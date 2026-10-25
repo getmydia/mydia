@@ -83,7 +83,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Duplicates")
+     |> assign(:page_title, gettext("Configuration - Duplicates"))
      |> assign(:kept, MapSet.new())
      |> assign(:keepers, %{})
      |> assign(:review_overrides, %{})
@@ -153,7 +153,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     with group when not is_nil(group) <- find_refused_group(socket, subject_id),
          ids = group_returning(socket, group),
          false <- ids == [] do
-      {:noreply, run_send(socket, ids, "from #{Components.subject_label(group)}")}
+      {:noreply, run_send(socket, ids, {:from, Components.subject_label(group)})}
     else
       _ -> {:noreply, socket}
     end
@@ -171,7 +171,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   def handle_event("confirm_review", _params, socket) do
     # Built before run_send/3 reloads the plan, which recomputes the count
     # against what is left.
-    label = "across #{Components.item_count(socket.assigns.returning_items)}"
+    label = {:across, socket.assigns.returning_items}
 
     {:noreply,
      socket
@@ -194,7 +194,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
          false <- ids == [] do
       actor_id = to_string(socket.assigns.current_scope.user.id)
       result = Prune.execute(ids, actor_id, socket.assigns.keepers)
-      label = "from #{Components.subject_label(decision.group)}"
+      label = {:from, Components.subject_label(decision.group)}
 
       {:noreply,
        socket
@@ -230,7 +230,15 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
       if result.failed == [] do
         socket
       else
-        put_flash(socket, :error, "#{length(result.failed)} file(s) could not be restored.")
+        put_flash(
+          socket,
+          :error,
+          ngettext(
+            "%{count} file could not be restored.",
+            "%{count} files could not be restored.",
+            length(result.failed)
+          )
+        )
       end
 
     # The toast clears either way. The run is over, and a second Undo on the
@@ -271,7 +279,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
 
     # `label` is computed before `load_plan/1` runs, because `load_plan/1`
     # recomputes `:affected_items` against the post-run plan.
-    label = "across #{Components.item_count(socket.assigns.affected_items)}"
+    label = {:across, socket.assigns.affected_items}
 
     # `:kept` survives the run. A group can still hold two files afterwards (a
     # keeper plus a copy the operator set to Keep), and it stays eligible, so
@@ -295,7 +303,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     {:noreply,
      socket
      |> maybe_flash_problems(result)
-     |> maybe_set_review_run(result, "from Misfiled")
+     |> maybe_set_review_run(result, :misfiled)
      |> load_plan()}
   end
 
@@ -518,8 +526,56 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   defp maybe_set_review_run(socket, %{returned: returned}, scope_label) do
     assign(socket, :last_run, %{
       kind: :review,
-      label: "Sent #{Components.file_count(length(returned))} #{scope_label} to Review"
+      label: sent_label(length(returned), scope_label)
     })
+  end
+
+  # One message per scope, so no sentence is spliced from translated pieces.
+  # The item count in an `:across` scope is the only embedded phrase.
+  defp sent_label(count, {:from, name}) do
+    ngettext(
+      "Sent %{count} file from %{name} to Review",
+      "Sent %{count} files from %{name} to Review",
+      count,
+      name: name
+    )
+  end
+
+  defp sent_label(count, {:across, items}) do
+    ngettext(
+      "Sent %{count} file across %{items} to Review",
+      "Sent %{count} files across %{items} to Review",
+      count,
+      items: Components.item_count(items)
+    )
+  end
+
+  defp sent_label(count, :misfiled) do
+    ngettext(
+      "Sent %{count} file from Misfiled to Review",
+      "Sent %{count} files from Misfiled to Review",
+      count
+    )
+  end
+
+  defp trashed_label(count, size, {:from, name}) do
+    ngettext(
+      "Trashed %{count} file from %{name} (%{size})",
+      "Trashed %{count} files from %{name} (%{size})",
+      count,
+      name: name,
+      size: size
+    )
+  end
+
+  defp trashed_label(count, size, {:across, items}) do
+    ngettext(
+      "Trashed %{count} file across %{items} (%{size})",
+      "Trashed %{count} files across %{items} (%{size})",
+      count,
+      items: Components.item_count(items),
+      size: size
+    )
   end
 
   # A clean run says everything it needs to in the undo toast, so no info flash
@@ -538,12 +594,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   defp maybe_flash_problems(socket, %{failed: failed, aborted: aborted}) do
     parts =
       [
-        failed != [] && "#{length(failed)} could not be moved",
-        aborted != [] && "#{length(aborted)} were skipped by re-verification"
+        failed != [] && gettext("%{count} could not be moved", count: length(failed)),
+        aborted != [] &&
+          gettext("%{count} were skipped by re-verification", count: length(aborted))
       ]
       |> Enum.filter(& &1)
 
-    put_flash(socket, :error, Enum.join(parts, ". ") <> ".")
+    put_flash(socket, :error, gettext("%{parts}.", parts: Enum.join(parts, ". ")))
   end
 
   defp maybe_set_last_run(socket, %{trashed: []}, _scope_label), do: socket
@@ -555,8 +612,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
       kind: :trash,
       file_ids: Enum.map(trashed, & &1.id),
       label:
-        "Trashed #{Components.file_count(length(trashed))} #{scope_label} " <>
-          "(#{MydiaWeb.Formatters.format_file_size(bytes)})"
+        trashed_label(
+          length(trashed),
+          MydiaWeb.Formatters.format_file_size(bytes),
+          scope_label
+        )
     })
   end
 end

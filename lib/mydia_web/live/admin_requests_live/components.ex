@@ -26,12 +26,12 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       value={@filter_status}
       event="filter_requests"
       param="status"
-      label="Filter requests by status"
+      label={gettext("Filter requests by status")}
     >
-      <:option value="pending" label="Pending" />
-      <:option value="all" label="All" />
-      <:option value="approved" label="Approved" />
-      <:option value="rejected" label="Rejected" />
+      <:option value="pending" label={pgettext("request status", "Pending")} />
+      <:option value="all" label={pgettext("selection", "All")} />
+      <:option value="approved" label={pgettext("request status", "Approved")} />
+      <:option value="rejected" label={pgettext("request status", "Rejected")} />
     </.segmented_control>
 
     <.admin_list id="requests" items={@requests}>
@@ -40,9 +40,9 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       </:row>
       <:empty>
         <%= if @filter_status == "pending" do %>
-          No pending requests at this time. Great job keeping up!
+          {gettext("No pending requests at this time. Great job keeping up!")}
         <% else %>
-          No {status_text(@filter_status)} requests found.
+          {gettext("No %{status} requests found.", status: status_text(@filter_status))}
         <% end %>
       </:empty>
     </.admin_list>
@@ -66,7 +66,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
             type="button"
             phx-click="show_request_details"
             phx-value-id={@request.id}
-            aria-label={"View details for #{@request.title}"}
+            aria-label={gettext("View details for %{title}", title: @request.title)}
             class="shrink-0 w-10 rounded overflow-hidden transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <img
@@ -99,7 +99,10 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       </:title>
 
       <:descriptor>
-        Requested by {@request.requester.email} on {format_date(@request.inserted_at, @display)}
+        {gettext("Requested by %{email} on %{date}",
+          email: @request.requester.email,
+          date: format_date(@request.inserted_at, @display)
+        )}
       </:descriptor>
 
       <:details>
@@ -124,7 +127,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
           <.row_action
             :if={@detailable}
             icon="hero-eye"
-            title="Details"
+            title={gettext("Details")}
             phx-click="show_request_details"
             phx-value-id={@request.id}
           />
@@ -132,22 +135,22 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
             :if={@request.status == "approved" and @request.media_item}
             navigate={~p"/media/#{@request.media_item.id}"}
             class="btn btn-sm btn-ghost join-item"
-            title="View in Library"
-            aria-label="View in Library"
+            title={gettext("View in Library")}
+            aria-label={gettext("View in Library")}
           >
             <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
           </.link>
           <.row_action
             :if={@request.status == "pending"}
             icon="hero-check"
-            title="Approve"
+            title={gettext("Approve")}
             phx-click="open_approve_modal"
             phx-value-id={@request.id}
           />
           <.row_action
             :if={@request.status == "pending"}
             icon="hero-x-mark"
-            title="Reject"
+            title={gettext("Reject")}
             destructive
             phx-click="open_reject_modal"
             phx-value-id={@request.id}
@@ -168,13 +171,18 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <div>
         <div>
           <%= if @request.approved_by do %>
-            Approved by {@request.approved_by.email} on {format_date(@request.approved_at, @display)}
+            {gettext("Approved by %{email} on %{date}",
+              email: @request.approved_by.email,
+              date: format_date(@request.approved_at, @display)
+            )}
           <% else %>
-            Approved automatically on {format_date(@request.approved_at, @display)}
+            {gettext("Approved automatically on %{date}",
+              date: format_date(@request.approved_at, @display)
+            )}
           <% end %>
         </div>
         <div :if={@request.admin_notes} class="text-xs mt-1">
-          Admin notes: {@request.admin_notes}
+          {gettext("Admin notes: %{notes}", notes: @request.admin_notes)}
         </div>
       </div>
     </div>
@@ -182,13 +190,16 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
       <div>
         <div>
-          Rejected by {@request.approved_by.email} on {format_date(@request.rejected_at, @display)}
+          {gettext("Rejected by %{email} on %{date}",
+            email: @request.approved_by.email,
+            date: format_date(@request.rejected_at, @display)
+          )}
         </div>
         <div :if={@request.rejection_reason} class="text-xs mt-1">
-          Reason: {@request.rejection_reason}
+          {gettext("Reason: %{reason}", reason: @request.rejection_reason)}
         </div>
         <div :if={@request.admin_notes} class="text-xs mt-1">
-          Admin notes: {@request.admin_notes}
+          {gettext("Admin notes: %{notes}", notes: @request.admin_notes)}
         </div>
       </div>
     </div>
@@ -200,24 +211,26 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   @doc "The header action buttons of the request detail popup."
   def detail_actions(assigns) do
     ~H"""
-    <button class="btn btn-ghost" phx-click="close_request_details_modal">Close</button>
+    <button class="btn btn-ghost" phx-click="close_request_details_modal">
+      {gettext("Close")}
+    </button>
     <.link
       :if={@detail_request && @detail_request.media_item}
       navigate={~p"/media/#{@detail_request.media_item.id}"}
       class="btn btn-primary"
     >
-      <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+      <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> {gettext("View in Library")}
     </.link>
     <%= if @detail_request && @detail_request.status == "pending" do %>
       <button class="btn btn-error" phx-click="open_reject_modal" phx-value-id={@detail_request.id}>
-        <.icon name="hero-x-mark" class="w-4 h-4" /> Reject
+        <.icon name="hero-x-mark" class="w-4 h-4" /> {gettext("Reject")}
       </button>
       <button
         class="btn btn-success"
         phx-click="open_approve_modal"
         phx-value-id={@detail_request.id}
       >
-        <.icon name="hero-check" class="w-4 h-4" /> Approve
+        <.icon name="hero-check" class="w-4 h-4" /> {gettext("Approve")}
       </button>
     <% end %>
     """
@@ -233,14 +246,14 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
     <.admin_modal
       id="approve-request-modal"
       icon="hero-check-circle"
-      title="Approve Request"
+      title={gettext("Approve Request")}
       on_close="close_approve_modal"
     >
       <div class="alert alert-success mb-4">
         <.icon name="hero-information-circle" class="w-5 h-5" />
         <div>
           <p class="font-semibold">{@selected_request.title}</p>
-          <p class="text-sm">This will create the media item in your library.</p>
+          <p class="text-sm">{gettext("This will create the media item in your library.")}</p>
         </div>
       </div>
       <.form
@@ -256,24 +269,24 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
         />
         <div class="form-control mb-4">
           <label class="label">
-            <span class="label-text font-semibold">Admin Notes (Optional)</span>
+            <span class="label-text font-semibold">{gettext("Admin Notes (Optional)")}</span>
           </label>
           <textarea
             name="approve[admin_notes]"
             class="textarea textarea-bordered h-24"
-            placeholder="Add any notes about this approval..."
+            placeholder={gettext("Add any notes about this approval...")}
           >{@approve_form[:admin_notes].value}</textarea>
         </div>
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_approve_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             type="submit"
             class="btn btn-success"
             disabled={@approve_config && @approve_config.libraries == []}
           >
-            <.icon name="hero-check" class="w-5 h-5" /> Approve & Add to Library
+            <.icon name="hero-check" class="w-5 h-5" /> {gettext("Approve & Add to Library")}
           </button>
         </.admin_modal_actions>
       </.form>
@@ -289,14 +302,14 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
     <.admin_modal
       id="reject-request-modal"
       icon="hero-x-circle"
-      title="Reject Request"
+      title={gettext("Reject Request")}
       on_close="close_reject_modal"
     >
       <div class="alert alert-error mb-4">
         <.icon name="hero-information-circle" class="w-5 h-5" />
         <div>
           <p class="font-semibold">{@selected_request.title}</p>
-          <p class="text-sm">Please provide a reason for rejecting this request.</p>
+          <p class="text-sm">{gettext("Please provide a reason for rejecting this request.")}</p>
         </div>
       </div>
       <.form
@@ -307,39 +320,39 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       >
         <div class="form-control mb-4">
           <label class="label">
-            <span class="label-text font-semibold">Rejection Reason</span>
+            <span class="label-text font-semibold">{gettext("Rejection Reason")}</span>
             <span class="label-text-alt text-error">*</span>
           </label>
           <textarea
             name="reject[rejection_reason]"
             class="textarea textarea-bordered h-24"
-            placeholder="Explain why this request is being rejected..."
+            placeholder={gettext("Explain why this request is being rejected...")}
             required
           >{@reject_form[:rejection_reason].value}</textarea>
           <%= if @reject_form[:rejection_reason].errors != [] do %>
             <label class="label">
               <span class="label-text-alt text-error">
-                {Enum.map_join(@reject_form[:rejection_reason].errors, ", ", fn {msg, _} -> msg end)}
+                {Enum.map_join(@reject_form[:rejection_reason].errors, ", ", &translate_error/1)}
               </span>
             </label>
           <% end %>
         </div>
         <div class="form-control mb-4">
           <label class="label">
-            <span class="label-text font-semibold">Admin Notes (Optional)</span>
+            <span class="label-text font-semibold">{gettext("Admin Notes (Optional)")}</span>
           </label>
           <textarea
             name="reject[admin_notes]"
             class="textarea textarea-bordered h-20"
-            placeholder="Add any additional notes..."
+            placeholder={gettext("Add any additional notes...")}
           >{@reject_form[:admin_notes].value}</textarea>
         </div>
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_reject_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-error">
-            <.icon name="hero-x-mark" class="w-5 h-5" /> Reject Request
+            <.icon name="hero-x-mark" class="w-5 h-5" /> {gettext("Reject Request")}
           </button>
         </.admin_modal_actions>
       </.form>

@@ -41,7 +41,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Trash")
+     |> assign(:page_title, gettext("Configuration - Trash"))
      |> assign(:reason, nil)
      |> assign(:page, 0)
      |> assign(:page_size, @per_page)
@@ -140,14 +140,14 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   def handle_event("restore_trash_file", %{"id" => id}, socket) do
     case fetch_trashed(id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "That file is no longer in the trash.")}
+        {:noreply, put_flash(socket, :error, gettext("That file is no longer in the trash."))}
 
       file ->
         case Library.restore_media_file(file) do
           {:ok, restored} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Restored #{label(restored)}.")
+             |> put_flash(:info, gettext("Restored %{name}.", name: label(restored)))
              |> load()}
 
           {:ok, restored, :trash_copy_retained} ->
@@ -155,14 +155,20 @@ defmodule MydiaWeb.AdminTrashLive.Index do
              socket
              |> put_flash(
                :warning,
-               "Restored #{label(restored)}, but its library path was already occupied, so the " <>
-                 "trashed copy was kept. Run \"Scan trash directory\" to find and remove it."
+               gettext(
+                 "Restored %{name}, but its library path was already occupied, so the trashed copy was kept. Run \"Scan trash directory\" to find and remove it.",
+                 name: label(restored)
+               )
              )
              |> load()}
 
           {:error, reason} ->
             {:noreply,
-             put_flash(socket, :error, "Could not restore that file: #{inspect(reason)}")}
+             put_flash(
+               socket,
+               :error,
+               gettext("Could not restore that file: %{reason}", reason: inspect(reason))
+             )}
         end
     end
   end
@@ -170,17 +176,23 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   def handle_event("purge_trash_file", %{"id" => id}, socket) do
     case fetch_trashed(id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "That file is no longer in the trash.")}
+        {:noreply, put_flash(socket, :error, gettext("That file is no longer in the trash."))}
 
       file ->
         case Library.purge_media_file(file) do
           :ok ->
             {:noreply,
-             socket |> put_flash(:info, "Deleted #{label(file)} permanently.") |> load()}
+             socket
+             |> put_flash(:info, gettext("Deleted %{name} permanently.", name: label(file)))
+             |> load()}
 
           {:error, reason} ->
             {:noreply,
-             put_flash(socket, :error, "Could not delete that file: #{inspect(reason)}")}
+             put_flash(
+               socket,
+               :error,
+               gettext("Could not delete that file: %{reason}", reason: inspect(reason))
+             )}
         end
     end
   end
@@ -200,7 +212,14 @@ defmodule MydiaWeb.AdminTrashLive.Index do
      socket
      |> assign(:show_empty_trash_modal, false)
      |> assign(:page, 0)
-     |> put_flash(:info, "Purged #{count} file(s) from the trash.")
+     |> put_flash(
+       :info,
+       ngettext(
+         "Purged %{count} file from the trash.",
+         "Purged %{count} files from the trash.",
+         count
+       )
+     )
      |> load()}
   end
 
@@ -251,7 +270,10 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     {:noreply,
      socket
      |> assign(:scanning, false)
-     |> put_flash(:error, "Could not read the trash directory: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not read the trash directory: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_async(:sweep, {:ok, result}, socket) do
@@ -262,7 +284,10 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     {:noreply,
      socket
      |> assign(:sweeping, false)
-     |> put_flash(:error, "Could not sweep the trash directory: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not sweep the trash directory: %{reason}", reason: inspect(reason))
+     )}
   end
 
   @impl true
@@ -273,14 +298,24 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   end
 
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: 0}) do
-    "Swept #{swept} item(s), reclaiming " <>
-      MydiaWeb.Formatters.format_file_size(bytes) <> "."
+    swept_sentence(swept, bytes)
   end
 
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: skipped}) do
-    "Swept #{swept} item(s), reclaiming " <>
-      MydiaWeb.Formatters.format_file_size(bytes) <>
-      ". Skipped #{skipped}, either too recently written to be safe or not removable."
+    swept_sentence(swept, bytes) <>
+      " " <>
+      gettext("Skipped %{count}, either too recently written to be safe or not removable.",
+        count: skipped
+      )
+  end
+
+  defp swept_sentence(swept, bytes) do
+    ngettext(
+      "Swept %{count} item, reclaiming %{size}.",
+      "Swept %{count} items, reclaiming %{size}.",
+      swept,
+      size: MydiaWeb.Formatters.format_file_size(bytes)
+    )
   end
 
   defp enqueue(socket, action) do
@@ -291,10 +326,15 @@ defmodule MydiaWeb.AdminTrashLive.Index do
         {:noreply,
          socket
          |> assign(:selection, MapSet.new())
-         |> put_flash(:info, "Working through the selected files in the background.")}
+         |> put_flash(:info, gettext("Working through the selected files in the background."))}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not start that: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Could not start that: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -308,23 +348,26 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   end
 
   defp done_message(%{action: "restore", ok: ok, retained: retained, failed: failed}) do
-    base = "Restored #{ok} file(s)."
+    base = ngettext("Restored %{count} file.", "Restored %{count} files.", ok)
 
     base
     |> maybe_append(
       retained > 0,
-      " #{retained} had an occupied library path, so the trashed copy was kept."
+      gettext("%{count} had an occupied library path, so the trashed copy was kept.",
+        count: retained
+      )
     )
-    |> maybe_append(failed > 0, " #{failed} could not be restored.")
+    |> maybe_append(failed > 0, gettext("%{count} could not be restored.", count: failed))
   end
 
   defp done_message(%{action: "purge", ok: ok, failed: failed}) do
-    "Deleted #{ok} file(s) permanently."
-    |> maybe_append(failed > 0, " #{failed} could not be deleted.")
+    ngettext("Deleted %{count} file permanently.", "Deleted %{count} files permanently.", ok)
+    |> maybe_append(failed > 0, gettext("%{count} could not be deleted.", count: failed))
   end
 
-  defp maybe_append(message, false, _suffix), do: message
-  defp maybe_append(message, true, suffix), do: message <> suffix
+  # Each part is a whole sentence of its own, joined with a space.
+  defp maybe_append(message, false, _sentence), do: message
+  defp maybe_append(message, true, sentence), do: message <> " " <> sentence
 
   defp fetch_trashed(id) do
     Library.get_trashed_media_file(id,

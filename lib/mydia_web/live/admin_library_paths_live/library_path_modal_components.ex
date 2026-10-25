@@ -15,17 +15,17 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
     <.admin_modal
       id="library-path-modal"
       icon={if @library_path_mode == :new, do: "hero-folder-plus", else: "hero-pencil-square"}
-      title={if @library_path_mode == :new, do: "Add Library", else: "Edit Library"}
+      title={if @library_path_mode == :new, do: gettext("Add Library"), else: gettext("Edit Library")}
       subtitle={
         if @library_path_mode == :new,
-          do: "Configure a new media directory",
-          else: "Update library settings"
+          do: gettext("Configure a new media directory"),
+          else: gettext("Update library settings")
       }
       on_close="close_library_path_modal"
     >
       <:header_aside>
         <label class="label cursor-pointer gap-2">
-          <span class="label-text text-sm">Monitored</span>
+          <span class="label-text text-sm">{pgettext("monitoring", "Monitored")}</span>
           <input
             type="hidden"
             form="library-path-form"
@@ -55,7 +55,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
             <.input
               field={@library_path_form[:name]}
               type="text"
-              label="Name"
+              label={gettext("Name")}
               placeholder={name_placeholder(@library_path_form[:path].value)}
               maxlength="60"
             />
@@ -66,23 +66,23 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
               <.input
                 field={@library_path_form[:path]}
                 type="text"
-                label="Path"
+                label={gettext("Path")}
                 placeholder="/path/to/media"
                 required
               />
               <p class="text-xs text-base-content/50 mt-1">
-                A folder on this server, or s3://&lt;storage backend&gt;/&lt;prefix&gt;.
+                {gettext("A folder on this server, or s3://<storage backend>/<prefix>.")}
               </p>
             </div>
             <div class="col-span-6 md:col-span-2">
               <.input
                 field={@library_path_form[:type]}
                 type="select"
-                label="Type"
+                label={pgettext("library type", "Type")}
                 options={[
-                  {"Movies", "movies"},
-                  {"TV Shows", "series"},
-                  {"Mixed", "mixed"}
+                  {gettext("Movies"), "movies"},
+                  {gettext("TV Shows"), "series"},
+                  {gettext("Mixed"), "mixed"}
                 ]}
                 required
               />
@@ -95,19 +95,19 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
             <.input
               field={@library_path_form[:scan_interval]}
               type="select"
-              label="Automatic scanning"
+              label={gettext("Automatic scanning")}
               options={[
-                {"Off (manual only)", nil},
-                {"Every 15 minutes", 900},
-                {"Every hour", 3600},
-                {"Every 6 hours", 21600},
-                {"Every 12 hours", 43200},
-                {"Daily", 86400}
+                {gettext("Off (manual only)"), nil},
+                {gettext("Every 15 minutes"), 900},
+                {gettext("Every hour"), 3600},
+                {gettext("Every 6 hours"), 21600},
+                {gettext("Every 12 hours"), 43200},
+                {gettext("Daily"), 86400}
               ]}
             />
             <p class="text-sm text-base-content/60 mt-1">
-              How often Mydia rescans this folder for files added outside of downloads.
-              Manual re-scans always work regardless of this setting.
+              {gettext("How often Mydia rescans this folder for files added outside of downloads.")}
+              {gettext("Manual re-scans always work regardless of this setting.")}
             </p>
           </div>
 
@@ -118,11 +118,13 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                 <.input
                   field={@library_path_form[:tv_metadata_source]}
                   type="select"
-                  label="TV Metadata Source"
+                  label={gettext("TV Metadata Source")}
                   options={[{"TheTVDB", "tvdb"}, {"TMDB", "tmdb"}]}
                 />
                 <p class="text-xs text-base-content/50 mt-1">
-                  Provider for TV show metadata. Existing shows keep their data until refreshed.
+                  {gettext(
+                    "Provider for TV show metadata. Existing shows keep their data until refreshed."
+                  )}
                 </p>
               </div>
             </div>
@@ -134,7 +136,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
           <div class="space-y-3">
             <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
               <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-              <span>Options</span>
+              <span>{gettext("Options")}</span>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -143,9 +145,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                 <div class="flex items-center gap-3">
                   <.icon name="hero-arrow-down-tray" class="w-4 h-4 text-base-content/60" />
                   <div>
-                    <span class="text-sm font-medium">Auto Import</span>
+                    <span class="text-sm font-medium">{gettext("Auto Import")}</span>
                     <p class="text-xs text-base-content/50">
-                      Let background scans import confident matches
+                      {gettext("Let background scans import confident matches")}
                     </p>
                   </div>
                 </div>
@@ -169,8 +171,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                 <div class="flex items-center gap-3">
                   <.icon name="hero-folder-open" class="w-4 h-4 text-base-content/60" />
                   <div>
-                    <span class="text-sm font-medium">Auto Organize</span>
-                    <p class="text-xs text-base-content/50">Sort into category folders</p>
+                    <span class="text-sm font-medium">{gettext("Auto Organize")}</span>
+                    <p class="text-xs text-base-content/50">
+                      {gettext("Sort into category folders")}
+                    </p>
                   </div>
                 </div>
                 <input type="hidden" name={@library_path_form[:auto_organize].name} value="false" />
@@ -192,13 +196,13 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                 :if={@library_path_form[:type].value in ["movies", "mixed", :movies, :mixed]}
                 field={@library_path_form[:default_for_movies]}
                 type="checkbox"
-                label="Default library for movies"
+                label={gettext("Default library for movies")}
               />
               <.input
                 :if={@library_path_form[:type].value in ["series", "mixed", :series, :mixed]}
                 field={@library_path_form[:default_for_series]}
                 type="checkbox"
-                label="Default library for series"
+                label={gettext("Default library for series")}
               />
 
               <%!-- Write NFO Toggle (only for movies/series/mixed) --%>
@@ -210,9 +214,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                       class="w-4 h-4 text-base-content/60"
                     />
                     <div>
-                      <span class="text-sm font-medium">Write NFO Files</span>
+                      <span class="text-sm font-medium">{gettext("Write NFO Files")}</span>
                       <p class="text-xs text-base-content/50">
-                        Jellyfin/Kodi metadata files
+                        {gettext("Jellyfin/Kodi metadata files")}
                       </p>
                     </div>
                   </div>
@@ -237,8 +241,8 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
                 <div class="flex items-center gap-3">
                   <.icon name="hero-pencil-square" class="w-4 h-4 text-base-content/60" />
                   <div>
-                    <span class="text-sm font-medium">Auto Rename</span>
-                    <p class="text-xs text-base-content/50">Rename files on import</p>
+                    <span class="text-sm font-medium">{gettext("Auto Rename")}</span>
+                    <p class="text-xs text-base-content/50">{gettext("Rename files on import")}</p>
                   </div>
                 </div>
                 <input type="hidden" name={@library_path_form[:auto_rename].name} value="false" />
@@ -264,11 +268,11 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_library_path_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary gap-2">
             <.icon name="hero-check" class="w-4 h-4" />
-            {if @library_path_mode == :new, do: "Add Library", else: "Save Changes"}
+            {if @library_path_mode == :new, do: gettext("Add Library"), else: gettext("Save Changes")}
           </button>
         </.admin_modal_actions>
       </.form>
@@ -294,7 +298,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
       <div class="space-y-3">
         <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
           <.icon name="hero-folder-open" class="w-4 h-4" />
-          <span>Category Paths</span>
+          <span>{gettext("Category Paths")}</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -331,7 +335,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
         type="text"
         name={"#{@form[:category_paths].name}[#{@category_key}]"}
         value={@current_value}
-        placeholder="subfolder path"
+        placeholder={gettext("subfolder path")}
         class="input input-bordered input-sm"
       />
     </div>
@@ -373,10 +377,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
       |> assign(:resolved_paths, resolved_paths)
 
     ~H"""
-    <div class="divider text-xs opacity-60">Path Preview</div>
+    <div class="divider text-xs opacity-60">{gettext("Path Preview")}</div>
     <div class="bg-base-300 rounded-lg p-3 font-mono text-xs space-y-1">
       <div class="text-base-content/60 mb-2">
-        Base: <span class="text-primary">{@base_path || "(not set)"}</span>
+        {gettext("Base: %{path}", path: @base_path || gettext("(not set)"))}
       </div>
       <div :for={rp <- @resolved_paths} class="flex items-center gap-2">
         <span class={[
@@ -386,7 +390,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
         <span class="text-base-content/70">{rp.label}</span>
         <span class="text-base-content/40">→</span>
         <span class={if(rp.is_root, do: "text-base-content/50", else: "text-secondary")}>
-          {rp.path || "(base)"}
+          {rp.path || gettext("(base)")}
         </span>
       </div>
     </div>
@@ -423,5 +427,5 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
   defp name_placeholder(path) when is_binary(path) and path != "",
     do: LibraryPath.display_name(%{path: path})
 
-  defp name_placeholder(_path), do: "Defaults to the folder name"
+  defp name_placeholder(_path), do: gettext("Defaults to the folder name")
 end

@@ -15,7 +15,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Library Paths")
+     |> assign(:page_title, gettext("Configuration - Library Paths"))
      |> assign(:reorganizing_library_ids, MapSet.new())
      |> assign(:reclassifying_library_ids, MapSet.new())
      |> load_data()}
@@ -38,13 +38,21 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
     message =
       cond do
         result.moved == 0 && result.total == 0 ->
-          "Reorganization complete: No files to reorganize"
+          gettext("Reorganization complete: No files to reorganize")
 
         result.moved == 0 ->
-          "Reorganization complete: No files needed moving (#{result.total} already in correct locations)"
+          gettext(
+            "Reorganization complete: No files needed moving (%{total} already in correct locations)",
+            total: result.total
+          )
 
         true ->
-          "Reorganization complete: Moved #{result.moved} of #{result.total} files"
+          ngettext(
+            "Reorganization complete: Moved %{moved} of %{count} file",
+            "Reorganization complete: Moved %{moved} of %{count} files",
+            result.total,
+            moved: result.moved
+          )
       end
 
     {:noreply,
@@ -63,16 +71,28 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
     message =
       cond do
         result.updated > 0 && result.skipped > 0 ->
-          "Reclassification complete: #{result.updated} updated (#{result.skipped} skipped with override)"
+          gettext(
+            "Reclassification complete: %{updated} updated (%{skipped} skipped with override)",
+            updated: result.updated,
+            skipped: result.skipped
+          )
 
         result.updated > 0 ->
-          "Reclassification complete: #{result.updated} items updated"
+          ngettext(
+            "Reclassification complete: %{count} item updated",
+            "Reclassification complete: %{count} items updated",
+            result.updated
+          )
 
         result.skipped > 0 ->
-          "Reclassification complete: No changes (#{result.skipped} items have override)"
+          ngettext(
+            "Reclassification complete: No changes (%{count} item has override)",
+            "Reclassification complete: No changes (%{count} items have override)",
+            result.skipped
+          )
 
         true ->
-          "Reclassification complete: No category changes detected"
+          gettext("Reclassification complete: No category changes detected")
       end
 
     {:noreply,
@@ -112,7 +132,11 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
     if runtime_library_path?(path) do
       {:noreply,
-       put_flash(socket, :error, "Library paths from environment variables cannot be edited here")}
+       put_flash(
+         socket,
+         :error,
+         gettext("Library paths from environment variables cannot be edited here")
+       )}
     else
       changeset = LibraryPath.changeset(path, %{})
 
@@ -180,7 +204,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
               {:noreply,
                socket
                |> assign(:show_library_path_modal, false)
-               |> put_flash(:info, "Library path saved successfully")
+               |> put_flash(:info, gettext("Library path saved successfully"))
                |> load_data()}
 
             {:error, %Ecto.Changeset{} = changeset} ->
@@ -188,7 +212,11 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
             {:error, :incompatible_type} ->
               {:noreply,
-               put_flash(socket, :error, "Library type cannot serve as default for that kind")}
+               put_flash(
+                 socket,
+                 :error,
+                 gettext("Library type cannot serve as default for that kind")
+               )}
           end
 
         {:error, reason} ->
@@ -197,13 +225,13 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
           {:noreply,
            socket
            |> assign(:library_path_form, to_form(changeset))
-           |> put_flash(:error, "Invalid directory: #{reason}")}
+           |> put_flash(:error, gettext("Invalid directory: %{reason}", reason: reason))}
       end
     else
       {:noreply,
        socket
        |> assign(:library_path_form, to_form(changeset))
-       |> put_flash(:error, "Please fix the validation errors")}
+       |> put_flash(:error, gettext("Please fix the validation errors"))}
     end
   end
 
@@ -213,7 +241,11 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
     if runtime_library_path?(path) do
       {:noreply,
-       put_flash(socket, :error, "Library paths from environment variables cannot be deleted")}
+       put_flash(
+         socket,
+         :error,
+         gettext("Library paths from environment variables cannot be deleted")
+       )}
     else
       delete_library_path(socket, path, id)
     end
@@ -234,9 +266,14 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
     message =
       if summary.total == 0 do
-        "No files need reorganization"
+        gettext("No files need reorganization")
       else
-        "Preview: #{summary.moved} of #{summary.total} files would be moved to category folders"
+        ngettext(
+          "Preview: %{moved} of %{count} file would be moved to category folders",
+          "Preview: %{moved} of %{count} files would be moved to category folders",
+          summary.total,
+          moved: summary.moved
+        )
       end
 
     {:noreply, put_flash(socket, :info, message)}
@@ -251,10 +288,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
         {:noreply,
          socket
          |> update(:reorganizing_library_ids, &MapSet.put(&1, id))
-         |> put_flash(:info, "Library reorganization started...")}
+         |> put_flash(:info, gettext("Library reorganization started..."))}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start reorganization")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to start reorganization"))}
     end
   end
 
@@ -267,10 +304,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
         {:noreply,
          socket
          |> update(:reclassifying_library_ids, &MapSet.put(&1, id))
-         |> put_flash(:info, "Media reclassification started...")}
+         |> put_flash(:info, gettext("Media reclassification started..."))}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start reclassification")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to start reclassification"))}
     end
   end
 
@@ -285,7 +322,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
       {:ok, _path} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Library path deleted successfully")
+         |> put_flash(:info, gettext("Library path deleted successfully"))
          |> load_data()}
 
       {:error, error} ->
@@ -341,8 +378,8 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
     |> assign(:show_library_path_modal, false)
   end
 
-  defp validate_directory(nil), do: {:error, "path cannot be blank"}
-  defp validate_directory(""), do: {:error, "path cannot be blank"}
+  defp validate_directory(nil), do: {:error, gettext("path cannot be blank")}
+  defp validate_directory(""), do: {:error, gettext("path cannot be blank")}
 
   # An S3 library has no directory on disk; ask the storage backend instead.
   defp validate_directory("s3://" <> _ = path) do
@@ -357,16 +394,21 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   defp validate_directory(path) when is_binary(path) do
     cond do
       not File.exists?(path) ->
-        {:error, "directory does not exist"}
+        {:error, gettext("directory does not exist")}
 
       not File.dir?(path) ->
-        {:error, "path is not a directory"}
+        {:error, gettext("path is not a directory")}
 
       true ->
         case File.ls(path) do
-          {:ok, _} -> :ok
-          {:error, :eacces} -> {:error, "directory is not accessible (permission denied)"}
-          {:error, reason} -> {:error, "cannot read directory: #{reason}"}
+          {:ok, _} ->
+            :ok
+
+          {:error, :eacces} ->
+            {:error, gettext("directory is not accessible (permission denied)")}
+
+          {:error, reason} ->
+            {:error, gettext("cannot read directory: %{reason}", reason: reason)}
         end
     end
   end
