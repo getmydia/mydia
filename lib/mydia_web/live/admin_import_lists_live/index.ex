@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
       {:ok,
        socket
-       |> assign(:page_title, "Import Lists")
+       |> assign(:page_title, gettext("Import Lists"))
        |> assign(:show_import_list_modal, false)
        |> assign(:show_import_list_items_modal, false)
        |> assign(:show_preset_confirm_modal, false)
@@ -39,7 +39,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     else
       {:ok,
        socket
-       |> put_flash(:error, "Import Lists is currently disabled")
+       |> put_flash(:error, gettext("Import Lists is currently disabled"))
        |> redirect(to: ~p"/admin/status")}
     end
   end
@@ -57,13 +57,19 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       case result do
         {:ok, stats} ->
           socket
-          |> put_flash(:info, "Sync completed: #{stats.new} new, #{stats.total} total items")
+          |> put_flash(
+            :info,
+            gettext("Sync completed: %{new} new, %{total} total items",
+              new: stats.new,
+              total: stats.total
+            )
+          )
           |> assign(:syncing_list_id, nil)
           |> load_data()
 
         {:error, reason} ->
           socket
-          |> put_flash(:error, "Sync failed: #{inspect(reason)}")
+          |> put_flash(:error, gettext("Sync failed: %{reason}", reason: inspect(reason)))
           |> assign(:syncing_list_id, nil)
           |> load_data()
       end
@@ -152,9 +158,11 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
         message =
           if auto_add do
-            "#{import_list.name} enabled with auto-add and syncing"
+            gettext("%{name} enabled with auto-add and syncing", name: import_list.name)
           else
-            "#{import_list.name} enabled and syncing (you'll review items before adding)"
+            gettext("%{name} enabled and syncing (you'll review items before adding)",
+              name: import_list.name
+            )
           end
 
         {:noreply,
@@ -169,7 +177,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
          socket
          |> assign(:show_preset_confirm_modal, false)
          |> assign(:pending_preset_id, nil)
-         |> put_flash(:error, "Preset not found")}
+         |> put_flash(:error, gettext("Preset not found"))}
 
       {:error, changeset} ->
         error_msg = format_changeset_errors(changeset)
@@ -178,7 +186,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
          socket
          |> assign(:show_preset_confirm_modal, false)
          |> assign(:pending_preset_id, nil)
-         |> put_flash(:error, "Failed to enable: #{error_msg}")}
+         |> put_flash(:error, gettext("Failed to enable: %{reason}", reason: error_msg))}
     end
   end
 
@@ -237,7 +245,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
           {:ok, import_list} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Import list created")
+             |> put_flash(:info, gettext("Import list created"))
              |> assign(:show_import_list_modal, false)
              |> load_data()
              |> then(fn s ->
@@ -255,7 +263,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
           {:ok, _import_list} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Import list updated")
+             |> put_flash(:info, gettext("Import list updated"))
              |> assign(:show_import_list_modal, false)
              |> load_data()}
 
@@ -280,15 +288,18 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
     case ImportLists.toggle_import_list(import_list) do
       {:ok, updated_list} ->
-        status = if updated_list.enabled, do: "enabled", else: "disabled"
+        message =
+          if updated_list.enabled,
+            do: gettext("%{name} enabled", name: import_list.name),
+            else: gettext("%{name} disabled", name: import_list.name)
 
         {:noreply,
          socket
-         |> put_flash(:info, "#{import_list.name} #{status}")
+         |> put_flash(:info, message)
          |> load_data()}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to toggle list")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to toggle list"))}
     end
   end
 
@@ -300,11 +311,11 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       {:ok, _} ->
         {:noreply,
          socket
-         |> put_flash(:info, "#{import_list.name} deleted")
+         |> put_flash(:info, gettext("%{name} deleted", name: import_list.name))
          |> load_data()}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete list")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to delete list"))}
     end
   end
 
@@ -319,10 +330,15 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
         {:noreply,
          socket
          |> assign(:syncing_list_id, id)
-         |> put_flash(:info, "Sync started for #{import_list.name}")}
+         |> put_flash(:info, gettext("Sync started for %{name}", name: import_list.name))}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start sync: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Failed to start sync: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -334,7 +350,16 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       ImportListSync.enqueue(list.id)
     end
 
-    {:noreply, put_flash(socket, :info, "Sync started for #{length(enabled_lists)} lists")}
+    {:noreply,
+     put_flash(
+       socket,
+       :info,
+       ngettext(
+         "Sync started for %{count} list",
+         "Sync started for %{count} lists",
+         length(enabled_lists)
+       )
+     )}
   end
 
   ## Event Handlers - Items
@@ -374,7 +399,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
          load_list_items(socket, socket.assigns.selected_list, socket.assigns.items_filter)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to reset item")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to reset item"))}
     end
   end
 
@@ -386,13 +411,13 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     socket =
       case ImportLists.add_item_to_library(item, import_list) do
         {:ok, media_item} ->
-          put_flash(socket, :info, "#{media_item.title} added to library")
+          put_flash(socket, :info, gettext("%{title} added to library", title: media_item.title))
 
         {:error, reason} when is_binary(reason) ->
-          put_flash(socket, :error, "Failed to add: #{reason}")
+          put_flash(socket, :error, gettext("Failed to add: %{reason}", reason: reason))
 
         {:error, _reason} ->
-          put_flash(socket, :error, "Failed to add item to library")
+          put_flash(socket, :error, gettext("Failed to add item to library"))
       end
 
     {:noreply,
@@ -426,29 +451,42 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   defp put_add_all_flash(socket, %{added: added, failed: failed}) do
     cond do
       added > 0 and failed > 0 ->
-        put_flash(socket, :info, "Added #{added} items to library, #{failed} failed")
+        put_flash(
+          socket,
+          :info,
+          ngettext(
+            "Added %{count} item to library, %{failed} failed",
+            "Added %{count} items to library, %{failed} failed",
+            added,
+            failed: failed
+          )
+        )
 
       added > 0 ->
-        put_flash(socket, :info, "Added #{added} items to library")
+        put_flash(
+          socket,
+          :info,
+          ngettext("Added %{count} item to library", "Added %{count} items to library", added)
+        )
 
       failed > 0 ->
-        put_flash(socket, :error, "Failed to add #{failed} items")
+        put_flash(
+          socket,
+          :error,
+          ngettext("Failed to add %{count} item", "Failed to add %{count} items", failed)
+        )
 
       true ->
-        put_flash(socket, :info, "Nothing left to add")
+        put_flash(socket, :info, gettext("Nothing left to add"))
     end
   end
 
   defp format_changeset_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {key, value}, acc_msg ->
-        String.replace(acc_msg, "%{#{key}}", to_string(value))
-      end)
-    end)
+    Ecto.Changeset.traverse_errors(changeset, &translate_error/1)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 
-  defp format_changeset_errors(_), do: "Unknown error"
+  defp format_changeset_errors(_), do: gettext("Unknown error")
 
   ## Helper Functions for Template
 
@@ -456,16 +494,23 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     MapSet.member?(configured_presets, {type, media_type})
   end
 
-  def format_last_synced(nil), do: "Never"
+  def format_last_synced(nil), do: gettext("Never")
 
   def format_last_synced(datetime) do
     diff = DateTime.diff(DateTime.utc_now(), datetime, :second)
 
     cond do
-      diff < 60 -> "Just now"
-      diff < 3600 -> "#{div(diff, 60)} min ago"
-      diff < 86400 -> "#{div(diff, 3600)} hours ago"
-      true -> "#{div(diff, 86400)} days ago"
+      diff < 60 ->
+        gettext("Just now")
+
+      diff < 3600 ->
+        ngettext("%{count} min ago", "%{count} min ago", div(diff, 60))
+
+      diff < 86400 ->
+        ngettext("%{count} hour ago", "%{count} hours ago", div(diff, 3600))
+
+      true ->
+        ngettext("%{count} day ago", "%{count} days ago", div(diff, 86400))
     end
   end
 
@@ -475,14 +520,14 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
     cond do
       total > 0 and ImportLists.count_import_list_items(import_list, "in_library") == total ->
-        "#{total} items, all in library"
+        ngettext("%{count} item, all in library", "%{count} items, all in library", total)
 
       # Auto-add lists add their pending items themselves, so no to-add count there
       to_add > 0 and not import_list.auto_add ->
-        "#{to_add} to add / #{total} total"
+        gettext("%{to_add} to add / %{total} total", to_add: to_add, total: total)
 
       true ->
-        "#{total} items"
+        ngettext("%{count} item", "%{count} items", total)
     end
   end
 
@@ -506,9 +551,9 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
   def status_explanation(status) do
     case status do
-      "pending" -> "Waiting to be added to library"
-      "in_library" -> "Already in your library"
-      "failed" -> "Failed to add (reset to retry)"
+      "pending" -> gettext("Waiting to be added to library")
+      "in_library" -> gettext("Already in your library")
+      "failed" -> gettext("Failed to add (reset to retry)")
       _ -> ""
     end
   end
@@ -575,11 +620,11 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
             (lp.disabled != true and (is_nil(allowed) or lp.type in allowed)),
           do: {lp.path, lp.id}
 
-    [{"Default", nil} | options]
+    [{gettext("Default"), nil} | options]
   end
 
-  defp media_type_label("movie"), do: "Movies"
-  defp media_type_label("tv_show"), do: "TV Shows"
+  defp media_type_label("movie"), do: gettext("Movies")
+  defp media_type_label("tv_show"), do: gettext("TV Shows")
   defp media_type_label(other), do: other
 
   def media_type_icon("movie"), do: "hero-film"
@@ -591,9 +636,9 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   def status_badge_class("failed"), do: "badge-error"
   def status_badge_class(_), do: "badge-ghost"
 
-  def status_label("pending"), do: "Pending"
-  def status_label("in_library"), do: "In library"
-  def status_label("failed"), do: "Failed"
+  def status_label("pending"), do: gettext("Pending")
+  def status_label("in_library"), do: gettext("In library")
+  def status_label("failed"), do: gettext("Failed")
   def status_label(other), do: other
 
   @doc ~s(Returns the item's live state: "pending", "in_library" or "failed".)

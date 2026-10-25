@@ -195,7 +195,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> put_flash(:error, Mydia.Media.restricted_message())}
+     |> put_flash(:error, MydiaWeb.OperationErrors.restricted_message())}
   end
 
   def handle_adopt_async({:ok, {:error, reason}}, socket) do

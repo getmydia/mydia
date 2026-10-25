@@ -300,8 +300,6 @@
   "downloadSelectQuality": "Seleccionar calidad",
   "episodeActionsTooltip": "Acciones del episodio",
   "episodeMarkThisAndPreviousWatched": "Marcar este y los anteriores como vistos",
-  "freshnessFailed": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}.",
-  "freshnessStale": "Mostrando tu biblioteca de {time}.",
   "gestureSeekSeconds": "{seconds} s",
   "qualityDialogTitle": "Calidad de vídeo",
   "qualityStatsToggleHint": "También en Ajustes. Sigue activo cuando los controles se ocultan.",
@@ -327,5 +325,7 @@
   "mediaMenuMovieDetails": "Detalles de la película",
   "mediaMenuRemoveFromContinueWatching": "Quitar de Seguir viendo",
   "connectionUpdateAvailable": "Actualización disponible: {label}",
-  "calendarMovie": "Película"
+  "calendarMovie": "Película",
+  "freshnessStaleBanner": "Mostrando tu biblioteca de {time}.",
+  "freshnessFailedBanner": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}."
 }

@@ -55,9 +55,9 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
               <form id="account-mapping-form" phx-submit="save_account_mapping">
                 <div class="flex items-center justify-between mb-2">
                   <span class="text-sm font-medium">
-                    {length(@accounts)} {found_label(@config, @accounts)}
+                    {found_label(@config, @accounts)}
                   </span>
-                  <span class="text-xs text-base-content/50">Mydia user</span>
+                  <span class="text-xs text-base-content/50">{gettext("Mydia user")}</span>
                 </div>
 
                 <div class="flex flex-col gap-2">
@@ -74,7 +74,9 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
                       <span class="truncate text-sm font-medium">
                         {RemoteAccount.label(account)}
                       </span>
-                      <span :if={account.admin?} class="badge badge-xs badge-warning">owner</span>
+                      <span :if={account.admin?} class="badge badge-xs badge-warning">
+                        {gettext("owner")}
+                      </span>
                     </div>
                     <div class="sm:w-56">
                       <.input
@@ -95,7 +97,7 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
                     class="btn btn-ghost"
                     phx-click="close_account_mapping_modal"
                   >
-                    Cancel
+                    {gettext("Cancel")}
                   </button>
                   <button
                     type="submit"
@@ -104,9 +106,9 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
                     disabled={@saving}
                   >
                     <%= if @saving do %>
-                      <span class="loading loading-spinner loading-sm"></span> Saving...
+                      <span class="loading loading-spinner loading-sm"></span> {gettext("Saving...")}
                     <% else %>
-                      <.icon name="hero-check" class="w-4 h-4" /> Save links
+                      <.icon name="hero-check" class="w-4 h-4" /> {gettext("Save links")}
                     <% end %>
                   </button>
                 </.admin_modal_actions>
@@ -126,26 +128,27 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
     # has none, and rendered as a blank option the operator could not tell
     # which account they were selecting. SSO accounts cannot be name-matched,
     # so hand-mapping here is the only way they are ever linked at all.
-    [{"Don't sync", ""} | Enum.map(users, &{User.label(&1), &1.id})]
+    [{gettext("Don't sync"), ""} | Enum.map(users, &{User.label(&1), &1.id})]
   end
 
   # The copy explains a real difference from token-based providers: Jellyfin has
   # no per-user tokens and the server API key reads each account's state.
-  defp account_heading(%{type: :jellyfin}), do: "Jellyfin accounts"
-  defp account_heading(_config), do: "Accounts"
+  defp account_heading(%{type: :jellyfin}), do: gettext("Jellyfin accounts")
+  defp account_heading(_config), do: gettext("Accounts")
 
   defp account_intro(_config) do
-    "Choose which Mydia user each Jellyfin account syncs watched status with. " <>
-      "Jellyfin issues no per-user tokens, so the server API key reads each account " <>
-      "and the mapping is what keeps histories apart."
+    gettext(
+      "Choose which Mydia user each Jellyfin account syncs watched status with. Jellyfin issues no per-user tokens, so the server API key reads each account and the mapping is what keeps histories apart."
+    )
   end
 
-  defp account_loading_message(_config), do: "Asking this server for its accounts..."
+  defp account_loading_message(_config), do: gettext("Asking this server for its accounts...")
 
   defp account_empty_message(_config) do
-    "This Jellyfin server reported no accounts, so there is nothing to map yet."
+    gettext("This Jellyfin server reported no accounts, so there is nothing to map yet.")
   end
 
-  defp found_label(_config, [_]), do: "account found"
-  defp found_label(_config, _accounts), do: "accounts found"
+  defp found_label(_config, accounts) do
+    ngettext("%{count} account found", "%{count} accounts found", length(accounts))
+  end
 end

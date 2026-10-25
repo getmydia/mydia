@@ -61,63 +61,72 @@ defmodule Mydia.Downloads.Queue.Duplicates do
     end
   end
 
-  def check_for_active_download(search_result, media_item_id, episode_id, opts \\ []) do
+  @doc """
+  Builds the query for downloads still occupying the target of a grab.
+
+  Shared by `check_for_active_download/4`, which then verifies the rows against
+  the download client, and `Mydia.Downloads.blocking_downloads/2`, which lists
+  them for the UI, so both agree on what blocks a grab. Honours
+  `:exclude_download_id`.
+  """
+  def blocking_downloads_query(search_result, media_item_id, episode_id, opts \\ []) do
     # Query for downloads still occupying their target — actively downloading,
     # downloaded-but-awaiting-import, or import-retrying. A completed-but-not-yet
     # imported download still counts, so we don't grab a duplicate while the
     # first one is queued for import. See Mydia.Downloads.Download.occupying/1.
-    base_query = Download.occupying()
-
-    base_query =
-      case Keyword.get(opts, :exclude_download_id) do
-        nil -> base_query
-        id -> where(base_query, [d], d.id != ^id)
-      end
+    base_query = exclude_download(Download.occupying(), Keyword.get(opts, :exclude_download_id))
 
     # Add filters based on what we're downloading
-    query =
-      cond do
-        # For episodes, check if there's an active download for this episode
-        episode_id ->
-          where(base_query, [d], d.episode_id == ^episode_id)
+    cond do
+      # For episodes, check if there's an active download for this episode
+      episode_id ->
+        where(base_query, [d], d.episode_id == ^episode_id)
 
-        # For season packs, check if there's an active download for same media_item and season
-        media_item_id &&
-            match?(
-              %SearchResultMetadata{season_pack: true, season_number: _},
-              search_result.metadata
-            ) ->
-          season_number = search_result.metadata.season_number
+      # For season packs, check if there's an active download for same media_item and season
+      media_item_id &&
+          match?(
+            %SearchResultMetadata{season_pack: true, season_number: _},
+            search_result.metadata
+          ) ->
+        season_number = search_result.metadata.season_number
 
-          base_query
-          |> where([d], d.media_item_id == ^media_item_id)
-          |> where([d], ^Mydia.DB.json_is_true(:metadata, "$.season_pack"))
-          |> where(
-            [d],
-            ^Mydia.DB.json_integer_equals(:metadata, "$.season_number", season_number)
-          )
+        base_query
+        |> where([d], d.media_item_id == ^media_item_id)
+        |> where([d], ^Mydia.DB.json_is_true(:metadata, "$.season_pack"))
+        |> where(
+          [d],
+          ^Mydia.DB.json_integer_equals(:metadata, "$.season_number", season_number)
+        )
 
-        # Unscoped TV show request (no episode_id, not a season pack): a TV show
-        # legitimately has many concurrent downloads across seasons/episodes, so
-        # an active download for a *different* season/episode doesn't make THIS
-        # request a duplicate. Dedupe by the exact release URL instead of by
-        # media_item: different seasons have different torrent hashes (so
-        # cross-season requests are allowed), while re-submitting the same
-        # release (e.g. a double-clicked manual result) is still blocked.
-        media_item_id && tv_show?(media_item_id) ->
-          where(base_query, [d], d.download_url == ^search_result.download_url)
+      # Unscoped TV show request (no episode_id, not a season pack): a TV show
+      # legitimately has many concurrent downloads across seasons/episodes, so
+      # an active download for a *different* season/episode doesn't make THIS
+      # request a duplicate. Dedupe by the exact release URL instead of by
+      # media_item: different seasons have different torrent hashes (so
+      # cross-season requests are allowed), while re-submitting the same
+      # release (e.g. a double-clicked manual result) is still blocked.
+      media_item_id && tv_show?(media_item_id) ->
+        where(base_query, [d], d.download_url == ^search_result.download_url)
 
-        # For movies or other media, check if there's an active download for this media_item
-        media_item_id ->
-          where(base_query, [d], d.media_item_id == ^media_item_id)
+      # For movies or other media, check if there's an active download for this media_item
+      media_item_id ->
+        where(base_query, [d], d.media_item_id == ^media_item_id)
 
-        # No media association (e.g., music, books, adult libraries)
-        # Check by download_url to prevent downloading the same file twice
-        true ->
-          where(base_query, [d], d.download_url == ^search_result.download_url)
-      end
+      # No media association (e.g., music, books, adult libraries)
+      # Check by download_url to prevent downloading the same file twice
+      true ->
+        where(base_query, [d], d.download_url == ^search_result.download_url)
+    end
+  end
 
-    active_downloads = Repo.all(query)
+  defp exclude_download(query, nil), do: query
+  defp exclude_download(query, id), do: where(query, [d], d.id != ^id)
+
+  def check_for_active_download(search_result, media_item_id, episode_id, opts \\ []) do
+    active_downloads =
+      search_result
+      |> blocking_downloads_query(media_item_id, episode_id, opts)
+      |> Repo.all()
 
     if active_downloads == [] do
       :ok
@@ -144,6 +153,39 @@ defmodule Mydia.Downloads.Queue.Duplicates do
       end
     end
   end
+
+  @doc """
+  Lists the downloads that would block a grab for `media_item` in the manual
+  search `context`, oldest first. Database only: no download client check.
+
+  A whole-show context (a TV show with neither an episode nor a season) returns
+  `[]`, because that grab dedupes by release URL rather than by target.
+  """
+  def blocking_downloads(%MediaItem{} = media_item, context) do
+    case blocking_target(media_item, context) do
+      nil ->
+        []
+
+      {search_result, episode_id} ->
+        search_result
+        |> blocking_downloads_query(media_item.id, episode_id)
+        |> order_by([d], asc: d.inserted_at)
+        |> Repo.all()
+    end
+  end
+
+  defp blocking_target(_media_item, %{type: :episode, episode_id: episode_id})
+       when not is_nil(episode_id),
+       do: {%{metadata: nil, download_url: nil}, episode_id}
+
+  defp blocking_target(_media_item, %{type: :season, season_number: season_number})
+       when not is_nil(season_number) do
+    metadata = %SearchResultMetadata{season_pack: true, season_number: season_number}
+    {%{metadata: metadata, download_url: nil}, nil}
+  end
+
+  defp blocking_target(%MediaItem{type: "tv_show"}, _context), do: nil
+  defp blocking_target(_media_item, _context), do: {%{metadata: nil, download_url: nil}, nil}
 
   defp tv_show?(media_item_id) do
     case Repo.get(MediaItem, media_item_id) do

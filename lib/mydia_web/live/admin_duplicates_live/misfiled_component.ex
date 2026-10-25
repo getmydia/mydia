@@ -169,8 +169,8 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
   defp item_returning(returning, finding),
     do: Enum.count(finding.suspects, fn {file, _} -> MapSet.member?(returning, file.id) end)
 
-  defp reason_label(:wrong_episode), do: "Wrong episode"
-  defp reason_label(:unbound), do: "Doesn't match"
+  defp reason_label(:wrong_episode), do: gettext("Wrong episode")
+  defp reason_label(:unbound), do: gettext("Doesn't match")
 
   @impl true
   def render(assigns) do
@@ -178,7 +178,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
     <div id={@id}>
       <.admin_section
         id="misfiled-section"
-        title="Misfiled"
+        title={gettext("Misfiled")}
         icon="hero-document-magnifying-glass"
         count={@findings && length(@findings)}
       >
@@ -193,7 +193,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
           >
             <span :if={@scanning?} class="loading loading-spinner loading-xs"></span>
             <.icon :if={!@scanning?} name="hero-arrow-path" class="w-4 h-4" />
-            {if @findings, do: "Scan again", else: "Scan for misfiled files"}
+            {if @findings, do: gettext("Scan again"), else: gettext("Scan for misfiled files")}
           </button>
           <button
             :if={@findings not in [nil, []]}
@@ -203,22 +203,31 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
             disabled={MapSet.size(@returning) == 0}
             phx-click="send_all_misfiled"
             phx-target={@myself}
-            phx-disable-with="Sending..."
-            data-confirm={"Send #{Components.file_count(MapSet.size(@returning))} to Review? They stay on disk and wait in Review until someone matches them."}
+            phx-disable-with={gettext("Sending...")}
+            data-confirm={
+              ngettext(
+                "Send %{count} file to Review? They stay on disk and wait in Review until someone matches them.",
+                "Send %{count} files to Review? They stay on disk and wait in Review until someone matches them.",
+                MapSet.size(@returning)
+              )
+            }
           >
             <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-            Send {Components.file_count(MapSet.size(@returning))} to Review
+            {Components.send_to_review_label(MapSet.size(@returning))}
           </button>
         </:actions>
 
         <p class="text-sm text-base-content/60">
-          Files attached to an item while their own name and folder point to a different
-          title or episode. They don't collide with another file, so Needs Attention can't
-          see them. Scanning reads every file in the library and can take a while.
+          {gettext(
+            "Files attached to an item while their own name and folder point to a different title or episode."
+          )}
+          {gettext(
+            "They don't collide with another file, so Needs Attention can't see them. Scanning reads every file in the library and can take a while."
+          )}
         </p>
 
         <div :if={@scan_failed?} id="misfiled-error" role="alert" class="alert alert-error text-sm">
-          The scan failed. Check the server logs, then try again.
+          {gettext("The scan failed. Check the server logs, then try again.")}
         </div>
 
         <%= cond do %>
@@ -226,7 +235,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
           <% @findings == [] -> %>
             <div id="misfiled-empty" class="bg-base-200 rounded-box p-4 text-sm text-base-content/70">
               <.icon name="hero-check-circle" class="w-5 h-5 text-success inline" />
-              No misfiled files found.
+              {gettext("No misfiled files found.")}
             </div>
           <% true -> %>
             <.admin_list id="misfiled-items" items={@findings}>
@@ -234,12 +243,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
                 <.admin_row id={"misfiled-item-#{finding.media_item.id}"}>
                   <:title>{finding.media_item.title}</:title>
                   <:descriptor>
-                    {Components.file_count(length(finding.suspects))} of {finding.file_count} flagged
+                    {ngettext(
+                      "%{count} file of %{total} flagged",
+                      "%{count} files of %{total} flagged",
+                      length(finding.suspects),
+                      total: finding.file_count
+                    )}
                   </:descriptor>
                   <:details :if={finding.nothing_binds?}>
                     <p class="text-base-content/60">
-                      None of this item's files match its title, so nothing says which one is right.
-                      Check the item's match before sending anything.
+                      {gettext(
+                        "None of this item's files match its title, so nothing says which one is right."
+                      )}
+                      {gettext("Check the item's match before sending anything.")}
                     </p>
                   </:details>
                   <:badges>
@@ -247,7 +263,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
                       :if={finding.nothing_binds?}
                       class="badge badge-sm badge-outline badge-warning"
                     >
-                      Nothing matches
+                      {gettext("Nothing matches")}
                     </span>
                   </:badges>
                   <:actions>
@@ -255,12 +271,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
                       <.row_action
                         id={"misfiled-send-item-#{finding.media_item.id}"}
                         icon="hero-arrow-uturn-left"
-                        title="Send to Review"
+                        title={gettext("Send to Review")}
                         disabled={item_returning(@returning, finding) == 0}
                         phx-click="send_misfiled_item"
                         phx-value-item={finding.media_item.id}
                         phx-target={@myself}
-                        phx-disable-with="Sending..."
+                        phx-disable-with={gettext("Sending...")}
                       />
                     </.row_actions>
                   </:actions>
@@ -284,7 +300,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
                   </:body>
                 </.admin_row>
               </:row>
-              <:empty>No misfiled files found.</:empty>
+              <:empty>{gettext("No misfiled files found.")}</:empty>
             </.admin_list>
         <% end %>
       </.admin_section>

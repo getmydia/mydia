@@ -24,7 +24,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
           is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
         />
       </:row>
-      <:empty>No library paths configured yet. Add a media directory to get started.</:empty>
+      <:empty>
+        {gettext("No library paths configured yet. Add a media directory to get started.")}
+      </:empty>
     </.admin_list>
     """
   end
@@ -35,7 +37,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
     <div class="flex items-center gap-2">
       <div class="dropdown md:dropdown-end">
         <div tabindex="0" role="button" id="library-export-menu" class="btn btn-sm btn-ghost">
-          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Export
+          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> {gettext("Export")}
         </div>
         <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-40 p-2 shadow">
           <li>
@@ -51,7 +53,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
         </ul>
       </div>
       <button id="new-library-path" class="btn btn-sm btn-primary" phx-click="new_library_path">
-        <.icon name="hero-plus" class="w-4 h-4" /> New
+        <.icon name="hero-plus" class="w-4 h-4" /> {gettext("New")}
       </button>
     </div>
     """
@@ -88,14 +90,16 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
       <:descriptor><span class="font-mono">{@library_path.path}</span></:descriptor>
       <:details :if={@library_path.last_scan_at}>
         <p class="text-xs text-base-content/50">
-          Last scan: {format(@library_path.last_scan_at, :datetime, @display)}
+          {gettext("Last scan: %{time}",
+            time: format(@library_path.last_scan_at, :datetime, @display)
+          )}
         </p>
       </:details>
       <:badges>
         <span
           :if={@metadata_source}
           class={["badge badge-sm tooltip", metadata_source_badge_class(@metadata_source)]}
-          data-tip="Metadata source"
+          data-tip={gettext("Metadata source")}
         >
           <.icon name="hero-circle-stack" class="w-3 h-3 mr-1" />
           {metadata_source_display(@metadata_source)}
@@ -108,13 +112,15 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
           :if={@library_path.default_for_movies or @library_path.default_for_series}
           class="badge badge-sm badge-outline"
         >
-          Default
+          {gettext("Default")}
         </span>
         <span class={[
           "badge badge-sm",
           if(@library_path.monitored, do: "badge-success", else: "badge-ghost")
         ]}>
-          {if @library_path.monitored, do: "Monitored", else: "Not Monitored"}
+          {if @library_path.monitored,
+            do: pgettext("monitoring", "Monitored"),
+            else: pgettext("monitoring", "Not Monitored")}
         </span>
       </:badges>
       <:actions>
@@ -128,22 +134,24 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
             <.row_action
               id={"edit-library-path-#{@library_path.id}"}
               icon="hero-pencil"
-              title="Edit"
+              title={gettext("Edit")}
               disabled={@runtime?}
-              disabled_reason={@runtime? && "Cannot edit environment-configured libraries"}
+              disabled_reason={@runtime? && gettext("Cannot edit environment-configured libraries")}
               phx-click="edit_library_path"
               phx-value-id={@library_path.id}
             />
             <.row_action
               id={"delete-library-path-#{@library_path.id}"}
               icon="hero-trash"
-              title="Delete"
+              title={gettext("Delete")}
               destructive
               disabled={@runtime?}
-              disabled_reason={@runtime? && "Cannot delete environment-configured libraries"}
+              disabled_reason={@runtime? && gettext("Cannot delete environment-configured libraries")}
               phx-click="delete_library_path"
               phx-value-id={@library_path.id}
-              data-confirm={"Delete library #{LibraryPath.display_name(@library_path)}?"}
+              data-confirm={
+                gettext("Delete library %{name}?", name: LibraryPath.display_name(@library_path))
+              }
             />
           </.row_actions>
         </div>
@@ -165,18 +173,18 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
       <% @is_reorganizing -> %>
         <div class="btn btn-sm btn-ghost gap-1 no-animation">
           <span class="loading loading-spinner loading-xs"></span>
-          <span class="hidden sm:inline">Reorganizing...</span>
+          <span class="hidden sm:inline">{gettext("Reorganizing...")}</span>
         </div>
       <% @is_reclassifying -> %>
         <div class="btn btn-sm btn-ghost gap-1 no-animation">
           <span class="loading loading-spinner loading-xs"></span>
-          <span class="hidden sm:inline">Reclassifying...</span>
+          <span class="hidden sm:inline">{gettext("Reclassifying...")}</span>
         </div>
       <% true -> %>
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
             <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-            <span class="hidden sm:inline">Actions</span>
+            <span class="hidden sm:inline">{gettext("Actions")}</span>
             <.icon name="hero-chevron-down" class="w-3 h-3" />
           </div>
           <ul
@@ -189,12 +197,12 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                 phx-value-id={@library_path.id}
                 onclick="document.activeElement && document.activeElement.blur()"
               >
-                <.icon name="hero-tag" class="w-4 h-4" /> Re-classify All
+                <.icon name="hero-tag" class="w-4 h-4" /> {gettext("Re-classify All")}
               </button>
             </li>
             <%= if @library_path.auto_organize do %>
               <li class="menu-title pt-2">
-                <span>File Organization</span>
+                <span>{gettext("File Organization")}</span>
               </li>
               <li>
                 <button
@@ -202,7 +210,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                   phx-value-id={@library_path.id}
                   onclick="document.activeElement && document.activeElement.blur()"
                 >
-                  <.icon name="hero-eye" class="w-4 h-4" /> Preview Organization
+                  <.icon name="hero-eye" class="w-4 h-4" /> {gettext("Preview Organization")}
                 </button>
               </li>
               <li>
@@ -211,16 +219,16 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                   phx-value-id={@library_path.id}
                   onclick="document.activeElement && document.activeElement.blur()"
                 >
-                  <.icon name="hero-folder-arrow-down" class="w-4 h-4" /> Reorganize Files
+                  <.icon name="hero-folder-arrow-down" class="w-4 h-4" /> {gettext("Reorganize Files")}
                 </button>
               </li>
             <% else %>
               <li class="menu-title pt-2">
-                <span class="text-base-content/50">File Organization</span>
+                <span class="text-base-content/50">{gettext("File Organization")}</span>
               </li>
               <li class="disabled">
                 <span class="text-base-content/40 text-xs">
-                  Enable auto-organize to move files
+                  {gettext("Enable auto-organize to move files")}
                 </span>
               </li>
             <% end %>
@@ -241,9 +249,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   defp library_type_badge_class(:mixed), do: "badge-secondary"
   defp library_type_badge_class(_), do: "badge-ghost"
 
-  defp library_type_display(:series), do: "Series"
-  defp library_type_display(:movies), do: "Movies"
-  defp library_type_display(:mixed), do: "Mixed"
+  defp library_type_display(:series), do: gettext("Series")
+  defp library_type_display(:movies), do: gettext("Movies")
+  defp library_type_display(:mixed), do: gettext("Mixed")
   defp library_type_display(type), do: to_string(type)
 
   # Where a library's metadata comes from. Movies are always sourced from TMDB;

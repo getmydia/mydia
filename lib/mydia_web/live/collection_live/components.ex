@@ -17,6 +17,7 @@ defmodule MydiaWeb.CollectionLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Collections.SmartRulesFields
+  alias MydiaWeb.CollectionLive.RuleLabels
 
   @doc """
   Loads the smart rule condition "value" option lists (used to populate enum
@@ -335,7 +336,10 @@ defmodule MydiaWeb.CollectionLive.Components do
       |> assign(:selected, selected)
       |> assign(
         :options,
-        with_stored_values(Map.get(assigns.value_options, assigns.field, []), selected)
+        assigns.value_options
+        |> Map.get(assigns.field, [])
+        |> with_stored_values(selected)
+        |> Enum.map(&RuleLabels.value_option(assigns.field, &1))
       )
 
     ~H"""
@@ -355,7 +359,12 @@ defmodule MydiaWeb.CollectionLive.Components do
 
   # Boolean fields - render yes/no dropdown
   defp render_value_input(assigns, %{type: :boolean}) do
-    assigns = assign(assigns, :options, Map.get(assigns.value_options, assigns.field, []))
+    options =
+      assigns.value_options
+      |> Map.get(assigns.field, [])
+      |> Enum.map(&RuleLabels.value_option(assigns.field, &1))
+
+    assigns = assign(assigns, :options, options)
 
     ~H"""
     <select

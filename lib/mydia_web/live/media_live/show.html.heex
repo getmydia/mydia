@@ -453,9 +453,6 @@
   <%= if @show_download_delete_confirm && @download_to_delete do %>
     <Modals.download_delete_confirm_modal download_to_delete={@download_to_delete} />
   <% end %>
-  <%= if @show_download_details_modal && @download_details do %>
-    <Modals.download_details_modal download_details={@download_details} display={@time_display} />
-  <% end %>
   <%= if @show_reidentify_modal do %>
     <Modals.reidentify_modal provider={@reidentify_provider} candidates={@reidentify_candidates} />
   <% end %>
@@ -474,6 +471,7 @@
     <Modals.manual_search_modal
       manual_search_context={@manual_search_context}
       existing={@manual_search_existing}
+      blocking={@manual_search_blocking}
       media_item={@media_item}
       manual_search_query={@manual_search_query}
       searching={@searching}
@@ -497,6 +495,11 @@
       min_seeders={@min_seeders}
       sort_by={@sort_by}
     />
+  <% end %>
+  <%!-- After the manual search modal so it stacks on top when opened from the
+       dialog's "already downloading" banner. --%>
+  <%= if @show_download_details_modal && @download_details do %>
+    <Modals.download_details_modal download_details={@download_details} display={@time_display} />
   <% end %>
   <%= if @show_rename_modal do %>
     <RenameModal.rename_files_modal

@@ -15,9 +15,9 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
       <div class="bg-base-200 rounded-box p-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
           <div class="flex-1">
-            <div class="font-medium">Default Quality Profile</div>
+            <div class="font-medium">{gettext("Default Quality Profile")}</div>
             <div class="text-xs opacity-60">
-              Used when adding new media items to your library
+              {gettext("Used when adding new media items to your library")}
             </div>
           </div>
           <form phx-change="update_default_quality_profile" id="default-quality-profile-form">
@@ -27,7 +27,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
               name="profile_id"
             >
               <option value="" selected={is_nil(@default_quality_profile_id)}>
-                None (no default)
+                {gettext("None (no default)")}
               </option>
               <%= for profile <- @quality_profiles do %>
                 <option value={profile.id} selected={@default_quality_profile_id == profile.id}>
@@ -40,7 +40,9 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
       </div>
 
       <.admin_list id="quality-profiles" items={@quality_profiles}>
-        <:empty>No quality profiles configured yet. Create one to get started.</:empty>
+        <:empty>
+          {gettext("No quality profiles configured yet. Create one to get started.")}
+        </:empty>
         <:row :let={profile}>
           <% standards = profile.quality_standards || %{} %>
           <% video_codecs = get_in(standards, [:preferred_video_codecs]) || [] %>
@@ -52,29 +54,31 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <.admin_row id={"quality-profile-#{profile.id}"}>
             <:title>
               {profile.name}
-              <span :if={profile.is_system} class="badge badge-sm badge-outline">System</span>
+              <span :if={profile.is_system} class="badge badge-sm badge-outline">
+                {gettext("System")}
+              </span>
             </:title>
             <:descriptor>
               <span :if={video_codecs != []} class="mr-3">
-                <span class="font-medium">Codecs:</span>
+                <span class="font-medium">{gettext("Codecs:")}</span>
                 {Enum.take(video_codecs, 3) |> Enum.join(", ")}
                 <span :if={length(video_codecs) > 3} class="opacity-50">
                   +{length(video_codecs) - 3}
                 </span>
               </span>
               <span :if={resolutions != []} class="mr-3">
-                <span class="font-medium">Res:</span>
+                <span class="font-medium">{gettext("Res:")}</span>
                 {Enum.take(resolutions, 2) |> Enum.join(", ")}
                 <span :if={length(resolutions) > 2} class="opacity-50">
                   +{length(resolutions) - 2}
                 </span>
               </span>
               <span :if={movie_min || movie_max} class="hidden sm:inline mr-3">
-                <span class="font-medium">Movies:</span>
+                <span class="font-medium">{gettext("Movies:")}</span>
                 {movie_min || "0"}-{movie_max || "∞"}MB
               </span>
               <span :if={episode_min || episode_max} class="hidden sm:inline">
-                <span class="font-medium">Episodes:</span>
+                <span class="font-medium">{gettext("Episodes:")}</span>
                 {episode_min || "0"}-{episode_max || "∞"}MB
               </span>
             </:descriptor>
@@ -84,21 +88,21 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
                   <.row_action
                     id={"edit-quality-profile-#{profile.id}"}
                     icon="hero-pencil"
-                    title="Edit"
+                    title={gettext("Edit")}
                     phx-click="edit_quality_profile"
                     phx-value-id={profile.id}
                   />
                   <.row_action
                     id={"duplicate-quality-profile-#{profile.id}"}
                     icon="hero-document-duplicate"
-                    title="Duplicate"
+                    title={gettext("Duplicate")}
                     phx-click="duplicate_quality_profile"
                     phx-value-id={profile.id}
                   />
                   <.row_action
                     id={"delete-quality-profile-#{profile.id}"}
                     icon="hero-trash"
-                    title="Delete"
+                    title={gettext("Delete")}
                     destructive
                     phx-click="delete_quality_profile"
                     phx-value-id={profile.id}
@@ -110,8 +114,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
                     role="button"
                     id={"export-quality-profile-#{profile.id}"}
                     class="btn btn-sm btn-ghost"
-                    title="Export"
-                    aria-label="Export"
+                    title={gettext("Export")}
+                    aria-label={gettext("Export")}
                   >
                     <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
                   </div>
@@ -153,13 +157,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
     ~H"""
     <button class="btn btn-sm btn-ghost" phx-click="open_quality_profile_presets_modal">
       <.icon name="hero-sparkles" class="w-4 h-4" />
-      <span class="hidden sm:inline">Browse</span> Presets
+      <span class="hidden sm:inline">{gettext("Browse Presets")}</span>
+      <span class="sm:hidden">{gettext("Presets")}</span>
     </button>
     <button class="btn btn-sm btn-ghost" phx-click="open_import_quality_profile_modal">
-      <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Import
+      <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> {pgettext("import", "Import")}
     </button>
     <button class="btn btn-sm btn-primary" phx-click="new_quality_profile">
-      <.icon name="hero-plus" class="w-4 h-4" /> New
+      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("New")}
     </button>
     """
   end

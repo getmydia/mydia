@@ -45,7 +45,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Plugins")
+     |> assign(:page_title, gettext("Configuration - Plugins"))
      |> assign(:browse, nil)
      |> assign(:browsing?, false)
      |> assign(:show_plugin_store_modal, false)
@@ -127,7 +127,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           |> load_installed()
 
         {:error, error} ->
-          put_flash(socket, :error, "Could not activate: #{error_message(error)}")
+          put_flash(
+            socket,
+            :error,
+            gettext("Could not activate: %{reason}", reason: error_message(error))
+          )
       end
 
     {:noreply, socket}
@@ -138,11 +142,20 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   def handle_event("toggle_plugin", %{"slug" => slug}, socket) do
     config = Settings.get_plugin_config_by_slug(slug)
     enable? = !(config && config.enabled)
-    apply_lifecycle(socket, fn -> Plugins.set_enabled(slug, enable?) end, "Updated #{slug}.")
+
+    apply_lifecycle(
+      socket,
+      fn -> Plugins.set_enabled(slug, enable?) end,
+      gettext("Updated %{slug}.", slug: slug)
+    )
   end
 
   def handle_event("remove_plugin", %{"slug" => slug}, socket) do
-    apply_lifecycle(socket, fn -> Plugins.remove(slug) end, "Removed #{slug}.")
+    apply_lifecycle(
+      socket,
+      fn -> Plugins.remove(slug) end,
+      gettext("Removed %{slug}.", slug: slug)
+    )
   end
 
   ## Settings modal (operator-editable config — U3)
@@ -183,14 +196,15 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           other -> other
         end
 
-      {:noreply, socket |> assign(:settings, settings) |> put_flash(:info, "Permissions saved.")}
+      {:noreply,
+       socket |> assign(:settings, settings) |> put_flash(:info, gettext("Permissions saved."))}
     else
-      _ -> {:noreply, put_flash(socket, :error, "Could not save permissions.")}
+      _ -> {:noreply, put_flash(socket, :error, gettext("Could not save permissions."))}
     end
   end
 
   def handle_event("save_ceilings", _params, socket),
-    do: {:noreply, put_flash(socket, :error, "Could not save permissions.")}
+    do: {:noreply, put_flash(socket, :error, gettext("Could not save permissions."))}
 
   def handle_event("save_plugin_settings", %{"slug" => slug} = params, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
@@ -206,7 +220,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           with :ok <- Plugins.validate_url_settings(schema, settings),
                {:ok, _} <- Plugins.update_settings(slug, settings) do
             socket
-            |> put_flash(:info, "#{config.name} settings saved.")
+            |> put_flash(:info, gettext("%{name} settings saved.", name: config.name))
             |> assign(:settings, nil)
             |> load_installed()
           else
@@ -282,13 +296,28 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   def handle_event("test_plugin", %{"slug" => slug, "event" => event_type}, socket) do
     case Plugins.test_invoke(slug, event_type) do
       :ok ->
-        {:noreply, put_flash(socket, :info, "Test #{event_type} dispatched to #{slug}.")}
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           gettext("Test %{event} dispatched to %{slug}.", event: event_type, slug: slug)
+         )}
 
       {:error, :no_instance} ->
-        {:noreply, put_flash(socket, :error, "#{slug} has no enabled instance to test.")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("%{slug} has no enabled instance to test.", slug: slug)
+         )}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "#{slug} is not running — enable it first.")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("%{slug} is not running — enable it first.", slug: slug)
+         )}
     end
   end
 
@@ -304,7 +333,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
     result = %BrowseResult{
       status: :empty,
-      error: "store lookup failed",
+      error: gettext("store lookup failed"),
       source_count: length(Index.sources()),
       failed_count: 1
     }
@@ -337,9 +366,12 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   ## Helpers
 
   defp approval_flash(%{ungranted: ungranted, name: name}) when ungranted != %{},
-    do: "#{name} re-approved. Its newly requested capabilities are now granted."
+    do:
+      gettext("%{name} re-approved. Its newly requested capabilities are now granted.",
+        name: name
+      )
 
-  defp approval_flash(%{name: name}), do: "#{name} approved and activated."
+  defp approval_flash(%{name: name}), do: gettext("%{name} approved and activated.", name: name)
 
   defp network_event_for?(%{type: "plugin.http_request"} = event, slug),
     do: event.actor_id == slug
@@ -643,8 +675,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   # A source removed between browse and confirm fails the foreign key.
   defp error_message(%Ecto.Changeset{errors: errors}) do
     if Keyword.has_key?(errors, :plugin_source_id),
-      do: "the plugin source was removed. Reopen the store and try again",
-      else: "the plugin could not be saved"
+      do: gettext("the plugin source was removed. Reopen the store and try again"),
+      else: gettext("the plugin could not be saved")
   end
 
   defp error_message(%{__struct__: _} = error) do

@@ -24,6 +24,8 @@ defmodule MydiaWeb.Plugs.RuntimeUeberauth do
 
   require Logger
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Controller, only: [put_flash: 3, redirect: 2]
 
   @impl Plug
@@ -41,7 +43,10 @@ defmodule MydiaWeb.Plugs.RuntimeUeberauth do
       Logger.error("Ueberauth request exited: #{inspect(reason)}")
 
       conn
-      |> put_flash(:error, "The identity provider did not respond in time. Please try again.")
+      |> put_flash(
+        :error,
+        gettext("The identity provider did not respond in time. Please try again.")
+      )
       |> redirect(to: "/auth/login")
       |> Plug.Conn.halt()
   end

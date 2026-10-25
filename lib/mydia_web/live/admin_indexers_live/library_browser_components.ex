@@ -23,8 +23,8 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
     <.admin_modal
       id="indexer-library-modal"
       icon="hero-book-open"
-      title="Indexer Library"
-      subtitle="Browse and add indexers from the definition library"
+      title={gettext("Indexer Library")}
+      subtitle={gettext("Browse and add indexers from the definition library")}
       on_close="close_indexer_library"
       size={:lg}
     >
@@ -32,8 +32,10 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       <div class="alert alert-warning mb-4">
         <.icon name="hero-beaker" class="w-5 h-5" />
         <span class="text-sm">
-          <span class="font-medium">Experimental:</span>
-          Only a limited number of indexers have been tested. Prowlarr and Jackett integrations are stable and recommended.
+          <span class="font-medium">{gettext("Experimental:")}</span>
+          {gettext(
+            "Only a limited number of indexers have been tested. Prowlarr and Jackett integrations are stable and recommended."
+          )}
         </span>
       </div>
       <%!-- Filters and Search --%>
@@ -42,14 +44,14 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
           <%!-- Search --%>
           <div class="form-control flex-1 min-w-48">
             <label class="label py-1">
-              <span class="label-text text-xs">Search</span>
+              <span class="label-text text-xs">{pgettext("search", "Search")}</span>
             </label>
             <form id="indexer-library-search-form" phx-change="search_library_indexers">
               <input
                 type="text"
                 name="search[query]"
                 value={@search_query}
-                placeholder="Search by name or description..."
+                placeholder={gettext("Search by name or description...")}
                 class="input input-bordered input-sm w-full"
               />
             </form>
@@ -64,24 +66,30 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             <%!-- Type Filter --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Type</span>
+                <span class="label-text text-xs">{pgettext("indexer type", "Type")}</span>
               </label>
               <select class="select select-bordered select-sm" name="type">
-                <option value="all" selected={@filter_type == "all"}>All Types</option>
-                <option value="public" selected={@filter_type == "public"}>Public</option>
-                <option value="private" selected={@filter_type == "private"}>Private</option>
+                <option value="all" selected={@filter_type == "all"}>{gettext("All Types")}</option>
+                <option value="public" selected={@filter_type == "public"}>
+                  {Components.library_indexer_type_label("public")}
+                </option>
+                <option value="private" selected={@filter_type == "private"}>
+                  {Components.library_indexer_type_label("private")}
+                </option>
                 <option value="semi-private" selected={@filter_type == "semi-private"}>
-                  Semi-Private
+                  {Components.library_indexer_type_label("semi-private")}
                 </option>
               </select>
             </div>
             <%!-- Language Filter --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Language</span>
+                <span class="label-text text-xs">{gettext("Language")}</span>
               </label>
               <select class="select select-bordered select-sm" name="language">
-                <option value="all" selected={@filter_language == "all"}>All Languages</option>
+                <option value="all" selected={@filter_language == "all"}>
+                  {gettext("All Languages")}
+                </option>
                 <%= for language <- @available_languages do %>
                   <option value={language} selected={@filter_language == language}>
                     {language}
@@ -92,13 +100,15 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             <%!-- Status Filter --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Status</span>
+                <span class="label-text text-xs">{gettext("Status")}</span>
               </label>
               <select class="select select-bordered select-sm" name="added">
-                <option value="all" selected={@filter_added == "all"}>All</option>
-                <option value="added" selected={@filter_added == "added"}>Added</option>
+                <option value="all" selected={@filter_added == "all"}>{gettext("All")}</option>
+                <option value="added" selected={@filter_added == "added"}>
+                  {gettext("Added")}
+                </option>
                 <option value="not_added" selected={@filter_added == "not_added"}>
-                  Not added
+                  {gettext("Not added")}
                 </option>
               </select>
             </div>
@@ -112,9 +122,9 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
               disabled={@syncing}
             >
               <%= if @syncing do %>
-                <span class="loading loading-spinner loading-xs"></span> Syncing...
+                <span class="loading loading-spinner loading-xs"></span> {gettext("Syncing...")}
               <% else %>
-                <.icon name="hero-arrow-path" class="w-4 h-4" /> Sync Library
+                <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Sync Library")}
               <% end %>
             </button>
           </div>
@@ -127,14 +137,18 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         </:row>
         <:empty>
           <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
-            No indexers match your filters. Try adjusting your search criteria.
+            {gettext("No indexers match your filters. Try adjusting your search criteria.")}
           <% else %>
-            No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
+            {gettext(
+              "No indexer definitions available. Click \"Sync Library\" to fetch indexers from the repository."
+            )}
           <% end %>
         </:empty>
       </.admin_list>
       <.admin_modal_actions>
-        <button class="btn btn-ghost" phx-click="close_indexer_library">Close</button>
+        <button class="btn btn-ghost" phx-click="close_indexer_library">
+          {gettext("Close")}
+        </button>
       </.admin_modal_actions>
     </.admin_modal>
     <%!-- Credentials dialog, stacked above the library modal --%>
@@ -142,7 +156,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       :if={@configuring_definition}
       id="library-definition-config-modal"
       icon="hero-cog-6-tooth"
-      title={"Configure #{@configuring_definition.name}"}
+      title={gettext("Configure %{name}", name: @configuring_definition.name)}
       on_close="close_library_definition_config_modal"
     >
       <.form
@@ -154,26 +168,26 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         <input type="hidden" name="definition_id" value={@configuring_definition.id} />
         <div class="form-control">
           <label class="label">
-            <span class="label-text">Username</span>
+            <span class="label-text">{gettext("Username")}</span>
           </label>
           <input
             type="text"
             name="config[username]"
             value={@config_form[:username].value}
             class="input input-bordered w-full"
-            placeholder="Enter username"
+            placeholder={gettext("Enter username")}
           />
         </div>
         <div class="form-control">
           <label class="label">
-            <span class="label-text">Password</span>
+            <span class="label-text">{gettext("Password")}</span>
           </label>
           <input
             type="password"
             name="config[password]"
             value={@config_form[:password].value}
             class="input input-bordered w-full"
-            placeholder="Enter password"
+            placeholder={gettext("Enter password")}
           />
         </div>
         <.admin_modal_actions>
@@ -182,9 +196,9 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             class="btn btn-ghost"
             phx-click="close_library_definition_config_modal"
           >
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="submit" class="btn btn-primary">{gettext("Save")}</button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -199,7 +213,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       <:title>
         {@definition.name}
         <span class={"badge badge-sm badge-outline #{Components.library_indexer_type_badge_class(@definition.type)}"}>
-          {@definition.type}
+          {Components.library_indexer_type_label(@definition.type)}
         </span>
         <span :if={@definition.language} class="badge badge-sm badge-ghost">
           {@definition.language}
@@ -213,8 +227,8 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       <:badges>
         <%= if Components.needs_library_config?(@definition) and @definition.in_library do %>
           <span
-            title="This indexer requires configuration"
-            aria-label="This indexer requires configuration"
+            title={gettext("This indexer requires configuration")}
+            aria-label={gettext("This indexer requires configuration")}
             role="img"
             class="inline-flex"
           >
@@ -232,7 +246,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             "text-xs font-medium min-w-16 text-right",
             if(@definition.in_library, do: "text-success", else: "text-base-content/50")
           ]}>
-            {if @definition.in_library, do: "Added", else: "Not added"}
+            {if @definition.in_library, do: gettext("Added"), else: gettext("Not added")}
           </span>
           <input
             type="checkbox"
@@ -242,8 +256,8 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             phx-value-id={@definition.id}
             aria-label={
               if @definition.in_library,
-                do: "Remove #{@definition.name}",
-                else: "Add #{@definition.name}"
+                do: gettext("Remove %{name}", name: @definition.name),
+                else: gettext("Add %{name}", name: @definition.name)
             }
           />
         </label>
@@ -253,7 +267,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
           <.row_action
             id={"configure-library-definition-#{@definition.id}"}
             icon="hero-cog-6-tooth"
-            title="Configure"
+            title={gettext("Configure")}
             phx-click="configure_library_definition"
             phx-value-id={@definition.id}
           />

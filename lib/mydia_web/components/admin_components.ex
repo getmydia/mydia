@@ -5,6 +5,7 @@ defmodule MydiaWeb.AdminComponents do
   navigation components read `MydiaWeb.AdminNav`.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
@@ -34,6 +35,7 @@ defmodule MydiaWeb.AdminComponents do
     hubs =
       for hub <- AdminNav.hubs() do
         Map.merge(hub, %{
+          label: AdminNav.hub_label(hub.key),
           active?: not is_nil(current) and current.hub == hub.key,
           path: AdminNav.hub_landing_path(hub.key)
         })
@@ -80,7 +82,7 @@ defmodule MydiaWeb.AdminComponents do
   defp source_label(:env), do: "ENV"
   defp source_label(:database), do: "DB"
   defp source_label(:yaml), do: "YAML"
-  defp source_label(_source), do: "Default"
+  defp source_label(_source), do: gettext("Default")
 
   attr :title, :string, required: true
   attr :description, :string, default: nil
@@ -170,7 +172,7 @@ defmodule MydiaWeb.AdminComponents do
           tabs' bottom borders coincide with it. --%>
     <nav
       id="admin-page-tabs"
-      aria-label={"#{@hub_label} pages"}
+      aria-label={gettext("%{hub} pages", hub: @hub_label)}
       class="tabs tabs-lift relative z-10 -mb-px max-xl:hidden"
     >
       <.link
@@ -181,7 +183,7 @@ defmodule MydiaWeb.AdminComponents do
         class={["tab gap-1.5 whitespace-nowrap", tab.key == @nav_page.key && "tab-active"]}
       >
         <.icon name={tab.icon} class="size-4 hidden 2xl:inline-block" />
-        {tab.label}
+        {AdminNav.page_label(tab)}
         <span
           :if={@count && tab.key == @nav_page.key}
           id="admin-page-count"
@@ -194,7 +196,11 @@ defmodule MydiaWeb.AdminComponents do
 
     <%!-- Below xl the current page is one lifted tab that opens the hub's pages.
           A plain btn here blended into the page in every theme (#1188). --%>
-    <nav id="admin-page-switcher" aria-label={"#{@hub_label} pages"} class="flex xl:hidden">
+    <nav
+      id="admin-page-switcher"
+      aria-label={gettext("%{hub} pages", hub: @hub_label)}
+      class="flex xl:hidden"
+    >
       <div class="dropdown z-20 -mb-px">
         <div
           id="admin-page-switcher-trigger"
@@ -203,7 +209,7 @@ defmodule MydiaWeb.AdminComponents do
           class="flex items-center gap-2 h-10 px-4 font-medium cursor-pointer bg-base-100 border border-base-300 border-b-0 rounded-t-box focus-visible:outline-2 focus-visible:outline-primary"
         >
           <.icon name={@nav_page.icon} class="size-4" />
-          {@nav_page.label}
+          {AdminNav.page_label(@nav_page)}
           <span :if={@count} id="admin-switcher-count" class="badge badge-sm tabular-nums">
             {@count}
           </span>
@@ -221,7 +227,7 @@ defmodule MydiaWeb.AdminComponents do
               class={[tab.key == @nav_page.key && "menu-active"]}
             >
               <.icon name={tab.icon} class="w-4 h-4 opacity-60" />
-              {tab.label}
+              {AdminNav.page_label(tab)}
             </.link>
           </li>
         </ul>
@@ -232,8 +238,8 @@ defmodule MydiaWeb.AdminComponents do
       id="admin-page-body"
       class="bg-base-100 border border-base-300 rounded-box rounded-tl-none p-3 sm:p-4 xl:p-6 space-y-4"
     >
-      <p :if={@nav_page.description} id="admin-page-description" class="text-base-content/70">
-        {@nav_page.description}
+      <p id="admin-page-description" class="text-base-content/70">
+        {AdminNav.page_description(@nav_page)}
       </p>
       {render_slot(@inner_block)}
     </div>
