@@ -65,7 +65,12 @@
               "You haven't submitted any requests yet. Start by searching for media to request!"
             )}
           <% else %>
-            {gettext("No %{status} requests found.", status: status_text(@filter_status))}
+            {case @filter_status do
+              "pending" -> gettext("No Pending Review requests found.")
+              "approved" -> gettext("No Approved requests found.")
+              "rejected" -> gettext("No Rejected requests found.")
+              _ -> gettext("No requests found.")
+            end}
           <% end %>
         </p>
         <div class="flex gap-2 justify-center">

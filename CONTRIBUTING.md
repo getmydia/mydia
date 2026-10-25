@@ -68,11 +68,12 @@ lower number becomes the new baseline. Findings are matched by check and functio
 moving an unchanged function into a new module is free. Splitting a large file is
 exactly what the gate wants.
 
-**Untranslated text.** A template file (`.heex`, or `~H` in an `.ex` under
-`lib/mydia_web/`) may not gain literal English text: text nodes and
-`placeholder`, `title`, `alt`, `aria-label`, `label` and `prompt` values. Wrap
-new text in `gettext/1` (see `lib/mydia_web/gettext/README.md`). Print a file's
-count with `./dev mix run -e 'IO.puts Mydia.Ratchet.TemplateText.count_file("path")'`.
+**Untranslated text.** Not a ratchet: `test/mydia_web/untranslated_text_test.exs`
+fails on any literal English text in a template under `lib/mydia_web/` (text nodes
+and `placeholder`, `title`, `alt`, `aria-label`, `label` and `prompt` values) and on
+`put_flash` with a literal string. Wrap new text in `gettext/1` (see
+`lib/mydia_web/gettext/README.md`). Print a file's count with
+`./dev mix run -e 'IO.puts Mydia.Ratchet.TemplateText.count_file("path")'`.
 
 ### Translations
 

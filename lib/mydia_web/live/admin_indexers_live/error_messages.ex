@@ -4,14 +4,24 @@ defmodule MydiaWeb.AdminIndexersLive.ErrorMessages do
   and FlareSolverr transport failures.
   """
 
-  @spec format_sync_error(term()) :: String.t()
-  def format_sync_error(:rate_limit_exceeded),
-    do: "GitHub API rate limit exceeded. Try again later."
+  use Gettext, backend: MydiaWeb.Gettext
 
-  def format_sync_error(:not_found), do: "Repository or definitions path not found."
-  def format_sync_error({:unexpected_status, status}), do: "Unexpected HTTP status: #{status}"
-  def format_sync_error(reason) when is_binary(reason), do: reason
-  def format_sync_error(reason), do: inspect(reason)
+  # One whole sentence per known reason; an unknown reason is shown raw inside
+  # the framing sentence.
+  @spec sync_failed_message(term()) :: String.t()
+  def sync_failed_message(:rate_limit_exceeded),
+    do: gettext("Sync failed: GitHub API rate limit exceeded. Try again later.")
+
+  def sync_failed_message(:not_found),
+    do: gettext("Sync failed: Repository or definitions path not found.")
+
+  def sync_failed_message({:unexpected_status, status}),
+    do: gettext("Sync failed: Unexpected HTTP status: %{status}", status: status)
+
+  def sync_failed_message(reason) when is_binary(reason),
+    do: gettext("Sync failed: %{reason}", reason: reason)
+
+  def sync_failed_message(reason), do: gettext("Sync failed: %{reason}", reason: inspect(reason))
 
   # Transport reasons are usually atoms (:econnrefused, :timeout) but can be
   # tuples, such as a TLS alert, which string interpolation cannot render.
@@ -24,17 +34,23 @@ defmodule MydiaWeb.AdminIndexersLive.ErrorMessages do
   # indexers report a green test while every search returned zero results. The
   # flash component only has :info and :error (core_components.ex:45), so a
   # degraded result is :error with a message that says what is degraded; the
-  # row's health badge carries the "degraded" state separately.
+  # row's health badge carries the "degraded" state separately. The result
+  # message and error text come from the health check and are shown as given.
   @spec library_test_flash(map()) :: {:info | :error, String.t()}
   def library_test_flash(%{success: true, status: "degraded"} = result) do
-    {:error, "#{result.message} (#{result.response_time_ms}ms)"}
+    {:error,
+     gettext("%{message} (%{ms}ms)", message: result.message, ms: result.response_time_ms)}
   end
 
   def library_test_flash(%{success: true} = result) do
-    {:info, "#{result.message} (#{result.response_time_ms}ms)"}
+    {:info, gettext("%{message} (%{ms}ms)", message: result.message, ms: result.response_time_ms)}
   end
 
   def library_test_flash(result) do
-    {:error, "#{result.message}: #{result.error || "Unknown error"}"}
+    {:error,
+     gettext("%{message}: %{error}",
+       message: result.message,
+       error: result.error || gettext("Unknown error")
+     )}
   end
 end

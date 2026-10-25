@@ -13,15 +13,17 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
       <div class="alert alert-info">
         <.icon name="hero-information-circle" class="w-5 h-5" />
         <span class="text-sm">
-          Configure quality standards including codecs, bitrates, resolutions, and file sizes. Leave fields empty to allow any value.
+          {gettext(
+            "Configure quality standards including codecs, bitrates, resolutions, and file sizes. Leave fields empty to allow any value."
+          )}
         </span>
       </div>
 
       <%!-- Video Codecs --%>
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred Video Codecs</span>
-          <span class="label-text-alt text-xs">In priority order</span>
+          <span class="label-text font-semibold">{gettext("Preferred Video Codecs")}</span>
+          <span class="label-text-alt text-xs">{gettext("In priority order")}</span>
         </label>
         <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
           <%= for codec <- ["h265", "h264", "av1", "hevc", "x264", "x265", "vc1", "mpeg2", "xvid", "divx"] do %>
@@ -45,11 +47,11 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
       </div>
 
       <%!-- Audio Settings --%>
-      <div class="divider">Audio Settings</div>
+      <div class="divider">{gettext("Audio Settings")}</div>
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred Audio Codecs</span>
+          <span class="label-text font-semibold">{gettext("Preferred Audio Codecs")}</span>
         </label>
         <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
           <%= for codec <- ["aac", "ac3", "eac3", "dts", "dts-hd", "truehd", "atmos", "flac", "mp3", "opus"] do %>
@@ -74,7 +76,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred Audio Channels</span>
+          <span class="label-text font-semibold">{gettext("Preferred Audio Channels")}</span>
         </label>
         <div class="grid grid-cols-3 md:grid-cols-4 gap-2">
           <%= for channels <- ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"] do %>
@@ -98,23 +100,24 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
       </div>
 
       <%!-- Resolution Settings --%>
-      <div class="divider">Resolution Settings</div>
+      <div class="divider">{gettext("Resolution Settings")}</div>
 
       <p id="resolution-limits-hint" class="text-xs text-base-content/70">
-        Automatic grabs and upgrades never go outside these. Manual search still lists
-        everything and marks what is outside.
+        {gettext(
+          "Automatic grabs and upgrades never go outside these. Manual search still lists everything and marks what is outside."
+        )}
       </p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="form-control">
           <label class="label">
-            <span class="label-text">Minimum Resolution</span>
+            <span class="label-text">{gettext("Minimum Resolution")}</span>
           </label>
           <select
             name="quality_profile[quality_standards][min_resolution]"
             class="select select-bordered w-full"
           >
-            <option value="">No minimum</option>
+            <option value="">{gettext("No minimum")}</option>
             <%= for res <- ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"] do %>
               <option
                 value={res}
@@ -134,13 +137,13 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
         <div class="form-control">
           <label class="label">
-            <span class="label-text">Maximum Resolution</span>
+            <span class="label-text">{gettext("Maximum Resolution")}</span>
           </label>
           <select
             name="quality_profile[quality_standards][max_resolution]"
             class="select select-bordered w-full"
           >
-            <option value="">No maximum</option>
+            <option value="">{gettext("No maximum")}</option>
             <%= for res <- ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"] do %>
               <option
                 value={res}
@@ -161,7 +164,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred Resolutions</span>
+          <span class="label-text font-semibold">{gettext("Preferred Resolutions")}</span>
         </label>
         <div class="grid grid-cols-3 md:grid-cols-4 gap-2">
           <%= for res <- ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"] do %>
@@ -185,12 +188,12 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
       </div>
 
       <%!-- Source Preferences --%>
-      <div class="divider">Source Preferences</div>
+      <div class="divider">{gettext("Source Preferences")}</div>
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred Sources</span>
-          <span class="label-text-alt text-xs">In priority order</span>
+          <span class="label-text font-semibold">{gettext("Preferred Sources")}</span>
+          <span class="label-text-alt text-xs">{gettext("In priority order")}</span>
         </label>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
           <%= for source <- ["BluRay", "BDRip", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"] do %>
@@ -215,12 +218,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Minimum seeder ratio (torrents)</span>
+          <span class="label-text font-semibold">
+            {gettext("Minimum seeder ratio (torrents)")}
+          </span>
         </label>
         <input
           type="number"
           name="quality_profile[quality_standards][min_ratio]"
-          placeholder="e.g. 0.2"
+          placeholder={gettext("e.g. 0.2")}
           step="0.05"
           min="0"
           value={
@@ -233,29 +238,32 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
         />
         <label class="label">
           <span class="label-text-alt">
-            A preference: torrents below this seeder/leecher ratio rank lower but can still be grabbed. Leave blank to disable.
+            {gettext(
+              "A preference: torrents below this seeder/leecher ratio rank lower but can still be grabbed. Leave blank to disable."
+            )}
           </span>
         </label>
       </div>
 
       <%!-- File Size Constraints --%>
-      <div class="divider">File Size Limits (MB)</div>
+      <div class="divider">{gettext("File Size Limits (MB)")}</div>
       <p id="size-limits-hint" class="text-xs text-base-content/70">
-        Automatic grabs and upgrades never go outside these. A season pack is judged per
-        episode. Manual search still lists everything and marks what is outside.
+        {gettext(
+          "Automatic grabs and upgrades never go outside these. A season pack is judged per episode. Manual search still lists everything and marks what is outside."
+        )}
       </p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="form-control">
           <label class="label">
-            <span class="label-text font-semibold">Movie File Sizes</span>
+            <span class="label-text font-semibold">{gettext("Movie File Sizes")}</span>
           </label>
           <div class="space-y-2">
             <div>
               <input
                 type="number"
                 name="quality_profile[quality_standards][movie_min_size_mb]"
-                placeholder="Min size (MB)"
+                placeholder={gettext("Min size (MB)")}
                 step="1"
                 min="0"
                 value={
@@ -267,14 +275,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
                 class="input input-bordered w-full"
               />
               <label class="label">
-                <span class="label-text-alt">Minimum</span>
+                <span class="label-text-alt">{gettext("Minimum")}</span>
               </label>
             </div>
             <div>
               <input
                 type="number"
                 name="quality_profile[quality_standards][movie_max_size_mb]"
-                placeholder="Max size (MB)"
+                placeholder={gettext("Max size (MB)")}
                 step="1"
                 min="0"
                 value={
@@ -286,7 +294,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
                 class="input input-bordered w-full"
               />
               <label class="label">
-                <span class="label-text-alt">Maximum</span>
+                <span class="label-text-alt">{gettext("Maximum")}</span>
               </label>
             </div>
           </div>
@@ -294,14 +302,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
         <div class="form-control">
           <label class="label">
-            <span class="label-text font-semibold">Episode File Sizes</span>
+            <span class="label-text font-semibold">{gettext("Episode File Sizes")}</span>
           </label>
           <div class="space-y-2">
             <div>
               <input
                 type="number"
                 name="quality_profile[quality_standards][episode_min_size_mb]"
-                placeholder="Min size (MB)"
+                placeholder={gettext("Min size (MB)")}
                 step="1"
                 min="0"
                 value={
@@ -313,14 +321,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
                 class="input input-bordered w-full"
               />
               <label class="label">
-                <span class="label-text-alt">Minimum</span>
+                <span class="label-text-alt">{gettext("Minimum")}</span>
               </label>
             </div>
             <div>
               <input
                 type="number"
                 name="quality_profile[quality_standards][episode_max_size_mb]"
-                placeholder="Max size (MB)"
+                placeholder={gettext("Max size (MB)")}
                 step="1"
                 min="0"
                 value={
@@ -332,7 +340,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
                 class="input input-bordered w-full"
               />
               <label class="label">
-                <span class="label-text-alt">Maximum</span>
+                <span class="label-text-alt">{gettext("Maximum")}</span>
               </label>
             </div>
           </div>
@@ -344,7 +352,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
 
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Preferred HDR Formats</span>
+          <span class="label-text font-semibold">{gettext("Preferred HDR Formats")}</span>
         </label>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
           <%= for format <- ["hdr10", "hdr10+", "dolby_vision", "hlg"] do %>
@@ -383,9 +391,9 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
             class="checkbox checkbox-primary"
           />
           <div>
-            <span class="label-text font-semibold">Require HDR</span>
+            <span class="label-text font-semibold">{gettext("Require HDR")}</span>
             <p class="text-xs text-base-content/70">
-              Automatic grabs and upgrades skip releases without HDR in the name
+              {gettext("Automatic grabs and upgrades skip releases without HDR in the name")}
             </p>
           </div>
         </label>

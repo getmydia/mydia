@@ -41,13 +41,20 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   def duplicates_tab(assigns) do
     ~H"""
     <p class="text-sm text-base-content/60">
-      Items holding more than one file, where every copy is proven to be the same content.
-      Each file is set to either <span class="font-medium text-base-content">Keep</span>
-      or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-      kept, the rest are already marked for trash. Trash one item with its own button, or
-      every item with the button above. Every item always keeps at least one file. Trashed
-      files are held for {@retention_days} days before permanent deletion, and a run can be
-      undone until you leave this page.
+      {gettext("Items holding more than one file, where every copy is proven to be the same content.")}
+      {gettext(
+        "Each file is set to either %{keep} or %{trash}; the best copy is listed first and kept, the rest are already marked for trash.",
+        keep: gettext("Keep"),
+        trash: gettext("Trash")
+      )}
+      {gettext(
+        "Trash one item with its own button, or every item with the button above. Every item always keeps at least one file."
+      )}
+      {ngettext(
+        "Trashed files are held for %{count} day before permanent deletion, and a run can be undone until you leave this page.",
+        "Trashed files are held for %{count} days before permanent deletion, and a run can be undone until you leave this page.",
+        @retention_days
+      )}
     </p>
 
     <.admin_list id="duplicates-groups" items={@decisions}>
@@ -56,9 +63,9 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       </:row>
       <:empty>
         <%= if @refusals == [] do %>
-          No item holds more than one file. There are no duplicates to review.
+          {gettext("No item holds more than one file. There are no duplicates to review.")}
         <% else %>
-          Nothing can be trashed safely right now. Every item below needs attention first.
+          {gettext("Nothing can be trashed safely right now. Every item below needs attention first.")}
         <% end %>
       </:empty>
     </.admin_list>
@@ -99,7 +106,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         class="btn btn-sm btn-ghost join-item"
         phx-click="trash_all_duplicates"
       >
-        <.icon name="hero-check-circle" class="w-4 h-4" /> Mark all for trash
+        <.icon name="hero-check-circle" class="w-4 h-4" /> {gettext("Mark all for trash")}
       </button>
       <button
         id="duplicates-trash-selected"
@@ -109,7 +116,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         phx-click="open_trash_modal"
       >
         <.icon name="hero-trash" class="w-4 h-4" />
-        Trash {file_count(MapSet.size(@selected))} ({format_file_size(@reclaimable)})
+        {trash_files_label(MapSet.size(@selected), format_file_size(@reclaimable))}
       </button>
     </div>
     """
@@ -135,16 +142,25 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       <:badges>
         <span class="badge badge-sm badge-outline">{file_count(length(@files))}</span>
         <span :if={@selected_count > 0} class="badge badge-sm badge-outline badge-error">
-          {@selected_count} to trash · {format_file_size(@selected_bytes)}
+          {ngettext(
+            "%{count} to trash · %{size}",
+            "%{count} to trash · %{size}",
+            @selected_count,
+            size: format_file_size(@selected_bytes)
+          )}
         </span>
-        <span :if={@selected_count == 0} class="badge badge-sm badge-outline">Keeping all</span>
+        <span :if={@selected_count == 0} class="badge badge-sm badge-outline">
+          {gettext("Keeping all")}
+        </span>
       </:badges>
       <:actions>
         <.row_actions>
           <.row_action
             id={"duplicates-group-mark-#{@decision.group.subject_id}"}
             icon="hero-check-circle"
-            title={if @selected_count > 0, do: "Keep all", else: "Mark all for trash"}
+            title={
+              if @selected_count > 0, do: gettext("Keep all"), else: gettext("Mark all for trash")
+            }
             phx-click={if @selected_count > 0, do: "keep_group", else: "trash_group"}
             phx-value-subject={@decision.group.subject_id}
           />
@@ -152,11 +168,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
             id={"duplicates-group-trash-#{@decision.group.subject_id}"}
             icon="hero-trash"
             destructive
-            title={"Trash #{file_count(@selected_count)} (#{format_file_size(@selected_bytes)})"}
+            title={trash_files_label(@selected_count, format_file_size(@selected_bytes))}
             disabled={@selected_count == 0}
             phx-click="trash_group_now"
             phx-value-subject={@decision.group.subject_id}
-            phx-disable-with="Trashing..."
+            phx-disable-with={gettext("Trashing...")}
           />
         </.row_actions>
       </:actions>
@@ -200,7 +216,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       </div>
 
       <span :if={@best? and not @trashing?} class="badge badge-sm badge-ghost hidden sm:inline-flex">
-        Best copy
+        {gettext("Best copy")}
       </span>
       <span class="badge badge-ghost badge-sm">{quality_label(@file)}</span>
       <span class="text-xs opacity-60 whitespace-nowrap">{format_file_size(@file.size)}</span>
@@ -214,14 +230,14 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       <div
         class="join shrink-0"
         role="radiogroup"
-        aria-label={"Disposition for #{@file.relative_path}"}
+        aria-label={gettext("Disposition for %{path}", path: @file.relative_path)}
       >
         <input
           type="radio"
           class="join-item btn btn-xs"
           id={"duplicates-keep-#{@file.id}"}
           name={"disposition-#{@file.id}"}
-          aria-label="Keep"
+          aria-label={gettext("Keep")}
           checked={not @trashing?}
           phx-click="keep_file"
           phx-value-subject={@subject_id}
@@ -243,7 +259,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           ]}
           id={"duplicates-trash-#{@file.id}"}
           name={"disposition-#{@file.id}"}
-          aria-label="Trash"
+          aria-label={gettext("Trash")}
           checked={@trashing?}
           phx-click="trash_file"
           phx-value-subject={@subject_id}
@@ -286,14 +302,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       id="duplicates-confirm-modal"
       tone={:error}
       icon="hero-trash"
-      title={"Trash #{file_count(@count)}?"}
-      subtitle={"Across #{item_count(@items)}, reclaiming #{format_file_size(@bytes)}."}
+      title={ngettext("Trash %{count} file?", "Trash %{count} files?", @count)}
+      subtitle={across_items_label(@items, format_file_size(@bytes))}
       on_close="close_trash_modal"
     >
       <p class="py-2">
-        Every file marked for trash is a redundant copy of one set to Keep, so each item keeps
-        a playable file. Trashed files are held for {@retention_days} days before permanent
-        deletion.
+        {gettext(
+          "Every file marked for trash is a redundant copy of one set to Keep, so each item keeps a playable file."
+        )}
+        {ngettext(
+          "Trashed files are held for %{count} day before permanent deletion.",
+          "Trashed files are held for %{count} days before permanent deletion.",
+          @retention_days
+        )}
       </p>
       <:actions>
         <button
@@ -302,16 +323,16 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           class="btn btn-ghost"
           phx-click="close_trash_modal"
         >
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           id="duplicates-confirm"
           type="button"
           class="btn btn-error"
           phx-click="confirm_trash"
-          phx-disable-with="Trashing..."
+          phx-disable-with={gettext("Trashing...")}
         >
-          <.icon name="hero-trash" class="w-4 h-4" /> Move to trash
+          <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Move to trash")}
         </button>
       </:actions>
     </.admin_modal>
@@ -355,9 +376,9 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           type="button"
           class="btn btn-sm btn-ghost"
           phx-click="undo_trash"
-          phx-disable-with="Undoing..."
+          phx-disable-with={gettext("Undoing...")}
         >
-          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Undo
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {gettext("Undo")}
         </button>
         <.link
           :if={@run.kind == :review}
@@ -365,13 +386,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           navigate={~p"/review"}
           class="btn btn-sm btn-ghost"
         >
-          <.icon name="hero-inbox-arrow-down" class="w-4 h-4" /> Open Review
+          <.icon name="hero-inbox-arrow-down" class="w-4 h-4" /> {gettext("Open Review")}
         </.link>
         <button
           id="duplicates-undo-dismiss"
           type="button"
           class="group self-start cursor-pointer"
-          aria-label="Dismiss"
+          aria-label={gettext("Dismiss")}
           phx-click="dismiss_undo"
         >
           <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
@@ -405,9 +426,35 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   module builds the undo toast's label and must count files and items the same
   way the rows above it do.
   """
-  def file_count(1), do: "1 file"
-  def file_count(n), do: "#{n} files"
+  def file_count(n), do: ngettext("%{count} file", "%{count} files", n)
 
-  def item_count(1), do: "1 item"
-  def item_count(n), do: "#{n} items"
+  def item_count(n), do: ngettext("%{count} item", "%{count} items", n)
+
+  @doc "\"Trash N files (size)\" as one message, for buttons and tooltips."
+  def trash_files_label(count, size) do
+    ngettext("Trash %{count} file (%{size})", "Trash %{count} files (%{size})", count, size: size)
+  end
+
+  @doc "\"Send N files to Review\" as one message."
+  def send_to_review_label(count) do
+    ngettext("Send %{count} file to Review", "Send %{count} files to Review", count)
+  end
+
+  @doc "The send-to-Review confirmation title: files and items in one message."
+  def send_files_from_items_label(files, items) do
+    gettext("Send %{files} from %{items} to Review?",
+      files: file_count(files),
+      items: item_count(items)
+    )
+  end
+
+  @doc "\"Across N items, reclaiming size.\" as one message."
+  def across_items_label(items, size) do
+    ngettext(
+      "Across %{count} item, reclaiming %{size}.",
+      "Across %{count} items, reclaiming %{size}.",
+      items,
+      size: size
+    )
+  end
 end

@@ -5,6 +5,8 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
   If the user is not authenticated, they will be redirected to the login page
   or receive a 401 error for API requests.
   """
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Plug.Conn
   import Phoenix.Controller, only: [redirect: 2, put_flash: 3, json: 2]
 
@@ -36,7 +38,7 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
 
       _ ->
         conn
-        |> put_flash(:error, "You must be logged in to access this page")
+        |> put_flash(:error, gettext("You must be logged in to access this page"))
         |> redirect(to: "/auth/login")
         |> halt()
     end

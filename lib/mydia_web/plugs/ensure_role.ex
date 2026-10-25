@@ -12,6 +12,8 @@ defmodule MydiaWeb.Plugs.EnsureRole do
       plug MydiaWeb.Plugs.EnsureRole, :admin
       plug MydiaWeb.Plugs.EnsureRole, [:admin, :user]
   """
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Plug.Conn
   import Phoenix.Controller, only: [redirect: 2, put_flash: 3, json: 2]
 
@@ -71,7 +73,7 @@ defmodule MydiaWeb.Plugs.EnsureRole do
 
       _ ->
         conn
-        |> put_flash(:error, "You do not have permission to access this page")
+        |> put_flash(:error, gettext("You do not have permission to access this page"))
         |> redirect(to: "/")
         |> halt()
     end

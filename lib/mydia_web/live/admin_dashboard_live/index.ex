@@ -27,7 +27,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Dashboard")
+     |> assign(:page_title, gettext("Dashboard"))
      |> assign(:range_days, @default_range)
      |> load_now_playing()
      |> load_history()}
@@ -60,11 +60,14 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   def handle_event("cancel_transcode_job", %{"id" => id}, socket) do
     case Downloads.get_transcode_job(id) do
       nil ->
-        {:noreply, socket |> load_now_playing() |> put_flash(:error, "Transcode job not found")}
+        {:noreply,
+         socket |> load_now_playing() |> put_flash(:error, gettext("Transcode job not found"))}
 
       job ->
         {:ok, _job} = Downloads.cancel_transcode_job(job)
-        {:noreply, socket |> load_now_playing() |> put_flash(:info, "Transcode job cancelled")}
+
+        {:noreply,
+         socket |> load_now_playing() |> put_flash(:info, gettext("Transcode job cancelled"))}
     end
   end
 
