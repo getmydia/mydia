@@ -46,21 +46,22 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
   def classify(tokens, anchors) when is_list(tokens) and is_map(anchors) do
     boundary = title_boundary(anchors)
     total_tokens = length(tokens)
+    tag_groups = tag_groups(tokens, anchors)
 
     tokens
     |> Enum.with_index()
     |> Enum.map(fn {%Token{} = token, index} ->
       zone = zone_for(token, boundary)
-      candidates = candidates_for(token, anchors, zone, index, total_tokens)
+      candidates = candidates_for(token, anchors, zone, index, total_tokens, tag_groups)
       %Token{token | candidates: candidates}
     end)
   end
 
   # ---- Internals ----
 
-  defp candidates_for(%Token{} = token, anchors, zone, index, total) do
+  defp candidates_for(%Token{} = token, anchors, zone, index, total, tag_groups) do
     anchor_candidates = anchor_candidates(token, anchors, zone)
-    vocab_candidates = vocab_candidates(token, zone)
+    vocab_candidates = vocab_candidates(token, zone, MapSet.member?(tag_groups, token_key(token)))
 
     case anchor_candidates ++ vocab_candidates do
       [] ->
@@ -94,22 +95,62 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
     end
   end
 
-  defp vocab_candidates(%Token{value: value}, zone) do
+  defp vocab_candidates(%Token{value: value}, zone, tag_group?) do
     entries =
       case Vocabulary.lookup(value) do
-        [] -> Vocabulary.lookup(strip_trailing_punct(value))
+        [] -> value |> strip_trailing_punct() |> Vocabulary.lookup() |> or_disc_count(value)
         list -> list
       end
 
     Enum.map(entries, fn %VocabularyEntry{} = entry ->
+      bonus_zone = if tag_group? and entry.label == :source, do: :metadata, else: zone
+
       %Candidate{
         label: entry.label,
         value: entry.canonical,
-        confidence: clamp(entry.confidence + zone_bonus(entry, zone)),
+        confidence: clamp(entry.confidence + zone_bonus(entry, bonus_zone)),
         zone: zone
       }
     end)
   end
+
+  # A disc count before a DVD (`2DVD5`, `2xDVD9`) says how many discs, not
+  # which source.
+  @disc_count_re ~r/^\d{1,2}x?(?=DVD)/i
+
+  defp or_disc_count([], value) do
+    value
+    |> then(&Regex.replace(@disc_count_re, &1, ""))
+    |> Vocabulary.lookup()
+    |> Enum.filter(&(&1.label == :source))
+  end
+
+  defp or_disc_count(entries, _value), do: entries
+
+  # Anchorless anime names put the source in a bracket of its own
+  # (`- 07 [Site][Web][MKV]`) or ahead of the resolution in a tag list
+  # (`(WEB 1080p x264 AAC)`), both before any anchor, where `Web` takes the
+  # title-zone penalty. A source word that opens a non-leading bracket group
+  # and is alone in it or followed by the resolution is a tag, so it scores
+  # as one. `(Spider Web)` and `[Web Story]` stay title words.
+  defp tag_groups(tokens, anchors) do
+    tokens
+    |> Enum.filter(&(&1.bracket_offset not in [nil, 0]))
+    |> Enum.chunk_by(& &1.bracket_offset)
+    |> Enum.flat_map(fn
+      [first] ->
+        [token_key(first)]
+
+      [first, second | _] ->
+        if resolution_anchor?(second, anchors), do: [token_key(first)], else: []
+    end)
+    |> MapSet.new()
+  end
+
+  defp resolution_anchor?(%Token{byte_offset: offset, byte_length: len}, %{resolution: pos}),
+    do: pos != nil and offset <= pos and pos < offset + len
+
+  defp token_key(%Token{byte_offset: offset, byte_length: len}), do: {offset, len}
 
   # Strip trailing punctuation bytes (e.g. `DD+` → `DD`, and the comma of a
   # listed tag set, `[2023, HEVC, HDR10]`). Limited to ASCII so we don't

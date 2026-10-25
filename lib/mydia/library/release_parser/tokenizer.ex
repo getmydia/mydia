@@ -19,21 +19,23 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   ## Separator rules
 
-  - Whitespace, `.`, `_` become token boundaries (the resulting separator
-    span is discarded).
+  - Whitespace, `.`, `_`, `"` and the zero-width space become token
+    boundaries (the resulting separator span is discarded).
   - `[`, `]`, `(`, `)`, `{`, `}` are token boundaries and the enclosed
-    tokens carry their bracket context.
+    tokens carry their bracket context and the opening bracket's offset.
   - Embedded dashes are split only against a fixed allow-list of
     compounds (`WEB-DL`, `WEB-Rip`, `H-265`, `H-264`, `DTS-HD`, `DTS-X`,
     `Hi10P-Hi10`). All other dashes stay un-split (`Spider-Man`,
-    `Marvel's What-If`).
+    `Marvel's What-If`). `WEB-DL` and `WEB-Rip` stay whole before the
+    title boundary, where the vocabulary reads them as one word.
   - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
     file naming) is split in two, but only when the left part is a known
-    source, so `Pilot-720p` stays whole. `HD1080p` keeps only the
-    resolution. Past the title boundary, a video or audio codec or a
-    revision flag dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`,
-    `x264-AAC`, `720p-FLAC`, `x264-REPACK-GRP`) is split off it; in the
-    title (`Route-264`) it stays.
+    source, so `Pilot-720p` stays whole. The reverse order (`720p-web`)
+    splits the same way. `HD1080p` keeps only the resolution. Past the title
+    boundary, a video or audio codec, a revision flag, a WEB compound or a
+    remux dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`,
+    `720p-FLAC`, `x264-REPACK-GRP`, `S1E1-WEB-DL`) is split off it; in the
+    title (`Route-264`) it stays. A bracketed `[GRP-Remux]` tag splits too.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -87,7 +89,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     scan(stripped, stripped, 0, nil, nil, [])
     |> Enum.reverse()
     |> apply_glued_source_splits(boundary)
-    |> apply_compound_dash_splits()
+    |> apply_compound_dash_splits(boundary)
   end
 
   @doc """
@@ -190,21 +192,29 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   end
 
   # State: (remaining, full_input, current_byte_pos, token_start_or_nil, bracket_or_nil, acc)
+  # `bracket` is `{context, opening_offset}` inside brackets.
   # acc is a list of finished %Token{} values in reverse order.
   defp scan(<<>>, full, pos, start, bracket, acc) do
     emit_pending(full, pos, start, bracket, acc)
   end
 
+  # A double quote (`DVDRip."XviD"-GRP`) wraps a word, it is not part of it.
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
-       when byte in [?\s, ?., ?_, ?\t] do
+       when byte in [?\s, ?., ?_, ?\t, ?"] do
     acc = emit_pending(full, pos, start, bracket, acc)
     scan(rest, full, pos + 1, nil, bracket, acc)
+  end
+
+  # Zero-width space (U+200B), which some posters put before every word.
+  defp scan(<<0xE2, 0x80, 0x8B, rest::binary>>, full, pos, start, bracket, acc) do
+    acc = emit_pending(full, pos, start, bracket, acc)
+    scan(rest, full, pos + 3, nil, bracket, acc)
   end
 
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
        when byte in [?[, ?\(, ?{] do
     acc = emit_pending(full, pos, start, bracket, acc)
-    scan(rest, full, pos + 1, nil, bracket_context(byte), acc)
+    scan(rest, full, pos + 1, nil, {bracket_context(byte), pos}, acc)
   end
 
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
@@ -228,13 +238,15 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
     if len > 0 do
       value = :binary.part(full, start_pos, len)
+      {context, opening} = bracket || {nil, nil}
 
       [
         %Token{
           value: value,
           byte_offset: start_pos,
           byte_length: len,
-          bracket_context: bracket
+          bracket_context: context,
+          bracket_offset: opening
         }
         | acc
       ]
@@ -310,10 +322,35 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
             else: [%Token{token | value: left, byte_length: left_len}, resolution]
 
         nil ->
-          if metadata_zone?(token, boundary), do: split_dashed_codecs(token), else: [token]
+          cond do
+            resolution_then_source?(token.value) -> split_compound_dash(token)
+            metadata_zone?(token, boundary) or remux_tag?(token) -> split_dashed_codecs(token)
+            true -> [token]
+          end
       end
     end)
   end
+
+  # The mirror order, a resolution then its source (`720p-web`). The
+  # resolution anchors the token, so this is never a title word.
+  @resolution_then_word_re ~r/^#{@resolution_heights}-([a-zA-Z]+)$/i
+
+  defp resolution_then_source?(value) do
+    case Regex.run(@resolution_then_word_re, value) do
+      [_, word] -> has_label?(word, :source)
+      nil -> false
+    end
+  end
+
+  # A leading `[GRP-Remux]` tag names the release a remux. It sits at the
+  # very start, so metadata_zone?/2 leaves it alone.
+  defp remux_tag?(%Token{bracket_context: :bracket, value: value}) do
+    value |> String.split("-") |> List.last() |> remux_part?()
+  end
+
+  defp remux_tag?(_token), do: false
+
+  defp remux_part?(part), do: Enum.any?(Vocabulary.lookup(part), &(&1.canonical == "REMUX"))
 
   # Codec words do turn up in titles (`Route-264`, `Code-Hevc`,
   # `Avc-Station`), so a dash run is split only once it reaches past the
@@ -341,8 +378,11 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   # Audio codecs split the same way (`720p-AAC`, `AC3-REPACK`), unless the
   # whole run is itself a vocabulary word (`E-AC3`, `AAC-LC`), which a split
   # would mangle into a different codec.
+  # A WEB compound or a remux in the run (`S1E1-WEB-DL-1080p`,
+  # `WEB-DL-GRP`, `GRP-Remux`) comes off the same way; the compound is
+  # rejoined first so it splits off whole.
   defp split_dashed_codecs(%Token{value: value} = token) do
-    parts = String.split(value, "-")
+    parts = value |> String.split("-") |> join_web_compounds()
 
     if length(parts) > 1 and Vocabulary.lookup(value) == [] and
          Enum.any?(parts, &codec_part?/1) do
@@ -365,8 +405,23 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   # comes off too, or it stays glued to the group name.
   defp codec_part?(part) do
     part in ["264", "265"] or has_label?(part, :codec) or has_label?(part, :audio) or
-      has_label?(part, :proper) or has_label?(part, :repack)
+      has_label?(part, :proper) or has_label?(part, :repack) or remux_part?(part) or
+      web_compound?(part)
   end
+
+  # Only the dashed WEB compounds: a bare `Web` part is a title word as often
+  # as a source (`Spider-Web`).
+  defp web_compound?(part), do: String.contains?(part, "-") and has_label?(part, :source)
+
+  defp join_web_compounds([head, next | rest]) do
+    joined = head <> "-" <> next
+
+    if String.upcase(head) == "WEB" and has_label?(joined, :source),
+      do: [joined | join_web_compounds(rest)],
+      else: [head | join_web_compounds([next | rest])]
+  end
+
+  defp join_web_compounds(parts), do: parts
 
   # `{relative_offset, value}` for each codec part and each dash-joined run
   # of other parts between them; empty parts (a leading dash) are dropped.
@@ -405,14 +460,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   defp has_label?(word, label), do: Enum.any?(Vocabulary.lookup(word), &(&1.label == label))
 
-  defp apply_compound_dash_splits(tokens) do
+  # Before the title boundary a WEB compound stays whole: split, its `Web`
+  # half takes the title-zone penalty that keeps `Madame.Web` a title, and
+  # its `DL` half joins the title. Whole, it is a vocabulary word of its own.
+  @web_compounds ["WEB-DL", "WEB-RIP"]
+
+  defp apply_compound_dash_splits(tokens, boundary) do
     Enum.flat_map(tokens, fn token ->
       upper = String.upcase(token.value)
 
-      if MapSet.member?(@compound_dashes, upper) do
-        split_compound_dash(token)
-      else
-        [token]
+      cond do
+        upper in @web_compounds and token.byte_offset < boundary -> [token]
+        MapSet.member?(@compound_dashes, upper) -> split_compound_dash(token)
+        true -> [token]
       end
     end)
   end
@@ -423,17 +483,12 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         left_len = byte_size(left)
 
         [
+          %Token{token | value: left, byte_length: left_len},
           %Token{
-            value: left,
-            byte_offset: token.byte_offset,
-            byte_length: left_len,
-            bracket_context: token.bracket_context
-          },
-          %Token{
-            value: right,
-            byte_offset: token.byte_offset + left_len + 1,
-            byte_length: byte_size(right),
-            bracket_context: token.bracket_context
+            token
+            | value: right,
+              byte_offset: token.byte_offset + left_len + 1,
+              byte_length: byte_size(right)
           }
         ]
 

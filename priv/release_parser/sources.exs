@@ -4,10 +4,10 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
 # Madame Web / Black Phone 2 case ("Madame.Web.2024.1080p") doesn't pick
 # up `Web` as a source — V1 → V2 carve-out, now data-driven.
 #
-# Note: WEB-DL and WEBRip are pre-split by the tokenizer's compound-dash
-# allow-list (WEB-DL → ["WEB", "DL"]), so the WEB entry covers all WEB-*
-# variants once the dash is gone. WEBRip is a single token and needs its
-# own entry. `Blu-ray` is not on that list, so it arrives whole.
+# Note: past the title boundary WEB-DL and WEB-Rip are pre-split by the
+# tokenizer's compound-dash allow-list (WEB-DL → ["WEB", "DL"]), so the WEB
+# entry covers them once the dash is gone. WEBRip is a single token and
+# needs its own entry. `Blu-ray` is not on that list, so it arrives whole.
 
 [
   %VocabularyEntry{
@@ -20,7 +20,7 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
   },
   %VocabularyEntry{
     label: :source,
-    aliases: ["BluRay", "BLURAY", "Blu-ray", "BD", "MBluRay", "UHDBD"],
+    aliases: ["BluRay", "BLURAY", "Blu-ray", "BD", "MBluRay", "UHDBD", "UHD2BD"],
     canonical: "BluRay",
     confidence: 0.95,
     title_zone_bonus: -0.2,
@@ -57,6 +57,29 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
     confidence: 0.85,
     title_zone_bonus: -0.7,
     metadata_zone_bonus: 0.2
+  },
+
+  # Dashed WEB compounds. Past the title boundary the tokenizer splits
+  # WEB-DL and WEB-Rip and the WEB entry above reads them; before it (an
+  # anchorless anime name, `Show.1.WEB-DL.720p`) they arrive whole. Unlike
+  # a bare `Web`, a dashed compound is never a title word, so it keeps the
+  # mild title-zone penalty. The rip and mux re-encodes fold into WEB-DL,
+  # as QualityParser reads them.
+  %VocabularyEntry{
+    label: :source,
+    aliases: ["WEB-DL", "WEB-DLRip", "WEB-DLMux", "WEB-HDRip"],
+    canonical: "WEB-DL",
+    confidence: 0.9,
+    title_zone_bonus: -0.2,
+    metadata_zone_bonus: 0.05
+  },
+  %VocabularyEntry{
+    label: :source,
+    aliases: ["WEB-Rip"],
+    canonical: "WEBRip",
+    confidence: 0.9,
+    title_zone_bonus: -0.3,
+    metadata_zone_bonus: 0.05
   },
   %VocabularyEntry{
     label: :source,

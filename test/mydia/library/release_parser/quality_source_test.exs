@@ -86,4 +86,96 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
     assert parsed.quality.source == nil
     assert parsed.title == "Fake Show"
   end
+
+  describe "WEB-DL variants" do
+    test "a number before it, so the title zone runs through it" do
+      parsed = ReleaseParser.parse("Fake.Show.1.WEB-DL.720p.Complete.Latino.GRP")
+      assert parsed.quality.source == "WEB-DL"
+      assert parsed.title == "Fake Show 1"
+    end
+
+    test "dash-joined to the episode marker and the resolution" do
+      parsed = ReleaseParser.parse("Fake Show S1E1-WEB-DL-1080p-NZBgeek")
+      assert parsed.quality.source == "WEB-DL"
+      assert {parsed.season, parsed.episodes} == {1, [1]}
+      assert source("Fake Show S1-E1-WEB-DL-1080p-NZBgeek") == "WEB-DL"
+      assert source("fake.show.s03e16.h264.720p-web-handbrake.mkv") == "WEB-DL"
+    end
+
+    test "rip and mux suffixes, which QualityParser also reads as WEB-DL" do
+      assert source("Fake.Movie.2020.WEB-DLRip.AVC.AC3.EN-GRP") == "WEB-DL"
+      assert source("Fake Show (Season 1) (2022) WEB-DLRip-AVC Eng") == "WEB-DL"
+      assert source("Fake.Show.6x10.Some.Episode.ITA.ENG.720p.WEB-DLMux.H.264-GRP") == "WEB-DL"
+      assert source("Fake.Movie.[2021].1080p.WEB-HDRip.Dual.Audio.x264.AAC-GRP") == "WEB-DL"
+    end
+
+    test "bracketed, in the title zone of an anchorless anime name" do
+      assert source("[Grp] Fake Show - 07 [Site][WEB-DL][1080p][AVC AAC][MP4]") == "WEB-DL"
+      assert source("[Grp] 偽の番組 Fake Show - 07 [Site][WEB-DL][1080p][AVC AAC]") == "WEB-DL"
+      assert source("[Grp] Fake Show: 30 [Web][MKV][h264][720p][AAC 2.0]") == "WEB-DL"
+
+      assert source("[Grp] Fake Show - 01-17 (WEB 1080p x264 10-bit AAC) [Dual-Audio]") ==
+               "WEB-DL"
+    end
+
+    test "bracketed with a group dash-joined to it" do
+      assert source("Fake Show [2022] [S01E13] [PL] [720p] [WEB-DL-GRP] [x264] ") == "WEB-DL"
+    end
+
+    test "Web as a title word is still not a source" do
+      parsed = ReleaseParser.parse("Fake.Web.Story.2020.1080p.BluRay.x264-GRP")
+      assert parsed.quality.source == "BluRay"
+      assert parsed.title == "Fake Web Story"
+
+      assert source("[Grp] Fake Show (Spider Web) - 01 [1080p]") == nil
+      assert source("[Grp] Fake Show [Web Story] - 01 [1080p]") == nil
+      assert source("Fake.Show.S01E01.Spider-Web.720p.HDTV.x264-GRP") == "HDTV"
+    end
+  end
+
+  describe "WEBRip variants" do
+    test "WEB Rip split by zero-width spaces" do
+      parsed =
+        ReleaseParser.parse(
+          "Fake.Show.\u200BS07E11.\u200BWEB Rip.\u200BXviD.\u200BGrp-\u200BCZ.\u200BEN"
+        )
+
+      assert parsed.quality.source == "WEBRip"
+      assert parsed.quality.codec == "XviD"
+      assert {parsed.season, parsed.episodes} == {7, [11]}
+      assert parsed.title == "Fake Show"
+    end
+
+    test "bracketed, in the title zone of an anchorless anime name" do
+      assert source("[Grp-Raws][Fake Show 偽の番組][1008][Site][WEB-RIP][CHT][1080p][MKV]") ==
+               "WEBRip"
+    end
+  end
+
+  describe "other spellings" do
+    test "a leading group tag that names a remux" do
+      assert source("[GRP-Remux].Fake.Show.X.21.720p.[76EA1C53].mkv") == "REMUX"
+    end
+
+    test "a disc count before a DVD" do
+      assert source("Fake.Movie.2000.2DVD5") == "DVD"
+      assert source("Fake.Movie.2020.PAL.2xDVD9") == "DVD"
+    end
+
+    test "UHD downscaled to BD, and a disc size before Blu-ray" do
+      parsed = ReleaseParser.parse("Fake.Movie.2012.German.DL.1080p.UHD2BD.x264-GRP")
+      assert parsed.quality.source == "BluRay"
+      assert parsed.quality.resolution == "1080p"
+
+      parsed = ReleaseParser.parse("Fake.Movie.2008.Directors.Cut.UHD.BD66.Blu-ray")
+      assert parsed.quality.source == "BluRay"
+      assert parsed.release_group == nil
+    end
+
+    test "a group named Ray is still a group" do
+      parsed = ReleaseParser.parse("Fake.Movie.2020.1080p.WEB-DL.x264-RAY")
+      assert parsed.quality.source == "WEB-DL"
+      assert parsed.release_group == "RAY"
+    end
+  end
 end

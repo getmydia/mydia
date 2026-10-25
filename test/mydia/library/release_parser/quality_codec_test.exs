@@ -88,4 +88,11 @@ defmodule Mydia.Library.ReleaseParser.QualityCodecTest do
     assert ReleaseParser.parse("Some Show (Season 1) (2022) WEB-DLRip-AVC Ukr Eng").quality.codec ==
              "H.264"
   end
+
+  test "a quoted codec" do
+    parsed = ReleaseParser.parse(~s(Fake.Show.Inc.S03E19.DVDRip."XviD"-GRP))
+    assert parsed.quality.codec == "XviD"
+    assert parsed.quality.source == "DVDRip"
+    assert parsed.release_group == "GRP"
+  end
 end

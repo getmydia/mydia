@@ -62,6 +62,10 @@ defmodule Mydia.Library.ReleaseParser.QualityParityTest do
     "Movie.Name.The.Lost.Pilots.Movie.HR.WS.PDTV.x264-DHD-Remux.mkv" => [
       {:codec, "ReleaseParser gap: no anchor token"}
     ],
+    "E.010910.HDTVx264REPACKLOL.mp4" => [
+      {:source, "ReleaseParser gap: source, codec, flag and group fused, no anchor token"},
+      {:codec, "ReleaseParser gap: source, codec, flag and group fused, no anchor token"}
+    ],
     # ReleaseParser gap: quality tag only in a parent directory
     "C:\\Test\\Unsorted\\Series.Title.S01E01.720p.HDTV\\tbbt101.avi" => [
       {:source, "ReleaseParser gap: tag only in parent directory"}

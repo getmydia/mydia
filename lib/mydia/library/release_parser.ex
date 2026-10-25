@@ -383,8 +383,15 @@ defmodule Mydia.Library.ReleaseParser do
   # release group.
   @known_compound_suffixes MapSet.new(["LC", "HD", "DL", "RIP", "X", "MA", "265", "264"])
 
-  defp forms_known_compound?(_stripped, _full_start, group_name) do
-    String.upcase(group_name) in @known_compound_suffixes
+  defp forms_known_compound?(stripped, full_start, group_name) do
+    String.upcase(group_name) in @known_compound_suffixes or
+      blu_ray?(stripped, full_start, group_name)
+  end
+
+  # A trailing `Blu-ray` is the source, not a group named `ray`.
+  defp blu_ray?(stripped, dash_offset, group_name) do
+    String.downcase(group_name) == "ray" and dash_offset >= 3 and
+      String.downcase(:binary.part(stripped, dash_offset - 3, 3)) == "blu"
   end
 
   # Replace the trailing separator in the original input. We find the
