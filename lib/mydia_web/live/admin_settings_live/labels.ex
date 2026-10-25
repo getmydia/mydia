@@ -52,7 +52,7 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def description("downloads.min_seeders"),
     do:
       gettext(
-        "Minimum seeders a result must report for automatic searches to consider it. This is a hard filter applied before ranking, so a torrent below it is removed rather than demoted. Manual searches have their own control, and Usenet results report no seeders at all and are exempt. 0, the default, filters nothing. Careful above 0: some indexers report 0 when they mean \"unknown\" rather than \"dead\", so a floor can silently empty their results."
+        ~s(Minimum seeders a result must report for automatic searches to consider it. This is a hard filter applied before ranking, so a torrent below it is removed rather than demoted. Manual searches have their own control, and Usenet results report no seeders at all and are exempt. 0, the default, filters nothing. Careful above 0: some indexers report 0 when they mean "unknown" rather than "dead", so a floor can silently empty their results.)
       )
 
   def description("streaming.max_transcode_height"),
