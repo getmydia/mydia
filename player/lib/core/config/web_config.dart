@@ -18,6 +18,10 @@ class MydiaWebConfig {
   final String? serverUrl;
   final bool embedMode;
 
+  /// The web UI's interface language for the user who opened the player, as
+  /// a Gettext code (`es`, `pt_BR`, `zh_Hans`). See `hostLocaleProvider`.
+  final String? locale;
+
   const MydiaWebConfig({
     required this.authenticated,
     this.token,
@@ -25,6 +29,7 @@ class MydiaWebConfig {
     this.username,
     this.serverUrl,
     this.embedMode = false,
+    this.locale,
   });
 
   /// Check if this config has valid auth data.

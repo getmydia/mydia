@@ -95,6 +95,64 @@ void main() {
     expect(storage.contents.containsKey('interface_locale'), isFalse);
   });
 
+  group('served by a Mydia instance', () {
+    ProviderContainer hostedWith(MockAuthStorage storage, String? hostCode) {
+      final c = ProviderContainer(overrides: [
+        coreSettingsServiceProvider
+            .overrideWithValue(SettingsService(storage: storage)),
+        hostLocaleProvider
+            .overrideWithValue(LocaleSetting.fromHostCode(hostCode)),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    test("the launching user's language beats this browser's stored one",
+        () async {
+      final storage = MockAuthStorage();
+      await storage.write('interface_locale', 'en');
+      final c = hostedWith(storage, 'es');
+      expect(c.read(localeSettingProvider), const Locale('es'));
+      await settle();
+      expect(c.read(localeSettingProvider), const Locale('es'));
+    });
+
+    test('a choice in the player still applies for the session', () async {
+      final c = hostedWith(MockAuthStorage(), 'es');
+      c.read(localeSettingProvider);
+      await c.read(localeSettingProvider.notifier).set(const Locale('en'));
+      expect(c.read(localeSettingProvider), const Locale('en'));
+    });
+
+    test('no language sent falls back to the stored choice', () async {
+      final storage = MockAuthStorage();
+      await storage.write('interface_locale', 'es');
+      final c = hostedWith(storage, null);
+      c.read(localeSettingProvider);
+      await settle();
+      expect(c.read(localeSettingProvider), const Locale('es'));
+    });
+  });
+
+  group('fromHostCode', () {
+    test('maps a shipped language', () {
+      expect(LocaleSetting.fromHostCode('es'), const Locale('es'));
+    });
+
+    test('drops a region the player does not ship', () {
+      expect(LocaleSetting.fromHostCode('es_MX'), const Locale('es'));
+    });
+
+    test('an untranslated language shows English, like the web UI', () {
+      expect(LocaleSetting.fromHostCode('pt_BR'), const Locale('en'));
+    });
+
+    test('no code is no preference', () {
+      expect(LocaleSetting.fromHostCode(null), isNull);
+      expect(LocaleSetting.fromHostCode(''), isNull);
+    });
+  });
+
   test('a failed write keeps the choice', () async {
     final storage = MockAuthStorage()..failAllWrites = true;
     final c = containerWith(storage);
