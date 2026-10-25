@@ -243,7 +243,6 @@ defmodule Mydia.Config.Loader do
   defp migrate_legacy_subtitle_language(other), do: other
 
   defp load_database_config do
-    # Load database configuration settings
     # Returns {:ok, %{}} if database is unavailable (e.g., during initial setup)
     Settings.load_database_config()
   end

@@ -977,10 +977,7 @@ defmodule Mydia.Config.Schema do
 
     if oidc_enabled do
       changeset
-      |> validate_required([
-        :oidc_client_id,
-        :oidc_client_secret
-      ])
+      |> validate_required([:oidc_client_id, :oidc_client_secret])
       |> validate_oidc_issuer()
     else
       changeset
