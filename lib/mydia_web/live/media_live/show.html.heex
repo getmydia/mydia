@@ -542,7 +542,7 @@
     <% end %>
   <% end %>
   <%= if @show_quality_profile_modal do %>
-    <Modals.quality_profile_modal
+    <PickerModals.quality_profile_modal
       media_item={@media_item}
       quality_profiles={@quality_profiles}
       default_quality_profile_name={@default_quality_profile_name}
@@ -552,10 +552,13 @@
     <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>
   <%= if @show_target_library_modal do %>
-    <Modals.target_library_modal media_item={@media_item} libraries={@target_library_candidates} />
+    <PickerModals.target_library_modal
+      media_item={@media_item}
+      libraries={@target_library_candidates}
+    />
   <% end %>
   <%= if @show_add_to_collection_modal do %>
-    <Modals.add_to_collection_modal
+    <PickerModals.add_to_collection_modal
       media_item={@media_item}
       user_collections={@user_collections}
       item_collections={@item_collections}

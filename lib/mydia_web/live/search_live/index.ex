@@ -16,8 +16,9 @@ defmodule MydiaWeb.SearchLive.Index do
   import MydiaWeb.IndexerComponents
   import MydiaWeb.AddMediaComponents, only: [add_config_fields: 1]
 
+  import MydiaWeb.SearchLive.QualityBadges, only: [get_quality_badges: 1]
+
   alias Mydia.Indexers.Structs.IndexerProgress
-  alias Mydia.Library.Structs.Quality
 
   require Logger
 
@@ -1318,68 +1319,6 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   # Helper functions for the template
-
-  defp get_quality_badges(%SearchResult{quality: nil}), do: []
-
-  defp get_quality_badges(%SearchResult{quality: quality}) do
-    badges = []
-
-    # Resolution badge (primary - blue)
-    badges =
-      if quality.resolution do
-        [%{text: quality.resolution, color: "badge-primary"} | badges]
-      else
-        badges
-      end
-
-    # Source badge (secondary - purple/gray)
-    badges =
-      if quality.source do
-        [%{text: quality.source, color: "badge-secondary"} | badges]
-      else
-        badges
-      end
-
-    # Codec badge (accent - cyan)
-    badges =
-      if quality.codec do
-        [%{text: quality.codec, color: "badge-accent"} | badges]
-      else
-        badges
-      end
-
-    # Audio badge (ghost - subtle)
-    badges =
-      if quality.audio do
-        [%{text: quality.audio, color: "badge-ghost"} | badges]
-      else
-        badges
-      end
-
-    # Special indicators
-    badges =
-      if Quality.hdr?(quality) do
-        [%{text: "HDR", color: "badge-warning"} | badges]
-      else
-        badges
-      end
-
-    badges =
-      if quality.proper do
-        [%{text: "PROPER", color: "badge-success"} | badges]
-      else
-        badges
-      end
-
-    badges =
-      if quality.repack do
-        [%{text: "REPACK", color: "badge-info"} | badges]
-      else
-        badges
-      end
-
-    Enum.reverse(badges)
-  end
 
   defp get_quality_badge(%SearchResult{} = result) do
     SearchResult.quality_description(result)

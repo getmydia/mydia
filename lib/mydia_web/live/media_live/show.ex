@@ -17,6 +17,9 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
+  alias MydiaWeb.MediaLive.Show.Messages
+  alias MydiaWeb.MediaLive.Show.PickerModals
+  alias MydiaWeb.MediaLive.Show.RescanResults
   alias MydiaWeb.MediaLive.Show.FixMatchEvents
   alias MydiaWeb.MediaLive.Show.FixMatchModal
   alias MydiaWeb.MediaLive.Show.FindFileComponents
@@ -724,7 +727,7 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_episode, nil)
 
       # Build the completion message
-      message = build_search_completion_message(stats)
+      message = Messages.search_completion_message(stats)
 
       # Determine flash type based on results
       flash_type =
@@ -946,13 +949,13 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FileEvents.handle_rescan_season_files_async(result, socket)
 
   def handle_async(:rescan_series, result, socket),
-    do: FileEvents.handle_rescan_series_async(result, socket)
+    do: RescanResults.handle_rescan_series_async(result, socket)
 
   def handle_async(:rescan_movie, result, socket),
-    do: FileEvents.handle_rescan_movie_async(result, socket)
+    do: RescanResults.handle_rescan_movie_async(result, socket)
 
   def handle_async(:rescan_season, result, socket),
-    do: FileEvents.handle_rescan_season_async(result, socket)
+    do: RescanResults.handle_rescan_season_async(result, socket)
 
   def handle_async(:rename_files, result, socket),
     do: RenameEvents.handle_rename_files_async(result, socket)
@@ -989,39 +992,4 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)
-
-  # Private helpers
-
-  defp build_search_completion_message(stats) do
-    indexers = stats.indexers_searched
-    results = stats.results_found
-    picked_up = stats.downloads_initiated
-
-    cond do
-      Map.get(stats, :error) ->
-        gettext("Search failed: %{reason}", reason: stats.error)
-
-      picked_up > 0 ->
-        gettext(
-          "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, %{picked_up} download(s) started",
-          indexers: indexers,
-          results: results,
-          picked_up: picked_up
-        )
-
-      results > 0 ->
-        gettext(
-          "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, but none matched quality criteria",
-          indexers: indexers,
-          results: results
-        )
-
-      true ->
-        ngettext(
-          "Search complete: %{count} indexer searched, no results found",
-          "Search complete: %{count} indexers searched, no results found",
-          indexers
-        )
-    end
-  end
 end

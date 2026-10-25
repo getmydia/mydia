@@ -33,6 +33,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
+  import MydiaWeb.DashboardLive.Text,
+    only: [format_bytes: 1, episode_line: 1, request_error_message: 1]
+
   # How many trending items each rail keeps after a successful fetch (see the
   # Enum.take/2 calls below). The skeleton grid's `count` must match this or
   # the placeholder no longer reserves the same height as the settled row,
@@ -846,28 +849,6 @@ defmodule MydiaWeb.DashboardLive.Index do
     assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, ref))
   end
 
-  defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
-
-  defp format_bytes(bytes) when bytes < 1024 * 1024 do
-    kb = bytes / 1024
-    "#{Float.round(kb, 1)} KB"
-  end
-
-  defp format_bytes(bytes) when bytes < 1024 * 1024 * 1024 do
-    mb = bytes / (1024 * 1024)
-    "#{Float.round(mb, 1)} MB"
-  end
-
-  defp format_bytes(bytes) when bytes < 1024 * 1024 * 1024 * 1024 do
-    gb = bytes / (1024 * 1024 * 1024)
-    "#{Float.round(gb, 1)} GB"
-  end
-
-  defp format_bytes(bytes) do
-    tb = bytes / (1024 * 1024 * 1024 * 1024)
-    "#{Float.round(tb, 2)} TB"
-  end
-
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
            socket.assigns.current_scope,
@@ -916,31 +897,6 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> put_flash(:error, request_error_message(reason))
     end
   end
-
-  # "S01E02 - Episode title" for the Your Activity lists.
-  defp episode_line(episode) do
-    gettext("S%{season}E%{episode} - %{title}",
-      season: String.pad_leading(to_string(episode.season_number), 2, "0"),
-      episode: String.pad_leading(to_string(episode.episode_number), 2, "0"),
-      title: episode.title
-    )
-  end
-
-  defp request_error_message(:duplicate_media),
-    do: gettext("That title is already in the library.")
-
-  defp request_error_message(:duplicate_request),
-    do: gettext("Someone has already requested that title.")
-
-  defp request_error_message(:restricted), do: Media.restricted_message()
-
-  defp request_error_message(%Ecto.Changeset{} = changeset),
-    do:
-      gettext("Could not submit the request: %{reason}",
-        reason: MediaAddHelpers.format_changeset_errors(changeset)
-      )
-
-  defp request_error_message(_), do: gettext("Could not submit the request. Please try again.")
 
   # phx-value payloads are client-controlled, and String.to_existing_atom/1
   # would raise on anything unexpected and take the LiveView down with it.

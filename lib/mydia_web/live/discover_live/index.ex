@@ -29,32 +29,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   import MydiaWeb.DiscoverLive.RegionalComponents
   import MydiaWeb.GridDensityComponents
 
-  defp movie_categories do
-    [
-      {:trending, gettext("Trending")},
-      {:popular, gettext("Popular")},
-      {:upcoming, gettext("Upcoming")},
-      {:now_playing, gettext("Now Playing")}
-    ]
-  end
-
-  defp tv_categories do
-    [
-      {:trending, gettext("Trending")},
-      {:popular, gettext("Popular")},
-      {:on_the_air, gettext("On The Air")},
-      {:airing_today, gettext("Airing Today")}
-    ]
-  end
-
-  defp sort_options do
-    [
-      {"popularity.desc", gettext("Most Popular")},
-      {"vote_average.desc", gettext("Highest Rated")},
-      {"primary_release_date.desc", gettext("Newest First")},
-      {"primary_release_date.asc", gettext("Oldest First")}
-    ]
-  end
+  import MydiaWeb.DiscoverLive.Messages,
+    only: [movie_categories: 0, tv_categories: 0, sort_options: 0, request_error_message: 1]
 
   # The provider returns fixed-size pages of this many results. Removing owned
   # titles from one leaves a short grid, or an empty one, which looks like the
@@ -982,22 +958,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp clear_adding(socket, ref) do
     assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, ref))
   end
-
-  defp request_error_message(:duplicate_media),
-    do: gettext("That title is already in the library.")
-
-  defp request_error_message(:duplicate_request),
-    do: gettext("Someone has already requested that title.")
-
-  defp request_error_message(:restricted), do: Media.restricted_message()
-
-  defp request_error_message(%Ecto.Changeset{} = changeset),
-    do:
-      gettext("Could not submit the request: %{errors}",
-        errors: MediaAddHelpers.format_changeset_errors(changeset)
-      )
-
-  defp request_error_message(_), do: gettext("Could not submit the request. Please try again.")
 
   # Private helpers
 

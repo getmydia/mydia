@@ -8,6 +8,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.MediaLive.Show.Helpers
   import MydiaWeb.MediaLive.Show.AudioTrackComponents, only: [audio_tracks: 1, shorten_codec: 1]
 
+  import MydiaWeb.MediaLive.Show.TranscodeComponents,
+    only: [transcode_controls: 1, transcode_badge: 1, available_transcode_resolutions: 2]
+
   alias MydiaWeb.MediaLive.Show.LibraryComponents
   alias MydiaWeb.MediaLive.Show.SegmentComponents
   alias MydiaWeb.MediaLive.Show.SeasonComponents
@@ -176,7 +179,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </span>
           </button>
 
-          <%!-- Opens a page-level modal (Modals.add_to_collection_modal/1) rather
+          <%!-- Opens a page-level modal (PickerModals.add_to_collection_modal/1) rather
                 than an anchored dropdown, because this button lives inside the
                 hero column's overflow-y-auto wrapper (see the note at the top
                 of this function), which clips a `.dropdown-content` menu the
@@ -207,7 +210,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <%!-- Info Cards --%>
         <div class="rounded-box bg-base-200/50 p-2 space-y-1 mt-3">
           <%!-- Quality Profile. A button opening a page-level modal
-                (Modals.quality_profile_modal/1) rather than an anchored
+                (PickerModals.quality_profile_modal/1) rather than an anchored
                 dropdown, for the same reason as the Collection button above:
                 the hero column's overflow-y-auto wrapper clips a
                 `.dropdown-content` list once it runs past the column's
@@ -1097,86 +1100,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       </div>
     <% end %>
     """
-  end
-
-  attr :file, :map, required: true
-  attr :transcode_jobs, :list, default: []
-
-  defp transcode_controls(assigns) do
-    ~H"""
-    <%= if @transcode_jobs != [] do %>
-      <div class="flex flex-wrap items-center gap-2">
-        <.transcode_badge
-          :for={job <- @transcode_jobs}
-          job={job}
-          file={@file}
-        />
-      </div>
-    <% end %>
-    """
-  end
-
-  attr :job, :map, required: true
-  attr :file, :map, required: true
-
-  defp transcode_badge(assigns) do
-    ~H"""
-    <div class={[
-      "badge badge-sm gap-1",
-      transcode_badge_class(@job.status)
-    ]}>
-      <%= case @job.status do %>
-        <% "ready" -> %>
-          <.icon name="hero-check-circle-mini" class="w-3 h-3" />
-          {@job.resolution}
-        <% "transcoding" -> %>
-          <span class="loading loading-spinner loading-xs"></span>
-          {@job.resolution} {format_transcode_progress(@job.progress)}
-        <% "pending" -> %>
-          <.icon name="hero-clock" class="w-3 h-3" />
-          {gettext("%{resolution} queued", resolution: @job.resolution)}
-        <% "failed" -> %>
-          <.icon name="hero-exclamation-triangle-mini" class="w-3 h-3" />
-          {gettext("%{resolution} failed", resolution: @job.resolution)}
-        <% _other -> %>
-          {@job.resolution}
-      <% end %>
-      <%= if @job.status in ["pending", "transcoding"] do %>
-        <button
-          type="button"
-          phx-click="cancel_transcode"
-          phx-value-job-id={@job.id}
-          class="ml-1 hover:text-error"
-          title={gettext("Cancel transcode")}
-        >
-          <.icon name="hero-x-mark-mini" class="w-3 h-3" />
-        </button>
-      <% end %>
-    </div>
-    """
-  end
-
-  defp transcode_badge_class("ready"), do: "badge-success"
-  defp transcode_badge_class("transcoding"), do: "badge-warning"
-  defp transcode_badge_class("pending"), do: "badge-info"
-  defp transcode_badge_class("failed"), do: "badge-error"
-  defp transcode_badge_class(_), do: "badge-ghost"
-
-  defp format_transcode_progress(nil), do: ""
-
-  defp format_transcode_progress(progress) when is_float(progress) do
-    "#{round(progress * 100)}%"
-  end
-
-  defp format_transcode_progress(_), do: ""
-
-  defp available_transcode_resolutions(file, jobs_by_resolution) do
-    source_height = Mydia.Downloads.DownloadService.parse_resolution_height(file.resolution)
-
-    [{"1080p", 1080}, {"720p", 720}, {"480p", 480}]
-    |> Enum.filter(fn {_res, height} -> height <= source_height end)
-    |> Enum.reject(fn {res, _height} -> Map.has_key?(jobs_by_resolution, res) end)
-    |> Enum.map(fn {res, _height} -> res end)
   end
 
   @doc """

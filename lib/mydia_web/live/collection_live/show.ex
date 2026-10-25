@@ -14,9 +14,10 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias Mydia.Collections
   alias Mydia.Collections.Collection
   alias Mydia.Media
+  alias MydiaWeb.CollectionLive.SmartRulesParams
 
   import MydiaWeb.CollectionLive.Components,
-    only: [smart_rules_editor: 1, load_value_options: 1, value_list: 1, value_string: 1]
+    only: [smart_rules_editor: 1, load_value_options: 1, value_string: 1]
 
   @items_per_page 50
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
@@ -721,7 +722,7 @@ defmodule MydiaWeb.CollectionLive.Show do
     # Build smart_rules JSON for smart collections
     {smart_rules, validation_result} =
       if collection.type == "smart" do
-        json = build_smart_rules_json(full_params)
+        json = SmartRulesParams.build_json(full_params)
         {json, SmartRules.validate(json)}
       else
         {nil, {:ok, nil}}
@@ -994,129 +995,6 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)
-
-  defp build_smart_rules_json(params) do
-    # Get conditions from params
-    conditions =
-      case params["conditions"] do
-        nil ->
-          []
-
-        cond_params when is_map(cond_params) ->
-          cond_params
-          |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
-          |> Enum.map(fn {_, cond} ->
-            value = parse_condition_value(cond["field"], cond["value"], cond["operator"])
-
-            %{
-              "field" => cond["field"],
-              "operator" => cond["operator"],
-              "value" => value
-            }
-          end)
-          |> Enum.filter(fn c -> c["field"] != "" end)
-      end
-
-    match_type = params["match_type"] || "all"
-    sort_field = params["sort_field"] || ""
-    sort_direction = params["sort_direction"] || "desc"
-
-    limit =
-      case params["limit"] do
-        nil -> nil
-        "" -> nil
-        val when is_binary(val) -> String.to_integer(val)
-        val -> val
-      end
-
-    rules = %{
-      "match_type" => match_type,
-      "conditions" => conditions
-    }
-
-    # Add sort if specified
-    rules =
-      if sort_field != "" do
-        Map.put(rules, "sort", %{"field" => sort_field, "direction" => sort_direction})
-      else
-        rules
-      end
-
-    # Add limit if specified
-    rules =
-      if limit && limit > 0 do
-        Map.put(rules, "limit", limit)
-      else
-        rules
-      end
-
-    Jason.encode!(rules)
-  end
-
-  # Fields that should always keep string values
-  @string_fields ~w(category type title metadata.original_language metadata.status)
-
-  # Fields that should be parsed as numbers
-  @numeric_fields ~w(year metadata.vote_average)
-
-  defp parse_condition_value(_field, value, operator)
-       when operator in ["in", "not_in", "contains_any"] do
-    value_list(value)
-  end
-
-  # A multi-select's list can outlive a switch to a scalar operator by one change
-  # event. The editor narrows that list to its first entry, so parse the same one
-  # rather than a joined string, which would match nothing.
-  defp parse_condition_value(field, value, operator) when is_list(value) do
-    parse_condition_value(field, value |> value_list() |> List.first(""), operator)
-  end
-
-  defp parse_condition_value(_field, value, "between") do
-    # Parse "min, max" into [min, max]
-    case String.split(value, ",") do
-      [min, max] ->
-        [parse_number(String.trim(min)), parse_number(String.trim(max))]
-
-      _ ->
-        value
-    end
-  end
-
-  # String fields should always remain as strings
-  defp parse_condition_value(field, value, _operator) when field in @string_fields do
-    value
-  end
-
-  # Numeric fields should be parsed as numbers
-  defp parse_condition_value(field, value, _operator) when field in @numeric_fields do
-    parse_number(value)
-  end
-
-  # For monitored (boolean field)
-  defp parse_condition_value("monitored", value, _operator) do
-    case String.downcase(String.trim(value)) do
-      "true" -> true
-      "false" -> false
-      "1" -> true
-      "0" -> false
-      _ -> value
-    end
-  end
-
-  # Default: try to parse as number, otherwise keep as string
-  defp parse_condition_value(_field, value, _operator) do
-    case Integer.parse(value) do
-      {num, ""} -> num
-      _ -> value
-    end
-  end
-
-  defp parse_number(str) do
-    case Integer.parse(str) do
-      {num, ""} -> num
-      _ -> str
-    end
-  end
 
   defp extract_changeset_error(changeset) do
     case changeset.errors do

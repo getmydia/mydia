@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   import Phoenix.LiveViewTest
 
   alias MydiaWeb.MediaLive.Show.Modals
+  alias MydiaWeb.MediaLive.Show.PickerModals
 
   @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
   alias Mydia.Library.MediaFile
@@ -464,7 +465,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       profile_b = %Mydia.Settings.QualityProfile{id: "profile-b", name: "Profile B"}
 
       html =
-        render_component(&Modals.quality_profile_modal/1,
+        render_component(&PickerModals.quality_profile_modal/1,
           media_item: %Mydia.Media.MediaItem{quality_profile_id: "profile-b"},
           quality_profiles: [profile_a, profile_b],
           default_quality_profile_name: "House Default"
@@ -483,7 +484,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       library = %LibraryPath{id: "lib-a", path: "/media/movies-a"}
 
       html =
-        render_component(&Modals.target_library_modal/1,
+        render_component(&PickerModals.target_library_modal/1,
           media_item: %Mydia.Media.MediaItem{library_path_id: "lib-a"},
           libraries: [library]
         )
@@ -498,7 +499,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   describe "add_to_collection_modal/1" do
     test "with no collections, offers a create-collection link instead of a list" do
       html =
-        render_component(&Modals.add_to_collection_modal/1,
+        render_component(&PickerModals.add_to_collection_modal/1,
           media_item: %Mydia.Media.MediaItem{},
           user_collections: [],
           item_collections: []
@@ -514,7 +515,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       not_in_collection = %Mydia.Collections.Collection{id: "c-2", name: "Not In It"}
 
       html =
-        render_component(&Modals.add_to_collection_modal/1,
+        render_component(&PickerModals.add_to_collection_modal/1,
           media_item: %Mydia.Media.MediaItem{},
           user_collections: [in_collection, not_in_collection],
           item_collections: [in_collection]

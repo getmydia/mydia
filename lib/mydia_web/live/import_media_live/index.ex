@@ -21,6 +21,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, MatchSearch, MatchSearchModal, RunControl}
   alias MydiaWeb.ImportMediaLive.Expansion
+  import MydiaWeb.ImportMediaLive.LibraryResolver, only: [resolve_library_path_id: 2]
+  import MydiaWeb.ImportMediaLive.Messages, only: [cleared_message: 1, queue_message: 2]
 
   # `phx-value-band` is client-controlled, so the atom it names is looked up
   # rather than converted. An unknown value is a silent no-op because there is
@@ -826,22 +828,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  # `ImportCandidates.clear_for_library/1` deletes every undismissed
-  # candidate and finished run history for the library, but preserves
-  # dismissed candidates -- naming that explicitly is what keeps a reviewer
-  # from reading "Cleared" as "every decision I made is gone".
-  defp cleared_message(%{candidates: 0}) do
-    gettext("Nothing to clear. Dismissed decisions are preserved.")
-  end
-
-  defp cleared_message(%{candidates: candidates}) do
-    ngettext(
-      "Cleared %{count} scan result. Dismissed decisions are preserved.",
-      "Cleared %{count} scan results. Dismissed decisions are preserved.",
-      candidates
-    )
-  end
-
   defp queue_result(socket, {:ok, %{queued: queued, skipped: skipped}}) do
     socket
     |> put_flash(:info, queue_message(queued, skipped))
@@ -867,32 +853,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
-
-  # The skipped count was previously dropped on the floor, so a user who
-  # selected 40 groups and saw 12 promoted was told "Accepted 12 group(s)" with
-  # no account of the rest. The wording stays generic because a skip covers
-  # three distinct causes and the flash has no room to distinguish them; the
-  # per-group reason lands on the row as queue_error.
-  defp queue_message(queued, 0),
-    do:
-      ngettext("Queued %{count} group for import.", "Queued %{count} groups for import.", queued)
-
-  defp queue_message(0, skipped),
-    do:
-      ngettext(
-        "Nothing queued. %{count} group has nothing to import from.",
-        "Nothing queued. %{count} groups have nothing to import from.",
-        skipped
-      )
-
-  defp queue_message(queued, skipped),
-    do:
-      ngettext(
-        "Queued %{count} group for import. %{skipped} skipped, nothing to import from.",
-        "Queued %{count} groups for import. %{skipped} skipped, nothing to import from.",
-        queued,
-        skipped: skipped
-      )
 
   defp show_outcome(socket, run) do
     socket =
@@ -928,41 +888,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
        do: run
 
   defp persistent_outcome(_run), do: nil
-
-  defp resolve_library_path_id(params, library_paths) do
-    cond do
-      id = params["library_path_id"] || params["library_id"] ->
-        Enum.find_value(library_paths, &(&1.id == id && &1.id)) ||
-          default_library_path_id(library_paths)
-
-      type = params["type"] || params["library_type"] ->
-        resolve_library_by_type(type, library_paths) || default_library_path_id(library_paths)
-
-      true ->
-        default_library_path_id(library_paths)
-    end
-  end
-
-  defp resolve_library_by_type(type, library_paths) when type in ["movies", "movie"] do
-    Enum.find_value(library_paths, fn lp -> lp.default_for_movies && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :movies && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
-  end
-
-  defp resolve_library_by_type(type, library_paths)
-       when type in ["tv", "series", "tv_show", "shows"] do
-    Enum.find_value(library_paths, fn lp -> lp.default_for_series && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :series && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
-  end
-
-  defp resolve_library_by_type(_type, _library_paths), do: nil
-
-  # Scanning and review work on one library path at a time. On mount the
-  # page-level tabs default to the first importable path; after that,
-  # select_library/2 changes the shared page context.
-  defp default_library_path_id([%{id: id} | _rest]), do: id
-  defp default_library_path_id([]), do: nil
 
   # Switches the library shared by scan controls and review. Every piece of
   # review state is library-scoped, and run subscriptions must move with the
@@ -1196,7 +1121,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp apply_selected_match(socket, anchor_key, result) do
     library_path_id = socket.assigns.selected_library_path_id
 
-    case ImportCandidates.change_match(library_path_id, anchor_key, match_from_result(result)) do
+    match = MatchSearch.match_from_result(result)
+
+    case ImportCandidates.change_match(library_path_id, anchor_key, match) do
       {:ok, _count} ->
         {:noreply,
          socket
@@ -1213,23 +1140,5 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          |> load_groups()
          |> refresh_counts()}
     end
-  end
-
-  # `result.provider` is the search result's own provider tag -- `:tvdb` for
-  # a TVDB result, `:metadata_relay` for a TMDB one (the relay's TMDB search
-  # stamps every result that way; see `SearchResult.from_api_response/2`) --
-  # so this mirrors `MetadataMatcher`'s own `if result.provider == :tvdb, do:
-  # :tvdb, else: :tmdb` convention rather than trusting the tag's literal
-  # value. This, not a hardcoded `"tmdb"`, is what closes the bug the design
-  # flagged in the code this replaced: a TVDB library's corrected match must
-  # not get mis-stamped as TMDB.
-  defp match_from_result(result) do
-    %{
-      provider_id: result.provider_id,
-      provider_type: if(result.provider == :tvdb, do: :tvdb, else: :tmdb),
-      title: result.title,
-      year: result.year,
-      media_type: result.media_type
-    }
   end
 end

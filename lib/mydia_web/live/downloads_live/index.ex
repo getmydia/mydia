@@ -25,6 +25,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
+
+  import MydiaWeb.DownloadsLive.Messages,
+    only: [
+      batch_message: 3,
+      mapping_error_message: 1,
+      friendly_rematch_error: 1,
+      import_issue_label: 1,
+      status_age: 2,
+      get_episode_details: 1
+    ]
+
   import MydiaWeb.DownloadsLive.ListView, only: [get_metadata_value: 2]
   import MydiaWeb.Formatters
 
@@ -1217,30 +1228,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp batch_message(:retried, count, 0),
-    do: ngettext("%{count} retried", "%{count} retried", count)
-
-  defp batch_message(:retried, count, skipped),
-    do:
-      ngettext(
-        "%{count} retried, %{skipped} skipped",
-        "%{count} retried, %{skipped} skipped",
-        count,
-        skipped: skipped
-      )
-
-  defp batch_message(:dismissed, count, 0),
-    do: ngettext("%{count} dismissed", "%{count} dismissed", count)
-
-  defp batch_message(:dismissed, count, skipped),
-    do:
-      ngettext(
-        "%{count} dismissed, %{skipped} skipped",
-        "%{count} dismissed, %{skipped} skipped",
-        count,
-        skipped: skipped
-      )
-
   # Clears the selection and flashes the tally, with a skipped suffix when
   # some rows were left alone.
   defp finish_issue_batch(socket, message) do
@@ -1616,20 +1603,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     length(downloads)
   end
 
-  defp mapping_error_message(changeset) do
-    case changeset.errors[:remote_prefix] do
-      {_msg, [{:constraint, :unique} | _]} ->
-        gettext("A mapping for this path already exists. Edit it on the Path Mappings page.")
-
-      _ ->
-        reason =
-          Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
-          |> Enum.map_join("; ", fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
-
-        gettext("Couldn't add the mapping: %{reason}", reason: reason)
-    end
-  end
-
   # For downloads classified as a path-mapping mismatch, compute a suggested
   # remote→local mapping (from the persisted reported path) and the number of
   # downloads a one-click apply would re-run. Mount roots are detected once for
@@ -1723,22 +1696,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp friendly_rematch_error(:not_imported), do: gettext("This download hasn't imported yet.")
-
-  defp friendly_rematch_error(reason) when reason in [:not_single_target, :multiple_files],
-    do: gettext("This download has multiple files; per-file re-match isn't supported yet.")
-
-  defp friendly_rematch_error(:no_imported_file),
-    do: gettext("Couldn't find the imported file for this download.")
-
-  defp friendly_rematch_error(:no_library_path),
-    do: gettext("No matching library is configured for that title's type.")
-
-  defp friendly_rematch_error(:library_type_mismatch),
-    do: gettext("That title's type doesn't match an available library.")
-
-  defp friendly_rematch_error(_), do: gettext("Re-match failed.")
-
   defp get_current_downloads(socket) do
     Downloads.list_downloads_with_status(bounded: true)
     |> ListView.rows_for_view(socket.assigns.view)
@@ -1787,9 +1744,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp import_issue_label(:failed), do: gettext("Import failed")
-  defp import_issue_label(:retrying), do: gettext("Import retrying")
-
   # Kept on Index because existing tests call them as Index.import_issue/1 and
   # Index.status_badge/1.
   defdelegate import_issue(download), to: ListView
@@ -1814,14 +1768,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
   end
 
-  defp status_age(%DateTime{} = as_of, display) do
-    seconds = max(DateTime.diff(DateTime.utc_now(), as_of, :second), 0)
-
-    if seconds < 60,
-      do: gettext("%{count}s ago", count: seconds),
-      else: format_relative_time(as_of, display)
-  end
-
   # Whether Mydia adopted this download from a client rather than grabbing it
   # itself. Written by `UntrackedMatcher.create_download_record/3` (automatic)
   # and `Queue.adopt_external_torrent/3` (manual); "Added outside Mydia" is
@@ -1840,54 +1786,4 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp adopted_from_client?(_download), do: false
 
   defp get_display_title(download), do: ListView.display_title(download)
-
-  defp get_episode_details(download) do
-    cond do
-      # Download has a specific episode association
-      is_map(download.episode) ->
-        episode_id = format_episode_identifier(download.episode)
-        episode_title = download.episode.title
-
-        if episode_title do
-          "#{episode_id} - #{episode_title}"
-        else
-          episode_id
-        end
-
-      # Download is for a TV show but no episode (likely season pack or series)
-      is_map(download.media_item) && download.media_item.type == "tv_show" ->
-        extract_season_info_from_title(download.title)
-
-      true ->
-        nil
-    end
-  end
-
-  defp extract_season_info_from_title(title) do
-    cond do
-      # Match S01, S02, etc. (most common format)
-      Regex.match?(~r/\.S(\d{1,2})(?:\.|E|$)/i, title) ->
-        [_, season] = Regex.run(~r/\.S(\d{1,2})(?:\.|E|$)/i, title)
-        pgettext("tv", "Season %{season}", season: String.to_integer(season))
-
-      # Match "Season 1", "Season 01", etc.
-      Regex.match?(~r/Season[\s\.]+(\d{1,2})/i, title) ->
-        [_, season] = Regex.run(~r/Season[\s\.]+(\d{1,2})/i, title)
-        pgettext("tv", "Season %{season}", season: String.to_integer(season))
-
-      # If title has "Complete" or "Series" - likely full series pack
-      Regex.match?(~r/(Complete|Series|Collection)/i, title) ->
-        gettext("Complete Series")
-
-      # Fallback
-      true ->
-        nil
-    end
-  end
-
-  defp format_episode_identifier(episode) do
-    season = String.pad_leading("#{episode.season_number}", 2, "0")
-    episode_num = String.pad_leading("#{episode.episode_number}", 2, "0")
-    "S#{season}E#{episode_num}"
-  end
 end

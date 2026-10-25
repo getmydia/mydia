@@ -14,7 +14,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
   Renders the resolved target library.
 
   With two or more candidates this is a button opening a page-level picker
-  modal (`MydiaWeb.MediaLive.Show.Modals.target_library_modal/1`) that writes
+  modal (`MydiaWeb.MediaLive.Show.PickerModals.target_library_modal/1`) that writes
   `media_items.library_path_id`; with one it is static text. Selecting
   "Automatic" clears the column and returns the item to dynamic resolution.
 
