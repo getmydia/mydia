@@ -212,7 +212,10 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
   defp fs_status_label(_), do: gettext("Unknown")
 
   defp fs_format_error({:connection_error, reason}),
-    do: gettext("Connection error: %{reason}", reason: reason)
+    do:
+      gettext("Connection error: %{reason}",
+        reason: MydiaWeb.AdminIndexersLive.ErrorMessages.format_transport_reason(reason)
+      )
 
   defp fs_format_error({:http_error, status, _}),
     do: gettext("HTTP error: %{status}", status: status)
