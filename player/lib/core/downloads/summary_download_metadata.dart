@@ -26,7 +26,7 @@ DownloadMetadata summaryDownloadMetadata(ItemSummary item) {
   final show = item.showTitle;
   return DownloadMetadata(
     title:
-        '${show == null ? '' : '$show - '}S${season}E$episode: ${item.title}',
+        '${show == null ? '' : '$show - '}S${season}E$episode: ${item.title}', // l10n-ignore: stored title, built from data
     mediaType: MediaType.episode,
     posterUrl: item.poster?.path,
     thumbnailUrl: item.poster?.path,

@@ -68,7 +68,8 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
     ref: ItemRef(sourceId: sourceId, kind: ItemKind.video, externalId: id),
     title: title != null && title.isNotEmpty
         ? title
-        : (file?['basename'] as String? ?? 'Scene $id'),
+        : (file?['basename'] as String? ??
+            'Scene $id'), // l10n-ignore: stored name for a scene that has none
     subtitle: (scene['studio'] as Map?)?['name'] as String? ?? date,
     year: date != null && date.length >= 4
         ? int.tryParse(date.substring(0, 4))

@@ -228,9 +228,9 @@ void main() {
     });
 
     group('fileSizeDisplay getter', () {
-      test('returns "Unknown size" when fileSize is null', () {
+      test('is null when fileSize is null, for the screen to word', () {
         final task = _createTask(fileSize: null);
-        expect(task.fileSizeDisplay, equals('Unknown size'));
+        expect(task.fileSizeDisplay, isNull);
       });
 
       test('formats bytes correctly', () {

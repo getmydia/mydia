@@ -47,15 +47,6 @@ enum PushOutcome {
   blockedByForm,
 }
 
-extension PushOutcomeMessage on PushOutcome {
-  /// What to tell the viewer when nothing was opened, else null.
-  String? get message => switch (this) {
-        PushOutcome.blockedByPlayer => 'Close the player to open this.',
-        PushOutcome.blockedByForm => 'Finish or close this screen first.',
-        _ => null,
-      };
-}
-
 /// Opens [path] for a caller that can run at any time: a remote `LoadContent`
 /// or a cast session brought back to this device.
 ///

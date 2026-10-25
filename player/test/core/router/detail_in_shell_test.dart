@@ -8,7 +8,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Page;
-import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -400,7 +401,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(outcome, PushOutcome.blockedByPlayer);
-      expect(outcome.message, isNotNull);
+      expect(AppLocalizationsEn().pushOutcomeMessage(outcome), isNotNull);
       expect(find.byKey(_playerKey), findsOneWidget);
       expect(find.byType(MovieDetailScreen), findsNothing);
     });
@@ -416,7 +417,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(outcome, PushOutcome.blockedByForm);
-      expect(outcome.message, isNotNull);
+      expect(AppLocalizationsEn().pushOutcomeMessage(outcome), isNotNull);
       expect(find.byKey(_formKey), findsOneWidget);
       expect(find.byType(MovieDetailScreen), findsNothing);
     });

@@ -117,7 +117,7 @@ class MediaSessionBridge {
     if (redacted && state.status != MediaSessionStatus.stopped) {
       state = MediaSessionState(
         status: state.status,
-        title: 'Mydia',
+        title: 'Mydia', // l10n-ignore: product name
         trackId: state.trackId,
         duration: state.duration,
         position: state.position,

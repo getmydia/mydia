@@ -198,7 +198,7 @@ class _ManageSection extends ConsumerWidget {
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
           title: context.l10n.settingsDiagnostics,
-          subtitle: connection.label,
+          subtitle: context.l10n.connectionLabel(connection),
           subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => SettingsNavScope.of(context).openDiagnostics(),
         ),

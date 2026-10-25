@@ -40,12 +40,15 @@ class MediaFile {
     );
   }
 
-  String get displayQuality {
-    final parts = <String>[];
-    if (resolution != null) parts.add(resolution!);
-    if (codec != null) parts.add(codec!);
-    if (hdrFormat != null) parts.add(hdrFormat!);
-    return parts.isEmpty ? 'Unknown' : parts.join(' • ');
+  /// e.g. "1080p • hevc • HDR10", or null when the file says nothing about
+  /// its quality; the screen then says it is unknown.
+  String? get displayQuality {
+    final parts = <String>[
+      if (resolution != null) resolution!,
+      if (codec != null) codec!,
+      if (hdrFormat != null) hdrFormat!,
+    ];
+    return parts.isEmpty ? null : parts.join(' • ');
   }
 }
 

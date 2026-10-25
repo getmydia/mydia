@@ -1,3 +1,14 @@
+/// Identities of the rungs that are not resolutions. Words for them come from
+/// `AppFormatters.qualityName`; these are only what tells one rung from another.
+const _originalId = 'Original';
+const _autoId = 'Auto';
+
+/// Resolution names read the same in every language, so they are not messages.
+const _p1080 = '1080p';
+const _p720 = '720p';
+const _p480 = '480p';
+const _p360 = '360p';
+
 /// One rung of the playback quality ladder, or Auto, which lets the player
 /// choose.
 ///
@@ -5,7 +16,8 @@
 /// server emits a single rendition per session, so switching rungs restarts
 /// the session at new encoder settings.
 class QualityRung {
-  /// Shown in the picker and on the control's tooltip.
+  /// What tells this rung apart. A resolution rung is shown by it (`720p`);
+  /// Auto and Original are worded by `AppFormatters.qualityName`.
   final String label;
 
   /// Output height ceiling in pixels, or null for the source resolution.
@@ -26,12 +38,12 @@ class QualityRung {
 
   /// No caps at all, which preserves the copy-when-compatible path and is the
   /// cheapest option for the server.
-  static const original = QualityRung(label: 'Original');
+  static const original = QualityRung(label: _originalId);
 
   /// The player decides: direct play or copy when this device can, otherwise
   /// the rung the connection supports. The default choice. It carries no caps
   /// of its own; the planner picks them.
-  static const auto = QualityRung(label: 'Auto');
+  static const auto = QualityRung(label: _autoId);
 
   bool get isAuto => this == auto;
 
@@ -79,10 +91,10 @@ class QualityRung {
 
 /// The full ladder, highest quality first, before filtering against a source.
 const _allRungs = <QualityRung>[
-  QualityRung(label: '1080p', height: 1080, maxBitrateKbps: 8000),
-  QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000),
-  QualityRung(label: '480p', height: 480, maxBitrateKbps: 1500),
-  QualityRung(label: '360p', height: 360, maxBitrateKbps: 800),
+  QualityRung(label: _p1080, height: 1080, maxBitrateKbps: 8000),
+  QualityRung(label: _p720, height: 720, maxBitrateKbps: 4000),
+  QualityRung(label: _p480, height: 480, maxBitrateKbps: 1500),
+  QualityRung(label: _p360, height: 360, maxBitrateKbps: 800),
 ];
 
 /// Builds the ladder offered for a source of [sourceHeight] pixels.
@@ -143,7 +155,7 @@ QualityRung? effectiveRungLabel({int? maxHeight, int? maxBitrateKbps}) {
   // the echoed bitrate, not a ladder rung's: this describes what the server
   // did, and nothing sends it back.
   return QualityRung(
-    label: '${maxHeight}p',
+    label: '${maxHeight}p', // l10n-ignore: resolution name
     height: maxHeight,
     maxBitrateKbps: maxBitrateKbps,
   );

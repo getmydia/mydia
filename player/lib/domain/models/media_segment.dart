@@ -119,17 +119,6 @@ class MediaSegment {
   /// not, and a zero-or-negative span is not skippable.
   bool get actionable => type != SegmentType.unknown && endMs > startMs;
 
-  String get label {
-    switch (type) {
-      case SegmentType.intro:
-        return 'Skip Intro';
-      case SegmentType.credits:
-        return 'Skip Credits';
-      case SegmentType.unknown:
-        return 'Skip';
-    }
-  }
-
   @override
   bool operator ==(Object other) =>
       other is MediaSegment &&

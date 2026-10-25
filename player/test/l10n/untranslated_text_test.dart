@@ -13,6 +13,8 @@ const convertedPaths = <String>[
   'lib/presentation/screens/login',
   'lib/core/startup/startup_error_app.dart',
   'lib/presentation/widgets',
+  'lib/core',
+  'lib/domain',
 ];
 
 void main() {

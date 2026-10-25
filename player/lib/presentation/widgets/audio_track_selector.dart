@@ -66,7 +66,7 @@ class AudioTrackSelectorSheet extends StatelessWidget {
             else
               ...tracks.map(
                 (track) => _TrackTile(
-                  title: track.displayName,
+                  title: context.l10n.audioTrackName(track),
                   isDefault: track.isDefault,
                   isSelected: currentTrack?.id == track.id,
                   onTap: () => Navigator.of(context).pop(track),

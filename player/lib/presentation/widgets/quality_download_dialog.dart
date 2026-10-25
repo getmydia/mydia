@@ -203,7 +203,9 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                   Row(
                     children: [
                       Text(
-                        option.label,
+                        option.resolution == 'original'
+                            ? context.l10n.qualityOriginal
+                            : option.label,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),

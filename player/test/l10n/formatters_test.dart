@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:player/core/connection/connection_summary.dart';
+import 'package:player/core/downloads/download_notification_text.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/subtitle_size.dart';
+import 'package:player/core/router/push_route.dart';
 import 'package:player/core/theme/glass_material.dart';
 import 'package:player/core/theme/theme_preset.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
+import 'package:player/domain/models/audio_track.dart';
+import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
+import 'package:player/domain/models/storage_settings.dart';
+import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/source_nav.dart';
@@ -400,6 +407,56 @@ void main() {
           expect(loc.statsPill(mode), isNotEmpty);
         }
       }
+    });
+  });
+
+  group('core and domain display text', () {
+    test('track names: its own title, else the language', () async {
+      final es = await l10n('es');
+      expect(es.audioTrackName(const AudioTrack(id: '1', language: 'spa')),
+          'Español');
+      expect(
+          es.audioTrackName(
+              const AudioTrack(id: '1', language: 'eng', title: 'Commentary')),
+          'Commentary');
+      expect(es.subtitleTrackName(const SubtitleTrack(id: '2', language: 'xx')),
+          'XX');
+    });
+
+    test('connection summaries name every kind in every language', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final kind in ConnectionKind.values) {
+          final summary =
+              ConnectionSummary(kind: kind, tone: ConnectionTone.good);
+          expect(loc.connectionLabel(summary), isNotEmpty);
+          expect(loc.connectionDetail(summary), isNotEmpty);
+        }
+      }
+    });
+
+    test('segment, push and storage names exist in every language', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final type in SegmentType.values) {
+          expect(loc.segmentSkipLabel(type), isNotEmpty);
+        }
+        expect(loc.pushOutcomeMessage(PushOutcome.blockedByPlayer), isNotEmpty);
+        expect(loc.pushOutcomeMessage(PushOutcome.blockedByForm), isNotEmpty);
+        expect(loc.pushOutcomeMessage(PushOutcome.pushed), isNull);
+        for (final policy in CleanupPolicy.values) {
+          expect(loc.cleanupPolicyName(policy), isNotEmpty);
+        }
+      }
+    });
+
+    test('the downloads title counts items', () async {
+      final en = await l10n('en');
+      expect(en.downloadNotificationTitle(1), 'Downloading');
+      expect(en.downloadNotificationTitle(3), 'Downloading 3 items');
+      expect(
+          en.downloadNotificationLine(const NotificationProgress('Quill', 40)),
+          'Quill - 40%');
     });
   });
 }

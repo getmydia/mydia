@@ -416,9 +416,11 @@ class DownloadTask {
       'S${seasonNumber?.toString().padLeft(2, '0') ?? '??'}'
       'E${episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
 
-  String get fileSizeDisplay {
-    if (fileSize == null) return 'Unknown size';
-    return formatBytes(fileSize!);
+  /// The size as text, or null when the server never said; the screen then
+  /// says it is unknown.
+  String? get fileSizeDisplay {
+    final size = fileSize;
+    return size == null ? null : formatBytes(size);
   }
 
   /// Returns e.g. "245.0 MB / 1.2 GB" or null if data is unavailable.

@@ -400,7 +400,7 @@ class _SubtitleTrackSelectorSheetState
           else
             ...widget.tracks.map(
               (track) => _TrackTile(
-                title: track.displayName,
+                title: context.l10n.subtitleTrackName(track),
                 subtitle: track.embedded
                     ? context.l10n.subtitleTrackEmbedded
                     : context.l10n.subtitleTrackExternal,

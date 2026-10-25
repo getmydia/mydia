@@ -120,7 +120,8 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       : null;
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
-    title: json['Name'] as String? ?? 'Untitled',
+    title: json['Name'] as String? ??
+        'Untitled', // l10n-ignore: stored name for a server item that has none
     subtitle: episode ? episodeSubtitle(parentIndex, index) : null,
     showTitle: episode ? json['SeriesName'] as String? : null,
     year: json['ProductionYear'] as int?,

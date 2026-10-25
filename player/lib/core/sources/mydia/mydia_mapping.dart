@@ -139,7 +139,8 @@ ItemSummary seasonSummary(
   final number = season['seasonNumber'] as int;
   return ItemSummary(
     ref: _ref(sid, ItemKind.season, seasonExternalId(showId, number)),
-    title: number == 0 ? 'Specials' : 'Season $number',
+    // Stored with the item; season rows are worded from `index`.
+    title: number == 0 ? 'Specials' : 'Season $number', // l10n-ignore: stored
     poster: poster,
     userState: _watchState(season['watchStatus']),
     childCount: season['episodeCount'] as int?,

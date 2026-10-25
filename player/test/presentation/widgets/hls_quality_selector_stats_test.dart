@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/domain/models/quality_delivery_subtitle.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/presentation/widgets/hls_quality_selector.dart';
 
@@ -21,7 +22,7 @@ Future<void> openPicker(
               const [QualityRung.auto, QualityRung.original],
               QualityRung.auto,
               autoSubtitle: 'Auto',
-              originalSubtitle: 'Original',
+              originalDelivery: OriginalDelivery.directPlay,
               statsEnabled: statsEnabled,
               onStatsChanged: onStatsChanged,
             ),

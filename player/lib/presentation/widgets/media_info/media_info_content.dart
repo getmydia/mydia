@@ -149,11 +149,7 @@ class MediaInfoContent extends StatelessWidget {
 
   String _versionChipLabel(AppLocalizations l10n, MediaFileInfo file) {
     final size = formatBytes(file.sizeBytes);
-    // `versionLabel` falls back to an English word when the file has neither
-    // resolution nor codec, so that case is named here instead.
-    final label = file.resolution == null && file.codec == null
-        ? l10n.mediaInfoVersionFallback
-        : file.versionLabel;
+    final label = file.versionLabel ?? l10n.mediaInfoVersionFallback;
     return size == null ? label : '$label · $size';
   }
 

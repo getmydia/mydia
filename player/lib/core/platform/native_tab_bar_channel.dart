@@ -363,7 +363,8 @@ class NativeTabBarChannel {
 
   // A sentinel no real accessory equals, so a failed send is retried even
   // when the failed value was null (which otherwise means "none sent").
-  static const _unsentAccessory = NativeAccessory(title: '\u0000unsent');
+  static const _unsentAccessory = NativeAccessory(
+      title: '\u0000unsent'); // l10n-ignore: sentinel, never shown
 
   void dispose() {
     _channel.setMethodCallHandler(null);

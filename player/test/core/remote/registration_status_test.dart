@@ -1,38 +1,54 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/remote/registration_status.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 
 void main() {
-  group('RegistrationStatus.describe', () {
+  final en = AppLocalizationsEn();
+
+  group('registrationStatusText', () {
     test('reads as off when idle', () {
-      expect(
-          const RegistrationIdle().describe(), 'Not advertising this device');
+      expect(en.registrationStatusText(const RegistrationIdle()),
+          'Not advertising this device');
     });
 
     test('names the dependency it is waiting on', () {
       expect(
-        const RegistrationWaiting('a server connection').describe(),
+        en.registrationStatusText(
+            const RegistrationWaiting(RegistrationDependency.serverConnection)),
         'Waiting for a server connection',
+      );
+      expect(
+        en.registrationStatusText(const RegistrationWaiting(
+            RegistrationDependency.remoteControlSetting)),
+        'Waiting for the remote control setting',
+      );
+      expect(
+        en.registrationStatusText(
+            const RegistrationWaiting(RegistrationDependency.deviceOnline)),
+        'Waiting for this device to come online',
       );
     });
 
     test('reports the attempt while in flight', () {
       expect(
-        const RegistrationInFlight('abc', 2).describe(),
+        en.registrationStatusText(const RegistrationInFlight('abc', 2)),
         'Registering with the server (attempt 2)',
       );
     });
 
     test('confirms success', () {
       expect(
-        RegistrationSucceeded('abc', DateTime(2026, 9, 1)).describe(),
+        en.registrationStatusText(
+            RegistrationSucceeded('abc', DateTime(2026, 9, 1))),
         'Discoverable by your other devices',
       );
     });
 
-    test('surfaces the failure reason', () {
+    test('surfaces the failure reason verbatim', () {
       expect(
-        const RegistrationFailed('server rejected the node id', 3, null)
-            .describe(),
+        en.registrationStatusText(
+            const RegistrationFailed('server rejected the node id', 3, null)),
         'Not discoverable: server rejected the node id',
       );
     });

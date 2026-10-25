@@ -49,7 +49,7 @@ void main() {
 
       expect(service.status, isA<RegistrationWaiting>());
       expect((service.status as RegistrationWaiting).dependency,
-          'this device to come online');
+          RegistrationDependency.deviceOnline);
     });
 
     test('waits rather than failing when the client is not ready', () async {
@@ -61,7 +61,7 @@ void main() {
 
       expect(service.status, isA<RegistrationWaiting>());
       expect((service.status as RegistrationWaiting).dependency,
-          'a server connection');
+          RegistrationDependency.serverConnection);
     });
 
     test('registers once every input has arrived', () async {

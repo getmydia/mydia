@@ -29,6 +29,7 @@ class LocaleSetting extends Notifier<Locale?> {
           await ref.read(coreSettingsServiceProvider).getLocaleCode();
       if (!ref.mounted || _chosen || stored == null) return;
       state = _supported(stored);
+      rememberInterfaceLocale(state);
     } catch (e) {
       debugPrint('[LocaleSetting] Could not load: $e');
     }
@@ -49,6 +50,7 @@ class LocaleSetting extends Notifier<Locale?> {
   Future<void> set(Locale? locale) {
     _chosen = true;
     state = locale;
+    rememberInterfaceLocale(locale);
     final service = ref.read(coreSettingsServiceProvider);
     return _pendingWrite = _pendingWrite.then((_) async {
       try {

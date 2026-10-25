@@ -52,7 +52,7 @@ class QualitySelectorSheet extends StatelessWidget {
               (file) => ListTile(
                 onTap: () => Navigator.of(context).pop(file),
                 title: Text(
-                  file.displayQuality,
+                  file.displayQuality ?? context.l10n.commonUnknown,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                   ),

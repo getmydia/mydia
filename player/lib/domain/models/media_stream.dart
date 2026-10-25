@@ -149,13 +149,14 @@ class MediaFileInfo {
   List<MediaStream> ofType(MediaStreamType type) =>
       (streams ?? const []).where((s) => s.type == type).toList();
 
-  /// Short label for the version switcher, e.g. "2160p HEVC · 54.2 GB".
-  String get versionLabel {
+  /// Short label for the version switcher, e.g. "2160p HEVC", or null when the
+  /// file has neither resolution nor codec.
+  String? get versionLabel {
     final parts = <String>[
       if (resolution != null) resolution!,
       if (codec != null) codec!.toUpperCase(),
     ];
-    return parts.isEmpty ? 'Version' : parts.join(' ');
+    return parts.isEmpty ? null : parts.join(' ');
   }
 
   factory MediaFileInfo.fromGraphQL(Fragment$MediaInfoFragment f) {

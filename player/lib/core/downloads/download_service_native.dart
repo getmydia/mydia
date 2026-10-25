@@ -22,6 +22,7 @@ import '../../domain/models/download_settings.dart';
 import '../../domain/models/storage_settings.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/source_error.dart';
+import '../../l10n/l10n.dart';
 import '../sources/source.dart';
 import '../storage/app_hive.dart';
 import 'download_notification_service.dart';
@@ -622,9 +623,11 @@ class _NativeDownloadService implements DownloadService {
     final summary = buildDownloadNotificationText(activeTasks, _isDiscreet);
     final hasPermission = await _notificationService.requestPermissions();
     if (!hasPermission) return;
+    // No BuildContext here: worded in the language the app is showing now.
+    final l10n = currentAppLocalizations();
     await _notificationService.startService(
-      title: summary.title,
-      text: summary.text,
+      title: l10n.downloadNotificationTitle(summary.count),
+      text: l10n.downloadNotificationLine(summary.line),
       progress: summary.progress,
       indeterminate: summary.indeterminate,
     );

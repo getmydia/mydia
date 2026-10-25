@@ -35,7 +35,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         ),
       ),
     );
@@ -56,7 +56,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         );
       }),
     );
@@ -80,7 +80,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         );
         completed = true;
       }),
@@ -105,7 +105,7 @@ void main() {
           ladder,
           current,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         ),
       ),
     );
@@ -125,7 +125,7 @@ void main() {
             ladder,
             QualityRung.original,
             autoSubtitle: 'Auto · Direct Play',
-            originalSubtitle: kOriginalDirectPlaySubtitle,
+            originalDelivery: OriginalDelivery.directPlay,
             clampNote: 'Limited to 720p by your remote connection',
           )),
     );
@@ -146,7 +146,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         ),
       ),
     );
@@ -164,22 +164,22 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalTranscodeSubtitle,
+          originalDelivery: OriginalDelivery.transcode,
         ),
       ),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.text(kOriginalTranscodeSubtitle), findsOneWidget);
+    expect(find.text('Original · re-encoding required'), findsOneWidget);
     expect(find.text('Source quality, no re-encoding'), findsNothing);
   });
 
   testWidgets('shows Direct Play and lossless Original subtitles when supplied',
       (tester) async {
-    for (final subtitle in [
-      kOriginalDirectPlaySubtitle,
-      kOriginalLosslessSubtitle,
+    for (final (delivery, subtitle) in [
+      (OriginalDelivery.directPlay, 'Direct Play'),
+      (OriginalDelivery.lossless, 'Original · no re-encoding'),
     ]) {
       await tester.pumpWidget(
         _host(
@@ -188,7 +188,7 @@ void main() {
             ladder,
             QualityRung.original,
             autoSubtitle: 'Auto · Direct Play',
-            originalSubtitle: subtitle,
+            originalDelivery: delivery,
           ),
         ),
       );
@@ -209,7 +209,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
         ),
       ),
     );
@@ -229,7 +229,7 @@ void main() {
           [QualityRung.auto, ...ladder],
           QualityRung.auto,
           autoSubtitle: 'Auto · 720p',
-          originalSubtitle: kOriginalLosslessSubtitle,
+          originalDelivery: OriginalDelivery.lossless,
         ),
       ),
     );
@@ -238,7 +238,7 @@ void main() {
 
     expect(find.byKey(const Key('quality-rung-selected-Auto')), findsOneWidget);
     expect(find.text('Auto · 720p'), findsOneWidget);
-    expect(find.text(kOriginalLosslessSubtitle), findsOneWidget);
+    expect(find.text('Original · no re-encoding'), findsOneWidget);
     final autoTop = tester.getTopLeft(find.text('Auto')).dy;
     final originalTop = tester.getTopLeft(find.text('Original')).dy;
     expect(autoTop, lessThan(originalTop));
@@ -253,7 +253,7 @@ void main() {
           [QualityRung.auto, ...ladder],
           QualityRung.original,
           autoSubtitle: 'Adapts to your connection',
-          originalSubtitle: kOriginalPreferenceSubtitle,
+          originalDelivery: OriginalDelivery.preference,
         );
       }),
     );
@@ -274,7 +274,7 @@ void main() {
           ladder,
           QualityRung.original,
           autoSubtitle: 'Auto · Direct Play',
-          originalSubtitle: kOriginalDirectPlaySubtitle,
+          originalDelivery: OriginalDelivery.directPlay,
           clampNote: 'The server is limiting this stream.',
           statsEnabled: false,
           onStatsChanged: (_) {},

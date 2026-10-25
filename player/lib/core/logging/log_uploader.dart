@@ -328,7 +328,8 @@ class LogUploader {
         time: _now().toUtc(),
         level: LogLevel.warn,
         tag: 'LogUploader',
-        message: 'gap: local logs were rotated away before upload',
+        message:
+            'gap: local logs were rotated away before upload', // l10n-ignore: log text
         sessionId: _sessionId,
       ).toJson());
 

@@ -7,17 +7,27 @@ library;
 import 'package:intl/intl.dart';
 
 import '../core/channels/pairing_service.dart';
+import '../core/connection/connection_summary.dart';
+import '../core/downloads/download_notification_text.dart';
 import '../core/playback/playback_plan.dart';
 import '../core/playback/stats/playback_stats.dart';
 import '../core/playback/stats/stats_report.dart';
 import '../core/player/fullscreen/fullscreen_failure.dart';
 import '../core/player/subtitle_size.dart';
+import '../core/remote/registration_status.dart';
+import '../core/router/push_route.dart';
 import '../core/theme/glass_material.dart';
 import '../core/theme/theme_preset.dart';
 import '../core/update/update_provider.dart';
 import '../core/update/update_track.dart';
+import '../domain/models/audio_track.dart';
+import '../domain/models/download.dart';
+import '../domain/models/media_segment.dart';
+import '../domain/models/quality_delivery_subtitle.dart';
 import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
+import '../domain/models/storage_settings.dart';
+import '../domain/models/subtitle_track.dart';
 import '../domain/navigation/media_filter.dart';
 import '../domain/navigation/nav_destination.dart';
 import '../domain/navigation/source_nav.dart';
@@ -368,6 +378,105 @@ extension AppFormatters on AppLocalizations {
           ),
         StatsPositionValue(:final position, :final duration) =>
           '${statsTimecode(position)} / ${statsTimecode(duration)}',
+      };
+
+  /// An audio track's name: its own title, else its language.
+  String audioTrackName(AudioTrack track) =>
+      _trackName(track.title, track.language);
+
+  /// A subtitle track's name: its own title, else its language.
+  String subtitleTrackName(SubtitleTrack track) =>
+      _trackName(track.title, track.language);
+
+  String _trackName(String? title, String language) =>
+      title != null && title.isNotEmpty
+          ? title
+          : languageName(language) ?? language;
+
+  /// How the Original rung is delivered, shown under it in the quality picker.
+  String originalDeliveryText(OriginalDelivery delivery) => switch (delivery) {
+        OriginalDelivery.directPlay => qualityDirectPlay,
+        OriginalDelivery.lossless => qualityOriginalLossless,
+        OriginalDelivery.transcode => qualityOriginalReencode,
+        OriginalDelivery.preference => qualityOriginalPreference,
+      };
+
+  /// Under a capped rung: it always re-encodes, up to [maxBitrateKbps] when
+  /// the rung has a cap (a rung synthesised from the server's answer may not).
+  String cappedRungDeliveryText(int? maxBitrateKbps) => maxBitrateKbps == null
+      ? qualityTranscodes
+      : qualityTranscodesUpTo(maxBitrateKbps);
+
+  String connectionLabel(ConnectionSummary summary) => switch (summary.kind) {
+        ConnectionKind.server => connectionServerLabel,
+        ConnectionKind.direct => connectionDirectLabel,
+        ConnectionKind.relay => connectionRelayLabel,
+        ConnectionKind.mixed => connectionMixedLabel,
+        ConnectionKind.reconnecting => connectionReconnectingLabel,
+        ConnectionKind.connecting => connectionConnectingLabel,
+      };
+
+  /// One sentence of detail under [connectionLabel].
+  String connectionDetail(ConnectionSummary summary) => switch (summary.kind) {
+        ConnectionKind.server => connectionServerDetail,
+        ConnectionKind.direct => connectionDirectDetail,
+        ConnectionKind.relay => connectionRelayDetail,
+        ConnectionKind.mixed => connectionMixedDetail,
+        ConnectionKind.reconnecting => connectionReconnectingDetail,
+        ConnectionKind.connecting => connectionConnectingDetail,
+      };
+
+  /// The skip button's label for a media segment.
+  String segmentSkipLabel(SegmentType type) => switch (type) {
+        SegmentType.intro => segmentSkipIntro,
+        SegmentType.credits => segmentSkipCredits,
+        SegmentType.unknown => segmentSkip,
+      };
+
+  /// The message after a remote or cast request to open something was
+  /// declined, or null when it was opened.
+  String? pushOutcomeMessage(PushOutcome outcome) => switch (outcome) {
+        PushOutcome.blockedByPlayer => pushBlockedByPlayer,
+        PushOutcome.blockedByForm => pushBlockedByForm,
+        PushOutcome.pushed || PushOutcome.pushedAfterClosingPages => null,
+      };
+
+  /// The line under a Mydia server's name in the remote registration status.
+  String registrationStatusText(RegistrationStatus status) => switch (status) {
+        RegistrationIdle() => registrationNotAdvertising,
+        RegistrationWaiting(:final dependency) => switch (dependency) {
+            RegistrationDependency.remoteControlSetting =>
+              registrationWaitingForSetting,
+            RegistrationDependency.deviceOnline => registrationWaitingForOnline,
+            RegistrationDependency.serverConnection =>
+              registrationWaitingForServer,
+          },
+        RegistrationInFlight(:final attempt) =>
+          registrationRegistering(attempt),
+        RegistrationSucceeded() => registrationDiscoverable,
+        RegistrationFailed(:final reason) =>
+          registrationNotDiscoverable(reason),
+      };
+
+  String cleanupPolicyName(CleanupPolicy policy) => switch (policy) {
+        CleanupPolicy.byDate => storageCleanupOldestFirst,
+        CleanupPolicy.lru => storageCleanupLeastRecentlyUsed,
+      };
+
+  /// The way a download's size reads, or a word for a size nobody knows.
+  String downloadTaskSize(DownloadTask task) =>
+      task.fileSizeDisplay ?? downloadsSizeUnknown;
+
+  /// The second line of the downloads notification.
+  String downloadNotificationLine(DownloadNotificationLine line) =>
+      switch (line) {
+        NotificationDownloading() => downloadNotificationDownloading,
+        NotificationWaiting() => downloadNotificationWaiting,
+        NotificationTaskTitle(:final title) => title,
+        NotificationPreparing(:final title) =>
+          downloadNotificationPreparing(title),
+        NotificationProgress(:final title, :final percent) =>
+          downloadNotificationProgress(title, percent),
       };
 }
 

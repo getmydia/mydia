@@ -43,7 +43,7 @@ class PlexHomeUser {
         uuid: json['uuid'] as String? ?? '',
         title: json['title'] as String? ??
             json['username'] as String? ??
-            'Plex user',
+            'Plex user', // l10n-ignore: name for a Home user plex.tv left unnamed
         admin: json['admin'] as bool? ?? false,
         protected: json['protected'] as bool? ?? false,
       );

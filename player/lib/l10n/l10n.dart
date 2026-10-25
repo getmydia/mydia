@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'gen/app_localizations.dart';
 
+export 'current_l10n.dart';
 export 'formatters.dart';
 export 'gen/app_localizations.dart';
 
