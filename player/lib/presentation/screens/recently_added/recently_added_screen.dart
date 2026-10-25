@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/source.dart';
+import '../../../l10n/l10n.dart';
 import '../sources/source_browse_providers.dart';
 import '../sources/source_listing_screen.dart';
 
@@ -18,14 +19,14 @@ class RecentlyAddedScreen extends ConsumerWidget {
     return SourceListingScreen(
       sourceId: sourceId,
       icon: Icons.fiber_new_rounded,
-      title: 'Recently Added',
+      title: context.l10n.navRecentlyAdded,
       queryKey: SourceKeys.recentlyAdded(sourceId),
       items: ref.watch(provider),
       onRetry: () => ref.invalidate(provider),
-      errorTitle: 'Failed to load recently added',
+      errorTitle: context.l10n.recentlyAddedLoadFailed,
       emptyIcon: Icons.fiber_new_rounded,
-      emptyTitle: 'Nothing new',
-      emptySubtitle: 'Recently added content will appear here',
+      emptyTitle: context.l10n.recentlyAddedEmptyTitle,
+      emptySubtitle: context.l10n.recentlyAddedEmptySubtitle,
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import 'calendar_day_group.dart';
 import 'calendar_jump_requests.dart';
 import 'calendar_timeline.dart';
@@ -193,7 +194,7 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
                   padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
                   child: Center(
                     child: Text(
-                      'That is everything scheduled in the next 90 days.',
+                      context.l10n.calendarFooterEnd,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

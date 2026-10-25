@@ -56,14 +56,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     return BrowseScaffold(
       icon: Icons.calendar_month_outlined,
-      title: 'Calendar',
+      title: context.l10n.navCalendar,
       queryKeys: [key],
       onRefresh: () => ref.read(invalidatorProvider).invalidate([key.target]),
       actions: [
         if (entries.isNotEmpty) _monthButton(entries, today),
         TextButton(
           onPressed: () => _jumps.request(today),
-          child: const Text('Today'),
+          child: Text(context.l10n.calendarToday),
         ),
       ],
       body: (context, scrollTopPadding) => switch (data) {
@@ -131,12 +131,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               size: 48, color: palette.textDisabled),
           const SizedBox(height: 16),
           Text(
-            'Nothing scheduled',
+            context.l10n.calendarEmptyTitle,
             style: TextStyle(fontSize: 17, color: palette.textSecondary),
           ),
           const SizedBox(height: 8),
           Text(
-            'The calendar covers 30 days back and 90 days ahead.',
+            context.l10n.calendarEmptyBody,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: palette.textDisabled),
           ),
@@ -157,13 +157,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             Icon(Icons.update, size: 48, color: palette.textDisabled),
             const SizedBox(height: 16),
             Text(
-              'This server does not have the calendar yet',
+              context.l10n.calendarUnsupportedTitle,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 17, color: palette.textSecondary),
             ),
             const SizedBox(height: 8),
             Text(
-              'Update the server and the calendar will appear here.',
+              context.l10n.calendarUnsupportedBody,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: palette.textDisabled),
             ),
@@ -179,14 +179,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           const Icon(Icons.error_outline, size: 48, color: AppColors.error),
           const SizedBox(height: 16),
           Text(
-            'The calendar could not be loaded',
+            context.l10n.calendarLoadFailed,
             style: TextStyle(fontSize: 17, color: palette.textSecondary),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () =>
                 ref.invalidate(sourceCalendarProvider(widget.sourceId)),
-            child: const Text('Try again'),
+            child: Text(context.l10n.commonTryAgain),
           ),
         ],
       ),

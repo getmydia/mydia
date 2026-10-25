@@ -9,6 +9,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/merged/merged_search.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../sources/source_error_view.dart';
 import '../sources/source_poster_row.dart';
@@ -16,11 +17,11 @@ import 'all_servers_banner.dart';
 import 'all_servers_cards.dart';
 import 'all_servers_providers.dart';
 
-String _sectionTitle(MergedSection s) => switch (s) {
-      MergedSection.movies => 'Movies',
-      MergedSection.shows => 'Shows',
-      MergedSection.episodes => 'Episodes',
-      MergedSection.videos => 'Videos',
+String _sectionTitle(AppLocalizations l10n, MergedSection s) => switch (s) {
+      MergedSection.movies => l10n.navMovies,
+      MergedSection.shows => l10n.navShowsShort,
+      MergedSection.episodes => l10n.sourcesSearchKindEpisodes,
+      MergedSection.videos => l10n.libraryTitleVideos,
     };
 
 class AllServersSearchScreen extends ConsumerWidget {
@@ -37,7 +38,7 @@ class AllServersSearchScreen extends ConsumerWidget {
         .length;
     return BrowseScaffold(
       icon: Icons.search_rounded,
-      title: 'Search',
+      title: context.l10n.navSearch,
       queryKeys: const [],
       secondRow: Center(
         child: TextField(
@@ -45,7 +46,7 @@ class AllServersSearchScreen extends ConsumerWidget {
           autofocus: true,
           style: const TextStyle(fontSize: 18),
           decoration: InputDecoration(
-            hintText: 'Search $count servers',
+            hintText: context.l10n.allServersSearchHint(count),
             hintStyle: TextStyle(
               color: palette.textSecondary.withValues(alpha: 0.6),
               fontSize: 18,
@@ -67,7 +68,7 @@ class AllServersSearchScreen extends ConsumerWidget {
         null => const SizedBox.shrink(),
         AsyncData(:final value) when value.value.isEmpty => Padding(
             padding: EdgeInsets.only(top: scrollTopPadding),
-            child: const Center(child: Text('Nothing found.')),
+            child: Center(child: Text(context.l10n.sourcesSearchNothingFound)),
           ),
         AsyncData(:final value) => ListView(
             padding: EdgeInsets.only(
@@ -78,7 +79,7 @@ class AllServersSearchScreen extends ConsumerWidget {
               for (final entry in value.value.sections.entries)
                 SourcePosterRow(
                   key: Key('all-search-section-${entry.key.name}'),
-                  title: _sectionTitle(entry.key),
+                  title: _sectionTitle(context.l10n, entry.key),
                   railId: 'all-search-${entry.key.name}',
                   items: entry.value,
                   posterFor: (context, item) => AllServersPoster(

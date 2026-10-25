@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/source.dart';
+import '../../../l10n/l10n.dart';
 import '../sources/source_listing_screen.dart';
 import '../sources/source_pages.dart';
 
@@ -18,15 +19,15 @@ class FavoritesScreen extends ConsumerWidget {
     return SourceListingScreen(
       sourceId: sourceId,
       icon: Icons.favorite_rounded,
-      title: 'Favorites',
+      title: context.l10n.navFavorites,
       queryKey: pages.key,
       items: ref.watch(provider).whenData((paged) => paged.items),
       onLoadMore: ref.read(provider.notifier).loadMore,
       onRetry: () => ref.invalidate(provider),
-      errorTitle: 'Failed to load favorites',
+      errorTitle: context.l10n.favoritesLoadFailed,
       emptyIcon: Icons.favorite_outline_rounded,
-      emptyTitle: 'No favorites yet',
-      emptySubtitle: 'Mark movies and shows as favorites to see them here',
+      emptyTitle: context.l10n.favoritesEmptyTitle,
+      emptySubtitle: context.l10n.favoritesEmptySubtitle,
     );
   }
 }
