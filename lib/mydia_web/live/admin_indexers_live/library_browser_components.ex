@@ -44,7 +44,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
           <%!-- Search --%>
           <div class="form-control flex-1 min-w-48">
             <label class="label py-1">
-              <span class="label-text text-xs">{gettext("Search")}</span>
+              <span class="label-text text-xs">{pgettext("search", "Search")}</span>
             </label>
             <form id="indexer-library-search-form" phx-change="search_library_indexers">
               <input
@@ -66,7 +66,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             <%!-- Type Filter --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">{gettext("Type")}</span>
+                <span class="label-text text-xs">{pgettext("indexer type", "Type")}</span>
               </label>
               <select class="select select-bordered select-sm" name="type">
                 <option value="all" selected={@filter_type == "all"}>{gettext("All Types")}</option>

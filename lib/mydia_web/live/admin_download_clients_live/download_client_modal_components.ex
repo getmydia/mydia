@@ -244,7 +244,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
               <.input
                 field={@download_client_form[:type]}
                 type="select"
-                label={gettext("Type")}
+                label={pgettext("download client", "Type")}
                 options={[
                   {"qBittorrent", "qbittorrent"},
                   {"Transmission", "transmission"},

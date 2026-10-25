@@ -91,7 +91,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
               <.input
                 field={@indexer_form[:type]}
                 type="select"
-                label={gettext("Type")}
+                label={pgettext("indexer type", "Type")}
                 options={[
                   {"Prowlarr", "prowlarr"},
                   {"Jackett", "jackett"},
@@ -273,20 +273,16 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                         class="btn btn-xs btn-ghost gap-1"
                         phx-click="select_all_prowlarr_indexers"
                       >
-                        <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> {pgettext(
-                          "selection",
-                          "All"
-                        )}
+                        <.icon name="hero-check-circle" class="w-3.5 h-3.5" />
+                        {pgettext("selection", "All")}
                       </button>
                       <button
                         type="button"
                         class="btn btn-xs btn-ghost gap-1"
                         phx-click="deselect_all_prowlarr_indexers"
                       >
-                        <.icon name="hero-x-circle" class="w-3.5 h-3.5" /> {pgettext(
-                          "selection",
-                          "None"
-                        )}
+                        <.icon name="hero-x-circle" class="w-3.5 h-3.5" />
+                        {pgettext("selection", "None")}
                       </button>
                     </div>
                     <span class="badge badge-primary badge-sm">

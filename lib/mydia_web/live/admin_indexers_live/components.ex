@@ -157,9 +157,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             phx-value-id={@indexer.id}
             disabled={@retesting}
           >
-            <span :if={@retesting} class="loading loading-spinner loading-xs"></span> {gettext(
-              "Retest"
-            )}
+            <span :if={@retesting} class="loading loading-spinner loading-xs"></span>
+            {gettext("Retest")}
           </button>
         </div>
       </:details>
@@ -347,7 +346,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.row_action
             id={"test-library-indexer-#{@indexer.id}"}
             icon="hero-signal"
-            title={gettext("Test")}
+            title={pgettext("verb", "Test")}
             phx-click="test_library_indexer"
             phx-value-id={@indexer.id}
           />

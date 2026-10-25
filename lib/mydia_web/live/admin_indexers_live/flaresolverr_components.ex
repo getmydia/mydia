@@ -161,7 +161,7 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
             class="btn btn-ghost gap-1.5"
             phx-click="test_flaresolverr_form"
           >
-            <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test")}
+            <.icon name="hero-signal" class="w-4 h-4" /> {pgettext("verb", "Test")}
           </button>
           <button type="button" class="btn btn-ghost" phx-click="close_flaresolverr_modal">
             {gettext("Cancel")}
