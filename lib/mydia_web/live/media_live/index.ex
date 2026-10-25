@@ -27,7 +27,7 @@ defmodule MydiaWeb.MediaLive.Index do
   import MydiaWeb.Formatters, only: [format_file_size: 1]
 
   import MydiaWeb.MediaLive.Index.Window,
-    only: [load_media_items: 1, load_media_items_when_connected: 2]
+    only: [load_media_items: 1, load_media_items_when_connected: 3]
 
   import MydiaWeb.MediaLive.Index.Messages,
     only: [batch_monitored_message: 2, auto_search_flash: 2, format_episode_count: 1]
@@ -282,25 +282,21 @@ defmodule MydiaWeb.MediaLive.Index do
   # Replies so the LoadMoreSentinel hook knows the batch has landed.
   def handle_event("load_more", _params, socket) do
     socket =
-      if socket.assigns.has_more do
-        socket = Window.load_next_batch(socket)
-        params = Window.listing_params(socket.assigns)
-
-        push_patch(socket,
-          to: ListingParams.path(socket.assigns.listing_base_path, params),
-          replace: true
-        )
-      else
-        socket
-      end
+      if socket.assigns.has_more,
+        do: socket |> Window.load_next_batch() |> patch_window(),
+        else: socket
 
     {:reply, %{}, socket}
   end
 
-  # The top sentinel after a jump. The URL keeps the letter, so Back returns
-  # to it rather than to rows loaded above it.
+  # The top sentinel after a jump. The URL counts the rows loaded above the
+  # letter, so Back and reloads put them back and the page does not shift.
   def handle_event("load_previous", _params, socket) do
-    socket = if socket.assigns.has_previous, do: Window.load_previous_batch(socket), else: socket
+    socket =
+      if socket.assigns.has_previous,
+        do: socket |> Window.load_previous_batch() |> patch_window(),
+        else: socket
+
     {:reply, %{}, socket}
   end
 
@@ -895,20 +891,28 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_listing_params(socket, params, force?) do
     parsed = ListingParams.parse(params, library_choices(socket))
+    current = Window.listing_params(socket.assigns)
 
-    if force? or not ListingParams.same_listing?(parsed, Window.listing_params(socket.assigns)) do
+    if force? or not ListingParams.same_listing?(parsed, current) do
       socket
       # Only an in-page jump scrolls; a mount or reconnect keeps the user's place.
       |> maybe_scroll_to_letter(
         not force? and parsed.letter != socket.assigns.letter and parsed.letter
       )
+      # A letter jump moves through the same items, so a selection survives it.
+      |> maybe_clear_selection(
+        force? or
+          not ListingParams.same_listing?(%{parsed | letter: nil}, %{current | letter: nil})
+      )
       |> assign_listing_params(parsed)
-      |> assign(:selected_ids, MapSet.new())
-      |> load_media_items_when_connected(parsed.shown)
+      |> load_media_items_when_connected(parsed.shown, parsed.above)
     else
       socket
     end
   end
+
+  defp maybe_clear_selection(socket, true), do: assign(socket, :selected_ids, MapSet.new())
+  defp maybe_clear_selection(socket, false), do: socket
 
   defp maybe_scroll_to_letter(socket, nil_or_false) when nil_or_false in [nil, false], do: socket
 
@@ -938,10 +942,24 @@ defmodule MydiaWeb.MediaLive.Index do
   # adding one, so Back from a title lands on the list in its latest state.
   # They also drop the A-Z jump letter, so the new listing starts at the top.
   defp patch_listing(socket, %ListingParams{} = params) do
-    params = %{params | shown: ListingParams.first_page(), letter: nil}
+    params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
     push_patch(socket,
       to: ListingParams.path(socket.assigns.listing_base_path, params),
+      replace: true
+    )
+  end
+
+  # Records how much of the listing is loaded, in place, so Back and reloads
+  # rebuild the same window. same_listing?/2 ignores the change, so the patch
+  # does not reload anything.
+  defp patch_window(socket) do
+    push_patch(socket,
+      to:
+        ListingParams.path(
+          socket.assigns.listing_base_path,
+          Window.listing_params(socket.assigns)
+        ),
       replace: true
     )
   end

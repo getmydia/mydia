@@ -4,7 +4,8 @@
 // pointer drag along the strip to pick a letter (as phone contact lists do),
 // and scrolls back to the list's top when the server reports a jump. Cards
 // carry data-initial; the strip's entries carry data-letter and are links for
-// letters with titles. Taps are left to the links themselves.
+// letters with titles. Taps are left to the links themselves, except on the
+// letter already in the URL, which the hook scrolls to on its own.
 //
 // "Top" is below the phone layout's sticky header: #media-items carries a
 // scroll-margin-top as tall as the header, which scrollIntoView honours, and
@@ -43,6 +44,16 @@ export function letterAt(y, rects) {
     }
   }
   return best;
+}
+
+// Whether a strip `letter` is the one already in the URL's query `search`.
+// Following that link would patch to the same listing, which the server
+// ignores, so the hook scrolls to the letter itself instead. "#" arrives
+// percent-encoded in the URL; URLSearchParams decodes it.
+export function isCurrentLetter(letter, search) {
+  if (!letter) return false;
+  const current = new URLSearchParams(search).get("letter");
+  return current !== null && current.toLowerCase() === letter.toLowerCase();
 }
 
 // A drag along the strip. The highlight follows the finger at once, but the
@@ -116,16 +127,25 @@ export const AlphaJumpBar = {
     // own drag and drop, which cancels the pointer and with it the scrub.
     this.el.addEventListener("dragstart", (e) => e.preventDefault());
 
+    // A tap on the letter already in the URL, or a scrub released on it. The
+    // rows are already loaded from that letter, so scroll to its first card
+    // here; stopping propagation keeps LiveView's window-level link handler
+    // from sending a patch the server would ignore.
+    this.el.addEventListener("click", (e) => {
+      const link = e.target.closest?.("a[data-letter]");
+      if (!link || !isCurrentLetter(link.dataset.letter, location.search)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.scrollToLetter(link.dataset.letter);
+    });
+
     // The strip's links do not change on a jump, so the server does not
     // re-render it and updated() never runs; and jumping from one letter to
     // another can leave the scroll position where it was, firing no scroll
     // event. So re-measure here, once the new rows have been laid out.
     this.handleEvent("alpha_jump:scroll_top", () => {
       document.getElementById("media-items")?.scrollIntoView({ block: "start" });
-      requestAnimationFrame(() => {
-        this.current = null;
-        this.highlight();
-      });
+      this.rehighlight();
     });
 
     this.highlight();
@@ -139,6 +159,32 @@ export const AlphaJumpBar = {
   destroyed() {
     window.removeEventListener("scroll", this.onScroll, { capture: true });
     if (this.frame) cancelAnimationFrame(this.frame);
+  },
+
+  // The first card under `letter`, at the top as a jump would leave it. A
+  // list-view wrapper is display: contents and cannot be scrolled to, so its
+  // first child stands in. The card borrows the list's scroll margin, so it
+  // lands below the phone layout's sticky header too.
+  scrollToLetter(letter) {
+    const list = document.getElementById("media-items");
+    const card = list?.querySelector(`[data-initial="${CSS.escape(letter)}"]`);
+    if (card) {
+      const target =
+        getComputedStyle(card).display === "contents" ? card.firstElementChild || card : card;
+      target.style.scrollMarginTop = getComputedStyle(list).scrollMarginTop;
+      target.scrollIntoView({ block: "start" });
+    }
+    this.rehighlight();
+  },
+
+  // Re-measure once the scroll has been laid out. Resetting `current` makes
+  // mark() repaint even when the letter is unchanged, which also clears a
+  // scrub's leftover highlight.
+  rehighlight() {
+    requestAnimationFrame(() => {
+      this.current = null;
+      this.highlight();
+    });
   },
 
   // Only letters with titles: a finger over a dimmed one goes to the nearest

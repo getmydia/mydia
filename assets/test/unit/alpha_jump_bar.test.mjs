@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createScrub, firstBelow, letterAt } from "../../js/hooks/alpha_jump_bar.mjs";
+import { createScrub, firstBelow, isCurrentLetter, letterAt } from "../../js/hooks/alpha_jump_bar.mjs";
 
 test("firstBelow finds the first card whose bottom is below the edge", () => {
   const bottoms = [10, 20, 30, 40, 50];
@@ -79,4 +79,15 @@ test("a cancelled scrub, or moves without a press, navigate nowhere", () => {
   scrub.up();
   assert.deepEqual(shown, ["c"]);
   assert.deepEqual(went, []);
+});
+
+test("isCurrentLetter matches the URL's letter, whatever its case or encoding", () => {
+  assert.equal(isCurrentLetter("m", "?letter=m"), true);
+  assert.equal(isCurrentLetter("m", "?sort=title_desc&letter=M&shown=100"), true);
+  assert.equal(isCurrentLetter("#", "?letter=%23"), true);
+  assert.equal(isCurrentLetter("#", "?letter=m"), false);
+  assert.equal(isCurrentLetter("a", "?letter=m"), false);
+  assert.equal(isCurrentLetter("m", ""), false);
+  assert.equal(isCurrentLetter("m", "?q=m"), false);
+  assert.equal(isCurrentLetter(null, "?letter=m"), false);
 });

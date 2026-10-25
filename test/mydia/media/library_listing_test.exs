@@ -795,7 +795,7 @@ defmodule Mydia.Media.LibraryListingTest do
     end
 
     test "initial/1 buckets by folded first letter", %{user: user} do
-      for title <- ["Élan Quarry", "9 Lanterns", "amber tide", "Ørsted Drift"] do
+      for title <- ["Élan Quarry", "9 Lanterns", "amber tide", "Ørsted Drift", "Æther Bay"] do
         media_item_fixture(%{type: "movie", title: title})
       end
 
@@ -807,9 +807,22 @@ defmodule Mydia.Media.LibraryListingTest do
                "9 Lanterns" => "#",
                "amber tide" => "a",
                "Élan Quarry" => "e",
-               # Ø has no decomposition, so it stays outside a-z.
-               "Ørsted Drift" => "#"
+               # Ø and Æ have no decomposition; an explicit fold reaches o and ae.
+               "Ørsted Drift" => "o",
+               "Æther Bay" => "a"
              }
+    end
+
+    test "a title that is not valid UTF-8 still lists and files under a letter", %{user: user} do
+      bad = <<"Bad ", 0xFF, " Title">>
+      item = media_item_fixture(%{type: "movie", title: "Placeholder Reel"})
+      MediaItem |> where([m], m.id == ^item.id) |> Repo.update_all(set: [title: bad])
+      media_item_fixture(%{type: "movie", title: "Amber Tide"})
+
+      listing = page(user, sort_by: "title_asc", letter: "b")
+      assert titles(listing) == [bad]
+      assert LibraryListing.initial(hd(listing.rows)) == "b"
+      assert Map.keys(listing.letter_offsets) |> Enum.sort() == ["a", "b"]
     end
 
     test "letters/0 is # then a to z" do
@@ -841,6 +854,21 @@ defmodule Mydia.Media.LibraryListingTest do
       assert listing.start == 2
       assert titles(listing) == ["Marrow Lane", "Mistral Gate"]
       assert length(listing.ids) == 5
+    end
+
+    test ":above starts rows that many before the letter, as far as the top", %{user: user} do
+      for title <- ["Amber Tide", "Ashen Pier", "Marrow Lane", "Mistral Gate", "Zephyr Hollow"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      listing = page(user, sort_by: "title_asc", letter: "m", above: 1, limit: 2)
+      assert {listing.start, listing.letter_start} == {1, 2}
+      # `limit` still counts from the letter.
+      assert titles(listing) == ["Ashen Pier", "Marrow Lane", "Mistral Gate"]
+
+      listing = page(user, sort_by: "title_asc", letter: "m", above: 9, limit: 1)
+      assert {listing.start, listing.letter_start} == {0, 2}
+      assert titles(listing) == ["Amber Tide", "Ashen Pier", "Marrow Lane"]
     end
 
     test ":letter with no rows starts at the next letter in sort order", %{user: user} do

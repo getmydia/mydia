@@ -119,11 +119,41 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
     expected = alders |> Enum.drop(60 - 48) |> Kernel.++(marrows) |> Kernel.++([zephyr])
     assert card_ids(view) == Enum.map(expected, &card/1)
-    assert_patch(view, "/movies?letter=m&shown=71")
+    assert_patch(view, "/movies?letter=m&shown=71&above=48")
 
-    # A reload starts back at the letter and keeps the rows below it.
+    # A reload keeps the rows on both sides of the letter.
     render_click(view, "toggle_view", %{"mode" => "list"})
-    assert card_ids(view) == Enum.map(marrows ++ [zephyr], &card/1)
+    assert card_ids(view) == Enum.map(expected, &card/1)
+  end
+
+  test "load_previous records the rows above the letter in the URL", %{conn: conn} do
+    %{alders: alders, marrows: [first_m | _]} = library()
+    {:ok, view, _html} = live(conn, ~p"/movies?letter=m")
+
+    render_hook(view, "load_previous", %{})
+    assert_patch(view, "/movies?letter=m&above=48")
+
+    # Back from a title mounts that URL afresh: the same rows, M where it was.
+    {:ok, view, _html} = live(conn, ~p"/movies?letter=m&above=48")
+    ids = card_ids(view)
+    assert Enum.take(ids, 48) == alders |> Enum.drop(60 - 48) |> Enum.map(&card/1)
+    assert Enum.at(ids, 48) == card(first_m)
+    assert has_element?(view, "#media-items-top-sentinel")
+
+    render_click(view, "toggle_view", %{"mode" => "list"})
+    assert Enum.at(card_ids(view), 48) == card(first_m)
+    assert length(card_ids(view)) == length(ids)
+  end
+
+  test "a letter jump keeps the selection", %{conn: conn} do
+    %{zephyr: zephyr} = library()
+    {:ok, view, _html} = live(conn, ~p"/movies?letter=m")
+
+    render_click(view, "toggle_selection_mode", %{})
+    render_click(view, "toggle_select", %{"id" => zephyr.id})
+    render_patch(view, "/movies?letter=z")
+
+    assert has_element?(view, "#grid-item-#{zephyr.id}[data-selected=true]")
   end
 
   test "only an in-page jump scrolls to the top", %{conn: conn} do
