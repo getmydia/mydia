@@ -11,6 +11,7 @@ import '../../../../core/playback/playback_progress_providers.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/quality_badge.dart';
 import 'series_downloads_dialogs.dart';
 
@@ -176,7 +177,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           color: Colors.white,
           size: 20,
         ),
-        tooltip: 'Episode actions',
+        tooltip: context.l10n.episodeActionsTooltip,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
         style: const ButtonStyle(
@@ -198,27 +199,28 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           }
         },
         itemBuilder: (context) => [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'play',
             child: Row(
               children: [
-                Icon(Icons.play_arrow_rounded, size: 18),
-                SizedBox(width: 12),
-                Text('Play'),
+                const Icon(Icons.play_arrow_rounded, size: 18),
+                const SizedBox(width: 12),
+                Text(context.l10n.commonPlay),
               ],
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'delete',
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.delete_outline_rounded,
                   size: 18,
                   color: AppColors.error,
                 ),
-                SizedBox(width: 12),
-                Text('Delete', style: TextStyle(color: AppColors.error)),
+                const SizedBox(width: 12),
+                Text(context.l10n.commonDelete,
+                    style: const TextStyle(color: AppColors.error)),
               ],
             ),
           ),

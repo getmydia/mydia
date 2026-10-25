@@ -54,27 +54,27 @@ Widget activeDownloadSheetActions({
         ListTile(
           key: const Key('downloads-sheet-resume'),
           leading: Icon(Icons.play_arrow_rounded, color: palette.primary),
-          title: const Text('Resume Download'),
+          title: Text(context.l10n.downloadsResumeDownload),
           onTap: onResume,
         )
       else
         ListTile(
           key: const Key('downloads-sheet-pause'),
           leading: Icon(Icons.pause_rounded, color: palette.primary),
-          title: const Text('Pause Download'),
+          title: Text(context.l10n.downloadsPauseDownload),
           onTap: onPause,
         ),
       ListTile(
         key: const Key('downloads-sheet-restart'),
         leading: Icon(Icons.refresh_rounded, color: palette.primary),
-        title: const Text('Restart Download'),
-        subtitle: const Text('Discards progress and starts over'),
+        title: Text(context.l10n.downloadsRestartDownload),
+        subtitle: Text(context.l10n.downloadsRestartDownloadSubtitle),
         onTap: onRestart,
       ),
       ListTile(
         key: const Key('downloads-sheet-cancel'),
         leading: const Icon(Icons.cancel_outlined, color: AppColors.error),
-        title: const Text('Cancel Download'),
+        title: Text(context.l10n.downloadsCancelDownloadAction),
         onTap: onCancel,
       ),
     ],
@@ -119,8 +119,9 @@ class DownloadsScreen extends ConsumerWidget {
             id: key,
             sourceId: task.source,
             itemId: groupItemId(isEpisode, task.showId, task.mediaId),
-            title:
-                isEpisode ? (task.showTitle ?? 'Unknown Series') : task.title,
+            title: isEpisode
+                ? (task.showTitle ?? context.l10n.downloadsUnknownSeries)
+                : task.title,
             posterUrl: isEpisode ? task.showPosterUrl : task.posterUrl,
             backdropUrl: task.backdropUrl,
             posterPath: task.posterPath,
@@ -148,8 +149,9 @@ class DownloadsScreen extends ConsumerWidget {
             id: key,
             sourceId: media.source,
             itemId: groupItemId(isEpisode, media.showId, media.mediaId),
-            title:
-                isEpisode ? (media.showTitle ?? 'Unknown Series') : media.title,
+            title: isEpisode
+                ? (media.showTitle ?? context.l10n.downloadsUnknownSeries)
+                : media.title,
             posterUrl: isEpisode ? media.showPosterUrl : media.posterUrl,
             backdropUrl: media.backdropUrl,
             posterPath: media.posterPath,
@@ -177,7 +179,7 @@ class DownloadsScreen extends ConsumerWidget {
                 .where((s) => s.id == group.sourceId)
                 .firstOrNull
                 ?.displayName ??
-            'Removed server'
+            context.l10n.downloadsRemovedServer
         : null;
 
     // This screen's own `WindowTitleRow` (built by `header`) draws into the
@@ -279,7 +281,7 @@ class DownloadsScreen extends ConsumerWidget {
               const Icon(Icons.error_outline_rounded, color: AppColors.error),
               const SizedBox(width: 8),
               Text(
-                'Failed Downloads (${failed.length})',
+                context.l10n.downloadsFailedTitle(failed.length),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: AppColors.error,
                       fontWeight: FontWeight.bold,
@@ -293,7 +295,8 @@ class DownloadsScreen extends ConsumerWidget {
                   await manager.retryAllFailed();
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Retry All', style: TextStyle(fontSize: 12)),
+                label: Text(context.l10n.downloadsRetryAll,
+                    style: const TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   foregroundColor: palette.primary,
                   padding:
@@ -308,8 +311,8 @@ class DownloadsScreen extends ConsumerWidget {
                   await manager.dismissAllFailed();
                 },
                 icon: const Icon(Icons.clear_rounded, size: 16),
-                label:
-                    const Text('Dismiss All', style: TextStyle(fontSize: 12)),
+                label: Text(context.l10n.downloadsDismissAll,
+                    style: const TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   foregroundColor: palette.textSecondary,
                   padding:
@@ -566,7 +569,7 @@ class DownloadsScreen extends ConsumerWidget {
                   ),
 
                 if (activeTask != null &&
-                    downloadStateLabel(activeTask).isNotEmpty)
+                    downloadStateLabel(context.l10n, activeTask).isNotEmpty)
                   Builder(
                     builder: (context) {
                       final task = activeTask;
@@ -586,7 +589,7 @@ class DownloadsScreen extends ConsumerWidget {
                 // Download stats (only when active and not recovering)
                 if (isActive &&
                     activeTask != null &&
-                    downloadStateLabel(activeTask).isEmpty)
+                    downloadStateLabel(context.l10n, activeTask).isEmpty)
                   Builder(
                     builder: (context) {
                       final task = activeTask;
@@ -631,7 +634,8 @@ class DownloadsScreen extends ConsumerWidget {
                 if (!isActive && group.downloads.isNotEmpty)
                   Text(
                     group.type == GroupType.series
-                        ? '${group.downloads.length} episode${group.downloads.length == 1 ? '' : 's'}'
+                        ? context.l10n
+                            .downloadsEpisodeCount(group.downloads.length)
                         : group.downloads.first.fileSizeDisplay,
                     maxLines: 1,
                     style: TextStyle(
@@ -658,12 +662,12 @@ class DownloadsScreen extends ConsumerWidget {
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         destructive: true,
-        title: const Text('Cancel Download?'),
-        content: Text('Stop downloading "${task.title}"?'),
+        title: Text(context.l10n.downloadsCancelDownloadTitle),
+        content: Text(context.l10n.downloadsCancelBody(task.title)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Keep',
+            child: Text(context.l10n.downloadsKeep,
                 style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
@@ -672,7 +676,7 @@ class DownloadsScreen extends ConsumerWidget {
               Navigator.pop(context);
             },
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Cancel Download'),
+            child: Text(context.l10n.downloadsCancelDownloadAction),
           ),
         ],
       ),
@@ -756,7 +760,7 @@ class DownloadsScreen extends ConsumerWidget {
                 ListTile(
                   leading: Icon(Icons.play_arrow_rounded,
                       color: sheetContext.palette.primary),
-                  title: const Text('Play'),
+                  title: Text(context.l10n.commonPlay),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     if (group.downloads.isNotEmpty) {
@@ -768,8 +772,8 @@ class DownloadsScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.delete_outline_rounded,
                       color: AppColors.error),
-                  title: const Text('Delete',
-                      style: TextStyle(color: AppColors.error)),
+                  title: Text(context.l10n.commonDelete,
+                      style: const TextStyle(color: AppColors.error)),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showDeleteMovieDialog(context, ref, group);
@@ -780,7 +784,7 @@ class DownloadsScreen extends ConsumerWidget {
                 ListTile(
                   leading: Icon(Icons.list_rounded,
                       color: sheetContext.palette.primary),
-                  title: const Text('View Episodes'),
+                  title: Text(context.l10n.downloadsViewEpisodes),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     Navigator.of(context).push(
@@ -799,8 +803,8 @@ class DownloadsScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.delete_outline_rounded,
                       color: AppColors.error),
-                  title: const Text('Delete All Episodes',
-                      style: TextStyle(color: AppColors.error)),
+                  title: Text(context.l10n.downloadsDeleteAllEpisodesTitle,
+                      style: const TextStyle(color: AppColors.error)),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showDeleteSeriesDialog(context, ref, group);
@@ -821,19 +825,18 @@ class DownloadsScreen extends ConsumerWidget {
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         destructive: true,
-        title: const Text('Delete Download'),
-        content: Text(
-            'Delete "${group.title}"? The downloaded file will be removed.'),
+        title: Text(context.l10n.downloadsDeleteDownloadTitle),
+        content: Text(context.l10n.downloadsDeleteDownloadBody(group.title)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel',
+            child: Text(context.l10n.commonCancel,
                 style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
+            child: Text(context.l10n.commonDelete),
           ),
         ],
       ),
@@ -855,20 +858,21 @@ class DownloadsScreen extends ConsumerWidget {
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         destructive: true,
-        title: const Text('Delete All Episodes'),
+        title: Text(context.l10n.downloadsDeleteAllEpisodesTitle),
         content: Text(
-          'Delete all $episodeCount episode${episodeCount == 1 ? '' : 's'} of "${group.title}"?',
+          context.l10n
+              .downloadsDeleteAllEpisodesBody(episodeCount, group.title),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel',
+            child: Text(context.l10n.commonCancel,
                 style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete All'),
+            child: Text(context.l10n.downloadsDeleteAllAction),
           ),
         ],
       ),
@@ -887,20 +891,18 @@ class DownloadsScreen extends ConsumerWidget {
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         destructive: true,
-        title: const Text('Cancel All Queued?'),
-        content: Text(
-          'Cancel $queuedCount queued download${queuedCount == 1 ? '' : 's'}?',
-        ),
+        title: Text(context.l10n.downloadsCancelAllQueuedTitle),
+        content: Text(context.l10n.downloadsCancelAllQueuedBody(queuedCount)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Keep',
+            child: Text(context.l10n.downloadsKeep,
                 style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Cancel All'),
+            child: Text(context.l10n.downloadsCancelAllAction),
           ),
         ],
       ),
@@ -981,7 +983,7 @@ class DownloadsScreen extends ConsumerWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'Downloads',
+                context.l10n.navDownloads,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.3,
@@ -994,7 +996,7 @@ class DownloadsScreen extends ConsumerWidget {
               IconButton(
                 onPressed: () =>
                     _showCancelAllQueuedDialog(context, ref, queuedCount),
-                tooltip: 'Cancel all queued',
+                tooltip: context.l10n.downloadsCancelAllQueuedTooltip,
                 icon: Icon(
                   Icons.clear_all_rounded,
                   color: palette.textSecondary,
@@ -1070,7 +1072,7 @@ class DownloadsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Storage Used',
+                      context.l10n.downloadsStorageUsed,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: palette.textSecondary,
                           ),
@@ -1186,13 +1188,14 @@ class DownloadsScreen extends ConsumerWidget {
           _buildBreakdownChip(
             context,
             color: baseColor.withValues(alpha: 0.45),
-            label: '${status.inProgressDisplay} downloading',
+            label: context.l10n
+                .downloadsBreakdownDownloading(status.inProgressDisplay),
           ),
         if (status.queuedBytes > 0)
           _buildBreakdownChip(
             context,
             color: baseColor.withValues(alpha: 0.2),
-            label: '${status.queuedDisplay} queued',
+            label: context.l10n.downloadsBreakdownQueued(status.queuedDisplay),
           ),
       ],
     );
@@ -1274,7 +1277,7 @@ class DownloadsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'No downloads yet',
+              context.l10n.downloadsEmptyTitle,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -1282,7 +1285,7 @@ class DownloadsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Download movies and shows to watch offline',
+              context.l10n.downloadsEmptySubtitle,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: palette.textSecondary,
                   ),
@@ -1351,7 +1354,7 @@ class DownloadsScreen extends ConsumerWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          task.error ?? 'Download failed',
+                          task.error ?? context.l10n.downloadsFailedFallback,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1374,8 +1377,8 @@ class DownloadsScreen extends ConsumerWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           minimumSize: const Size(0, 32),
                         ),
-                        child: const Text('Dismiss',
-                            style: TextStyle(fontSize: 12)),
+                        child: Text(context.l10n.commonDismiss,
+                            style: const TextStyle(fontSize: 12)),
                       ),
                       const SizedBox(width: 4),
                       FilledButton(
@@ -1390,8 +1393,8 @@ class DownloadsScreen extends ConsumerWidget {
                           backgroundColor: palette.primary,
                           minimumSize: const Size(0, 32),
                         ),
-                        child:
-                            const Text('Retry', style: TextStyle(fontSize: 12)),
+                        child: Text(context.l10n.commonRetry,
+                            style: const TextStyle(fontSize: 12)),
                       ),
                     ],
                   ),
@@ -1462,7 +1465,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
   }
 
   String _formatLimit(int? limit) {
-    if (limit == null) return 'No limit';
+    if (limit == null) return context.l10n.downloadsSettingsNoLimit;
     return StorageSettings.formatBytes(limit);
   }
 
@@ -1496,7 +1499,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
     final totalCleanable = cleanupService.getTotalCleanableBytes();
 
     if (totalCleanable == 0) {
-      showToast(context, 'No downloads to clean up');
+      showToast(context, context.l10n.downloadsCleanupNothing);
       return;
     }
 
@@ -1506,21 +1509,21 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
         backgroundColor: context.palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         destructive: true,
-        title: const Text('Clean Up Downloads'),
+        title: Text(context.l10n.downloadsCleanupTitle),
         content: Text(
-          'This will delete all downloaded media (${StorageSettings.formatBytes(totalCleanable)}). '
-          'Are you sure?',
+          context.l10n.downloadsCleanupBody(
+              StorageSettings.formatBytes(totalCleanable)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel',
+            child: Text(context.l10n.commonCancel,
                 style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete All'),
+            child: Text(context.l10n.downloadsDeleteAllAction),
           ),
         ],
       ),
@@ -1534,7 +1537,8 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
       if (mounted) {
         showToast(
           context,
-          'Freed ${StorageSettings.formatBytes(freedBytes)}',
+          context.l10n
+              .downloadsCleanupFreed(StorageSettings.formatBytes(freedBytes)),
           kind: ToastKind.success,
         );
         Navigator.of(context).pop();
@@ -1570,7 +1574,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
               ),
               const SizedBox(width: 12),
               Text(
-                'Storage Settings',
+                context.l10n.downloadsSettingsTitle,
                 style: Theme.of(context)
                     .textTheme
                     .titleLarge
@@ -1582,7 +1586,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
           // Storage limit dropdown
           Text(
-            'Maximum Storage',
+            context.l10n.downloadsSettingsMaxStorage,
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -1611,9 +1615,9 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                         Text(_formatLimit(limit)),
                         if (isCurrentlyUsed) ...[
                           const SizedBox(width: 8),
-                          const Text(
-                            '(Full)',
-                            style: TextStyle(
+                          Text(
+                            context.l10n.downloadsSettingsFull,
+                            style: const TextStyle(
                               color: AppColors.error,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -1633,7 +1637,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
           // Concurrent downloads
           Text(
-            'Concurrent Downloads',
+            context.l10n.downloadsSettingsConcurrent,
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -1672,7 +1676,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Auto Start Downloads',
+                context.l10n.downloadsSettingsAutoStart,
                 style: Theme.of(context)
                     .textTheme
                     .titleSmall
@@ -1693,7 +1697,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Auto Cleanup',
+                context.l10n.downloadsSettingsAutoCleanup,
                 style: Theme.of(context)
                     .textTheme
                     .titleSmall
@@ -1711,7 +1715,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           if (_autoCleanupEnabled) ...[
             const SizedBox(height: 16),
             Text(
-              'Cleanup Policy',
+              context.l10n.downloadsSettingsCleanupPolicy,
               style: Theme.of(context)
                   .textTheme
                   .titleSmall
@@ -1757,7 +1761,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Clean Up Now'),
+                  child: Text(context.l10n.downloadsSettingsCleanUpNow),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1770,7 +1774,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Save'),
+                  child: Text(context.l10n.downloadsSettingsSave),
                 ),
               ),
             ],

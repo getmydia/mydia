@@ -5,6 +5,7 @@ import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/widgets/downloaded_episode_card.dart';
 import 'package:player/presentation/widgets/quality_badge.dart';
 
@@ -51,6 +52,8 @@ Future<void> _pump(
           playbackProgressStoreProvider.overrideWith((ref) async => store),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: DownloadedEpisodeCard(media: media, showId: 'show-1'),
           ),
