@@ -233,6 +233,14 @@ defmodule Mydia.Quality.AttrsTest do
       assert attrs.file_size_mb == 20_480
     end
 
+    test "reads the parser's canonical audio labels with their channels" do
+      eac3 = Attrs.from_quality(%Quality{audio: "DD+ 5.1"}, nil, :movie)
+      assert {eac3.audio_codec, eac3.audio_channels} == {"eac3", "5.1"}
+
+      ac3 = Attrs.from_quality(%Quality{audio: "AC3 5.1"}, nil, :movie)
+      assert {ac3.audio_codec, ac3.audio_channels} == {"ac3", "5.1"}
+    end
+
     test "leaves every unmentioned dimension nil, hdr_tokens included" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)
@@ -415,6 +423,20 @@ defmodule Mydia.Quality.AttrsTest do
     test "PDTV is a known source" do
       quality = QualityParser.parse("Quiet.Harbor.S01E01.PDTV.x264-GRP")
       assert %{source: "PDTV"} = Attrs.from_quality(quality, nil, :episode)
+    end
+  end
+
+  # Files imported before the parser folded BDRip into BluRay still carry
+  # "BDRip" or "BRRip" in their stored metadata.
+  describe "stored BDRip metadata" do
+    test "scores as BluRay from a parsed quality" do
+      attrs = Attrs.from_quality(%Quality{source: "BDRip"}, nil, :movie)
+      assert attrs.source == "BluRay"
+    end
+
+    test "scores as BluRay from a media file" do
+      file = %MediaFile{metadata: %FileMetadata{source: "BRRip"}}
+      assert Attrs.from_media_file(file, :movie).source == "BluRay"
     end
   end
 

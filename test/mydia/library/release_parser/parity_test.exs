@@ -104,8 +104,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result1 = FileParser.parse("Movie 2020 4K.mkv")
       result2 = FileParser.parse("Movie 2020 UHD.mkv")
 
-      assert result1.quality.resolution == "4K"
-      assert result2.quality.resolution == "UHD"
+      assert result1.quality.resolution == "2160p"
+      assert result2.quality.resolution == "2160p"
     end
 
     test "handles P2P release naming" do
@@ -189,8 +189,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 2
       assert result.episodes == [8]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "WEB"
-      assert result.quality.codec == "H264"
+      assert result.quality.source == "WEB-DL"
+      assert result.quality.codec == "H.264"
       assert result.release_group == "GROUP"
     end
 
@@ -224,8 +224,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result = FileParser.parse("Show.S01E01.1080p.WEB-DL.DD5.1.H264.mkv")
 
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DD5.1"
-      assert result.quality.codec == "H264"
+      assert result.quality.audio == "AC3 5.1"
+      assert result.quality.codec == "H.264"
     end
 
     test "handles two-digit episodes" do
@@ -295,7 +295,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles BDRip source" do
       result = FileParser.parse("Movie 2020 1080p BDRip.mkv")
 
-      assert result.quality.source == "BDRip"
+      assert result.quality.source == "BluRay"
     end
 
     test "handles HDTV source" do
@@ -338,7 +338,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles DDP5.1 audio codec" do
       result = FileParser.parse("Movie 2020 1080p WEB-DL DDP5.1 Atmos.mkv")
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.title == "Movie"
       assert result.year == 2020
     end
@@ -451,8 +451,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.title == "Avatar"
       assert result.year == 2009
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.265"
       assert result.quality.audio == "Atmos"
     end
 
@@ -463,7 +463,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.title == "The Matrix Reloaded"
       assert result.year == 2003
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BDRip"
+      assert result.quality.source == "BluRay"
     end
 
     test "parses movie with 10bit pattern (no space)" do
@@ -507,7 +507,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.codec == "x265"
       assert result.quality.hdr_format == :hdr10
       # Audio codec case is preserved from the filename (lowercase "aac")
-      assert result.quality.audio == "aac"
+      assert result.quality.audio == "AAC"
       assert result.release_group == "Rosy"
     end
 
@@ -522,9 +522,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       # Codec case is preserved from the filename (uppercase "X265")
-      assert result.quality.codec == "X265"
+      assert result.quality.codec == "x265"
       # Release group detected with updated pattern supporting dots/spaces
       assert result.release_group == "POOLTED"
     end
@@ -534,37 +534,37 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles audio codec variations with dots" do
       # DD5.1 with dot
       result1 = FileParser.parse("Movie.2024.1080p.DD5.1.mkv")
-      assert result1.quality.audio == "DD5.1"
+      assert result1.quality.audio == "AC3 5.1"
       assert result1.title == "Movie"
 
       # DDP5.1 with dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP5.1.mkv")
-      assert result2.quality.audio == "DDP5.1"
+      assert result2.quality.audio == "DD+ 5.1"
       assert result2.title == "Movie"
     end
 
     test "handles audio codec variations without dots" do
       # DD51 without dot
       result1 = FileParser.parse("Movie.2024.1080p.DD51.mkv")
-      assert result1.quality.audio == "DD51"
+      assert result1.quality.audio == "AC3 5.1"
       assert result1.title == "Movie"
 
       # DDP51 without dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv")
-      assert result2.quality.audio == "DDP51"
+      assert result2.quality.audio == "DD+ 5.1"
       assert result2.title == "Movie"
     end
 
     test "handles EAC3 audio codec (alternative name for DDP)" do
       result = FileParser.parse("Movie.2024.1080p.EAC3.mkv")
-      assert result.quality.audio == "EAC3"
+      assert result.quality.audio == "DD+"
       assert result.title == "Movie"
     end
 
     test "handles DD+ audio codec" do
       result = FileParser.parse("Movie.2024.1080p.DD+.mkv")
       # DD+ is parsed as "DD" since + is normalized away
-      assert result.quality.audio == "DD"
+      assert result.quality.audio == "DD+"
       # The + character is normalized to space and removed during title cleaning
       assert result.title == "Movie"
     end
@@ -583,11 +583,11 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # DTS-HD.MA
       result2 = FileParser.parse("Movie.2024.1080p.DTS-HD.MA.mkv")
-      assert result2.quality.audio == "DTS-HD.MA"
+      assert result2.quality.audio == "DTS-HD MA"
 
       # DTS-X
       result3 = FileParser.parse("Movie.2024.1080p.DTS-X.mkv")
-      assert result3.quality.audio == "DTS-X"
+      assert result3.quality.audio == "DTS:X"
 
       # Plain DTS
       result4 = FileParser.parse("Movie.2024.1080p.DTS.mkv")
@@ -597,7 +597,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles video codec variations with dots" do
       # x.264 - dots are normalized to spaces, then restored to dots
       result1 = FileParser.parse("Movie.2024.1080p.x.264.mkv")
-      assert result1.quality.codec == "x.264"
+      assert result1.quality.codec == "x264"
       assert result1.title == "Movie"
 
       # H.264 - dots are normalized to spaces, then restored to dots
@@ -613,7 +613,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # h264
       result2 = FileParser.parse("Movie.2024.1080p.h264.mkv")
-      assert result2.quality.codec == "h264"
+      assert result2.quality.codec == "H.264"
     end
 
     test "handles x265 and h265 variations" do
@@ -621,19 +621,19 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result1.quality.codec == "x265"
 
       result2 = FileParser.parse("Movie.2024.1080p.h265.mkv")
-      assert result2.quality.codec == "h265"
+      assert result2.quality.codec == "H.265"
 
       # x.265 - dots are normalized to spaces, then restored to dots
       result3 = FileParser.parse("Movie.2024.1080p.x.265.mkv")
-      assert result3.quality.codec == "x.265"
+      assert result3.quality.codec == "x265"
     end
 
     test "handles HEVC and AVC codec names" do
       result1 = FileParser.parse("Movie.2024.1080p.HEVC.mkv")
-      assert result1.quality.codec == "HEVC"
+      assert result1.quality.codec == "H.265"
 
       result2 = FileParser.parse("Movie.2024.1080p.AVC.mkv")
-      assert result2.quality.codec == "AVC"
+      assert result2.quality.codec == "H.264"
     end
 
     test "handles resolution pattern variations" do
@@ -647,16 +647,16 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # 4K, 8K, UHD
       result3 = FileParser.parse("Movie.2024.4K.mkv")
-      assert result3.quality.resolution == "4K"
+      assert result3.quality.resolution == "2160p"
 
       result4 = FileParser.parse("Movie.2024.UHD.mkv")
-      assert result4.quality.resolution == "UHD"
+      assert result4.quality.resolution == "2160p"
     end
 
     test "handles source pattern variations" do
       # WEB
       result1 = FileParser.parse("Movie.2024.1080p.WEB.mkv")
-      assert result1.quality.source == "WEB"
+      assert result1.quality.source == "WEB-DL"
 
       # WEB-DL
       result2 = FileParser.parse("Movie.2024.1080p.WEB-DL.mkv")
@@ -684,14 +684,14 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 1999
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "x.264"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.codec == "x264"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "GROUP"
     end
 
     test "handles DDP7.1 audio codec" do
       result = FileParser.parse("Movie.2024.1080p.DDP7.1.mkv")
-      assert result.quality.audio == "DDP7.1"
+      assert result.quality.audio == "DD+ 7.1"
       assert result.title == "Movie"
     end
 
@@ -700,7 +700,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result1.quality.audio == "AAC"
 
       result2 = FileParser.parse("Movie.2024.1080p.AAC-LC.mkv")
-      assert result2.quality.audio == "AAC-LC"
+      assert result2.quality.audio == "AAC"
     end
   end
 
@@ -715,7 +715,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
       assert result.quality.hdr_format == :hdr10
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "GROUP"
     end
 
@@ -742,8 +742,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2024
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "HEVC"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.265"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "GROUP"
     end
   end
@@ -758,8 +758,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
-      assert result.quality.codec == "X265"
+      assert result.quality.audio == "DD+ 5.1"
+      assert result.quality.codec == "x265"
       # Title is cleanly extracted with sequential extraction and release group pattern update
       assert result.title == "Black Phone 2"
       assert result.release_group == "POOLTED"
@@ -770,7 +770,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result = FileParser.parse("Movie.2024.1080p.DDP9.1.mkv")
 
       # Should still extract DDP9.1 as audio codec
-      assert result.quality.audio == "DDP9.1"
+      assert result.quality.audio == "DD+ 9.1"
       assert result.title == "Movie"
     end
 
@@ -783,8 +783,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 1
       assert result.episodes == [5]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      # REMUX outranks the other source tokens, as in `Mydia.Quality.Sources`.
+      assert result.quality.source == "REMUX"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.codec == "H.264"
       assert result.release_group == "GROUP"
     end
@@ -798,7 +799,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # DDP51 → Dolby Digital Plus 51
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv", standardize: true)
-      assert result2.quality.audio == "Dolby Digital Plus 51"
+      assert result2.quality.audio == "Dolby Digital Plus 5.1"
 
       # EAC3 → Dolby Digital Plus
       result3 = FileParser.parse("Movie.2024.1080p.EAC3.mkv", standardize: true)
@@ -812,7 +813,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # DD51 → Dolby Digital 51
       result2 = FileParser.parse("Movie.2024.1080p.DD51.mkv", standardize: true)
-      assert result2.quality.audio == "Dolby Digital 51"
+      assert result2.quality.audio == "Dolby Digital 5.1"
 
       # AC3 → Dolby Digital
       result3 = FileParser.parse("Movie.2024.1080p.AC3.mkv", standardize: true)
@@ -858,7 +859,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # AAC-LC → AAC-LC
       result2 = FileParser.parse("Movie.2024.1080p.AAC-LC.mkv", standardize: true)
-      assert result2.quality.audio == "AAC-LC"
+      assert result2.quality.audio == "AAC"
     end
 
     test "standardizes video codec - H.264/AVC variations" do
@@ -940,7 +941,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "standardizes source - WEB and other sources" do
       # WEB → WEB
       result1 = FileParser.parse("Movie.2024.1080p.WEB.mkv", standardize: true)
-      assert result1.quality.source == "WEB"
+      assert result1.quality.source == "WEB-DL"
 
       # WEB-DL → WEB-DL
       result2 = FileParser.parse("Movie.2024.1080p.WEB-DL.mkv", standardize: true)
@@ -1017,7 +1018,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.codec == "x264"
     end
 
@@ -1110,7 +1111,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert Enum.at(results, 2).quality.audio == "AAC"
 
       assert Enum.at(results, 3).quality.resolution == "2160p (4K)"
-      assert Enum.at(results, 3).quality.audio == "Dolby TrueHD"
+      assert Enum.at(results, 3).quality.audio == "Dolby TrueHD Atmos"
     end
 
     test "edge case - empty quality map with standardization" do
@@ -1169,7 +1170,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.source == "Blu-ray"
       assert result.quality.codec == "H.265/HEVC"
       assert result.quality.hdr_format == :hdr10_plus
-      assert result.quality.audio == "Dolby TrueHD"
+      assert result.quality.audio == "Dolby TrueHD Atmos 7.1"
       # Release group should still be extracted
       assert result.release_group == "ELITE"
     end
@@ -1206,7 +1207,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [1]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.codec == "H.264"
       assert result.release_group == "FLUX"
     end
@@ -1263,8 +1264,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [1]
       assert result.year == 2019
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "WEBRIP"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.source == "WEBRip"
+      assert result.quality.codec == "H.265"
     end
 
     test "parses TV show with year in brackets after episode marker" do
@@ -1310,9 +1311,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2019
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.hdr_format == :hdr10
-      assert result.quality.codec == "H265"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "GROUP"
     end
 
@@ -1656,8 +1657,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [8]
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.audio == "DD+ 5.1"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "Vyndros"
     end
 
@@ -1816,8 +1817,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.265"
       assert result.quality.audio == "TrueHD 7.1"
       assert result.quality.hdr_format == :hdr10
       assert result.release_group == "MR"
@@ -1831,9 +1832,10 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.265"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "FGT"
     end
 
@@ -1869,7 +1871,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2024
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.hdr_format == :hdr10_plus
       assert result.release_group == "GROUP"
     end
@@ -1898,7 +1900,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [5]
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "Game of Thrones S06E09 4K with TrueHD Atmos" do
@@ -1912,8 +1914,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 6
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
 
@@ -1927,7 +1929,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [4]
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "BEN"
     end
   end
@@ -1943,8 +1945,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [19]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ADWeb"
     end
 
@@ -1957,7 +1959,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "BYNDR"
     end
 
@@ -1971,8 +1973,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [5]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
 
@@ -1987,7 +1989,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
 
@@ -2001,8 +2003,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ZeroTV"
     end
 
@@ -2017,8 +2019,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2024
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "GROUP"
     end
 
@@ -2032,7 +2034,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "DiN"
     end
 
@@ -2045,8 +2047,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 8
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.source == "REMUX"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end
 
@@ -2062,7 +2064,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DTS-HD.MA"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "MgB"
     end
   end
@@ -2158,7 +2161,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.title == "Top Gun"
       assert result.year == 1986
       assert result.quality.source == "DVDRip"
-      assert result.quality.codec == "Xvid"
+      assert result.quality.codec == "XviD"
       assert result.release_group == "pirat"
     end
 
@@ -2169,7 +2172,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.type == :movie
       assert result.title == "Jack Reacher"
       assert result.year == 2012
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
@@ -2181,8 +2184,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.type == :movie
       assert result.title == "Cloud Atlas"
       assert result.year == 2012
-      assert result.quality.source == "dvdrip"
-      assert result.quality.codec == "xvid"
+      assert result.quality.source == "DVDRip"
+      assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
 
@@ -2193,7 +2196,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.type == :movie
       assert result.title == "The Last Samurai"
       assert result.year == 2003
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.quality.audio == "AC3"
       assert result.release_group == "HuSh"
@@ -2229,9 +2232,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Fast.and.Furious.2001.2160p.UHD.Bluray.REMUX.HEVC-MIXED.mkv")
 
-      assert result.quality.source == "Bluray"
+      assert result.quality.source == "REMUX"
       assert result.quality.resolution == "2160p"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "BluRay REMUX release" do
@@ -2239,8 +2242,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Dune.Part.Two.2024.BluRay.1080p.REMUX.AVC.DTS-HD.MA.5.1-FGT.mkv")
 
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "AVC"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.264"
       assert result.release_group == "FGT"
     end
   end
@@ -2286,7 +2289,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         FileParser.parse("DREAM.2023.1080p.WEBRip.H264.AAC.mkv")
 
       assert result.quality.source == "WEBRip"
-      assert result.quality.codec == "H264"
+      assert result.quality.codec == "H.264"
       assert result.quality.audio == "AAC"
     end
 
@@ -2303,7 +2306,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         FileParser.parse("Oh.My.School.2023.1080p.WEB-DL.H265.DDP5.1-DreamHD.mkv")
 
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H265"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "DreamHD"
     end
   end
@@ -2342,26 +2345,18 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Chucky.2021.2160p.BluRay.REMUX.DV.HDR.HEVC-LTN.mkv")
 
-      # The resolver's :hdr label is a singleton (Resolver.resolve_one_label/2):
-      # only the highest zone-adjusted-confidence HDR-ish token survives per
-      # release, and DV (0.8 base + 0.1 metadata-zone bonus = 0.9) ties the
-      # bare HDR token (0.9 base + 0.0 = 0.9); Enum.max_by/2 keeps the first
-      # on a tie, and DV appears first in this title. The bare HDR token is
-      # demoted to a title candidate and never reaches QualityExtractor, so
-      # hdr_format stays nil here even though the release also says "HDR".
+      # Every HDR token reaches QualityExtractor, so the Dolby Vision layer
+      # keeps the HDR10 base the release also names.
       assert result.quality.dolby_vision
-      assert result.quality.hdr_format == nil
+      assert result.quality.hdr_format == :hdr10
     end
 
     test "DoVi abbreviation" do
       result =
         FileParser.parse("Game.of.Thrones.S01E01.2160p.DoVi.HDR.BluRay.REMUX.HEVC-PB69.mkv")
 
-      # DoVi (0.95 base + 0.05 metadata-zone bonus, clamped to 1.0) outranks
-      # the bare HDR token (0.9) outright in the :hdr singleton conflict, so
-      # HDR is demoted and hdr_format stays nil. See the DV test above.
       assert result.quality.dolby_vision
-      assert result.quality.hdr_format == nil
+      assert result.quality.hdr_format == :hdr10
     end
   end
 
@@ -2410,7 +2405,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
           "Game.of.Thrones.S03E09.2160p.BluRay.REMUX.HEVC.TrueHD.7.1.Atmos-SHD13.mkv"
         )
 
-      assert result.quality.audio == "TrueHD 7.1"
+      assert result.quality.audio == "TrueHD Atmos 7.1"
     end
   end
 
@@ -2419,14 +2414,14 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Monster.House.2006.1080p.BluRay.x264.DTS-HD.MA.5.1-ParkHD.mkv")
 
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
     end
 
     test "DTS-HD MA 7.1" do
       result =
         FileParser.parse("A.Haunting.in.Venice.2023.BluRay.1080p.DTS-HD.MA.7.1.x264-MTeam.mkv")
 
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 7.1"
     end
   end
 
@@ -2437,21 +2432,21 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
           "Final.Destination.Bloodlines.2025.1080p.AMZN.WEB-DL.DDP5.1.H.265-TBMovies.mkv"
         )
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "DDP5.1 with Atmos" do
       result =
         FileParser.parse("Heart.of.Stone.2023.1080p.NF.WEB-DL.x264.DDP5.1.Atmos-MOMOWEB.mkv")
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "EAC3 format" do
       result =
         FileParser.parse("Dahmer.S01E05.1080p.NF.WEB-DL.EAC3.x264-K83.mkv")
 
-      assert result.quality.audio == "EAC3"
+      assert result.quality.audio == "DD+"
     end
   end
 
@@ -2489,7 +2484,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Fast.and.Furious.2001.2160p.UHD.Bluray.REMUX.HEVC-MIXED.mkv")
 
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "x265 codec" do
@@ -2514,7 +2509,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Seoul.Busters.S01E19.1080p.DSNP.WEB-DL.H264.DDP5.1-ADWeb.mkv")
 
-      assert result.quality.codec == "H264"
+      assert result.quality.codec == "H.264"
     end
 
     test "x264 codec" do
@@ -2544,7 +2539,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Cloud.Atlas.2012.dvdrip.xvid-T911.avi")
 
-      assert result.quality.codec == "xvid"
+      assert result.quality.codec == "XviD"
     end
   end
 
@@ -2553,7 +2548,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Madame.Web.2024.BluRay.1080p.REMUX.AVC.DTS-HD.MA.5.1-LEGi0N.mkv")
 
-      assert result.quality.codec == "AVC"
+      assert result.quality.codec == "H.264"
     end
   end
 
@@ -2858,7 +2853,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "DiN"
       assert result.confidence > 0.8
     end
@@ -2873,7 +2868,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2023
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       # DV sets dolby_vision, not hdr_format
       assert result.quality.dolby_vision
       assert result.release_group == "GROUP"
@@ -2887,7 +2882,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.type == :movie
       assert result.title == "Jack Reacher"
       assert result.year == 2012
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
@@ -2905,8 +2900,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 6
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.source == "REMUX"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
 
@@ -2920,8 +2915,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ZeroTV"
     end
 
@@ -2948,8 +2943,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 8
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "BluRay"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.source == "REMUX"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end
 
@@ -2964,7 +2959,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
   end

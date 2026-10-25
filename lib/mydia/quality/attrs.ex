@@ -151,8 +151,12 @@ defmodule Mydia.Quality.Attrs do
     "7.1.4" => "7.1.4"
   }
 
-  @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip) ++
+  @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip) ++
                        ["CAM", "Telesync", "Telecine", "Screener", "Workprint", "PDTV"]
+
+  # Files imported before the parser folded these into BluRay still carry
+  # them in stored metadata. Keys are downcased.
+  @legacy_source_aliases %{"bdrip" => "BluRay", "brrip" => "BluRay"}
 
   # Precedence for fused audio strings that carry two codec tokens, e.g.
   # FileAnalyzer's "TrueHD Atmos" or "DTS-HD MA". Atmos is a higher-tier
@@ -295,8 +299,10 @@ defmodule Mydia.Quality.Attrs do
   defp canonical_source(nil), do: nil
 
   defp canonical_source(value) when is_binary(value) do
-    Enum.find(@canonical_sources, fn canonical ->
-      String.downcase(canonical) == String.downcase(String.trim(value))
+    normalized = value |> String.trim() |> String.downcase()
+
+    Map.get_lazy(@legacy_source_aliases, normalized, fn ->
+      Enum.find(@canonical_sources, &(String.downcase(&1) == normalized))
     end)
   end
 

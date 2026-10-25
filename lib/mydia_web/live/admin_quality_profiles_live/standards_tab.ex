@@ -196,7 +196,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
           <span class="label-text-alt text-xs">{gettext("In priority order")}</span>
         </label>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-          <%= for source <- ["BluRay", "BDRip", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"] do %>
+          <%= for source <- Mydia.Settings.QualityProfile.valid_sources() do %>
             <label class="label cursor-pointer justify-start gap-2">
               <input
                 type="checkbox"

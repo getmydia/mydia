@@ -19,22 +19,32 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   ## Separator rules
 
-  - Whitespace, `.`, `_` become token boundaries (the resulting separator
-    span is discarded).
+  - Whitespace, `.`, `_` and the zero-width space become token
+    boundaries (the resulting separator span is discarded), and so does
+    `"` past the title boundary.
   - `[`, `]`, `(`, `)`, `{`, `}` are token boundaries and the enclosed
-    tokens carry their bracket context.
+    tokens carry their bracket context and the opening bracket's offset.
   - Embedded dashes are split only against a fixed allow-list of
     compounds (`WEB-DL`, `WEB-Rip`, `H-265`, `H-264`, `DTS-HD`, `DTS-X`,
     `Hi10P-Hi10`). All other dashes stay un-split (`Spider-Man`,
-    `Marvel's What-If`).
+    `Marvel's What-If`). `WEB-DL` and `WEB-Rip` stay whole before the
+    title boundary, where the vocabulary reads them as one word.
+  - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
+    file naming) is split in two, but only when the left part is a known
+    source, so `Pilot-720p` stays whole. The reverse order (`720p-web`)
+    splits the same way. `HD1080p` keeps only the resolution. Past the title
+    boundary, a video or audio codec, a revision flag, a WEB compound or a
+    remux dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`,
+    `720p-FLAC`, `x264-REPACK-GRP`, `S1E1-WEB-DL`) is split off it; in the
+    title (`Route-264`) it stays.
   """
 
   alias Mydia.Library.ReleaseParser.Token
+  alias Mydia.Library.ReleaseParser.Vocabulary
 
   @compound_dashes MapSet.new([
                      "WEB-DL",
                      "WEB-RIP",
-                     "BLU-RAY",
                      "H-265",
                      "H-264",
                      "DTS-HD",
@@ -46,7 +56,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   @year_re_primary ~r/[\(\[](19\d{2}|20\d{2})[\)\]]/
   @year_re_secondary ~r/(?<![0-9])(19\d{2}|20\d{2})(?![0-9])/
 
-  @resolution_re ~r/(?<![0-9a-zA-Z])(?:(?:480|540|576|720|1080|1440|2160|4320)[pi]|4K|8K|UHD)(?![a-zA-Z])/i
+  @resolution_heights "(?:360|480|540|576|720|1080|1440|2160|4320)[pi]"
+
+  @resolution_re ~r/(?<![0-9a-zA-Z])(?:#{@resolution_heights}|4K|8K|UHD)(?![a-zA-Z])/i
+
+  # A resolution glued to the word before it (`Bluray1080p`, `HD1080p`).
+  # The lookbehind above rejects these, so the prefix is checked on its
+  # own and the anchor lands on the digits, where the glued split puts
+  # the resolution token.
+  @glued_resolution_anchor_re ~r/(?<![0-9a-zA-Z])([a-zA-Z][a-zA-Z-]*?)-?(#{@resolution_heights})(?![a-zA-Z])/i
+
+  # `HD` glued to a resolution says nothing the resolution doesn't, and is
+  # not a source.
+  @glued_resolution_noise ["HD"]
 
   @type anchors :: %{
           year: non_neg_integer() | nil,
@@ -63,7 +85,14 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(input) when is_binary(input) do
     stripped = drop_extension(input)
-    scan(stripped, stripped, 0, nil, nil, []) |> Enum.reverse() |> apply_compound_dash_splits()
+    boundary = title_boundary(anchor_positions(stripped), stripped)
+
+    scannable = unquote_metadata(stripped, boundary)
+
+    scan(scannable, scannable, 0, nil, nil, [])
+    |> Enum.reverse()
+    |> apply_glued_source_splits(boundary)
+    |> apply_compound_dash_splits(boundary)
   end
 
   @doc """
@@ -88,7 +117,10 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         first_match_pos(stripped, [@year_re_secondary])
       end
 
-    resolution = first_match_pos(stripped, [@resolution_re])
+    resolution =
+      [first_match_pos(stripped, [@resolution_re]), glued_resolution_pos(stripped)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> nil end)
 
     %{
       year: year_after_episode_only(year, episode, primary_year),
@@ -162,7 +194,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     ]
   end
 
+  # Past the title boundary a double quote (`DVDRip."XviD"-GRP`) wraps a tag
+  # and is a separator. In the title (`Show "Nick" S01E01`) it is kept. The
+  # swap is byte for byte, so offsets and token values are unchanged.
+  defp unquote_metadata(input, boundary) when boundary < byte_size(input) do
+    head = :binary.part(input, 0, boundary)
+    tail = :binary.part(input, boundary, byte_size(input) - boundary)
+    head <> String.replace(tail, "\"", " ")
+  end
+
+  defp unquote_metadata(input, _boundary), do: input
+
   # State: (remaining, full_input, current_byte_pos, token_start_or_nil, bracket_or_nil, acc)
+  # `bracket` is `{context, opening_offset}` inside brackets.
   # acc is a list of finished %Token{} values in reverse order.
   defp scan(<<>>, full, pos, start, bracket, acc) do
     emit_pending(full, pos, start, bracket, acc)
@@ -174,10 +218,16 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     scan(rest, full, pos + 1, nil, bracket, acc)
   end
 
+  # Zero-width space (U+200B), which some posters put before every word.
+  defp scan(<<0xE2, 0x80, 0x8B, rest::binary>>, full, pos, start, bracket, acc) do
+    acc = emit_pending(full, pos, start, bracket, acc)
+    scan(rest, full, pos + 3, nil, bracket, acc)
+  end
+
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
        when byte in [?[, ?\(, ?{] do
     acc = emit_pending(full, pos, start, bracket, acc)
-    scan(rest, full, pos + 1, nil, bracket_context(byte), acc)
+    scan(rest, full, pos + 1, nil, {bracket_context(byte), pos}, acc)
   end
 
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
@@ -201,13 +251,15 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
     if len > 0 do
       value = :binary.part(full, start_pos, len)
+      {context, opening} = bracket || {nil, nil}
 
       [
         %Token{
           value: value,
           byte_offset: start_pos,
           byte_length: len,
-          bracket_context: bracket
+          bracket_context: context,
+          bracket_offset: opening
         }
         | acc
       ]
@@ -251,14 +303,198 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     end
   end
 
-  defp apply_compound_dash_splits(tokens) do
+  @glued_resolution_re ~r/^(.+?)(-?)(#{@resolution_heights})$/i
+
+  defp glued_resolution_pos(input) do
+    @glued_resolution_anchor_re
+    |> Regex.scan(input, return: :index)
+    |> Enum.find_value(fn [_full, {prefix_at, prefix_len}, {res_at, _}] ->
+      if glued_prefix?(:binary.part(input, prefix_at, prefix_len)), do: res_at
+    end)
+  end
+
+  defp glued_prefix?(word), do: source_word?(word) or noise_prefix?(word)
+
+  defp noise_prefix?(word), do: String.upcase(word) in @glued_resolution_noise
+
+  defp apply_glued_source_splits(tokens, boundary) do
+    Enum.flat_map(tokens, fn %Token{} = token ->
+      case source_then_resolution(token.value) do
+        nil -> split_unglued(token, boundary)
+        match -> split_glued(token, match)
+      end
+    end)
+  end
+
+  defp split_glued(%Token{} = token, [_, left, dash, right]) do
+    left_len = byte_size(left)
+
+    resolution = %Token{
+      token
+      | value: right,
+        byte_offset: token.byte_offset + left_len + byte_size(dash),
+        byte_length: byte_size(right)
+    }
+
+    if noise_prefix?(left),
+      do: [resolution],
+      else: [%Token{token | value: left, byte_length: left_len}, resolution]
+  end
+
+  defp split_unglued(%Token{} = token, boundary) do
+    cond do
+      resolution_then_source?(token.value) -> split_compound_dash(token)
+      metadata_zone?(token, boundary) -> split_dashed_codecs(token)
+      true -> [token]
+    end
+  end
+
+  # The mirror order, a resolution then its source (`720p-web`). The
+  # resolution anchors the token, so this is never a title word.
+  @resolution_then_word_re ~r/^#{@resolution_heights}-([a-zA-Z]+)$/i
+
+  defp resolution_then_source?(value) do
+    case Regex.run(@resolution_then_word_re, value) do
+      [_, word] -> has_label?(word, :source)
+      nil -> false
+    end
+  end
+
+  defp remux_part?(part), do: Enum.any?(Vocabulary.lookup(part), &(&1.canonical == "REMUX"))
+
+  # Codec words do turn up in titles (`Route-264`, `Code-Hevc`,
+  # `Avc-Station`), so a dash run is split only once it reaches past the
+  # title boundary. Anchor-less anime names carry their quality in
+  # brackets (`(1280x720_x264-AAC)`), so a bracketed token counts too,
+  # unless it is the leading `[Group]` tag.
+  defp metadata_zone?(%Token{} = token, boundary) do
+    token.byte_offset + token.byte_length > boundary or
+      (token.bracket_context != nil and token.bracket_offset not in [nil, 0])
+  end
+
+  # A source (or `HD`) followed by its resolution, dash optional.
+  defp source_then_resolution(value) do
+    case Regex.run(@glued_resolution_re, value) do
+      [_, left, _, _] = match -> if glued_prefix?(left), do: match
+      nil -> nil
+    end
+  end
+
+  # A codec dash-joined to its neighbours (`BDRip-AVC`, `HEVC-10bit`,
+  # `1080p-x264-AC3`, a group the pre-pass did not claim) comes off as its
+  # own token, in the metadata zone only (see metadata_zone?/2). The other
+  # dash runs stay joined (`WEB-DLRip`, `Fra-Ac3`).
+  # A bare `264` counts so `H.264-GRP` still pairs its `H` and `264`.
+  # Audio codecs split the same way (`720p-AAC`, `AC3-REPACK`), unless the
+  # whole run is itself a vocabulary word (`E-AC3`, `AAC-LC`), which a split
+  # would mangle into a different codec.
+  # A WEB compound or a remux in the run (`S1E1-WEB-DL-1080p`,
+  # `WEB-DL-GRP`, `Hybrid-REMUX`) comes off the same way; the compound is
+  # rejoined first so it splits off whole.
+  defp split_dashed_codecs(%Token{value: value} = token) do
+    parts = value |> String.split("-") |> join_web_compounds()
+
+    if length(parts) > 1 and Vocabulary.lookup(value) == [] and
+         Enum.any?(parts, &codec_part?/1) do
+      parts
+      |> runs_around_codecs()
+      |> Enum.flat_map(fn {offset, run} ->
+        %Token{
+          token
+          | value: run,
+            byte_offset: token.byte_offset + offset,
+            byte_length: byte_size(run)
+        }
+        |> split_glued_run()
+      end)
+    else
+      [token]
+    end
+  end
+
+  # The glued split ran on the whole token, which a revision flag kept from
+  # ending in its resolution. Mydia's own renamer writes
+  # `[BluRay-1080p-Proper]`, so the run left once the flag comes off gets
+  # the same split.
+  defp split_glued_run(%Token{} = run) do
+    case source_then_resolution(run.value) do
+      nil -> [run]
+      match -> split_glued(run, match)
+    end
+  end
+
+  # A revision flag between the codec and the group (`x264-REPACK-TLA`)
+  # comes off too, or it stays glued to the group name.
+  defp codec_part?(part) do
+    part in ["264", "265"] or has_label?(part, :codec) or has_label?(part, :audio) or
+      has_label?(part, :proper) or has_label?(part, :repack) or remux_part?(part) or
+      web_compound?(part)
+  end
+
+  # Only the dashed WEB compounds: a bare `Web` part is a title word as often
+  # as a source (`Spider-Web`).
+  defp web_compound?(part), do: String.contains?(part, "-") and has_label?(part, :source)
+
+  defp join_web_compounds([head, next | rest]) do
+    joined = head <> "-" <> next
+
+    if String.upcase(head) == "WEB" and has_label?(joined, :source),
+      do: [joined | join_web_compounds(rest)],
+      else: [head | join_web_compounds([next | rest])]
+  end
+
+  defp join_web_compounds(parts), do: parts
+
+  # `{relative_offset, value}` for each codec part and each dash-joined run
+  # of other parts between them; empty parts (a leading dash) are dropped.
+  defp runs_around_codecs(parts) do
+    {runs, pending, _offset} =
+      Enum.reduce(parts, {[], nil, 0}, fn part, {runs, pending, offset} ->
+        next = offset + byte_size(part) + 1
+
+        cond do
+          part == "" ->
+            {flush(runs, pending), nil, next}
+
+          codec_part?(part) ->
+            {[{offset, part} | flush(runs, pending)], nil, next}
+
+          pending == nil ->
+            {runs, {offset, part}, next}
+
+          true ->
+            {start, run} = pending
+            {runs, {start, run <> "-" <> part}, next}
+        end
+      end)
+
+    Enum.reverse(flush(runs, pending))
+  end
+
+  defp flush(runs, nil), do: runs
+  defp flush(runs, pending), do: [pending | runs]
+
+  # A source, or one of the compound dashes (`H-264`, `DTS-HD`), which are
+  # not sources but still come off a resolution glued to them.
+  defp source_word?(word) do
+    MapSet.member?(@compound_dashes, String.upcase(word)) or has_label?(word, :source)
+  end
+
+  defp has_label?(word, label), do: Enum.any?(Vocabulary.lookup(word), &(&1.label == label))
+
+  # Before the title boundary a WEB compound stays whole: split, its `Web`
+  # half takes the title-zone penalty that keeps `Madame.Web` a title, and
+  # its `DL` half joins the title. Whole, it is a vocabulary word of its own.
+  @web_compounds ["WEB-DL", "WEB-RIP"]
+
+  defp apply_compound_dash_splits(tokens, boundary) do
     Enum.flat_map(tokens, fn token ->
       upper = String.upcase(token.value)
 
-      if MapSet.member?(@compound_dashes, upper) do
-        split_compound_dash(token)
-      else
-        [token]
+      cond do
+        upper in @web_compounds and token.byte_offset < boundary -> [token]
+        MapSet.member?(@compound_dashes, upper) -> split_compound_dash(token)
+        true -> [token]
       end
     end)
   end
@@ -269,17 +505,12 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         left_len = byte_size(left)
 
         [
+          %Token{token | value: left, byte_length: left_len},
           %Token{
-            value: left,
-            byte_offset: token.byte_offset,
-            byte_length: left_len,
-            bracket_context: token.bracket_context
-          },
-          %Token{
-            value: right,
-            byte_offset: token.byte_offset + left_len + 1,
-            byte_length: byte_size(right),
-            bracket_context: token.bracket_context
+            token
+            | value: right,
+              byte_offset: token.byte_offset + left_len + 1,
+              byte_length: byte_size(right)
           }
         ]
 
