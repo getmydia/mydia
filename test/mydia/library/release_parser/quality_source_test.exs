@@ -129,6 +129,16 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
 
       assert source("[Grp] Fake Show (Spider Web) - 01 [1080p]") == nil
       assert source("[Grp] Fake Show [Web Story] - 01 [1080p]") == nil
+
+      parsed = ReleaseParser.parse("Fake Show (Web) 2020 1080p BluRay x264-GRP")
+      assert parsed.quality.source == "BluRay"
+      assert parsed.title == "Fake Show (Web)"
+    end
+
+    test "a lone parenthesised scene abbreviation in the title stays a title word" do
+      parsed = ReleaseParser.parse("Fake Movie (TS) 2020 1080p x264-GRP")
+      assert parsed.quality.source == nil
+      assert parsed.title == "Fake Movie (Ts)"
       assert source("Fake.Show.S01E01.Spider-Web.720p.HDTV.x264-GRP") == "HDTV"
     end
   end
@@ -153,8 +163,10 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
   end
 
   describe "other spellings" do
-    test "a leading group tag that names a remux" do
-      assert source("[GRP-Remux].Fake.Show.X.21.720p.[76EA1C53].mkv") == "REMUX"
+    test "a leading group tag ending in Remux is a fansub group, not a remux" do
+      parsed = ReleaseParser.parse("[GRP-Remux].Fake.Show.X.21.720p.[76EA1C53].mkv")
+      refute parsed.quality.source == "REMUX"
+      assert parsed.title == "GRP-Remux Fake Show X 21"
     end
 
     test "a disc count before a DVD" do

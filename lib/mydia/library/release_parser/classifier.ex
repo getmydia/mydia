@@ -103,12 +103,12 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
       end
 
     Enum.map(entries, fn %VocabularyEntry{} = entry ->
-      bonus_zone = if tag_group? and entry.label == :source, do: :metadata, else: zone
+      bonus = if tag_group? and entry.label == :source, do: 0.0, else: zone_bonus(entry, zone)
 
       %Candidate{
         label: entry.label,
         value: entry.canonical,
-        confidence: clamp(entry.confidence + zone_bonus(entry, bonus_zone)),
+        confidence: clamp(entry.confidence + bonus),
         zone: zone
       }
     end)
@@ -131,15 +131,20 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
   # (`- 07 [Site][Web][MKV]`) or ahead of the resolution in a tag list
   # (`(WEB 1080p x264 AAC)`), both before any anchor, where `Web` takes the
   # title-zone penalty. A source word that opens a non-leading bracket group
-  # and is alone in it or followed by the resolution is a tag, so it scores
-  # as one. `(Spider Web)` and `[Web Story]` stay title words.
+  # and is followed by the resolution, or is alone in a square bracket, is a
+  # tag, so it drops the penalty (without the metadata bonus, so an explicit
+  # source past the boundary still wins). `(Spider Web)`, `[Web Story]` and a
+  # lone parenthesised word (`Fake Show (Web) 2020`, `(TS)`) stay title words.
   defp tag_groups(tokens, anchors) do
     tokens
     |> Enum.filter(&(&1.bracket_offset not in [nil, 0]))
     |> Enum.chunk_by(& &1.bracket_offset)
     |> Enum.flat_map(fn
-      [first] ->
+      [%Token{bracket_context: :bracket} = first] ->
         [token_key(first)]
+
+      [_first] ->
+        []
 
       [first, second | _] ->
         if resolution_anchor?(second, anchors), do: [token_key(first)], else: []

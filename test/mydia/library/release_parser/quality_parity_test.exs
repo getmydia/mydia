@@ -40,6 +40,9 @@ defmodule Mydia.Library.ReleaseParser.QualityParityTest do
     "Movie.Name.2019.S02E07.Chapter.15.The.Believer.4Kto1080p.DSNYP.Webrip.x265.10bit.EAC3.5.1.Atmos.GokiTAoE" =>
       [{:resolution, "'4Kto1080p' is a 1080p downscale, not 2160p"}],
     "bn-BD" => [{:source, "locale code 'BD' read as BluRay"}],
+    "[TMS-Remux].Series.Title.X.21.720p.[76EA1C53].mkv" => [
+      {:source, "Sonarr fixture says HDTV-720p; TMS-Remux is a group name"}
+    ],
     "Series.Galaxy.S01E01.33.720p.HDDVD.x264-SiNNERS.mkv" => [
       {:source, "HDDVD is not DVD"}
     ],

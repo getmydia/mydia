@@ -19,8 +19,9 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   ## Separator rules
 
-  - Whitespace, `.`, `_`, `"` and the zero-width space become token
-    boundaries (the resulting separator span is discarded).
+  - Whitespace, `.`, `_` and the zero-width space become token
+    boundaries (the resulting separator span is discarded), and so does
+    `"` past the title boundary.
   - `[`, `]`, `(`, `)`, `{`, `}` are token boundaries and the enclosed
     tokens carry their bracket context and the opening bracket's offset.
   - Embedded dashes are split only against a fixed allow-list of
@@ -35,7 +36,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     boundary, a video or audio codec, a revision flag, a WEB compound or a
     remux dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`,
     `720p-FLAC`, `x264-REPACK-GRP`, `S1E1-WEB-DL`) is split off it; in the
-    title (`Route-264`) it stays. A bracketed `[GRP-Remux]` tag splits too.
+    title (`Route-264`) it stays.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -86,7 +87,9 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     stripped = drop_extension(input)
     boundary = title_boundary(anchor_positions(stripped), stripped)
 
-    scan(stripped, stripped, 0, nil, nil, [])
+    scannable = unquote_metadata(stripped, boundary)
+
+    scan(scannable, scannable, 0, nil, nil, [])
     |> Enum.reverse()
     |> apply_glued_source_splits(boundary)
     |> apply_compound_dash_splits(boundary)
@@ -191,6 +194,17 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     ]
   end
 
+  # Past the title boundary a double quote (`DVDRip."XviD"-GRP`) wraps a tag
+  # and is a separator. In the title (`Show "Nick" S01E01`) it is kept. The
+  # swap is byte for byte, so offsets and token values are unchanged.
+  defp unquote_metadata(input, boundary) when boundary < byte_size(input) do
+    head = :binary.part(input, 0, boundary)
+    tail = :binary.part(input, boundary, byte_size(input) - boundary)
+    head <> String.replace(tail, "\"", " ")
+  end
+
+  defp unquote_metadata(input, _boundary), do: input
+
   # State: (remaining, full_input, current_byte_pos, token_start_or_nil, bracket_or_nil, acc)
   # `bracket` is `{context, opening_offset}` inside brackets.
   # acc is a list of finished %Token{} values in reverse order.
@@ -198,9 +212,8 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     emit_pending(full, pos, start, bracket, acc)
   end
 
-  # A double quote (`DVDRip."XviD"-GRP`) wraps a word, it is not part of it.
   defp scan(<<byte, rest::binary>>, full, pos, start, bracket, acc)
-       when byte in [?\s, ?., ?_, ?\t, ?"] do
+       when byte in [?\s, ?., ?_, ?\t] do
     acc = emit_pending(full, pos, start, bracket, acc)
     scan(rest, full, pos + 1, nil, bracket, acc)
   end
@@ -324,7 +337,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         nil ->
           cond do
             resolution_then_source?(token.value) -> split_compound_dash(token)
-            metadata_zone?(token, boundary) or remux_tag?(token) -> split_dashed_codecs(token)
+            metadata_zone?(token, boundary) -> split_dashed_codecs(token)
             true -> [token]
           end
       end
@@ -341,14 +354,6 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
       nil -> false
     end
   end
-
-  # A leading `[GRP-Remux]` tag names the release a remux. It sits at the
-  # very start, so metadata_zone?/2 leaves it alone.
-  defp remux_tag?(%Token{bracket_context: :bracket, value: value}) do
-    value |> String.split("-") |> List.last() |> remux_part?()
-  end
-
-  defp remux_tag?(_token), do: false
 
   defp remux_part?(part), do: Enum.any?(Vocabulary.lookup(part), &(&1.canonical == "REMUX"))
 
@@ -379,7 +384,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   # whole run is itself a vocabulary word (`E-AC3`, `AAC-LC`), which a split
   # would mangle into a different codec.
   # A WEB compound or a remux in the run (`S1E1-WEB-DL-1080p`,
-  # `WEB-DL-GRP`, `GRP-Remux`) comes off the same way; the compound is
+  # `WEB-DL-GRP`, `Hybrid-REMUX`) comes off the same way; the compound is
   # rejoined first so it splits off whole.
   defp split_dashed_codecs(%Token{value: value} = token) do
     parts = value |> String.split("-") |> join_web_compounds()

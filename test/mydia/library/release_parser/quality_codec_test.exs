@@ -95,4 +95,11 @@ defmodule Mydia.Library.ReleaseParser.QualityCodecTest do
     assert parsed.quality.source == "DVDRip"
     assert parsed.release_group == "GRP"
   end
+
+  # The tokenizer keeps title-zone quotes (see tokenizer_test.exs); the title
+  # assembler has always trimmed them from the rendered title.
+  test "a quoted title word renders as before" do
+    assert ReleaseParser.parse(~s(Fake Show "Nick" S01E01 720p HDTV x264-GRP)).title ==
+             "Fake Show Nick"
+  end
 end
