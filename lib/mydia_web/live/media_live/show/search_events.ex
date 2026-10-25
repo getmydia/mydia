@@ -47,6 +47,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:manual_search_query, search_query)
        |> assign(:manual_search_context, %{type: :media_item})
        |> assign_existing_files()
+       |> assign_manual_search_blocking()
        |> assign(:searching, true)
        # TRUE, not false: the display set is genuinely empty until the first
        # indexer reports. The modal's loading gate is
@@ -65,6 +66,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:indexer_errors, [])
        |> assign(:raw_search_results, [])
        |> assign(:result_states, %{})
+       |> assign(:prior_attempts, %{})
+       |> assign(:prior_attempts_checked, MapSet.new())
        |> stream(:search_results, [], reset: true)
        |> start_async(:search, fn ->
          perform_search(search_query, min_seeders, lv, search_id)
@@ -149,6 +152,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        }
      )
      |> assign_existing_files()
+     |> assign_manual_search_blocking()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -161,6 +165,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:indexer_errors, [])
      |> assign(:raw_search_results, [])
      |> assign(:result_states, %{})
+     |> assign(:prior_attempts, %{})
+     |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
        perform_search(search_query, min_seeders, lv, search_id)
@@ -184,6 +190,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:manual_search_query, search_query)
      |> assign(:manual_search_context, %{type: :season, season_number: season_num})
      |> assign_existing_files()
+     |> assign_manual_search_blocking()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -196,6 +203,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:indexer_errors, [])
      |> assign(:raw_search_results, [])
      |> assign(:result_states, %{})
+     |> assign(:prior_attempts, %{})
+     |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
        perform_search(search_query, min_seeders, lv, search_id)
@@ -383,6 +392,28 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     )
   end
 
+  # The downloads that would make any grab in this dialog come back "Already
+  # downloading", shown as a banner above the results. Database only: the
+  # click-time check in Queue.Duplicates also verifies the rows against the
+  # download client and stays authoritative, so a failed lookup just means no
+  # banner. A no-op while the dialog is closed, since the grab PubSub handlers
+  # below call it whether or not it is open.
+  defp assign_manual_search_blocking(socket) do
+    if socket.assigns.show_manual_search_modal do
+      assign(socket, :manual_search_blocking, load_blocking_downloads(socket.assigns))
+    else
+      socket
+    end
+  end
+
+  defp load_blocking_downloads(%{media_item: media_item, manual_search_context: context}) do
+    Downloads.blocking_downloads(media_item, context || %{type: :media_item})
+  rescue
+    error ->
+      Logger.warning("Blocking downloads lookup failed: #{Exception.message(error)}")
+      []
+  end
+
   defp reset_search_modal(socket) do
     socket
     |> assign(:show_manual_search_modal, false)
@@ -396,6 +427,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_progress, %{})
     |> assign(:indexer_raw_results, %{})
     |> assign(:result_states, %{})
+    |> assign(:prior_attempts, %{})
+    |> assign(:prior_attempts_checked, MapSet.new())
+    |> assign(:manual_search_blocking, [])
     |> assign(:download_error, nil)
     |> assign(:source_filter, nil)
     |> assign(:codec_filter, nil)
@@ -589,11 +623,14 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         # only by raising `KeyError` and crashing this LiveView for what is
         # purely a per-row badge, in exchange for a check that is already
         # satisfied: every caller above passes a literal subset of
-        # SearchResult's four declared display fields.
+        # SearchResult's four declared grab-state display fields.
         stream_insert(socket, :search_results, Map.merge(item, Map.fetch!(states, download_url)))
     end
   end
 
+  # Applies :prior_attempts the same way SearchHelpers.stream_prepared_results/2
+  # does, so the row mark_result/3 re-inserts carries the same annotation a
+  # full rebuild would.
   defp find_prepared_result(socket, download_url) do
     raw_results = Map.get(socket.assigns, :raw_search_results, [])
     assigns = socket.assigns
@@ -604,6 +641,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> sort_search_results_with_opts(assigns.sort_by, ranking_opts)
     |> prepare_for_stream()
     |> Enum.find(&(&1.download_url == download_url))
+    |> case do
+      nil -> nil
+      item -> put_prior_attempt(item, Map.get(assigns, :prior_attempts, %{}))
+    end
   end
 
   # handle_async dispatches
@@ -667,14 +708,23 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # Mydia.Downloads.Grabber). Row lookup is a no-op when the modal is closed.
 
   def handle_grab_completed(%{download_url: download_url}, socket) do
-    {:noreply, mark_result(socket, download_url, %{downloading: false, downloaded: true})}
+    {:noreply,
+     socket
+     |> mark_result(download_url, %{downloading: false, downloaded: true})
+     |> assign_manual_search_blocking()}
   end
 
   def handle_grab_failed(%{download_url: download_url, reason: reason}, socket) do
-    {:noreply, mark_result(socket, download_url, %{downloading: false, grab_failed: reason})}
+    {:noreply,
+     socket
+     |> mark_result(download_url, %{downloading: false, grab_failed: reason})
+     |> assign_manual_search_blocking()}
   end
 
   def handle_grab_duplicate(%{download_url: download_url}, socket) do
-    {:noreply, mark_result(socket, download_url, %{downloading: false, duplicate: true})}
+    {:noreply,
+     socket
+     |> mark_result(download_url, %{downloading: false, duplicate: true})
+     |> assign_manual_search_blocking()}
   end
 end

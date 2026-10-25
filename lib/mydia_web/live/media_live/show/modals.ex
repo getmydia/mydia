@@ -740,13 +740,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
           <%!-- Source URL --%>
-          <%= if @download_details.source_url do %>
+          <%= if @download_details.download_url do %>
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">
                 {gettext("Source URL")}
               </h4>
               <p class="text-xs font-mono bg-base-200 p-3 rounded-box break-all">
-                {@download_details.source_url}
+                {@download_details.download_url}
               </p>
             </div>
           <% end %>
@@ -781,17 +781,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               </div>
             <% end %>
           </div>
-          <%!-- Estimated Completion --%>
-          <%= if @download_details.estimated_completion do %>
-            <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
-                {gettext("Estimated Completion")}
-              </h4>
-              <p class="text-sm">
-                {format(@download_details.estimated_completion, :datetime, @display)}
-              </p>
-            </div>
-          <% end %>
           <%!-- Metadata (if present) --%>
           <%= if @download_details.metadata && map_size(@download_details.metadata) > 0 do %>
             <div>
@@ -820,6 +809,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   """
   attr :manual_search_context, :map, default: nil
   attr :existing, :any, default: nil
+  # Downloads that would block any grab here (Mydia.Downloads.blocking_downloads/2).
+  attr :blocking, :list, default: []
   attr :media_item, Mydia.Media.MediaItem, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
@@ -973,6 +964,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <span class="text-sm">{@download_error}</span>
             </div>
           <% end %>
+          <.blocking_banner
+            :if={@blocking != []}
+            blocking={@blocking}
+            context_type={@manual_search_context && @manual_search_context.type}
+          />
           <%!-- Per-indexer search progress --%>
           <div class="px-4">
             <.indexer_search_status
@@ -1123,8 +1119,22 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         {result.indexer}
                       </span>
                     <% end %>
+                    <%!-- Tried before: failed for this target or blacklisted --%>
+                    <%= if attempt = Map.get(result, :prior_attempt) do %>
+                      <span
+                        id={"#{id}-prior-attempt"}
+                        class="badge badge-error badge-outline badge-sm"
+                      >
+                        <%= if attempt.kind == :blacklisted do %>
+                          {gettext("Blacklisted")}
+                        <% else %>
+                          {gettext("Failed %{ago}", ago: format_relative_time_short(attempt.at))}
+                        <% end %>
+                      </span>
+                    <% end %>
                   </div>
-                  <%= if reason = Map.get(result, :grab_failed) do %>
+                  <%!-- A live failure from this dialog wins over the recorded one --%>
+                  <%= if reason = Map.get(result, :grab_failed) || prior_attempt_reason(result) do %>
                     <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
                   <% end %>
                   <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
@@ -1197,25 +1207,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         <span class="hidden sm:inline">{gettext("Grabbing…")}</span>
                       </button>
                     <% Map.get(result, :grab_failed) -> %>
-                      <button
-                        class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
-                        phx-click="download_from_search"
-                        phx-value-download-url={result.download_url}
-                        phx-value-title={result.title}
-                        phx-value-indexer={result.indexer}
-                        phx-value-size={result.size}
-                        phx-value-seeders={result.seeders || 0}
-                        phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result)}
-                        title={
-                          gettext("Failed: %{reason} — click to retry",
-                            reason: Map.get(result, :grab_failed)
-                          )
-                        }
-                      >
-                        <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Failed — retry")}</span>
-                      </button>
+                      <.retry_button result={result} reason={Map.get(result, :grab_failed)} />
+                    <% Map.get(result, :prior_attempt) -> %>
+                      <.retry_button result={result} reason={prior_attempt_reason(result)} />
                     <% true -> %>
                       <button
                         class="btn btn-primary btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
@@ -1246,6 +1240,110 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       <div class="modal-backdrop" phx-click="close_manual_search_modal"></div>
     </div>
     """
+  end
+
+  # The manual search dialog's "already downloading" banner: names the first
+  # download that blocks every grab for this target, which opens the existing
+  # download details modal, and counts the rest.
+  attr :blocking, :list, required: true
+  attr :context_type, :atom, default: nil
+
+  defp blocking_banner(assigns) do
+    assigns =
+      assigns
+      |> assign(:first, hd(assigns.blocking))
+      |> assign(:more, length(assigns.blocking) - 1)
+
+    ~H"""
+    <div id="manual-search-blocking" role="status" class="alert alert-info mx-4 mt-3 mb-1">
+      <.icon name="hero-information-circle" class="w-5 h-5 shrink-0" />
+      <p class="text-sm">
+        <button
+          type="button"
+          id="manual-search-blocking-download"
+          class="link font-medium"
+          phx-click="show_download_details"
+          phx-value-download-id={@first.id}
+        >
+          {gettext("“%{title}”", title: @first.title)}
+        </button>
+        <%= if @more == 0 do %>
+          {gettext("is already downloading.")}
+        <% else %>
+          {ngettext(
+            "and %{count} more are already downloading.",
+            "and %{count} more are already downloading.",
+            @more
+          )}
+        <% end %>
+        {blocked_target_text(@context_type, length(@blocking))}
+      </p>
+    </div>
+    """
+  end
+
+  # One whole sentence per target rather than a translated target word
+  # interpolated into a shared one (see lib/mydia_web/gettext/README.md).
+  defp blocked_target_text(:episode, count) do
+    ngettext(
+      "New grabs for this episode are blocked until it finishes or is removed.",
+      "New grabs for this episode are blocked until they finish or are removed.",
+      count
+    )
+  end
+
+  defp blocked_target_text(:season, count) do
+    ngettext(
+      "New grabs for this season are blocked until it finishes or is removed.",
+      "New grabs for this season are blocked until they finish or are removed.",
+      count
+    )
+  end
+
+  defp blocked_target_text(_movie, count) do
+    ngettext(
+      "New grabs for this movie are blocked until it finishes or is removed.",
+      "New grabs for this movie are blocked until they finish or are removed.",
+      count
+    )
+  end
+
+  # The retry action shared by a live failure in this dialog and a recorded
+  # prior attempt; a release grabbed again goes through the same
+  # download_from_search event as the plain Download button.
+  attr :result, SearchResult, required: true
+  attr :reason, :string, default: nil
+
+  defp retry_button(assigns) do
+    ~H"""
+    <button
+      class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
+      phx-click="download_from_search"
+      phx-value-download-url={@result.download_url}
+      phx-value-title={@result.title}
+      phx-value-indexer={@result.indexer}
+      phx-value-size={@result.size}
+      phx-value-seeders={@result.seeders || 0}
+      phx-value-leechers={@result.leechers || 0}
+      phx-value-quality={get_search_quality_badge(@result)}
+      title={
+        if(@reason,
+          do: gettext("Failed: %{reason} — click to retry", reason: @reason),
+          else: gettext("Download this release")
+        )
+      }
+    >
+      <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+      <span class="hidden sm:inline">{gettext("Failed — retry")}</span>
+    </button>
+    """
+  end
+
+  defp prior_attempt_reason(result) do
+    case Map.get(result, :prior_attempt) do
+      %{reason: reason} -> reason
+      nil -> nil
+    end
   end
 
   @doc """

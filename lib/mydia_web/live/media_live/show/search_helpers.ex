@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Handles manual search, filtering, sorting, and result processing.
   """
 
+  alias Mydia.Downloads
   alias Mydia.Indexers
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.RankingOptions
@@ -59,14 +60,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   `:result_states` is the backing assign that survives those rebuilds, mirroring
   how `MydiaWeb.SearchLive.Index` keeps `:downloading_urls` in assigns and
   re-derives per-row state after each re-stream.
+
+  `:prior_attempts` (failed or blacklisted releases from the database) is
+  folded in first, so a live grab state from `:result_states` always wins.
   """
   def stream_prepared_results(socket, sorted_results) do
     states = Map.get(socket.assigns, :result_states, %{})
+    prior_attempts = Map.get(socket.assigns, :prior_attempts, %{})
 
     prepared =
       sorted_results
       |> prepare_for_stream()
       |> Enum.map(fn result ->
+        result = put_prior_attempt(result, prior_attempts)
+
         case Map.get(states, result.download_url) do
           nil -> result
           state -> Map.merge(result, state)
@@ -74,6 +81,45 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       end)
 
     Phoenix.LiveView.stream(socket, :search_results, prepared, reset: true)
+  end
+
+  @doc """
+  Sets a result's `:prior_attempt` from the `:prior_attempts` map (keyed by
+  `download_url`). Shared by the full stream rebuild and the single-row
+  re-insert in `SearchEvents.mark_result/3`, so both render the same row.
+  """
+  def put_prior_attempt(result, prior_attempts) do
+    Map.put(result, :prior_attempt, Map.get(prior_attempts, result.download_url))
+  end
+
+  # Looks up prior attempts only for releases not checked yet this search. A
+  # release with no prior attempt never becomes a key in :prior_attempts, so
+  # :prior_attempts_checked is what stops it being re-queried on every
+  # progress message.
+  defp track_prior_attempts(socket, results) do
+    checked = Map.get(socket.assigns, :prior_attempts_checked, MapSet.new())
+    fresh = Enum.reject(results, &MapSet.member?(checked, &1.download_url))
+
+    if fresh == [] do
+      socket
+    else
+      found =
+        Downloads.prior_attempts_for_results(
+          fresh,
+          socket.assigns.media_item,
+          socket.assigns.manual_search_context || %{type: :media_item}
+        )
+
+      socket
+      |> Phoenix.Component.assign(
+        :prior_attempts,
+        Map.merge(Map.get(socket.assigns, :prior_attempts, %{}), found)
+      )
+      |> Phoenix.Component.assign(
+        :prior_attempts_checked,
+        Enum.reduce(fresh, checked, &MapSet.put(&2, &1.download_url))
+      )
+    end
   end
 
   @doc """
@@ -157,6 +203,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     |> Phoenix.Component.assign(:indexer_raw_results, raw_pool)
     |> Phoenix.Component.assign(:raw_search_results, ranked)
     |> Phoenix.Component.assign(:results_empty?, sorted == [])
+    |> track_prior_attempts(progress.results)
     |> stream_prepared_results(sorted)
   end
 

@@ -1,7 +1,9 @@
 defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   use MydiaWeb.ConnCase, async: false
 
+  import Ecto.Query, only: [from: 2]
   import Phoenix.LiveViewTest
+  import Mydia.DownloadsFixtures
   import Mydia.IndexersFixtures
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
@@ -1156,5 +1158,134 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     assert has_element?(view, "#indexer-paused-#{indexer.id}", "Amber Tracker")
     assert has_element?(view, "#indexer-retest-paused-#{indexer.id}")
+  end
+
+  describe "prior attempts and blocking downloads" do
+    # A failed grab leaves its downloads row behind with error_message set,
+    # which is what the dialog reads back on the next search.
+    defp failed_download!(media_item, url, message) do
+      download = download_fixture(%{media_item_id: media_item.id, download_url: url})
+
+      three_hours_ago =
+        DateTime.utc_now() |> DateTime.add(-3, :hour) |> DateTime.truncate(:second)
+
+      Mydia.Repo.update_all(
+        from(d in Mydia.Downloads.Download, where: d.id == ^download.id),
+        set: [error_message: message, updated_at: three_hours_ago]
+      )
+    end
+
+    defp report_results(view, indexer_id, results, completed) do
+      send(
+        view.pid,
+        {:indexer_progress, current_search_id(view),
+         %IndexerProgress{
+           indexer: "indexer-#{completed}",
+           indexer_id: indexer_id,
+           status: :ok,
+           results: results,
+           result_count: length(results),
+           duration_ms: 90,
+           completed: completed,
+           total: 2
+         }}
+      )
+
+      render(view)
+    end
+
+    test "a release that failed before is marked, offers a retry, and keeps its marker across rebuilds",
+         %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Quiet Meridian", type: "movie"})
+      indexer = pending_indexer_fixture("slow-indexer")
+      release = search_result("Quiet.Meridian.2023.1080p.WEB-DL")
+      failed_download!(media_item, release.download_url, "Torrent stalled with no seeders")
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+      view |> element("#manual-search-button") |> render_click()
+      wait_for_indexer_progress(view)
+
+      report_results(view, indexer.id, [release], 1)
+
+      row = "##{positioned_result_dom_id(release)}"
+      assert has_element?(view, "#{row}-prior-attempt", "Failed 3h")
+      assert has_element?(view, row, "Torrent stalled with no seeders")
+      assert has_element?(view, "#{row} button.btn-error[phx-click=download_from_search]")
+
+      # A second indexer reporting rebuilds the stream with reset: true.
+      report_results(view, "other-id", [], 2)
+
+      assert has_element?(view, "#{row}-prior-attempt"),
+             "the prior-attempt marker was erased by the next indexer's progress message"
+
+      assert has_element?(view, "#{row} button.btn-error")
+    end
+
+    test "a live grab outcome overrides the prior attempt's retry button", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Quiet Meridian", type: "movie"})
+      indexer = pending_indexer_fixture("slow-indexer")
+      release = search_result("Quiet.Meridian.2023.2160p.UHD")
+      failed_download!(media_item, release.download_url, "Client rejected the torrent")
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+      view |> element("#manual-search-button") |> render_click()
+      wait_for_indexer_progress(view)
+      report_results(view, indexer.id, [release], 1)
+
+      row = "##{positioned_result_dom_id(release)}"
+      assert has_element?(view, "#{row} .btn-error"), "precondition: retry button not shown"
+
+      send(view.pid, {:grab_completed, %{download_url: release.download_url}})
+      render(view)
+
+      assert has_element?(view, "#{row} .btn-success")
+      refute has_element?(view, "#{row} .btn-error")
+    end
+
+    test "an in-flight download for the searched episode shows the blocking banner",
+         %{conn: conn} do
+      show = media_item_fixture(%{title: "Lantern Coast", type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 4})
+
+      blocking =
+        download_fixture(%{
+          media_item_id: show.id,
+          episode_id: episode.id,
+          title: "Lantern.Coast.S01E04.1080p.WEB"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+      render_hook(view, "search_episode", %{"episode-id" => episode.id})
+
+      assert has_element?(view, "#manual-search-blocking", "Lantern.Coast.S01E04.1080p.WEB")
+      assert has_element?(view, "#manual-search-blocking", "this episode")
+
+      view |> element("#manual-search-blocking-download") |> render_click()
+      assert has_element?(view, ".modal-box", "Download Details")
+      assert :sys.get_state(view.pid).socket.assigns.download_details.id == blocking.id
+    end
+
+    test "an in-flight download for the movie shows the blocking banner", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Quiet Meridian", type: "movie"})
+      download_fixture(%{media_item_id: media_item.id, title: "Quiet.Meridian.2023.720p"})
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+      view |> element("#manual-search-button") |> render_click()
+
+      assert has_element?(view, "#manual-search-blocking", "Quiet.Meridian.2023.720p")
+      assert has_element?(view, "#manual-search-blocking", "this movie")
+    end
+
+    test "a whole-show search shows no blocking banner", %{conn: conn} do
+      show = media_item_fixture(%{title: "Lantern Coast", type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+      download_fixture(%{media_item_id: show.id, episode_id: episode.id})
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+      render_hook(view, "manual_search", %{})
+
+      assert has_element?(view, "#manual-search-modal")
+      refute has_element?(view, "#manual-search-blocking")
+    end
   end
 end

@@ -223,6 +223,14 @@ defmodule MydiaWeb.MediaLive.Show do
      # that only lived in the stream, so this is the assign those badges
      # actually survive in. See SearchHelpers.stream_prepared_results/2.
      |> assign(:result_states, %{})
+     # Releases that already failed for the searched target or are
+     # blacklisted, keyed by download_url, plus every URL already looked up
+     # (a release with no prior attempt is never a key in :prior_attempts).
+     # Folded in under :result_states, so a live grab state wins.
+     |> assign(:prior_attempts, %{})
+     |> assign(:prior_attempts_checked, MapSet.new())
+     # Downloads that would block any grab in the open manual search dialog.
+     |> assign(:manual_search_blocking, [])
      # Category modal state
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
