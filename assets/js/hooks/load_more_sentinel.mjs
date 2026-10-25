@@ -22,14 +22,13 @@
 // layout's sticky header); the observer then treats everything above that
 // line, plus a few pixels, as off screen (insetMargin).
 //
-// The top sentinel sets `data-chain="false"` and behaves more cautiously.
-// Rows prepended above the viewport only stay out of sight if the scroll
-// position is held, and if it slips the sentinel stays visible after every
-// batch, where chaining would load every row above the letter and land the
-// user on the first title. So it loads nothing until the sentinel has been
-// seen off screen once (the jump itself scrolls the list to the top, which
-// would otherwise count as a scroll up), and at most one batch per time it
-// comes into view.
+// The top sentinel sets `data-chain="false"`: it loads at most one batch per
+// time it comes into view, and asks again only after it has left the view and
+// returned. It is live from the start, so a fresh load at the top of the page
+// (a shared URL, a reload, Back) fills in the rows above the letter without
+// the user having to scroll away and back. The one-batch limit and keepInPlace
+// (below) are what stop it running away: a prepend pushes the sentinel off
+// screen, so it does not stay visible and chain through every row above.
 //
 // It also sets `data-anchor` to the list's id, and the hook holds the list's
 // first card where it was across each batch (keepInPlace). The browser's own
@@ -49,7 +48,7 @@ export function insetMargin(inset) {
   return `-${inset + INSET_SLACK}px 0px 0px 0px`;
 }
 
-export function createLoader(el, push, { event = "load_more", chain = true, armed = true } = {}) {
+export function createLoader(el, push, { event = "load_more", chain = true } = {}) {
   let visible = false;
   let inFlight = false;
   // With chain off, set once a batch has landed and cleared when the
@@ -57,7 +56,7 @@ export function createLoader(el, push, { event = "load_more", chain = true, arme
   let spent = false;
 
   function maybeLoad() {
-    if (!armed || !visible || inFlight || spent || el.dataset.hasMore !== "true") return;
+    if (!visible || inFlight || spent || el.dataset.hasMore !== "true") return;
 
     inFlight = true;
     push(event, {}).then(
@@ -76,7 +75,6 @@ export function createLoader(el, push, { event = "load_more", chain = true, arme
     maybeLoad,
     setVisible(isVisible) {
       if (isVisible && !visible) spent = false;
-      if (!isVisible) armed = true;
       visible = isVisible;
       maybeLoad();
     },
@@ -126,7 +124,6 @@ export const LoadMoreSentinel = {
     this.loader = createLoader(this.el, push, {
       event: this.el.dataset.event || "load_more",
       chain,
-      armed: chain,
     });
 
     this.observer = new IntersectionObserver(

@@ -75,19 +75,23 @@ function setupTop() {
   const calls = [];
   const push = (event, payload) =>
     new Promise((resolve, reject) => calls.push({ event, payload, resolve, reject }));
-  const loader = createLoader(el, push, { event: "load_previous", chain: false, armed: false });
+  const loader = createLoader(el, push, { event: "load_previous", chain: false });
   return { calls, loader };
 }
 
-test("an unarmed loader waits until the sentinel has been off screen", () => {
+test("a non-chaining loader fires on its first visibility, then not again until it leaves and returns", async () => {
   const { calls, loader } = setupTop();
   loader.setVisible(true);
+  assert.equal(calls.length, 1);
+
+  calls[0].resolve({});
+  await flush();
   loader.maybeLoad();
-  assert.equal(calls.length, 0);
+  assert.equal(calls.length, 1);
 
   loader.setVisible(false);
   loader.setVisible(true);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("without chaining, one batch per time the sentinel comes into view", async () => {
