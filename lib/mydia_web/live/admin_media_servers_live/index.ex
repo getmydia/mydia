@@ -19,6 +19,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   alias Mydia.Logger, as: MydiaLogger
   alias MydiaWeb.AdminMediaServersLive.Messages
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
@@ -338,7 +339,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
             user_id: socket.assigns.current_user.id
           )
 
-          error_msg = MydiaLogger.user_error_message(:delete_media_server, error)
+          error_msg = OperationErrors.user_error_message(:delete_media_server, error)
 
           {:noreply, put_flash(socket, :error, error_msg)}
       end

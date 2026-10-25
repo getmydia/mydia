@@ -2,8 +2,6 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Downloads.Client.FailureCategory
-
   attr :display, Mydia.TimeDisplay, required: true
   attr :rows, :list, required: true
   attr :total_count, :integer, required: true
@@ -177,5 +175,5 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
 
   # Slugs are stable identifiers; the operator reads the label. Unknown
   # slugs (rows written by a newer version) humanize rather than raise.
-  defp reason_label(slug), do: FailureCategory.label(slug)
+  defp reason_label(slug), do: MydiaWeb.StatusLabels.failure_category(slug)
 end

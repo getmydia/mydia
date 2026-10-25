@@ -324,7 +324,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
       assigns
       |> assign(:category_key, category_key)
       |> assign(:current_value, current_value)
-      |> assign(:label, Mydia.Media.MediaCategory.label(assigns.category))
+      |> assign(:label, MydiaWeb.StatusLabels.media_category(assigns.category))
 
     ~H"""
     <div class="form-control">
@@ -354,7 +354,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
       Enum.map(assigns.categories, fn category ->
         category_key = Atom.to_string(category)
         subpath = Map.get(category_paths, category_key, "")
-        label = Mydia.Media.MediaCategory.label(category)
+        label = MydiaWeb.StatusLabels.media_category(category)
 
         resolved =
           if subpath == "" or subpath == nil do

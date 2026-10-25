@@ -7,6 +7,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   alias Mydia.Downloads.ClientHealth
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
@@ -177,7 +178,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:delete_download_client, error)
+        error_msg = OperationErrors.user_error_message(:delete_download_client, error)
 
         {:noreply,
          socket

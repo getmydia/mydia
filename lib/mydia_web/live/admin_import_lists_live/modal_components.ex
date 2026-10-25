@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
 
   alias Mydia.ImportLists.ImportList
   alias MydiaWeb.AdminImportListsLive.Index
+  alias MydiaWeb.AdminImportListsLive.Labels
 
   defp source_options do
     [
@@ -84,8 +85,8 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
               :if={ImportList.requires_config?(@selected_type)}
               field={@import_list_form[:list_url]}
               type="text"
-              label={ImportList.config_field_label(@selected_type)}
-              placeholder={ImportList.config_field_placeholder(@selected_type)}
+              label={Labels.config_field_label(@selected_type)}
+              placeholder={Labels.config_field_placeholder(@selected_type)}
               required
             />
 
@@ -101,7 +102,7 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
               <label class="label"><span class="label-text">{gettext("List Type")}</span></label>
               <input
                 type="text"
-                value={ImportList.type_label(@selected_list.type)}
+                value={Labels.type_label(@selected_list.type)}
                 class="input input-bordered"
                 disabled
               />
@@ -111,8 +112,8 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
               :if={ImportList.requires_config?(@selected_list.type)}
               field={@import_list_form[:list_url]}
               type="text"
-              label={ImportList.config_field_label(@selected_list.type)}
-              placeholder={ImportList.config_field_placeholder(@selected_list.type)}
+              label={Labels.config_field_label(@selected_list.type)}
+              placeholder={Labels.config_field_placeholder(@selected_list.type)}
               value={@selected_list.config["list_url"]}
             />
 

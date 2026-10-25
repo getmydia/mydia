@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   alias MydiaWeb.AdminSettingsLive.LanguageSettings
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
@@ -88,7 +89,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         )
       end)
 
-      error_msg = MydiaLogger.user_error_message(:update_setting, :multiple_failures)
+      error_msg = OperationErrors.user_error_message(:update_setting, :multiple_failures)
 
       {:noreply,
        socket
@@ -147,7 +148,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
             user_id: socket.assigns.current_user.id
           )
 
-          error_msg = MydiaLogger.user_error_message(:update_setting, changeset)
+          error_msg = OperationErrors.user_error_message(:update_setting, changeset)
 
           {:noreply,
            socket
@@ -182,7 +183,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         )
 
         {:noreply,
-         put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, reason))}
+         put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, reason))}
     end
   end
 
@@ -348,7 +349,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         )
 
         {:noreply,
-         put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, error))}
+         put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, error))}
     end
   end
 

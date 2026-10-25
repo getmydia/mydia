@@ -10,6 +10,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   alias MydiaWeb.AdminIndexersLive.{
     CardigannEngineEvents,
@@ -266,7 +267,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
             user_id: socket.assigns.current_user.id
           )
 
-          error_msg = MydiaLogger.user_error_message(:delete_indexer, error)
+          error_msg = OperationErrors.user_error_message(:delete_indexer, error)
           {:noreply, put_flash(socket, :error, error_msg)}
       end
     end
@@ -515,7 +516,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:toggle_library_flaresolverr, changeset)
+        error_msg = OperationErrors.user_error_message(:toggle_library_flaresolverr, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -547,7 +548,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:toggle_library_indexer, changeset)
+        error_msg = OperationErrors.user_error_message(:toggle_library_indexer, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -571,7 +572,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:remove_library_indexer, changeset)
+        error_msg = OperationErrors.user_error_message(:remove_library_indexer, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -638,7 +639,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:configure_library_indexer, changeset)
+        error_msg = OperationErrors.user_error_message(:configure_library_indexer, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -667,7 +668,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:configure_library_indexer, changeset)
+        error_msg = OperationErrors.user_error_message(:configure_library_indexer, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -836,7 +837,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:toggle_library_indexer, changeset)
+        error_msg = OperationErrors.user_error_message(:toggle_library_indexer, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -906,7 +907,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:save_indexer_config, changeset)
+        error_msg = OperationErrors.user_error_message(:save_indexer_config, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end

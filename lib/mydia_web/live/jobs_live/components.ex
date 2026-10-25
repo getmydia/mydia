@@ -330,7 +330,7 @@ defmodule MydiaWeb.JobsLive.Components do
     do: job.worker |> inspect() |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
 
   defp format_relative_time(nil), do: gettext("Never")
-  defp format_relative_time(%DateTime{} = dt), do: Timex.from_now(dt)
+  defp format_relative_time(%DateTime{} = dt), do: MydiaWeb.RelativeTime.from_now(dt)
 
   defp format_datetime(nil), do: gettext("N/A")
   defp format_datetime(%DateTime{} = dt), do: Timex.format!(dt, "{ISO:Extended}")

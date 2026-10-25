@@ -1070,7 +1070,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp media_status_icon(status), do: AvailabilityStatus.icon(status)
 
-  defp media_status_label(status), do: AvailabilityStatus.label(status)
+  defp media_status_label(status), do: MydiaWeb.StatusLabels.availability(status)
 
   @doc false
   # Public so the copy can be unit-tested without mounting the LiveView.

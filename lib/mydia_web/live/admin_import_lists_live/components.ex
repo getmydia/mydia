@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
 
   alias Mydia.ImportLists.ImportList
   alias MydiaWeb.AdminImportListsLive.Index
+  alias MydiaWeb.AdminImportListsLive.Labels
 
   @doc "The page header's Sync All and New TMDB List buttons."
   def header_actions(assigns) do
@@ -189,9 +190,9 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
 
     Enum.join(
       [
-        ImportList.type_label(list.type),
+        Labels.type_label(list.type),
         media,
-        ImportList.sync_interval_label(list.sync_interval),
+        Labels.sync_interval_label(list.sync_interval),
         gettext("Synced %{time}", time: Index.format_last_synced(list.last_synced_at))
       ],
       " · "

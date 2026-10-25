@@ -5,7 +5,6 @@ defmodule MydiaWeb.DiscoverLive.Messages do
 
   use Gettext, backend: MydiaWeb.Gettext
 
-  alias Mydia.Media
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   def movie_categories do
@@ -41,7 +40,7 @@ defmodule MydiaWeb.DiscoverLive.Messages do
   def request_error_message(:duplicate_request),
     do: gettext("Someone has already requested that title.")
 
-  def request_error_message(:restricted), do: Media.restricted_message()
+  def request_error_message(:restricted), do: MydiaWeb.OperationErrors.restricted_message()
 
   def request_error_message(%Ecto.Changeset{} = changeset),
     do:

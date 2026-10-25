@@ -3,7 +3,6 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
   use MydiaWeb, :html
 
   alias Mydia.Accounts.User
-  alias Mydia.Media.ContentRating
   alias Mydia.Media.MediaCategory
 
   defp roles do
@@ -288,7 +287,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     assigns =
       assigns
       |> assign(:categories, MediaCategory.all())
-      |> assign(:thresholds, ContentRating.thresholds())
+      |> assign(:thresholds, MydiaWeb.StatusLabels.content_rating_thresholds())
       |> assign(:selected, selected_categories(assigns.restriction))
       |> assign(:max_age, assigns.restriction && assigns.restriction.max_content_age)
 

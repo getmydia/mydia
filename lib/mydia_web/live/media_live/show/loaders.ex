@@ -9,8 +9,10 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Events
+  alias Mydia.Events.Presentation
   alias Mydia.Subtitles
   alias Mydia.Library.MediaFile
+  alias MydiaWeb.ActivityLive.EventText
   alias MydiaWeb.MediaLive.Show.Helpers
 
   def load_media_item(scope, id) do
@@ -59,6 +61,8 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
 
       # Merge formatted properties with event data needed by template
       Map.merge(formatted, %{
+        title: EventText.title(event),
+        description: Presentation.detail(event) || EventText.no_detail(),
         timestamp: event.inserted_at,
         metadata: MydiaWeb.MediaLive.Show.Formatters.format_metadata_for_display(event)
       })

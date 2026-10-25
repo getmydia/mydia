@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   alias Mydia.Settings.RuntimeConfig
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
@@ -334,7 +335,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:delete_library_path, error)
+        error_msg = OperationErrors.user_error_message(:delete_library_path, error)
 
         {:noreply, put_flash(socket, :error, error_msg)}
     end

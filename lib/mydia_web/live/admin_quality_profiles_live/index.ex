@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   alias Mydia.Settings.QualityProfile
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
@@ -157,7 +158,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:duplicate_quality_profile, changeset)
+        error_msg = OperationErrors.user_error_message(:duplicate_quality_profile, changeset)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -191,7 +192,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:delete_quality_profile, error)
+        error_msg = OperationErrors.user_error_message(:delete_quality_profile, error)
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
@@ -230,7 +231,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:force_delete_quality_profile, error)
+        error_msg = OperationErrors.user_error_message(:force_delete_quality_profile, error)
 
         {:noreply,
          socket
