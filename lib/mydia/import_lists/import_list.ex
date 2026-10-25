@@ -198,12 +198,19 @@ defmodule Mydia.ImportLists.ImportList do
 
   defp list_url_submitted?(changeset), do: Map.has_key?(changeset.params || %{}, "list_url")
 
+  # Only a URL already persisted on the list counts, and only while the
+  # incoming config leaves it untouched. config is castable, so a URL supplied
+  # through config on create, or swapped in on update, never passed format
+  # validation and must not be accepted as "stored".
   defp stored_list_url?(changeset) do
-    case get_field(changeset, :config) do
-      %{"list_url" => url} when is_binary(url) and url != "" -> true
-      _ -> false
-    end
+    persisted = config_list_url(changeset.data.config)
+
+    is_binary(persisted) and persisted != "" and
+      config_list_url(get_field(changeset, :config)) == persisted
   end
+
+  defp config_list_url(%{"list_url" => url}), do: url
+  defp config_list_url(_), do: nil
 
   # Validates the URL/ID format based on list type
   defp validate_list_url_format(changeset) do

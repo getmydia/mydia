@@ -936,6 +936,29 @@ defmodule Mydia.ImportListsTest do
 
       assert "is required for this list type" in errors_on(changeset).list_url
     end
+
+    test "a URL supplied only through config on create is not accepted as stored" do
+      assert {:error, changeset} =
+               ImportLists.create_import_list(%{
+                 name: "Config URL",
+                 type: "custom_url",
+                 media_type: "movie",
+                 config: %{"list_url" => "not a url"}
+               })
+
+      assert "is required for this list type" in errors_on(changeset).list_url
+    end
+
+    test "swapping the URL through config on update is not accepted as stored" do
+      list = stored_url_list("custom_url", "https://example.com/feed.json")
+
+      assert {:error, changeset} =
+               ImportLists.update_import_list(list, %{
+                 config: Map.put(list.config, "list_url", "not a url")
+               })
+
+      assert "is required for this list type" in errors_on(changeset).list_url
+    end
   end
 
   describe "check_duplicate/2" do
