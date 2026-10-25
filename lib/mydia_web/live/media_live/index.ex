@@ -22,19 +22,23 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
   alias MydiaWeb.MediaLive.Index.ReclassifyFlash
+  alias MydiaWeb.MediaLive.Index.Window
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
+
+  import MydiaWeb.MediaLive.Index.Window,
+    only: [load_media_items: 1, load_media_items_when_connected: 3]
 
   import MydiaWeb.MediaLive.Index.Messages,
     only: [batch_monitored_message: 2, auto_search_flash: 2, format_episode_count: 1]
 
   import MydiaWeb.GridDensityComponents
+  import MydiaWeb.MediaLive.Index.AlphaJumpComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
   import MydiaWeb.MediaLive.Index.SelectionComponents
 
   require Logger
 
-  @items_per_scroll 50
   @auto_search_confirm_threshold 50
 
   # Ten is enough anime to be a nuisance in a mixed list and few enough that a
@@ -62,10 +66,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
      |> assign(:page_key, nil)
-     |> assign(:listing_ids, [])
-     |> assign(:loaded_count, 0)
      |> assign(:library_options, [])
-     |> assign(:has_more, false)
      |> assign(:loading?, true)
      |> assign(:media_items_empty?, false)
      |> assign(:selection_mode, false)
@@ -92,7 +93,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:all_visible_ids, MapSet.new())
      |> assign(:total_size, 0)
      |> assign(:description_match_start_id, nil)
-     |> stream(:media_items, [])}
+     |> Window.reset()}
   end
 
   @impl true
@@ -100,8 +101,10 @@ defmodule MydiaWeb.MediaLive.Index do
   # The page itself (title, library options, section rules) is only set up
   # when the route changes; a patch that only changes the URL's listing state,
   # including load_more's own `shown` patch, goes straight to the listing.
-  def handle_params(params, _url, socket) do
+  def handle_params(params, url, socket) do
     page_key = {socket.assigns.live_action, params["id"]}
+    # The page's own path (/movies, /tv, /sections/:id), for listing patches.
+    socket = assign(socket, :listing_base_path, URI.parse(url).path)
 
     socket =
       if page_key == socket.assigns.page_key do
@@ -172,10 +175,7 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:all_visible_ids, MapSet.new())
         |> assign(:total_size, 0)
         |> assign(:description_match_start_id, nil)
-        |> assign(:has_more, false)
-        |> assign(:listing_ids, [])
-        |> assign(:loaded_count, 0)
-        |> stream(:media_items, [], reset: true)
+        |> Window.reset()
     end
   end
 
@@ -257,11 +257,11 @@ defmodule MydiaWeb.MediaLive.Index do
 
   def handle_event("search", params, socket) do
     query = params["search"] || params["value"] || ""
-    {:noreply, patch_listing(socket, %{current_listing_params(socket.assigns) | search: query})}
+    {:noreply, patch_listing(socket, %{Window.listing_params(socket.assigns) | search: query})}
   end
 
   def handle_event("filter", params, socket) do
-    current = current_listing_params(socket.assigns)
+    current = Window.listing_params(socket.assigns)
 
     form = %{
       "q" => current.search,
@@ -282,17 +282,20 @@ defmodule MydiaWeb.MediaLive.Index do
   # Replies so the LoadMoreSentinel hook knows the batch has landed.
   def handle_event("load_more", _params, socket) do
     socket =
-      if socket.assigns.has_more do
-        socket = load_next_batch(socket)
-        params = current_listing_params(socket.assigns)
+      if socket.assigns.has_more,
+        do: socket |> Window.load_next_batch() |> patch_window(),
+        else: socket
 
-        push_patch(socket,
-          to: ListingParams.path(listing_base_path(socket.assigns), params),
-          replace: true
-        )
-      else
-        socket
-      end
+    {:reply, %{}, socket}
+  end
+
+  # The top sentinel after a jump. The URL counts the rows loaded above the
+  # letter, so Back and reloads put them back and the page does not shift.
+  def handle_event("load_previous", _params, socket) do
+    socket =
+      if socket.assigns.has_previous,
+        do: socket |> Window.load_previous_batch() |> patch_window(),
+        else: socket
 
     {:reply, %{}, socket}
   end
@@ -878,61 +881,6 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp toggle_selected_id(socket, :error), do: socket
 
-  # The HTTP render paints a skeleton and loads nothing. The connected mount
-  # runs handle_params again moments later, so loading here doubled the cost
-  # of every full page load.
-  defp load_media_items_when_connected(socket, limit) do
-    if connected?(socket), do: load_media_items(socket, limit), else: socket
-  end
-
-  # A fresh snapshot. Without a limit it keeps as many rows as are on screen,
-  # so a reload after a bulk action does not throw the user back to the top.
-  defp load_media_items(socket, limit \\ nil)
-
-  defp load_media_items(%{assigns: %{section_error: true}} = socket, _limit), do: socket
-
-  defp load_media_items(socket, limit) do
-    limit = limit || max(socket.assigns.loaded_count, ListingParams.first_page())
-
-    snapshot =
-      LibraryListing.snapshot(
-        socket.assigns.current_scope,
-        listing_opts(socket.assigns, limit: limit)
-      )
-
-    loaded = length(snapshot.rows)
-
-    socket
-    |> assign(:listing_ids, snapshot.ids)
-    |> assign(:loaded_count, loaded)
-    |> assign(:has_more, loaded < length(snapshot.ids))
-    |> assign(:loading?, false)
-    |> assign(:media_items_empty?, snapshot.empty?)
-    # Every matching id, not only the rendered rows, for "Select All".
-    |> assign(:all_visible_ids, snapshot.visible_ids)
-    |> assign(:total_size, snapshot.total_size)
-    |> assign(:description_match_start_id, snapshot.description_match_start_id)
-    |> stream(:media_items, snapshot.rows, reset: true)
-  end
-
-  # The next batch, from the snapshot's order. Advances by ids, not by rows
-  # returned, so an item deleted since the snapshot is skipped, not retried.
-  # `loaded_count` counts ids consumed, not cards rendered, so `shown` can
-  # slightly overstate the cards on screen after a deletion; that is harmless.
-  defp load_next_batch(socket) do
-    %{listing_ids: ids, loaded_count: loaded} = socket.assigns
-    batch = Enum.slice(ids, loaded, @items_per_scroll)
-    loaded = loaded + length(batch)
-
-    rows =
-      LibraryListing.rows(socket.assigns.current_scope, batch, socket.assigns.current_user.id)
-
-    socket
-    |> assign(:loaded_count, loaded)
-    |> assign(:has_more, loaded < length(ids))
-    |> stream(:media_items, rows)
-  end
-
   # Selects everything the current filters match, including rows not rendered.
   defp select_all_visible(socket),
     do: assign(socket, :selected_ids, socket.assigns.all_visible_ids)
@@ -943,16 +891,33 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_listing_params(socket, params, force?) do
     parsed = ListingParams.parse(params, library_choices(socket))
+    current = Window.listing_params(socket.assigns)
 
-    if force? or not ListingParams.same_listing?(parsed, current_listing_params(socket.assigns)) do
+    if force? or not ListingParams.same_listing?(parsed, current) do
       socket
+      # Only an in-page jump scrolls; a mount or reconnect keeps the user's place.
+      |> maybe_scroll_to_letter(
+        not force? and parsed.letter != socket.assigns.letter and parsed.letter
+      )
+      # A letter jump moves through the same items, so a selection survives it.
+      |> maybe_clear_selection(
+        force? or
+          not ListingParams.same_listing?(%{parsed | letter: nil}, %{current | letter: nil})
+      )
       |> assign_listing_params(parsed)
-      |> assign(:selected_ids, MapSet.new())
-      |> load_media_items_when_connected(parsed.shown)
+      |> load_media_items_when_connected(parsed.shown, parsed.above)
     else
       socket
     end
   end
+
+  defp maybe_clear_selection(socket, true), do: assign(socket, :selected_ids, MapSet.new())
+  defp maybe_clear_selection(socket, false), do: socket
+
+  defp maybe_scroll_to_letter(socket, nil_or_false) when nil_or_false in [nil, false], do: socket
+
+  defp maybe_scroll_to_letter(socket, _letter),
+    do: push_event(socket, "alpha_jump:scroll_top", %{})
 
   # The select is hidden below two options, where a chosen library could not
   # be cleared, so it is only honoured from two up.
@@ -969,65 +934,35 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:filter_monitored, params.monitored)
     |> assign(:filter_quality, params.quality)
     |> assign(:sort_by, params.sort)
+    |> assign(:letter, params.letter)
     |> assign(:filtered?, ListingParams.filtered?(params))
   end
 
-  defp current_listing_params(assigns) do
-    %ListingParams{
-      search: assigns.search_query,
-      library: assigns.filter_library,
-      progress: assigns.filter_progress,
-      monitored: assigns.filter_monitored,
-      quality: assigns.filter_quality,
-      sort: assigns.sort_by,
-      shown: min(max(assigns.loaded_count, ListingParams.first_page()), ListingParams.max_shown())
-    }
-  end
-
-  defp listing_base_path(%{live_action: :movies}), do: ~p"/movies"
-  defp listing_base_path(%{live_action: :tv_shows}), do: ~p"/tv"
-
-  defp listing_base_path(%{live_action: :section, section: section}),
-    do: ~p"/sections/#{section.id}"
-
   # Filter, search and sort changes replace the history entry rather than
   # adding one, so Back from a title lands on the list in its latest state.
+  # They also drop the A-Z jump letter, so the new listing starts at the top.
   defp patch_listing(socket, %ListingParams{} = params) do
-    params = %{params | shown: ListingParams.first_page()}
+    params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
     push_patch(socket,
-      to: ListingParams.path(listing_base_path(socket.assigns), params),
+      to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
     )
   end
 
-  defp listing_opts(assigns, page_opts) do
-    []
-    |> maybe_add_filter(:base_query, assigns[:section_query])
-    # A section's own base_query already selects its claimed categories, so
-    # excluding those same categories here would contradict it and empty the
-    # section out. The exclusion only makes sense off of section pages, where
-    # it is what removes claimed items from the built-in Movies/TV listings.
-    |> maybe_add_filter(
-      :exclude_categories,
-      if(is_nil(assigns[:section]), do: assigns[:excluded_categories], else: [])
+  # Records how much of the listing is loaded, in place, so Back and reloads
+  # rebuild the same window. same_listing?/2 ignores the change, so the patch
+  # does not reload anything.
+  defp patch_window(socket) do
+    push_patch(socket,
+      to:
+        ListingParams.path(
+          socket.assigns.listing_base_path,
+          Window.listing_params(socket.assigns)
+        ),
+      replace: true
     )
-    |> maybe_add_filter(:type, assigns.filter_type)
-    |> maybe_add_filter(:monitored, assigns.filter_monitored)
-    |> maybe_add_filter(:library_path_id, assigns[:filter_library])
-    |> Keyword.merge(
-      user_id: assigns.current_user.id,
-      search: assigns.search_query,
-      quality: assigns.filter_quality,
-      progress: assigns.filter_progress,
-      sort_by: assigns.sort_by
-    )
-    |> Keyword.merge(page_opts)
   end
-
-  defp maybe_add_filter(opts, _key, []), do: opts
-  defp maybe_add_filter(opts, _key, nil), do: opts
-  defp maybe_add_filter(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp get_poster_url(media_item),
     do: MydiaWeb.Live.Helpers.MediaImages.poster_url(media_item)

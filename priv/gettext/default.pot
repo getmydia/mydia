@@ -226,9 +226,9 @@ msgstr ""
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:128
 #: lib/mydia_web/live/integrations_live/index.html.heex:99
 #: lib/mydia_web/live/jobs_live/components.ex:314
-#: lib/mydia_web/live/media_live/index.html.heex:1048
 #: lib/mydia_web/live/media_live/index.html.heex:1078
-#: lib/mydia_web/live/media_live/index.html.heex:1196
+#: lib/mydia_web/live/media_live/index.html.heex:1108
+#: lib/mydia_web/live/media_live/index.html.heex:1226
 #: lib/mydia_web/live/media_live/index/section_components.ex:57
 #: lib/mydia_web/live/media_live/show/download_audio_components.ex:98
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:147
@@ -389,7 +389,7 @@ msgstr ""
 #: lib/mydia_web/components/add_media_components.ex:53
 #: lib/mydia_web/components/layouts.ex:205
 #: lib/mydia_web/live/admin_settings_live/labels.ex:23
-#: lib/mydia_web/live/media_live/index.html.heex:196
+#: lib/mydia_web/live/media_live/index.html.heex:201
 #, elixir-autogen, elixir-format
 msgid "Library"
 msgstr ""
@@ -421,7 +421,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/components.ex:215
 #: lib/mydia_web/live/downloads_live/components.ex:257
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:143
-#: lib/mydia_web/live/media_live/index.html.heex:393
+#: lib/mydia_web/live/media_live/index.html.heex:398
 #: lib/mydia_web/live/media_live/show.html.heex:231
 #: lib/mydia_web/live/media_live/show/category_events.ex:171
 #: lib/mydia_web/live/media_live/show/components.ex:275
@@ -445,7 +445,7 @@ msgstr ""
 #: lib/mydia_web/live/calendar_live/index.html.heex:28
 #: lib/mydia_web/live/dashboard_live/index.html.heex:66
 #: lib/mydia_web/live/discover_live/index.html.heex:54
-#: lib/mydia_web/live/media_live/index.ex:121
+#: lib/mydia_web/live/media_live/index.ex:124
 #: lib/mydia_web/live/search_live/index.ex:29
 #: lib/mydia_web/live/search_live/index.ex:1016
 #: lib/mydia_web/live/search_live/index.ex:1359
@@ -533,7 +533,7 @@ msgstr ""
 #: lib/mydia_web/components/video_player_components.ex:287
 #: lib/mydia_web/live/activity_live/index.ex:473
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:146
-#: lib/mydia_web/live/media_live/index.html.heex:441
+#: lib/mydia_web/live/media_live/index.html.heex:446
 #: lib/mydia_web/live/media_live/show/modals.ex:721
 #: lib/mydia_web/live/search_live/index.html.heex:492
 #, elixir-autogen, elixir-format
@@ -626,8 +626,8 @@ msgstr ""
 #: lib/mydia_web/live/calendar_live/index.html.heex:26
 #: lib/mydia_web/live/dashboard_live/index.html.heex:74
 #: lib/mydia_web/live/discover_live/index.html.heex:55
-#: lib/mydia_web/live/media_live/index.ex:129
-#: lib/mydia_web/live/media_live/index.html.heex:290
+#: lib/mydia_web/live/media_live/index.ex:132
+#: lib/mydia_web/live/media_live/index.html.heex:295
 #, elixir-autogen, elixir-format
 msgid "TV Shows"
 msgstr ""
@@ -704,7 +704,7 @@ msgstr ""
 
 #: lib/mydia_web/components/core_components.ex:623
 #: lib/mydia_web/components/grid_density_components.ex:73
-#: lib/mydia_web/live/media_live/index.html.heex:749
+#: lib/mydia_web/live/media_live/index.html.heex:779
 #, elixir-autogen, elixir-format
 msgid "Watched"
 msgstr ""
@@ -1683,7 +1683,7 @@ msgstr ""
 
 #: lib/mydia_web/controllers/session_html/new.html.heex:63
 #: lib/mydia_web/controllers/session_html/totp.html.heex:29
-#: lib/mydia_web/live/media_live/index.html.heex:395
+#: lib/mydia_web/live/media_live/index.html.heex:400
 #, elixir-autogen, elixir-format
 msgid "or"
 msgstr ""
@@ -1858,7 +1858,7 @@ msgid_plural "%{count} hours ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1109
+#: lib/mydia_web/live/media_live/index.ex:1044
 #, elixir-autogen, elixir-format
 msgid "%{count} imported automatically"
 msgstr ""
@@ -1876,7 +1876,7 @@ msgstr[1] ""
 #: lib/mydia_web/live/collection_live/preset_components.ex:88
 #: lib/mydia_web/live/collection_live/show.ex:162
 #: lib/mydia_web/live/media_live/disk_removal_flash.ex:101
-#: lib/mydia_web/live/media_live/index.html.heex:1162
+#: lib/mydia_web/live/media_live/index.html.heex:1192
 #, elixir-autogen, elixir-format
 msgid "%{count} item"
 msgid_plural "%{count} items"
@@ -1890,7 +1890,7 @@ msgid_plural "%{count} items retried"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1105
+#: lib/mydia_web/live/media_live/index.html.heex:1135
 #, elixir-autogen, elixir-format
 msgid "%{count} item selected"
 msgid_plural "%{count} items selected"
@@ -1911,7 +1911,7 @@ msgid_plural "%{count} items set to unmonitored"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:816
+#: lib/mydia_web/live/media_live/index.ex:819
 #, elixir-autogen, elixir-format
 msgid "%{count} item updated successfully"
 msgid_plural "%{count} items updated successfully"
@@ -1949,12 +1949,12 @@ msgid_plural "%{count} missing"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1099
+#: lib/mydia_web/live/media_live/index.ex:1034
 #, elixir-autogen, elixir-format
 msgid "%{count} modified"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1094
+#: lib/mydia_web/live/media_live/index.ex:1029
 #, elixir-autogen, elixir-format
 msgid "%{count} new"
 msgstr ""
@@ -1980,7 +1980,7 @@ msgid_plural "%{count} peers"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1104
+#: lib/mydia_web/live/media_live/index.ex:1039
 #, elixir-autogen, elixir-format
 msgid "%{count} removed"
 msgstr ""
@@ -2528,12 +2528,12 @@ msgid "Add Items to Collection"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:146
-#: lib/mydia_web/live/media_live/index.html.heex:109
+#: lib/mydia_web/live/media_live/index.html.heex:114
 #, elixir-autogen, elixir-format
 msgid "Add Movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:115
+#: lib/mydia_web/live/media_live/index.html.heex:120
 #, elixir-autogen, elixir-format
 msgid "Add Series"
 msgstr ""
@@ -2559,7 +2559,7 @@ msgstr ""
 msgid "Add a section"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:388
+#: lib/mydia_web/live/media_live/index.html.heex:393
 #, elixir-autogen, elixir-format
 msgid "Add as"
 msgstr ""
@@ -2569,19 +2569,19 @@ msgstr ""
 msgid "Add conditions to filter which items appear in this collection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:376
-#: lib/mydia_web/live/media_live/index.html.heex:383
+#: lib/mydia_web/live/media_live/index.html.heex:381
+#: lib/mydia_web/live/media_live/index.html.heex:388
 #, elixir-autogen, elixir-format
 msgid "Add it to your library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:426
+#: lib/mydia_web/live/media_live/index.html.heex:431
 #, elixir-autogen, elixir-format
 msgid "Add some media to get started"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:927
-#: lib/mydia_web/live/media_live/index.html.heex:1103
+#: lib/mydia_web/live/media_live/index.html.heex:957
+#: lib/mydia_web/live/media_live/index.html.heex:1133
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:167
 #, elixir-autogen, elixir-format
 msgid "Add to Collection"
@@ -2621,7 +2621,7 @@ msgstr ""
 msgid "Added \"%{name}\""
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:504
+#: lib/mydia_web/live/media_live/index.ex:507
 #, elixir-autogen, elixir-format
 msgid "Added %{count} item to %{name}"
 msgid_plural "Added %{count} items to %{name}"
@@ -2634,12 +2634,12 @@ msgstr[1] ""
 msgid "Added %{title} to your library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:271
+#: lib/mydia_web/live/media_live/index.html.heex:276
 #, elixir-autogen, elixir-format
 msgid "Added (Newest)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:274
+#: lib/mydia_web/live/media_live/index.html.heex:279
 #, elixir-autogen, elixir-format
 msgid "Added (Oldest)"
 msgstr ""
@@ -2757,12 +2757,12 @@ msgstr ""
 msgid "All Media"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:212
+#: lib/mydia_web/live/media_live/index.html.heex:217
 #, elixir-autogen, elixir-format
 msgid "All Progress"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:246
+#: lib/mydia_web/live/media_live/index.html.heex:251
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:28
 #: lib/mydia_web/live/search_live/index.html.heex:127
 #, elixir-autogen, elixir-format
@@ -2774,7 +2774,7 @@ msgstr ""
 msgid "All Sources"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:232
+#: lib/mydia_web/live/media_live/index.html.heex:237
 #, elixir-autogen, elixir-format
 msgid "All Status"
 msgstr ""
@@ -2801,7 +2801,7 @@ msgstr ""
 msgid "All downloads completed successfully"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:198
+#: lib/mydia_web/live/media_live/index.html.heex:203
 #, elixir-autogen, elixir-format
 msgid "All libraries"
 msgstr ""
@@ -2917,7 +2917,7 @@ msgid_plural "Applied '%{preset}' monitoring to %{count} episodes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1055
+#: lib/mydia_web/live/media_live/index.html.heex:1085
 #, elixir-autogen, elixir-format
 msgid "Apply Changes"
 msgstr ""
@@ -3050,7 +3050,7 @@ msgstr ""
 msgid "Authorization was denied."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:880
+#: lib/mydia_web/live/media_live/index.html.heex:910
 #, elixir-autogen, elixir-format
 msgid "Auto Search"
 msgstr ""
@@ -3115,7 +3115,7 @@ msgstr ""
 msgid "Basic"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:999
+#: lib/mydia_web/live/media_live/index.html.heex:1029
 #, elixir-autogen, elixir-format
 msgid "Batch Edit"
 msgstr ""
@@ -3238,7 +3238,7 @@ msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:916
-#: lib/mydia_web/live/media_live/index.ex:518
+#: lib/mydia_web/live/media_live/index.ex:521
 #: lib/mydia_web/live/media_live/show/collection_events.ex:65
 #, elixir-autogen, elixir-format
 msgid "Cannot add items to smart collections"
@@ -3603,7 +3603,7 @@ msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:411
 #: lib/mydia_web/live/collection_live/show.ex:33
-#: lib/mydia_web/live/media_live/index.ex:495
+#: lib/mydia_web/live/media_live/index.ex:498
 #: lib/mydia_web/live/media_live/show/collection_events.ex:49
 #: lib/mydia_web/live/media_live/show/collection_events.ex:79
 #, elixir-autogen, elixir-format
@@ -3848,7 +3848,7 @@ msgstr ""
 msgid "Could not create that section."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:626
+#: lib/mydia_web/live/media_live/index.ex:629
 #, elixir-autogen, elixir-format
 msgid "Could not create the Anime section"
 msgstr ""
@@ -3915,7 +3915,7 @@ msgstr ""
 msgid "Could not reclassify that file"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:596
+#: lib/mydia_web/live/media_live/index.ex:599
 #, elixir-autogen, elixir-format
 msgid "Could not remove the section"
 msgstr ""
@@ -4037,7 +4037,7 @@ msgstr ""
 msgid "Could not undo that change."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:579
+#: lib/mydia_web/live/media_live/index.ex:582
 #, elixir-autogen, elixir-format
 msgid "Could not update the section"
 msgstr ""
@@ -4100,14 +4100,14 @@ msgstr ""
 msgid "Country"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:337
+#: lib/mydia_web/live/media_live/index.html.heex:342
 #, elixir-autogen, elixir-format
 msgid "Create Anime section"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:171
 #: lib/mydia_web/live/collection_live/index.ex:265
-#: lib/mydia_web/live/media_live/index.html.heex:1126
+#: lib/mydia_web/live/media_live/index.html.heex:1156
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:171
 #, elixir-autogen, elixir-format
 msgid "Create Collection"
@@ -4118,7 +4118,7 @@ msgstr ""
 msgid "Create a collection to organize your media into custom groups."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1187
+#: lib/mydia_web/live/media_live/index.html.heex:1217
 #, elixir-autogen, elixir-format
 msgid "Create new collection"
 msgstr ""
@@ -4133,7 +4133,7 @@ msgstr ""
 msgid "Create your first collection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1123
+#: lib/mydia_web/live/media_live/index.html.heex:1153
 #, elixir-autogen, elixir-format
 msgid "Create your first collection to organize your media"
 msgstr ""
@@ -4257,7 +4257,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:75
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:100
 #: lib/mydia_web/live/downloads_live/index.html.heex:184
-#: lib/mydia_web/live/media_live/index.html.heex:965
+#: lib/mydia_web/live/media_live/index.html.heex:995
 #: lib/mydia_web/live/media_live/show.html.heex:168
 #, elixir-autogen, elixir-format
 msgid "Delete"
@@ -4417,7 +4417,7 @@ msgstr ""
 msgid "Description"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:838
+#: lib/mydia_web/live/media_live/index.html.heex:868
 #, elixir-autogen, elixir-format
 msgid "Deselect all"
 msgstr ""
@@ -4517,12 +4517,12 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/index.ex:306
 #: lib/mydia_web/live/collection_live/show.ex:592
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:115
-#: lib/mydia_web/live/media_live/index.html.heex:981
+#: lib/mydia_web/live/media_live/index.html.heex:1011
 #, elixir-autogen, elixir-format
 msgid "Done"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:979
+#: lib/mydia_web/live/media_live/index.html.heex:1009
 #, elixir-autogen, elixir-format
 msgid "Done (Esc)"
 msgstr ""
@@ -4678,7 +4678,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:91
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:64
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:92
-#: lib/mydia_web/live/media_live/index.html.heex:916
+#: lib/mydia_web/live/media_live/index.html.heex:946
 #, elixir-autogen, elixir-format
 msgid "Edit"
 msgstr ""
@@ -4703,12 +4703,12 @@ msgstr ""
 msgid "Edit Rules"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:41
+#: lib/mydia_web/live/media_live/index.html.heex:46
 #, elixir-autogen, elixir-format
 msgid "Edit rules"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1005
+#: lib/mydia_web/live/media_live/index.html.heex:1035
 #, elixir-autogen, elixir-format
 msgid "Editing %{count} item. Only fields you change will be updated."
 msgid_plural "Editing %{count} items. Only fields you change will be updated."
@@ -4775,12 +4775,12 @@ msgstr ""
 msgid "Episodes %{range}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:307
+#: lib/mydia_web/live/media_live/index.html.heex:312
 #, elixir-autogen, elixir-format
 msgid "Episodes (Least)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:304
+#: lib/mydia_web/live/media_live/index.html.heex:309
 #, elixir-autogen, elixir-format
 msgid "Episodes (Most)"
 msgstr ""
@@ -4913,7 +4913,7 @@ msgstr ""
 msgid "Failed to add item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:524
+#: lib/mydia_web/live/media_live/index.ex:527
 #: lib/mydia_web/live/media_live/show/collection_events.ex:68
 #, elixir-autogen, elixir-format
 msgid "Failed to add to collection"
@@ -4972,7 +4972,7 @@ msgstr ""
 msgid "Failed to delete download"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:795
+#: lib/mydia_web/live/media_live/index.ex:798
 #, elixir-autogen, elixir-format
 msgid "Failed to delete items"
 msgstr ""
@@ -5013,7 +5013,7 @@ msgstr ""
 msgid "Failed to pause download: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:862
+#: lib/mydia_web/live/media_live/index.ex:865
 #, elixir-autogen, elixir-format
 msgid "Failed to queue searches"
 msgstr ""
@@ -5134,8 +5134,8 @@ msgstr ""
 msgid "Failed to update favorites"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:751
-#: lib/mydia_web/live/media_live/index.ex:830
+#: lib/mydia_web/live/media_live/index.ex:754
+#: lib/mydia_web/live/media_live/index.ex:833
 #, elixir-autogen, elixir-format
 msgid "Failed to update items"
 msgstr ""
@@ -5197,7 +5197,7 @@ msgstr ""
 msgid "Favorited"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1158
+#: lib/mydia_web/live/media_live/index.html.heex:1188
 #: lib/mydia_web/status_labels.ex:211
 #, elixir-autogen, elixir-format
 msgid "Favorites"
@@ -5388,7 +5388,7 @@ msgstr ""
 msgid "Future downloads will go to the selected library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:257
+#: lib/mydia_web/live/media_live/index.html.heex:262
 #, elixir-autogen, elixir-format
 msgid "General"
 msgstr ""
@@ -5786,7 +5786,7 @@ msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:86
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:162
-#: lib/mydia_web/live/media_live/index.html.heex:20
+#: lib/mydia_web/live/media_live/index.html.heex:25
 #, elixir-autogen, elixir-format
 msgid "Items"
 msgstr ""
@@ -5878,12 +5878,12 @@ msgstr ""
 msgid "Largest"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:295
+#: lib/mydia_web/live/media_live/index.html.heex:300
 #, elixir-autogen, elixir-format
 msgid "Last Aired (Oldest)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:292
+#: lib/mydia_web/live/media_live/index.html.heex:297
 #, elixir-autogen, elixir-format
 msgid "Last Aired (Recent)"
 msgstr ""
@@ -5913,17 +5913,17 @@ msgstr ""
 msgid "Library is now chosen automatically"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1115
+#: lib/mydia_web/live/media_live/index.ex:1050
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: %{changes}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1113
+#: lib/mydia_web/live/media_live/index.ex:1048
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: No changes detected"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:711
+#: lib/mydia_web/live/media_live/index.ex:714
 #, elixir-autogen, elixir-format
 msgid "Library scan failed: %{error}"
 msgstr ""
@@ -6067,7 +6067,7 @@ msgstr ""
 msgid "Match updated — the import will use the corrected match."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:484
+#: lib/mydia_web/live/media_live/index.html.heex:514
 #, elixir-autogen, elixir-format
 msgid "Matched in description"
 msgstr ""
@@ -6250,7 +6250,7 @@ msgstr ""
 msgid "Monitor this series"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1035
+#: lib/mydia_web/live/media_live/index.html.heex:1065
 #, elixir-autogen, elixir-format
 msgid "Monitored Status"
 msgstr ""
@@ -6396,7 +6396,7 @@ msgstr ""
 #: lib/mydia_web/live/jobs_live/components.ex:338
 #: lib/mydia_web/live/jobs_live/components.ex:339
 #: lib/mydia_web/live/jobs_live/components.ex:353
-#: lib/mydia_web/live/media_live/index.ex:1037
+#: lib/mydia_web/live/media_live/index.ex:972
 #: lib/mydia_web/live/media_live/show/formatters.ex:13
 #, elixir-autogen, elixir-format
 msgid "N/A"
@@ -6480,12 +6480,12 @@ msgstr ""
 msgid "Next"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:301
+#: lib/mydia_web/live/media_live/index.html.heex:306
 #, elixir-autogen, elixir-format
 msgid "Next Airing (Later)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:298
+#: lib/mydia_web/live/media_live/index.html.heex:303
 #, elixir-autogen, elixir-format
 msgid "Next Airing (Soon)"
 msgstr ""
@@ -6535,7 +6535,7 @@ msgstr[1] ""
 msgid "No collections found"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1121
+#: lib/mydia_web/live/media_live/index.html.heex:1151
 #, elixir-autogen, elixir-format
 msgid "No collections yet"
 msgstr ""
@@ -6693,7 +6693,7 @@ msgstr ""
 msgid "No media files to refresh for season %{number}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:363
+#: lib/mydia_web/live/media_live/index.html.heex:368
 #, elixir-autogen, elixir-format
 msgid "No media found"
 msgstr ""
@@ -6769,7 +6769,7 @@ msgstr ""
 msgid "No requests found"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:367
+#: lib/mydia_web/live/media_live/index.html.heex:372
 #, elixir-autogen, elixir-format
 msgid "No results for \"%{query}\"."
 msgstr ""
@@ -6815,7 +6815,7 @@ msgstr ""
 msgid "No subtitles found"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:344
+#: lib/mydia_web/live/media_live/index.html.heex:349
 #, elixir-autogen, elixir-format
 msgid "No thanks"
 msgstr ""
@@ -7003,7 +7003,7 @@ msgstr ""
 msgid "On The Air"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:26
+#: lib/mydia_web/live/media_live/index.html.heex:31
 #, elixir-autogen, elixir-format
 msgid "On disk"
 msgstr ""
@@ -7498,7 +7498,7 @@ msgid "Quality (Best)"
 msgstr ""
 
 #: lib/mydia_web/components/add_media_components.ex:77
-#: lib/mydia_web/live/media_live/index.html.heex:1022
+#: lib/mydia_web/live/media_live/index.html.heex:1052
 #: lib/mydia_web/live/media_live/show/components.ex:230
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:32
 #, elixir-autogen, elixir-format
@@ -7530,7 +7530,7 @@ msgstr ""
 msgid "Queue is empty"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1086
+#: lib/mydia_web/live/media_live/index.html.heex:1116
 #, elixir-autogen, elixir-format
 msgid "Queue searches"
 msgstr ""
@@ -7605,12 +7605,12 @@ msgstr ""
 msgid "Rating"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:277
+#: lib/mydia_web/live/media_live/index.html.heex:282
 #, elixir-autogen, elixir-format
 msgid "Rating (High)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:280
+#: lib/mydia_web/live/media_live/index.html.heex:285
 #, elixir-autogen, elixir-format
 msgid "Rating (Low)"
 msgstr ""
@@ -7635,7 +7635,7 @@ msgstr ""
 msgid "Re-analyze skip segments"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:956
+#: lib/mydia_web/live/media_live/index.html.heex:986
 #, elixir-autogen, elixir-format
 msgid "Re-classify"
 msgstr ""
@@ -7685,7 +7685,7 @@ msgstr ""
 msgid "Re-match to the correct title"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:84
+#: lib/mydia_web/live/media_live/index.html.heex:89
 #: lib/mydia_web/live/media_live/show/season_components.ex:610
 #: lib/mydia_web/live/media_live/show/season_components.ex:611
 #, elixir-autogen, elixir-format
@@ -8104,7 +8104,7 @@ msgid "Reported path"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:121
-#: lib/mydia_web/live/media_live/index.html.heex:95
+#: lib/mydia_web/live/media_live/index.html.heex:100
 #: lib/mydia_web/live/my_requests_live/index.html.heex:13
 #: lib/mydia_web/live/my_requests_live/index.html.heex:78
 #, elixir-autogen, elixir-format
@@ -8112,15 +8112,15 @@ msgid "Request Movie"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:129
-#: lib/mydia_web/live/media_live/index.html.heex:101
+#: lib/mydia_web/live/media_live/index.html.heex:106
 #: lib/mydia_web/live/my_requests_live/index.html.heex:16
 #: lib/mydia_web/live/my_requests_live/index.html.heex:81
 #, elixir-autogen, elixir-format
 msgid "Request Series"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:412
-#: lib/mydia_web/live/media_live/index.html.heex:419
+#: lib/mydia_web/live/media_live/index.html.heex:417
+#: lib/mydia_web/live/media_live/index.html.heex:424
 #, elixir-autogen, elixir-format
 msgid "Request it"
 msgstr ""
@@ -8393,7 +8393,7 @@ msgstr ""
 msgid "Scan in progress"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:77
+#: lib/mydia_web/live/media_live/index.html.heex:82
 #, elixir-autogen, elixir-format
 msgid "Scan library for new media"
 msgstr ""
@@ -8423,7 +8423,7 @@ msgstr ""
 msgid "Scanning library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:81
+#: lib/mydia_web/live/media_live/index.html.heex:86
 #, elixir-autogen, elixir-format
 msgid "Scanning..."
 msgstr ""
@@ -8581,7 +8581,7 @@ msgstr ""
 msgid "Search for a show to add"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1066
+#: lib/mydia_web/live/media_live/index.html.heex:1096
 #, elixir-autogen, elixir-format
 msgid "Search for many items?"
 msgstr ""
@@ -8606,7 +8606,7 @@ msgstr ""
 msgid "Search library..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:182
+#: lib/mydia_web/live/media_live/index.html.heex:187
 #, elixir-autogen, elixir-format
 msgid "Search media..."
 msgstr ""
@@ -8731,18 +8731,18 @@ msgstr ""
 msgid "Seasons & Episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:592
+#: lib/mydia_web/live/media_live/index.ex:595
 #, elixir-autogen, elixir-format
 msgid "Section removed from the sidebar"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:62
+#: lib/mydia_web/live/media_live/index.html.heex:67
 #: lib/mydia_web/live/media_live/index/section_components.ex:19
 #, elixir-autogen, elixir-format
 msgid "Section settings"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:576
+#: lib/mydia_web/live/media_live/index.ex:579
 #, elixir-autogen, elixir-format
 msgid "Section updated"
 msgstr ""
@@ -8807,7 +8807,7 @@ msgstr ""
 msgid "Select %{title}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:851
+#: lib/mydia_web/live/media_live/index.html.heex:881
 #, elixir-autogen, elixir-format
 msgid "Select All"
 msgstr ""
@@ -8842,13 +8842,13 @@ msgstr ""
 msgid "Select a library..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:838
+#: lib/mydia_web/live/media_live/index.html.heex:868
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:77
 #, elixir-autogen, elixir-format
 msgid "Select all"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:871
+#: lib/mydia_web/live/media_live/index.html.heex:901
 #, elixir-autogen, elixir-format
 msgid "Select all %{count}"
 msgstr ""
@@ -9041,7 +9041,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:149
 #: lib/mydia_web/live/downloads_live/index.html.heex:493
 #: lib/mydia_web/live/downloads_live/index.html.heex:526
-#: lib/mydia_web/live/media_live/index.html.heex:442
+#: lib/mydia_web/live/media_live/index.html.heex:447
 #: lib/mydia_web/live/media_live/show/modals.ex:472
 #: lib/mydia_web/live/search_live/index.html.heex:257
 #: lib/mydia_web/live/search_live/index.html.heex:500
@@ -9049,13 +9049,13 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:283
+#: lib/mydia_web/live/media_live/index.html.heex:288
 #: lib/mydia_web/live/search_live/index.html.heex:169
 #, elixir-autogen, elixir-format
 msgid "Size (Largest)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:286
+#: lib/mydia_web/live/media_live/index.html.heex:291
 #, elixir-autogen, elixir-format
 msgid "Size (Smallest)"
 msgstr ""
@@ -9075,7 +9075,7 @@ msgstr ""
 msgid "Size on Disk"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:792
+#: lib/mydia_web/live/media_live/index.html.heex:822
 #, elixir-autogen, elixir-format
 msgid "Size on disk"
 msgstr ""
@@ -9159,7 +9159,7 @@ msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:625
 #: lib/mydia_web/live/collection_live/components.ex:209
-#: lib/mydia_web/live/media_live/index.html.heex:255
+#: lib/mydia_web/live/media_live/index.html.heex:260
 #, elixir-autogen, elixir-format
 msgid "Sort by"
 msgstr ""
@@ -9225,7 +9225,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_plugins_live/logs_modal_components.ex:119
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:117
 #: lib/mydia_web/live/downloads_live/sorting.ex:28
-#: lib/mydia_web/live/media_live/index.html.heex:440
+#: lib/mydia_web/live/media_live/index.html.heex:445
 #: lib/mydia_web/live/media_live/show/modals.ex:709
 #, elixir-autogen, elixir-format
 msgid "Status"
@@ -9443,7 +9443,7 @@ msgstr ""
 msgid "TV Search"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:400
+#: lib/mydia_web/live/media_live/index.html.heex:405
 #: lib/mydia_web/live/search_live/index.ex:30
 #: lib/mydia_web/live/search_live/index.ex:1017
 #: lib/mydia_web/live/search_live/index.ex:1360
@@ -9616,7 +9616,7 @@ msgstr ""
 msgid "That result is no longer available. Search again."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:152
+#: lib/mydia_web/live/media_live/index.ex:155
 #, elixir-autogen, elixir-format
 msgid "That section is no longer available."
 msgstr ""
@@ -9832,7 +9832,7 @@ msgid_plural "This permanently deletes files for %{count} downloads from disk. T
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:36
+#: lib/mydia_web/live/media_live/index.html.heex:41
 #, elixir-autogen, elixir-format
 msgid "This section's rules can't be read, so it has nothing to show. Edit the collection to fix them."
 msgstr ""
@@ -9862,7 +9862,7 @@ msgstr ""
 msgid "This will only remove the download record. Downloaded files will remain on disk."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1069
+#: lib/mydia_web/live/media_live/index.html.heex:1099
 #, elixir-autogen, elixir-format
 msgid "This will queue searches for %{count} selected item. Searches run two at a time, so a batch this size can take hours of indexer requests to work through."
 msgid_plural "This will queue searches for %{count} selected items. Searches run two at a time, so a batch this size can take hours of indexer requests to work through."
@@ -9903,7 +9903,7 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/components.ex:125
 #: lib/mydia_web/live/collection_live/components.ex:213
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:144
-#: lib/mydia_web/live/media_live/index.html.heex:438
+#: lib/mydia_web/live/media_live/index.html.heex:443
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:56
 #: lib/mydia_web/live/media_live/show/modals.ex:703
 #, elixir-autogen, elixir-format
@@ -9915,12 +9915,12 @@ msgstr ""
 msgid "Title %{percent}%"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:259
+#: lib/mydia_web/live/media_live/index.html.heex:264
 #, elixir-autogen, elixir-format
 msgid "Title (A-Z)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:262
+#: lib/mydia_web/live/media_live/index.html.heex:267
 #, elixir-autogen, elixir-format
 msgid "Title (Z-A)"
 msgstr ""
@@ -10091,7 +10091,7 @@ msgstr ""
 msgid "Try adjusting your filters or search terms"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:422
+#: lib/mydia_web/live/media_live/index.html.heex:427
 #, elixir-autogen, elixir-format
 msgid "Try adjusting your search or filters"
 msgstr ""
@@ -10442,18 +10442,18 @@ msgstr ""
 #: lib/mydia_web/components/library_components.ex:93
 #: lib/mydia_web/live/collection_live/components.ex:122
 #: lib/mydia_web/live/collection_live/components.ex:214
-#: lib/mydia_web/live/media_live/index.html.heex:439
+#: lib/mydia_web/live/media_live/index.html.heex:444
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:63
 #, elixir-autogen, elixir-format
 msgid "Year"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:265
+#: lib/mydia_web/live/media_live/index.html.heex:270
 #, elixir-autogen, elixir-format
 msgid "Year (Newest)"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:268
+#: lib/mydia_web/live/media_live/index.html.heex:273
 #, elixir-autogen, elixir-format
 msgid "Year (Oldest)"
 msgstr ""
@@ -10495,7 +10495,7 @@ msgstr ""
 msgid "You don't have permission to pin this collection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:327
+#: lib/mydia_web/live/media_live/index.html.heex:332
 #, elixir-autogen, elixir-format
 msgid "You have a fair bit of anime mixed in here. Want it in its own sidebar section?"
 msgstr ""
@@ -11030,8 +11030,8 @@ msgstr ""
 msgid "value1, value2, ..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:1025
-#: lib/mydia_web/live/media_live/index.html.heex:1038
+#: lib/mydia_web/live/media_live/index.html.heex:1055
+#: lib/mydia_web/live/media_live/index.html.heex:1068
 #, elixir-autogen, elixir-format
 msgid "— No change —"
 msgstr ""
@@ -11229,7 +11229,7 @@ msgstr ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:226
 #: lib/mydia_web/live/downloads_live/list_components.ex:263
-#: lib/mydia_web/live/media_live/index.html.heex:320
+#: lib/mydia_web/live/media_live/index.html.heex:325
 #, elixir-autogen, elixir-format
 msgctxt "filters"
 msgid "Clear filters"
@@ -11318,7 +11318,7 @@ msgctxt "job queue"
 msgid "Queue:"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:129
+#: lib/mydia_web/live/media_live/index.html.heex:134
 #, elixir-autogen, elixir-format
 msgctxt "library"
 msgid "Import Files"
@@ -11330,25 +11330,25 @@ msgctxt "library"
 msgid "Library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:220
+#: lib/mydia_web/live/media_live/index.html.heex:225
 #, elixir-autogen, elixir-format
 msgctxt "library progress"
 msgid "Downloaded"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:214
+#: lib/mydia_web/live/media_live/index.html.heex:219
 #, elixir-autogen, elixir-format
 msgctxt "library progress"
 msgid "Missing"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:217
+#: lib/mydia_web/live/media_live/index.html.heex:222
 #, elixir-autogen, elixir-format
 msgctxt "library progress"
 msgid "Partial"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:223
+#: lib/mydia_web/live/media_live/index.html.heex:228
 #, elixir-autogen, elixir-format
 msgctxt "library progress"
 msgid "Upcoming"
@@ -11380,9 +11380,9 @@ msgctxt "monitoring"
 msgid "Custom"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:508
-#: lib/mydia_web/live/media_live/index.html.heex:695
-#: lib/mydia_web/live/media_live/index.html.heex:892
+#: lib/mydia_web/live/media_live/index.html.heex:538
+#: lib/mydia_web/live/media_live/index.html.heex:725
+#: lib/mydia_web/live/media_live/index.html.heex:922
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Monitor"
@@ -11392,8 +11392,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:122
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:28
 #: lib/mydia_web/live/collection_live/components.ex:128
-#: lib/mydia_web/live/media_live/index.html.heex:235
-#: lib/mydia_web/live/media_live/index.html.heex:1039
+#: lib/mydia_web/live/media_live/index.html.heex:240
+#: lib/mydia_web/live/media_live/index.html.heex:1069
 #: lib/mydia_web/live/media_live/show/components.ex:1266
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
@@ -11407,16 +11407,16 @@ msgctxt "monitoring"
 msgid "Not Monitored"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:507
-#: lib/mydia_web/live/media_live/index.html.heex:694
-#: lib/mydia_web/live/media_live/index.html.heex:904
+#: lib/mydia_web/live/media_live/index.html.heex:537
+#: lib/mydia_web/live/media_live/index.html.heex:724
+#: lib/mydia_web/live/media_live/index.html.heex:934
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Unmonitor"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:238
-#: lib/mydia_web/live/media_live/index.html.heex:1040
+#: lib/mydia_web/live/media_live/index.html.heex:243
+#: lib/mydia_web/live/media_live/index.html.heex:1070
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Unmonitored"
@@ -11785,7 +11785,7 @@ msgid_plural "%{count} selected"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.html.heex:855
+#: lib/mydia_web/live/media_live/index.html.heex:885
 #, elixir-autogen, elixir-format
 msgctxt "selection count"
 msgid "selected"
@@ -20823,4 +20823,14 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:109
 #, elixir-autogen, elixir-format
 msgid "Grab anyway"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/index/alpha_jump_components.ex:21
+#, elixir-autogen, elixir-format
+msgid "Jump to letter"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/index/alpha_jump_components.ex:59
+#, elixir-autogen, elixir-format
+msgid "Titles starting with a number or symbol"
 msgstr ""

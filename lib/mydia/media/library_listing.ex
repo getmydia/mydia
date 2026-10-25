@@ -56,6 +56,23 @@ defmodule Mydia.Media.LibraryListing do
   @never_aired ~D[1970-01-01]
   @no_upcoming_airing ~D[2999-12-31]
 
+  @letters ["#" | Enum.map(?a..?z, &<<&1>>)]
+  @title_sorts ~w(title_asc title_desc)
+
+  # Latin letters NFD leaves whole, so stripping marks cannot reach their base
+  # letter. Without these, "Ørsted" would file under # rather than O.
+  @latin_folds %{
+    "ø" => "o",
+    "æ" => "ae",
+    "œ" => "oe",
+    "ß" => "ss",
+    "ł" => "l",
+    "đ" => "d",
+    "þ" => "th",
+    "ð" => "d"
+  }
+  @latin_fold_keys Map.keys(@latin_folds)
+
   # Every key sort/2 matches. The LiveView validates URL input against it.
   @sort_keys ~w(title_asc title_desc year_asc year_desc added_asc added_desc
                 rating_asc rating_desc size_asc size_desc last_aired_asc
@@ -65,6 +82,17 @@ defmodule Mydia.Media.LibraryListing do
   @doc "The sort keys `:sort_by` accepts. Anything else sorts by title, A to Z."
   @spec sort_keys() :: [String.t()]
   def sort_keys, do: @sort_keys
+
+  @doc "The jump bar's letters in A-Z order: `#` for anything not starting with a-z."
+  @spec letters() :: [String.t()]
+  def letters, do: @letters
+
+  @doc """
+  The letter a row files under in the title sorts: the first character of its
+  accent-folded, lowercased title, or `#` when that is not a-z.
+  """
+  @spec initial(LibraryRow.t()) :: String.t()
+  def initial(%LibraryRow{item: item}), do: item.title |> fold_title() |> initial_of()
 
   @doc """
   The whole listing, evaluated once.
@@ -79,7 +107,11 @@ defmodule Mydia.Media.LibraryListing do
   match in final order; `rows` holds the first `:limit` of them with
   `user_id`'s playback progress. Build later rows with `rows/3` from a slice
   of `ids`. `limit: 0` skips the progress query when only the figures are
-  needed.
+  needed. `:letter` (only honoured when `letter_offsets` is filled) puts
+  `letter_start` at that letter's first row, or at the next letter present in
+  sort order, or at the top when none follows. `rows` start `:above` rows
+  (default 0) before `letter_start`, as far as the top allows, and run
+  `:limit` rows past it.
   """
   @spec snapshot(Scope.t(), keyword()) :: Snapshot.t()
   def snapshot(%Scope{} = scope, opts) do
@@ -102,9 +134,20 @@ defmodule Mydia.Media.LibraryListing do
     description_rows = sort(description_rows, sort_by)
     rows = title_rows ++ description_rows
 
+    letter_offsets = letter_offsets(rows, sort_by, query)
+    letter_start = window_start(letter_offsets, Keyword.get(opts, :letter), sort_by)
+    start = max(letter_start - Keyword.get(opts, :above, 0), 0)
+
     %Snapshot{
       ids: Enum.map(rows, & &1.id),
-      rows: rows |> Enum.take(limit) |> put_progress(user_id),
+      rows:
+        rows
+        |> Enum.drop(start)
+        |> Enum.take(letter_start - start + limit)
+        |> put_progress(user_id),
+      start: start,
+      letter_start: letter_start,
+      letter_offsets: letter_offsets,
       visible_ids: MapSet.new(rows, & &1.id),
       total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum(),
       description_match_start_id: description_rows |> List.first() |> row_id(),
@@ -426,7 +469,57 @@ defmodule Mydia.Media.LibraryListing do
   # "title_asc", and anything unrecognised.
   defp sort(rows, _sort_by), do: Enum.sort_by(rows, &title_key/1, :asc)
 
-  defp title_key(%LibraryRow{item: item}), do: String.downcase(item.title || "")
+  # The # group ranks first so it is one block: digits and most punctuation
+  # already sort before "a", but "[", "~" and non-Latin scripts would land
+  # after "z" without it.
+  defp title_key(%LibraryRow{item: item}) do
+    folded = fold_title(item.title)
+    {if(initial_of(folded) == "#", do: 0, else: 1), folded}
+  end
+
+  defp fold_title(title) do
+    title = title || ""
+
+    # Invalid UTF-8 has no NFD form, and the Unicode regex would raise on it.
+    # Its raw bytes still sort, and still file under some letter or #.
+    case :unicode.characters_to_nfd_binary(title) do
+      nfd when is_binary(nfd) ->
+        nfd
+        |> String.replace(~r/\p{Mn}/u, "")
+        |> String.downcase()
+        |> String.replace(@latin_fold_keys, &Map.fetch!(@latin_folds, &1))
+
+      _error ->
+        String.downcase(title)
+    end
+  end
+
+  defp initial_of(<<c, _rest::binary>>) when c in ?a..?z, do: <<c>>
+  defp initial_of(_folded), do: "#"
+
+  defp letter_offsets(rows, sort_by, query) when sort_by in @title_sorts do
+    if String.trim(query) == "" do
+      rows
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, fn {row, index}, acc -> Map.put_new(acc, initial(row), index) end)
+    else
+      %{}
+    end
+  end
+
+  defp letter_offsets(_rows, _sort_by, _query), do: %{}
+
+  # A letter filtered out since its URL was made starts at the next letter
+  # present in the listing's own order, so the jump still lands nearby.
+  defp window_start(offsets, letter, sort_by) when letter in @letters and offsets != %{} do
+    order = if sort_by == "title_desc", do: Enum.reverse(@letters), else: @letters
+
+    order
+    |> Enum.drop_while(&(&1 != letter))
+    |> Enum.find_value(0, &Map.get(offsets, &1))
+  end
+
+  defp window_start(_offsets, _letter, _sort_by), do: 0
 
   defp rating(%LibraryRow{item: %MediaItem{metadata: %MediaMetadata{vote_average: rating}}})
        when is_number(rating),
