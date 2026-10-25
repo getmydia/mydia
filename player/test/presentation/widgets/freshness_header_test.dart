@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library alongside other
@@ -61,6 +62,8 @@ Future<void> pumpHeader(
         ...extraOverrides,
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: FreshnessHeader(queryKeys: keys ?? [QueryKeys.home]),
         ),
@@ -284,7 +287,10 @@ void main() {
         sourceStatusProvider(idB)
             .overrideWithValue(SourceConnectionStatus.remote),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router),
     ));
     await tester.pumpAndSettle();
 

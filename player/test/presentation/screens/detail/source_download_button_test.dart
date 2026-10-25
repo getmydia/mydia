@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
@@ -27,6 +28,8 @@ Future<void> _pump(WidgetTester tester, FakeMediaSource source) async {
       isItemDownloadedProvider(_movie).overrideWith((ref) => false),
     ],
     child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: MovieDetailScreen.target(target: SourceTarget(_movie)),
     ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -98,7 +99,10 @@ Future<List<String>> pumpHome(
       ...overrides,
     ],
     child: MaterialApp.router(
-        routerConfig: homeRouter, builder: toastLayerBuilder),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: homeRouter,
+        builder: toastLayerBuilder),
   ));
   if (settle) {
     await t.pumpAndSettle();

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -70,7 +71,10 @@ Future<void> _pumpShell(
       mediaSourceProvider(_idA).overrideWithValue(a),
       mediaSourceProvider(_idB).overrideWithValue(b),
     ],
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router),
   ));
   await tester.pump();
 }
@@ -118,8 +122,11 @@ void main() {
         fetchLogProvider.overrideWithValue(fetchLog),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],
-      child:
-          MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
+      child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+          builder: toastLayerBuilder),
     ));
     await tester.pumpAndSettle();
 

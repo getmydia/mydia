@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart' hide Page;
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not part of the main entrypoint's exports.
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -63,9 +64,16 @@ Future<void> pumpDetailScreen(
         ...overrides,
       ],
       child: routes.isEmpty
-          ? MaterialApp(theme: theme, home: screen)
+          ? MaterialApp(
+              theme: theme,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: screen,
+            )
           : MaterialApp.router(
               theme: theme,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               routerConfig: GoRouter(routes: [
                 GoRoute(path: '/', builder: (_, __) => screen),
                 ...routes,
