@@ -3,12 +3,11 @@ defmodule Mydia.Quality.Sources do
   The source-detection vocabulary for the indexer search/grab path.
 
   `QualityParser` uses this module to classify release names during search and
-  grab. It is not the only source parser in the codebase: `Mydia.Library.FileParser`'s
-  `@source_pattern`, the V3 parser (`priv/release_parser/sources.exs`), and
-  `Mydia.Quality.Attrs`'s `@canonical_sources` each carry their own,
-  independently-maintained vocabularies for their respective pipelines.
-  Unifying those is separate follow-up work, not something this module
-  attempts.
+  grab. `Mydia.Library.ReleaseParser` (`priv/release_parser/sources.exs`) keeps
+  its own token table, but both now emit the same canonical names: `BDRip` and
+  `BRRip` fold into `BluRay` on either side, and `Mydia.Quality.Attrs` and
+  `Mydia.Settings.QualityProfile` no longer list them. Retiring this module in
+  favour of the release parser is follow-up work.
 
   ## Why the short tokens are delimiter-anchored
 

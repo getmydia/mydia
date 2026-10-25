@@ -426,6 +426,20 @@ defmodule Mydia.Quality.AttrsTest do
     end
   end
 
+  # Files imported before the parser folded BDRip into BluRay still carry
+  # "BDRip" or "BRRip" in their stored metadata.
+  describe "stored BDRip metadata" do
+    test "scores as BluRay from a parsed quality" do
+      attrs = Attrs.from_quality(%Quality{source: "BDRip"}, nil, :movie)
+      assert attrs.source == "BluRay"
+    end
+
+    test "scores as BluRay from a media file" do
+      file = %MediaFile{metadata: %FileMetadata{source: "BRRip"}}
+      assert Attrs.from_media_file(file, :movie).source == "BluRay"
+    end
+  end
+
   describe "canonical_video_codec/1" do
     test "folds release-naming synonyms" do
       assert Attrs.canonical_video_codec("hevc") == "h265"

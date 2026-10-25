@@ -57,14 +57,10 @@ defmodule Mydia.Settings.QualityProfile do
   ]
   @valid_audio_channels ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"]
   @valid_resolutions ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"]
-  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the
-  # indexer search/grab path, but the V3 release parser
-  # (priv/release_parser/sources.exs) still emits canonical "BDRip" for
-  # on-disk files, and that value flows through Mydia.Quality.Attrs into
-  # scoring. So "BDRip" remains a meaningful, selectable preference here.
+  # No "BDRip" or "BRRip": both parsers fold them into "BluRay", so a
+  # preference naming them could never match a release or a file.
   @valid_sources [
     "BluRay",
-    "BDRip",
     "REMUX",
     "WEB-DL",
     "WEBRip",
@@ -77,6 +73,9 @@ defmodule Mydia.Settings.QualityProfile do
   # since the whole point of the exclusion list is naming the cam-tier types
   # that are never valid *preferences*.
   @valid_excludable_sources @valid_sources ++ Sources.cam_tier()
+  # Source names older profiles may still carry (YAML/env config, imports,
+  # rows from before the fold), mapped to what they mean now.
+  @legacy_source_aliases %{"BDRip" => "BluRay", "BRRip" => "BluRay"}
   @valid_hdr_formats Mydia.Library.Hdr.profile_format_strings()
 
   schema "quality_profiles" do
@@ -121,6 +120,7 @@ defmodule Mydia.Settings.QualityProfile do
     ])
     |> validate_required([:name])
     |> unique_constraint(:name)
+    |> fold_legacy_sources()
     |> validate_quality_standards()
     |> validate_preferred_resolutions_present()
     |> validate_number(:upgrade_until_score,
@@ -332,6 +332,35 @@ defmodule Mydia.Settings.QualityProfile do
   """
   @spec valid_resolutions() :: [String.t()]
   def valid_resolutions, do: @valid_resolutions
+
+  @doc """
+  The source names a profile may list as preferences, in display order.
+  """
+  @spec valid_sources() :: [String.t()]
+  def valid_sources, do: @valid_sources
+
+  # Rewrites legacy source names rather than rejecting them, so a profile
+  # that still lists "BDRip" keeps loading. Duplicates the rewrite creates
+  # collapse onto the first occurrence, which keeps the priority order.
+  defp fold_legacy_sources(changeset) do
+    update_change(changeset, :quality_standards, fn
+      standards when is_map(standards) ->
+        Enum.reduce([:preferred_sources, :excluded_sources], standards, fn key, acc ->
+          case Map.get(acc, key) do
+            sources when is_list(sources) ->
+              Map.put(acc, key, sources |> Enum.map(&fold_legacy_source/1) |> Enum.uniq())
+
+            _ ->
+              acc
+          end
+        end)
+
+      other ->
+        other
+    end)
+  end
+
+  defp fold_legacy_source(source), do: Map.get(@legacy_source_aliases, source, source)
 
   # A profile must specify at least one preferred resolution. With the
   # standalone `qualities` list gone, the allow-list lives entirely in
