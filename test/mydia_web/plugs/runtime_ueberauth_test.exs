@@ -26,5 +26,19 @@ defmodule MydiaWeb.Plugs.RuntimeUeberauthTest do
       assert redirected_to(conn) == ~p"/auth/login"
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "identity provider"
     end
+
+    # The callback never runs after a request-phase exit, so the plug is the
+    # last place that can drop a pending SSO link.
+    test "drops a pending link intent and returns to the profile", %{conn: conn} do
+      conn =
+        conn
+        |> init_test_session(%{
+          oidc_link_intent: %{"user_id" => "someone", "issued_at" => System.system_time(:second)}
+        })
+        |> get(~p"/auth/timeout_provider")
+
+      assert redirected_to(conn) == ~p"/profile"
+      refute get_session(conn, :oidc_link_intent)
+    end
   end
 end

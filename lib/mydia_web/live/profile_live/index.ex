@@ -36,7 +36,8 @@ defmodule MydiaWeb.ProfileLive.Index do
       |> assign(:has_password, Accounts.password_user?(user))
       |> assign(:oidc_configured, Accounts.oidc_configured?())
       |> assign(:oidc_linked, Accounts.oidc_user?(user))
-      |> assign(:can_unlink_oidc, Accounts.can_unlink_oidc?(user))
+      |> assign(:oidc_unlink_blocker, Accounts.oidc_unlink_blocker(user))
+      |> assign(:auth_method, Accounts.auth_method(user))
       |> assign(:local_auth_enabled, Mydia.Config.get().auth.local_enabled)
       |> assign(:page_url, nil)
       |> assign(:profile_form, to_form(Accounts.change_profile(user)))
@@ -392,13 +393,9 @@ defmodule MydiaWeb.ProfileLive.Index do
     end
   end
 
-  defp auth_type(user) do
-    case {Accounts.password_user?(user), Accounts.oidc_user?(user)} do
-      {true, true} -> gettext("Local + SSO")
-      {false, true} -> gettext("OpenID Connect (SSO)")
-      _local -> gettext("Local")
-    end
-  end
+  defp auth_type(:local_and_oidc), do: gettext("Local + SSO")
+  defp auth_type(:oidc), do: gettext("OpenID Connect (SSO)")
+  defp auth_type(:local), do: gettext("Local")
 
   defp format_datetime(nil, _display), do: gettext("Never")
 

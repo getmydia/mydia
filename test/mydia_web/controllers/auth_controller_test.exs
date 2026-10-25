@@ -53,6 +53,7 @@ defmodule MydiaWeb.AuthControllerLinkTest do
   use MydiaWeb.ConnCase, async: false
 
   alias Mydia.Accounts
+  alias Mydia.Auth.Guardian
 
   setup do
     original = Application.get_env(:ueberauth, Ueberauth)
@@ -65,13 +66,41 @@ defmodule MydiaWeb.AuthControllerLinkTest do
       providers: [test_only: {Ueberauth.Strategy.Oidcc, []}]
     )
 
+    runtime = Application.get_env(:mydia, :runtime_config)
+
     on_exit(fn ->
       if original,
         do: Application.put_env(:ueberauth, Ueberauth, original),
         else: Application.delete_env(:ueberauth, Ueberauth)
+
+      if runtime,
+        do: Application.put_env(:mydia, :runtime_config, runtime),
+        else: Application.delete_env(:mydia, :runtime_config)
     end)
 
     :ok
+  end
+
+  defp put_auth(fields) do
+    config = Mydia.Config.get()
+    Application.put_env(:mydia, :runtime_config, %{config | auth: struct(config.auth, fields)})
+  end
+
+  # Shaped like UeberauthOidcc's own extra/1: the ID token's claims always,
+  # the userinfo response only when the strategy fetched one.
+  defp id_token_auth(sub, email, verified) do
+    %Ueberauth.Auth{
+      uid: sub,
+      provider: :oidc,
+      info: %Ueberauth.Auth.Info{email: email, name: "Fictional Person"},
+      extra: %Ueberauth.Auth.Extra{
+        raw_info: %UeberauthOidcc.RawInfo{
+          opts: %{},
+          claims: %{"sub" => sub, "email" => email, "email_verified" => verified},
+          userinfo: nil
+        }
+      }
+    }
   end
 
   defp auth(sub, email, verified \\ true) do
@@ -278,6 +307,73 @@ defmodule MydiaWeb.AuthControllerLinkTest do
     end
   end
 
+  describe "callback auto-linking by email" do
+    setup do
+      put_auth(oidc_link_by_email: true)
+      local = create_test_user(%{email: "rowan@example.test", role: "readonly"})
+      %{local: local}
+    end
+
+    test "a verified email signs in as the local account and links it", %{
+      conn: conn,
+      local: local
+    } do
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> callback(id_token_auth("sub-auto", "Rowan@example.test", true))
+
+      assert redirected_to(conn) == "/"
+      assert Accounts.get_user_by_oidc("sub-auto", "oidc").id == local.id
+
+      {:ok, claims} = Guardian.decode_and_verify(get_session(conn, :guardian_default_token))
+      assert claims["sub"] == local.id
+      assert Accounts.get_user!(local.id).role == "readonly"
+    end
+
+    test "the string \"true\" is not a verified email", %{conn: conn, local: local} do
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> callback(id_token_auth("sub-auto", "rowan@example.test", "true"))
+
+      assert redirected_to(conn) == "/auth/login"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "link SSO from your profile"
+      assert Accounts.get_user_by_oidc("sub-auto", "oidc") == nil
+      assert Accounts.get_user!(local.id).oidc_sub == nil
+      refute get_session(conn, :guardian_default_token)
+    end
+  end
+
+  # Neither ueberauth_auth nor ueberauth_failure: the callback route was hit
+  # without the strategy having run, so there is nothing to sign in with.
+  describe "callback with no Ueberauth result" do
+    test "drops a link intent and returns to the profile", %{conn: conn} do
+      user = create_test_user()
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> put_session(:oidc_link_intent, %{
+          "user_id" => user.id,
+          "issued_at" => System.system_time(:second)
+        })
+        |> get(~p"/auth/oidc/callback")
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error)
+      refute get_session(conn, :oidc_link_intent)
+      assert Accounts.get_user!(user.id).oidc_sub == nil
+    end
+
+    test "without an intent returns to the login page", %{conn: conn} do
+      conn = conn |> init_test_session(%{}) |> get(~p"/auth/oidc/callback")
+
+      assert redirected_to(conn) == "/auth/login"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error)
+    end
+  end
+
   describe "DELETE /auth/oidc/link" do
     test "requires authentication", %{conn: conn} do
       conn = delete(conn, ~p"/auth/oidc/link")
@@ -298,7 +394,17 @@ defmodule MydiaWeb.AuthControllerLinkTest do
       conn = conn |> log_in_user(user) |> delete(~p"/auth/oidc/link")
 
       assert redirected_to(conn) == "/profile"
-      assert Phoenix.Flash.get(conn.assigns.flash, :error)
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "managed by your SSO provider"
+      assert Accounts.get_user!(user.id).oidc_sub
+    end
+
+    test "refuses while local sign-in is disabled", %{conn: conn} do
+      {:ok, user} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+      put_auth(local_enabled: false)
+      conn = conn |> log_in_user(user) |> delete(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Local sign-in is disabled"
       assert Accounts.get_user!(user.id).oidc_sub
     end
   end

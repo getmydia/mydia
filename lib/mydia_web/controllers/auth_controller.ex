@@ -88,6 +88,17 @@ defmodule MydiaWeb.AuthController do
     end
   end
 
+  # The strategy did not run for this request (no provider claims the path,
+  # or OIDC was reconfigured mid-flow), so there is nothing to sign in with.
+  def callback(conn, _params) do
+    Logger.warning("OIDC callback reached without an Ueberauth result")
+    {intent, conn} = pop_link_intent(conn)
+
+    conn
+    |> put_flash(:error, gettext("Authentication failed. Please try again."))
+    |> redirect(to: if(intent, do: ~p"/profile", else: "/auth/login"))
+  end
+
   @doc """
   Starts linking SSO to the signed-in account: remembers who asked, then hands
   off to the normal OIDC request. The callback finishes the link.
@@ -129,13 +140,19 @@ defmodule MydiaWeb.AuthController do
         |> put_flash(:info, gettext("SSO has been unlinked from your account."))
         |> redirect(to: ~p"/profile")
 
-      {:error, :would_lock_out} ->
+      {:error, :local_auth_disabled} ->
         conn
         |> put_flash(
           :error,
-          gettext(
-            "Set a password or add a passkey before unlinking SSO, or you could not sign in."
-          )
+          gettext("Local sign-in is disabled on this server, so SSO cannot be unlinked.")
+        )
+        |> redirect(to: ~p"/profile")
+
+      {:error, :no_local_credential} ->
+        conn
+        |> put_flash(
+          :error,
+          gettext("Your sign-in is managed by your SSO provider, so it cannot be unlinked.")
         )
         |> redirect(to: ~p"/profile")
 
@@ -176,20 +193,22 @@ defmodule MydiaWeb.AuthController do
           )
         )
 
-      # Lost races in the auto-link branch: another request linked this
-      # identity, or the matched account, between the lookup and the update.
+      # Races in the email auto-link branch, which matched an unlinked local
+      # account and then lost it before the write. :identity_taken: another
+      # request put this identity on a different account first.
       {:error, :identity_taken} ->
         sign_in_failed(
           conn,
           gettext("This SSO account is already linked to another Mydia account.")
         )
 
+      # :already_linked: another sign-in linked the matched account between
+      # the lookup and the conditional write. A retry either finds this
+      # identity on it and signs in, or explains the email collision.
       {:error, :already_linked} ->
         sign_in_failed(
           conn,
-          gettext(
-            "An account with this email is already linked to a different SSO account. Sign in with your password instead."
-          )
+          gettext("This account was linked to SSO by another sign-in. Please try again.")
         )
 
       {:error, reason} ->

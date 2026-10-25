@@ -46,6 +46,19 @@ defmodule Mydia.Accounts.OidcLinkTest do
       assert {:error, :already_linked} = Accounts.link_oidc_identity(user, "sub-2", @issuer)
     end
 
+    # Two sign-ins can auto-link the same account at once: each loaded it
+    # with no identity. The write must check the database, not the struct.
+    test "refuses a stale struct whose account was linked meanwhile" do
+      user = user_fixture()
+      {:ok, _} = Accounts.link_oidc_identity(user, "sub-1", @issuer)
+
+      assert user.oidc_sub == nil
+      assert {:error, :already_linked} = Accounts.link_oidc_identity(user, "sub-2", @issuer)
+
+      assert Repo.get!(User, user.id).oidc_sub == "sub-1"
+      assert Accounts.get_user_by_oidc("sub-2", @issuer) == nil
+    end
+
     test "refuses an identity that belongs to another account" do
       other = user_fixture()
       {:ok, _} = Accounts.link_oidc_identity(other, "sub-1", @issuer)
@@ -65,17 +78,52 @@ defmodule Mydia.Accounts.OidcLinkTest do
     test "refuses an SSO-only account" do
       user = oidc_user_fixture()
       refute Accounts.can_unlink_oidc?(user)
-      assert {:error, :would_lock_out} = Accounts.unlink_oidc_identity(user)
+      assert Accounts.oidc_unlink_blocker(user) == :no_local_credential
+      assert {:error, :no_local_credential} = Accounts.unlink_oidc_identity(user)
     end
 
     test "refuses when local auth is disabled" do
       {:ok, user} = Accounts.link_oidc_identity(user_fixture(), "sub-1", @issuer)
       put_auth(local_enabled: false)
-      assert {:error, :would_lock_out} = Accounts.unlink_oidc_identity(user)
+      assert Accounts.oidc_unlink_blocker(user) == :local_auth_disabled
+      assert {:error, :local_auth_disabled} = Accounts.unlink_oidc_identity(user)
     end
 
     test "refuses an unlinked account" do
       assert {:error, :not_linked} = Accounts.unlink_oidc_identity(user_fixture())
+    end
+  end
+
+  describe "auth_method/1" do
+    test "names local, SSO-only and linked accounts" do
+      local = user_fixture()
+      {:ok, linked} = Accounts.link_oidc_identity(user_fixture(), "sub-1", @issuer)
+
+      assert Accounts.auth_method(local) == :local
+      assert Accounts.auth_method(oidc_user_fixture()) == :oidc
+      assert Accounts.auth_method(linked) == :local_and_oidc
+      assert Accounts.auth_method_label(linked) == "Local + SSO"
+    end
+  end
+
+  describe "upsert_user_from_oidc/3 claim refresh" do
+    # The IdP now reports an email another local account already uses. The
+    # identity is still valid, so the sign-in goes through on the old email.
+    test "keeps the local email when the IdP email belongs to another account" do
+      user = oidc_user_fixture(%{email: "sso-own@example.test"})
+      user_fixture(%{email: "taken@example.test"})
+
+      assert {:ok, signed_in} =
+               Accounts.upsert_user_from_oidc(
+                 user.oidc_sub,
+                 user.oidc_issuer,
+                 sso_attrs("taken@example.test", %{display_name: "Renamed Person"})
+               )
+
+      assert signed_in.id == user.id
+      assert signed_in.email == "sso-own@example.test"
+      assert signed_in.display_name == "Renamed Person"
+      assert Repo.get!(User, user.id).email == "sso-own@example.test"
     end
   end
 

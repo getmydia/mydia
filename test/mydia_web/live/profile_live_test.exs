@@ -464,6 +464,43 @@ defmodule MydiaWeb.ProfileLiveSsoTest do
 
       refute has_element?(view, "#unlink-sso-btn")
       refute has_element?(view, "#change-password-btn")
+      assert has_element?(view, "#sso-unlink-blocked[data-reason='no_local_credential']")
+      assert has_element?(view, "#auth-method[data-method='oidc']")
+    end
+
+    test "a linked account cannot unlink while local sign-in is disabled", %{conn: conn} do
+      runtime = Application.get_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        if runtime,
+          do: Application.put_env(:mydia, :runtime_config, runtime),
+          else: Application.delete_env(:mydia, :runtime_config)
+      end)
+
+      {:ok, user} =
+        Mydia.Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+
+      config = Mydia.Config.get()
+
+      Application.put_env(:mydia, :runtime_config, %{
+        config
+        | auth: %{config.auth | local_enabled: false}
+      })
+
+      {:ok, view, _html} = conn |> log_in_user(user) |> live(~p"/profile")
+
+      refute has_element?(view, "#unlink-sso-btn")
+      assert has_element?(view, "#sso-unlink-blocked[data-reason='local_auth_disabled']")
+    end
+
+    test "labels a password account with SSO linked as Local + SSO", %{conn: conn} do
+      {:ok, user} =
+        Mydia.Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+
+      {:ok, view, _html} = conn |> log_in_user(user) |> live(~p"/profile")
+
+      assert has_element?(view, "#auth-method[data-method='local_and_oidc']", "Local + SSO")
+      refute has_element?(view, "#sso-unlink-blocked")
     end
   end
 end
