@@ -142,6 +142,42 @@ defmodule MydiaWeb.PlayerControllerTest do
       assert html_response =~ "\"token\":\""
     end
 
+    test "injects the logged-in user's interface language", %{conn: conn} do
+      index_path = write_player_index()
+      on_exit(fn -> File.rm(index_path) end)
+
+      {conn, user} = register_and_log_in_user(conn)
+
+      {:ok, _} =
+        user
+        |> Mydia.Accounts.get_user_preference!()
+        |> Mydia.Accounts.update_preference(%{"interface_language" => "es"})
+
+      html =
+        conn
+        # The user's preference wins over the browser's language.
+        |> put_req_header("accept-language", "en-US,en;q=0.9")
+        |> get(~p"/player")
+        |> response(200)
+
+      assert html =~ "\"locale\":\"es\""
+    end
+
+    test "without a preference, injects the browser's language", %{conn: conn} do
+      index_path = write_player_index()
+      on_exit(fn -> File.rm(index_path) end)
+
+      {conn, _user} = register_and_log_in_user(conn)
+
+      html =
+        conn
+        |> put_req_header("accept-language", "es-ES,es;q=0.9")
+        |> get(~p"/player")
+        |> response(200)
+
+      assert html =~ "\"locale\":\"es\""
+    end
+
     test "when authenticated, handles player not built gracefully", %{conn: conn} do
       # Ensure player index doesn't exist
       player_index = Path.join([:code.priv_dir(:mydia), "static", "player", "index.html"])
@@ -161,6 +197,18 @@ defmodule MydiaWeb.PlayerControllerTest do
 
       assert response(conn, 404)
     end
+  end
+
+  defp write_player_index do
+    index_path = Path.join([:code.priv_dir(:mydia), "static", "player", "index.html"])
+    File.mkdir_p!(Path.dirname(index_path))
+
+    File.write!(
+      index_path,
+      "<html><body><script src=\"flutter_bootstrap.js\" async></script></body></html>"
+    )
+
+    index_path
   end
 
   describe "player bundle caching" do
