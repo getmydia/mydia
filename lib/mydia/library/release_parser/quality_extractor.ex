@@ -20,8 +20,8 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   The tokenizer splits on dots and dashes, so compound tokens like
   `DDP5.1`, `H.264`, `WEB-DL`, `DTS-HD.MA`, `2160p-NVENC` arrive as
   multiple tokens. This module rejoins them using the original token
-  stream (`resolver.all_tokens`) so V2-compatible raw values come back
-  out the other side.
+  stream (`resolver.all_tokens`), so each compound reaches the canonical
+  fold whole.
 
   ## Byte-safety
 
@@ -566,7 +566,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   defp token_key(%Token{byte_offset: offset, byte_length: length}), do: {offset, length}
 
-  # ---- Standardization (matches V2's standardize_quality/1 outputs exactly) ----
+  # ---- Standardization: canonical labels to display strings ----
 
   @doc """
   Projects a `%Quality{}` of canonical labels (what `extract/2` emits by
@@ -581,16 +581,13 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   """
   @spec standardize(Quality.t()) :: Quality.t()
   def standardize(%Quality{} = q) do
-    # Update syntax, so the release flags (`proper`, `repack`) carry over.
+    # Update syntax, so the release flags (`proper`, `repack`) and the HDR
+    # fields, already canonical out of extract_hdr/3, carry over.
     %Quality{
       q
       | resolution: standardize_resolution(q.resolution),
         source: standardize_source(q.source),
         codec: standardize_codec(q.codec),
-        # HDR is already canonical coming out of extract_hdr/1; no raw string
-        # form remains to standardize.
-        hdr_format: q.hdr_format,
-        dolby_vision: q.dolby_vision,
         audio: standardize_audio(q.audio)
     }
   end
@@ -623,7 +620,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       normalized == "web-rip" -> "WEBRip"
       normalized == "web" -> "WEB"
       normalized == "hdtv" -> "HDTV"
-      normalized in ["dvd", "dvdrip", "dvdscr"] -> "DVD"
+      normalized in ["dvd", "dvdrip"] -> "DVD"
       true -> value
     end
   end

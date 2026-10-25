@@ -474,8 +474,8 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   defp flush(runs, nil), do: runs
   defp flush(runs, pending), do: [pending | runs]
 
-  # `WEB-DL` is not itself a vocabulary alias; the compound split below
-  # turns it into one.
+  # A source, or one of the compound dashes (`H-264`, `DTS-HD`), which are
+  # not sources but still come off a resolution glued to them.
   defp source_word?(word) do
     MapSet.member?(@compound_dashes, String.upcase(word)) or has_label?(word, :source)
   end
