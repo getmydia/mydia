@@ -115,6 +115,61 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
     assert source("Fake Show - S01E01 - Pilot [WEB-DL-1080p]") == "WEB-DL"
   end
 
+  describe "Mydia's own renamer tag with a revision flag" do
+    alias Mydia.Library.FileNamer
+
+    defp renamer_quality(source, resolution, proper, repack) do
+      %{
+        source: source,
+        resolution: resolution,
+        codec: "x264",
+        audio: nil,
+        hdr_format: nil,
+        dolby_vision: false,
+        proper: proper,
+        repack: repack
+      }
+    end
+
+    test "a movie" do
+      for {source, resolution, proper, repack} <- [
+            {"BluRay", "1080p", true, false},
+            {"HDTV", "720p", false, true},
+            {"BluRay", "2160p", true, true},
+            {"WEB-DL", "1080p", false, true}
+          ] do
+        name =
+          FileNamer.generate_movie_filename(
+            %{title: "Fake Movie", year: 2020},
+            renamer_quality(source, resolution, proper, repack),
+            "Fake.Movie.2020.x264-GRP.mkv"
+          )
+
+        parsed = ReleaseParser.parse(name)
+        assert parsed.quality.source == source, name
+        assert parsed.quality.resolution == resolution, name
+        assert {parsed.quality.proper, parsed.quality.repack} == {proper, repack}, name
+        assert {parsed.title, parsed.year} == {"Fake Movie", 2020}, name
+      end
+    end
+
+    test "an episode" do
+      name =
+        FileNamer.generate_episode_filename(
+          %{title: "Fake Show", year: 2019},
+          %{season_number: 1, episode_number: 2, title: "Some Episode"},
+          renamer_quality("HDTV", "720p", true, false),
+          "Fake.Show.S01E02.x264-GRP.mkv"
+        )
+
+      assert name =~ "[HDTV-720p-Proper]"
+      parsed = ReleaseParser.parse(name)
+      assert {parsed.quality.source, parsed.quality.resolution} == {"HDTV", "720p"}
+      assert {parsed.quality.proper, parsed.quality.repack} == {true, false}
+      assert {parsed.title, parsed.season, parsed.episodes} == {"Fake Show", 1, [2]}
+    end
+  end
+
   test "a source dash-glued to its codec" do
     parsed = ReleaseParser.parse("Fake Show (Season 1) (2019) BDRip-AVC Eng")
     assert parsed.quality.source == "BluRay"

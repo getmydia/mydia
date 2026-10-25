@@ -398,16 +398,28 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
          Enum.any?(parts, &codec_part?/1) do
       parts
       |> runs_around_codecs()
-      |> Enum.map(fn {offset, run} ->
+      |> Enum.flat_map(fn {offset, run} ->
         %Token{
           token
           | value: run,
             byte_offset: token.byte_offset + offset,
             byte_length: byte_size(run)
         }
+        |> split_glued_run()
       end)
     else
       [token]
+    end
+  end
+
+  # The glued split ran on the whole token, which a revision flag kept from
+  # ending in its resolution. Mydia's own renamer writes
+  # `[BluRay-1080p-Proper]`, so the run left once the flag comes off gets
+  # the same split.
+  defp split_glued_run(%Token{} = run) do
+    case source_then_resolution(run.value) do
+      nil -> [run]
+      match -> split_glued(run, match)
     end
   end
 
