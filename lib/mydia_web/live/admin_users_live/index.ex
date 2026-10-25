@@ -214,11 +214,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   def handle_event("open_reset_password_modal", %{"id" => id}, socket) do
     user = Accounts.get_user!(id)
 
-    if not Accounts.password_user?(user) do
-      {:noreply,
-       socket
-       |> put_flash(:error, gettext("This user has no local password to reset"))}
-    else
+    if Accounts.password_user?(user) do
       {:noreply,
        socket
        |> assign(:show_reset_password_modal, true)
@@ -228,6 +224,10 @@ defmodule MydiaWeb.AdminUsersLive.Index do
        |> assign(:show_password_reset, false)
        |> assign(:password_reset_success, false)
        |> assign_reset_password_form()}
+    else
+      {:noreply,
+       socket
+       |> put_flash(:error, gettext("This user has no local password to reset"))}
     end
   end
 

@@ -20889,7 +20889,7 @@ msgstr ""
 msgid "Single sign-on"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/index.ex:220
+#: lib/mydia_web/live/admin_users_live/index.ex:230
 #, elixir-autogen, elixir-format
 msgid "This user has no local password to reset"
 msgstr ""
