@@ -56,10 +56,10 @@ defmodule Mydia.Library.ReleaseParser.Resolver.TitleZone do
     {title_zone, rest} =
       Enum.split_while(per_token, fn {token, _} -> in_title_zone?(token, boundary) end)
 
-    reclaim_zone(title_zone, boundary) ++ rest
+    reclaim_zone(title_zone, boundary, List.first(rest)) ++ rest
   end
 
-  defp reclaim_zone([{token, cands}], boundary) when boundary != :infinity do
+  defp reclaim_zone([{token, cands}], boundary, _anchor) when boundary != :infinity do
     case slate_kind(cands) do
       kind when kind in [:language, :revision] ->
         [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
@@ -69,10 +69,11 @@ defmodule Mydia.Library.ReleaseParser.Resolver.TitleZone do
     end
   end
 
-  defp reclaim_zone(title_zone, _boundary) do
+  # The last word's next entry is the anchor that closes the zone, if any.
+  defp reclaim_zone(title_zone, _boundary, anchor) do
     kinds = Enum.map(title_zone, fn {_, cands} -> slate_kind(cands) end)
     previous_kinds = [nil | kinds]
-    next_entries = Enum.drop(title_zone, 1) ++ [nil]
+    next_entries = Enum.drop(title_zone, 1) ++ [anchor]
 
     # Enum.zip/1 truncates to the shortest list, aligning each token with its kind, prior kind, and next entry.
     [title_zone, kinds, previous_kinds, next_entries]
@@ -88,12 +89,22 @@ defmodule Mydia.Library.ReleaseParser.Resolver.TitleZone do
   end
 
   # `PROPER.REAL.RERIP` qualifies the revision, so REAL after one is not
-  # the title word that would make PROPER a title word too.
+  # the title word that would make PROPER a title word too. Scene names put
+  # the flag after the year or episode marker, so one directly before it
+  # closes the title (`The.Last.Proper.2020`); one before the resolution
+  # (`Show.PROPER.1080p`) is still the flag.
   defp maybe_reclaim({{token, cands}, :revision, previous_kind, {next_token, next_cands}})
        when previous_kind != :revision do
-    if slate_kind(next_cands) == :plain and String.upcase(next_token.value) != "REAL",
-      do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
-      else: {token, cands}
+    cond do
+      slate_kind(next_cands) == :plain and String.upcase(next_token.value) != "REAL" ->
+        {token, [reclaimed_candidate(neighbor_confidence(next_cands))]}
+
+      Enum.any?(next_cands, &(&1.label in [:year, :episode_marker])) ->
+        {token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}
+
+      true ->
+        {token, cands}
+    end
   end
 
   defp maybe_reclaim({entry, _kind, _previous_kind, _next}), do: entry

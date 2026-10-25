@@ -67,6 +67,36 @@ defmodule Mydia.Library.ReleaseParser.QualityResolutionTest do
     assert result.title == "Repack"
   end
 
+  test "a revision word directly before the year or episode marker is a title word" do
+    result = ReleaseParser.parse("The.Last.Proper.2020.1080p.BluRay.x264-GRP")
+    refute result.quality.proper
+    assert {result.title, result.year} == {"The Last Proper", 2020}
+
+    result = ReleaseParser.parse("Fake.Show.Repack.S01E01.720p.HDTV.x264-GRP")
+    refute result.quality.repack
+    assert {result.title, result.season, result.episodes} == {"Fake Show Repack", 1, [1]}
+
+    # Scene names put the flag after the anchor.
+    result = ReleaseParser.parse("Fake.Show.S01E01.PROPER.720p.HDTV.x264-GRP")
+    assert result.quality.proper
+    assert result.title == "Fake Show"
+  end
+
+  # QualityParser reads `Proper` anywhere as the flag, and an episode title
+  # cannot be told from a tag here, so parity wins.
+  test "an episode title opening with Proper sets the flag" do
+    result = ReleaseParser.parse("Fake.Show.S01E01.Proper.Noun.720p.HDTV.x264-GRP")
+    assert result.quality.proper
+    assert result.title == "Fake Show"
+  end
+
+  test "a standalone RERIP is a repack" do
+    result = ReleaseParser.parse("Fake.Movie.2020.RERIP.1080p.BluRay.x264-GRP")
+    assert result.quality.repack
+    refute result.quality.proper
+    assert {result.title, result.year} == {"Fake Movie", 2020}
+  end
+
   test "a revision tag leaves type and confidence alone" do
     plain = ReleaseParser.parse("Fake.Movie.2020.720p.HDTV.x264-GRP")
     tagged = ReleaseParser.parse("Fake.Movie.2020.REPACK.720p.HDTV.x264-GRP")
