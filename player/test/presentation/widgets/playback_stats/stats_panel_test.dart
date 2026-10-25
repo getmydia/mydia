@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
+import 'package:player/core/playback/stats/stats_report.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
@@ -111,23 +112,11 @@ void main() {
       sample: sampleWithHistory(),
     );
 
-    for (final label in const [
-      'Playing',
-      'Why',
-      'Source',
-      'Video',
-      'Decoder',
-      'Audio',
-      'Frames',
-      'Buffer',
-      'Throughput',
-      'Link',
-      'Position',
-    ]) {
+    for (final id in StatsRowId.values) {
       expect(
-        find.byKey(StatsPanel.rowKey(label)),
+        find.byKey(StatsPanel.rowKey(id)),
         findsOneWidget,
-        reason: 'expected a $label row',
+        reason: 'expected a ${id.name} row',
       );
     }
     expect(find.byKey(StatsSparkline.painterKey), findsOneWidget);
@@ -140,10 +129,10 @@ void main() {
       sample: sampleWithHistory(),
     );
 
-    expect(find.byKey(StatsPanel.rowKey('Playing')), findsOneWidget);
-    expect(find.byKey(StatsPanel.rowKey('Source')), findsNothing);
-    expect(find.byKey(StatsPanel.rowKey('Audio')), findsNothing);
-    expect(find.byKey(StatsPanel.rowKey('Position')), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.playing)), findsOneWidget);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.source)), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.audio)), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.position)), findsNothing);
     expect(find.byKey(StatsSparkline.painterKey), findsNothing);
   });
 
@@ -181,10 +170,10 @@ void main() {
       ),
     );
 
-    expect(find.byKey(StatsPanel.rowKey('Decoder')), findsNothing);
-    expect(find.byKey(StatsPanel.rowKey('Frames')), findsNothing);
-    expect(find.byKey(StatsPanel.rowKey('Throughput')), findsNothing);
-    expect(find.byKey(StatsPanel.rowKey('Link')), findsOneWidget);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.decoder)), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.frames)), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.throughput)), findsNothing);
+    expect(find.byKey(StatsPanel.rowKey(StatsRowId.link)), findsOneWidget);
   });
 
   testWidgets('the buttons report taps', (tester) async {

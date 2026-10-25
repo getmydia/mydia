@@ -120,17 +120,21 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
         title: 'Films',
         kind: LibraryKind.movies,
         sortOptions: [
-          SortOption(id: 'title', label: 'Title'),
+          SortOption(id: 'title', name: SortName.title),
           SortOption(
-              id: 'added', label: 'Recently added', descendingByDefault: true),
+              id: 'added',
+              name: SortName.recentlyAdded,
+              descendingByDefault: true),
         ],
-        filterOptions: [FilterOption(id: 'unwatched', label: 'Unwatched')],
+        filterOptions: [
+          FilterOption(id: 'unwatched', name: FilterName.unwatched)
+        ],
       ),
       Library(
           ref: shows,
           title: 'Series',
           kind: LibraryKind.shows,
-          sortOptions: [SortOption(id: 'title', label: 'Title')]),
+          sortOptions: [SortOption(id: 'title', name: SortName.title)]),
     ];
   }
 

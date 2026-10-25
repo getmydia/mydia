@@ -9,6 +9,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/screens/home/home_rows.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
@@ -136,7 +137,7 @@ void main() {
       feeds(a, libraries: [lib(a, 'movies', 'Films')]),
     ]);
     expect(rows.labelled, isFalse);
-    expect(rows.libraries.single.title, 'Films');
+    expect(rows.libraries.single.title(AppLocalizationsEn()), 'Films');
   });
 
   test('two servers: library rows name their server, in scope order', () {
@@ -145,7 +146,7 @@ void main() {
       feeds(b, libraries: [lib(b, 'movies', 'Films'), lib(b, 'x', 'Extras')]),
     ]);
     expect(rows.labelled, isTrue);
-    expect(rows.libraries.map((r) => r.title),
+    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())),
         ['Films · Server a', 'Films · Server b', 'Extras · Server b']);
   });
 
@@ -160,7 +161,7 @@ void main() {
         empty.ref: const AsyncData([]),
       }),
     ]);
-    expect(rows.libraries.map((r) => r.title), ['Films']);
+    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())), ['Films']);
     expect(rows.libraries.single.items.single.ref.externalId, 'm1');
   });
 

@@ -7,6 +7,8 @@ library;
 import 'package:intl/intl.dart';
 
 import '../core/playback/playback_plan.dart';
+import '../core/playback/stats/playback_stats.dart';
+import '../core/playback/stats/stats_report.dart';
 import '../core/player/fullscreen/fullscreen_failure.dart';
 import '../core/player/subtitle_size.dart';
 import '../core/theme/glass_material.dart';
@@ -15,7 +17,11 @@ import '../core/update/update_provider.dart';
 import '../core/update/update_track.dart';
 import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
+import '../domain/navigation/media_filter.dart';
+import '../domain/navigation/nav_destination.dart';
+import '../domain/navigation/source_nav.dart';
 import '../domain/sources/item.dart';
+import '../domain/sources/library.dart';
 import '../presentation/screens/calendar/calendar_dates.dart';
 import '../presentation/screens/login/login_failure.dart';
 import 'gen/app_localizations.dart';
@@ -198,6 +204,141 @@ extension AppFormatters on AppLocalizations {
     final key = _languageKeys[code.toLowerCase()];
     return key == null ? code.toUpperCase() : languageNameByCode(key);
   }
+
+  /// The name of a sidebar row: a builtin's by its id, a saved filter's own
+  /// words as the viewer typed them.
+  String navDestinationLabel(NavDestination destination) =>
+      switch (destination) {
+        FilterDestination(:final label) => label,
+        BuiltinDestination(:final id) => _builtinNavName(id),
+      };
+
+  /// The name of a resolved sidebar or bottom bar entry: a library's own name
+  /// from its server, else the builtin the entry stands for.
+  String navEntryLabel(SourceNavEntry entry) {
+    final kind = entry.libraryKind;
+    return entry.label ??
+        (kind == null ? _builtinNavName(entry.id) : libraryKindTitle(kind));
+  }
+
+  /// What the bottom bar shows for [entry]: the short form where it has one.
+  String navEntryTabLabel(SourceNavEntry entry) =>
+      entry.shortLabel ? navShowsShort : navEntryLabel(entry);
+
+  String _builtinNavName(String id) => switch (id) {
+        'search' => navSearch,
+        'home' => navHome,
+        'continue_watching' => nextUpContinueWatching,
+        'movies' => navMovies,
+        'shows' => navShows,
+        'calendar' => navCalendar,
+        'recently_added' => navRecentlyAdded,
+        'unwatched' => navUnwatched,
+        'favorites' => navFavorites,
+        'collections' => navCollections,
+        'downloads' => navDownloads,
+        'settings' => settingsTitle,
+        _ => id,
+      };
+
+  /// A library's name: its server's, else one for its kind.
+  String libraryTitle(Library library) =>
+      library.title ?? libraryKindTitle(library.kind);
+
+  /// What a library of [kind] is called when its server did not name it.
+  String libraryKindTitle(LibraryKind kind) => switch (kind) {
+        LibraryKind.movies => navMovies,
+        LibraryKind.shows => navShows,
+        LibraryKind.videos => libraryTitleVideos,
+      };
+
+  String sortName(SortName name) => switch (name) {
+        SortName.title => sortTitle,
+        SortName.year => sortYear,
+        SortName.recentlyAdded => sortRecentlyAdded,
+        SortName.dateAdded => sortDateAdded,
+        SortName.rating => sortRating,
+        SortName.duration => sortDuration,
+        SortName.popularity => sortPopularity,
+        SortName.contentRating => sortContentRating,
+        SortName.releaseDate => sortReleaseDate,
+        SortName.date => sortDate,
+        SortName.lastPlayed => sortLastPlayed,
+        SortName.lastWatched => sortLastWatched,
+        SortName.mostPlayed => sortMostPlayed,
+        SortName.watchState => sortWatchState,
+        SortName.random => sortRandom,
+      };
+
+  /// A filter chip's name.
+  String filterOptionName(FilterOption option) {
+    final category = option.category;
+    if (category != null) return categoryFilterName(category);
+    return switch (option.name!) {
+      FilterName.unwatched => navUnwatched,
+      FilterName.unplayed => filterUnplayed,
+      FilterName.favorites => navFavorites,
+      FilterName.inProgress => filterInProgress,
+    };
+  }
+
+  String categoryFilterName(MediaCategoryFilter category) => switch (category) {
+        MediaCategoryFilter.movie => navMovies,
+        MediaCategoryFilter.animeMovie => filterCategoryAnimeMovies,
+        MediaCategoryFilter.cartoonMovie => filterCategoryCartoonMovies,
+        MediaCategoryFilter.tvShow => navShows,
+        MediaCategoryFilter.animeSeries => filterCategoryAnimeSeries,
+        MediaCategoryFilter.cartoonSeries => filterCategoryCartoonSeries,
+      };
+
+  String statsRowLabel(StatsRowId id) => switch (id) {
+        StatsRowId.playing => statsRowPlaying,
+        StatsRowId.why => statsRowWhy,
+        StatsRowId.source => statsRowSource,
+        StatsRowId.video => statsRowVideo,
+        StatsRowId.decoder => statsRowDecoder,
+        StatsRowId.audio => statsRowAudio,
+        StatsRowId.frames => statsRowFrames,
+        StatsRowId.buffer => statsRowBuffer,
+        StatsRowId.throughput => statsRowThroughput,
+        StatsRowId.link => statsRowLink,
+        StatsRowId.position => statsRowPosition,
+      };
+
+  /// The badge before the Playing value.
+  String statsPill(PlaybackMode mode) => switch (mode) {
+        PlaybackMode.direct => statsPillDirect,
+        PlaybackMode.copy => statsPillCopy,
+        PlaybackMode.transcode => statsPillTranscode,
+        PlaybackMode.localFile => statsModeLocalFile,
+      };
+
+  String statsModeName(PlaybackMode mode) => switch (mode) {
+        PlaybackMode.direct => statsModeDirectPlay,
+        PlaybackMode.copy => statsModeStreamCopy,
+        PlaybackMode.transcode => statsModeTranscode,
+        PlaybackMode.localFile => statsModeLocalFile,
+      };
+
+  String statsValue(StatsValue value) => switch (value) {
+        StatsText(:final text) => text,
+        StatsModeValue(:final mode) => statsModeName(mode),
+        StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
+            null => label,
+            true => statsDecoderHardware(label),
+            false => statsDecoderSoftware(label),
+          },
+        StatsFramesValue(:final dropped, :final total) =>
+          statsFramesDropped(dropped, total),
+        // One decimal: a buffer that reads `18 s` for eighteen seconds
+        // running looks frozen while `18.4` visibly moves.
+        StatsBufferValue(:final ahead) => statsBufferAhead(
+            NumberFormat('0.0', localeName)
+                .format((ahead.inMilliseconds / 100).round() / 10),
+          ),
+        StatsPositionValue(:final position, :final duration) =>
+          '${statsTimecode(position)} / ${statsTimecode(duration)}',
+      };
 }
 
 /// ISO 639-1, 639-2/T and 639-2/B codes to the two letter key the

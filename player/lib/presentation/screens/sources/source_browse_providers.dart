@@ -53,7 +53,7 @@ final sourceLibraryPreviewProvider = StreamProvider.autoDispose
           .where((l) => l.ref == library)
           .firstOrNull
           ?.sortOptions
-          .where((o) => o.label == 'Recently added')
+          .where((o) => o.name == SortName.recentlyAdded)
           .firstOrNull
           ?.id,
     ),

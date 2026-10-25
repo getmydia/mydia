@@ -107,7 +107,6 @@ class StashMediaSource extends MediaSource
   Future<List<Library>> libraries() async => [
         Library(
           ref: LibraryRef(sourceId: id, id: stashScenesLibraryId),
-          title: 'Scenes',
           kind: LibraryKind.videos,
           sortOptions: stashSortOptions,
           filterOptions: stashFilterOptions,

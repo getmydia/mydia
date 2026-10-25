@@ -18,6 +18,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/glass/glass_chip.dart';
@@ -395,7 +396,7 @@ class _ChipRow extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: GlassChip(
                 chipKey: Key('source-sort-${option.id}'),
-                label: Text(option.label),
+                label: Text(context.l10n.sortName(option.name)),
                 selected:
                     (query.sortId ?? info.sortOptions.first.id) == option.id,
                 // A new sort starts in its own default direction.
@@ -412,7 +413,7 @@ class _ChipRow extends StatelessWidget {
               child: GlassChip(
                 multiSelect: true,
                 chipKey: Key('source-filter-${filter.id}'),
-                label: Text(filter.label),
+                label: Text(context.l10n.filterOptionName(filter)),
                 selected: query.filterIds.contains(filter.id),
                 onSelected: (on) => onChanged(query.copyWith(
                   filterIds: on

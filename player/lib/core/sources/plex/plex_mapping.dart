@@ -8,23 +8,28 @@ import '../../../domain/sources/library.dart';
 import '../source.dart';
 
 const plexSortOptions = [
-  SortOption(id: 'titleSort', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'titleSort', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'addedAt',
-      label: 'Recently added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
   SortOption(
       id: 'originallyAvailableAt',
-      label: 'Release date',
+      name: SortName.releaseDate,
       descendingByDefault: true,
       shared: SharedSort.released),
-  SortOption(id: 'audienceRating', label: 'Rating', descendingByDefault: true),
   SortOption(
-      id: 'lastViewedAt', label: 'Last watched', descendingByDefault: true),
+      id: 'audienceRating', name: SortName.rating, descendingByDefault: true),
+  SortOption(
+      id: 'lastViewedAt',
+      name: SortName.lastWatched,
+      descendingByDefault: true),
 ];
 
-const plexFilterOptions = [FilterOption(id: 'unwatched', label: 'Unwatched')];
+const plexFilterOptions = [
+  FilterOption(id: 'unwatched', name: FilterName.unwatched),
+];
 
 ItemKind? plexItemKind(String? type) => switch (type) {
       'movie' => ItemKind.movie,
@@ -48,7 +53,7 @@ Library? plexLibrary(SourceId sourceId, Map<String, dynamic> d) {
   if (kind == null) return null;
   return Library(
     ref: LibraryRef(sourceId: sourceId, id: key),
-    title: d['title'] as String? ?? 'Library',
+    title: d['title'] as String?,
     kind: kind,
     sortOptions: plexSortOptions,
     filterOptions: plexFilterOptions,

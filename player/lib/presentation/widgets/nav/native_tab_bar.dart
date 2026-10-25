@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/web_config.dart';
 import '../../../core/platform/native_tab_bar_channel.dart';
 import '../../../domain/navigation/source_nav.dart';
+import '../../../l10n/l10n.dart';
 import '../toast/toast_obstruction.dart';
 
 /// Id of the embed-mode back item, which is not a source entry.
@@ -42,6 +43,7 @@ String? settingsTabBadge({required bool updatePending}) =>
 /// stays usable.
 List<NativeTab> nativeTabsFor(
   List<SourceNavEntry> entries, {
+  required AppLocalizations l10n,
   required bool isOffline,
   required bool showBackToMydia,
   String? settingsBadge,
@@ -56,7 +58,7 @@ List<NativeTab> nativeTabsFor(
       for (final entry in entries)
         NativeTab(
           id: entry.id,
-          title: entry.shortLabel ?? entry.label,
+          title: l10n.navEntryTabLabel(entry),
           symbol: nativeTabSymbol(entry.id),
           badge: entry.id == 'settings' ? settingsBadge : null,
           enabled: !isOffline || entry.id == 'downloads',
@@ -168,6 +170,7 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
   void _sync() {
     unawaited(_channel.setTabs(nativeTabsFor(
       widget.entries,
+      l10n: context.l10n,
       isOffline: widget.isOffline,
       showBackToMydia: widget.showBackToMydia,
       settingsBadge: widget.settingsBadge,

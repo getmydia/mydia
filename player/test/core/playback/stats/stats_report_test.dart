@@ -3,6 +3,8 @@ import 'package:player/core/build_channel.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 
 const _sample = StatsSample(
   bufferedAhead: Duration(milliseconds: 18400),
@@ -26,11 +28,14 @@ const _context = StatsContext(
   linkLabel: 'direct p2p - 1 peer',
 );
 
-List<String> labelsOf(List<StatsRow> rows) =>
-    rows.map((row) => row.label).toList();
+final _en = AppLocalizationsEn();
 
-String valueFor(List<StatsRow> rows, String label) =>
-    rows.firstWhere((row) => row.label == label).value;
+List<String> labelsOf(List<StatsRow> rows) =>
+    rows.map((row) => _en.statsRowLabel(row.id)).toList();
+
+String valueFor(List<StatsRow> rows, String label) => _en.statsValue(
+      rows.firstWhere((row) => _en.statsRowLabel(row.id) == label).value,
+    );
 
 void main() {
   test('the full density shows every row in order', () {
@@ -82,7 +87,7 @@ void main() {
 
     // The label list is the real assertion: a value the platform does not
     // know produces no row at all, so an implementation that emitted
-    // `StatsRow(label: 'Decoder', value: '-')` would fail here.
+    // `StatsRow(id: StatsRowId.decoder, value: StatsText('-'))` would fail here.
     expect(labelsOf(rows), ['Playing', 'Buffer', 'Link', 'Position']);
     // And nothing that does render is a bare placeholder. Deliberately not
     // a scan for '-': ' - ' is the field separator in Source, Frames and
@@ -91,7 +96,7 @@ void main() {
     expect(
       rows.every(
         (row) => !const ['', '-', '--', 'n/a', 'unknown']
-            .contains(row.value.trim().toLowerCase()),
+            .contains(_en.statsValue(row.value).trim().toLowerCase()),
       ),
       isTrue,
     );
@@ -102,7 +107,7 @@ void main() {
   test('the Playing row carries the mode badge', () {
     expect(
       statsRows(_sample, _context, StatsDensity.full).first.pill,
-      'TRANSCODE',
+      PlaybackMode.transcode,
     );
 
     const direct = StatsContext(
@@ -112,7 +117,7 @@ void main() {
     );
     expect(
       statsRows(_sample, direct, StatsDensity.full).first.pill,
-      'DIRECT',
+      PlaybackMode.direct,
     );
 
     const copy = StatsContext(
@@ -122,7 +127,7 @@ void main() {
     );
     expect(
       statsRows(_sample, copy, StatsDensity.full).first.pill,
-      'COPY',
+      PlaybackMode.copy,
     );
 
     const localFile = StatsContext(
@@ -219,7 +224,7 @@ void main() {
     final clean = statsRows(_sample, _context, StatsDensity.full);
     expect(valueFor(clean, 'Frames'), '0 dropped - 0 total');
     expect(
-      clean.firstWhere((row) => row.label == 'Frames').tone,
+      clean.firstWhere((row) => row.id == StatsRowId.frames).tone,
       StatsTone.good,
     );
 
@@ -235,7 +240,7 @@ void main() {
     );
     expect(valueFor(dropping, 'Frames'), '142 dropped - 1402 total');
     expect(
-      dropping.firstWhere((row) => row.label == 'Frames').tone,
+      dropping.firstWhere((row) => row.id == StatsRowId.frames).tone,
       StatsTone.warn,
     );
   });
@@ -251,7 +256,7 @@ void main() {
     final rows = statsRows(_sample, relayed, StatsDensity.full);
 
     expect(
-      rows.firstWhere((row) => row.label == 'Link').tone,
+      rows.firstWhere((row) => row.id == StatsRowId.link).tone,
       StatsTone.warn,
     );
   });

@@ -41,7 +41,7 @@ class StatsPanel extends StatelessWidget {
   static const Key copyKey = Key('stats-copy');
   static const Key closeKey = Key('stats-close');
 
-  static Key rowKey(String label) => Key('stats-row-$label');
+  static Key rowKey(StatsRowId id) => Key('stats-row-${id.name}');
 
   @override
   Widget build(BuildContext buildContext) {
@@ -94,7 +94,7 @@ class StatsPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         for (final row in rows) ...[
-                          _row(row, palette),
+                          _row(l10n, row, palette),
                           if (row != rows.last)
                             SizedBox(height: metrics.rowGap),
                         ],
@@ -167,20 +167,20 @@ class StatsPanel extends StatelessWidget {
     );
   }
 
-  Widget _row(StatsRow row, MydiaPalette palette) {
+  Widget _row(AppLocalizations l10n, StatsRow row, MydiaPalette palette) {
     final color = switch (row.tone) {
       StatsTone.good => AppColors.successText,
       StatsTone.warn => AppColors.warningText,
       StatsTone.normal => palette.textPrimary,
     };
     return Row(
-      key: rowKey(row.label),
+      key: rowKey(row.id),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: metrics.density == StatsDensity.tv ? 126 : 90,
           child: Text(
-            row.label,
+            l10n.statsRowLabel(row.id),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -205,12 +205,12 @@ class StatsPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (row.pill != null) ...[
-                _pill(row.pill!),
+                _pill(l10n.statsPill(row.pill!)),
                 const SizedBox(width: 7),
               ],
               Flexible(
                 child: Text(
-                  row.value,
+                  l10n.statsValue(row.value),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

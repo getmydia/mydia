@@ -38,15 +38,15 @@ Future<void> pump(WidgetTester tester,
 }
 
 const _withReleased = [
-  SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'added',
-      label: 'Added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
   SortOption(
       id: 'released',
-      label: 'Released',
+      name: SortName.releaseDate,
       descendingByDefault: true,
       shared: SharedSort.released),
 ];

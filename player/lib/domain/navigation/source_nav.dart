@@ -16,19 +16,29 @@ import 'nav_destination.dart';
 class SourceNavEntry {
   const SourceNavEntry({
     required this.id,
-    required this.label,
+    this.label,
+    this.libraryKind,
     required this.icon,
     required this.selectedIcon,
     required this.route,
     this.anchored = false,
-    this.shortLabel,
+    this.shortLabel = false,
   });
 
-  /// A shorter label for the bottom bar, when [label] does not fit.
-  final String? shortLabel;
+  /// The kind of the library this entry opens, so a library its server left
+  /// unnamed is still named. Null for every other entry.
+  final LibraryKind? libraryKind;
+
+  /// Whether the bottom bar uses the short form of the name, when the full
+  /// one does not fit.
+  final bool shortLabel;
 
   final String id;
-  final String label;
+
+  /// A library's own name, which is the server's and never translated. Null
+  /// for a builtin row, which is named from [id] by
+  /// `AppFormatters.navEntryLabel`.
+  final String? label;
   final IconData icon;
   final IconData selectedIcon;
   final String route;
@@ -49,6 +59,7 @@ class SourceNavEntry {
       other is SourceNavEntry &&
       other.id == id &&
       other.label == label &&
+      other.libraryKind == libraryKind &&
       other.icon == icon &&
       other.selectedIcon == selectedIcon &&
       other.route == route &&
@@ -56,8 +67,8 @@ class SourceNavEntry {
       other.shortLabel == shortLabel;
 
   @override
-  int get hashCode =>
-      Object.hash(id, label, icon, selectedIcon, route, anchored, shortLabel);
+  int get hashCode => Object.hash(
+      id, label, libraryKind, icon, selectedIcon, route, anchored, shortLabel);
 }
 
 /// The source id in a `/s/<id>/...` location, or null elsewhere.
@@ -83,7 +94,6 @@ List<SourceNavEntry> anchoredNavEntries(List<NavDestination> layout) => [
         if (d.isAnchored && d.id != 'search')
           SourceNavEntry(
             id: d.id,
-            label: d.label,
             icon: d.icon,
             selectedIcon: d.selectedIcon,
             route: d.route,
@@ -115,12 +125,11 @@ List<SourceNavEntry> resolveAllServersNav(List<NavDestination> layout) {
       if (routeFor(d) case final route?)
         SourceNavEntry(
           id: d.id,
-          label: d.label,
           icon: d.icon,
           selectedIcon: d.selectedIcon,
           route: route,
           anchored: d.isAnchored,
-          shortLabel: d.id == 'shows' ? 'Shows' : null,
+          shortLabel: d.id == 'shows',
         ),
   ];
 }
@@ -179,12 +188,11 @@ List<SourceNavEntry> resolveSourceNav({
     if (route == null) continue;
     entries.add(SourceNavEntry(
       id: d.id,
-      label: d.label,
       icon: d.icon,
       selectedIcon: d.selectedIcon,
       route: route,
       anchored: d.isAnchored,
-      shortLabel: d.id == 'shows' ? 'Shows' : null,
+      shortLabel: d.id == 'shows',
     ));
     if (d.id == 'shows' || (d.id == 'movies' && afterLibraries == -1)) {
       afterLibraries = entries.length;
@@ -197,6 +205,7 @@ List<SourceNavEntry> resolveSourceNav({
         SourceNavEntry(
           id: 'library-${l.ref.id}',
           label: l.title,
+          libraryKind: l.kind,
           icon: Icons.video_library_outlined,
           selectedIcon: Icons.video_library,
           route: sourceLibraryLocation(l.ref),

@@ -114,7 +114,8 @@ class SidebarMiddleList extends StatelessWidget {
         final Widget trailing = row.hidden
             ? IconButton(
                 onPressed: () => onRestore(row.destination.id),
-                tooltip: context.l10n.navRestoreRow(row.destination.label),
+                tooltip: context.l10n.navRestoreRow(
+                    context.l10n.navDestinationLabel(row.destination)),
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(

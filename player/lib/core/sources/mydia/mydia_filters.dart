@@ -36,13 +36,27 @@ const _shared = {
   SortField.releaseDate: SharedSort.released,
 };
 
+const _sortNames = {
+  SortField.title: SortName.title,
+  SortField.year: SortName.year,
+  SortField.addedAt: SortName.dateAdded,
+  SortField.rating: SortName.rating,
+  SortField.runtime: SortName.duration,
+  SortField.popularity: SortName.popularity,
+  SortField.contentRating: SortName.contentRating,
+  SortField.releaseDate: SortName.releaseDate,
+  SortField.lastPlayed: SortName.lastPlayed,
+  SortField.watchState: SortName.watchState,
+  SortField.random: SortName.random,
+};
+
 /// One option per `SortField` but random, which has no direction.
 final List<SortOption> mydiaSortOptions = [
   for (final f in SortField.values)
     if (f != SortField.random)
       SortOption(
         id: f.wireName,
-        label: f.displayName,
+        name: _sortNames[f]!,
         descendingByDefault: _descendingByDefault.contains(f),
         shared: _shared[f],
       ),
@@ -55,11 +69,11 @@ List<FilterOption> mydiaFilterOptions(LibraryKind kind) {
     LibraryKind.videos => null,
   };
   return [
-    const FilterOption(id: _unwatchedId, label: 'Unwatched'),
-    const FilterOption(id: _favoritesId, label: 'Favorites'),
+    const FilterOption(id: _unwatchedId, name: FilterName.unwatched),
+    const FilterOption(id: _favoritesId, name: FilterName.favorites),
     if (mediaKind != null)
       for (final c in MediaCategoryFilter.forKind(mediaKind))
-        FilterOption(id: '$_categoryPrefix${c.wireName}', label: c.displayName),
+        FilterOption(id: '$_categoryPrefix${c.wireName}', category: c),
   ];
 }
 

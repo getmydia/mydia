@@ -4,6 +4,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../core/sources/source.dart';
+import '../navigation/media_filter.dart';
 
 enum LibraryKind { movies, shows, videos }
 
@@ -33,17 +34,42 @@ class LibraryRef {
 /// grids sort by these and ask each library for the option tagged with one.
 enum SharedSort { title, added, released }
 
+/// What a sort option is called. The viewer's language is chosen where the
+/// option is drawn (`AppFormatters.sortName`), so a cached library survives a
+/// language change.
+enum SortName {
+  title,
+  year,
+  recentlyAdded,
+  dateAdded,
+  rating,
+  duration,
+  popularity,
+  contentRating,
+  releaseDate,
+  date,
+  lastPlayed,
+  lastWatched,
+  mostPlayed,
+  watchState,
+  random,
+}
+
+/// What a source's own filter chip is called, apart from a Mydia category,
+/// which is named by [MediaCategoryFilter]. Worded by `AppFormatters.filterName`.
+enum FilterName { unwatched, unplayed, favorites, inProgress }
+
 @immutable
 class SortOption {
   const SortOption({
     required this.id,
-    required this.label,
+    required this.name,
     this.descendingByDefault = false,
     this.shared,
   });
 
   final String id;
-  final String label;
+  final SortName name;
   final bool descendingByDefault;
 
   /// Null for an option with no cross-server meaning (rating, random).
@@ -51,7 +77,7 @@ class SortOption {
 
   factory SortOption.fromJson(Map<String, Object?> json) => SortOption(
         id: json['id']! as String,
-        label: json['label']! as String,
+        name: SortName.values.byName(json['name']! as String),
         descendingByDefault: json['descendingByDefault'] as bool? ?? false,
         shared: json['shared'] == null
             ? null
@@ -60,25 +86,34 @@ class SortOption {
 
   Map<String, Object?> toJson() => {
         'id': id,
-        'label': label,
+        'name': name.name,
         'descendingByDefault': descendingByDefault,
         'shared': shared?.name,
       };
 }
 
+/// A filter chip: either one of [FilterName] or a Mydia [category].
 @immutable
 class FilterOption {
-  const FilterOption({required this.id, required this.label});
+  const FilterOption({required this.id, this.name, this.category})
+      : assert((name == null) != (category == null));
 
   final String id;
-  final String label;
+  final FilterName? name;
+  final MediaCategoryFilter? category;
 
   factory FilterOption.fromJson(Map<String, Object?> json) => FilterOption(
         id: json['id']! as String,
-        label: json['label']! as String,
+        name: json['name'] == null
+            ? null
+            : FilterName.values.byName(json['name']! as String),
+        category: json['category'] == null
+            ? null
+            : MediaCategoryFilter.values.byName(json['category']! as String),
       );
 
-  Map<String, Object?> toJson() => {'id': id, 'label': label};
+  Map<String, Object?> toJson() =>
+      {'id': id, 'name': name?.name, 'category': category?.name};
 }
 
 /// A library as its source describes it. The sorts and filters are the
@@ -87,21 +122,25 @@ class FilterOption {
 class Library {
   const Library({
     required this.ref,
-    required this.title,
+    this.title,
     required this.kind,
     this.sortOptions = const [],
     this.filterOptions = const [],
   });
 
   final LibraryRef ref;
-  final String title;
+
+  /// The server's name for the library, never translated. Null when the
+  /// server gave none, or the source has fixed libraries: the screens then
+  /// name it from [kind] (`AppFormatters.libraryTitle`).
+  final String? title;
   final LibraryKind kind;
   final List<SortOption> sortOptions;
   final List<FilterOption> filterOptions;
 
   factory Library.fromJson(Map<String, Object?> json) => Library(
         ref: LibraryRef.fromJson(json['ref']! as Map<String, Object?>),
-        title: json['title']! as String,
+        title: json['title'] as String?,
         kind: LibraryKind.values.byName(json['kind']! as String),
         sortOptions: [
           for (final e in (json['sortOptions'] as List?) ?? const [])

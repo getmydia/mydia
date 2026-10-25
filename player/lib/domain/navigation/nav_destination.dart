@@ -10,7 +10,6 @@ sealed class NavDestination {
   const NavDestination();
 
   String get id;
-  String get label;
   IconData get icon;
   IconData get selectedIcon;
   String get route;
@@ -22,11 +21,11 @@ sealed class NavDestination {
   bool matches(String location) => location.startsWith(route);
 }
 
-/// A destination the app ships.
+/// A destination the app ships. Its name is not stored here: the sidebar
+/// words it from [id] (`AppFormatters.navDestinationLabel`).
 class BuiltinDestination extends NavDestination {
   const BuiltinDestination({
     required this.id,
-    required this.label,
     required this.icon,
     required this.selectedIcon,
     required this.route,
@@ -38,8 +37,6 @@ class BuiltinDestination extends NavDestination {
 
   @override
   final String id;
-  @override
-  final String label;
   @override
   final IconData icon;
   @override
@@ -80,7 +77,8 @@ class FilterDestination extends NavDestination {
 
   @override
   final String id;
-  @override
+
+  /// What the viewer named the filter. Their words, never translated.
   final String label;
   final MediaFilter filter;
 
@@ -129,7 +127,6 @@ class FilterDestination extends NavDestination {
 const List<BuiltinDestination> builtinDestinations = [
   BuiltinDestination(
     id: 'search',
-    label: 'Search',
     icon: Icons.search_outlined,
     selectedIcon: Icons.search_rounded,
     route: '/search',
@@ -138,7 +135,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'home',
-    label: 'Home',
     icon: Icons.home_outlined,
     selectedIcon: Icons.home_rounded,
     route: '/',
@@ -152,7 +148,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'continue_watching',
-    label: 'Continue Watching',
     icon: Icons.play_circle_outline,
     selectedIcon: Icons.play_circle_rounded,
     route: '/continue-watching',
@@ -160,7 +155,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'movies',
-    label: 'Movies',
     icon: Icons.movie_outlined,
     selectedIcon: Icons.movie_rounded,
     route: '/movies',
@@ -168,7 +162,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'shows',
-    label: 'TV Shows',
     icon: Icons.tv_outlined,
     selectedIcon: Icons.tv_rounded,
     route: '/shows',
@@ -176,7 +169,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'calendar',
-    label: 'Calendar',
     icon: Icons.calendar_month_outlined,
     selectedIcon: Icons.calendar_month_rounded,
     route: '/calendar',
@@ -184,7 +176,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'recently_added',
-    label: 'Recently Added',
     icon: Icons.fiber_new_outlined,
     selectedIcon: Icons.fiber_new_rounded,
     route: '/recently-added',
@@ -192,7 +183,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'unwatched',
-    label: 'Unwatched',
     icon: Icons.visibility_off_outlined,
     selectedIcon: Icons.visibility_off_rounded,
     route: '/unwatched',
@@ -200,7 +190,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'favorites',
-    label: 'Favorites',
     icon: Icons.favorite_outline_rounded,
     selectedIcon: Icons.favorite_rounded,
     route: '/favorites',
@@ -208,7 +197,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'collections',
-    label: 'Collections',
     icon: Icons.collections_bookmark_outlined,
     selectedIcon: Icons.collections_bookmark_rounded,
     route: '/collections',
@@ -216,7 +204,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'downloads',
-    label: 'Downloads',
     icon: Icons.download_outlined,
     selectedIcon: Icons.download_rounded,
     route: '/downloads',
@@ -226,7 +213,6 @@ const List<BuiltinDestination> builtinDestinations = [
   ),
   BuiltinDestination(
     id: 'settings',
-    label: 'Settings',
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings_rounded,
     route: '/settings',

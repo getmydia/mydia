@@ -12,6 +12,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/startup/startup_timeline.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/shell_rail_inset.dart';
@@ -200,7 +201,7 @@ class HomeScreen extends ConsumerWidget {
                 SourcePosterRow(
                   key: ValueKey(
                       'home-library-${row.library.sourceId.value}-${row.library.id}'),
-                  title: row.title,
+                  title: row.title(context.l10n),
                   titleKey: Key(
                       'home-library-row-${row.library.sourceId.value}-${row.library.id}'),
                   railId:

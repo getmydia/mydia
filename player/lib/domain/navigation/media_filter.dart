@@ -20,17 +20,17 @@ enum MediaKind {
 
 /// Mirrors the server's `MediaCategory` enum.
 enum MediaCategoryFilter {
-  movie('MOVIE', 'Movies', MediaKind.movies),
-  animeMovie('ANIME_MOVIE', 'Anime Movies', MediaKind.movies),
-  cartoonMovie('CARTOON_MOVIE', 'Cartoon Movies', MediaKind.movies),
-  tvShow('TV_SHOW', 'TV Shows', MediaKind.shows),
-  animeSeries('ANIME_SERIES', 'Anime Series', MediaKind.shows),
-  cartoonSeries('CARTOON_SERIES', 'Cartoon Series', MediaKind.shows);
+  movie('MOVIE', MediaKind.movies),
+  animeMovie('ANIME_MOVIE', MediaKind.movies),
+  cartoonMovie('CARTOON_MOVIE', MediaKind.movies),
+  tvShow('TV_SHOW', MediaKind.shows),
+  animeSeries('ANIME_SERIES', MediaKind.shows),
+  cartoonSeries('CARTOON_SERIES', MediaKind.shows);
 
-  const MediaCategoryFilter(this.wireName, this.displayName, this.kind);
+  const MediaCategoryFilter(this.wireName, this.kind);
 
+  /// Worded by `AppFormatters.categoryFilterName`.
   final String wireName;
-  final String displayName;
   final MediaKind kind;
 
   static List<MediaCategoryFilter> forKind(MediaKind kind) =>

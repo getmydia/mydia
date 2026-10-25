@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:player/core/playback/playback_plan.dart';
+import 'package:player/core/playback/stats/playback_stats.dart';
+import 'package:player/core/playback/stats/stats_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/theme/glass_material.dart';
@@ -10,6 +12,10 @@ import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
+import 'package:player/domain/navigation/media_filter.dart';
+import 'package:player/domain/navigation/nav_destination.dart';
+import 'package:player/domain/navigation/source_nav.dart';
+import 'package:player/domain/sources/library.dart';
 import 'package:player/l10n/formatters.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -285,6 +291,115 @@ void main() {
           es.loginFailure(
               const LoginFailureOfKind(LoginFailureKind.cannotConnect)),
           isNot(contains('Cannot')));
+    });
+  });
+
+  group('navigation and library names', () {
+    test('every builtin destination has a name that is not its id', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final d in builtinDestinations) {
+          final name = loc.navDestinationLabel(d);
+          expect(name, isNotEmpty, reason: '$tag ${d.id}');
+          expect(name, isNot(d.id), reason: '$tag ${d.id}');
+        }
+      }
+    });
+
+    test('a saved filter keeps the words the viewer typed', () async {
+      final es = await l10n('es');
+      const filter = FilterDestination(
+        id: 'f1',
+        label: 'Unwatched Anime',
+        filter: MediaFilter.allMovies,
+      );
+      expect(es.navDestinationLabel(filter), 'Unwatched Anime');
+    });
+
+    test('entries: a library keeps its server name, builtins are worded',
+        () async {
+      final es = await l10n('es');
+      const icon = Icons.circle;
+      expect(
+        es.navEntryLabel(const SourceNavEntry(
+            id: 'library-1',
+            label: 'Kids',
+            icon: icon,
+            selectedIcon: icon,
+            route: '/x')),
+        'Kids',
+      );
+      expect(
+        es.navEntryLabel(const SourceNavEntry(
+            id: 'library-2',
+            libraryKind: LibraryKind.videos,
+            icon: icon,
+            selectedIcon: icon,
+            route: '/x')),
+        'Escenas',
+      );
+      expect(
+        es.navEntryTabLabel(const SourceNavEntry(
+            id: 'shows',
+            shortLabel: true,
+            icon: icon,
+            selectedIcon: icon,
+            route: '/x')),
+        'Series',
+      );
+    });
+
+    test('sort and filter names exist in every language', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final name in SortName.values) {
+          expect(loc.sortName(name), isNotEmpty, reason: '$tag $name');
+        }
+        for (final name in FilterName.values) {
+          expect(loc.filterOptionName(FilterOption(id: 'x', name: name)),
+              isNotEmpty);
+        }
+        for (final category in MediaCategoryFilter.values) {
+          expect(loc.categoryFilterName(category), isNotEmpty);
+        }
+      }
+      final en = await l10n('en');
+      expect(en.sortName(SortName.recentlyAdded), 'Recently added');
+    });
+  });
+
+  group('playback stats', () {
+    test('values read the way the panel always drew them in English', () async {
+      final en = await l10n('en');
+      expect(
+          en.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
+          '18.4 s ahead');
+      expect(en.statsValue(const StatsFramesValue(dropped: 3, total: 40)),
+          '3 dropped - 40 total');
+      expect(en.statsValue(const StatsDecoderValue('h264', true)),
+          'h264 hardware');
+      expect(en.statsValue(const StatsDecoderValue('h264', null)), 'h264');
+      expect(en.statsModeName(PlaybackMode.transcode), 'Transcode');
+    });
+
+    test('the buffer uses the language decimal separator', () async {
+      final es = await l10n('es');
+      expect(
+          es.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
+          contains('18,4'));
+    });
+
+    test('every row and mode has a label in every language', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final id in StatsRowId.values) {
+          expect(loc.statsRowLabel(id), isNotEmpty);
+        }
+        for (final mode in PlaybackMode.values) {
+          expect(loc.statsModeName(mode), isNotEmpty);
+          expect(loc.statsPill(mode), isNotEmpty);
+        }
+      }
     });
   });
 }

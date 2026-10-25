@@ -11,23 +11,28 @@ const stashScenesLibraryId = 'scenes';
 const stashSortOptions = [
   SortOption(
       id: 'created_at',
-      label: 'Recently added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
-  SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'date',
-      label: 'Date',
+      name: SortName.date,
       descendingByDefault: true,
       shared: SharedSort.released),
-  SortOption(id: 'rating', label: 'Rating', descendingByDefault: true),
-  SortOption(id: 'play_count', label: 'Most played', descendingByDefault: true),
+  SortOption(id: 'rating', name: SortName.rating, descendingByDefault: true),
   SortOption(
-      id: 'last_played_at', label: 'Last played', descendingByDefault: true),
-  SortOption(id: 'random', label: 'Random'),
+      id: 'play_count', name: SortName.mostPlayed, descendingByDefault: true),
+  SortOption(
+      id: 'last_played_at',
+      name: SortName.lastPlayed,
+      descendingByDefault: true),
+  SortOption(id: 'random', name: SortName.random),
 ];
 
-const stashFilterOptions = [FilterOption(id: 'unplayed', label: 'Unplayed')];
+const stashFilterOptions = [
+  FilterOption(id: 'unplayed', name: FilterName.unplayed),
+];
 
 /// A server-made URL as a path relative to the server, without the
 /// `apikey` parameter Stash adds when the request carried a key.

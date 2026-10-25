@@ -107,12 +107,14 @@ void main() {
       sortOptions: [
         SortOption(
           id: 'addedAt',
-          label: 'Recently added',
+          name: SortName.recentlyAdded,
           descendingByDefault: true,
           shared: SharedSort.added,
         ),
       ],
-      filterOptions: [FilterOption(id: 'unwatched', label: 'Unwatched')],
+      filterOptions: [
+        FilterOption(id: 'unwatched', name: FilterName.unwatched)
+      ],
     );
     expect(Library.fromJson(_viaString(library.toJson())).toJson(),
         library.toJson());

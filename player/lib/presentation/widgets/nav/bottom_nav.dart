@@ -6,6 +6,7 @@ import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/source_nav.dart';
+import '../../../l10n/l10n.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
@@ -146,7 +147,7 @@ class BottomNav extends StatelessWidget {
                                 : NavItem(
                                     icon: entry.icon,
                                     selectedIcon: entry.selectedIcon,
-                                    label: entry.shortLabel ?? entry.label,
+                                    label: context.l10n.navEntryTabLabel(entry),
                                     isSelected: entry.matches(location),
                                     isDisabled:
                                         isOffline && entry.id != 'downloads',

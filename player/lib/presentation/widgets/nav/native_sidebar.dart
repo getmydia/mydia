@@ -183,7 +183,7 @@ NativeSidebar nativeSidebarFor({
 
   NativeSidebarItem destination(SourceNavEntry entry) => NativeSidebarItem(
         id: entry.id,
-        title: entry.label,
+        title: l10n.navEntryLabel(entry),
         symbol: nativeSidebarSymbol(entry.id),
         badge: entry.id == 'settings' ? settingsBadge : null,
         // The Flutter rows' offline rule (`SidebarContent._buildRow`).

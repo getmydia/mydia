@@ -201,14 +201,12 @@ class MydiaSource extends MediaSource
   Future<List<Library>> libraries() async => [
         Library(
           ref: LibraryRef(sourceId: id, id: _moviesLibrary),
-          title: 'Movies',
           kind: LibraryKind.movies,
           sortOptions: mydiaSortOptions,
           filterOptions: mydiaFilterOptions(LibraryKind.movies),
         ),
         Library(
           ref: LibraryRef(sourceId: id, id: _showsLibrary),
-          title: 'TV Shows',
           kind: LibraryKind.shows,
           sortOptions: mydiaSortOptions,
           filterOptions: mydiaFilterOptions(LibraryKind.shows),
