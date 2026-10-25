@@ -68,7 +68,7 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
       );
     } on SourceException catch (e) {
       throw CastBackendException(
-        'Could not start a streaming session: ${e.message ?? e.viewerMessage}',
+        'Could not start a streaming session: ${e.logText}',
         CastFailureKind.unreachable,
       );
     }

@@ -5,6 +5,7 @@ import 'package:player/core/player/device_profile.dart';
 import 'package:player/core/sources/transcode_codecs.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/player/session/jellyfin_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 
@@ -56,8 +57,9 @@ void main() {
     o.server.playbackErrorCode = 'NotAllowed';
     final prep = await o.session.prepareStreaming(
         owner: Object(), onProgress: (_) {}, isCurrent: () => true);
-    expect(
-        (prep as StreamingUnavailable).problem.text, contains('not allowed'));
+    final error = (prep as StreamingUnavailable).problem.error;
+    expect(error, isA<SourceException>());
+    expect((error as SourceException).fault, SourceFault.jellyfinNotAllowed);
   });
 
   test('detail lists the sidecar subtitle only, and fetches it', () async {

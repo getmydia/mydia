@@ -66,8 +66,7 @@ class PlexServerClient {
     try {
       json = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
-      throw const SourceException.server(
-          'The Plex server sent a response this app cannot read.');
+      throw const SourceException.fault(SourceFault.plexUnreadable);
     }
     final body = json is Map ? json['MediaContainer'] : null;
     return body is Map ? body.cast<String, dynamic>() : const {};

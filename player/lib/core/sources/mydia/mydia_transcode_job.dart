@@ -45,8 +45,7 @@ class MydiaTranscodeJob extends TranscodeJob {
       return _snapshot(await jobs.getJobStatus(jobId));
     } on DownloadServiceException catch (e) {
       if (e.statusCode == 404) {
-        throw const DeadJobException(
-            'The server no longer has this download job. Restart to try again.');
+        throw const DeadJobException();
       }
       rethrow;
     }

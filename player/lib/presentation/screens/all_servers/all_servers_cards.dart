@@ -119,7 +119,7 @@ Future<void> showAllServersContinueMenu(
       } catch (e) {
         toaster.show(
           e is SourceException
-              ? e.viewerMessage
+              ? l10n.sourceError(e)
               : l10n.continueRemoveTitleFailed,
           kind: ToastKind.error,
         );

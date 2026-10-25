@@ -1994,9 +1994,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!_isCurrentLoad(gen)) return;
       if (mounted) {
         setState(() {
-          _error = e is PlaybackIssueException
-              ? context.l10n.playbackIssueText(e.issue)
-              : e.toString();
+          _error = context.l10n.playbackFailureText(e);
           _isLoading = false;
         });
       }
@@ -2619,7 +2617,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Fallback failed: $e');
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = context.l10n.playbackFailureText(e);
         _isLoading = false;
       });
     }
@@ -3484,9 +3482,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  void _showLostSourceError(String message) {
+  /// [issue] words the failure when the app itself knows the reason, [error]
+  /// when a reopen threw; [message] is mpv's own text otherwise.
+  void _showLostSourceError(String message,
+      {PlaybackIssue? issue, Object? error}) {
     setState(() {
-      _error = playbackErrorMessage(context.l10n, message);
+      final l10n = context.l10n;
+      _error = issue != null
+          ? l10n.playbackIssueText(issue)
+          : error != null
+              ? l10n.playbackErrorFailed(l10n.playbackFailureText(error))
+              : playbackErrorMessage(l10n, message);
       _isLoading = false;
     });
     _remoteTargetController.notifyChanged();
@@ -3505,14 +3511,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     // Only here is the player still loaded, so whether the viewer had paused
     // is reliable; a lost source cannot say.
-    _reopenLostSource('Media proxy moved to a new port',
-        keepPaused: !_player!.state.playing);
+    _reopenLostSource('Media proxy moved to a new port', // l10n-ignore log text
+        keepPaused: !_player!.state.playing,
+        issue: PlaybackIssue.proxyMoved);
   }
 
   /// Reopens the current file at [_lastGoodPosition] on the same plan, once
   /// per [_lostSourceWindow]; a second loss inside it shows the error page
   /// with its Retry.
-  void _reopenLostSource(String message, {bool keepPaused = false}) {
+  void _reopenLostSource(String message,
+      {bool keepPaused = false, PlaybackIssue? issue}) {
     if (_reopeningLostSource) return;
     // A file change in flight has no player to recover and owns the outcome;
     // an error here would land on the incoming file. `_player` and not
@@ -3546,7 +3554,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // nothing to reopen through, so the error page and its Retry are the
       // only recovery.
       _stopVerification();
-      _showLostSourceError(message);
+      _showLostSourceError(message, issue: issue);
       return;
     }
 
@@ -3568,7 +3576,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // False means the switch did nothing, so the dead source is still
         // loaded and the viewer would be left with no error and no player.
         if (!switched) {
-          _showLostSourceError(message);
+          _showLostSourceError(message, issue: issue);
         } else if (keepPaused) {
           // The switch waits for the position to advance, so it always
           // resumes playback; put the viewer's pause back afterwards.
@@ -3577,7 +3585,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       } catch (e) {
         debugPrint('[PlayerScreen] Lost-source reopen failed: $e');
         if (!_isCurrentLoad(gen)) return;
-        _showLostSourceError(e.toString());
+        _showLostSourceError(e.toString(), error: e);
       } finally {
         if (_reopeningLostSourceGeneration == gen) {
           _reopeningLostSourceGeneration = null;
@@ -4772,7 +4780,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       },
       stillActive: () => mounted,
       onGaveUp: (error) => setState(() {
-        _error = error.toString();
+        _error = context.l10n.playbackFailureText(error);
         _isLoading = false;
       }),
     );

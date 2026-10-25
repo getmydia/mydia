@@ -56,13 +56,14 @@ Map<String, dynamic> jellyfinDeviceProfile(DeviceProfile? profile) {
   };
 }
 
-String jellyfinPlaybackError(String code) => switch (code) {
-      'NotAllowed' => 'Your Jellyfin account is not allowed to play this.',
+SourceException jellyfinPlaybackError(String code) => switch (code) {
+      'NotAllowed' =>
+        const SourceException.fault(SourceFault.jellyfinNotAllowed),
       'NoCompatibleStream' =>
-        'Jellyfin found no way to play this file on this device.',
+        const SourceException.fault(SourceFault.jellyfinNoCompatibleStream),
       'RateLimitExceeded' =>
-        'Jellyfin limits how much this account can stream right now.',
-      _ => 'Jellyfin refused to play this ($code).',
+        const SourceException.fault(SourceFault.jellyfinRateLimited),
+      _ => SourceException.fault(SourceFault.jellyfinRefused, detail: code),
     };
 
 @immutable
@@ -89,7 +90,7 @@ class JellyfinPlaybackInfo {
 
   factory JellyfinPlaybackInfo.fromJson(Map<String, dynamic> json) {
     if (json['ErrorCode'] case final String code) {
-      throw SourceException.server(jellyfinPlaybackError(code));
+      throw jellyfinPlaybackError(code);
     }
     return JellyfinPlaybackInfo(
       playSessionId: json['PlaySessionId'] as String? ?? '',

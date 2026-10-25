@@ -84,7 +84,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
         try {
           await run(pin);
         } on SourceException catch (e) {
-          return e.viewerMessage;
+          return l10n.sourceError(e);
         } catch (e) {
           failure = e;
         }
@@ -107,7 +107,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
       final error = failure;
       toaster.show(
         error is SourceException
-            ? error.viewerMessage
+            ? l10n.sourceError(error)
             : l10n.sourcesSwitchUserFailed(user.title),
         kind: ToastKind.error,
       );

@@ -2061,7 +2061,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 ),
                               ),
                               child: Text(
-                                context.l10n.loginSave,
+                                context.l10n.commonSave,
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,

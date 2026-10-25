@@ -180,8 +180,8 @@ class PlexStreamResolver implements StreamResolver {
     switch (plan) {
       case DirectPlayPlan():
         final path = version.streamPath ??
-            (throw const SourceException.unsupported(
-                'Plex offers no direct file for this item.'));
+            (throw const SourceException.unsupportedFault(
+                SourceFault.plexNoDirectFile));
         if (forReceiver) {
           return ResolvedStream(
             url: (await client.url(path, await _playerHeaders())).toString(),
@@ -231,9 +231,10 @@ class PlexStreamResolver implements StreamResolver {
             '/video/:/transcode/universal/decision', query);
         final code = decision['generalDecisionCode'] as int?;
         if (code != null && code >= 2000 && code < 3000) {
-          throw SourceException.server(
-              decision['generalDecisionText'] as String? ??
-                  'Plex refused to convert this file.');
+          final text = decision['generalDecisionText'] as String?;
+          throw text == null
+              ? const SourceException.fault(SourceFault.plexRefusedConvert)
+              : SourceException.server(text);
         }
         final headers = await _playerHeaders();
         return ResolvedStream(

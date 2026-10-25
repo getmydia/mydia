@@ -23,9 +23,6 @@ class PlexHomeSwitcher {
         _secrets = secrets,
         _records = records;
 
-  static const noServersMessage =
-      'This user has no access to the servers on this account.';
-
   final PlexTvClient _tv;
   final SourceSecrets _secrets;
   final SourceRecordsNotifier _records;
@@ -81,7 +78,8 @@ class PlexHomeSwitcher {
             if (chosen.contains(r.clientIdentifier)) r,
         ];
         if (visible.isEmpty) {
-          throw const SourceException.unsupported(noServersMessage);
+          throw const SourceException.unsupportedFault(
+              SourceFault.plexNoServersForUser);
         }
         previousProfile = current.account.activeProfileId;
         previousServers = current.servers;

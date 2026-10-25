@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../domain/models/available_update.dart';
 import '../android_installer.dart';
 import '../platform_updater.dart';
+import '../update_problem.dart';
 
 /// Android: downloads the APK and hands it to the package installer.
 ///
@@ -72,8 +73,8 @@ class AndroidUpdater extends PlatformUpdater {
         // Delete first. A file that failed its check must not sit in the
         // cache where a later run could pick it up.
         file.deleteSync();
-        throw Exception(
-          'The downloaded file does not match its published checksum.',
+        throw const UpdateStepFailed(
+          UpdateProblem(UpdateIssue.checksumMismatch),
         );
       }
     }

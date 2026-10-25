@@ -36,12 +36,15 @@ void main() {
         const Page<int>(items: [1], nextCursor: Cursor('60')).hasMore, isTrue);
   });
 
-  test('SourceException speaks to the viewer', () {
-    expect(
-        const SourceException.unreachable().viewerMessage, contains('reach'));
-    expect(const SourceException.unauthorized().viewerMessage,
-        contains('Sign in again'));
-    expect(const SourceException.server('Transcoder busy').viewerMessage,
+  test('SourceException.toString is English log text, not viewer text', () {
+    expect(const SourceException.unreachable().toString(), contains('reach'));
+    expect(const SourceException.server('Transcoder busy').toString(),
         'Transcoder busy');
+    expect(
+        const SourceException.fault(SourceFault.serverHttp, detail: '502')
+            .toString(),
+        'The server answered HTTP 502.');
+    expect(const SourceException.unsupportedFault(SourceFault.serverGone).kind,
+        SourceErrorKind.unsupported);
   });
 }

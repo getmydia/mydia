@@ -1,4 +1,5 @@
 import '../../../core/channels/pairing_service.dart' show PairingFailure;
+import '../../../domain/sources/source_error.dart';
 
 /// Why a sign-in step failed, rendered by the screen through
 /// `AppLocalizations.loginFailure`.
@@ -32,4 +33,11 @@ final class LoginFailureFromServer extends LoginFailure {
 final class LoginFailureOfPairing extends LoginFailure {
   const LoginFailureOfPairing(this.failure);
   final PairingFailure failure;
+}
+
+/// A source failure; the screen words it from [error] through
+/// `AppLocalizations.sourceError`.
+final class LoginFailureOfSource extends LoginFailure {
+  const LoginFailureOfSource(this.error);
+  final SourceException error;
 }

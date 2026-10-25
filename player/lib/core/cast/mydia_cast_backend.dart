@@ -374,7 +374,7 @@ class MydiaCastBackend
       _connected = null;
       final kind = response is FlutterRemoteControlResponse_NotAuthorized
           ? CastFailureKind.notAuthorized
-          : CastFailureKind.unknown;
+          : CastFailureKind.targetRefused;
       if (!_disposed) _failures.add(kind);
       throw CastBackendException(
         'The Mydia target refused this device.',

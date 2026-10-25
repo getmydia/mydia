@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/backends/flatpak_update_backend.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/update_backend.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/domain/models/available_update.dart';
 
 const _notes = 'https://github.com/getmydia/mydia/releases/latest';
@@ -191,7 +192,8 @@ void main() {
     final outcome = await backend.requestUpdate();
 
     expect(outcome, isA<UpdateFailed>());
-    expect((outcome as UpdateFailed).message, contains('connection reset'));
+    expect(
+        (outcome as UpdateFailed).problem.text, contains('connection reset'));
   });
 
   test('a stream that ends without a terminal status is not success', () async {
@@ -208,7 +210,7 @@ void main() {
     final outcome = await backend.requestUpdate();
 
     expect(outcome, isA<UpdateFailed>());
-    expect((outcome as UpdateFailed).message, contains('without reporting'));
+    expect((outcome as UpdateFailed).problem.issue, UpdateIssue.noResult);
   });
 
   test('a refusal arriving on the Progress signal also reports unsupported',
@@ -233,7 +235,8 @@ void main() {
     final outcome = await backend.requestUpdate();
 
     expect(outcome, isA<UpdateUnsupported>());
-    expect((outcome as UpdateUnsupported).reason, contains('permissions'));
+    expect((outcome as UpdateUnsupported).problem.issue,
+        UpdateIssue.needsNewPermissions);
   });
 
   test('a refused update reports unsupported, not failed', () async {
@@ -247,7 +250,8 @@ void main() {
     final outcome = await backend.requestUpdate();
 
     expect(outcome, isA<UpdateUnsupported>());
-    expect((outcome as UpdateUnsupported).reason, contains('permissions'));
+    expect((outcome as UpdateUnsupported).problem.issue,
+        UpdateIssue.needsNewPermissions);
   });
 
   test('an update already installed skips the transaction entirely', () async {
@@ -346,7 +350,8 @@ void main() {
     expect(backend.manualCheck, ManualCheckBehaviour.checksAndInstalls);
     final outcome = await backend.requestUpdate();
     expect(outcome, isA<UpdateFailed>());
-    expect((outcome as UpdateFailed).message, contains('software centre'));
+    expect(
+        (outcome as UpdateFailed).problem.issue, UpdateIssue.portalUnreachable);
   });
 
   test('refresh is a no-op, because the portal owns the polling', () async {

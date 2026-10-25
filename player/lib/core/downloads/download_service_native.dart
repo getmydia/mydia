@@ -16,6 +16,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../../domain/models/download.dart';
+import '../../domain/models/download_failure.dart';
 import '../../domain/models/download_plan.dart';
 import '../../domain/models/download_request.dart';
 import '../../domain/models/download_settings.dart';
@@ -290,7 +291,7 @@ class _NativeDownloadService implements DownloadService {
       if (task != null) {
         final cancelledTask = task.copyWith(
           status: 'cancelled',
-          error: 'Cancelled by user',
+          error: _cancelledByUser,
         );
         await _database!.saveTask(cancelledTask);
         _emit(cancelledTask);
@@ -523,8 +524,9 @@ class _NativeDownloadService implements DownloadService {
       case RecoveryAction.fail:
         final failed = task.copyWith(
           status: 'failed',
-          error: 'Download stopped responding after '
-              '$maxRecoveryAttempts recovery attempts.',
+          error: const DownloadFailure(DownloadFailureCode.stalled,
+                  count: maxRecoveryAttempts)
+              .encode(),
         );
         await _database!.saveTask(failed);
         _emit(failed);
@@ -732,7 +734,7 @@ class _NativeDownloadService implements DownloadService {
   Future<DownloadPlan> _resolve(DownloadTask task) async {
     final resolver = _resolver;
     if (resolver == null) {
-      throw const _ParkTask('Downloads are still starting.');
+      throw const _ParkTask(DownloadFailure(DownloadFailureCode.startingUp));
     }
     try {
       return await resolver(task);
@@ -740,12 +742,12 @@ class _NativeDownloadService implements DownloadService {
       if (e.kind == SourceErrorKind.unreachable) {
         // Being offline is not the download's fault, so it must not use up
         // the sweep's attempts.
-        throw _ParkTask(e.viewerMessage, countsAsAttempt: false);
+        throw _ParkTask(DownloadFailure.fromSource(e), countsAsAttempt: false);
       }
-      throw _TaskFailure(e.viewerMessage, permanent: true);
+      throw _TaskFailure(DownloadFailure.fromSource(e), permanent: true);
     } on DownloadServiceException catch (e) {
       if (e.statusCode == 404) {
-        throw const _TaskFailure('This item is no longer on the server.',
+        throw const _TaskFailure(DownloadFailure(DownloadFailureCode.itemGone),
             permanent: true);
       }
       rethrow;
@@ -874,7 +876,9 @@ class _NativeDownloadService implements DownloadService {
       Future<void> pollJob(TranscodeJob job, String id) async {
         final snap = await _guardJobCall(() => job.status(id));
         if (snap.error != null) {
-          throw _TaskFailure('Transcode failed: ${snap.error}');
+          throw _TaskFailure(DownloadFailure(
+              DownloadFailureCode.transcodeFailed,
+              detail: snap.error));
         }
         transcodeDone = snap.ready;
         expected = snap.fileSize ?? expected;
@@ -1018,7 +1022,7 @@ class _NativeDownloadService implements DownloadService {
           if (code == 401 || code == 403) {
             if (reResolved) {
               throw const _TaskFailure(
-                  'This server no longer accepts the saved sign-in. Sign in again.',
+                  DownloadFailure(DownloadFailureCode.signInExpired),
                   permanent: true);
             }
             reResolved = true;
@@ -1034,8 +1038,10 @@ class _NativeDownloadService implements DownloadService {
                 Duration(seconds: 1 << transientRetries));
             if (superseded()) return;
             if (transientRetries >= maxTransientRetries) {
-              throw _ParkTask('Network error after $maxTransientRetries '
-                  'attempts: ${e.message ?? e.type.name}');
+              throw _ParkTask(DownloadFailure(
+                  DownloadFailureCode.networkRetries,
+                  count: maxTransientRetries,
+                  detail: e.message ?? e.type.name));
             }
             continue;
           }
@@ -1043,7 +1049,7 @@ class _NativeDownloadService implements DownloadService {
           // remote servers: park it so the sweep resumes it with a Range
           // request instead of failing it back to byte zero.
           if (_isTransportError(e)) {
-            throw _ParkTask('Network error: ${e.message ?? e.type.name}');
+            throw _ParkTask(_networkFailure(e));
           }
           rethrow;
         }
@@ -1072,7 +1078,7 @@ class _NativeDownloadService implements DownloadService {
       final before = attemptsBeforeClaim;
       await save(await withDiskProgress(current.copyWith(
         status: 'interrupted',
-        error: e.message,
+        error: e.failure.encode(),
         recoveryAttempts: !e.countsAsAttempt && before != null
             ? math.min(before, current.recoveryAttempts)
             : current.recoveryAttempts,
@@ -1080,24 +1086,29 @@ class _NativeDownloadService implements DownloadService {
     } on _TaskFailure catch (e) {
       await save(await withDiskProgress(current.copyWith(
         status: 'failed',
-        error: e.message,
+        error: e.failure.encode(),
         recoveryAttempts:
             e.permanent ? maxRecoveryAttempts : current.recoveryAttempts,
       )));
-    } on DeadJobException catch (e) {
+    } on DeadJobException {
       await save(current.copyWith(
           status: 'failed',
-          error: e.message,
+          error: const DownloadFailure(DownloadFailureCode.jobGone).encode(),
           recoveryAttempts: maxRecoveryAttempts));
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) return;
       // The same rule as in the loop, for a failure before the first byte.
+      final message = e.message;
       await save(await withDiskProgress(current.copyWith(
           status: _isTransportError(e) ? 'interrupted' : 'failed',
-          error: e.message ?? 'Download failed')));
+          // No text of its own leaves the generic "download failed".
+          error: (message == null
+                  ? const DownloadFailure(DownloadFailureCode.unknown)
+                  : DownloadFailure.text(message))
+              .encode())));
     } catch (e) {
-      await save(await withDiskProgress(
-          current.copyWith(status: 'failed', error: e.toString())));
+      await save(await withDiskProgress(current.copyWith(
+          status: 'failed', error: DownloadFailure.text('$e').encode())));
     } finally {
       release();
       _runInBackground(_processQueue(), 'process queue');
@@ -1176,7 +1187,7 @@ class _NativeDownloadService implements DownloadService {
     if (task != null) {
       final cancelledTask = task.copyWith(
         status: 'cancelled',
-        error: 'Cancelled by user',
+        error: _cancelledByUser,
       );
       await _database!.saveTask(cancelledTask);
       _emit(cancelledTask);
@@ -1549,30 +1560,30 @@ Future<T> _guardJobCall<T>(Future<T> Function() call) async {
     return await call();
   } on SourceException catch (e) {
     if (e.kind == SourceErrorKind.unreachable) {
-      throw _ParkTask(e.viewerMessage, countsAsAttempt: false);
+      throw _ParkTask(DownloadFailure.fromSource(e), countsAsAttempt: false);
     }
     rethrow;
   } on DioException catch (e) {
     if (_isTransportError(e)) {
-      throw _ParkTask('Network error: ${e.message ?? e.type.name}');
+      throw _ParkTask(_networkFailure(e));
     }
     rethrow;
   } on http.ClientException catch (e) {
-    throw _ParkTask('Network error (${e.runtimeType})');
+    throw _ParkTask(_networkKind(e));
   } on SocketException catch (e) {
-    throw _ParkTask('Network error (${e.runtimeType})');
+    throw _ParkTask(_networkKind(e));
   } on HttpException catch (e) {
-    throw _ParkTask('Network error (${e.runtimeType})');
+    throw _ParkTask(_networkKind(e));
   } on TimeoutException catch (e) {
-    throw _ParkTask('Network error (${e.runtimeType})');
+    throw _ParkTask(_networkKind(e));
   }
 }
 
 /// The task cannot go on now, but may later: parked as interrupted for the
 /// recovery sweep.
 class _ParkTask implements Exception {
-  const _ParkTask(this.message, {this.countsAsAttempt = true});
-  final String message;
+  const _ParkTask(this.failure, {this.countsAsAttempt = true});
+  final DownloadFailure failure;
 
   /// False when the park says nothing about the download itself (its source
   /// is unreachable), so the sweep's claim is handed back.
@@ -1581,7 +1592,23 @@ class _ParkTask implements Exception {
 
 /// The task cannot finish. [permanent] stops the sweep retrying it.
 class _TaskFailure implements Exception {
-  const _TaskFailure(this.message, {this.permanent = false});
-  final String message;
+  const _TaskFailure(this.failure, {this.permanent = false});
+  final DownloadFailure failure;
   final bool permanent;
 }
+
+/// What a cancelled task records as its error.
+final String _cancelledByUser =
+    const DownloadFailure(DownloadFailureCode.cancelled).encode();
+
+/// A dropped connection, as the transport worded it.
+DownloadFailure _networkFailure(DioException e) => DownloadFailure(
+      DownloadFailureCode.network,
+      detail: e.message ?? e.type.name,
+    );
+
+/// A dropped connection that only has a type to show.
+DownloadFailure _networkKind(Object e) => DownloadFailure(
+      DownloadFailureCode.networkKind,
+      detail: '${e.runtimeType}',
+    );

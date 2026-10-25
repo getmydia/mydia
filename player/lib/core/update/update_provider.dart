@@ -11,6 +11,7 @@ import 'android_installer.dart';
 import 'backends/flatpak_update_backend.dart';
 import 'update_backend.dart';
 import 'update_host.dart';
+import 'update_problem.dart';
 import 'update_track.dart';
 
 /// Terminates the process, mirroring Flutter's own `debugPrint`: a mutable
@@ -49,12 +50,11 @@ final installPermissionCheckProvider = Provider<Future<bool> Function()>(
 );
 
 /// What the user sees when they come back from Android's settings without
-/// having granted the permission. Names the toggle as Android labels it, since
-/// "Allow from this source" alone does not say what is being allowed.
-const String _installPermissionStillDenied =
-    'Mydia still is not allowed to install updates. Turn on "Install unknown '
-    'apps" (Allow from this source) for Mydia in Android settings, then '
-    'tap Retry.';
+/// having granted the permission. The sentence names the toggle as Android
+/// labels it, since "Allow from this source" alone does not say what is being
+/// allowed.
+const UpdateProblem _installPermissionStillDenied =
+    UpdateProblem(UpdateIssue.installPermissionStillDenied);
 
 /// A track the viewer chose that has no builds here. [macos] selects the
 /// macOS wording.
@@ -105,8 +105,9 @@ class UpdateState {
   /// update card words it (`AppFormatters.updateNoticeText`).
   final UpdateNotice? notice;
 
-  /// Error message from the last check or apply attempt.
-  final String? error;
+  /// Why the last check or apply attempt failed; the update card words it
+  /// (`AppFormatters.updateErrorMessage`).
+  final UpdateProblem? error;
 
   /// The track switch that failed for want of published builds. Shown as an
   /// error, formatted by `AppFormatters.updateErrorMessage`; at most one of
@@ -161,7 +162,7 @@ class UpdateState {
     double? downloadProgress,
     bool? restartRequired,
     UpdateNotice? notice,
-    String? error,
+    UpdateProblem? error,
     TrackNotPublished? trackNotPublished,
     Set<UpdateTrack>? availableTracks,
     UpdateTrack? currentTrack,
@@ -317,7 +318,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       if (!ref.mounted) return;
       state = state.copyWith(
         isChecking: false,
-        error: 'Failed to check for updates: $e',
+        error: UpdateProblem(UpdateIssue.checkFailed, detail: '$e'),
       );
     }
   }
@@ -360,10 +361,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
           notice: UpdateNotice.upToDate,
           clearUpdate: true,
         ),
-      UpdateUnsupported(:final reason, :final needsInstallPermission) =>
-        _unsupported(reason, needsInstallPermission),
-      UpdateFailed(:final message) =>
-        state.copyWith(isApplying: false, error: message),
+      UpdateUnsupported(:final problem, :final needsInstallPermission) =>
+        _unsupported(problem, needsInstallPermission),
+      UpdateFailed(:final problem) =>
+        state.copyWith(isApplying: false, error: problem),
       // The backend has already handed this off somewhere outside the app
       // (Android's own confirmation dialog, Sparkle's window) and holds no
       // pending update of its own to retry. Leaving availableUpdate set
@@ -377,9 +378,9 @@ class UpdateNotifier extends Notifier<UpdateState> {
     };
   }
 
-  UpdateState _unsupported(String reason, bool needsInstallPermission) {
+  UpdateState _unsupported(UpdateProblem problem, bool needsInstallPermission) {
     _setInstallPending(needsInstallPermission);
-    return state.copyWith(isApplying: false, error: reason);
+    return state.copyWith(isApplying: false, error: problem);
   }
 
   /// Watches for the app coming back to the foreground only while an install
@@ -485,7 +486,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
           clearError: true,
           trackNotPublished: TrackNotPublished(track, macos: macos),
         ),
-      TrackSwitchUnsupported(:final reason) => state.copyWith(error: reason),
+      TrackSwitchUnsupported(:final problem) => state.copyWith(error: problem),
     };
   }
 }

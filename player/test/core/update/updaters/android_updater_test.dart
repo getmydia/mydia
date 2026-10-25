@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/android_installer.dart';
 import 'package:player/core/update/updaters/android_updater.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/domain/models/available_update.dart';
 
 AppUpdate _update({String? sha256}) => AppUpdate(
@@ -86,7 +87,8 @@ void main() {
 
     await expectLater(
       updater.applyUpdate(_update(sha256: 'not-the-digest')),
-      throwsA(predicate((e) => e.toString().contains('does not match'))),
+      throwsA(isA<UpdateStepFailed>().having(
+          (e) => e.problem.issue, 'issue', UpdateIssue.checksumMismatch)),
     );
     expect(installer.installed, isNull);
     expect(cache.listSync(), isEmpty);

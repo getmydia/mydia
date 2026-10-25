@@ -1354,7 +1354,11 @@ class DownloadsScreen extends ConsumerWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          task.error ?? context.l10n.downloadsFailedFallback,
+                          switch (task.failure) {
+                            final failure? =>
+                              context.l10n.downloadFailureText(failure),
+                            null => context.l10n.downloadsFailedFallback,
+                          },
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1774,7 +1778,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(context.l10n.downloadsSettingsSave),
+                  child: Text(context.l10n.commonSave),
                 ),
               ),
             ],

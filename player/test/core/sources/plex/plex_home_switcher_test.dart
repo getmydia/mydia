@@ -175,8 +175,8 @@ void main() {
   test('a user who sees none of the chosen servers is refused', () async {
     await expectLater(
       (await switcher()).switchTo(_account, _wren),
-      throwsA(isA<SourceException>().having((e) => e.viewerMessage, 'message',
-          PlexHomeSwitcher.noServersMessage)),
+      throwsA(isA<SourceException>()
+          .having((e) => e.fault, 'fault', SourceFault.plexNoServersForUser)),
     );
     expect((await stored()).account.activeProfileId, 'owner');
     expect(await storage.read('source/acc1/guest02/user_token'), isNull);

@@ -48,8 +48,8 @@ Future<DirectFile> originalFile(
   required Future<Map<String, String>> Function() headers,
 }) async {
   final version = downloadVersion(await source.item(ref)) ??
-      (throw const SourceException.unsupported(
-          'This server offers no file to download for this item.'));
+      (throw const SourceException.unsupportedFault(
+          SourceFault.noFileToDownload));
   return DirectFile(
     url: (await url(version)).toString(),
     headers: await headers(),

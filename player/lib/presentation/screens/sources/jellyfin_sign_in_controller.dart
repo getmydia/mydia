@@ -132,7 +132,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     } on SourceException catch (e) {
       if (ref.mounted) {
         state = JellyfinEnterAddress(
-          error: SignInProblem.fromServer(e.viewerMessage),
+          error: SignInProblem.fromError(e),
         );
       }
     } catch (_) {
@@ -160,7 +160,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     } on SourceException catch (e) {
       if (ref.mounted) {
         state = JellyfinPassword(
-          error: SignInProblem.fromServer(e.viewerMessage),
+          error: SignInProblem.fromError(e),
           quickConnectAvailable: _quickConnect,
         );
       }
@@ -193,7 +193,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       state = e.kind == SourceErrorKind.notFound
           ? JellyfinQuickConnect(code: code.code, expired: true)
           : JellyfinPassword(
-              error: SignInProblem.fromServer(e.viewerMessage),
+              error: SignInProblem.fromError(e),
               quickConnectAvailable: _quickConnect,
             );
     } on SignInIssueException catch (e) {
@@ -223,7 +223,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       state = JellyfinPassword(
         error: e.kind == SourceErrorKind.unauthorized
             ? const SignInProblem(SignInIssue.jellyfinWrongCredentials)
-            : SignInProblem.fromServer(e.viewerMessage),
+            : SignInProblem.fromError(e),
         quickConnectAvailable: _quickConnect,
       );
     } on SignInIssueException catch (e) {

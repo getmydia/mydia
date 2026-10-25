@@ -37,7 +37,9 @@ class SourceErrorView extends StatelessWidget {
             Icon(unauthorized ? Icons.lock_outline : Icons.cloud_off, size: 48),
             const SizedBox(height: 16),
             Text(
-              sourceError?.viewerMessage ?? context.l10n.sourcesErrorGeneric,
+              sourceError == null
+                  ? context.l10n.sourcesErrorGeneric
+                  : context.l10n.sourceError(sourceError),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

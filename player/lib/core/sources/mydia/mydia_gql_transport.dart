@@ -77,8 +77,7 @@ class HttpMydiaTransport implements MydiaGqlTransport {
       body: {'query': query, 'variables': variables},
     );
     if (body is! Map<String, dynamic>) {
-      throw const SourceException.server(
-          'The server sent a response this app cannot read.');
+      throw const SourceException.fault(SourceFault.serverUnreadable);
     }
     final errors = body['errors'];
     if (errors is List && errors.isNotEmpty) {
@@ -92,7 +91,7 @@ class HttpMydiaTransport implements MydiaGqlTransport {
     }
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
-      throw const SourceException.server('The server sent no data.');
+      throw const SourceException.fault(SourceFault.serverNoData);
     }
     return data;
   }

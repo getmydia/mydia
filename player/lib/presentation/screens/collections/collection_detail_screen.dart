@@ -419,7 +419,8 @@ class _CollectionDownloadButtonState
     } catch (e) {
       debugPrint('Collection sync failed: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.collectionSyncFailed('$e'),
+      showToast(context,
+          context.l10n.collectionSyncFailed(context.l10n.failureDetail(e)),
           kind: ToastKind.error);
     } finally {
       if (mounted) setState(() => _isSyncing = false);
@@ -457,7 +458,10 @@ class _CollectionDownloadButtonState
       options = await downloadable.downloadOptions(_probe());
     } catch (e) {
       if (!mounted) return;
-      showToast(context, context.l10n.collectionDownloadOptionsFailed('$e'),
+      showToast(
+          context,
+          context.l10n
+              .collectionDownloadOptionsFailed(context.l10n.failureDetail(e)),
           kind: ToastKind.error);
       return;
     }

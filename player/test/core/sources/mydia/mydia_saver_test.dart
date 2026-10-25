@@ -249,8 +249,8 @@ void main() {
   test('a re-auth for a different instance is refused', () async {
     await expectLater(
       save(_paired(instanceId: 'inst-3'), reauth: 'minst-2'),
-      throwsA(isA<SourceException>().having((e) => e.viewerMessage, 'message',
-          'That code belongs to a different server.')),
+      throwsA(isA<SourceException>()
+          .having((e) => e.fault, 'fault', SourceFault.mydiaWrongServerCode)),
     );
     expect(store.puts, 0);
   });

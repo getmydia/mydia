@@ -22,10 +22,12 @@ import '../core/remote/registration_status.dart';
 import '../core/router/push_route.dart';
 import '../core/theme/glass_material.dart';
 import '../core/theme/theme_preset.dart';
+import '../core/update/update_problem.dart';
 import '../core/update/update_provider.dart';
 import '../core/update/update_track.dart';
 import '../domain/models/audio_track.dart';
 import '../domain/models/download.dart';
+import '../domain/models/download_failure.dart';
 import '../domain/models/media_segment.dart';
 import '../domain/models/quality_delivery_subtitle.dart';
 import '../domain/models/quality_rung.dart';
@@ -38,6 +40,7 @@ import '../domain/navigation/nav_destination.dart';
 import '../domain/navigation/source_nav.dart';
 import '../domain/sources/item.dart';
 import '../domain/sources/library.dart';
+import '../domain/sources/source_error.dart';
 import '../presentation/screens/calendar/calendar_dates.dart';
 import '../presentation/screens/library/library_sort.dart';
 import '../presentation/screens/login/login_failure.dart';
@@ -46,9 +49,122 @@ import '../presentation/screens/player/subtitle_track_builder.dart'
 import 'gen/app_localizations.dart';
 
 extension AppFormatters on AppLocalizations {
+  /// The sentence for a failed source call. The server's own words are shown
+  /// verbatim; the app's own failures and every other error get a translated
+  /// sentence, never the error's `toString`.
+  String sourceError(Object error) {
+    if (error is! SourceException) return sourcesErrorGeneric;
+    final fault = error.fault;
+    if (fault != null) return sourceFaultText(fault, error.detail);
+    final message = error.message;
+    return switch (error.kind) {
+      SourceErrorKind.unreachable => sourceErrorUnreachable,
+      SourceErrorKind.unauthorized => sourceErrorUnauthorized,
+      SourceErrorKind.notFound => sourceErrorNotFound,
+      SourceErrorKind.unsupported => message ?? sourceErrorUnsupported,
+      SourceErrorKind.server => message ?? sourceErrorServer,
+      SourceErrorKind.wrongPin => sourceErrorWrongPin,
+    };
+  }
+
+  /// The detail to put inside a sentence such as "Sync failed: {detail}": a
+  /// source failure is worded in the viewer's language, anything else is the
+  /// error's own technical text.
+  String failureDetail(Object error) =>
+      error is SourceException ? sourceError(error) : '$error';
+
+  /// The sentence for a failure the app recognised itself. [detail] is the
+  /// HTTP status or the server's status word the sentence names.
+  String sourceFaultText(SourceFault fault, String? detail) {
+    final value = detail ?? '';
+    return switch (fault) {
+      SourceFault.serverGone => sourceFaultServerGone,
+      SourceFault.serverRefused => sourceFaultServerRefused,
+      SourceFault.serverHttp => sourceFaultServerHttp(value),
+      SourceFault.serverUnreadable ||
+      SourceFault.stashUnreadable =>
+        sourceFaultServerUnreadable,
+      SourceFault.serverNoData => sourceFaultServerNoData,
+      SourceFault.noFileToDownload => sourceFaultNoFileToDownload,
+      SourceFault.mydiaBadServerId => sourceFaultMydiaBadServerId,
+      SourceFault.mydiaWrongServerCode => sourceFaultMydiaWrongServerCode,
+      SourceFault.mydiaNoServerId => sourceFaultMydiaNoServerId,
+      SourceFault.jellyfinNoSession => sourceFaultJellyfinNoSession,
+      SourceFault.jellyfinNoQuickConnectCode =>
+        sourceFaultJellyfinNoQuickConnectCode,
+      SourceFault.jellyfinUnexpectedSignIn =>
+        sourceFaultJellyfinUnexpectedSignIn,
+      SourceFault.jellyfinNotJellyfin => sourcesJellyfinNotJellyfin,
+      SourceFault.jellyfinUnreadable => sourceFaultJellyfinUnreadable,
+      SourceFault.jellyfinNotAllowed => sourceFaultJellyfinNotAllowed,
+      SourceFault.jellyfinNoCompatibleStream =>
+        sourceFaultJellyfinNoCompatibleStream,
+      SourceFault.jellyfinRateLimited => sourceFaultJellyfinRateLimited,
+      SourceFault.jellyfinRefused => sourceFaultJellyfinRefused(value),
+      SourceFault.plexUnreadable => sourceFaultPlexUnreadable,
+      SourceFault.plexTvUnexpected => sourceFaultPlexTvUnexpected,
+      SourceFault.plexNoDirectFile => sourceFaultPlexNoDirectFile,
+      SourceFault.plexNoServersForUser => sourceFaultPlexNoServersForUser,
+      SourceFault.plexRefusedConvert => sourceFaultPlexRefusedConvert,
+      SourceFault.stashHttp => sourceFaultStashHttp(value),
+      SourceFault.stashUnexpectedReply => sourceFaultStashUnexpectedReply,
+      SourceFault.stashReportedError => sourceFaultStashReportedError,
+      SourceFault.stashStatus => sourceFaultStashStatus(value),
+      SourceFault.stashNotConfirmed => sourceFaultStashNotConfirmed,
+    };
+  }
+
+  /// The reason line on a failed or interrupted download card.
+  String downloadFailureText(DownloadFailure failure) {
+    final detail = failure.detail ?? '';
+    return switch (failure.code) {
+      DownloadFailureCode.cancelled => downloadsFailureCancelled,
+      DownloadFailureCode.stalled =>
+        downloadsFailureStalled(failure.count ?? 0),
+      DownloadFailureCode.startingUp => downloadsFailureStartingUp,
+      DownloadFailureCode.source => sourceError(failure.sourceException()),
+      DownloadFailureCode.transcodeFailed => downloadsFailureTranscode(detail),
+      DownloadFailureCode.networkRetries =>
+        downloadsFailureNetworkRetries(failure.count ?? 0, detail),
+      DownloadFailureCode.network => downloadsFailureNetwork(detail),
+      DownloadFailureCode.networkKind => downloadsFailureNetworkKind(detail),
+      DownloadFailureCode.jobGone => downloadsFailureJobGone,
+      DownloadFailureCode.signInExpired => sourceErrorUnauthorized,
+      DownloadFailureCode.itemGone => sourceErrorNotFound,
+      DownloadFailureCode.unknown => failure.detail ?? downloadsFailedFallback,
+    };
+  }
+
+  /// The line under the update card for [problem].
+  String updateProblemText(UpdateProblem problem) {
+    final issue = problem.issue;
+    if (issue == null) return problem.text ?? updateFailedGeneric;
+    final detail = problem.detail ?? '';
+    return switch (issue) {
+      UpdateIssue.installPermissionDenied => updateInstallPermissionDenied,
+      UpdateIssue.installPermissionStillDenied =>
+        updateInstallPermissionStillDenied,
+      UpdateIssue.installerUnavailable => updateInstallerUnavailable,
+      UpdateIssue.needsNewPermissions => updateNeedsNewPermissions,
+      UpdateIssue.portalUnreachable => updatePortalUnreachable,
+      UpdateIssue.noResult => updateNoResult,
+      UpdateIssue.updateFailed => updateFailedGeneric,
+      UpdateIssue.installFailed => updateInstallFailed(detail),
+      UpdateIssue.checkFailed => updateCheckFailed(detail),
+      UpdateIssue.saveChoiceFailed => updateSaveChoiceFailed(detail),
+      UpdateIssue.saveChoiceFailedMacos => updateSaveChoiceFailedMacos,
+      UpdateIssue.checksumMismatch => updateChecksumMismatch,
+      UpdateIssue.extractFailed => updateExtractFailed(detail),
+      UpdateIssue.copyFailed => updateCopyFailed(detail),
+      UpdateIssue.chmodFailed => updateChmodFailed(detail),
+      UpdateIssue.notAnAppImage => updateNotAnAppImage,
+    };
+  }
+
   /// The sign-in error line for [failure]; the server's own words verbatim.
   String loginFailure(LoginFailure failure) => switch (failure) {
         LoginFailureFromServer(:final message) => message,
+        LoginFailureOfSource(:final error) => sourceError(error),
         LoginFailureOfKind(:final kind) => switch (kind) {
             LoginFailureKind.cannotConnect => loginErrorCannotConnect,
             LoginFailureKind.serverNotFound => loginErrorServerNotFound,
@@ -221,7 +337,10 @@ extension AppFormatters on AppLocalizations {
   /// The error line under the update card, or null when there is none.
   String? updateErrorMessage(UpdateState state) {
     final unpublished = state.trackNotPublished;
-    if (unpublished == null) return state.error;
+    if (unpublished == null) {
+      final error = state.error;
+      return error == null ? null : updateProblemText(error);
+    }
     final track = updateTrackName(unpublished.track);
     return unpublished.macos
         ? updateTrackNotPublishedMacos(track)

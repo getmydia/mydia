@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
 import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
+import '../update_problem.dart';
 import 'linux_updater.dart';
 
 typedef AppImageDownload = Future<void> Function(
@@ -14,11 +15,12 @@ typedef AppImageDownload = Future<void> Function(
 );
 
 /// The download is not an AppImage: truncated, or an error page.
-class AppImageUpdateException implements Exception {
-  const AppImageUpdateException(this.message);
-  final String message;
+class AppImageUpdateException extends UpdateStepFailed {
+  AppImageUpdateException(UpdateIssue issue, {String? detail})
+      : super(UpdateProblem(issue, detail: detail));
+
   @override
-  String toString() => 'AppImageUpdateException: $message';
+  String toString() => 'AppImageUpdateException(${problem.issue})';
 }
 
 /// Updates an AppImage by replacing its own `.AppImage` file.
@@ -89,7 +91,8 @@ class AppImageUpdater extends PlatformUpdater {
       _requireAppImage(temp);
       final chmod = await Process.run('chmod', ['755', temp.path]);
       if (chmod.exitCode != 0) {
-        throw AppImageUpdateException('chmod failed: ${chmod.stderr}');
+        throw AppImageUpdateException(UpdateIssue.chmodFailed,
+            detail: '${chmod.stderr}');
       }
       temp.renameSync(_appImagePath);
     } catch (_) {
@@ -113,7 +116,7 @@ class AppImageUpdater extends PlatformUpdater {
           List.generate(4, (i) => head[i] == magic[i]).every((b) => b) &&
           List.generate(3, (i) => head[8 + i] == marker[i]).every((b) => b);
       if (!ok) {
-        throw const AppImageUpdateException('download is not an AppImage');
+        throw AppImageUpdateException(UpdateIssue.notAnAppImage);
       }
     } finally {
       raf.closeSync();

@@ -7,6 +7,7 @@ import '../android_installer.dart';
 import '../platform_updater.dart';
 import '../update_backend.dart';
 import '../update_service.dart';
+import '../update_problem.dart';
 import '../update_track.dart';
 import '../update_track_store.dart';
 
@@ -70,7 +71,8 @@ class ReleaseUpdateBackend implements UpdateBackend {
     try {
       await _trackStore.write(track);
     } catch (e) {
-      return TrackSwitchUnsupported('Could not save that choice: $e');
+      return TrackSwitchUnsupported(
+          UpdateProblem(UpdateIssue.saveChoiceFailed, detail: '$e'));
     }
 
     _track = track;
@@ -116,14 +118,23 @@ class ReleaseUpdateBackend implements UpdateBackend {
       // answered it, so this reports that as deferred instead.
       if (_updater.handsOffUnconfirmed) return const UpdateDeferred();
       return const UpdateInstalled();
-    } on InstallerPermissionDenied catch (e) {
+    } on InstallerPermissionDenied {
       // Not a failure to retry: the user has to grant the permission, and the
       // updater has already opened the screen where they do it.
-      return UpdateUnsupported(e.toString(), needsInstallPermission: true);
-    } on InstallerUnavailable catch (e) {
-      return UpdateUnsupported(e.toString());
+      return const UpdateUnsupported(
+        UpdateProblem(UpdateIssue.installPermissionDenied),
+        needsInstallPermission: true,
+      );
+    } on InstallerUnavailable {
+      return const UpdateUnsupported(
+          UpdateProblem(UpdateIssue.installerUnavailable));
+    } on UpdateStepFailed catch (e) {
+      return UpdateFailed(e.problem);
+    } on InstallerFailed catch (e) {
+      return UpdateFailed(
+          UpdateProblem(UpdateIssue.installFailed, detail: e.detail));
     } catch (e) {
-      return UpdateFailed(e.toString());
+      return UpdateFailed(UpdateProblem.text(e.toString()));
     }
   }
 

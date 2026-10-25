@@ -76,8 +76,7 @@ Future<DownloadService> downloadManager(Ref ref) async {
     if (downloadable == null) {
       throw source == null && _sourceMayReturn(ref, task.source)
           ? const SourceException.unreachable()
-          : const SourceException.unsupported(
-              'This server is no longer on this device.');
+          : const SourceException.unsupportedFault(SourceFault.serverGone);
     }
     return downloadable.resolve(task.itemRef, task.quality);
   });

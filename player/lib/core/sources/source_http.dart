@@ -52,10 +52,10 @@ class SourceHttp {
     }
     if (code == 401) throw const SourceException.unauthorized();
     if (code == 403) {
-      throw const SourceException.server('The server refused access to this.');
+      throw const SourceException.fault(SourceFault.serverRefused);
     }
     if (code == 404) throw const SourceException.notFound();
-    throw SourceException.server('The server answered HTTP $code.');
+    throw SourceException.fault(SourceFault.serverHttp, detail: '$code');
   }
 
   Future<Object?> json(
@@ -74,8 +74,7 @@ class SourceHttp {
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
-      throw const SourceException.server(
-          'The server sent a response this app cannot read.');
+      throw const SourceException.fault(SourceFault.serverUnreadable);
     }
   }
 }

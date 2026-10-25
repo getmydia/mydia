@@ -61,7 +61,7 @@ void main() {
     expect(
       () => JellyfinPlaybackInfo.fromJson(const {'ErrorCode': 'NotAllowed'}),
       throwsA(isA<SourceException>()
-          .having((e) => e.viewerMessage, 'message', contains('not allowed'))),
+          .having((e) => e.fault, 'fault', SourceFault.jellyfinNotAllowed)),
     );
   });
 

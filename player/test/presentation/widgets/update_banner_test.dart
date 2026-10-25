@@ -10,6 +10,7 @@ import 'package:player/core/sources/media_source.dart'
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/update/update_dismissal_provider.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/update_banner.dart';
@@ -382,7 +383,7 @@ void main() {
         state: UpdateState(
           currentVersion: '0.14.2',
           availableUpdate: _update(),
-          error: 'Update failed: connection closed',
+          error: const UpdateProblem.text('Update failed: connection closed'),
         ),
       );
 

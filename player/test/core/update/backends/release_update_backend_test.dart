@@ -128,7 +128,7 @@ void main() {
     final outcome = await backend.requestUpdate();
 
     expect(outcome, isA<UpdateFailed>());
-    expect((outcome as UpdateFailed).message, contains('read-only'));
+    expect((outcome as UpdateFailed).problem.text, contains('read-only'));
   });
 
   test('a refused install permission is unsupported, not a failure', () async {

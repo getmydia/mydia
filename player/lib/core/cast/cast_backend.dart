@@ -98,6 +98,22 @@ enum CastFailureKind {
   /// to command. Not an error, just a state the controller re-syncs from.
   notPlaying,
 
+  /// The receiver speaks AirPlay, which this backend cannot drive.
+  airplayUnsupported,
+
+  /// A Mydia target answered the handshake by refusing this device for a
+  /// reason other than a revoked pairing.
+  targetRefused,
+
+  /// A Mydia player can only be sent items from a Mydia server.
+  mydiaItemsOnly,
+
+  /// The server the item came from cannot be cast.
+  serverNotCastable,
+
+  /// There is no stored session to reconnect to.
+  noSessionToReconnect,
+
   unknown,
 }
 

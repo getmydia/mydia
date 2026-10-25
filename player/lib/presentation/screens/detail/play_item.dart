@@ -50,7 +50,7 @@ Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
     detail = await source.item(item);
   } catch (e) {
     toaster.show(
-      e is SourceException ? e.viewerMessage : l10n.detailOpenTitleFailed,
+      e is SourceException ? l10n.sourceError(e) : l10n.detailOpenTitleFailed,
       kind: ToastKind.error,
     );
     return;

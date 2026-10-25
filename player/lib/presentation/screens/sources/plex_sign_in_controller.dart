@@ -91,7 +91,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       );
     } on SourceException catch (e) {
       if (ref.mounted) {
-        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+        state = PlexSignInFailed(SignInProblem.fromError(e));
       }
     } catch (_) {
       // An unexpected reply (a malformed PIN, say) must not leave a spinner.
@@ -134,7 +134,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
     } on SourceException catch (e) {
       _poll?.cancel();
       if (ref.mounted) {
-        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+        state = PlexSignInFailed(SignInProblem.fromError(e));
       }
     } catch (_) {
       _poll?.cancel();
@@ -254,7 +254,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       if (ref.mounted) state = PlexSignInDone(first);
     } on SourceException catch (e) {
       if (ref.mounted) {
-        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+        state = PlexSignInFailed(SignInProblem.fromError(e));
       }
     } catch (_) {
       if (ref.mounted) {

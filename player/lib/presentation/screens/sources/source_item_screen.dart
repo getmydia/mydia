@@ -130,7 +130,7 @@ class _Body extends ConsumerWidget {
                     if (!context.mounted) return;
                     toaster.show(
                       e is SourceException
-                          ? e.viewerMessage
+                          ? l10n.sourceError(e)
                           : l10n.commonWatchedUpdateFailed,
                       kind: ToastKind.error,
                     );
