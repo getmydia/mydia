@@ -490,7 +490,7 @@
   },
   "loginTvStepOpenDevices": "Open your account menu → Devices → Pair a new device",
   "@loginTvStepOpenDevices": {
-    "description": "Second step of the pairing instructions on a TV: the path to the pairing button in the Mydia web app. Devices is an entry in the web's account menu (opened from the avatar), and Pair a new device is the button on that page. Each label must match what the web UI shows in this language: use the web's translation where it has one, and its English label where it does not (Pair a new device is not translated in the web yet)."
+    "description": "Second step of the pairing instructions on a TV: the path to the pairing button in the Mydia web app. Devices is an entry in the web's account menu (opened from the avatar), and Pair a new device is the button on that page. Each label must match what the web UI shows in this language: use the web's translation where it has one, and its English label where it does not."
   },
   "loginTvStepEnterCode": "Enter the 6-character code below",
   "@loginTvStepEnterCode": {

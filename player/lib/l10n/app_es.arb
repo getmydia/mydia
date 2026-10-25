@@ -112,7 +112,7 @@
   "loginPairSubtitle": "Vincula tu servidor con un código QR o un código de vinculación",
   "loginNetworkSettingsTooltip": "Ajustes de relay y red",
   "loginTvStepOpenMydia": "Abre Mydia en el teléfono o la computadora",
-  "loginTvStepOpenDevices": "Abre el menú de tu cuenta → Dispositivos → Pair a new device",
+  "loginTvStepOpenDevices": "Abre el menú de tu cuenta → Dispositivos → Vincular un dispositivo nuevo",
   "loginTvStepEnterCode": "Introduce abajo el código de 6 caracteres",
   "loginConnect": "Conectar",
   "loginClear": "Borrar",
