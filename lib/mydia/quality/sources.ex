@@ -2,9 +2,11 @@ defmodule Mydia.Quality.Sources do
   @moduledoc """
   The source-detection vocabulary for the indexer search/grab path.
 
-  `QualityParser` uses this module to classify release names during search and
-  grab. `Mydia.Library.ReleaseParser` (`priv/release_parser/sources.exs`) keeps
-  its own token table, but both now emit the same canonical names: `BDRip` and
+  `ProfileLimits` falls back to this module for a search result with no parsed
+  quality, and `Mydia.Quality.Attrs` reads file paths with it; release names
+  themselves go through `Mydia.Library.ReleaseParser`
+  (`priv/release_parser/sources.exs`), which keeps its own token table. Both
+  emit the same canonical names: `BDRip` and
   `BRRip` fold into `BluRay` on either side, and `Mydia.Quality.Attrs` and
   `Mydia.Settings.QualityProfile` no longer list them. Retiring this module in
   favour of the release parser is follow-up work.

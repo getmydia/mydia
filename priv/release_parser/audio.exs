@@ -105,6 +105,14 @@ end
     title_zone_bonus: -0.2,
     metadata_zone_bonus: 0.0
   },
+  %VocabularyEntry{
+    label: :audio,
+    aliases: with_channels.("VORBIS"),
+    canonical: "Vorbis",
+    confidence: 0.9,
+    title_zone_bonus: -0.2,
+    metadata_zone_bonus: 0.0
+  },
   # Dual-audio anime releases count their tracks (`2xFLAC`, `FLACx2`).
   %VocabularyEntry{
     label: :audio,
