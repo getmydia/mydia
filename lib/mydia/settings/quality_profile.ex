@@ -507,20 +507,16 @@ defmodule Mydia.Settings.QualityProfile do
     end
   end
 
-  # Sources that may appear in an exclusion list. Superset of @valid_sources,
-  # since the whole point of the exclusion list is naming the cam-tier types
-  # that are never valid *preferences*. Built at runtime rather than in a
-  # module attribute: Sources.detect/1 reaches the whole release parser, and a
-  # compile-time call would recompile this schema whenever any of it changes.
-  defp valid_excludable_sources, do: @valid_sources ++ Sources.cam_tier()
-
   defp validate_excluded_sources(changeset, standards) do
     case Map.get(standards, :excluded_sources) do
       nil ->
         changeset
 
       sources when is_list(sources) ->
-        valid = valid_excludable_sources()
+        # Superset of @valid_sources: the exclusion list names the cam-tier types
+        # that are never valid preferences. Built at runtime, since Sources reaches
+        # the release parser and a compile-time call would recompile this schema.
+        valid = @valid_sources ++ Sources.cam_tier()
         invalid = sources -- valid
 
         if Enum.empty?(invalid) do
