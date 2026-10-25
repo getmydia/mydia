@@ -538,7 +538,7 @@ void main() {
         });
         async.flushMicrotasks();
 
-        expect(error, isA<LogUploadException>());
+        expect((error as LogUploadException).failure, LogUploadFailure.noLogs);
       });
     });
 
@@ -572,8 +572,8 @@ void main() {
 
         expect(error, isA<LogUploadException>());
         expect(
-          (error as LogUploadException).message,
-          'Could not reach the relay. Check the connection and try again.',
+          (error as LogUploadException).failure,
+          LogUploadFailure.relayUnreachable,
         );
       });
     });

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../core/channels/pairing_service.dart';
 import '../core/connection/connection_summary.dart';
 import '../core/downloads/download_notification_text.dart';
+import '../core/logging/log_uploader.dart';
 import '../core/playback/playback_plan.dart';
 import '../core/playback/stats/playback_stats.dart';
 import '../core/playback/stats/stats_report.dart';
@@ -477,6 +478,26 @@ extension AppFormatters on AppLocalizations {
           downloadNotificationPreparing(title),
         NotificationProgress(:final title, :final percent) =>
           downloadNotificationProgress(title, percent),
+      };
+
+  /// The line the update card shows when there is nothing left to do.
+  String updateNoticeText(UpdateNotice notice) => switch (notice) {
+        UpdateNotice.upToDate => settingsUpdateCheckUpToDate,
+        UpdateNotice.handedOff => settingsUpdateNoticeHandedOff,
+        UpdateNotice.reopenToFinish => settingsUpdateNoticeReopen,
+      };
+
+  /// Why sending logs failed.
+  String logUploadFailure(LogUploadException error) => switch (error.failure) {
+        LogUploadFailure.relayBusy => settingsDiagnosticsRelayBusy,
+        LogUploadFailure.relayRejected => settingsDiagnosticsRelayRejected,
+        LogUploadFailure.relayNoCode => settingsDiagnosticsRelayNoCode,
+        LogUploadFailure.relayUnreachable =>
+          settingsDiagnosticsRelayUnreachable,
+        LogUploadFailure.relayHttp =>
+          settingsDiagnosticsRelayHttp(error.status ?? 0),
+        LogUploadFailure.noLogs => settingsDiagnosticsNoLogs,
+        LogUploadFailure.unavailable => settingsDiagnosticsLogsUnavailable,
       };
 }
 

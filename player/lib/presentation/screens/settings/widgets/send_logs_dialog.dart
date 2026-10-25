@@ -143,7 +143,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
       setState(() {
         _phase = _Phase.failed;
         _error = e is LogUploadException
-            ? e.message
+            ? context.l10n.logUploadFailure(e)
             : context.l10n.settingsDiagnosticsRelayUnreachable;
       });
     }

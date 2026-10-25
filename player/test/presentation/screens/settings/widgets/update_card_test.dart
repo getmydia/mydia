@@ -363,7 +363,7 @@ void main() {
       await _pump(
         tester,
         state: const UpdateState(
-          notice: "You're up to date",
+          notice: UpdateNotice.upToDate,
           manualCheck: ManualCheckBehaviour.checksAndInstalls,
         ),
       );
@@ -382,8 +382,7 @@ void main() {
       await _pump(
         tester,
         state: const UpdateState(
-          notice: 'Handed off outside Mydia. Confirm there to finish '
-              'installing.',
+          notice: UpdateNotice.handedOff,
           manualCheck: ManualCheckBehaviour.checksOnly,
         ),
       );

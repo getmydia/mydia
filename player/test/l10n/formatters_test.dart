@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:player/core/connection/connection_summary.dart';
 import 'package:player/core/downloads/download_notification_text.dart';
+import 'package:player/core/logging/log_uploader.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
@@ -457,6 +458,26 @@ void main() {
       expect(
           en.downloadNotificationLine(const NotificationProgress('Quill', 40)),
           'Quill - 40%');
+    });
+
+    test('update notices and log upload failures are worded in every language',
+        () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final notice in UpdateNotice.values) {
+          expect(loc.updateNoticeText(notice), isNotEmpty);
+        }
+        for (final failure in LogUploadFailure.values) {
+          expect(loc.logUploadFailure(LogUploadException(failure, status: 502)),
+              isNotEmpty);
+        }
+      }
+      final en = await l10n('en');
+      expect(
+          en.logUploadFailure(const LogUploadException(
+              LogUploadFailure.relayHttp,
+              status: 502)),
+          'The relay answered HTTP 502');
     });
   });
 }

@@ -568,5 +568,13 @@
   "routerPageNotFound": "Página no encontrada: {uri}",
   "pipDisable": "Desactivar PiP",
   "pipEnable": "Activar PiP",
+  "settingsUpdateNoticeHandedOff": "Entregado fuera de Mydia. Confirma allí para terminar la instalación.",
+  "settingsUpdateNoticeReopen": "Actualización instalada. Vuelve a abrir Mydia para terminar.",
+  "settingsDiagnosticsRelayBusy": "El relay está ocupado. Inténtalo de nuevo en un minuto.",
+  "settingsDiagnosticsRelayRejected": "El relay no aceptó estos registros.",
+  "settingsDiagnosticsRelayNoCode": "El relay no devolvió un código.",
+  "settingsDiagnosticsRelayHttp": "El relay respondió HTTP {status}",
+  "settingsDiagnosticsNoLogs": "Aún no hay registros en este dispositivo.",
+  "settingsDiagnosticsLogsUnavailable": "Los registros no están disponibles en este dispositivo.",
   "calendarMovie": "Película"
 }
