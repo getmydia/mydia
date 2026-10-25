@@ -12389,7 +12389,7 @@ msgstr ""
 msgid "%{name} removed"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:70
+#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:69
 #, elixir-autogen, elixir-format
 msgid "%{name} score"
 msgstr ""
@@ -14213,7 +14213,6 @@ msgstr ""
 #: lib/mydia_web/admin_nav.ex:69
 #: lib/mydia_web/live/admin_custom_formats_live/index.ex:21
 #: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:40
-#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:46
 #, elixir-autogen, elixir-format
 msgid "Custom Formats"
 msgstr ""
@@ -14304,11 +14303,6 @@ msgstr ""
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:430
 #, elixir-autogen, elixir-format
 msgid "Defaults to the folder name"
-msgstr ""
-
-#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:44
-#, elixir-autogen, elixir-format
-msgid "Define formats on the"
 msgstr ""
 
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:78
@@ -17546,7 +17540,7 @@ msgstr ""
 msgid "Registered twice"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:83
+#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:82
 #: lib/mydia_web/live/admin_requests_live/components.ex:157
 #: lib/mydia_web/live/admin_requests_live/components.ex:230
 #, elixir-autogen, elixir-format
@@ -20041,11 +20035,6 @@ msgstr ""
 msgid "p50 %{p50} / p90 %{p90}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:48
-#, elixir-autogen, elixir-format
-msgid "page."
-msgstr ""
-
 #: lib/mydia_web/live/admin_library_paths_live/index.ex:382
 #: lib/mydia_web/live/admin_library_paths_live/index.ex:383
 #, elixir-autogen, elixir-format
@@ -20763,4 +20752,14 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgctxt "verb"
 msgid "Test"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:44
+#, elixir-autogen, elixir-format
+msgid "Define formats on the Custom Formats page."
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:46
+#, elixir-autogen, elixir-format
+msgid "Open Custom Formats"
 msgstr ""

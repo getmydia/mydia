@@ -63,7 +63,17 @@ before changing a term everywhere.
 | Seeders | Semillas | Seeders |
 | Peers | Pares | Peers |
 | Trash | Papelera | Lixeira |
-| Blocklist | Lista de bloqueo | Lista de bloqueio |
+| Blocklist (never "blacklist") | Lista de bloqueo | Lista de bloqueio |
+| Path mapping | Asignación de ruta | Mapeamento de caminho |
+| Storage backend | Backend de almacenamiento | Backend de armazenamento |
+| Misfiled | Mal ubicados | Mal classificados |
+| Needs attention | Requiere atención | Requer atenção |
+| Review (the queue, "Send to Review") | Revisión | Revisão |
+| Keep / Leave | Conservar / Dejar | Manter / Deixar |
+| Passkey | Passkey | Chave de acesso |
+| Preset | Preajuste | Predefinição |
+| Debrid | Debrid | Debrid |
+| Healthy / Unhealthy | Saludable / No saludable | Saudável / Não saudável |
 | Smart collection | Colección inteligente | Coleção inteligente |
 | Shelf | Estante | Estante |
 | Section | Sección | Seção |
