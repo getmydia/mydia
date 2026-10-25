@@ -1111,7 +1111,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert Enum.at(results, 2).quality.audio == "AAC"
 
       assert Enum.at(results, 3).quality.resolution == "2160p (4K)"
-      assert Enum.at(results, 3).quality.audio == "Dolby TrueHD"
+      assert Enum.at(results, 3).quality.audio == "Dolby TrueHD Atmos"
     end
 
     test "edge case - empty quality map with standardization" do
@@ -1170,7 +1170,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.source == "Blu-ray"
       assert result.quality.codec == "H.265/HEVC"
       assert result.quality.hdr_format == :hdr10_plus
-      assert result.quality.audio == "Dolby TrueHD"
+      assert result.quality.audio == "Dolby TrueHD Atmos 7.1"
       # Release group should still be extracted
       assert result.release_group == "ELITE"
     end
@@ -1834,7 +1834,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
-      assert result.quality.audio == "DTS-HD MA"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "FGT"
     end
 
@@ -2063,7 +2064,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DTS-HD MA"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "MgB"
     end
   end
@@ -2411,7 +2413,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
           "Game.of.Thrones.S03E09.2160p.BluRay.REMUX.HEVC.TrueHD.7.1.Atmos-SHD13.mkv"
         )
 
-      assert result.quality.audio == "TrueHD 7.1"
+      assert result.quality.audio == "TrueHD Atmos 7.1"
     end
   end
 

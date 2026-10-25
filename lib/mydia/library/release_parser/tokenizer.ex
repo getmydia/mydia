@@ -29,9 +29,10 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     `Marvel's What-If`).
   - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
     file naming) is split in two, but only when the left part is a known
-    source, so `Pilot-720p` stays whole. Past the title boundary, a codec
-    dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`) is
-    split off it; in the title (`Route-264`) it stays.
+    source, so `Pilot-720p` stays whole. Past the title boundary, a video
+    or audio codec dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`,
+    `x264-AAC`, `720p-FLAC`) is split off it; in the title (`Route-264`)
+    it stays.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -308,10 +309,14 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   # own token, in the metadata zone only (see metadata_zone?/2). The other
   # dash runs stay joined (`WEB-DLRip`, `Fra-Ac3`).
   # A bare `264` counts so `H.264-GRP` still pairs its `H` and `264`.
+  # Audio codecs split the same way (`720p-AAC`, `AC3-REPACK`), unless the
+  # whole run is itself a vocabulary word (`E-AC3`, `AAC-LC`), which a split
+  # would mangle into a different codec.
   defp split_dashed_codecs(%Token{value: value} = token) do
     parts = String.split(value, "-")
 
-    if length(parts) > 1 and Enum.any?(parts, &codec_part?/1) do
+    if length(parts) > 1 and Vocabulary.lookup(value) == [] and
+         Enum.any?(parts, &codec_part?/1) do
       parts
       |> runs_around_codecs()
       |> Enum.map(fn {offset, run} ->
@@ -327,7 +332,8 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     end
   end
 
-  defp codec_part?(part), do: part in ["264", "265"] or has_label?(part, :codec)
+  defp codec_part?(part),
+    do: part in ["264", "265"] or has_label?(part, :codec) or has_label?(part, :audio)
 
   # `{relative_offset, value}` for each codec part and each dash-joined run
   # of other parts between them; empty parts (a leading dash) are dropped.

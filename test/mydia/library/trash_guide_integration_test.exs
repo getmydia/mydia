@@ -80,7 +80,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
-      assert result.quality.audio == "DTS-HD MA"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "FGT"
     end
 
@@ -308,7 +309,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DTS-HD MA"
+      # Two tracks; the TrueHD Atmos one is the better tier.
+      assert result.quality.audio == "TrueHD Atmos 7.1"
       assert result.release_group == "MgB"
     end
   end
@@ -656,7 +658,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
           "Game.of.Thrones.S03E09.2160p.BluRay.REMUX.HEVC.TrueHD.7.1.Atmos-SHD13.mkv"
         )
 
-      assert result.quality.audio == "TrueHD 7.1"
+      assert result.quality.audio == "TrueHD Atmos 7.1"
     end
   end
 

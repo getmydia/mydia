@@ -282,11 +282,11 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
       assert result.language == nil
     end
 
-    test "an audio word inside the title stays a tag" do
+    test "an audio word inside the title stays a tag but is not reported as a track" do
       result = resolve("Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264")
 
       assert result.title == "Quiet Harbor"
-      assert Enum.any?(result.quality_tokens, &(&1.label == :audio))
+      refute Enum.any?(result.quality_tokens, &(&1.label == :audio))
     end
 
     test "a vocab word that ends the title zone stays a tag, even before a year" do

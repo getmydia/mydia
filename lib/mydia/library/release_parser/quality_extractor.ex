@@ -78,7 +78,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       codec: canonical_codec(codec),
       hdr_format: hdr_format,
       dolby_vision: dolby_vision,
-      audio: canonical_audio(audio)
+      audio: audio
     }
   end
 
@@ -138,51 +138,24 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   defp canonical_h26x([_, "h", digits]), do: "H.#{digits}"
   defp canonical_h26x([_, "x", digits]), do: "x#{digits}"
 
-  defp canonical_audio(nil), do: nil
+  defp canonical_audio_name(name) when name in ["ddp", "eac3", "e-ac3", "e-ac-3", "eac3d", "dd+"],
+    do: "DD+"
 
-  defp canonical_audio(value) do
-    # Whole value first: `EAC3` and `MP3` end in digits that are not channels.
-    case canonical_audio_name(String.downcase(value)) do
-      nil ->
-        {name, channels} = split_audio_channels(value)
+  defp canonical_audio_name(name) when name in ["dd", "ac3", "ac3d"], do: "AC3"
 
-        case canonical_audio_name(String.downcase(name)) do
-          nil -> value
-          label -> join_channels(label, channels)
-        end
+  defp canonical_audio_name(name) when name in ["dts-hd.ma", "dts-hd ma", "dtshdma"],
+    do: "DTS-HD MA"
 
-      label ->
-        label
-    end
-  end
-
-  defp canonical_audio_name(name) when name in ["ddp", "eac3", "e-ac3", "dd+"], do: "DD+"
-  defp canonical_audio_name(name) when name in ["dd", "ac3"], do: "AC3"
-  defp canonical_audio_name(name) when name in ["dts-hd.ma", "dts-hd ma"], do: "DTS-HD MA"
-  defp canonical_audio_name("dts-hd"), do: "DTS-HD"
+  defp canonical_audio_name(name) when name in ["dts-hd", "dtshd"], do: "DTS-HD"
   defp canonical_audio_name(name) when name in ["dts-x", "dts:x", "dtsx"], do: "DTS:X"
+  defp canonical_audio_name("dts"), do: "DTS"
   defp canonical_audio_name("truehd"), do: "TrueHD"
   defp canonical_audio_name(name) when name in ["aac", "aac-lc"], do: "AAC"
-  defp canonical_audio_name("flac"), do: "FLAC"
+  defp canonical_audio_name(name) when name in ["flac", "2xflac", "flacx2"], do: "FLAC"
   defp canonical_audio_name("opus"), do: "Opus"
   defp canonical_audio_name("vorbis"), do: "Vorbis"
   defp canonical_audio_name("mp3"), do: "MP3"
   defp canonical_audio_name(_), do: nil
-
-  # Channels arrive glued on (`DDP5.1`) or after a space (`TrueHD 7.1`).
-  defp split_audio_channels(value) do
-    case Regex.run(~r/^(.*?)\s*(\d+(?:\.\d+)?)$/, value) do
-      [_, name, channels] when name != "" -> {name, dotted_channels(channels)}
-      _ -> {value, nil}
-    end
-  end
-
-  # `DD51` / `DDP51` carry the layout without its dot.
-  defp dotted_channels(<<a, b>>) when a in ?0..?9 and b in ?0..?9, do: <<a, ?., b>>
-  defp dotted_channels(channels), do: channels
-
-  defp join_channels(label, nil), do: label
-  defp join_channels(label, channels), do: "#{label} #{channels}"
 
   # --- Resolution ---
   #
@@ -362,16 +335,73 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   #
   # Audio is the most adjacency-prone field. Tokens like `DDP5.1`,
   # `DTS-HD.MA`, `TrueHD.7.1`, `AAC 2.0` get split on dots, spaces, and
-  # dashes. Rebuild the V2 canonical *raw* string.
+  # dashes, so each audio token is rebuilt from its neighbours into a
+  # canonical label and its channels.
+  #
+  # A release can list several tracks (`Esp DD2.0, Ing DTS-HD5.1`), and
+  # the one reported is the best in the scorers' tier order, so a dub
+  # listed first does not hide the lossless original. `Atmos` is not a
+  # track: beside TrueHD it is the `TrueHD Atmos` tier, beside DD+ it has
+  # no tier of its own and is dropped, and alone it is all the release
+  # says.
+
+  @audio_tiers [
+    "TrueHD Atmos",
+    "DTS:X",
+    "TrueHD",
+    "DTS-HD MA",
+    "DTS-HD",
+    "FLAC",
+    "DD+",
+    "DTS",
+    "AC3",
+    "AAC",
+    "Opus",
+    "Vorbis",
+    "MP3"
+  ]
 
   defp extract_audio(quality_tokens, next_by_token) do
-    case Enum.find(quality_tokens, &(&1.label == :audio)) do
-      nil ->
-        nil
+    {atmos, tracks} =
+      quality_tokens
+      |> Enum.filter(&(&1.label == :audio))
+      |> Enum.split_with(&(String.upcase(token_text(&1)) == "ATMOS"))
 
-      entry ->
-        raw = token_text(entry)
-        rejoin_audio(keep_dd_plus(raw, entry), entry, next_by_token)
+    tracks
+    |> Enum.map(&(&1 |> audio_track(next_by_token) |> with_atmos(atmos != [])))
+    |> Enum.min_by(&audio_tier/1, fn -> nil end)
+    |> audio_label(atmos)
+  end
+
+  defp with_atmos({"TrueHD", channels}, true), do: {"TrueHD Atmos", channels}
+  defp with_atmos(track, _atmos?), do: track
+
+  defp audio_tier({label, _channels}) do
+    Enum.find_index(@audio_tiers, &(&1 == label)) || length(@audio_tiers)
+  end
+
+  defp audio_label(nil, []), do: nil
+  defp audio_label(nil, [_ | _]), do: "Atmos"
+  defp audio_label({label, nil}, _atmos), do: label
+  defp audio_label({label, channels}, _atmos), do: "#{label} #{channels}"
+
+  defp audio_track(entry, next_by_token) do
+    {name, fused} = entry |> token_text() |> keep_dd_plus(entry) |> split_fused_channels()
+    {name, last, fused} = extend_dts(String.upcase(name), name, entry.token, fused, next_by_token)
+    label = canonical_audio_name(String.downcase(name)) || name
+    {label, audio_channels(fused, last, next_by_token)}
+  end
+
+  # `AAC2` (from `AAC2.0`), `DDP51`, `DTS-HD5`: the digits glued onto the
+  # codec start its channel layout. The whole value is checked first,
+  # since `EAC3` and `MP3` end in digits that are not channels.
+  defp split_fused_channels(raw) do
+    with nil <- canonical_audio_name(String.downcase(raw)),
+         [_, name, digits] <- Regex.run(~r/^(.+?)(\d{1,2})$/, raw),
+         label when is_binary(label) <- canonical_audio_name(String.downcase(name)) do
+      {name, digits}
+    else
+      _ -> {raw, ""}
     end
   end
 
@@ -382,118 +412,84 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   defp keep_dd_plus(raw, _entry), do: raw
 
-  defp rejoin_audio(raw, entry, next_by_token) do
-    upper = String.upcase(raw)
-
-    cond do
-      # DTS-HD: tokenizer compound-dash split produces DTS, HD as two
-      # tokens. The vocab matches `DTS-HD` from `DTS` (after rejoin).
-      # Then ".MA" may follow as a third token. We handle that case
-      # below.
-      upper in ["DTS"] ->
-        rejoin_dts(entry, next_by_token, raw)
-
-      # TrueHD: optional channel spec (`TrueHD 7.1` → `TrueHD 7.1`)
-      upper == "TRUEHD" ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      # AAC: optional channel spec
-      upper in ["AAC", "AAC-LC", "DD+"] ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      # DDP / DD: may have channel suffix as separate token (`DDP5` `1` → `DDP5.1`).
-      Regex.match?(~r/^DDP\d+$/i, raw) or Regex.match?(~r/^DD\d+$/i, raw) ->
-        rejoin_trailing_channel_dot(raw, entry, next_by_token)
-
-      # OPUS: with channels
-      upper == "OPUS" ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      true ->
-        raw
-    end
-  end
-
-  # Handle DTS rejoin: DTS-HD (with optional .MA) or DTS-X. Both are
-  # adjacent dash compounds the tokenizer splits.
-  defp rejoin_dts(entry, next_by_token, raw) do
-    case next_token(entry.token, next_by_token) do
-      %Token{value: hd_value, byte_offset: ho, byte_length: hl} = hd_token
-      when hd_value in ["HD", "hd", "Hd"] ->
-        sep_len = ho - (entry.token.byte_offset + entry.token.byte_length)
-
-        if sep_len == 1 do
-          rejoined = "DTS-HD"
-
-          case next_token(hd_token, next_by_token) do
-            %Token{value: ma_value, byte_offset: mo} = ma_token
-            when ma_value in ["MA", "ma", "Ma"] ->
-              if mo == ho + hl + 1 do
-                rejoin_trailing_channel("DTS-HD.MA", %{token: ma_token}, next_by_token)
-              else
-                rejoined
-              end
-
-            _ ->
-              rejoined
-          end
-        else
-          raw
+  # DTS compounds arrive split: `DTS-HD.MA` as `DTS` `HD` `MA`, `DTS-X` as
+  # `DTS` `X`, and the shorthands `DTS-MA`, `DTSHD-MA` and `DTS-HR` (high
+  # resolution) the same way. `DTS-ES` is plain DTS with its channels
+  # after the `ES`. Returns the rebuilt name, the last token it used, and
+  # any channel digits fused onto that token (`MA5` in `DTS-HD.MA5.1`).
+  defp extend_dts("DTS", name, token, "", next_by_token) do
+    case adjacent_token(token, next_by_token) do
+      %Token{value: value} = next ->
+        case String.upcase(value) do
+          up when up in ["HD", "HR"] -> extend_ma(next, "DTS-HD", next_by_token)
+          "X" -> {"DTS-X", next, ""}
+          "ES" -> {name, next, ""}
+          _ -> extend_ma(token, name, next_by_token)
         end
 
-      %Token{value: x_value, byte_offset: xo}
-      when x_value in ["X", "x"] ->
-        sep_len = xo - (entry.token.byte_offset + entry.token.byte_length)
-        if sep_len == 1, do: "DTS-X", else: raw
-
-      _ ->
-        raw
+      nil ->
+        {name, token, ""}
     end
   end
 
-  # Rejoin TrueHD/AAC/Opus with trailing channel notation: `TrueHD 7.1`
-  # becomes `TrueHD 7.1`. The channels arrive as separate tokens
-  # `7` and `1` after the dot split.
-  defp rejoin_trailing_channel(raw, entry, next_by_token) do
-    case channel_after(entry.token, next_by_token) do
-      nil -> raw
-      ch -> "#{raw} #{ch}"
-    end
-  end
+  defp extend_dts("DTSHD", _name, token, "", next_by_token),
+    do: extend_ma(token, "DTS-HD", next_by_token)
 
-  # Rejoin DDP/DD with channel suffix via dot: `DDP5` followed by `1` → `DDP5.1`.
-  defp rejoin_trailing_channel_dot(raw, entry, next_by_token) do
-    case next_token(entry.token, next_by_token) do
-      %Token{value: digit, byte_offset: to}
-      when digit in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] ->
-        head_end = entry.token.byte_offset + entry.token.byte_length
+  defp extend_dts(_upper, name, token, fused, _next_by_token), do: {name, token, fused}
 
-        # Must be adjacent (separated by a single dot byte)
-        if to == head_end + 1 do
-          "#{raw}.#{digit}"
-        else
-          raw
-        end
-
-      _ ->
-        raw
-    end
-  end
-
-  # Detect a 2-digit channel suffix (e.g. `7` `1` after `TrueHD`).
-  defp channel_after(%Token{} = token, next_by_token) do
-    n1 = next_token(token, next_by_token)
-    n2 = if n1, do: next_token(n1, next_by_token), else: nil
-
-    if is_digit_token?(n1) and is_digit_token?(n2) do
-      "#{n1.value}.#{n2.value}"
+  defp extend_ma(token, fallback, next_by_token) do
+    with %Token{value: value} = ma <- adjacent_token(token, next_by_token),
+         [_, digits] <- Regex.run(~r/^MA(\d{0,2})(?:-.*)?$/i, value) do
+      {"DTS-HD MA", ma, digits}
     else
-      nil
+      _ -> {fallback, token, ""}
     end
   end
 
-  defp is_digit_token?(%Token{value: v}), do: Regex.match?(~r/^\d+$/, v)
-  defp is_digit_token?(_), do: false
+  # Channels come glued whole (`DDP51`), glued then split on the dot
+  # (`DDP5` `1`, or `AAC2 0` with a space), or as two digit tokens after
+  # the codec (`TrueHD.7.1`, `DD 5 1`), possibly past an `Atmos`
+  # (`TrueHD.Atmos.7.1`).
+  defp audio_channels(<<a, b>>, _last, _next_by_token) when a in ?0..?9 and b in ?0..?9,
+    do: <<a, ?., b>>
+
+  defp audio_channels(<<a>>, last, next_by_token) when a in ?0..?9 do
+    case last |> adjacent_token(next_by_token) |> channel_digit() do
+      nil -> nil
+      b -> <<a, ?., b>>
+    end
+  end
+
+  defp audio_channels(_fused, last, next_by_token) do
+    n1 = last |> next_token(next_by_token) |> skip_atmos(next_by_token)
+    n2 = next_token(n1, next_by_token)
+
+    with a when a != nil <- channel_digit(n1),
+         b when b != nil <- channel_digit(n2) do
+      <<a, ?., b>>
+    end
+  end
+
+  defp skip_atmos(%Token{value: value} = token, next_by_token) do
+    if String.upcase(value) == "ATMOS", do: next_token(token, next_by_token), else: token
+  end
+
+  defp skip_atmos(nil, _next_by_token), do: nil
+
+  # One digit, or one digit before the comma of a track list
+  # (`Esp DD2.0,Ing DTS-HD5.1` tokenizes as `DD2` `0,Ing`): commas do not
+  # split tokens.
+  defp channel_digit(%Token{value: <<d>>}) when d in ?0..?9, do: d
+  defp channel_digit(%Token{value: <<d, ?,, _::binary>>}) when d in ?0..?9, do: d
+  defp channel_digit(_), do: nil
+
+  # The next token, when only one separator byte sits between the two.
+  defp adjacent_token(%Token{byte_offset: offset, byte_length: length} = token, next_by_token) do
+    case next_token(token, next_by_token) do
+      %Token{byte_offset: next_offset} = next when next_offset == offset + length + 1 -> next
+      _ -> nil
+    end
+  end
 
   # --- Helpers ---
 
@@ -532,6 +528,8 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   defp next_token(%Token{} = current, next_by_token) do
     Map.get(next_by_token, token_key(current))
   end
+
+  defp next_token(nil, _next_by_token), do: nil
 
   defp token_key(%Token{byte_offset: offset, byte_length: length}), do: {offset, length}
 
@@ -646,6 +644,9 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
       Regex.match?(~r/^dts$/i, normalized) ->
         "DTS"
+
+      String.contains?(normalized, "truehd atmos") ->
+        extract_channels(value, "Dolby TrueHD Atmos")
 
       String.contains?(normalized, "truehd") ->
         extract_channels(value, "Dolby TrueHD")

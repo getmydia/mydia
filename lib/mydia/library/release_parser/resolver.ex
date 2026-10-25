@@ -125,7 +125,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     year_value = pick_year_value(year_pick)
     year_confidence = pick_confidence(year_pick)
 
-    quality_tokens = collect_quality_tokens(assignments)
+    quality_tokens = collect_quality_tokens(assignments, boundary)
     release_group = pick_release_group(assignments)
     language = pick_language(assignments)
 
@@ -358,17 +358,40 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   defp pick_confidence(nil), do: nil
   defp pick_confidence({_, %Candidate{confidence: c}}), do: c
 
-  defp collect_quality_tokens(assignments) do
+  # Audio is not a singleton: a release can list several tracks, and the
+  # QualityExtractor picks among them. An audio word with title words
+  # after it ("Fake.Dts.Story.2020") is a title word, never a track, so it
+  # does not reach the extractor. One in the run of tags that ends the
+  # title zone ("German.DTS.720p", "[X264-AAC][720P]") is still a track,
+  # and without anchors there is no boundary and nothing is cut.
+  defp collect_quality_tokens(assignments, boundary) do
     @quality_labels
     |> Enum.flat_map(fn label ->
       assignments
       |> Enum.filter(fn {_, c} -> c.label == label end)
       |> case do
-        [] -> []
-        list when label == :audio -> Enum.map(list, &to_quality_entry/1)
-        list -> [list |> Enum.max_by(fn {_, c} -> c.confidence end) |> to_quality_entry()]
+        [] ->
+          []
+
+        list when label == :audio ->
+          list
+          |> Enum.reject(fn {token, _} -> title_word_audio?(token, assignments, boundary) end)
+          |> Enum.map(&to_quality_entry/1)
+
+        list ->
+          [list |> Enum.max_by(fn {_, c} -> c.confidence end) |> to_quality_entry()]
       end
     end)
+  end
+
+  defp title_word_audio?(_token, _assignments, :infinity), do: false
+
+  defp title_word_audio?(%Token{byte_offset: offset} = token, assignments, boundary) do
+    in_title_zone?(token, boundary) and
+      Enum.any?(assignments, fn {other, c} ->
+        c.label == :title_candidate and other.byte_offset > offset and
+          in_title_zone?(other, boundary)
+      end)
   end
 
   defp to_quality_entry({token, %Candidate{} = c}) do
