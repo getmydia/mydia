@@ -70,45 +70,45 @@ void main() {
     });
   });
 
-  group('qualityControlLabel', () {
+  group('qualityControlRung', () {
     test('Auto names itself whatever the server applied', () {
-      expect(qualityControlLabel(selected: QualityRung.auto, effective: _r720),
-          'Auto');
+      expect(qualityControlRung(selected: QualityRung.auto, effective: _r720),
+          QualityRung.auto);
     });
 
     test('any other choice shows what the server applied', () {
       expect(
-          qualityControlLabel(selected: QualityRung.original, effective: _r720),
-          '720p');
-      expect(qualityControlLabel(selected: _r1080), '1080p');
+          qualityControlRung(selected: QualityRung.original, effective: _r720),
+          _r720);
+      expect(qualityControlRung(selected: _r1080), _r1080);
     });
   });
 
-  group('qualityClampNote', () {
+  group('qualityClampedTo', () {
     test('silent when the stream got what the plan asked for', () {
       expect(
-          qualityClampNote(plan: _transcode(_r720), effective: _r720), isNull);
-      expect(qualityClampNote(plan: _direct, effective: null), isNull);
+          qualityClampedTo(plan: _transcode(_r720), effective: _r720), isNull);
+      expect(qualityClampedTo(plan: _direct, effective: null), isNull);
       expect(
-          qualityClampNote(plan: _transcode(_r720), effective: null), isNull);
+          qualityClampedTo(plan: _transcode(_r720), effective: null), isNull);
     });
 
     test('names a rung below the one requested', () {
-      expect(qualityClampNote(plan: _transcode(_r1080), effective: _r720),
-          'Limited to 720p by your connection');
+      expect(
+          qualityClampedTo(plan: _transcode(_r1080), effective: _r720), _r720);
     });
 
     test('an uncapped request limited to a rung is a limit', () {
       expect(
-        qualityClampNote(
+        qualityClampedTo(
             plan: _transcode(QualityRung.original), effective: _r720),
-        'Limited to 720p by your connection',
+        _r720,
       );
     });
 
     test('an uncapped answer is never a limit', () {
       expect(
-        qualityClampNote(
+        qualityClampedTo(
             plan: _transcode(_r720), effective: QualityRung.original),
         isNull,
       );

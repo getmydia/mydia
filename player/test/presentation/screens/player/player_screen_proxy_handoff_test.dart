@@ -23,6 +23,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/item.dart';
@@ -129,6 +130,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: PlayerScreen(
           key: const ValueKey('direct-instance'),
           mediaId: 'movie-1',

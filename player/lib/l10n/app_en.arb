@@ -711,5 +711,17 @@
   "fullscreenEnterFailed": "Could not enter fullscreen",
   "@fullscreenEnterFailed": {"description": "Toast in the player when the browser refuses a request to enter fullscreen."},
   "fullscreenExitFailed": "Could not exit fullscreen",
-  "@fullscreenExitFailed": {"description": "Toast in the player when the browser refuses a request to leave fullscreen."}
+  "@fullscreenExitFailed": {"description": "Toast in the player when the browser refuses a request to leave fullscreen."},
+  "qualityAutoPreference": "Adapts to your connection",
+  "@qualityAutoPreference": {"description": "Subtitle of the Auto row in the quality picker when there is no playback to describe, such as in Settings."},
+  "qualityAutoDirectPlay": "Auto · Direct Play",
+  "@qualityAutoDirectPlay": {"description": "Subtitle of the Auto row in the player's quality picker when Auto plays the file as is on this device."},
+  "qualityAutoCopy": "Auto · Original, no re-encoding",
+  "@qualityAutoCopy": {"description": "Subtitle of the Auto row in the player's quality picker when the server repackages the video without re-encoding it."},
+  "qualityAutoReencodeOriginal": "Auto · Original, re-encoding required",
+  "@qualityAutoReencodeOriginal": {"description": "Subtitle of the Auto row in the player's quality picker when the server must re-encode the video at its original resolution."},
+  "qualityAutoRung": "Auto · {quality}",
+  "@qualityAutoRung": {"description": "Subtitle of the Auto row in the player's quality picker naming the quality Auto is streaming at, such as 720p.", "placeholders": {"quality": {"type": "String", "example": "720p"}}},
+  "qualityClampNote": "Limited to {quality} by your connection",
+  "@qualityClampNote": {"description": "Note in the player's quality picker when the server delivers a lower quality than requested.", "placeholders": {"quality": {"type": "String", "example": "720p"}}}
 }

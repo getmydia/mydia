@@ -1,10 +1,10 @@
 /// Which release cadence this installation follows.
 ///
-/// The names are user facing, through `AppFormatters.updateTrackName`. The third track builds from the master branch,
-/// but "master" means nothing to someone who does not know the repository, so
-/// it is Dev everywhere the user can see it. The wire names are what the feed
-/// and the stored preference use, and they must not drift from the keys in
-/// releases.json.
+/// The names are user facing, through `AppFormatters.updateTrackName`. The
+/// third track builds from the master branch, but "master" means nothing to
+/// someone who does not know the repository, so it is Dev everywhere the user
+/// can see it. The wire names are what the feed and the stored preference use,
+/// and they must not drift from the keys in releases.json.
 enum UpdateTrack {
   stable,
   beta,

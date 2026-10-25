@@ -2,7 +2,6 @@
 library;
 
 import '../../core/playback/playback_plan.dart';
-import 'quality_rung.dart';
 
 const kOriginalDirectPlaySubtitle = 'Direct Play';
 const kOriginalLosslessSubtitle = 'Original · no re-encoding';
@@ -51,22 +50,3 @@ String deliverySubtitleForPlan(PlaybackPlan plan) => switch (plan) {
       HlsPlan(strategy: HlsStrategy.copy) => kOriginalLosslessSubtitle,
       HlsPlan() => kOriginalTranscodeSubtitle,
     };
-
-/// Neutral Auto subtitle when there is no delivery context (e.g. Settings).
-const kAutoPreferenceSubtitle = 'Adapts to your connection';
-
-/// The Auto row's subtitle for [plan]: what Auto is doing, or would do.
-///
-/// [effective] is the rung the server echoed for a transcode, which on a
-/// relay can sit below the one Auto asked for; the row names what is
-/// actually playing.
-String autoDeliverySubtitle(PlaybackPlan plan, {QualityRung? effective}) =>
-    switch (plan) {
-      DirectPlayPlan() => 'Auto · Direct Play',
-      HlsPlan(strategy: HlsStrategy.copy) => 'Auto · Original, no re-encoding',
-      HlsPlan(:final rung) => _autoTranscodeSubtitle(effective ?? rung),
-    };
-
-String _autoTranscodeSubtitle(QualityRung rung) => rung.isOriginal
-    ? 'Auto · Original, re-encoding required'
-    : 'Auto · ${rung.label}';

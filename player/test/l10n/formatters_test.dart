@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/theme/glass_material.dart';
@@ -159,5 +160,60 @@ void main() {
               const FullscreenFailure(FullscreenFailureCause.noVideoElement)),
           isNot('Could not enter fullscreen'));
     }
+  });
+
+  group('quality sentences', () {
+    const r720 = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+    const r1080 =
+        QualityRung(label: '1080p', height: 1080, maxBitrateKbps: 8000);
+
+    test('autoDeliverySubtitle keeps its English text', () async {
+      final en = await l10n('en');
+      expect(
+        en.autoDeliverySubtitle(
+            const DirectPlayPlan(reason: PlanReason.directPlayAccepted)),
+        'Auto · Direct Play',
+      );
+      expect(
+        en.autoDeliverySubtitle(const HlsPlan(
+          strategy: HlsStrategy.copy,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.copyAccepted,
+        )),
+        'Auto · Original, no re-encoding',
+      );
+      expect(
+        en.autoDeliverySubtitle(const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: true,
+          reason: PlanReason.noDirectPlayCandidate,
+        )),
+        'Auto · Original, re-encoding required',
+      );
+      expect(
+        en.autoDeliverySubtitle(
+          const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: r1080,
+            adaptive: true,
+            reason: PlanReason.noDirectPlayCandidate,
+          ),
+          effective: r720,
+        ),
+        'Auto · 720p',
+      );
+    });
+
+    test('clamp note and preference subtitle', () async {
+      final en = await l10n('en');
+      expect(en.qualityClampNote(en.qualityName(r720)),
+          'Limited to 720p by your connection');
+      expect(en.qualityAutoPreference, 'Adapts to your connection');
+      final es = await l10n('es');
+      expect(es.qualityClampNote('720p'), isNot(contains('Limited')));
+      expect(es.qualityAutoRung('720p'), contains('720p'));
+    });
   });
 }

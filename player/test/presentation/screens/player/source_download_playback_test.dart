@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/downloads/download_locations.dart';
 import 'package:player/presentation/screens/sources/source_player_route.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -267,6 +268,8 @@ void main() {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
           home: SourcePlayerRoute(sourceId: id, itemId: '10', uri: uri),
         ),

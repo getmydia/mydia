@@ -56,7 +56,6 @@ const String _installPermissionStillDenied =
     'apps" (Allow from this source) for Mydia in Android settings, then '
     'tap Retry.';
 
-/// State for the update system.
 /// A track the viewer chose that has no builds here. [macos] selects the
 /// macOS wording.
 class TrackNotPublished {
@@ -66,6 +65,7 @@ class TrackNotPublished {
   const TrackNotPublished(this.track, {this.macos = false});
 }
 
+/// State for the update system.
 class UpdateState {
   /// Available update, if any. Null on platforms that update elsewhere.
   final AvailableUpdate? availableUpdate;

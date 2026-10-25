@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
@@ -137,6 +138,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         home: PlayerScreen(
           mediaId: 'm1',
@@ -197,6 +200,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: router,
       ),
@@ -395,6 +400,8 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       routerConfig: router,
     ),
@@ -423,6 +430,8 @@ Future<void> _pumpWithSession(
             .overrideWithValue(const CastCapabilities.full()),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         home: PlayerScreen(
           mediaId: 'm1',

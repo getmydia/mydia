@@ -252,7 +252,7 @@ void main() {
           context,
           [QualityRung.auto, ...ladder],
           QualityRung.original,
-          autoSubtitle: kAutoPreferenceSubtitle,
+          autoSubtitle: 'Adapts to your connection',
           originalSubtitle: kOriginalPreferenceSubtitle,
         );
       }),

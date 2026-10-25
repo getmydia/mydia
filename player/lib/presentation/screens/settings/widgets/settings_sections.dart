@@ -131,7 +131,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
       current,
       // A standing preference has no streaming candidates to derive delivery
       // from, so both open rows keep a neutral subtitle.
-      autoSubtitle: kAutoPreferenceSubtitle,
+      autoSubtitle: context.l10n.qualityAutoPreference,
       originalSubtitle: kOriginalPreferenceSubtitle,
     );
 

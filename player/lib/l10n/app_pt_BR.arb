@@ -185,5 +185,11 @@
   "qualityAuto": "Automática",
   "qualityOriginal": "Original",
   "fullscreenEnterFailed": "Não foi possível entrar em tela cheia",
-  "fullscreenExitFailed": "Não foi possível sair da tela cheia"
+  "fullscreenExitFailed": "Não foi possível sair da tela cheia",
+  "qualityAutoPreference": "Adapta-se à sua conexão",
+  "qualityAutoDirectPlay": "Automática · Reprodução direta",
+  "qualityAutoCopy": "Automática · Original, sem recodificação",
+  "qualityAutoReencodeOriginal": "Automática · Original, requer recodificação",
+  "qualityAutoRung": "Automática · {quality}",
+  "qualityClampNote": "Limitada a {quality} pela sua conexão"
 }

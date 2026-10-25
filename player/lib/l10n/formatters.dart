@@ -6,6 +6,7 @@ library;
 
 import 'package:intl/intl.dart';
 
+import '../core/playback/playback_plan.dart';
 import '../core/player/fullscreen/fullscreen_failure.dart';
 import '../core/player/subtitle_size.dart';
 import '../core/theme/glass_material.dart';
@@ -125,4 +126,20 @@ extension AppFormatters on AppLocalizations {
         ? updateTrackNotPublishedMacos(track)
         : updateTrackNotPublished(track);
   }
+
+  /// The Auto row's subtitle for [plan]: what Auto is doing, or would do.
+  ///
+  /// [effective] is the rung the server echoed for a transcode, which on a
+  /// relay can sit below the one Auto asked for; the row names what is
+  /// actually playing.
+  String autoDeliverySubtitle(PlaybackPlan plan, {QualityRung? effective}) =>
+      switch (plan) {
+        DirectPlayPlan() => qualityAutoDirectPlay,
+        HlsPlan(strategy: HlsStrategy.copy) => qualityAutoCopy,
+        HlsPlan(:final rung) => _autoTranscodeSubtitle(effective ?? rung),
+      };
+
+  String _autoTranscodeSubtitle(QualityRung rung) => rung.isOriginal
+      ? qualityAutoReencodeOriginal
+      : qualityAutoRung(qualityName(rung));
 }

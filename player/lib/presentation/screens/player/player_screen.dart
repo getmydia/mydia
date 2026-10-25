@@ -4694,7 +4694,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _selectedQuality,
       autoSubtitle: _autoDeliverySubtitle(),
       originalSubtitle: _originalDeliverySubtitle,
-      clampNote: qualityClampNote(plan: _plan, effective: _effectiveQuality),
+      clampNote: _qualityClampNote(),
       statsEnabled: ref.read(statsOverlayEnabledProvider).value ?? false,
       onStatsChanged: (enabled) => unawaited(
         ref.read(statsOverlayEnabledProvider.notifier).set(enabled),
@@ -4770,14 +4770,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The Auto row's subtitle: what is playing now when Auto is in effect,
   /// otherwise what Auto would do for this file.
   String _autoDeliverySubtitle() {
+    final l10n = context.l10n;
     final plan = _plan;
     if (_selectedQuality.isAuto && plan != null) {
-      return autoDeliverySubtitle(plan, effective: _effectiveQuality);
+      return l10n.autoDeliverySubtitle(plan, effective: _effectiveQuality);
     }
     final inputs = _planInputs;
-    if (inputs == null) return kAutoPreferenceSubtitle;
-    return autoDeliverySubtitle(
+    if (inputs == null) return l10n.qualityAutoPreference;
+    return l10n.autoDeliverySubtitle(
         planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
+  }
+
+  /// The picker's note when the server delivered less than was asked.
+  String? _qualityClampNote() {
+    final l10n = context.l10n;
+    final clamped = qualityClampedTo(plan: _plan, effective: _effectiveQuality);
+    return clamped == null
+        ? null
+        : l10n.qualityClampNote(l10n.qualityName(clamped));
   }
 
   /// The physical display in logical pixels. Read from the display rather
@@ -5652,8 +5662,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             audioTrackCount: _audioTracks.length,
             selectedAudioLabel: _selectedAudioTrack?.displayName,
             selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
-            selectedQualityLabel: qualityControlLabel(
-                selected: _selectedQuality, effective: _effectiveQuality),
+            selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
+                selected: _selectedQuality, effective: _effectiveQuality)),
           ),
           fill: Colors.black,
           fit: _scaling.boxFit,
