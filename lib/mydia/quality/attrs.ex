@@ -234,11 +234,11 @@ defmodule Mydia.Quality.Attrs do
   defp metadata_source(%MediaFile{metadata: %{source: source}}) when is_binary(source),
     do: source
 
-  # V3's ReleaseParser (priv/release_parser/sources.exs) carries zero
-  # cam-tier entries, so a download-imported telesync or cam release lands
-  # here with metadata.source nil. Without this fallback such a file scores
-  # a neutral 50.0 forever, and R7 (a cam-tier file already in the library
-  # scores 0 so the upgrade path replaces it) never fires.
+  # A telesync or cam release imported before ReleaseParser
+  # (priv/release_parser/sources.exs) read cam-tier tokens lands here with
+  # metadata.source nil. Without this fallback such a file scores a neutral
+  # 50.0 forever, and R7 (a cam-tier file already in the library scores 0 so
+  # the upgrade path replaces it) never fires.
   #
   # The fallback is deliberately restricted to cam-tier detections. Every
   # on-disk file with no metadata.source today reaches score_source/2 with a
