@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../core/player/stream_timeline.dart';
 import '../../core/player/video_scaling.dart';
+import '../../l10n/l10n.dart';
 import 'pinch_tracker.dart';
 
 /// Gesture controls for mobile playback
@@ -220,7 +221,7 @@ class _GestureControlsState extends State<GestureControls> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '${_seekSeconds.toInt()} sec',
+                      context.l10n.gestureSeekSeconds(_seekSeconds.toInt()),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,

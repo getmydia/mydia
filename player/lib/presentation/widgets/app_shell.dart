@@ -19,6 +19,7 @@ import '../../core/platform/native_sidebar_state.dart';
 import '../../core/platform/native_tab_bar_channel.dart';
 import '../../core/platform/native_tab_bar_support.dart';
 import '../../domain/navigation/source_nav.dart';
+import '../../l10n/l10n.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/router/detail_location.dart';
 import '../../core/router/page_cover_observer.dart';
@@ -650,7 +651,7 @@ class _AppShellState extends ConsumerState<AppShell>
     if (totalQueued > 0 && mounted) {
       showToast(
         context,
-        'Auto-sync: queued $totalQueued new item${totalQueued != 1 ? 's' : ''} for download',
+        context.l10n.shellAutoSyncQueued(totalQueued),
         icon: Icons.sync_rounded,
       );
     }
@@ -663,7 +664,7 @@ class _AppShellState extends ConsumerState<AppShell>
 
   /// Show a toast when a disabled nav item is tapped in offline mode
   void _showOfflineToast() {
-    showToast(context, 'Connect to server to access this');
+    showToast(context, context.l10n.shellOfflineNavBlocked);
   }
 
   void _navigateTo(String route) {

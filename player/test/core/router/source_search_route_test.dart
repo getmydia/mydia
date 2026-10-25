@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
@@ -24,7 +25,11 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();

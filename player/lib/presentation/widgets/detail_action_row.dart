@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'focus_highlight.dart';
 import 'glass/glass_interaction.dart';
 import 'glass_surface.dart';
@@ -80,7 +81,7 @@ class DetailActionRow extends StatelessWidget {
           icon: watched
               ? Icons.check_circle_rounded
               : Icons.check_circle_outline_rounded,
-          label: 'Watched',
+          label: context.l10n.commonWatched,
           highlighted: watched,
           highlightColor: AppColors.success,
           onTap: onToggleWatched,
@@ -90,7 +91,7 @@ class DetailActionRow extends StatelessWidget {
           icon: isFavorite
               ? Icons.favorite_rounded
               : Icons.favorite_border_rounded,
-          label: 'Favorite',
+          label: context.l10n.commonFavorite,
           highlighted: isFavorite,
           highlightColor: AppColors.error,
           onTap: onToggleFavorite!,
@@ -100,7 +101,7 @@ class DetailActionRow extends StatelessWidget {
           icon: isDownloaded
               ? Icons.download_done_rounded
               : Icons.download_rounded,
-          label: 'Download',
+          label: context.l10n.commonDownload,
           highlighted: isDownloaded,
           highlightColor: AppColors.success,
           onTap: onDownload!,
@@ -108,7 +109,7 @@ class DetailActionRow extends StatelessWidget {
       if (trailerUrl != null)
         _ActionButton(
           icon: Icons.smart_display_rounded,
-          label: 'Trailer',
+          label: context.l10n.detailTrailer,
           highlighted: false,
           highlightColor: palette.primary,
           onTap: () => _openTrailer(context, trailerUrl),
@@ -116,7 +117,7 @@ class DetailActionRow extends StatelessWidget {
       if (onShowMediaInfo != null)
         _ActionButton(
           icon: Icons.info_outline_rounded,
-          label: 'Info',
+          label: context.l10n.detailInfo,
           highlighted: false,
           highlightColor: palette.textPrimary,
           onTap: onShowMediaInfo!,
@@ -142,7 +143,8 @@ class DetailActionRow extends StatelessWidget {
 
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      showToast(context, 'Could not open trailer', kind: ToastKind.error);
+      showToast(context, context.l10n.detailTrailerOpenFailed,
+          kind: ToastKind.error);
     }
   }
 }

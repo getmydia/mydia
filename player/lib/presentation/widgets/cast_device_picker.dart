@@ -12,6 +12,7 @@ import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/cast_device.dart';
+import '../../l10n/l10n.dart';
 import 'local_network_settings_button.dart';
 import 'osd_dialog.dart';
 
@@ -54,11 +55,11 @@ class CastDevicePickerDialog extends ConsumerWidget {
         connection == CastConnection.casting;
 
     return OsdDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.cast, size: 24),
-          SizedBox(width: 12),
-          Text('Cast to Device'),
+          const Icon(Icons.cast, size: 24),
+          const SizedBox(width: 12),
+          Text(context.l10n.castPickerTitle),
         ],
       ),
       content: Material(
@@ -92,7 +93,7 @@ class CastDevicePickerDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(context.l10n.commonClose),
         ),
       ],
     );
@@ -174,14 +175,13 @@ class _DeviceListState extends State<_DeviceList> {
             Icon(Icons.tv_off, size: 48, color: palette.textSecondary),
             const SizedBox(height: 16),
             Text(
-              'No cast devices found',
+              context.l10n.castPickerEmptyTitle,
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Make sure the device is powered on and on the same Wi-Fi '
-              'network as this one.',
+              context.l10n.castPickerEmptyHint,
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.textSecondary),
             ),
@@ -196,7 +196,7 @@ class _DeviceListState extends State<_DeviceList> {
           Icon(Icons.search, size: 48, color: palette.textSecondary),
           const SizedBox(height: 16),
           Text(
-            'Searching for devices...',
+            context.l10n.castPickerSearching,
             style: TextStyle(color: palette.textSecondary),
           ),
           const SizedBox(height: 16),
@@ -219,7 +219,7 @@ class _DeviceListState extends State<_DeviceList> {
         if (capabilities.chromecast && chromecast.isNotEmpty)
           _ProtocolGroup(
             key: const Key('cast-group-chromecast'),
-            label: 'Chromecast',
+            label: 'Chromecast', // l10n-ignore: product name
             devices: chromecast,
             currentDeviceId: currentDeviceId,
             connected: connected,
@@ -227,7 +227,7 @@ class _DeviceListState extends State<_DeviceList> {
         if (capabilities.dlna && dlna.isNotEmpty)
           _ProtocolGroup(
             key: const Key('cast-group-dlna'),
-            label: 'DLNA / UPnP',
+            label: 'DLNA / UPnP', // l10n-ignore: protocol name
             devices: dlna,
             currentDeviceId: currentDeviceId,
             connected: connected,
@@ -239,7 +239,7 @@ class _DeviceListState extends State<_DeviceList> {
         if (mydia.isNotEmpty)
           _ProtocolGroup(
             key: const Key('cast-group-mydia'),
-            label: 'Mydia Players',
+            label: context.l10n.castPickerGroupMydia,
             devices: mydia,
             currentDeviceId: currentDeviceId,
             connected: connected,
@@ -301,8 +301,8 @@ class _ProtocolGroup extends ConsumerWidget {
           final subtitle = device.protocol == CastProtocolKind.mydia
               ? (device.metadata['nowPlayingTitle'] ??
                   (device.metadata['statusUnavailable'] == 'true'
-                      ? 'Status unavailable'
-                      : 'Nothing playing'))
+                      ? context.l10n.castPickerStatusUnavailable
+                      : context.l10n.castPickerNothingPlaying))
               : device.model;
           // The Mydia servers that list this device, by their own names.
           // Only worth saying when there is more than one to tell apart.
@@ -360,14 +360,13 @@ class _DiscoveryError extends StatelessWidget {
           const Icon(Icons.wifi_off, size: 48, color: AppColors.error),
           const SizedBox(height: 16),
           Text(
-            'Mydia needs local network permission',
+            context.l10n.castPickerPermissionTitle,
             style: Theme.of(context).textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            'Mydia cannot see cast devices until local network access is '
-            'enabled.',
+            context.l10n.castPickerPermissionHint,
             textAlign: TextAlign.center,
             style: TextStyle(color: palette.textSecondary),
           ),
@@ -384,7 +383,7 @@ class _DiscoveryError extends StatelessWidget {
         const Icon(Icons.error_outline, size: 48, color: AppColors.error),
         const SizedBox(height: 16),
         Text(
-          'Failed to find devices',
+          context.l10n.castPickerErrorTitle,
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),

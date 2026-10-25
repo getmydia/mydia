@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/compatibility_details_dialog.dart';
 
 Future<void> pumpDialog(WidgetTester tester, CompatibilityState state) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: CompatibilityDetailsDialog(state: state),
       ),

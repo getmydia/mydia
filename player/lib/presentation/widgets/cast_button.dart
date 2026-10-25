@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_providers.dart';
+import '../../l10n/l10n.dart';
 import 'cast_visuals.dart';
 import 'glass/glass_icon_button.dart';
 
@@ -30,7 +31,7 @@ class CastButton extends ConsumerWidget {
 
     final connection = ref.watch(castConnectionProvider);
     final device = ref.watch(castDisplayDeviceProvider);
-    final visuals = castVisualsFor(connection, device?.name ?? 'device');
+    final visuals = castVisualsFor(context.l10n, connection, device?.name);
     final glyph = visuals.connected ? Icons.cast_connected : Icons.cast;
 
     final icon = connection == CastConnection.connecting

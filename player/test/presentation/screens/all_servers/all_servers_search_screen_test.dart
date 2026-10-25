@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_search_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
@@ -26,7 +27,12 @@ Future<void> pump(WidgetTester tester,
       allServersNeedSignInProvider.overrideWithValue(const []),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
-    child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: router,
+      builder: toastLayerBuilder,
+    ),
   ));
   await tester.pumpAndSettle();
 }

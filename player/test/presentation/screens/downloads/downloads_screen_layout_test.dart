@@ -23,6 +23,7 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -47,6 +48,8 @@ Future<void> _pumpHarness(
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: MediaQuery(
           data: MediaQueryData(
             padding: EdgeInsets.only(top: statusBar + insets.height),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/gesture_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
@@ -60,6 +61,8 @@ void main() {
     // Positioned.fill(PlaybackChrome)] -> wrapped by GestureControls) so the
     // hit-testing story matches production, not a simplified stand-in.
     Widget host(Player player) => MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox.expand(
               child: GestureControls(

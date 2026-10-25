@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/palette.dart';
 import '../../domain/models/audio_track.dart';
+import '../../l10n/l10n.dart';
 import 'osd_sheet.dart';
 
 /// Shows a bottom sheet for selecting an audio track.
@@ -46,7 +47,7 @@ class AudioTrackSelectorSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'Audio Tracks',
+                context.l10n.audioTracksTitle,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
@@ -58,7 +59,7 @@ class AudioTrackSelectorSheet extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'No audio tracks available',
+                  context.l10n.audioTracksEmpty,
                   style: TextStyle(color: palette.textSecondary),
                 ),
               )
@@ -105,7 +106,7 @@ class _TrackTile extends StatelessWidget {
       ),
       subtitle: isDefault
           ? Text(
-              'Default',
+              context.l10n.commonDefault,
               style: TextStyle(color: palette.textSecondary),
             )
           : null,

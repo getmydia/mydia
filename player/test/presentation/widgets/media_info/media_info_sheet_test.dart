@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/media_stream.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/media_info_sheet.dart';
 
 import '../../screens/sources/fake_capable_source.dart';
@@ -23,6 +24,8 @@ Widget _harness(Size size) {
   return MediaQuery(
     data: MediaQueryData(size: size),
     child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: MediaInfoPanel(files: [_file]),
       ),
@@ -84,6 +87,8 @@ void main() {
           mediaSourceProvider(fakeSourceId).overrideWithValue(source),
         ],
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: MediaInfoSheet(item: item)),
         ),
       ));

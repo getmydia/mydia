@@ -16,6 +16,7 @@ import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -70,7 +71,13 @@ Future<void> pumpLibrary(
             .overrideWithValue(const CastCapabilities.full()),
         ...extraOverrides,
       ],
-      child: wrap == null ? MaterialApp(home: screen) : wrap(screen),
+      child: wrap == null
+          ? MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: screen,
+            )
+          : wrap(screen),
     ),
   );
 

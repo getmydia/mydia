@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_device_picker.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
@@ -55,6 +56,8 @@ Future<void> _pump(
         castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Directionality(
           textDirection: dir,
           child: MediaQuery(
@@ -300,6 +303,8 @@ void main() {
         ProviderScope(
           overrides: castCapableOverrides(),
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: WindowTitleBar(
               height: 40,
               decorate: (row) => ColoredBox(

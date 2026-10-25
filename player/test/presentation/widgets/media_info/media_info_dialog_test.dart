@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_stream.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/media_info_sheet.dart';
 
 import '../../../test_utils/text_decoration.dart';
@@ -50,6 +51,8 @@ const _secondFile = MediaFileInfo(
 Future<void> _openDialog(WidgetTester tester, List<MediaFileInfo> files) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () => showGeneralDialog<void>(

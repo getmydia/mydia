@@ -19,6 +19,7 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/playback/local_playback_state.dart';
@@ -107,7 +108,11 @@ Future<ProviderContainer> _pump(
 
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+    child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: CastMiniController()),
+    ),
   ));
   await tester.pump();
   return container;
@@ -254,6 +259,8 @@ Future<ProviderContainer> _pumpWithManager(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: Scaffold(body: CastMiniController()),
     ),
@@ -305,6 +312,8 @@ Future<bool Function()> _pumpLayer(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
       builder: (context, child) =>
           CastBarLayer(child: child ?? const SizedBox.shrink()),
@@ -1535,7 +1544,11 @@ void main() {
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastMiniController()),
+        ),
       ));
       await tester.pump();
 
@@ -1559,7 +1572,11 @@ void main() {
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastMiniController()),
+        ),
       ));
       await tester.pump();
 
@@ -1596,7 +1613,11 @@ void main() {
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastMiniController()),
+        ),
       ));
       await tester.pump();
       await tester.pump();
@@ -1624,7 +1645,11 @@ void main() {
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastMiniController()),
+        ),
       ));
       await tester.pump();
 
@@ -1657,7 +1682,11 @@ void main() {
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastMiniController()),
+        ),
       ));
       await tester.pump();
       await tester.pump();
@@ -1983,6 +2012,8 @@ void main() {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) => CastBarLayer(child: child!),
           home: Scaffold(
             extendBody: true,

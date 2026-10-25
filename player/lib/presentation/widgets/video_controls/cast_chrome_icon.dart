@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cast/cast_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../cast_visuals.dart';
 
 /// The cast glyph for the playback chrome's top bar.
@@ -31,7 +32,7 @@ class CastChromeIcon extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final connection = ref.watch(castConnectionProvider);
     final device = ref.watch(castDisplayDeviceProvider);
-    final visuals = castVisualsFor(connection, device?.name ?? 'device');
+    final visuals = castVisualsFor(context.l10n, connection, device?.name);
     final glyph =
         visuals.connected ? Icons.cast_connected_rounded : Icons.cast_rounded;
 

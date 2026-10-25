@@ -15,6 +15,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/l10n.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 
@@ -61,7 +62,11 @@ void main() {
     final router = container.read(appRouterProvider);
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ));
     await container.read(sourceRecordsProvider.future);
     await tester.pumpAndSettle();

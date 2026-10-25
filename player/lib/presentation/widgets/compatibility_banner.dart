@@ -6,6 +6,7 @@ import '../../core/compatibility/compatibility_verdict.dart';
 import '../../core/theme/colors.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
+import '../../l10n/l10n.dart';
 import '../screens/settings/dialog/open_settings.dart';
 import '../screens/settings/dialog/settings_dialog.dart';
 import 'banner_button.dart';
@@ -57,7 +58,7 @@ class CompatibilityBanner extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                _message(state),
+                _message(context.l10n, state),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -67,14 +68,14 @@ class CompatibilityBanner extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             BannerButton(
-              label: 'Details',
+              label: context.l10n.commonDetails,
               color: color,
               onPressed: () => showCompatibilityDetailsDialog(context, state),
             ),
             if (state.verdict.isPlayerBehind) ...[
               const SizedBox(width: 8),
               BannerButton(
-                label: 'Update',
+                label: context.l10n.commonUpdate,
                 color: color,
                 onPressed: () {
                   // Settings is the fallback, not the destination. It covers
@@ -98,7 +99,7 @@ class CompatibilityBanner extends ConsumerWidget {
                 icon: const Icon(Icons.close, size: 16),
                 color: color,
                 visualDensity: VisualDensity.compact,
-                tooltip: 'Dismiss',
+                tooltip: context.l10n.commonDismiss,
                 onPressed: () =>
                     ref.read(compatibilityProvider.notifier).dismiss(),
               ),
@@ -109,19 +110,22 @@ class CompatibilityBanner extends ConsumerWidget {
     );
   }
 
-  String _message(CompatibilityState state) {
-    final floor = state.requiredVersion ?? 'a newer version';
+  String _message(AppLocalizations l10n, CompatibilityState state) {
+    final floor = state.requiredVersion;
 
     switch (state.verdict) {
       case CompatibilityVerdict.playerUpdateRequired:
-        return 'Update Mydia Player. This server needs version $floor or newer.';
+        return floor == null
+            ? l10n.compatPlayerUpdateRequiredNoVersion
+            : l10n.compatPlayerUpdateRequired(floor);
       case CompatibilityVerdict.serverUpdateRequired:
-        return 'This server is out of date. Mydia Player needs server version '
-            '$floor or newer.';
+        return floor == null
+            ? l10n.compatServerUpdateRequiredNoVersion
+            : l10n.compatServerUpdateRequired(floor);
       case CompatibilityVerdict.playerUpdateRecommended:
-        return 'A newer Mydia Player is available for this server.';
+        return l10n.compatPlayerUpdateRecommended;
       case CompatibilityVerdict.serverUpdateRecommended:
-        return 'A newer Mydia server is available for this app.';
+        return l10n.compatServerUpdateRecommended;
       case CompatibilityVerdict.compatible:
       case CompatibilityVerdict.unknown:
         return '';

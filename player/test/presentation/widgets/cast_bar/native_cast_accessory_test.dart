@@ -9,6 +9,7 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/platform/native_tab_bar_channel.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
 import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
@@ -186,6 +187,8 @@ void main() {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: NativeCastAccessory()),
         ),
       ));

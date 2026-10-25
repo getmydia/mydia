@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
+import '../../l10n/l10n.dart';
 import '../screens/detail/detail_links.dart';
 
 /// What a card's long-press menu can offer.
@@ -89,12 +90,13 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
 }
 
 /// Menu copy for [action].
-String mediaContextLabel(MediaContextAction action) => switch (action) {
-      MediaContextAction.play => 'Play',
-      MediaContextAction.goToShow => 'Go to show',
-      MediaContextAction.movieDetails => 'Movie details',
+String mediaContextLabel(AppLocalizations l10n, MediaContextAction action) =>
+    switch (action) {
+      MediaContextAction.play => l10n.commonPlay,
+      MediaContextAction.goToShow => l10n.mediaMenuGoToShow,
+      MediaContextAction.movieDetails => l10n.mediaMenuMovieDetails,
       MediaContextAction.removeFromContinueWatching =>
-        'Remove from Continue Watching',
+        l10n.mediaMenuRemoveFromContinueWatching,
     };
 
 /// Menu glyph for [action].
@@ -188,7 +190,7 @@ Future<void> showMediaContextMenu(
               // from Continue Watching" overflows the menu's own width on a
               // phone, and a bare Text in a min-size Row paints the overflow
               // stripes rather than wrapping.
-              Flexible(child: Text(mediaContextLabel(action))),
+              Flexible(child: Text(mediaContextLabel(context.l10n, action))),
             ],
           ),
         ),

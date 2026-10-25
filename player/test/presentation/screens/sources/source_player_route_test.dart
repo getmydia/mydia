@@ -8,6 +8,7 @@ import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
 import 'package:player/presentation/screens/player/session/source_playback_sessions.dart';
@@ -83,6 +84,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: fakeSourceId,
           itemId: 'm1',
@@ -105,6 +108,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: fakeSourceId,
           itemId: 'e2',
@@ -129,6 +134,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource())
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: fakeSourceId,
           itemId: 'm1',
@@ -148,6 +155,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: fakeSourceId,
           itemId: 'm1',
@@ -174,7 +183,11 @@ void main() {
         mediaSourceProvider(const SourceId('x'))
             .overrideWithValue(FakeMediaSource())
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ));
     await tester.pumpAndSettle();
     final first = tester.state(find.byType(SourcePlayerRoute));
@@ -197,6 +210,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: fakeSourceId,
           itemId: 'm1',

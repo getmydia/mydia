@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_file.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
@@ -18,6 +19,8 @@ const _twoFiles = [
 /// Mirrors how both detail heroes embed the control: a Row whose leading child
 /// is Expanded (the title column) and whose trailing child is non-flex.
 Widget _host(Widget control) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.end,

@@ -5,6 +5,7 @@ import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/progress.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/watch_indicator.dart';
 
@@ -40,6 +41,8 @@ Future<void> _pump(
               .overrideWith((ref) => false),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: EpisodeRailCard(
               episode: episode,

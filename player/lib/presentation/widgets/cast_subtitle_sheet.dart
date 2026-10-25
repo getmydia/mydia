@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_sheet.dart';
 
 /// What the cast caption sheet resolved to when it closed.
@@ -55,7 +56,7 @@ Future<CastSubtitleSelection> showCastSubtitleSheet(
           ListTile(
             key: const Key('cast-subtitle-off'),
             leading: const Icon(Icons.closed_caption_off),
-            title: const Text('Off'),
+            title: Text(context.l10n.commonOff),
             trailing: selected == null ? const Icon(Icons.check) : null,
             onTap: () => Navigator.of(context).pop(const CastSubtitleOff()),
           ),

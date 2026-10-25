@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_button.dart';
 import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
 
@@ -37,6 +38,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: overrides,
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           // The pill's IconTheme, reproduced: an idle glyph must inherit this
           // rather than hard-coding a colour of its own.
@@ -91,7 +94,7 @@ void main() {
 
       expect(iconOf(tester).icon, Icons.cast_rounded);
       expect(iconOf(tester).color, Colors.blue);
-      expect(tooltipOf(tester), '${_device.name} — not connected');
+      expect(tooltipOf(tester), '${_device.name} (not connected)');
     });
 
     testWidgets('shows a progress ring while connecting', (tester) async {
@@ -211,6 +214,8 @@ void main() {
         await tester.pumpWidget(ProviderScope(
           overrides: overrides,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: CastButton(onPressed: () {})),
           ),
         ));

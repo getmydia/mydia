@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 class DownloadDialog extends StatefulWidget {
@@ -30,7 +31,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
   }
 
   String _formatFileSize(int? bytes) {
-    if (bytes == null) return 'Unknown';
+    if (bytes == null) return context.l10n.commonUnknown;
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) {
@@ -48,7 +49,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Download',
+            context.l10n.commonDownload,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -71,7 +72,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select Quality',
+              context.l10n.downloadSelectQuality,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -98,7 +99,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
-            'Cancel',
+            context.l10n.commonCancel,
             style: TextStyle(color: palette.textSecondary),
           ),
         ),
@@ -110,7 +111,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
             backgroundColor: palette.primary,
             foregroundColor: palette.onPrimary,
           ),
-          child: const Text('Download'),
+          child: Text(context.l10n.commonDownload),
         ),
       ],
     );

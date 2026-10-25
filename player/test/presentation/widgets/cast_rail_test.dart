@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_views.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(home: Scaffold(body: child)),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: child),
+      ),
     );
 
 void main() {

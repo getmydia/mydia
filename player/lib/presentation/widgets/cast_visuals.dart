@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/cast/cast_providers.dart';
+import '../../l10n/l10n.dart';
 
 /// How a cast affordance reads in a given [CastConnection].
 ///
@@ -19,32 +20,37 @@ typedef CastVisuals = ({bool connected, Color color, String tooltip});
 /// `connected` is true only when a connection is genuinely live, because
 /// `cast_connected` is the platform's "this app owns that receiver" glyph. A
 /// device that has merely been chosen stays hollow, in the same blue.
-CastVisuals castVisualsFor(CastConnection connection, String name) {
+CastVisuals castVisualsFor(
+  AppLocalizations l10n,
+  CastConnection connection,
+  String? deviceName,
+) {
+  final name = deviceName ?? l10n.castDeviceFallbackName;
   return switch (connection) {
     CastConnection.none => (
         connected: false,
         color: Colors.white,
-        tooltip: 'Cast to device',
+        tooltip: l10n.castTooltipIdle,
       ),
     CastConnection.connecting => (
         connected: false,
         color: Colors.blue,
-        tooltip: 'Connecting to $name…',
+        tooltip: l10n.castTooltipConnecting(name),
       ),
     CastConnection.connectedIdle => (
         connected: true,
         color: Colors.blue,
-        tooltip: 'Connected to $name',
+        tooltip: l10n.castTooltipConnected(name),
       ),
     CastConnection.casting => (
         connected: true,
         color: Colors.blue,
-        tooltip: 'Casting to $name',
+        tooltip: l10n.castTooltipCasting(name),
       ),
     CastConnection.chosenOffline => (
         connected: false,
         color: Colors.blue,
-        tooltip: '$name — not connected',
+        tooltip: l10n.castTooltipOffline(name),
       ),
   };
 }

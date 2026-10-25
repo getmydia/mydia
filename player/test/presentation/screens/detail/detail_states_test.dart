@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/detail_screen_frame.dart';
 import 'package:player/presentation/screens/detail/detail_states.dart';
 
@@ -18,7 +19,11 @@ Future<void> _pumpSliverScreen(WidgetTester tester, Widget child) {
   return tester.pumpWidget(
     ProviderScope(
       overrides: castCapableOverrides(),
-      child: MaterialApp(home: Scaffold(body: child)),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: child),
+      ),
     ),
   );
 }

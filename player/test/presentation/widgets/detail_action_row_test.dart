@@ -4,12 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child, {bool? liquid}) => ProviderScope(
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: liquid == null
             ? null
             : AppTheme.build(Palettes.projectionBooth, liquid: liquid),

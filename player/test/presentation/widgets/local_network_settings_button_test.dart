@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/local_network_settings_button.dart';
 
 void main() {
@@ -40,6 +41,8 @@ void main() {
   testWidgets('LocalNetworkSettingsButton renders a tappable action',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: LocalNetworkSettingsButton(available: true)),
     ));
 
@@ -54,6 +57,8 @@ void main() {
     // settings pane fixes. Offering the button there deep-linked to an Apple
     // URL and then printed macOS instructions on a phone.
     await tester.pumpWidget(const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: LocalNetworkSettingsButton(available: false)),
     ));
 
@@ -66,6 +71,8 @@ void main() {
       (tester) async {
     // Guards the production default: no override means no button here.
     await tester.pumpWidget(const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: LocalNetworkSettingsButton()),
     ));
 

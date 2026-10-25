@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/player/platform_features.dart';
+import '../../l10n/l10n.dart';
 import 'toast/toaster.dart';
 
 /// Whether this platform has a local-network permission pane worth linking to.
@@ -95,7 +96,7 @@ class LocalNetworkSettingsButton extends StatelessWidget {
       key: const Key('local-network-settings-button'),
       onPressed: () => openLocalNetworkSettings(context),
       icon: const Icon(Icons.settings, size: 18),
-      label: const Text('Open Settings'),
+      label: Text(context.l10n.commonOpenSettings),
     );
   }
 }

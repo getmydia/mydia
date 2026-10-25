@@ -7,6 +7,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/nav/nav_badges.dart';
 
 import '../../../core/sources/mydia/fake_mydia_transport.dart';
@@ -64,6 +65,8 @@ Future<void> _pump(
         updateProvider.overrideWith(() => _FakeUpdateNotifier(update)),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Center(
             child: SettingsBadge(
@@ -125,7 +128,7 @@ void main() {
     );
 
     expect(
-      find.byTooltip('Update available - Connected to server'),
+      find.byTooltip('Update available: Connected to server'),
       findsOneWidget,
     );
   });

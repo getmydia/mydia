@@ -10,6 +10,7 @@ import 'package:player/core/platform/native_tab_bar_channel.dart';
 import 'package:player/core/router/page_cover_observer.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
@@ -154,6 +155,8 @@ Future<List<bool>> _pump(WidgetTester tester) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
       builder: (context, child) =>
           CastBarLayer(child: child ?? const SizedBox.shrink()),
@@ -257,6 +260,8 @@ void main() {
       final observer = ShellPopupObserver();
       addTearDown(observer.dispose);
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Navigator(
           observers: [observer],
           onGenerateRoute: (_) => MaterialPageRoute<void>(

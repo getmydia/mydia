@@ -5,6 +5,7 @@ import 'package:player/core/cache/freshness.dart';
 import '../../test_utils/query_keys.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
 
 const _bodyKey = Key('browse-scaffold-test-body');
@@ -37,6 +38,8 @@ Future<void> pumpScaffold(
             .overrideWithValue(const CastCapabilities.full()),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: BrowseScaffold(
           icon: Icons.visibility_off_rounded,
           title: 'Unwatched',
@@ -137,6 +140,8 @@ void main() {
                 .overrideWithValue(const CastCapabilities.full()),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) => Scaffold(
                 body: TextButton(
