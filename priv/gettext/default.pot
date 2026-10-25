@@ -13984,7 +13984,7 @@ msgstr ""
 msgid "Connection Details"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:215
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:216
 #, elixir-autogen, elixir-format
 msgid "Connection error: %{reason}"
 msgstr ""
@@ -14023,7 +14023,7 @@ msgstr ""
 msgid "Connection successful! Version: %{version}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:220
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:223
 #, elixir-autogen, elixir-format
 msgid "Connection timed out"
 msgstr ""
@@ -15482,7 +15482,7 @@ msgstr ""
 msgid "Guest"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:218
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:221
 #, elixir-autogen, elixir-format
 msgid "HTTP error: %{status}"
 msgstr ""
@@ -16761,7 +16761,7 @@ msgstr ""
 msgid "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:223
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:226
 #, elixir-autogen, elixir-format
 msgid "Not a valid http(s) URL"
 msgstr ""
@@ -16777,7 +16777,7 @@ msgstr ""
 msgid "Not analyzed"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:221
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:224
 #, elixir-autogen, elixir-format
 msgid "Not configured"
 msgstr ""
@@ -18255,7 +18255,7 @@ msgstr ""
 msgid "Server, database and service health"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:222
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:225
 #, elixir-autogen, elixir-format
 msgid "Service is disabled"
 msgstr ""

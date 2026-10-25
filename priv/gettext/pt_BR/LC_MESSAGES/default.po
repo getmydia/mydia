@@ -13984,7 +13984,7 @@ msgstr "Conexão"
 msgid "Connection Details"
 msgstr "Detalhes da conexão"
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:215
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:216
 #, elixir-autogen, elixir-format
 msgid "Connection error: %{reason}"
 msgstr "Erro de conexão: %{reason}"
@@ -14023,7 +14023,7 @@ msgstr "Conexão bem-sucedida! Versão do RPC: %{version}"
 msgid "Connection successful! Version: %{version}"
 msgstr "Conexão bem-sucedida! Versão: %{version}"
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:220
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:223
 #, elixir-autogen, elixir-format
 msgid "Connection timed out"
 msgstr "Tempo de conexão esgotado"
@@ -15482,7 +15482,7 @@ msgstr "Recursos concedidos"
 msgid "Guest"
 msgstr "Convidado"
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:218
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:221
 #, elixir-autogen, elixir-format
 msgid "HTTP error: %{status}"
 msgstr "Erro HTTP: %{status}"
@@ -16761,7 +16761,7 @@ msgstr "Nenhum dos arquivos deste item corresponde ao título, então não há c
 msgid "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
 msgstr "URL do FlareSolverr inválida. Use o formato http://flaresolverr:8191."
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:223
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:226
 #, elixir-autogen, elixir-format
 msgid "Not a valid http(s) URL"
 msgstr "URL http(s) inválida"
@@ -16777,7 +16777,7 @@ msgstr "Não adicionado"
 msgid "Not analyzed"
 msgstr "Não analisado"
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:221
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:224
 #, elixir-autogen, elixir-format
 msgid "Not configured"
 msgstr "Não configurado"
@@ -18255,7 +18255,7 @@ msgstr "Servidor salvo"
 msgid "Server, database and service health"
 msgstr "Integridade do servidor, do banco de dados e dos serviços"
 
-#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:222
+#: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:225
 #, elixir-autogen, elixir-format
 msgid "Service is disabled"
 msgstr "O serviço está desativado"
