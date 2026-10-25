@@ -62,6 +62,13 @@ defmodule Mydia.Library.ReleaseParser.QualityCanonicalTest do
       assert std("Fake.Show.S01E01.1080i.HDTV.MPEG2-GRP").resolution == "1080p (Full HD)"
     end
 
+    test "every resolution under 720p displays as SD" do
+      assert std("Fake.Movie.2020.360p.WEB-DL.x264-GRP").resolution == "360p (SD)"
+      assert std("Fake.Movie.2020.480p.WEB-DL.x264-GRP").resolution == "480p (SD)"
+      assert std("Fake.Show.S01E01.540p.WEB-DL.x264-GRP").resolution == "540p (SD)"
+      assert std("Fake.Movie.2020.576p.WEB-DL.x264-GRP").resolution == "576p (SD)"
+    end
+
     test "AAC-LC displays as AAC with channels" do
       assert std("Fake.Movie.2020.1080p.BluRay.AAC-LC.2.0.x264-GRP").audio == "AAC 2.0"
     end

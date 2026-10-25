@@ -602,7 +602,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       normalized == "1080p" -> "1080p (Full HD)"
       normalized == "720p" -> "720p (HD)"
       normalized in ["4320p", "8k"] -> "4320p (8K)"
-      normalized in ["576p", "480p"] -> "#{value} (SD)"
+      normalized in ["576p", "540p", "480p", "360p"] -> "#{value} (SD)"
       true -> value
     end
   end
