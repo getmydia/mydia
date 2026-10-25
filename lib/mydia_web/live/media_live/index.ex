@@ -101,8 +101,10 @@ defmodule MydiaWeb.MediaLive.Index do
   # The page itself (title, library options, section rules) is only set up
   # when the route changes; a patch that only changes the URL's listing state,
   # including load_more's own `shown` patch, goes straight to the listing.
-  def handle_params(params, _url, socket) do
+  def handle_params(params, url, socket) do
     page_key = {socket.assigns.live_action, params["id"]}
+    # The page's own path (/movies, /tv, /sections/:id), for listing patches.
+    socket = assign(socket, :listing_base_path, URI.parse(url).path)
 
     socket =
       if page_key == socket.assigns.page_key do
@@ -285,7 +287,7 @@ defmodule MydiaWeb.MediaLive.Index do
         params = Window.listing_params(socket.assigns)
 
         push_patch(socket,
-          to: ListingParams.path(listing_base_path(socket.assigns), params),
+          to: ListingParams.path(socket.assigns.listing_base_path, params),
           replace: true
         )
       else
@@ -932,12 +934,6 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:filtered?, ListingParams.filtered?(params))
   end
 
-  defp listing_base_path(%{live_action: :movies}), do: ~p"/movies"
-  defp listing_base_path(%{live_action: :tv_shows}), do: ~p"/tv"
-
-  defp listing_base_path(%{live_action: :section, section: section}),
-    do: ~p"/sections/#{section.id}"
-
   # Filter, search and sort changes replace the history entry rather than
   # adding one, so Back from a title lands on the list in its latest state.
   # They also drop the A-Z jump letter, so the new listing starts at the top.
@@ -945,15 +941,9 @@ defmodule MydiaWeb.MediaLive.Index do
     params = %{params | shown: ListingParams.first_page(), letter: nil}
 
     push_patch(socket,
-      to: ListingParams.path(listing_base_path(socket.assigns), params),
+      to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
     )
-  end
-
-  # A jump keeps the filters and sort and starts a fresh first batch.
-  defp letter_path(assigns, letter) do
-    params = %{Window.listing_params(assigns) | letter: letter, shown: ListingParams.first_page()}
-    ListingParams.path(listing_base_path(assigns), params)
   end
 
   defp get_poster_url(media_item),

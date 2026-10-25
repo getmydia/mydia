@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { firstBelow, letterAt } from "../../js/hooks/alpha_jump_bar.mjs";
+import { createScrub, firstBelow, letterAt } from "../../js/hooks/alpha_jump_bar.mjs";
 
 test("firstBelow finds the first card whose bottom is below the edge", () => {
   const bottoms = [10, 20, 30, 40, 50];
@@ -35,4 +35,48 @@ test("letterAt picks the nearest entry when the strip spaces its entries out", (
   assert.equal(letterAt(18, rects), "a");
   assert.equal(letterAt(34, rects), "a");
   assert.equal(letterAt(37, rects), "b");
+});
+
+function makeScrub() {
+  const shown = [];
+  const went = [];
+  return { shown, went, scrub: createScrub((l) => shown.push(l), (l) => went.push(l)) };
+}
+
+test("a scrub highlights each letter it crosses and navigates once, on release", () => {
+  const { shown, went, scrub } = makeScrub();
+  scrub.down("a");
+  assert.equal(scrub.move("a"), false);
+  assert.equal(scrub.move("c"), true);
+  assert.equal(scrub.move("c"), false);
+  assert.equal(scrub.move("d"), true);
+  assert.deepEqual(went, []);
+  scrub.up();
+  assert.deepEqual(shown, ["c", "d"]);
+  assert.deepEqual(went, ["d"]);
+});
+
+test("a tap is left to the link, and a drag back to the start still navigates", () => {
+  const tap = makeScrub();
+  tap.scrub.down("m");
+  tap.scrub.up();
+  assert.deepEqual(tap.went, []);
+
+  const back = makeScrub();
+  back.scrub.down("m");
+  back.scrub.move("n");
+  back.scrub.move("m");
+  back.scrub.up();
+  assert.deepEqual(back.went, ["m"]);
+});
+
+test("a cancelled scrub, or moves without a press, navigate nowhere", () => {
+  const { shown, went, scrub } = makeScrub();
+  assert.equal(scrub.move("c"), false);
+  scrub.down("a");
+  scrub.move("c");
+  scrub.cancel();
+  scrub.up();
+  assert.deepEqual(shown, ["c"]);
+  assert.deepEqual(went, []);
 });

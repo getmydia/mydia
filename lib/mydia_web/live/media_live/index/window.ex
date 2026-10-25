@@ -31,6 +31,7 @@ defmodule MydiaWeb.MediaLive.Index.Window do
     |> assign(:has_more, false)
     |> assign(:has_previous, false)
     |> assign(:letter_offsets, %{})
+    |> assign(:letter_paths, %{})
     |> stream(:media_items, [], reset: true)
   end
 
@@ -67,6 +68,7 @@ defmodule MydiaWeb.MediaLive.Index.Window do
     |> assign(:has_more, stop < length(snapshot.ids))
     |> assign(:has_previous, snapshot.start > 0)
     |> assign(:letter_offsets, snapshot.letter_offsets)
+    |> assign(:letter_paths, letter_paths(socket.assigns, snapshot.letter_offsets))
     |> assign(:loading?, false)
     |> assign(:media_items_empty?, snapshot.empty?)
     # Every matching id, not only the rendered rows, for "Select All".
@@ -120,6 +122,17 @@ defmodule MydiaWeb.MediaLive.Index.Window do
           ListingParams.max_shown()
         )
     }
+  end
+
+  # The A-Z strip's links, built once per snapshot so the strip re-renders only
+  # when the listing changes. A jump keeps the filters and sort and starts a
+  # fresh first batch at the letter.
+  defp letter_paths(assigns, letter_offsets) do
+    params = %{listing_params(assigns) | shown: ListingParams.first_page()}
+
+    Map.new(letter_offsets, fn {letter, _offset} ->
+      {letter, ListingParams.path(assigns.listing_base_path, %{params | letter: letter})}
+    end)
   end
 
   # `shown` and reloads count from where the letter started the window, so

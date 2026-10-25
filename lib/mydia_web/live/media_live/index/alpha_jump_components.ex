@@ -7,8 +7,9 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
 
   alias Mydia.Media.LibraryListing
 
-  attr :offsets, :map, required: true, doc: "LibraryListing snapshot letter_offsets"
-  attr :path, :any, required: true, doc: "letter -> listing path with that letter"
+  attr :paths, :map,
+    required: true,
+    doc: "letter => listing path starting at it, for the letters with titles"
 
   def alpha_jump_bar(assigns) do
     assigns = assign(assigns, :letters, LibraryListing.letters())
@@ -27,10 +28,11 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
     >
       <%= for letter <- @letters do %>
         <.link
-          :if={Map.has_key?(@offsets, letter)}
+          :if={Map.has_key?(@paths, letter)}
           id={letter_id(letter)}
-          patch={@path.(letter)}
+          patch={@paths[letter]}
           replace
+          draggable="false"
           data-letter={letter}
           aria-label={letter_label(letter)}
           class="w-5 text-center text-[10px] lg:text-xs leading-tight text-base-content/80 hover:text-primary"
@@ -38,7 +40,7 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
           {String.upcase(letter)}
         </.link>
         <span
-          :if={not Map.has_key?(@offsets, letter)}
+          :if={not Map.has_key?(@paths, letter)}
           id={letter_id(letter)}
           data-letter={letter}
           aria-disabled="true"

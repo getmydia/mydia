@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createLoader, keepInPlace, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
+import { createLoader, insetMargin, keepInPlace, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -135,4 +135,9 @@ test("keepInPlace leaves the scroll alone without an anchor or after a rejection
   }), scrollBy);
   await assert.rejects(failing("load_previous", {}));
   assert.deepEqual(scrolls, []);
+});
+
+test("insetMargin starts the viewport a little below an inset", () => {
+  assert.equal(insetMargin(0), "-8px 0px 0px 0px");
+  assert.equal(insetMargin(64), "-72px 0px 0px 0px");
 });

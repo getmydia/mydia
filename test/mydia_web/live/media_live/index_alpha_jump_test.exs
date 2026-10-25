@@ -43,6 +43,16 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     assert has_element?(view, "span#alpha-jump-hash[aria-disabled=true]")
   end
 
+  test "letter links keep the sort and filters and start a fresh batch", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies?sort=title_desc&monitored=true&shown=100")
+
+    assert has_element?(
+             view,
+             ~s|a#alpha-jump-m[href="/movies?monitored=true&sort=title_desc&letter=m"]|
+           )
+  end
+
   test "the bar is hidden under other sorts and while searching", %{conn: conn} do
     library()
     {:ok, view, _html} = live(conn, ~p"/movies?sort=year_desc")

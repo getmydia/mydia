@@ -1,5 +1,10 @@
 <Layouts.app {assigns}>
-  <div class="flex flex-col h-full" phx-window-keydown="keydown">
+  <%!-- Below lg the A-Z strip runs from under the header to the dock, beside
+       the toolbar as well as the cards, so the whole page makes room for it. --%>
+  <div
+    class={["flex flex-col h-full", @letter_paths != %{} && "max-lg:pr-5"]}
+    phx-window-keydown="keydown"
+  >
     <%!-- Header with title and view controls --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
       <div>
@@ -453,24 +458,18 @@
     >
     </div>
 
-    <.alpha_jump_bar
-      :if={@letter_offsets != %{}}
-      offsets={@letter_offsets}
-      path={&letter_path(assigns, &1)}
-    />
+    <.alpha_jump_bar :if={@letter_paths != %{}} paths={@letter_paths} />
 
     <%!-- After an A-Z jump, loads the titles above the letter one batch per
           scroll up to it. No prefetch margin and no chaining: see the hook.
-          The negative top margin is because the jump leaves the sentinel's
-          bottom on (grid) or a pixel under (list, -mt-px) the viewport's top
-          edge, which an observer counts as intersecting, so it would never be
-          seen off screen and never arm. --%>
+          data-inset-from makes the observer's viewport start where a jump
+          puts the list, below the phone header: see insetMargin. --%>
     <div
       :if={@has_previous}
       id="media-items-top-sentinel"
       phx-hook="LoadMoreSentinel"
       data-event="load_previous"
-      data-margin="-8px 0px 0px 0px"
+      data-inset-from="media-items"
       data-chain="false"
       data-anchor="media-items"
       data-has-more="true"
@@ -479,7 +478,9 @@
       <span class="loading loading-spinner loading-md text-primary"></span>
     </div>
 
-    <%!-- Unified Media Items Container (single stream for both grid and list) --%>
+    <%!-- Unified Media Items Container (single stream for both grid and list).
+         Its scroll margin is where a jump scrolls the list to, below the phone
+         layout's sticky header; the A-Z hook and the top sentinel read it back. --%>
     <div
       id="media-items"
       phx-update="stream"
@@ -488,7 +489,8 @@
         @view_mode == :grid && grid_columns_class(@grid_density),
         @view_mode == :list && "card bg-base-100 shadow-lg overflow-hidden -mt-px",
         @selection_mode && "selection-mode",
-        @letter_offsets != %{} && "pr-6 lg:pr-8"
+        @letter_paths != %{} && "lg:pr-8",
+        "max-lg:scroll-mt-[calc(4rem+env(safe-area-inset-top,0px))]"
       ]}
     >
       <div

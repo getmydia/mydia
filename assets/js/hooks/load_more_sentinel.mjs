@@ -17,7 +17,10 @@
 //
 // The same hook backs the top sentinel after an A-Z jump: `data-event` names
 // the event to push (default `load_more`) and `data-margin` the observer's root
-// margin (default `ROOT_MARGIN`).
+// margin (default `ROOT_MARGIN`). `data-inset-from` names an element whose
+// scroll-margin-top marks where the visible list starts (below the phone
+// layout's sticky header); the observer then treats everything above that
+// line, plus a few pixels, as off screen (insetMargin).
 //
 // The top sentinel sets `data-chain="false"` and behaves more cautiously.
 // Rows prepended above the viewport only stay out of sight if the scroll
@@ -35,6 +38,16 @@
 // rows, so the user would be thrown to the start of the new batch.
 
 export const ROOT_MARGIN = "0px 0px 150% 0px";
+
+// A jump scrolls the list to its scroll margin, which leaves the top sentinel's
+// bottom on that line (or a pixel under it, in list view). An observer counts
+// an edge that merely touches the root as intersecting, so the slack keeps the
+// sentinel off screen until the user actually scrolls up.
+const INSET_SLACK = 8;
+
+export function insetMargin(inset) {
+  return `-${inset + INSET_SLACK}px 0px 0px 0px`;
+}
 
 export function createLoader(el, push, { event = "load_more", chain = true, armed = true } = {}) {
   let visible = false;
@@ -74,6 +87,11 @@ export function createLoader(el, push, { event = "load_more", chain = true, arme
 // scrolled back to the same viewport position once the reply (and its DOM
 // patch) has landed. Where the browser already anchored, the anchor has not
 // moved and this scrolls by nothing.
+//
+// The trade-off: it restores the anchor to where it was when the push left,
+// so any scrolling the user does during the round trip is undone. The round
+// trip is short, and the alternative, the view lurching a whole batch, is
+// worse.
 export function keepInPlace(push, getAnchor, scrollBy) {
   return (event, payload) => {
     const anchor = getAnchor();
@@ -113,9 +131,15 @@ export const LoadMoreSentinel = {
 
     this.observer = new IntersectionObserver(
       (entries) => entries.forEach((entry) => this.loader.setVisible(entry.isIntersecting)),
-      { rootMargin: this.el.dataset.margin || ROOT_MARGIN },
+      { rootMargin: this.rootMargin() },
     );
     this.observer.observe(this.el);
+  },
+
+  rootMargin() {
+    const inset = document.getElementById(this.el.dataset.insetFrom || "");
+    if (inset) return insetMargin(parseFloat(getComputedStyle(inset).scrollMarginTop) || 0);
+    return this.el.dataset.margin || ROOT_MARGIN;
   },
 
   // data-has-more changed, e.g. a new filter brought more rows.
