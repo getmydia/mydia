@@ -143,8 +143,7 @@ defmodule MydiaWeb.PlayerControllerTest do
     end
 
     test "injects the logged-in user's interface language", %{conn: conn} do
-      index_path = write_player_index()
-      on_exit(fn -> File.rm(index_path) end)
+      write_player_index()
 
       {conn, user} = register_and_log_in_user(conn)
 
@@ -164,8 +163,7 @@ defmodule MydiaWeb.PlayerControllerTest do
     end
 
     test "without a preference, injects the browser's language", %{conn: conn} do
-      index_path = write_player_index()
-      on_exit(fn -> File.rm(index_path) end)
+      write_player_index()
 
       {conn, _user} = register_and_log_in_user(conn)
 
@@ -199,16 +197,24 @@ defmodule MydiaWeb.PlayerControllerTest do
     end
   end
 
+  # Writes a stub player shell for the rest of the test, then puts back
+  # whatever was there: in a dev checkout that is a real Flutter build.
   defp write_player_index do
     index_path = Path.join([:code.priv_dir(:mydia), "static", "player", "index.html"])
     File.mkdir_p!(Path.dirname(index_path))
+    previous = File.read(index_path)
 
     File.write!(
       index_path,
       "<html><body><script src=\"flutter_bootstrap.js\" async></script></body></html>"
     )
 
-    index_path
+    on_exit(fn ->
+      case previous do
+        {:ok, content} -> File.write!(index_path, content)
+        {:error, _} -> File.rm(index_path)
+      end
+    end)
   end
 
   describe "player bundle caching" do
