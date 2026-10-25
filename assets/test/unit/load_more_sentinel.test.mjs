@@ -63,9 +63,45 @@ test("stops after the reply once it is no longer visible", async () => {
 test("pushes the event it was created with", () => {
   const el = { dataset: { hasMore: "true" } };
   const calls = [];
-  const loader = createLoader(el, (event) => new Promise(() => calls.push(event)), "load_previous");
+  const loader = createLoader(el, (event) => new Promise(() => calls.push(event)), {
+    event: "load_previous",
+  });
   loader.setVisible(true);
   assert.deepEqual(calls, ["load_previous"]);
+});
+
+function setupTop() {
+  const el = { dataset: { hasMore: "true" } };
+  const calls = [];
+  const push = (event, payload) =>
+    new Promise((resolve, reject) => calls.push({ event, payload, resolve, reject }));
+  const loader = createLoader(el, push, { event: "load_previous", chain: false, armed: false });
+  return { calls, loader };
+}
+
+test("an unarmed loader waits until the sentinel has been off screen", () => {
+  const { calls, loader } = setupTop();
+  loader.setVisible(true);
+  loader.maybeLoad();
+  assert.equal(calls.length, 0);
+
+  loader.setVisible(false);
+  loader.setVisible(true);
+  assert.equal(calls.length, 1);
+});
+
+test("without chaining, one batch per time the sentinel comes into view", async () => {
+  const { calls, loader } = setupTop();
+  loader.setVisible(false);
+  loader.setVisible(true);
+  calls[0].resolve({});
+  await flush();
+  loader.maybeLoad();
+  assert.equal(calls.length, 1);
+
+  loader.setVisible(false);
+  loader.setVisible(true);
+  assert.equal(calls.length, 2);
 });
 
 test("does nothing when the server has no more rows", () => {

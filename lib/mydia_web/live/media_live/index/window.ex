@@ -5,7 +5,8 @@ defmodule MydiaWeb.MediaLive.Index.Window do
 
   A fresh listing starts at the top, or at the URL's A-Z `letter`. Scrolling
   down extends `window_end` a batch at a time; after a jump, scrolling up
-  extends `window_start` back towards the top.
+  extends `window_start` back towards the top. `letter_start` keeps where the
+  letter put it.
   """
 
   import Phoenix.Component, only: [assign: 3]
@@ -25,6 +26,7 @@ defmodule MydiaWeb.MediaLive.Index.Window do
     socket
     |> assign(:listing_ids, [])
     |> assign(:window_start, 0)
+    |> assign(:letter_start, 0)
     |> assign(:window_end, 0)
     |> assign(:has_more, false)
     |> assign(:has_previous, false)
@@ -47,8 +49,7 @@ defmodule MydiaWeb.MediaLive.Index.Window do
   def load_media_items(%{assigns: %{section_error: true}} = socket, _limit), do: socket
 
   def load_media_items(socket, limit) do
-    %{window_start: start, window_end: stop} = socket.assigns
-    limit = limit || max(stop - start, ListingParams.first_page())
+    limit = limit || max(rows_from_letter(socket.assigns), ListingParams.first_page())
 
     snapshot =
       LibraryListing.snapshot(
@@ -61,6 +62,7 @@ defmodule MydiaWeb.MediaLive.Index.Window do
     socket
     |> assign(:listing_ids, snapshot.ids)
     |> assign(:window_start, snapshot.start)
+    |> assign(:letter_start, snapshot.start)
     |> assign(:window_end, stop)
     |> assign(:has_more, stop < length(snapshot.ids))
     |> assign(:has_previous, snapshot.start > 0)
@@ -114,11 +116,15 @@ defmodule MydiaWeb.MediaLive.Index.Window do
       letter: assigns.letter,
       shown:
         min(
-          max(assigns.window_end - assigns.window_start, ListingParams.first_page()),
+          max(rows_from_letter(assigns), ListingParams.first_page()),
           ListingParams.max_shown()
         )
     }
   end
+
+  # `shown` and reloads count from where the letter started the window, so
+  # rows loaded above it neither inflate the URL nor survive a reload.
+  defp rows_from_letter(assigns), do: assigns.window_end - assigns.letter_start
 
   defp rows(socket, ids),
     do: LibraryListing.rows(socket.assigns.current_scope, ids, socket.assigns.current_user.id)

@@ -453,14 +453,15 @@
     >
     </div>
 
-    <%!-- After an A-Z jump, loads the titles above the letter about a screen
-          and a half before the user scrolls up to them. --%>
+    <%!-- After an A-Z jump, loads the titles above the letter one batch per
+          scroll up to it. No prefetch margin and no chaining: see the hook. --%>
     <div
       :if={@has_previous}
       id="media-items-top-sentinel"
       phx-hook="LoadMoreSentinel"
       data-event="load_previous"
-      data-margin="150% 0px 0px 0px"
+      data-margin="0px"
+      data-chain="false"
       data-has-more="true"
       class="flex justify-center py-8"
     >

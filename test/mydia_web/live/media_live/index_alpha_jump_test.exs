@@ -83,13 +83,49 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     refute has_element?(view, "#media-items-top-sentinel")
   end
 
+  # 70 "Marrow" titles, so the first batch from M stops short of the end.
+  defp long_library do
+    alders = for i <- 1..60, do: movie("Alder #{pad(i)}")
+    marrows = for i <- 1..70, do: movie("Marrow #{pad(i)}")
+    zephyr = movie("Zephyr Hollow")
+    %{alders: alders, marrows: marrows, zephyr: zephyr}
+  end
+
   test "load_more after a jump continues past the letter", %{conn: conn} do
-    %{zephyr: zephyr} = library()
+    %{marrows: marrows, zephyr: zephyr} = long_library()
     {:ok, view, _html} = live(conn, ~p"/movies?letter=m")
 
-    # M and Z fit in the first batch.
-    assert List.last(card_ids(view)) == card(zephyr)
-    refute has_element?(view, "#media-items-sentinel [class~=loading]")
+    assert card_ids(view) == marrows |> Enum.take(50) |> Enum.map(&card/1)
+
+    render_hook(view, "load_more", %{})
+
+    assert card_ids(view) == Enum.map(marrows ++ [zephyr], &card/1)
+    assert_patch(view, "/movies?letter=m&shown=71")
+  end
+
+  test "shown counts from the letter, not the rows loaded above it", %{conn: conn} do
+    %{alders: alders, marrows: marrows, zephyr: zephyr} = long_library()
+    {:ok, view, _html} = live(conn, ~p"/movies?letter=m")
+
+    render_hook(view, "load_previous", %{})
+    render_hook(view, "load_more", %{})
+
+    expected = alders |> Enum.drop(60 - 48) |> Kernel.++(marrows) |> Kernel.++([zephyr])
+    assert card_ids(view) == Enum.map(expected, &card/1)
+    assert_patch(view, "/movies?letter=m&shown=71")
+
+    # A reload starts back at the letter and keeps the rows below it.
+    render_click(view, "toggle_view", %{"mode" => "list"})
+    assert card_ids(view) == Enum.map(marrows ++ [zephyr], &card/1)
+  end
+
+  test "only an in-page jump scrolls to the top", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies?letter=m")
+    refute_push_event(view, "alpha_jump:scroll_top", %{})
+
+    render_patch(view, "/movies?letter=z")
+    assert_push_event(view, "alpha_jump:scroll_top", %{})
   end
 
   test "a letter with no titles starts at the next letter", %{conn: conn} do

@@ -895,7 +895,10 @@ defmodule MydiaWeb.MediaLive.Index do
 
     if force? or not ListingParams.same_listing?(parsed, Window.listing_params(socket.assigns)) do
       socket
-      |> maybe_scroll_to_letter(parsed.letter != socket.assigns.letter && parsed.letter)
+      # Only an in-page jump scrolls; a mount or reconnect keeps the user's place.
+      |> maybe_scroll_to_letter(
+        not force? and parsed.letter != socket.assigns.letter and parsed.letter
+      )
       |> assign_listing_params(parsed)
       |> assign(:selected_ids, MapSet.new())
       |> load_media_items_when_connected(parsed.shown)

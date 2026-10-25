@@ -18,20 +18,33 @@
 // The same hook backs the top sentinel after an A-Z jump: `data-event` names
 // the event to push (default `load_more`) and `data-margin` the observer's root
 // margin (default `ROOT_MARGIN`).
+//
+// The top sentinel sets `data-chain="false"` and behaves more cautiously.
+// Rows prepended above the viewport only stay out of sight if the browser
+// anchors the scroll position, and anchoring is unreliable near the top of the
+// page. Without it the sentinel stays visible after every batch, and chaining
+// would load every row above the letter and land the user on the first title.
+// So it loads nothing until the sentinel has been seen off screen once (the
+// jump itself scrolls the list to the top, which would otherwise count as a
+// scroll up), and at most one batch per time it comes into view.
 
 export const ROOT_MARGIN = "0px 0px 150% 0px";
 
-export function createLoader(el, push, event = "load_more") {
+export function createLoader(el, push, { event = "load_more", chain = true, armed = true } = {}) {
   let visible = false;
   let inFlight = false;
+  // With chain off, set once a batch has landed and cleared when the
+  // sentinel comes back into view.
+  let spent = false;
 
   function maybeLoad() {
-    if (!visible || inFlight || el.dataset.hasMore !== "true") return;
+    if (!armed || !visible || inFlight || spent || el.dataset.hasMore !== "true") return;
 
     inFlight = true;
     push(event, {}).then(
       () => {
         inFlight = false;
+        spent = !chain;
         maybeLoad();
       },
       () => {
@@ -43,6 +56,8 @@ export function createLoader(el, push, event = "load_more") {
   return {
     maybeLoad,
     setVisible(isVisible) {
+      if (isVisible && !visible) spent = false;
+      if (!isVisible) armed = true;
       visible = isVisible;
       maybeLoad();
     },
@@ -51,8 +66,13 @@ export function createLoader(el, push, event = "load_more") {
 
 export const LoadMoreSentinel = {
   mounted() {
-    const event = this.el.dataset.event || "load_more";
-    this.loader = createLoader(this.el, (name, payload) => this.pushEvent(name, payload), event);
+    const chain = this.el.dataset.chain !== "false";
+
+    this.loader = createLoader(this.el, (name, payload) => this.pushEvent(name, payload), {
+      event: this.el.dataset.event || "load_more",
+      chain,
+      armed: chain,
+    });
 
     this.observer = new IntersectionObserver(
       (entries) => entries.forEach((entry) => this.loader.setVisible(entry.isIntersecting)),
