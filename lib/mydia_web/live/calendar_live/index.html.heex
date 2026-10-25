@@ -161,7 +161,7 @@
               "text-lg font-semibold mb-3",
               date == @current_date && "text-primary"
             ]}>
-              {Calendar.strftime(date, "%A, %B %-d", MydiaWeb.DateNames.strftime_opts())}
+              {MydiaWeb.DateNames.weekday_month_day(date)}
               <%= if date == @current_date do %>
                 <span class="badge badge-primary badge-sm ml-2">{gettext("Today")}</span>
               <% end %>

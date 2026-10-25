@@ -6,9 +6,15 @@ defmodule MydiaWeb.DateNames do
   follow the current Gettext locale:
 
       Calendar.strftime(date, "%B %Y", MydiaWeb.DateNames.strftime_opts())
+
+  The patterns themselves are translatable too (day-first in Spanish and
+  Portuguese), through `month_year/1`, `weekday_month_day/1`, `short_date/1`
+  and `short_date_unpadded/1`.
   """
 
   use Gettext, backend: MydiaWeb.Gettext
+
+  @pattern_comment "strftime pattern: %B month, %b short month, %d day, %-d day without padding, %Y year, %A weekday, %a short weekday. Reorder or add words, keep the directives."
 
   @doc "Options for `Calendar.strftime/3` that translate month and weekday names."
   def strftime_opts do
@@ -19,6 +25,32 @@ defmodule MydiaWeb.DateNames do
       abbreviated_day_of_week_names: &abbreviated_day_of_week_name/1
     ]
   end
+
+  @doc "Month and year heading, `October 2026`."
+  def month_year(date) do
+    gettext_comment(@pattern_comment)
+    format(date, pgettext("date format", "%B %Y"))
+  end
+
+  @doc "Weekday with month and day, `Saturday, October 24`."
+  def weekday_month_day(date) do
+    gettext_comment(@pattern_comment)
+    format(date, pgettext("date format", "%A, %B %-d"))
+  end
+
+  @doc "Short date with a zero-padded day, `Oct 04, 2026`."
+  def short_date(date) do
+    gettext_comment(@pattern_comment)
+    format(date, pgettext("date format", "%b %d, %Y"))
+  end
+
+  @doc "Short date without day padding, `Oct 4, 2026`."
+  def short_date_unpadded(date) do
+    gettext_comment(@pattern_comment)
+    format(date, pgettext("date format", "%b %-d, %Y"))
+  end
+
+  defp format(date, pattern), do: Calendar.strftime(date, pattern, strftime_opts())
 
   defp month_name(1), do: pgettext("month", "January")
   defp month_name(2), do: pgettext("month", "February")

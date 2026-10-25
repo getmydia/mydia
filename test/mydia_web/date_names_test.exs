@@ -58,4 +58,32 @@ defmodule MydiaWeb.DateNamesTest do
                Calendar.strftime(date, "%a")
     end
   end
+
+  describe "translated date patterns" do
+    setup do
+      on_exit(fn -> Gettext.put_locale(MydiaWeb.Gettext, "en") end)
+    end
+
+    test "English keeps the original order" do
+      assert DateNames.month_year(~D[2026-10-24]) == "October 2026"
+      assert DateNames.weekday_month_day(~D[2026-10-24]) == "Saturday, October 24"
+      assert DateNames.short_date(~D[2026-03-04]) == "Mar 04, 2026"
+      assert DateNames.short_date_unpadded(~D[2026-03-04]) == "Mar 4, 2026"
+    end
+
+    test "Spanish puts the day first with lowercase month names" do
+      Gettext.put_locale(MydiaWeb.Gettext, "es")
+      assert DateNames.month_year(~D[2026-10-24]) == "octubre de 2026"
+      assert DateNames.weekday_month_day(~D[2026-10-24]) == "sábado, 24 de octubre"
+      assert DateNames.short_date(~D[2026-03-04]) == "04 mar 2026"
+      assert DateNames.short_date_unpadded(~D[2026-03-04]) == "4 mar 2026"
+    end
+
+    test "Portuguese puts the day first with lowercase month names" do
+      Gettext.put_locale(MydiaWeb.Gettext, "pt_BR")
+      assert DateNames.month_year(~D[2026-10-24]) == "outubro de 2026"
+      assert DateNames.weekday_month_day(~D[2026-10-24]) == "sábado, 24 de outubro"
+      assert DateNames.short_date_unpadded(~D[2026-03-04]) == "4 de mar de 2026"
+    end
+  end
 end
