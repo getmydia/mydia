@@ -813,6 +813,8 @@ defmodule Mydia.Media.LibraryListingTest do
              }
     end
 
+    # Postgres rejects invalid UTF-8 on write, so only SQLite can hold such a title.
+    @tag skip: Mydia.DB.postgres?() && "Postgres cannot store an invalid UTF-8 title"
     test "a title that is not valid UTF-8 still lists and files under a letter", %{user: user} do
       bad = <<"Bad ", 0xFF, " Title">>
       item = media_item_fixture(%{type: "movie", title: "Placeholder Reel"})

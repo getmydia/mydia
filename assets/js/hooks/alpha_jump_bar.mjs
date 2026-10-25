@@ -173,6 +173,8 @@ export const AlphaJumpBar = {
         getComputedStyle(card).display === "contents" ? card.firstElementChild || card : card;
       target.style.scrollMarginTop = getComputedStyle(list).scrollMarginTop;
       target.scrollIntoView({ block: "start" });
+      // The margin has done its job once the scroll is issued; leave no trace.
+      target.style.scrollMarginTop = "";
     }
     this.rehighlight();
   },
