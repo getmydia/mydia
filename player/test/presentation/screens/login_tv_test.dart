@@ -36,7 +36,7 @@ import '../../test_utils/mock_auth_storage.dart';
 
 class _FakeLoginController extends LoginController {
   String? submittedClaimCode;
-  String? failureError;
+  LoginFailure? failureError;
 
   @override
   LoginState build() => LoginState.initial();
@@ -195,7 +195,8 @@ void main() {
     testWidgets('error state preserves entered code in PinCodeDisplay',
         (tester) async {
       final fakeController = _FakeLoginController()
-        ..failureError = 'Invalid or expired claim code';
+        ..failureError =
+            const LoginFailureFromServer('Invalid or expired claim code');
       await _pumpLoginScreen(tester, controller: fakeController);
 
       for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {

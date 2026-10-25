@@ -54,4 +54,31 @@ void main() {
     expect(found.single.line, 3);
     expect(found.single.toString(), "y.dart:3  Hi");
   });
+
+  test('flags both branches of a conditional', () {
+    expect(scan("f(b) => Text(b ? 'On' : 'Off');"), ['On', 'Off']);
+    expect(scan("f(b) => X(title: b ? 'Yes' : x.l10n.no);"), ['Yes']);
+  });
+
+  test('flags both sides of ??', () {
+    expect(scan("f(s) => Text(s ?? 'Unknown');"), ['Unknown']);
+    expect(scan("f(s) => X(subtitle: s.name ?? 'None');"), ['None']);
+  });
+
+  test('flags nested conditionals and parentheses', () {
+    expect(
+        scan("f(a, b) => Text(a ? 'A' : (b ? 'B' : 'C'));"), ['A', 'B', 'C']);
+  });
+
+  test('flags the message passed to showToast', () {
+    expect(
+      scan(r"f(c, e) { showToast(c, 'Saved'); showToast(c, 'Failed: $e', "
+          r"kind: ToastKind.error); }"),
+      ['Saved', r'Failed: $e'],
+    );
+  });
+
+  test('allows translated toasts', () {
+    expect(scan("f(c) => showToast(c, c.l10n.saved);"), isEmpty);
+  });
 }

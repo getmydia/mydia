@@ -50,10 +50,10 @@ void main() {
       expect(episode().episodeCode, 'S02E05');
     });
 
-    test('runtimeDisplay formats minutes and hours', () {
-      expect(episode(runtime: 45).runtimeDisplay, '45m');
-      expect(episode(runtime: 90).runtimeDisplay, '1h 30m');
-      expect(episode().runtimeDisplay, '');
+    test('runtimeDuration carries the minutes as a Duration', () {
+      expect(episode(runtime: 45).runtimeDuration, const Duration(minutes: 45));
+      expect(episode(runtime: 90).runtimeDuration, const Duration(minutes: 90));
+      expect(episode().runtimeDuration, isNull);
     });
 
     test('watched reads the progress row', () {
@@ -83,7 +83,7 @@ void main() {
       final m = movie(rating: 8.14, runtime: 146);
       expect(m.yearDisplay, '2024');
       expect(m.ratingDisplay, '8.1');
-      expect(m.runtimeDisplay, '2h 26m');
+      expect(m.runtimeDuration, const Duration(minutes: 146));
     });
 
     test('hasResumableProgress needs unwatched partial progress', () {
@@ -97,47 +97,43 @@ void main() {
       );
     });
 
-    test('watchedAtDisplay is empty with no progress row or no date', () {
-      expect(movie().watchedAtDisplay, '');
+    test('lastWatchedAt is null with no progress row or no date', () {
+      expect(movie().lastWatchedAt, isNull);
       expect(
         movie(
           progress:
               const Progress(positionSeconds: 0, percentage: 0, watched: true),
-        ).watchedAtDisplay,
-        '',
+        ).lastWatchedAt,
+        isNull,
       );
     });
-  });
 
-  group('formatWatchedAt', () {
-    final now = DateTime(2026, 8, 4);
-
-    test('returns empty for a null timestamp', () {
-      expect(formatWatchedAt(null, now), '');
+    test('lastWatchedAt is null for an unparseable timestamp', () {
+      expect(
+        movie(
+          progress: const Progress(
+            positionSeconds: 0,
+            percentage: 0,
+            watched: true,
+            lastWatchedAt: 'not a date',
+          ),
+        ).lastWatchedAt,
+        isNull,
+      );
     });
 
-    test('returns empty for an unparseable timestamp', () {
-      expect(formatWatchedAt('not a date', now), '');
-    });
-
-    test('omits the year inside the current year', () {
-      // Built from a local DateTime so the round-trip through toLocal()
-      // cannot shift the day under a test runner in any timezone.
-      final watchedAt = DateTime(2026, 8, 2, 12).toIso8601String();
-
-      expect(formatWatchedAt(watchedAt, now), 'Aug 2');
-    });
-
-    test('includes the year outside the current year', () {
-      final watchedAt = DateTime(2025, 8, 2, 12).toIso8601String();
-
-      expect(formatWatchedAt(watchedAt, now), 'Aug 2, 2025');
-    });
-
-    test('parses the UTC form the server actually sends', () {
-      // Asserts only that a Z-suffixed timestamp formats to something,
-      // since the exact local day depends on the runner's timezone.
-      expect(formatWatchedAt('2026-08-02T12:00:00Z', now), isNotEmpty);
+    test('lastWatchedAt parses the UTC form the server sends', () {
+      expect(
+        movie(
+          progress: const Progress(
+            positionSeconds: 0,
+            percentage: 0,
+            watched: true,
+            lastWatchedAt: '2026-08-02T12:00:00Z',
+          ),
+        ).lastWatchedAt,
+        DateTime.utc(2026, 8, 2, 12),
+      );
     });
   });
 }

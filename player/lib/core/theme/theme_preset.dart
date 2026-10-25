@@ -5,14 +5,10 @@ import 'palette.dart';
 
 /// The theme a viewer picks on this device. All presets are dark.
 enum ThemePreset {
-  projectionBooth('Projection Booth'),
-  oledBlack('OLED Black'),
-  slate('Slate'),
-  macos('macOS');
-
-  const ThemePreset(this.label);
-
-  final String label;
+  projectionBooth,
+  oledBlack,
+  slate,
+  macos;
 
   /// `macos` needs the native runner's accent, so it is native macOS only.
   /// The web build on a Mac reports [TargetPlatform.macOS] too, hence [isWeb].

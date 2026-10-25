@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_dates.dart';
@@ -104,7 +105,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('calendar-month-button')),
-        matching: find.text(monthName(later)),
+        matching: find.textContaining(DateFormat.MMMM('en').format(later)),
       ),
       findsOneWidget,
     );

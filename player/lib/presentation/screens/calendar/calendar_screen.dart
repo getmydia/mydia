@@ -9,9 +9,9 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../sources/source_browse_providers.dart';
-import 'calendar_dates.dart';
 import 'calendar_jump_requests.dart';
 import 'calendar_month_sheet.dart';
 import 'calendar_timeline.dart';
@@ -82,7 +82,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       onPressed: () => _openMonthSheet(entries, today, month),
       icon: const Icon(Icons.expand_more_rounded),
       iconAlignment: IconAlignment.end,
-      label: Text(formatMonth(month, today)),
+      label: Text(context.l10n.monthLabel(month, today)),
     );
   }
 

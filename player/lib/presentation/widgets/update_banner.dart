@@ -8,6 +8,7 @@ import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
 import '../../core/update/update_dismissal_provider.dart';
 import '../../core/update/update_provider.dart';
+import '../../l10n/l10n.dart';
 import 'banner_button.dart';
 import 'update_action.dart';
 
@@ -123,7 +124,8 @@ class UpdateBanner extends ConsumerWidget {
     final version = update.version;
     if (version == null) return const SizedBox.shrink();
 
-    final failed = updateState.error != null;
+    final errorMessage = context.l10n.updateErrorMessage(updateState);
+    final failed = errorMessage != null;
     final color = failed ? AppColors.error : AppColors.info;
 
     return Container(
@@ -143,9 +145,7 @@ class UpdateBanner extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                failed
-                    ? updateState.error!
-                    : 'Mydia Player $version is available.',
+                errorMessage ?? 'Mydia Player $version is available.',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,

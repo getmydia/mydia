@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/player/subtitle_size.dart';
 import '../../core/settings/subtitle_size_setting.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 
 /// The subtitle sheet's size row. Writes the device setting directly, so
 /// the text behind the sheet resizes as the viewer steps.
@@ -45,7 +46,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
               Expanded(
                 child: Center(
                   child: Text(
-                    size.label,
+                    context.l10n.subtitleSizeName(size),
                     key: const ValueKey('subtitle-size-value'),
                     style: TextStyle(
                       color: palette.textPrimary,

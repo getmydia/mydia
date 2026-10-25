@@ -26,22 +26,23 @@ bool qualityControlAvailable({
       deriveAdaptiveLadder(sourceHeight: sourceHeight).isNotEmpty;
 }
 
-/// The control's label.
+/// The rung the control names; the widget formats it with `qualityName`.
 ///
 /// Auto names itself; the picker's Auto row carries what it chose. Any other
 /// choice shows what the server applied, which on a relay can sit below it.
-String qualityControlLabel({
+QualityRung qualityControlRung({
   required QualityRung selected,
   QualityRung? effective,
 }) =>
-    selected.isAuto ? selected.label : (effective ?? selected).label;
+    selected.isAuto ? selected : (effective ?? selected);
 
-/// Explains a server-side limit, or null when the stream got what was asked.
+/// The rung a server-side limit landed on, or null when the stream got what
+/// was asked. The picker words it with `AppLocalizations.qualityClampNote`.
 ///
 /// Compares against the rung the plan requested rather than the viewer's
 /// choice: under Auto that rung is Auto's own pick, and naming it as a limit
 /// would blame the connection for a decision the player made.
-String? qualityClampNote({
+QualityRung? qualityClampedTo({
   required PlaybackPlan? plan,
   QualityRung? effective,
 }) {
@@ -52,5 +53,5 @@ String? qualityClampNote({
   if (requestedHeight != null && effectiveHeight >= requestedHeight) {
     return null;
   }
-  return 'Limited to ${effective.label} by your connection';
+  return effective;
 }

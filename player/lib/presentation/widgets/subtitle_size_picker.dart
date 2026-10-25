@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/player/subtitle_size.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'osd_dialog.dart';
 
 /// Shows the subtitle size choices and returns the one picked, or null if
@@ -38,7 +39,7 @@ Future<SubtitleSize?> showSubtitleSizePicker(
                           : palette.textSecondary,
                     ),
                     title: Text(
-                      size.label,
+                      context.l10n.subtitleSizeName(size),
                       style: TextStyle(
                         color: palette.textPrimary,
                         fontWeight: size == current

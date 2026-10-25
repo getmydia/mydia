@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/format/relative_time.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
@@ -220,7 +219,10 @@ class DeviceCard extends StatelessWidget {
                     child: _InfoRow(
                       icon: Icons.access_time_rounded,
                       label: context.l10n.settingsDevicesLastSeen,
-                      value: device.lastSeenRelative,
+                      value: switch (device.lastSeenAt) {
+                        final at? => context.l10n.relativeTime(at),
+                        null => context.l10n.remoteDeviceNeverSeen,
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -228,7 +230,7 @@ class DeviceCard extends StatelessWidget {
                     child: _InfoRow(
                       icon: Icons.calendar_today_rounded,
                       label: context.l10n.settingsDevicesAdded,
-                      value: _formatDate(device.createdAt),
+                      value: context.l10n.relativeTime(device.createdAt),
                     ),
                   ),
                 ],
@@ -283,8 +285,6 @@ class DeviceCard extends StatelessWidget {
         return platform;
     }
   }
-
-  String _formatDate(DateTime date) => formatRelativeTime(date);
 }
 
 class _StatusBadge extends StatelessWidget {

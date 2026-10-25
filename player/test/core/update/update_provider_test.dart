@@ -515,10 +515,9 @@ void main() {
     expect(container.read(updateProvider).trackUrl, isNull);
   });
 
-  test('an unsupported track switch surfaces its reason as an error', () async {
+  test('an unpublished track surfaces typed, not as a sentence', () async {
     final backend = _FakeBackend(
-      trackSwitchOutcome:
-          const TrackSwitchUnsupported('Dev builds are not published yet.'),
+      trackSwitchOutcome: const TrackSwitchNotPublished(UpdateTrack.dev),
     );
     final container = _container(backend);
     container.read(updateProvider);
@@ -527,7 +526,24 @@ void main() {
     await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
 
     final state = container.read(updateProvider);
-    expect(state.error, contains('not published'));
+    expect(state.trackNotPublished?.track, UpdateTrack.dev);
+    expect(state.trackNotPublished?.macos, isFalse);
+    expect(state.hasError, isTrue);
     expect(state.currentTrack, UpdateTrack.stable);
+  });
+
+  test('an unsupported track switch surfaces its reason as an error', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchUnsupported('Could not save.'),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    final state = container.read(updateProvider);
+    expect(state.error, 'Could not save.');
+    expect(state.trackNotPublished, isNull);
   });
 }

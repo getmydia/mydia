@@ -25,16 +25,6 @@ class DownloadSpeedInfo {
     if (bytesPerSecond <= 0) return '';
     return '${DownloadTask.formatBytes(bytesPerSecond.round())}/s';
   }
-
-  String get etaDisplay {
-    if (eta == null) return '';
-    final totalSeconds = eta!.inSeconds;
-    if (totalSeconds < 60) return '${totalSeconds}s left';
-    if (totalSeconds < 3600) return '${(totalSeconds / 60).ceil()}m left';
-    final hours = totalSeconds ~/ 3600;
-    final mins = (totalSeconds % 3600) ~/ 60;
-    return '${hours}h ${mins}m left';
-  }
 }
 
 /// Whether downloads are supported on the current platform.

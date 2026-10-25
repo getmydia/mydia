@@ -26,46 +26,6 @@ enum DetailFeature {
   seasonDownload,
 }
 
-const _monthAbbreviations = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-/// Formats [lastWatchedAt] for the watched badge.
-///
-/// [now] is a parameter rather than an internal `DateTime.now()` so the
-/// year-elision branch is testable without depending on the wall clock.
-/// Returns `''` when there is nothing to show, which is the caller's cue
-/// to render the badge without a date.
-String formatWatchedAt(String? lastWatchedAt, DateTime now) {
-  if (lastWatchedAt == null) return '';
-
-  final parsed = DateTime.tryParse(lastWatchedAt);
-  if (parsed == null) return '';
-
-  final local = parsed.toLocal();
-  final label = '${_monthAbbreviations[local.month - 1]} ${local.day}';
-  return local.year == now.year ? label : '$label, ${local.year}';
-}
-
-String _runtime(int? minutes) {
-  if (minutes == null) return '';
-  final hours = minutes ~/ 60;
-  final rest = minutes % 60;
-  if (hours == 0) return '${rest}m';
-  return rest > 0 ? '${hours}h ${rest}m' : '${hours}h';
-}
-
 @immutable
 class CastView {
   const CastView({required this.name, this.character, this.photo});
@@ -142,7 +102,9 @@ class EpisodeView {
   String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'
       'E${episodeNumber.toString().padLeft(2, '0')}';
 
-  String get runtimeDisplay => _runtime(runtime);
+  /// [runtime] as a [Duration]; widgets format it with `AppFormatters.runtime`.
+  Duration? get runtimeDuration =>
+      runtime == null ? null : Duration(minutes: runtime!);
 
   String get fullTitle => '$showTitle - $episodeCode';
 
@@ -220,12 +182,18 @@ class MovieView {
     return current != null && !current.watched && current.percentage > 0;
   }
 
-  String get watchedAtDisplay =>
-      formatWatchedAt(progress?.lastWatchedAt, DateTime.now());
+  /// When the item was last watched, or null with no date or an unparseable
+  /// one. Widgets format it with `AppFormatters.watchedDate`.
+  DateTime? get lastWatchedAt {
+    final raw = progress?.lastWatchedAt;
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
 
   String get yearDisplay => year?.toString() ?? '';
 
-  String get runtimeDisplay => _runtime(runtime);
+  /// [runtime] as a [Duration]; widgets format it with `AppFormatters.runtime`.
+  Duration? get runtimeDuration =>
+      runtime == null ? null : Duration(minutes: runtime!);
 
   String get ratingDisplay => rating?.toStringAsFixed(1) ?? '';
 

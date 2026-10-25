@@ -70,6 +70,7 @@ import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
 import '../../../core/cast/cast_target.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
@@ -4693,7 +4694,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _selectedQuality,
       autoSubtitle: _autoDeliverySubtitle(),
       originalSubtitle: _originalDeliverySubtitle,
-      clampNote: qualityClampNote(plan: _plan, effective: _effectiveQuality),
+      clampNote: _qualityClampNote(),
       statsEnabled: ref.read(statsOverlayEnabledProvider).value ?? false,
       onStatsChanged: (enabled) => unawaited(
         ref.read(statsOverlayEnabledProvider.notifier).set(enabled),
@@ -4769,14 +4770,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The Auto row's subtitle: what is playing now when Auto is in effect,
   /// otherwise what Auto would do for this file.
   String _autoDeliverySubtitle() {
+    final l10n = context.l10n;
     final plan = _plan;
     if (_selectedQuality.isAuto && plan != null) {
-      return autoDeliverySubtitle(plan, effective: _effectiveQuality);
+      return l10n.autoDeliverySubtitle(plan, effective: _effectiveQuality);
     }
     final inputs = _planInputs;
-    if (inputs == null) return kAutoPreferenceSubtitle;
-    return autoDeliverySubtitle(
+    if (inputs == null) return l10n.qualityAutoPreference;
+    return l10n.autoDeliverySubtitle(
         planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
+  }
+
+  /// The picker's note when the server delivered less than was asked.
+  String? _qualityClampNote() {
+    final l10n = context.l10n;
+    final clamped = qualityClampedTo(plan: _plan, effective: _effectiveQuality);
+    return clamped == null
+        ? null
+        : l10n.qualityClampNote(l10n.qualityName(clamped));
   }
 
   /// The physical display in logical pixels. Read from the display rather
@@ -4960,13 +4971,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // A refused exit is also viewer-initiated, so it reaches here too. Saying
     // "could not enter" to someone trying to leave fullscreen would describe
     // the opposite of what they did.
-    final message = switch (failure.cause) {
-      FullscreenFailureCause.documentExitRejected ||
-      FullscreenFailureCause.videoExitFailed =>
-        'Could not exit fullscreen',
-      _ => 'Could not enter fullscreen',
-    };
-    showToast(context, message, kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.fullscreenFailureMessage(failure),
+      kind: ToastKind.error,
+    );
   }
 
   /// Toggle always-on-top across desktop platforms.
@@ -5653,8 +5662,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             audioTrackCount: _audioTracks.length,
             selectedAudioLabel: _selectedAudioTrack?.displayName,
             selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
-            selectedQualityLabel: qualityControlLabel(
-                selected: _selectedQuality, effective: _effectiveQuality),
+            selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
+                selected: _selectedQuality, effective: _effectiveQuality)),
           ),
           fill: Colors.black,
           fit: _scaling.boxFit,

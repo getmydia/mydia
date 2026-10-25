@@ -92,5 +92,6 @@ before changing a term everywhere.
 ## Reviewing the seed translations
 
 The Spanish and Brazilian Portuguese translations of the whole web interface
-were machine-drafted, and so was the Spanish translation of the player. Native
+were machine-drafted, and so were the Spanish and Brazilian Portuguese
+translations of the player. Native
 speakers: please review them on Weblate.

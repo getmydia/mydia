@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
@@ -296,6 +297,8 @@ Future<void> _mount(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: _container!,
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: PlayerScreen(
         mediaId: mediaId,
@@ -336,6 +339,8 @@ Future<void> _mountWithFactory(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: _container!,
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: PlayerScreen(
         mediaId: 'movie-1',

@@ -19,6 +19,10 @@ const _uiArguments = {
   'text',
 };
 
+/// Functions whose positional argument at the given index is a message shown
+/// to the viewer.
+const _uiPositionalCalls = {'showToast': 1};
+
 class UntranslatedLiteral {
   const UntranslatedLiteral(this.path, this.line, this.text);
   final String path;
@@ -28,8 +32,10 @@ class UntranslatedLiteral {
   String toString() => '$path:$line  $text';
 }
 
-/// Literal English handed straight to a widget in [source]. Unresolved AST,
-/// so `Text('x')` without `const` parses as a method call: both are checked.
+/// Literal English handed straight to a widget in [source], including either
+/// branch of a conditional, either side of `??`, and the message argument of
+/// `showToast`. Unresolved AST, so `Text('x')` without `const` parses as a
+/// method call: both are checked.
 List<UntranslatedLiteral> findUntranslated(
   String source, {
   required String path,
@@ -60,6 +66,13 @@ class _Visitor extends RecursiveAstVisitor<void> {
     if (node.target == null && node.methodName.name == 'Text') {
       _checkFirstPositional(node.argumentList);
     }
+    final index = _uiPositionalCalls[node.methodName.name];
+    if (node.target == null && index != null) {
+      final positional = node.argumentList.arguments
+          .where((a) => a is! NamedExpression)
+          .toList();
+      if (positional.length > index) _check(positional[index]);
+    }
     super.visitMethodInvocation(node);
   }
 
@@ -75,6 +88,25 @@ class _Visitor extends RecursiveAstVisitor<void> {
   }
 
   void _check(Expression e) {
+    switch (e) {
+      case ParenthesizedExpression(:final expression):
+        _check(expression);
+        return;
+      case ConditionalExpression(:final thenExpression, :final elseExpression):
+        _check(thenExpression);
+        _check(elseExpression);
+        return;
+      case BinaryExpression(
+            :final operator,
+            :final leftOperand,
+            :final rightOperand
+          )
+          when operator.lexeme == '??':
+        _check(leftOperand);
+        _check(rightOperand);
+        return;
+      default:
+    }
     final words = switch (e) {
       SimpleStringLiteral(:final value) => value,
       AdjacentStrings() => _literalText(e),

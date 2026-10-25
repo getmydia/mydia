@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library alongside other
@@ -51,6 +52,7 @@ Future<void> pumpHeader(
   // requires to be a compile-time constant.
   List<QueryKey>? keys,
   List<Override> extraOverrides = const [],
+  Locale? locale,
 }) {
   return tester.pumpWidget(
     ProviderScope(
@@ -61,6 +63,9 @@ Future<void> pumpHeader(
         ...extraOverrides,
       ],
       child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: FreshnessHeader(queryKeys: keys ?? [QueryKeys.home]),
         ),
@@ -123,6 +128,31 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('the banners are whole translated sentences', (tester) async {
+    await pumpHeader(
+      tester,
+      locale: const Locale('es'),
+      freshness: {
+        QueryKeys.home: Freshness(
+          fetchedAt: now.subtract(const Duration(hours: 2)),
+          refreshFailed: true,
+          isStale: true,
+          hasData: true,
+        ),
+      },
+    );
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(const Key('freshness-banner'))),
+    );
+    final expected = l10n.freshnessFailedBanner(
+      l10n.relativeTime(now.subtract(const Duration(hours: 2))),
+    );
+    expect(expected, startsWith('No se pudo conectar'));
+    expect(find.text(expected), findsOneWidget);
+    expect(find.text('Reintentar'), findsOneWidget);
   });
 
   testWidgets('shows the stale banner with a refresh action', (tester) async {
@@ -284,7 +314,10 @@ void main() {
         sourceStatusProvider(idB)
             .overrideWithValue(SourceConnectionStatus.remote),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router),
     ));
     await tester.pumpAndSettle();
 

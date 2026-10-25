@@ -22,7 +22,7 @@ class SubtitleSizeSettingsRow extends ConsumerWidget {
       icon: Icons.closed_caption,
       title: context.l10n.settingsSubtitleSizeTitle,
       subtitle: context.l10n.settingsSubtitleSizeSubtitle,
-      value: size.label,
+      value: context.l10n.subtitleSizeName(size),
       onTap: () async {
         final picked = await showSubtitleSizePicker(context, size);
         if (picked != null) {

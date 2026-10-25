@@ -16,6 +16,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
@@ -29,6 +30,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: MediaQuery(
             data: const MediaQueryData(
               padding: EdgeInsets.only(top: kMacTitleBarOverlap),

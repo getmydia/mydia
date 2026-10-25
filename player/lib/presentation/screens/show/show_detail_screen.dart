@@ -24,6 +24,7 @@ import '../../widgets/shell_rail_inset.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
@@ -308,7 +309,7 @@ class ShowDetailScreen extends ConsumerWidget {
         selectedEpisode,
         compact: compact,
       ),
-      tagColumn: _buildTagColumn(show, selectedEpisode),
+      tagColumn: _buildTagColumn(context, show, selectedEpisode),
     );
   }
 
@@ -356,10 +357,12 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTagColumn(ShowView show, EpisodeView episode) {
+  Widget _buildTagColumn(
+      BuildContext context, ShowView show, EpisodeView episode) {
     return DetailTagColumn(
       tags: [
-        if (episode.runtimeDisplay.isNotEmpty) episode.runtimeDisplay,
+        if (episode.runtimeDuration case final runtime?)
+          context.l10n.runtime(runtime),
         if (episode.files.firstOrNull?.resolution case final resolution?)
           resolution,
         if (show.contentRating case final rating?) rating,

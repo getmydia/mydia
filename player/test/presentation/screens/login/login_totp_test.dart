@@ -54,7 +54,7 @@ class _ExpiringLoginController extends LoginController {
   Future<void> submitTotpCode(String code, {String? reauthAccountId}) async {
     state = state.copyWith(
       clearTotpChallenge: true,
-      error: 'Sign-in expired, please try again',
+      error: const LoginFailureOfKind(LoginFailureKind.signInExpired),
     );
   }
 

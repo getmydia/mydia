@@ -26,6 +26,7 @@ import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
@@ -806,6 +807,8 @@ Future<void> pumpPlayerScreen(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: PlayerScreen(
         mediaId: mediaId,

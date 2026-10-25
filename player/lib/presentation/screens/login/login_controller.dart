@@ -13,6 +13,9 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart'
     show sourceRecordsProvider, sourceSecretsProvider;
 import '../../../domain/sources/source_error.dart';
+import 'login_failure.dart';
+
+export 'login_failure.dart';
 
 // Re-export QrPairingData so UI can import from one place
 export '../../../core/channels/pairing_service.dart' show QrPairingData;
@@ -75,46 +78,50 @@ final pairingServiceProvider = Provider<PairingService>(
 final loginDeviceInfoProvider =
     Provider<DeviceInfoService>((ref) => DeviceInfoService());
 
-/// The viewer-facing message for a failure of the save, or null for any
-/// other error.
-String? _saveErrorMessage(Object e) =>
-    e is SourceException ? e.viewerMessage : null;
+/// The viewer-facing failure of the save, or null for any other error.
+LoginFailure? _saveFailure(Object e) =>
+    e is SourceException ? LoginFailureFromServer(e.viewerMessage) : null;
 
-const _cannotConnect =
-    'Cannot connect to server. Check the URL and your network.';
-const _signInExpired = 'Sign-in expired, please try again';
-const _tooManyAttempts = 'Too many login attempts. Please try again later.';
+const _cannotConnect = LoginFailureOfKind(LoginFailureKind.cannotConnect);
+const _invalidCode = LoginFailureOfKind(LoginFailureKind.invalidCode);
+const _signInExpired = LoginFailureOfKind(LoginFailureKind.signInExpired);
+const _tooManyAttempts = LoginFailureOfKind(LoginFailureKind.tooManyAttempts);
 
-/// What the user sees when the password step fails, chosen by error kind.
+/// Why the password step failed, chosen by error kind.
 /// A server's own words (a [MydiaGraphqlError]) are matched by text, since
 /// that is all the server sends.
-String _loginErrorMessage(Object e) {
-  if (e is! SourceException) return _loginMessageFromText(e.toString());
+LoginFailure _loginFailure(Object e) {
+  if (e is! SourceException) return _loginFailureFromText(e.toString());
   return switch (e.kind) {
     SourceErrorKind.unreachable => _cannotConnect,
-    SourceErrorKind.notFound => 'Server not found. Check the URL.',
-    SourceErrorKind.unauthorized => 'Invalid username or password',
-    _ when e is MydiaGraphqlError => _loginMessageFromText(e.viewerMessage),
-    _ => e.viewerMessage,
+    SourceErrorKind.notFound =>
+      const LoginFailureOfKind(LoginFailureKind.serverNotFound),
+    SourceErrorKind.unauthorized =>
+      const LoginFailureOfKind(LoginFailureKind.invalidCredentials),
+    _ when e is MydiaGraphqlError => _loginFailureFromText(e.viewerMessage),
+    _ => LoginFailureFromServer(e.viewerMessage),
   };
 }
 
-String _loginMessageFromText(String text) {
+LoginFailure _loginFailureFromText(String text) {
   if (text.contains('Invalid username or password') ||
       text.contains('Local authentication is disabled')) {
-    return text.replaceFirst('Exception: Login error: ', '');
+    return LoginFailureFromServer(
+        text.replaceFirst('Exception: Login error: ', ''));
   }
-  if (text.contains('invalid')) return 'Invalid username or password';
+  if (text.contains('invalid')) {
+    return const LoginFailureOfKind(LoginFailureKind.invalidCredentials);
+  }
   if (text.contains('connection') ||
       text.contains('network') ||
       text.contains('SocketException')) {
     return _cannotConnect;
   }
-  return 'Login failed. Please check your credentials.';
+  return const LoginFailureOfKind(LoginFailureKind.loginFailed);
 }
 
-/// What the user sees when the verification code step fails.
-String _totpErrorMessage(Object e) {
+/// Why the verification code step failed.
+LoginFailure _totpFailure(Object e) {
   if (e is SourceException) {
     if (e.kind == SourceErrorKind.unreachable) return _cannotConnect;
     if (e is MydiaGraphqlError) {
@@ -122,7 +129,7 @@ String _totpErrorMessage(Object e) {
       if (text.contains('Sign-in expired')) return _signInExpired;
       if (text.contains('Too many')) return _tooManyAttempts;
     }
-    return 'Invalid code';
+    return _invalidCode;
   }
   final text = e.toString();
   if (text.contains('SocketException') ||
@@ -130,7 +137,7 @@ String _totpErrorMessage(Object e) {
       text.contains('network')) {
     return _cannotConnect;
   }
-  return 'Invalid code';
+  return _invalidCode;
 }
 
 /// State for the login screen.
@@ -149,7 +156,7 @@ class LoginState {
 
   final ConnectionMode mode;
   final bool isLoading;
-  final String? error;
+  final LoginFailure? error;
   final bool success;
   final ClaimCodeStatus claimCodeStatus;
   final String? claimCodeMessage;
@@ -169,7 +176,7 @@ class LoginState {
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
-    String? error,
+    LoginFailure? error,
     bool? success,
     ClaimCodeStatus? claimCodeStatus,
     String? claimCodeMessage,
@@ -323,7 +330,7 @@ class LoginController extends _$LoginController {
           );
     } catch (e) {
       if (!ref.mounted) return;
-      state = state.copyWith(isLoading: false, error: _loginErrorMessage(e));
+      state = state.copyWith(isLoading: false, error: _loginFailure(e));
       return;
     }
 
@@ -338,7 +345,7 @@ class LoginController extends _$LoginController {
           // requestLogin never answers this; end loading if it ever does.
           state = state.copyWith(
             isLoading: false,
-            error: 'Login failed. Please try again.',
+            error: const LoginFailureOfKind(LoginFailureKind.loginFailed),
           );
       }
     } catch (e) {
@@ -347,7 +354,7 @@ class LoginController extends _$LoginController {
 
       state = state.copyWith(
         isLoading: false,
-        error: _saveErrorMessage(e) ?? _loginErrorMessage(e),
+        error: _saveFailure(e) ?? _loginFailure(e),
       );
     }
   }
@@ -370,12 +377,12 @@ class LoginController extends _$LoginController {
           .requestTotp(challenge: challenge, code: code.trim());
     } catch (e) {
       if (!ref.mounted) return;
-      final message = _totpErrorMessage(e);
+      final failure = _totpFailure(e);
       state = state.copyWith(
         isLoading: false,
         // An expired challenge cannot be retried with another code.
-        clearTotpChallenge: message == _signInExpired,
-        error: message,
+        clearTotpChallenge: identical(failure, _signInExpired),
+        error: failure,
       );
       return;
     }
@@ -387,7 +394,7 @@ class LoginController extends _$LoginController {
       if (!ref.mounted) return;
       state = state.copyWith(
         isLoading: false,
-        error: _saveErrorMessage(e) ?? 'Invalid code',
+        error: _saveFailure(e) ?? _invalidCode,
       );
     }
   }
@@ -454,8 +461,8 @@ class LoginController extends _$LoginController {
     state = state.copyWith(
       isLoading: false,
       claimCodeStatus: ClaimCodeStatus.error,
-      error:
-          _saveErrorMessage(e) ?? e.toString().replaceFirst('Exception: ', ''),
+      error: _saveFailure(e) ??
+          LoginFailureFromServer(e.toString().replaceFirst('Exception: ', '')),
     );
   }
 

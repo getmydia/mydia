@@ -7,6 +7,7 @@ import '../../widgets/shell_rail_inset.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_links.dart';
@@ -131,12 +132,18 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildTagColumn(BuildContext context, MovieView movie) {
     return DetailTagColumn(
       leading: movie.isWatched
-          ? MovieWatchedLine(dateLabel: movie.watchedAtDisplay)
+          ? MovieWatchedLine(
+              dateLabel: switch (movie.lastWatchedAt) {
+                final at? => context.l10n.watchedDate(at, DateTime.now()),
+                null => '',
+              },
+            )
           : movie.hasResumableProgress
               ? _buildProgressBar(context, movie)
               : null,
       tags: [
-        if (movie.runtimeDisplay.isNotEmpty) movie.runtimeDisplay,
+        if (movie.runtimeDuration case final runtime?)
+          context.l10n.runtime(runtime),
         if (movie.files.firstOrNull?.resolution case final resolution?)
           resolution,
         if (movie.contentRating case final rating?) rating,

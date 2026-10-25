@@ -55,9 +55,7 @@ class SparkleUpdateBackend implements UpdateBackend {
   @override
   Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
     if (!availableTracks.contains(track)) {
-      return TrackSwitchUnsupported(
-        '${track.label} builds are not published for macOS yet.',
-      );
+      return TrackSwitchNotPublished(track, macos: true);
     }
     if (!await _writeTrack(track)) {
       return const TrackSwitchUnsupported(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/freshness.dart';
@@ -38,6 +39,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourceLibraryScreen(library: FakeMediaSource.movies),
       ),
     ));

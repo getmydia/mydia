@@ -64,9 +64,7 @@ class ReleaseUpdateBackend implements UpdateBackend {
   @override
   Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
     if (!_availableTracks.contains(track)) {
-      return TrackSwitchUnsupported(
-        '${track.label} builds are not published for this platform yet.',
-      );
+      return TrackSwitchNotPublished(track);
     }
 
     try {

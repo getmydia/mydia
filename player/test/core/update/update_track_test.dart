@@ -1,7 +1,10 @@
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/core/update/update_track_store.dart';
+import 'package:player/l10n/formatters.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 
@@ -30,11 +33,13 @@ void main() {
       expect(UpdateTrack.fromWireName(''), isNull);
     });
 
-    test('the dev track never says master to a user', () {
-      expect(UpdateTrack.dev.label, 'Dev');
+    test('the dev track never says master to a user', () async {
+      final en = await AppLocalizations.delegate.load(const Locale('en'));
       for (final track in UpdateTrack.values) {
-        expect(track.label.toLowerCase(), isNot(contains('master')));
-        expect(track.description.toLowerCase(), isNot(contains('master')));
+        expect(
+            en.updateTrackName(track).toLowerCase(), isNot(contains('master')));
+        expect(en.updateTrackDescription(track).toLowerCase(),
+            isNot(contains('master')));
       }
     });
   });

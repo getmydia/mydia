@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/presentation/widgets/subtitle_size_stepper.dart';
@@ -17,6 +18,8 @@ Widget _host(MockAuthStorage storage) => ProviderScope(
             .overrideWithValue(SettingsService(storage: storage)),
       ],
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: SubtitleSizeStepper()),
       ),
     );

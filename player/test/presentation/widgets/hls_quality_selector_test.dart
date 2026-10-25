@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/quality_delivery_subtitle.dart';
 import 'package:player/domain/models/quality_rung.dart';
@@ -10,6 +11,8 @@ import '../../test_utils/osd_contrast.dart';
 
 Widget _host(void Function(BuildContext) onReady) {
   return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: Builder(
         builder: (context) => ElevatedButton(
@@ -249,7 +252,7 @@ void main() {
           context,
           [QualityRung.auto, ...ladder],
           QualityRung.original,
-          autoSubtitle: kAutoPreferenceSubtitle,
+          autoSubtitle: 'Adapts to your connection',
           originalSubtitle: kOriginalPreferenceSubtitle,
         );
       }),

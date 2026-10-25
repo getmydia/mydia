@@ -44,9 +44,10 @@ class LocaleSetting extends Notifier<Locale?> {
   }
 
   /// A stored tag the app still ships, or null. A language dropped from the
-  /// ARB files falls back to the device language instead of English.
+  /// ARB files falls back to the device language instead of English, and so
+  /// does a stub such as bare `pt` (see [stubLanguageCodes]).
   static Locale? _supported(String tag) {
-    for (final l in AppLocalizations.supportedLocales) {
+    for (final l in pickableLocales) {
       if (l.toLanguageTag() == tag) return l;
     }
     return null;
@@ -54,7 +55,8 @@ class LocaleSetting extends Notifier<Locale?> {
 
   /// The player locale for a web UI Gettext code (`es`, `pt_BR`, `zh_Hans`):
   /// the exact language when the player ships it, else the same language
-  /// without its region or script, else English. English rather than the
+  /// without its region or script, else English. A stub is never returned:
+  /// `pt` and `pt_PT` map to the shipped `pt_BR`. English rather than the
   /// device language, because that is what the web UI shows for a message
   /// nobody translated. Null only for no code at all.
   static Locale? fromHostCode(String? code) {
@@ -62,15 +64,10 @@ class LocaleSetting extends Notifier<Locale?> {
     final tag = code.replaceAll('_', '-');
     final exact = _supported(tag);
     if (exact != null) return exact;
-    final language = tag.split('-').first;
-    for (final l in AppLocalizations.supportedLocales) {
-      if (l.languageCode == language &&
-          l.countryCode == null &&
-          l.scriptCode == null) {
-        return l;
-      }
-    }
-    return const Locale('en');
+    return resolveLocaleList(
+      [Locale(tag.split('-').first)],
+      AppLocalizations.supportedLocales,
+    );
   }
 
   /// Applies at once; a failed write keeps the choice for this session and

@@ -78,7 +78,18 @@ final class TrackSwitchDeferred extends TrackSwitchOutcome {
   const TrackSwitchDeferred({required this.instructions, this.url});
 }
 
-/// The backend cannot offer this track at all.
+/// The chosen track has no builds on this platform. Typed rather than a
+/// sentence so the widget names the track in the viewer's language.
+final class TrackSwitchNotPublished extends TrackSwitchOutcome {
+  final UpdateTrack track;
+
+  /// True on the macOS (Sparkle) backend, whose message names macOS.
+  final bool macos;
+
+  const TrackSwitchNotPublished(this.track, {this.macos = false});
+}
+
+/// The backend cannot make this switch, and [reason] says why.
 final class TrackSwitchUnsupported extends TrackSwitchOutcome {
   final String reason;
 
