@@ -138,7 +138,11 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
             )
           }
         >
-          <.icon name="hero-plus" class="w-3 h-3" /> {gettext("%{count} pending", count: @pending)}
+          <.icon name="hero-plus" class="w-3 h-3" /> {ngettext(
+            "%{count} pending",
+            "%{count} pending",
+            @pending
+          )}
         </button>
       </:badges>
       <:actions>

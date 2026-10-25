@@ -504,7 +504,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
         gettext("Just now")
 
       diff < 3600 ->
-        gettext("%{count} min ago", count: div(diff, 60))
+        ngettext("%{count} min ago", "%{count} min ago", div(diff, 60))
 
       diff < 86400 ->
         ngettext("%{count} hour ago", "%{count} hours ago", div(diff, 3600))

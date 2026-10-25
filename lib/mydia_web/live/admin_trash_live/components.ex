@@ -243,7 +243,11 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       class="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-base-200"
     >
       <span class="font-medium">
-        {gettext("%{count} selected", count: selection_count(@selection, @total_matching))}
+        {ngettext(
+          "%{count} selected",
+          "%{count} selected",
+          selection_count(@selection, @total_matching)
+        )}
       </span>
 
       <button
@@ -285,7 +289,11 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         class="btn btn-sm btn-ghost"
         phx-click="select_all_trash"
       >
-        {gettext("Select all %{count} matching", count: @total_matching)}
+        {ngettext(
+          "Select all %{count} matching",
+          "Select all %{count} matching",
+          @total_matching
+        )}
       </button>
     </div>
     """

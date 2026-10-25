@@ -162,7 +162,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
       <:badges>
         <span class="badge badge-sm badge-outline badge-warning">{refusal_label(@reason)}</span>
         <span :if={@controls? and @returning_count > 0} class="badge badge-sm badge-outline">
-          {gettext("%{count} to Review", count: @returning_count)}
+          {ngettext("%{count} to Review", "%{count} to Review", @returning_count)}
         </span>
       </:badges>
       <:actions>

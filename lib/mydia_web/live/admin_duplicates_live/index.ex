@@ -594,13 +594,22 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   defp maybe_flash_problems(socket, %{failed: failed, aborted: aborted}) do
     parts =
       [
-        failed != [] && gettext("%{count} could not be moved", count: length(failed)),
+        failed != [] &&
+          ngettext(
+            "%{count} could not be moved.",
+            "%{count} could not be moved.",
+            length(failed)
+          ),
         aborted != [] &&
-          gettext("%{count} were skipped by re-verification", count: length(aborted))
+          ngettext(
+            "%{count} was skipped by re-verification.",
+            "%{count} were skipped by re-verification.",
+            length(aborted)
+          )
       ]
       |> Enum.filter(& &1)
 
-    put_flash(socket, :error, gettext("%{parts}.", parts: Enum.join(parts, ". ")))
+    put_flash(socket, :error, Enum.join(parts, " "))
   end
 
   defp maybe_set_last_run(socket, %{trashed: []}, _scope_label), do: socket

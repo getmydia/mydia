@@ -304,8 +304,10 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: skipped}) do
     swept_sentence(swept, bytes) <>
       " " <>
-      gettext("Skipped %{count}, either too recently written to be safe or not removable.",
-        count: skipped
+      ngettext(
+        "Skipped %{count}, either too recently written to be safe or not removable.",
+        "Skipped %{count}, either too recently written to be safe or not removable.",
+        skipped
       )
   end
 
@@ -353,16 +355,24 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     base
     |> maybe_append(
       retained > 0,
-      gettext("%{count} had an occupied library path, so the trashed copy was kept.",
-        count: retained
+      ngettext(
+        "%{count} had an occupied library path, so the trashed copy was kept.",
+        "%{count} had an occupied library path, so the trashed copy was kept.",
+        retained
       )
     )
-    |> maybe_append(failed > 0, gettext("%{count} could not be restored.", count: failed))
+    |> maybe_append(
+      failed > 0,
+      ngettext("%{count} could not be restored.", "%{count} could not be restored.", failed)
+    )
   end
 
   defp done_message(%{action: "purge", ok: ok, failed: failed}) do
     ngettext("Deleted %{count} file permanently.", "Deleted %{count} files permanently.", ok)
-    |> maybe_append(failed > 0, gettext("%{count} could not be deleted.", count: failed))
+    |> maybe_append(
+      failed > 0,
+      ngettext("%{count} could not be deleted.", "%{count} could not be deleted.", failed)
+    )
   end
 
   # Each part is a whole sentence of its own, joined with a space.

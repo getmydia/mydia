@@ -142,8 +142,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       <:badges>
         <span class="badge badge-sm badge-outline">{file_count(length(@files))}</span>
         <span :if={@selected_count > 0} class="badge badge-sm badge-outline badge-error">
-          {gettext("%{count} to trash · %{size}",
-            count: @selected_count,
+          {ngettext(
+            "%{count} to trash · %{size}",
+            "%{count} to trash · %{size}",
+            @selected_count,
             size: format_file_size(@selected_bytes)
           )}
         </span>

@@ -42,12 +42,16 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
         <%= if @filter_status == "pending" do %>
           {gettext("No pending requests at this time. Great job keeping up!")}
         <% else %>
-          {gettext("No %{status} requests found.", status: status_text(@filter_status))}
+          {empty_text(@filter_status)}
         <% end %>
       </:empty>
     </.admin_list>
     """
   end
+
+  defp empty_text("approved"), do: gettext("No Approved requests found.")
+  defp empty_text("rejected"), do: gettext("No Rejected requests found.")
+  defp empty_text(_), do: gettext("No requests found.")
 
   attr :request, MediaRequest, required: true
   attr :display, Mydia.TimeDisplay, required: true

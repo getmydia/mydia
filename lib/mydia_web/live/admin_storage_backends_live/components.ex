@@ -115,7 +115,7 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Components do
           field={@storage_backend_form[:name]}
           type="text"
           label={gettext("Name")}
-          placeholder={gettext("media")}
+          placeholder="media"
           required
         />
         <.input
