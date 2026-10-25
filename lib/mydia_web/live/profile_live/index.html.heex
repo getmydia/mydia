@@ -400,16 +400,7 @@
               <.icon name="hero-shield-check" class="w-5 h-5" /> {gettext("Security")}
             </h2>
 
-            <%= if @is_oidc_user do %>
-              <div class="alert">
-                <.icon name="hero-information-circle" class="w-5 h-5" />
-                <span>
-                  {gettext(
-                    "Your account is managed through your SSO provider. Password changes are not available."
-                  )}
-                </span>
-              </div>
-            <% else %>
+            <%= if @has_password do %>
               <p class="text-base-content/70 mb-4">
                 {gettext("Change your password to keep your account secure.")}
               </p>
@@ -437,7 +428,54 @@
                 time_display={@time_display}
                 page_url={@page_url}
               />
+            <% else %>
+              <div class="alert">
+                <.icon name="hero-information-circle" class="w-5 h-5" />
+                <span>
+                  {gettext(
+                    "Your account is managed through your SSO provider. Password changes are not available."
+                  )}
+                </span>
+              </div>
             <% end %>
+
+            <div
+              :if={@oidc_configured}
+              id="sso-link-section"
+              class="mt-6 pt-6 border-t border-base-300"
+            >
+              <h3 class="font-semibold mb-1">{gettext("Single sign-on")}</h3>
+              <%= if @oidc_linked do %>
+                <p class="text-base-content/70 mb-3">
+                  {gettext("Your account is linked to your SSO provider.")}
+                </p>
+                <.link
+                  :if={@can_unlink_oidc}
+                  id="unlink-sso-btn"
+                  href={~p"/auth/oidc/link"}
+                  method="delete"
+                  data-confirm={gettext("Unlink SSO from your account?")}
+                  class="btn btn-outline btn-sm"
+                >
+                  <.icon name="hero-link-slash" class="w-4 h-4" /> {gettext("Unlink SSO")}
+                </.link>
+                <p :if={!@can_unlink_oidc} class="text-sm text-base-content/60">
+                  {gettext("Set a password or add a passkey to be able to unlink SSO.")}
+                </p>
+              <% else %>
+                <p class="text-base-content/70 mb-3">
+                  {gettext("Sign in with your SSO provider as well as your password.")}
+                </p>
+                <.link
+                  id="link-sso-btn"
+                  href={~p"/auth/oidc/link"}
+                  method="post"
+                  class="btn btn-outline btn-sm"
+                >
+                  <.icon name="hero-link" class="w-4 h-4" /> {gettext("Link SSO account")}
+                </.link>
+              <% end %>
+            </div>
           </div>
         </div>
 

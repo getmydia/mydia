@@ -23,7 +23,6 @@ defmodule MydiaWeb.ProfileLive.Index do
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
-    is_oidc_user = Accounts.oidc_user?(user)
     preference = Accounts.get_user_preference!(user)
     libraries = Settings.list_library_paths()
 
@@ -34,7 +33,10 @@ defmodule MydiaWeb.ProfileLive.Index do
         max_entries: 1,
         max_file_size: 5_000_000
       )
-      |> assign(:is_oidc_user, is_oidc_user)
+      |> assign(:has_password, Accounts.password_user?(user))
+      |> assign(:oidc_configured, Accounts.oidc_configured?())
+      |> assign(:oidc_linked, Accounts.oidc_user?(user))
+      |> assign(:can_unlink_oidc, Accounts.can_unlink_oidc?(user))
       |> assign(:local_auth_enabled, Mydia.Config.get().auth.local_enabled)
       |> assign(:page_url, nil)
       |> assign(:profile_form, to_form(Accounts.change_profile(user)))
@@ -391,10 +393,10 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   defp auth_type(user) do
-    if Accounts.oidc_user?(user) do
-      gettext("OpenID Connect (SSO)")
-    else
-      gettext("Local")
+    case {Accounts.password_user?(user), Accounts.oidc_user?(user)} do
+      {true, true} -> gettext("Local + SSO")
+      {false, true} -> gettext("OpenID Connect (SSO)")
+      _local -> gettext("Local")
     end
   end
 

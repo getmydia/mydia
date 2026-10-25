@@ -214,10 +214,10 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   def handle_event("open_reset_password_modal", %{"id" => id}, socket) do
     user = Accounts.get_user!(id)
 
-    if is_oidc_user?(user) do
+    if not Accounts.password_user?(user) do
       {:noreply,
        socket
-       |> put_flash(:error, gettext("Cannot reset password for OIDC users"))}
+       |> put_flash(:error, gettext("This user has no local password to reset"))}
     else
       {:noreply,
        socket
@@ -655,7 +655,4 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     |> Base.url_encode64(padding: false)
     |> binary_part(0, 16)
   end
-
-  defp is_oidc_user?(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: true
-  defp is_oidc_user?(_user), do: false
 end

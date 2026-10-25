@@ -91,7 +91,13 @@ defmodule Mix.Tasks.Mydia.User do
       Mix.shell().info(String.duplicate("-", 80))
 
       Enum.each(users, fn user ->
-        auth_type = if user.oidc_sub, do: "OIDC", else: "Local"
+        auth_type =
+          case {user.password_hash, user.oidc_sub} do
+            {hash, sub} when not is_nil(hash) and not is_nil(sub) -> "Local + SSO"
+            {nil, sub} when not is_nil(sub) -> "OIDC"
+            _local -> "Local"
+          end
+
         display = user.display_name || user.username || "-"
 
         Mix.shell().info(
