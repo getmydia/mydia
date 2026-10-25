@@ -5,6 +5,7 @@ import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
+import '../../l10n/l10n.dart';
 import 'osd_dialog.dart';
 
 /// The stats row inside the quality sheet.
@@ -145,7 +146,7 @@ Widget _rungTile(
       color: isSelected ? palette.primary : palette.textSecondary,
     ),
     title: Text(
-      rung.label,
+      context.l10n.qualityName(rung),
       style: TextStyle(
         color: palette.textPrimary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,

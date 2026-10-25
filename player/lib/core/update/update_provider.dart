@@ -57,6 +57,15 @@ const String _installPermissionStillDenied =
     'tap Retry.';
 
 /// State for the update system.
+/// A track the viewer chose that has no builds here. [macos] selects the
+/// macOS wording.
+class TrackNotPublished {
+  final UpdateTrack track;
+  final bool macos;
+
+  const TrackNotPublished(this.track, {this.macos = false});
+}
+
 class UpdateState {
   /// Available update, if any. Null on platforms that update elsewhere.
   final AvailableUpdate? availableUpdate;
@@ -84,6 +93,14 @@ class UpdateState {
 
   /// Error message from the last check or apply attempt.
   final String? error;
+
+  /// The track switch that failed for want of published builds. Shown as an
+  /// error, formatted by `AppFormatters.updateErrorMessage`; at most one of
+  /// this and [error] is set.
+  final TrackNotPublished? trackNotPublished;
+
+  /// Whether the update card has an error to show.
+  bool get hasError => error != null || trackNotPublished != null;
 
   /// The tracks this installation can be pointed at. Empty on a platform the
   /// backend never offers a choice on (iOS, web, Play-installed Android),
@@ -114,6 +131,7 @@ class UpdateState {
     this.restartRequired = false,
     this.notice,
     this.error,
+    this.trackNotPublished,
     this.availableTracks = const <UpdateTrack>{},
     this.currentTrack = UpdateTrack.stable,
     this.trackNotice,
@@ -130,6 +148,7 @@ class UpdateState {
     bool? restartRequired,
     String? notice,
     String? error,
+    TrackNotPublished? trackNotPublished,
     Set<UpdateTrack>? availableTracks,
     UpdateTrack? currentTrack,
     String? trackNotice,
@@ -151,6 +170,10 @@ class UpdateState {
       restartRequired: restartRequired ?? this.restartRequired,
       notice: clearNotice ? null : (notice ?? this.notice),
       error: clearError ? null : (error ?? this.error),
+      // A new text error or clearError replaces it, so only one error shows.
+      trackNotPublished: clearError || error != null
+          ? trackNotPublished
+          : (trackNotPublished ?? this.trackNotPublished),
       availableTracks: availableTracks ?? this.availableTracks,
       currentTrack: currentTrack ?? this.currentTrack,
       trackNotice: clearTrackNotice ? null : (trackNotice ?? this.trackNotice),
@@ -444,6 +467,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
           // that was not asked to change, but wrong here since this switch
           // is deciding trackUrl fresh every time.
           clearTrackUrl: url == null,
+        ),
+      TrackSwitchNotPublished(:final track, :final macos) => state.copyWith(
+          clearError: true,
+          trackNotPublished: TrackNotPublished(track, macos: macos),
         ),
       TrackSwitchUnsupported(:final reason) => state.copyWith(error: reason),
     };

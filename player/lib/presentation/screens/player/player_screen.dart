@@ -70,6 +70,7 @@ import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
 import '../../../core/cast/cast_target.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
@@ -4960,13 +4961,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // A refused exit is also viewer-initiated, so it reaches here too. Saying
     // "could not enter" to someone trying to leave fullscreen would describe
     // the opposite of what they did.
-    final message = switch (failure.cause) {
-      FullscreenFailureCause.documentExitRejected ||
-      FullscreenFailureCause.videoExitFailed =>
-        'Could not exit fullscreen',
-      _ => 'Could not enter fullscreen',
-    };
-    showToast(context, message, kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.fullscreenFailureMessage(failure),
+      kind: ToastKind.error,
+    );
   }
 
   /// Toggle always-on-top across desktop platforms.

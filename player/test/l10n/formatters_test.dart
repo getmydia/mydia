@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
+import 'package:player/core/player/subtitle_size.dart';
+import 'package:player/core/theme/glass_material.dart';
+import 'package:player/core/theme/theme_preset.dart';
+import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/update/update_track.dart';
+import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/l10n/formatters.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -86,5 +93,71 @@ void main() {
         en.remoteDeviceStatus(RemoteDeviceStatus.neverActive), 'Never active');
     expect(en.remoteDeviceStatus(RemoteDeviceStatus.active), 'Active');
     expect(en.remoteDeviceStatus(RemoteDeviceStatus.inactive), 'Inactive');
+  });
+
+  test('enum names keep their English labels', () async {
+    final en = await l10n('en');
+    expect(en.themePresetName(ThemePreset.projectionBooth), 'Projection Booth');
+    expect(en.themePresetName(ThemePreset.oledBlack), 'OLED Black');
+    expect(en.themePresetName(ThemePreset.slate), 'Slate');
+    expect(en.themePresetName(ThemePreset.macos), 'macOS');
+    expect(en.glassMaterialName(GlassMaterial.liquid), 'Liquid Glass');
+    expect(en.glassMaterialName(GlassMaterial.frosted), 'Frosted');
+    expect(en.subtitleSizeName(SubtitleSize.small), 'Small');
+    expect(en.subtitleSizeName(SubtitleSize.medium), 'Medium');
+    expect(en.subtitleSizeName(SubtitleSize.large), 'Large');
+    expect(en.subtitleSizeName(SubtitleSize.extraLarge), 'Extra large');
+    expect(en.updateTrackName(UpdateTrack.stable), 'Stable');
+    expect(en.updateTrackName(UpdateTrack.beta), 'Beta');
+    expect(en.updateTrackName(UpdateTrack.dev), 'Dev');
+    expect(en.updateTrackDescription(UpdateTrack.stable),
+        'Released builds. The default.');
+    expect(en.updateTrackDescription(UpdateTrack.beta),
+        'Prerelease builds, a few weeks ahead of stable and less tested.');
+    expect(en.updateTrackDescription(UpdateTrack.dev),
+        'Builds straight from development, published when a maintainer asks for one. Expect rough edges.');
+    expect(en.qualityName(QualityRung.auto), 'Auto');
+    expect(en.qualityName(QualityRung.original), 'Original');
+    expect(
+        en.qualityName(const QualityRung(label: '720p', height: 720)), '720p');
+  });
+
+  test('fullscreenFailureMessage distinguishes exit from enter', () async {
+    final en = await l10n('en');
+    for (final cause in FullscreenFailureCause.values) {
+      final exit = cause == FullscreenFailureCause.documentExitRejected ||
+          cause == FullscreenFailureCause.videoExitFailed;
+      expect(en.fullscreenFailureMessage(FullscreenFailure(cause)),
+          exit ? 'Could not exit fullscreen' : 'Could not enter fullscreen');
+    }
+  });
+
+  test('updateErrorMessage formats a track that is not published', () async {
+    final en = await l10n('en');
+    expect(
+      en.updateErrorMessage(const UpdateState(
+          trackNotPublished: TrackNotPublished(UpdateTrack.dev))),
+      'Dev builds are not published for this platform yet.',
+    );
+    expect(
+      en.updateErrorMessage(const UpdateState(
+          trackNotPublished: TrackNotPublished(UpdateTrack.dev, macos: true))),
+      'Dev builds are not published for macOS yet.',
+    );
+    expect(en.updateErrorMessage(const UpdateState(error: 'boom')), 'boom');
+    expect(en.updateErrorMessage(const UpdateState()), isNull);
+  });
+
+  test('enum names translate', () async {
+    for (final tag in ['es', 'pt_BR']) {
+      final t = await l10n(tag);
+      expect(t.updateTrackName(UpdateTrack.stable), isNot('Stable'));
+      expect(t.subtitleSizeName(SubtitleSize.large), isNot('Large'));
+      expect(t.glassMaterialName(GlassMaterial.frosted), isNot('Frosted'));
+      expect(
+          t.fullscreenFailureMessage(
+              const FullscreenFailure(FullscreenFailureCause.noVideoElement)),
+          isNot('Could not enter fullscreen'));
+    }
   });
 }

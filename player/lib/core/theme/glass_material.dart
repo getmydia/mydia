@@ -10,12 +10,8 @@ import '../player/input_capabilities.dart';
 /// Glass material itself. [frosted] is the Material look with frosted
 /// panels. Native chrome drawn by the Runners is not affected.
 enum GlassMaterial {
-  liquid('Liquid Glass'),
-  frosted('Frosted');
-
-  const GlassMaterial(this.label);
-
-  final String label;
+  liquid,
+  frosted;
 
   /// Liquid Glass is never offered on TV: the D-pad focus styling and the
   /// 10-foot layout were not designed against glass controls. [isTv] null

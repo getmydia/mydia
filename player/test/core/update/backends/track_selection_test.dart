@@ -68,7 +68,9 @@ void main() {
 
     final outcome = await backend.selectTrack(UpdateTrack.dev);
 
-    expect(outcome, isA<TrackSwitchUnsupported>());
+    expect(outcome, isA<TrackSwitchNotPublished>());
+    expect((outcome as TrackSwitchNotPublished).track, UpdateTrack.dev);
+    expect(outcome.macos, isFalse);
     expect(backend.currentTrack, UpdateTrack.stable);
   });
 

@@ -21,7 +21,7 @@ class ThemePresetSettingsRow extends ConsumerWidget {
       icon: Icons.palette_outlined,
       title: context.l10n.settingsThemeTitle,
       subtitle: context.l10n.settingsThemeSubtitle,
-      value: preset.label,
+      value: context.l10n.themePresetName(preset),
       onTap: () async {
         final picked = await showThemePresetPicker(
           context,

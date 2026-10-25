@@ -25,15 +25,14 @@ const double kSubtitleMinFontSize = 18;
 const double _referenceArea = 1920 * 1080;
 
 enum SubtitleSize {
-  small(0.8, 'Small'),
-  medium(1.0, 'Medium'),
-  large(1.25, 'Large'),
-  extraLarge(1.5, 'Extra large');
+  small(0.8),
+  medium(1.0),
+  large(1.25),
+  extraLarge(1.5);
 
-  const SubtitleSize(this.multiplier, this.label);
+  const SubtitleSize(this.multiplier);
 
   final double multiplier;
-  final String label;
 
   /// The next smaller preset, or null at [small].
   SubtitleSize? get smaller => index == 0 ? null : values[index - 1];

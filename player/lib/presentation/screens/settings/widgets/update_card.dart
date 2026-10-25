@@ -52,7 +52,7 @@ class UpdateCard extends ConsumerWidget {
       // only signal that anything happened at all. Without it here the row
       // presses, waits, and reports nothing, which reads as the check doing
       // nothing rather than failing.
-      final message = state.notice ?? state.error;
+      final message = state.notice ?? context.l10n.updateErrorMessage(state);
       if (message == null) {
         return const SizedBox.shrink();
       }
@@ -68,7 +68,7 @@ class UpdateCard extends ConsumerWidget {
                 message,
                 style: TextStyle(
                   fontSize: 13,
-                  color: state.error != null
+                  color: state.hasError
                       ? Theme.of(context).colorScheme.error
                       : palette.textSecondary,
                 ),
@@ -147,10 +147,10 @@ class UpdateCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                if (state.error != null) ...[
+                if (state.hasError) ...[
                   const SizedBox(height: 8),
                   Text(
-                    state.error!,
+                    context.l10n.updateErrorMessage(state) ?? '',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.error,

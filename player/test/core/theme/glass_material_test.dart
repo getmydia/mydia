@@ -81,9 +81,4 @@ void main() {
           GlassMaterial.frosted);
     });
   });
-
-  test('labels', () {
-    expect(GlassMaterial.liquid.label, 'Liquid Glass');
-    expect(GlassMaterial.frosted.label, 'Frosted');
-  });
 }

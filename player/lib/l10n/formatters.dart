@@ -6,6 +6,13 @@ library;
 
 import 'package:intl/intl.dart';
 
+import '../core/player/fullscreen/fullscreen_failure.dart';
+import '../core/player/subtitle_size.dart';
+import '../core/theme/glass_material.dart';
+import '../core/theme/theme_preset.dart';
+import '../core/update/update_provider.dart';
+import '../core/update/update_track.dart';
+import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
 import 'gen/app_localizations.dart';
 
@@ -53,4 +60,69 @@ extension AppFormatters on AppLocalizations {
         RemoteDeviceStatus.active => settingsDevicesStatusActive,
         RemoteDeviceStatus.inactive => settingsDevicesStatusInactive,
       };
+
+  String themePresetName(ThemePreset preset) => switch (preset) {
+        ThemePreset.projectionBooth => themePresetProjectionBooth,
+        ThemePreset.oledBlack => themePresetOledBlack,
+        ThemePreset.slate => themePresetSlate,
+        ThemePreset.macos => themePresetMacos,
+      };
+
+  String glassMaterialName(GlassMaterial material) => switch (material) {
+        GlassMaterial.liquid => glassMaterialLiquid,
+        GlassMaterial.frosted => glassMaterialFrosted,
+      };
+
+  String subtitleSizeName(SubtitleSize size) => switch (size) {
+        SubtitleSize.small => subtitleSizeSmall,
+        SubtitleSize.medium => subtitleSizeMedium,
+        SubtitleSize.large => subtitleSizeLarge,
+        SubtitleSize.extraLarge => subtitleSizeExtraLarge,
+      };
+
+  String updateTrackName(UpdateTrack track) => switch (track) {
+        UpdateTrack.stable => updateTrackStable,
+        UpdateTrack.beta => updateTrackBeta,
+        UpdateTrack.dev => updateTrackDev,
+      };
+
+  String updateTrackDescription(UpdateTrack track) => switch (track) {
+        UpdateTrack.stable => updateTrackStableDescription,
+        UpdateTrack.beta => updateTrackBetaDescription,
+        UpdateTrack.dev => updateTrackDevDescription,
+      };
+
+  /// Auto and Original are words; a capped rung is its own label, a
+  /// resolution such as "720p" that reads the same in every language.
+  String qualityName(QualityRung rung) {
+    if (rung.isAuto) return qualityAuto;
+    if (rung.isOriginal) return qualityOriginal;
+    return rung.label;
+  }
+
+  /// The toast for a refused fullscreen request. A refused exit says so,
+  /// because "could not enter" would describe the opposite of what was asked.
+  String fullscreenFailureMessage(FullscreenFailure failure) =>
+      switch (failure.cause) {
+        FullscreenFailureCause.documentExitRejected ||
+        FullscreenFailureCause.videoExitFailed =>
+          fullscreenExitFailed,
+        FullscreenFailureCause.documentEnabledProbeFailed ||
+        FullscreenFailureCause.videoSupportProbeFailed ||
+        FullscreenFailureCause.documentRequestRejected ||
+        FullscreenFailureCause.playerNotWebPlayer ||
+        FullscreenFailureCause.noVideoElement ||
+        FullscreenFailureCause.videoEnterFailed =>
+          fullscreenEnterFailed,
+      };
+
+  /// The error line under the update card, or null when there is none.
+  String? updateErrorMessage(UpdateState state) {
+    final unpublished = state.trackNotPublished;
+    if (unpublished == null) return state.error;
+    final track = updateTrackName(unpublished.track);
+    return unpublished.macos
+        ? updateTrackNotPublishedMacos(track)
+        : updateTrackNotPublished(track);
+  }
 }

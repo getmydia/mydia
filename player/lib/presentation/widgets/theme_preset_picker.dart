@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/palette.dart';
 import '../../core/theme/system_accent.dart';
 import '../../core/theme/theme_preset.dart';
+import '../../l10n/l10n.dart';
 import 'osd_dialog.dart';
 
 /// Shows the presets offered here and returns the one picked, or null if the
@@ -34,7 +35,7 @@ Future<ThemePreset?> showThemePresetPicker(
                     autofocus: preset == current,
                     leading: _Swatch(preset: preset),
                     title: Text(
-                      preset.label,
+                      context.l10n.themePresetName(preset),
                       style: TextStyle(
                         color: palette.textPrimary,
                         fontWeight: preset == current

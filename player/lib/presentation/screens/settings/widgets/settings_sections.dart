@@ -69,7 +69,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
           icon: Icons.hd,
           title: l10n.settingsDefaultQualityTitle,
           subtitle: l10n.settingsDefaultQualitySubtitle,
-          value: current == null ? null : quality.label,
+          value: current == null ? null : l10n.qualityName(quality),
           onTap: current == null
               ? null
               : () => _pickQuality(context, ref, quality),

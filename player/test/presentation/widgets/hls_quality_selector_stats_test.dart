@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/presentation/widgets/hls_quality_selector.dart';
 
@@ -10,6 +11,8 @@ Future<void> openPicker(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(

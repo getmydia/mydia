@@ -119,7 +119,7 @@ class TrackPickerRow extends StatelessWidget {
 
     return l10n.settingsReleaseTrackDowngradeNotice(
       installedVersion,
-      currentTrack.label,
+      l10n.updateTrackName(currentTrack),
     );
   }
 
@@ -185,7 +185,7 @@ class _TrackOption extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        track.label,
+                        context.l10n.updateTrackName(track),
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w500,
@@ -196,7 +196,7 @@ class _TrackOption extends StatelessWidget {
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        track.description,
+                        context.l10n.updateTrackDescription(track),
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.35,

@@ -57,11 +57,6 @@ void main() {
       expect(SubtitleSize.extraLarge.larger, isNull);
       expect(SubtitleSize.extraLarge.smaller, SubtitleSize.large);
     });
-
-    test('labels', () {
-      expect(SubtitleSize.values.map((s) => s.label),
-          ['Small', 'Medium', 'Large', 'Extra large']);
-    });
   });
 
   test('subtitleViewConfigurationFor keeps media_kit style and padding', () {
