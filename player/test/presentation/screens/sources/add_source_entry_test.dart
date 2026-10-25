@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/router/app_router.dart' show addMydiaRouteRedirect;
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
@@ -30,7 +31,11 @@ void main() {
         authServiceProvider
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ));
     await tester.pumpAndSettle();
 
@@ -132,7 +137,11 @@ void main() {
         authServiceProvider
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
       ],
-      child: const MaterialApp(home: LoginScreen(reauthAccountId: 'mabc')),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: LoginScreen(reauthAccountId: 'mabc'),
+      ),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Add a Mydia server'), findsOneWidget);

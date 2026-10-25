@@ -7,6 +7,7 @@ import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/update/update_provider.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
@@ -48,7 +49,8 @@ class SettingsScreen extends ConsumerWidget {
   static PreferredSizeWidget header(BuildContext context) {
     return WindowTitleBar(
       height: WindowTitleRow.heightOf(context),
-      title: Text('Settings', style: Theme.of(context).textTheme.titleLarge),
+      title: Text(context.l10n.settingsTitle,
+          style: Theme.of(context).textTheme.titleLarge),
     );
   }
 
@@ -191,11 +193,11 @@ class _ManageSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsSection(
-      label: 'Manage',
+      label: context.l10n.settingsManageSection,
       children: [
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
-          title: 'Diagnostics',
+          title: context.l10n.settingsDiagnostics,
           subtitle: connection.label,
           subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => SettingsNavScope.of(context).openDiagnostics(),

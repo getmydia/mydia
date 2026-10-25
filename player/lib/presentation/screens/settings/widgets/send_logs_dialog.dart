@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/logging/log_uploader.dart';
 import '../../../../core/player/input_capabilities.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/focus_highlight.dart';
 import '../../../widgets/toast/toaster.dart';
 import '../../../widgets/glass/glass_dialog.dart';
@@ -85,8 +86,8 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
         autofocus: _tv,
         textInputAction: _tv ? TextInputAction.done : null,
         onSubmitted: _tv ? (_) => _stopEditingNote() : null,
-        decoration: const InputDecoration(
-          labelText: 'What went wrong? (optional)',
+        decoration: InputDecoration(
+          labelText: context.l10n.settingsDiagnosticsNoteLabel,
         ),
       );
 
@@ -109,7 +110,9 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  note.isEmpty ? 'Add a note (optional)' : note,
+                  note.isEmpty
+                      ? context.l10n.settingsDiagnosticsNoteEmpty
+                      : note,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -141,7 +144,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
         _phase = _Phase.failed;
         _error = e is LogUploadException
             ? e.message
-            : 'Could not reach the relay. Check the connection and try again.';
+            : context.l10n.settingsDiagnosticsRelayUnreachable;
       });
     }
   }
@@ -149,12 +152,17 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: _code!));
     if (!mounted) return;
-    showToast(context, 'Code copied', kind: ToastKind.success);
+    showToast(
+      context,
+      context.l10n.settingsDiagnosticsCodeCopied,
+      kind: ToastKind.success,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final editingNote = _phase == _Phase.editing && _editingNote;
+    final l10n = context.l10n;
     return PopScope(
       // Blocked while sending: once the code or the error is on screen, Done,
       // Close and Retry are how this closes, and a back press should work
@@ -165,7 +173,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
         if (!didPop && editingNote) _stopEditingNote();
       },
       child: GlassDialog(
-        title: const Text('Send logs'),
+        title: Text(l10n.settingsDiagnosticsSendLogsTitle),
         content: switch (_phase) {
           _Phase.editing => _tv && !_editingNote ? _noteRow() : _noteField(),
           _Phase.sending => const SizedBox(
@@ -176,7 +184,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Share this code with the Mydia developers:'),
+                Text(l10n.settingsDiagnosticsShareCode),
                 const SizedBox(height: 8),
                 SelectableText(
                   _code!,
@@ -196,7 +204,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
           _Phase.editing => [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(l10n.commonCancel),
               ),
               FilledButton(
                 key: const Key('diagnostics-send-logs-confirm'),
@@ -204,7 +212,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
                 // fallback does, so a remote press lands on Send.
                 autofocus: true,
                 onPressed: _send,
-                child: const Text('Send'),
+                child: Text(l10n.commonSend),
               ),
             ],
           _Phase.sending => const <Widget>[],
@@ -212,22 +220,22 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
               TextButton(
                 key: const Key('diagnostics-report-copy'),
                 onPressed: _copy,
-                child: const Text('Copy'),
+                child: Text(l10n.commonCopy),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Done'),
+                child: Text(l10n.commonDone),
               ),
             ],
           _Phase.failed => [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+                child: Text(l10n.commonClose),
               ),
               FilledButton(
                 key: const Key('diagnostics-report-retry'),
                 onPressed: _send,
-                child: const Text('Retry'),
+                child: Text(l10n.commonRetry),
               ),
             ],
         },

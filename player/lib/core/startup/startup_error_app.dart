@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/l10n.dart';
 import '../theme/app_theme.dart';
 import '../crash_reporting/startup_report_controller.dart';
 
@@ -21,9 +22,8 @@ class StartupErrorApp extends StatelessWidget {
   /// the lock on the shared data directory. Specifically detected, so the
   /// message can be user-actionable instead of a generic error dump.
   factory StartupErrorApp.alreadyRunning(Object error) => StartupErrorApp(
-        title: 'Mydia Player is already running',
-        message: 'Another window of Mydia Player is already open on this '
-            'computer. Quit it, then reopen this one.',
+        title: (l10n) => l10n.startupAlreadyRunningTitle,
+        message: (l10n) => l10n.startupAlreadyRunningMessage,
         details: '$error',
         key: const Key('startup-error-already-running'),
       );
@@ -36,15 +36,19 @@ class StartupErrorApp extends StatelessWidget {
     StartupReportController? report,
   }) =>
       StartupErrorApp(
-        title: "Mydia Player couldn't start",
-        message: 'Something went wrong while starting the app.',
+        title: (l10n) => l10n.startupGenericTitle,
+        message: (l10n) => l10n.startupGenericMessage,
         details: '$error',
         report: report,
         key: const Key('startup-error-generic'),
       );
 
-  final String title;
-  final String message;
+  /// Selectors rather than text: the factories run before any
+  /// [Localizations] exists, so the strings are looked up in [build].
+  final String Function(AppLocalizations) title;
+  final String Function(AppLocalizations) message;
+
+  /// Raw error text, shown as is.
   final String? details;
 
   /// Drives the Send report button. Null hides it: on web, where nothing is
@@ -55,50 +59,58 @@ class StartupErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final report = this.report;
     return MaterialApp(
-      title: 'Mydia Player',
+      title: 'Mydia Player', // l10n-ignore: product name
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 56),
-                const SizedBox(height: 16),
-                Text(
-                  title,
+      // Follows the device locale: no settings exist yet at this point.
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      // This widget's own context sits above Localizations.
+      home: Builder(builder: (context) => _buildBody(context.l10n, report)),
+    );
+  }
+
+  Widget _buildBody(AppLocalizations l10n, StartupReportController? report) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 56),
+              const SizedBox(height: 16),
+              Text(
+                title(l10n),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message(l10n),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              if (details != null) ...[
+                const SizedBox(height: 24),
+                SelectableText(
+                  details!,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    color: Colors.white38,
+                    fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                if (details != null) ...[
-                  const SizedBox(height: 24),
-                  SelectableText(
-                    details!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-                if (report != null) ...[
-                  const SizedBox(height: 24),
-                  _SendReportButton(controller: report),
-                ],
               ],
-            ),
+              if (report != null) ...[
+                const SizedBox(height: 24),
+                _SendReportButton(controller: report),
+              ],
+            ],
           ),
         ),
       ),
@@ -117,10 +129,11 @@ class _SendReportButton extends StatelessWidget {
     return ValueListenableBuilder<StartupReportState>(
       valueListenable: controller,
       builder: (context, state, _) {
+        final l10n = context.l10n;
         final (icon, label, onPressed) = switch (state) {
           StartupReportState.idle => (
               const Icon(Icons.send_outlined),
-              'Send report',
+              l10n.startupSendReport,
               controller.send,
             ),
           StartupReportState.sending => (
@@ -128,17 +141,17 @@ class _SendReportButton extends StatelessWidget {
                 dimension: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              'Sending report',
+              l10n.startupSendingReport,
               null,
             ),
           StartupReportState.sent => (
               const Icon(Icons.check),
-              'Report sent',
+              l10n.startupReportSent,
               null,
             ),
           StartupReportState.failed => (
               const Icon(Icons.refresh),
-              "Couldn't send. Try again",
+              l10n.startupReportFailed,
               controller.send,
             ),
         };

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -12,6 +13,8 @@ Future<void> _pump(
   // only place that wires state.
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ListView(
           children: [

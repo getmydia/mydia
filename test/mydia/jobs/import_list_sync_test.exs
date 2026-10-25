@@ -40,7 +40,7 @@ defmodule Mydia.Jobs.ImportListSyncTest do
     %Oban.Job{args: args, attempt: 1, max_attempts: 3}
   end
 
-  defp tmdb_trending_list(bypass, attrs \\ %{}) do
+  defp point_relay_at(bypass) do
     previous_url = Application.get_env(:mydia, :metadata_relay_url)
     Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
 
@@ -50,6 +50,10 @@ defmodule Mydia.Jobs.ImportListSyncTest do
         value -> Application.put_env(:mydia, :metadata_relay_url, value)
       end
     end)
+  end
+
+  defp tmdb_trending_list(bypass, attrs \\ %{}) do
+    point_relay_at(bypass)
 
     {:ok, list} =
       %{
@@ -86,6 +90,51 @@ defmodule Mydia.Jobs.ImportListSyncTest do
   end
 
   describe "perform/1" do
+    test "marks a stored tmdb_list list synced (issue #1251)" do
+      bypass = Bypass.open()
+      point_relay_at(bypass)
+
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "My TMDB List",
+          type: "tmdb_list",
+          media_type: "movie",
+          enabled: true,
+          list_url: "8709058"
+        })
+
+      Bypass.stub(bypass, "GET", "/tmdb/list/8709058", fn conn ->
+        body = %{
+          "items" => [
+            %{
+              "id" => 333,
+              "title" => "Lantern Tide",
+              "release_date" => "2020-02-02",
+              "media_type" => "movie"
+            },
+            %{
+              "id" => 444,
+              "title" => "Copper Meridian",
+              "release_date" => "2019-09-09",
+              "media_type" => "movie"
+            }
+          ]
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert :ok = ImportListSync.perform(job(%{"import_list_id" => list.id}))
+
+      reloaded = ImportLists.get_import_list!(list.id)
+      assert reloaded.last_synced_at != nil
+      assert reloaded.sync_error == nil
+      assert reloaded.config["list_url"] == "8709058"
+      assert length(ImportLists.list_import_list_items(reloaded)) == 2
+    end
+
     test "returns :ok without error when the import list no longer exists" do
       assert :ok = ImportListSync.perform(job(%{"import_list_id" => Ecto.UUID.generate()}))
     end

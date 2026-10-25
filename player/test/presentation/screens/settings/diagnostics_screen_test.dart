@@ -9,6 +9,7 @@ import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/diagnostics_sharing_section.dart';
 
@@ -45,6 +46,8 @@ Future<void> _pump(
         ),
       ],
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         home: DiagnosticsScreen(),
       ),

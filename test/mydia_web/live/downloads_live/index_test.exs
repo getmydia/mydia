@@ -221,6 +221,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       html = view |> element("#clear-completed-form") |> render_submit(%{})
 
       assert html =~ "Clearing 1 completed download"
+      refute html =~ "Clearing 1 completed downloads"
       refute html =~ "deleting their files"
       assert Downloads.count_completed() == 0
       assert_enqueued(worker: Mydia.Jobs.RemoveDownload)
@@ -804,7 +805,9 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       render_click(view, "toggle_select", %{"id" => stale_id})
 
       # The operator asked for it removed and it is removed, so it counts.
-      assert render_click(view, "batch_delete", %{}) =~ "Removing 1 download"
+      html = render_click(view, "batch_delete", %{})
+      assert html =~ "Removing 1 download"
+      refute html =~ "Removing 1 downloads"
     end
 
     test "batch_retry does not count an already-deleted row", %{conn: conn, stale_id: stale_id} do

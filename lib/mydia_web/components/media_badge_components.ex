@@ -89,7 +89,7 @@ defmodule MydiaWeb.MediaBadgeComponents do
   def format_release_date(nil), do: nil
 
   def format_release_date(%Date{} = date),
-    do: Calendar.strftime(date, "%b %-d, %Y", DateNames.strftime_opts())
+    do: DateNames.short_date_unpadded(date)
 
   @doc """
   The release date carried by fetched metadata: `release_date` for a movie,

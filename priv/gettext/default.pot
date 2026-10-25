@@ -2614,7 +2614,7 @@ msgstr ""
 msgid "All libraries"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.html.heex:412
+#: lib/mydia_web/live/dashboard_live/index.html.heex:404
 #, elixir-autogen, elixir-format
 msgid "All sections are currently hidden. Choose which widgets to show to customize your dashboard."
 msgstr ""
@@ -2963,7 +2963,7 @@ msgstr ""
 msgid "Blocked"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.html.heex:435
+#: lib/mydia_web/live/dashboard_live/index.html.heex:427
 #, elixir-autogen, elixir-format
 msgid "Browse Discover"
 msgstr ""
@@ -3428,7 +3428,7 @@ msgstr ""
 msgid "Comfortable"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.html.heex:374
+#: lib/mydia_web/live/dashboard_live/index.html.heex:370
 #, elixir-autogen, elixir-format
 msgid "Coming Soon"
 msgstr ""
@@ -4438,7 +4438,7 @@ msgid "Edit Collection"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:14
-#: lib/mydia_web/live/dashboard_live/index.html.heex:421
+#: lib/mydia_web/live/dashboard_live/index.html.heex:413
 #, elixir-autogen, elixir-format
 msgid "Edit Home"
 msgstr ""
@@ -5172,7 +5172,7 @@ msgid "Get the app"
 msgstr ""
 
 #: lib/mydia_web/controllers/page_html/home.html.heex:57
-#: lib/mydia_web/live/dashboard_live/index.html.heex:431
+#: lib/mydia_web/live/dashboard_live/index.html.heex:423
 #, elixir-autogen, elixir-format
 msgid "Getting Started"
 msgstr ""
@@ -10186,7 +10186,7 @@ msgstr ""
 msgid "Your Activity"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.html.heex:410
+#: lib/mydia_web/live/dashboard_live/index.html.heex:402
 #, elixir-autogen, elixir-format
 msgid "Your Home is empty"
 msgstr ""
@@ -10212,7 +10212,7 @@ msgstr ""
 msgid "Your media library is empty. Start by adding movies or TV shows!"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.html.heex:433
+#: lib/mydia_web/live/dashboard_live/index.html.heex:425
 #, elixir-autogen, elixir-format
 msgid "Your media library is empty. Start by adding movies or TV shows."
 msgstr ""
@@ -11093,145 +11093,145 @@ msgctxt "monitoring"
 msgid "not monitored"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:26
+#: lib/mydia_web/date_names.ex:58
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "April"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:30
+#: lib/mydia_web/date_names.ex:62
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "August"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:34
+#: lib/mydia_web/date_names.ex:66
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "December"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:24
+#: lib/mydia_web/date_names.ex:56
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "February"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:23
+#: lib/mydia_web/date_names.ex:55
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "January"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:29
+#: lib/mydia_web/date_names.ex:61
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "July"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:28
+#: lib/mydia_web/date_names.ex:60
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "June"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:25
+#: lib/mydia_web/date_names.ex:57
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "March"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:27
+#: lib/mydia_web/date_names.ex:59
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "May"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:33
+#: lib/mydia_web/date_names.ex:65
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "November"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:32
+#: lib/mydia_web/date_names.ex:64
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "October"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:31
+#: lib/mydia_web/date_names.ex:63
 #, elixir-autogen, elixir-format
 msgctxt "month"
 msgid "September"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:39
+#: lib/mydia_web/date_names.ex:71
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Apr"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:43
+#: lib/mydia_web/date_names.ex:75
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Aug"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:47
+#: lib/mydia_web/date_names.ex:79
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Dec"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:37
+#: lib/mydia_web/date_names.ex:69
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Feb"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:36
+#: lib/mydia_web/date_names.ex:68
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Jan"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:42
+#: lib/mydia_web/date_names.ex:74
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Jul"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:41
+#: lib/mydia_web/date_names.ex:73
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Jun"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:38
+#: lib/mydia_web/date_names.ex:70
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Mar"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:40
+#: lib/mydia_web/date_names.ex:72
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "May"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:46
+#: lib/mydia_web/date_names.ex:78
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Nov"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:45
+#: lib/mydia_web/date_names.ex:77
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Oct"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:44
+#: lib/mydia_web/date_names.ex:76
 #, elixir-autogen, elixir-format
 msgctxt "month abbreviation"
 msgid "Sep"
@@ -11543,86 +11543,114 @@ msgctxt "upload speed"
 msgid "Upload"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:53
+#: lib/mydia_web/date_names.ex:85
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Friday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:49
+#: lib/mydia_web/date_names.ex:81
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Monday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:54
+#: lib/mydia_web/date_names.ex:86
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Saturday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:55
+#: lib/mydia_web/date_names.ex:87
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Sunday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:52
+#: lib/mydia_web/date_names.ex:84
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Thursday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:50
+#: lib/mydia_web/date_names.ex:82
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Tuesday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:51
+#: lib/mydia_web/date_names.ex:83
 #, elixir-autogen, elixir-format
 msgctxt "weekday"
 msgid "Wednesday"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:61
+#: lib/mydia_web/date_names.ex:93
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Fri"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:57
+#: lib/mydia_web/date_names.ex:89
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Mon"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:62
+#: lib/mydia_web/date_names.ex:94
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Sat"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:63
+#: lib/mydia_web/date_names.ex:95
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Sun"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:60
+#: lib/mydia_web/date_names.ex:92
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Thu"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:58
+#: lib/mydia_web/date_names.ex:90
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Tue"
 msgstr ""
 
-#: lib/mydia_web/date_names.ex:59
+#: lib/mydia_web/date_names.ex:91
 #, elixir-autogen, elixir-format
 msgctxt "weekday abbreviation"
 msgid "Wed"
+msgstr ""
+
+#. strftime pattern: %B month, %b short month, %d day, %-d day without padding, %Y year, %A weekday, %a short weekday. Reorder or add words, keep the directives.
+#: lib/mydia_web/date_names.ex:38
+#, elixir-autogen, elixir-format
+msgctxt "date format"
+msgid "%A, %B %-d"
+msgstr ""
+
+#. strftime pattern: %B month, %b short month, %d day, %-d day without padding, %Y year, %A weekday, %a short weekday. Reorder or add words, keep the directives.
+#: lib/mydia_web/date_names.ex:32
+#, elixir-autogen, elixir-format
+msgctxt "date format"
+msgid "%B %Y"
+msgstr ""
+
+#. strftime pattern: %B month, %b short month, %d day, %-d day without padding, %Y year, %A weekday, %a short weekday. Reorder or add words, keep the directives.
+#: lib/mydia_web/date_names.ex:50
+#, elixir-autogen, elixir-format
+msgctxt "date format"
+msgid "%b %-d, %Y"
+msgstr ""
+
+#. strftime pattern: %B month, %b short month, %d day, %-d day without padding, %Y year, %A weekday, %a short weekday. Reorder or add words, keep the directives.
+#: lib/mydia_web/date_names.ex:44
+#, elixir-autogen, elixir-format
+msgctxt "date format"
+msgid "%b %d, %Y"
 msgstr ""

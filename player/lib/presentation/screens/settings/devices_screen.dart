@@ -7,6 +7,7 @@ import '../../../core/theme/palette.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
+import '../../../l10n/l10n.dart';
 import 'devices_controller.dart';
 
 /// One Mydia instance's devices, embedded in its settings screen.
@@ -24,27 +25,25 @@ class DevicesSection extends ConsumerWidget {
     if (device.isRevoked) return;
 
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => GlassDialog(
         destructive: true,
-        title: const Text('Revoke Device'),
-        content: Text(
-          'Are you sure you want to revoke "${device.deviceName}"? '
-          'This device will no longer be able to access your account.',
-        ),
+        title: Text(l10n.settingsDevicesRevokeTitle),
+        content: Text(l10n.settingsDevicesRevokeConfirm(device.deviceName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: scheme.error,
             ),
-            child: const Text('Revoke'),
+            child: Text(l10n.settingsDevicesRevoke),
           ),
         ],
       ),
@@ -59,13 +58,19 @@ class DevicesSection extends ConsumerWidget {
         if (context.mounted) {
           showToast(
             context,
-            success ? 'Device revoked successfully' : 'Failed to revoke device',
+            success
+                ? l10n.settingsDevicesRevokeSucceeded
+                : l10n.settingsDevicesRevokeFailed,
             kind: success ? ToastKind.success : ToastKind.error,
           );
         }
       } catch (e) {
         if (context.mounted) {
-          showToast(context, 'Error: ${e.toString()}', kind: ToastKind.error);
+          showToast(
+            context,
+            l10n.settingsDevicesRevokeError(e.toString()),
+            kind: ToastKind.error,
+          );
         }
       }
     }
@@ -82,7 +87,7 @@ class DevicesSection extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                'Devices',
+                context.l10n.settingsDevicesTitle,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
@@ -92,7 +97,7 @@ class DevicesSection extends ConsumerWidget {
               onPressed: () => ref
                   .read(devicesControllerProvider(sourceId).notifier)
                   .refresh(),
-              tooltip: 'Refresh',
+              tooltip: context.l10n.commonRefresh,
             ),
           ],
         ),
@@ -214,7 +219,7 @@ class DeviceCard extends StatelessWidget {
                   Expanded(
                     child: _InfoRow(
                       icon: Icons.access_time_rounded,
-                      label: 'Last seen',
+                      label: context.l10n.settingsDevicesLastSeen,
                       value: device.lastSeenRelative,
                     ),
                   ),
@@ -222,7 +227,7 @@ class DeviceCard extends StatelessWidget {
                   Expanded(
                     child: _InfoRow(
                       icon: Icons.calendar_today_rounded,
-                      label: 'Added',
+                      label: context.l10n.settingsDevicesAdded,
                       value: _formatDate(device.createdAt),
                     ),
                   ),
@@ -237,7 +242,7 @@ class DeviceCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onRevoke,
                     icon: const Icon(Icons.block_rounded, size: 18),
-                    label: const Text('Revoke Device'),
+                    label: Text(context.l10n.settingsDevicesRevokeTitle),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: scheme.error,
                       side: BorderSide(
@@ -296,11 +301,12 @@ class _StatusBadge extends StatelessWidget {
             ? AppColors.success
             : scheme.onSurfaceVariant;
 
+    final l10n = context.l10n;
     final text = device.isRevoked
-        ? 'Revoked'
+        ? l10n.settingsDevicesStatusRevoked
         : device.isRecentlyActive
-            ? 'Active'
-            : 'Inactive';
+            ? l10n.settingsDevicesStatusActive
+            : l10n.settingsDevicesStatusInactive;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -398,7 +404,7 @@ class _EmptyView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'No devices',
+              context.l10n.settingsDevicesEmptyTitle,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -406,7 +412,7 @@ class _EmptyView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'No devices are currently paired with your account',
+              context.l10n.settingsDevicesEmptyBody,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -448,7 +454,7 @@ class _ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Failed to load devices',
+              context.l10n.settingsDevicesLoadFailed,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),

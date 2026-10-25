@@ -73,7 +73,7 @@
         </h3>
         <p class="text-base-content/50">
           {gettext("No monitored media has releases scheduled for %{month}",
-            month: format_month_year(@selected_month, @selected_year)
+            month: MydiaWeb.DateNames.month_year(Date.new!(@selected_year, @selected_month, 1))
           )}
         </p>
       </div>
@@ -161,7 +161,7 @@
               "text-lg font-semibold mb-3",
               date == @current_date && "text-primary"
             ]}>
-              {Calendar.strftime(date, "%A, %B %-d", MydiaWeb.DateNames.strftime_opts())}
+              {MydiaWeb.DateNames.weekday_month_day(date)}
               <%= if date == @current_date do %>
                 <span class="badge badge-primary badge-sm ml-2">{gettext("Today")}</span>
               <% end %>

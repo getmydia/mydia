@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/update_track.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/widgets/track_picker_row.dart';
 
 void main() {
   Widget host(Widget child) => ProviderScope(
-        child: MaterialApp(home: Scaffold(body: child)),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: child),
+        ),
       );
 
   testWidgets('renders one option per available track', (tester) async {

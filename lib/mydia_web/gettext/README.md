@@ -3,6 +3,8 @@
 The Phoenix UI is translated with Gettext. Translations live in
 `priv/gettext/<locale>/LC_MESSAGES/{default,errors}.po` and are written on
 Weblate (see `TRANSLATING.md`). This file is for developers writing UI code.
+The player app is translated separately, with ARB files: see
+`player/docs/l10n.md`.
 
 ## Writing translatable text
 

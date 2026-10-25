@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'l10n/l10n.dart';
 import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
@@ -16,6 +17,7 @@ import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/ambient_tint/ambient_tint.dart';
+import 'core/settings/locale_setting.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/glass_material.dart';
 import 'core/theme/theme_providers.dart';
@@ -532,6 +534,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       ref.watch(paletteProvider),
       liquid: ref.watch(glassMaterialSettingProvider) == GlassMaterial.liquid,
     );
+    final locale = ref.watch(localeSettingProvider);
     // Show loading screen while the stored sources are loading
     if (ref.watch(sourcesLoadingProvider)) {
       debugPrint('[MyApp] Showing loading screen');
@@ -540,14 +543,22 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: theme,
-        home: const Scaffold(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Loading...', style: TextStyle(color: Colors.white)),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) => Text(
+                    context.l10n.appLoading,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
               ],
             ),
           ),
@@ -564,6 +575,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: theme,
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.

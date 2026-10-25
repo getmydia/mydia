@@ -1,0 +1,643 @@
+{
+  "@@locale": "en",
+  "appLoading": "Loading...",
+  "@appLoading": {
+    "description": "Shown under a spinner while saved sources load at startup."
+  },
+  "settingsLanguageTitle": "Language",
+  "@settingsLanguageTitle": {
+    "description": "Title of the Appearance settings row and of the language picker dialog."
+  },
+  "settingsLanguageSubtitle": "Interface language on this device",
+  "@settingsLanguageSubtitle": {
+    "description": "Subtitle of the language row in Appearance settings. The choice is stored per device."
+  },
+  "settingsLanguageSystemDefault": "System default",
+  "@settingsLanguageSystemDefault": {
+    "description": "Language picker option (and the row's value) that follows the device language instead of a fixed one."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Button that dismisses a dialog without doing anything."
+  },
+  "commonContinue": "Continue",
+  "@commonContinue": {
+    "description": "Button that confirms a dialog and goes ahead with the action it describes."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button or tooltip that closes a dialog or panel."
+  },
+  "commonBack": "Back",
+  "@commonBack": {
+    "description": "Tooltip of a back-arrow button that returns to the previous page."
+  },
+  "commonRetry": "Retry",
+  "@commonRetry": {
+    "description": "Button that tries a failed action again."
+  },
+  "commonRefresh": "Refresh",
+  "@commonRefresh": {
+    "description": "Tooltip of a button that reloads a list."
+  },
+  "commonSend": "Send",
+  "@commonSend": {
+    "description": "Button that sends something (for example logs) to the developers."
+  },
+  "commonCopy": "Copy",
+  "@commonCopy": {
+    "description": "Button that copies a value to the clipboard."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Button that closes a dialog once its task has finished."
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Title bar of the settings screen."
+  },
+  "settingsManageSection": "Manage",
+  "@settingsManageSection": {
+    "description": "Section heading on the settings screen above the diagnostics, remote control and update rows."
+  },
+  "settingsDiagnostics": "Diagnostics",
+  "@settingsDiagnostics": {
+    "description": "Name of the diagnostics page: its title, the settings row that opens it, and its category in the desktop settings sidebar."
+  },
+  "settingsPlayback": "Playback",
+  "@settingsPlayback": {
+    "description": "Section heading for playback preferences, the desktop settings category of the same name, and the playback section of the diagnostics page."
+  },
+  "settingsServers": "Servers",
+  "@settingsServers": {
+    "description": "Desktop settings category and page title listing the servers added on this device."
+  },
+  "settingsAbout": "About",
+  "@settingsAbout": {
+    "description": "Desktop settings category and page title showing the app version and updates."
+  },
+  "settingsServerFallback": "Server",
+  "@settingsServerFallback": {
+    "description": "Page title for one server's settings when the server has no display name."
+  },
+  "settingsDefaultQualityTitle": "Default quality",
+  "@settingsDefaultQualityTitle": {
+    "description": "Settings row that opens the default playback quality picker."
+  },
+  "settingsDefaultQualitySubtitle": "Used when a title has no saved preference",
+  "@settingsDefaultQualitySubtitle": {
+    "description": "Subtitle of the default quality row. A title here means a movie or episode."
+  },
+  "settingsAutoSkipTitle": "Skip intros and credits",
+  "@settingsAutoSkipTitle": {
+    "description": "Switch that skips intros and end credits automatically during playback."
+  },
+  "settingsAutoSkipSubtitle": "Off shows a skip button instead",
+  "@settingsAutoSkipSubtitle": {
+    "description": "Subtitle of the skip intros switch: when it is off, the player shows a button to skip instead."
+  },
+  "settingsStatsOverlayTitle": "Stats for nerds",
+  "@settingsStatsOverlayTitle": {
+    "description": "Switch that shows a technical statistics overlay on the video. Playful name; translate the idea, not the words."
+  },
+  "settingsStatsOverlaySubtitle": "Live playback numbers over the video",
+  "@settingsStatsOverlaySubtitle": {
+    "description": "Subtitle of the stats overlay switch."
+  },
+  "settingsPreferencesLoadFailedTitle": "Couldn't load preferences",
+  "@settingsPreferencesLoadFailedTitle": {
+    "description": "Row shown in the playback section when the saved playback preferences failed to load."
+  },
+  "settingsPreferencesLoadFailedSubtitle": "Your other settings still work.",
+  "@settingsPreferencesLoadFailedSubtitle": {
+    "description": "Subtitle of the failed preferences row, reassuring that the rest of settings is usable."
+  },
+  "settingsRemoteControlTitle": "Allow this device to be controlled",
+  "@settingsRemoteControlTitle": {
+    "description": "Switch that lets other devices control playback on this one."
+  },
+  "settingsRetryRegistrationTitle": "Retry registration",
+  "@settingsRetryRegistrationTitle": {
+    "description": "Row shown after this device failed to register as a remote-control target."
+  },
+  "settingsRetryRegistrationSubtitle": "Try to make this device discoverable again",
+  "@settingsRetryRegistrationSubtitle": {
+    "description": "Subtitle of the retry registration row."
+  },
+  "settingsCheckAndInstallUpdates": "Check and install updates",
+  "@settingsCheckAndInstallUpdates": {
+    "description": "Row that checks for an update and installs it in one step."
+  },
+  "settingsCheckForUpdates": "Check for updates",
+  "@settingsCheckForUpdates": {
+    "description": "Row that checks for an update, and the title of the dialog confirming a check-and-install."
+  },
+  "settingsCheckForUpdatesConfirm": "Check for an update and install it if one is found?",
+  "@settingsCheckForUpdatesConfirm": {
+    "description": "Body of the dialog asking before a check that also installs."
+  },
+  "settingsUpdatesSection": "Updates",
+  "@settingsUpdatesSection": {
+    "description": "Section heading for update rows in the About page, and the update card's fallback heading."
+  },
+  "settingsUpdateCheckSparkle": "Opens the Sparkle update dialog",
+  "@settingsUpdateCheckSparkle": {
+    "description": "Subtitle of the check for updates row on macOS. Sparkle is the name of the macOS updater; do not translate it."
+  },
+  "settingsUpdateCheckVersionAvailable": "v{version} available",
+  "@settingsUpdateCheckVersionAvailable": {
+    "description": "Subtitle of the check for updates row when a newer version is known.",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.4.0"
+      }
+    }
+  },
+  "settingsUpdateCheckAvailable": "An update is available",
+  "@settingsUpdateCheckAvailable": {
+    "description": "Subtitle of the check for updates row when an update exists but has no version number."
+  },
+  "settingsUpdateCheckInstallsNewest": "Checks and installs the newest build",
+  "@settingsUpdateCheckInstallsNewest": {
+    "description": "Subtitle of the check and install updates row when nothing is pending."
+  },
+  "settingsUpdateCheckUpToDate": "You're up to date",
+  "@settingsUpdateCheckUpToDate": {
+    "description": "Subtitle of the check for updates row when the newest version is installed."
+  },
+  "settingsAppearanceSection": "Appearance",
+  "@settingsAppearanceSection": {
+    "description": "Section heading for language, theme and glass material settings."
+  },
+  "settingsSubtitleSizeTitle": "Subtitle size",
+  "@settingsSubtitleSizeTitle": {
+    "description": "Settings row that opens the subtitle text size picker."
+  },
+  "settingsSubtitleSizeSubtitle": "Text subtitles on this device",
+  "@settingsSubtitleSizeSubtitle": {
+    "description": "Subtitle of the subtitle size row: it applies to text subtitles, and only on this device."
+  },
+  "settingsThemeTitle": "Theme",
+  "@settingsThemeTitle": {
+    "description": "Settings row that opens the colour theme picker."
+  },
+  "settingsThemeSubtitle": "Colours on this device",
+  "@settingsThemeSubtitle": {
+    "description": "Subtitle of the theme row: the theme is stored per device."
+  },
+  "settingsGlassMaterialSubtitle": "Glass controls and panels",
+  "@settingsGlassMaterialSubtitle": {
+    "description": "Subtitle of the Liquid Glass switch, which draws controls and panels as glass."
+  },
+  "settingsIdentitySignedIn": "Signed in",
+  "@settingsIdentitySignedIn": {
+    "description": "Shown at the top of settings in place of the username when the server did not report one."
+  },
+  "settingsReleaseTrackTitle": "Release track",
+  "@settingsReleaseTrackTitle": {
+    "description": "Heading of the picker choosing which release channel (stable, beta, dev) this installation follows."
+  },
+  "settingsReleaseTrackDowngradeNotice": "You are on {version}. {track} will not install anything older, so you will stay on this build until {track} publishes one newer than it.",
+  "@settingsReleaseTrackDowngradeNotice": {
+    "description": "Shown when the chosen release channel is behind the installed build, explaining nothing will be downgraded.",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.4.0-beta.2"
+      },
+      "track": {
+        "type": "String",
+        "example": "Stable"
+      }
+    }
+  },
+  "settingsUpdateRestart": "Restart",
+  "@settingsUpdateRestart": {
+    "description": "Button that restarts the app to finish installing an update."
+  },
+  "settingsUpdateNow": "Update Now",
+  "@settingsUpdateNow": {
+    "description": "Button that starts installing the available update."
+  },
+  "settingsUpdateReleaseNotes": "Release Notes",
+  "@settingsUpdateReleaseNotes": {
+    "description": "Button that opens the release notes of the available update in a browser."
+  },
+  "settingsUpdateRestartToFinish": "Restart to finish updating",
+  "@settingsUpdateRestartToFinish": {
+    "description": "Update card heading once an update is installed and waits for a restart."
+  },
+  "settingsUpdateAvailableVersion": "Update available: v{version}",
+  "@settingsUpdateAvailableVersion": {
+    "description": "Update card heading naming the new version.",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.4.0"
+      }
+    }
+  },
+  "settingsUpdateAvailableNoVersion": "A new version of Mydia Player is available",
+  "@settingsUpdateAvailableNoVersion": {
+    "description": "Update card heading when the update has no version number. Mydia Player is the app's name; do not translate it."
+  },
+  "settingsUpdateDownloadingPercent": "Downloading {percent}%",
+  "@settingsUpdateDownloadingPercent": {
+    "description": "Label under the update download progress bar.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "settingsUpdateDownloading": "Downloading",
+  "@settingsUpdateDownloading": {
+    "description": "Label under the update download progress bar before progress is known."
+  },
+  "settingsDevicesTitle": "Devices",
+  "@settingsDevicesTitle": {
+    "description": "Heading of the list of devices paired with this server account."
+  },
+  "settingsDevicesRevokeTitle": "Revoke Device",
+  "@settingsDevicesRevokeTitle": {
+    "description": "Title of the dialog confirming a device revocation, and the button on each device that opens it."
+  },
+  "settingsDevicesRevokeConfirm": "Are you sure you want to revoke \"{deviceName}\"? This device will no longer be able to access your account.",
+  "@settingsDevicesRevokeConfirm": {
+    "description": "Body of the revoke device dialog.",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Living room TV"
+      }
+    }
+  },
+  "settingsDevicesRevoke": "Revoke",
+  "@settingsDevicesRevoke": {
+    "description": "Destructive button in the revoke device dialog."
+  },
+  "settingsDevicesRevokeSucceeded": "Device revoked successfully",
+  "@settingsDevicesRevokeSucceeded": {
+    "description": "Toast after a device was revoked."
+  },
+  "settingsDevicesRevokeFailed": "Failed to revoke device",
+  "@settingsDevicesRevokeFailed": {
+    "description": "Toast when the server refused to revoke a device."
+  },
+  "settingsDevicesRevokeError": "Error: {error}",
+  "@settingsDevicesRevokeError": {
+    "description": "Toast when revoking a device threw. The error text comes from the app or server and stays untranslated.",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection refused"
+      }
+    }
+  },
+  "settingsDevicesLastSeen": "Last seen",
+  "@settingsDevicesLastSeen": {
+    "description": "Label above when a device last connected."
+  },
+  "settingsDevicesAdded": "Added",
+  "@settingsDevicesAdded": {
+    "description": "Label above when a device was paired."
+  },
+  "settingsDevicesStatusRevoked": "Revoked",
+  "@settingsDevicesStatusRevoked": {
+    "description": "Status badge of a device that can no longer access the account."
+  },
+  "settingsDevicesStatusActive": "Active",
+  "@settingsDevicesStatusActive": {
+    "description": "Status badge of a device seen recently."
+  },
+  "settingsDevicesStatusInactive": "Inactive",
+  "@settingsDevicesStatusInactive": {
+    "description": "Status badge of a device not seen recently."
+  },
+  "settingsDevicesEmptyTitle": "No devices",
+  "@settingsDevicesEmptyTitle": {
+    "description": "Heading shown when no devices are paired."
+  },
+  "settingsDevicesEmptyBody": "No devices are currently paired with your account",
+  "@settingsDevicesEmptyBody": {
+    "description": "Text under the no devices heading."
+  },
+  "settingsDevicesLoadFailed": "Failed to load devices",
+  "@settingsDevicesLoadFailed": {
+    "description": "Heading shown when the device list failed to load. The error detail below it stays untranslated."
+  },
+  "settingsDiagnosticsTransport": "Transport",
+  "@settingsDiagnosticsTransport": {
+    "description": "Diagnostics section heading describing how this device reaches the server (direct, peer-to-peer, relayed)."
+  },
+  "settingsDiagnosticsRelay": "Relay",
+  "@settingsDiagnosticsRelay": {
+    "description": "Diagnostics row for the peer-to-peer relay connection. Relay is the server that forwards traffic when a direct connection is not possible."
+  },
+  "settingsDiagnosticsConnected": "Connected",
+  "@settingsDiagnosticsConnected": {
+    "description": "Value of the relay row when the relay is connected."
+  },
+  "settingsDiagnosticsNotConnected": "Not connected",
+  "@settingsDiagnosticsNotConnected": {
+    "description": "Value of the relay row when the relay is not connected."
+  },
+  "settingsDiagnosticsRelayServer": "Relay server",
+  "@settingsDiagnosticsRelayServer": {
+    "description": "Diagnostics row whose subtitle is the relay's address."
+  },
+  "settingsDiagnosticsPeers": "Peers",
+  "@settingsDiagnosticsPeers": {
+    "description": "Diagnostics section heading about peer-to-peer connections to other devices."
+  },
+  "settingsDiagnosticsConnectedPeers": "Connected peers",
+  "@settingsDiagnosticsConnectedPeers": {
+    "description": "Diagnostics row whose value is the number of connected peers."
+  },
+  "settingsDiagnosticsNoPeers": "None connected",
+  "@settingsDiagnosticsNoPeers": {
+    "description": "Value of the connected peers row when there are none."
+  },
+  "settingsDiagnosticsIdentity": "Identity",
+  "@settingsDiagnosticsIdentity": {
+    "description": "Diagnostics section heading for this device's peer-to-peer identity."
+  },
+  "settingsDiagnosticsNodeAddress": "Node address",
+  "@settingsDiagnosticsNodeAddress": {
+    "description": "Diagnostics row whose subtitle is this device's peer-to-peer node address."
+  },
+  "settingsDiagnosticsCopy": "Copy diagnostics",
+  "@settingsDiagnosticsCopy": {
+    "description": "Button that copies a diagnostics report to the clipboard for a bug report."
+  },
+  "settingsDiagnosticsCopied": "Diagnostics copied",
+  "@settingsDiagnosticsCopied": {
+    "description": "Toast after the diagnostics report was copied."
+  },
+  "settingsDiagnosticsFullscreen": "Fullscreen",
+  "@settingsDiagnosticsFullscreen": {
+    "description": "Diagnostics row about the fullscreen player, shown before anything has played."
+  },
+  "settingsDiagnosticsNothingPlayed": "Nothing played yet this session",
+  "@settingsDiagnosticsNothingPlayed": {
+    "description": "Subtitle of the fullscreen row before anything has played since the app started."
+  },
+  "settingsDiagnosticsShareSection": "Share with developers",
+  "@settingsDiagnosticsShareSection": {
+    "description": "Diagnostics section heading for what this device sends to the Mydia developers."
+  },
+  "settingsDiagnosticsSendCrashReports": "Send crash reports",
+  "@settingsDiagnosticsSendCrashReports": {
+    "description": "Switch that sends crash reports to the developers."
+  },
+  "settingsDiagnosticsShareLogs": "Share logs",
+  "@settingsDiagnosticsShareLogs": {
+    "description": "Switch that shares the app's logs with the developers."
+  },
+  "settingsDiagnosticsDisclosure": "Shared: app activity, server addresses, titles and this device's name. Never shared: passwords or tokens. Logs are kept 14 days, sent reports 90.",
+  "@settingsDiagnosticsDisclosure": {
+    "description": "Explains what crash reports and logs contain and how long they are kept. Titles means movie and show titles. 90 means 90 days."
+  },
+  "settingsDiagnosticsSendLogsNow": "Send logs now",
+  "@settingsDiagnosticsSendLogsNow": {
+    "description": "Row that uploads this device's recent logs once."
+  },
+  "settingsDiagnosticsSendLogsNowSubtitle": "Uploads recent logs and gives you a code to share",
+  "@settingsDiagnosticsSendLogsNowSubtitle": {
+    "description": "Subtitle of the send logs now row."
+  },
+  "settingsDiagnosticsSaveFailed": "Could not save that choice",
+  "@settingsDiagnosticsSaveFailed": {
+    "description": "Toast when a crash report or log sharing switch could not be saved."
+  },
+  "settingsDiagnosticsSendLogsTitle": "Send logs",
+  "@settingsDiagnosticsSendLogsTitle": {
+    "description": "Title of the dialog that uploads this device's logs."
+  },
+  "settingsDiagnosticsNoteLabel": "What went wrong? (optional)",
+  "@settingsDiagnosticsNoteLabel": {
+    "description": "Label of the optional note field sent with the logs."
+  },
+  "settingsDiagnosticsNoteEmpty": "Add a note (optional)",
+  "@settingsDiagnosticsNoteEmpty": {
+    "description": "On a TV, the row that opens the note field while no note has been written."
+  },
+  "settingsDiagnosticsShareCode": "Share this code with the Mydia developers:",
+  "@settingsDiagnosticsShareCode": {
+    "description": "Shown above the report code after the logs were sent."
+  },
+  "settingsDiagnosticsRelayUnreachable": "Could not reach the relay. Check the connection and try again.",
+  "@settingsDiagnosticsRelayUnreachable": {
+    "description": "Shown when sending logs failed for an unknown reason. The relay is the Mydia service that receives the logs."
+  },
+  "settingsDiagnosticsCodeCopied": "Code copied",
+  "@settingsDiagnosticsCodeCopied": {
+    "description": "Toast after the report code was copied."
+  },
+  "loginRelaySaved": "Custom relay URL saved",
+  "@loginRelaySaved": {
+    "description": "Toast on the sign-in screen after a custom relay address was saved in Advanced Settings. The relay is the service that introduces the player to the Mydia server."
+  },
+  "loginRelayResetDone": "Relay URL reset to default",
+  "@loginRelayResetDone": {
+    "description": "Toast on the sign-in screen after Advanced Settings was saved with the default relay address."
+  },
+  "loginInvalidQr": "Invalid QR code. Please scan a Mydia pairing code.",
+  "@loginInvalidQr": {
+    "description": "Toast while the camera scanner is open and it read a QR code that is not a Mydia pairing code."
+  },
+  "loginScanQrCode": "Scan QR Code",
+  "@loginScanQrCode": {
+    "description": "Title of the camera scanner overlay, and the scan button on phones."
+  },
+  "loginScanQrWithCamera": "Scan QR Code with Camera",
+  "@loginScanQrWithCamera": {
+    "description": "Scan button on desktop and web, where the camera is less obvious than on a phone."
+  },
+  "loginScanQrInstructions": "Point your camera at the QR code shown on your Mydia server",
+  "@loginScanQrInstructions": {
+    "description": "Instructions under the camera preview of the QR scanner."
+  },
+  "loginAddServerTitle": "Add a Mydia server",
+  "@loginAddServerTitle": {
+    "description": "Heading of the sign-in screen when adding another server or signing in again, instead of the app name."
+  },
+  "loginTagline": "Stream your media library",
+  "@loginTagline": {
+    "description": "Tagline under the app name on the sign-in screen."
+  },
+  "loginDirectSubtitle": "Sign in directly with your server credentials",
+  "@loginDirectSubtitle": {
+    "description": "Subtitle of the sign-in card while the Direct Server tab (address, username, password) is selected."
+  },
+  "loginTvPairSubtitle": "Pair with your server using claim code",
+  "@loginTvPairSubtitle": {
+    "description": "Subtitle of the sign-in card on a TV while the Quick Pair tab is selected. A claim code is the short code the Mydia server shows for pairing a device."
+  },
+  "loginPairSubtitle": "Pair with your server using QR code or claim code",
+  "@loginPairSubtitle": {
+    "description": "Subtitle of the sign-in card on phones and desktops while the Quick Pair tab is selected."
+  },
+  "loginNetworkSettingsTooltip": "Relay & Network Settings",
+  "@loginNetworkSettingsTooltip": {
+    "description": "Tooltip of the gear button that opens Advanced Settings on the sign-in screen."
+  },
+  "loginTvStepOpenMydia": "Open Mydia on phone or PC",
+  "@loginTvStepOpenMydia": {
+    "description": "First step of the pairing instructions on a TV: open the Mydia web app on another device."
+  },
+  "loginTvStepOpenDevices": "Open your account menu → Devices → Pair a new device",
+  "@loginTvStepOpenDevices": {
+    "description": "Second step of the pairing instructions on a TV: the path to the pairing button in the Mydia web app. Devices is an entry in the web's account menu (opened from the avatar), and Pair a new device is the button on that page. Each label must match what the web UI shows in this language: use the web's translation where it has one, and its English label where it does not (Pair a new device is not translated in the web yet)."
+  },
+  "loginTvStepEnterCode": "Enter the 6-character code below",
+  "@loginTvStepEnterCode": {
+    "description": "Third step of the pairing instructions on a TV: type the code with the on-screen keypad."
+  },
+  "loginConnect": "Connect",
+  "@loginConnect": {
+    "description": "Button that pairs with the server using the entered claim code."
+  },
+  "loginClear": "Clear",
+  "@loginClear": {
+    "description": "Button on a TV that empties the claim code typed so far."
+  },
+  "loginConnectTitle": "Connect to Server",
+  "@loginConnectTitle": {
+    "description": "Heading of the sign-in card on phones and desktops."
+  },
+  "loginQuickPair": "Quick Pair",
+  "@loginQuickPair": {
+    "description": "Tab that pairs with a claim code or QR code. Also named in the relay help text in Advanced Settings."
+  },
+  "loginDirectServer": "Direct Server",
+  "@loginDirectServer": {
+    "description": "Tab that signs in with a server address, username and password."
+  },
+  "loginServerUrlLabel": "Server URL",
+  "@loginServerUrlLabel": {
+    "description": "Label of the server address field."
+  },
+  "loginServerUrlRequired": "Please enter a server URL",
+  "@loginServerUrlRequired": {
+    "description": "Error under the server address field when it is empty."
+  },
+  "loginServerUrlScheme": "URL must start with http:// or https://",
+  "@loginServerUrlScheme": {
+    "description": "Error under the server address field when it does not start with http:// or https://. Keep both prefixes as they are."
+  },
+  "loginUsernameLabel": "Username",
+  "@loginUsernameLabel": {
+    "description": "Label of the username field."
+  },
+  "loginUsernameRequired": "Please enter a username",
+  "@loginUsernameRequired": {
+    "description": "Error under the username field when it is empty."
+  },
+  "loginPasswordLabel": "Password",
+  "@loginPasswordLabel": {
+    "description": "Label of the password field."
+  },
+  "loginPasswordRequired": "Please enter a password",
+  "@loginPasswordRequired": {
+    "description": "Error under the password field when it is empty."
+  },
+  "loginTotpTitle": "Two-factor authentication",
+  "@loginTotpTitle": {
+    "description": "Heading of the step that asks for a two-factor code after the password was accepted."
+  },
+  "loginTotpBody": "Enter the 6-digit code from your authenticator app, or one of your recovery codes.",
+  "@loginTotpBody": {
+    "description": "Explanation under the two-factor heading."
+  },
+  "loginTotpCodeLabel": "Authentication code",
+  "@loginTotpCodeLabel": {
+    "description": "Label of the two-factor code field."
+  },
+  "loginTotpVerify": "Verify",
+  "@loginTotpVerify": {
+    "description": "Button that submits the two-factor code."
+  },
+  "loginPasteClaimCode": "Paste claim code",
+  "@loginPasteClaimCode": {
+    "description": "Tooltip of the button that pastes a claim code from the clipboard."
+  },
+  "loginSignIn": "Sign in",
+  "@loginSignIn": {
+    "description": "Button that signs in with the server address, username and password."
+  },
+  "loginP2pReady": "P2P Ready",
+  "@loginP2pReady": {
+    "description": "Footer status when the peer-to-peer connection to the relay is up."
+  },
+  "loginP2pConnecting": "Connecting...",
+  "@loginP2pConnecting": {
+    "description": "Footer status while the peer-to-peer connection to the relay is being set up."
+  },
+  "loginEncrypted": "End-to-end encrypted",
+  "@loginEncrypted": {
+    "description": "Footer note that the connection to the server is end-to-end encrypted."
+  },
+  "loginAdvancedSettings": "Advanced Settings",
+  "@loginAdvancedSettings": {
+    "description": "Title of the relay settings panel opened from the gear button on the sign-in screen."
+  },
+  "loginCloseAdvancedSettings": "Close advanced settings",
+  "@loginCloseAdvancedSettings": {
+    "description": "Tooltip of the close button of the Advanced Settings panel."
+  },
+  "loginRelayUrlLabel": "Relay URL",
+  "@loginRelayUrlLabel": {
+    "description": "Label above the relay address field in Advanced Settings."
+  },
+  "loginRelayUrlHelp": "Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.",
+  "@loginRelayUrlHelp": {
+    "description": "Help text above the relay address field in Advanced Settings. Quick Pair is the pairing tab of the sign-in screen."
+  },
+  "loginRelayResetTooltip": "Reset to default",
+  "@loginRelayResetTooltip": {
+    "description": "Tooltip of the button that puts the default relay address back into the field."
+  },
+  "loginRelayCustomInUse": "Using custom relay URL",
+  "@loginRelayCustomInUse": {
+    "description": "Note under the relay field when a custom relay address is saved."
+  },
+  "loginSave": "Save",
+  "@loginSave": {
+    "description": "Button that saves the relay address in Advanced Settings."
+  },
+  "startupAlreadyRunningTitle": "Mydia Player is already running",
+  "@startupAlreadyRunningTitle": {
+    "description": "Heading of the screen shown at launch when another window of the app holds its data."
+  },
+  "startupAlreadyRunningMessage": "Another window of Mydia Player is already open on this computer. Quit it, then reopen this one.",
+  "@startupAlreadyRunningMessage": {
+    "description": "Explanation under the already-running heading."
+  },
+  "startupGenericTitle": "Mydia Player couldn't start",
+  "@startupGenericTitle": {
+    "description": "Heading of the screen shown when the app fails to start. Raw error text is shown below it untranslated."
+  },
+  "startupGenericMessage": "Something went wrong while starting the app.",
+  "@startupGenericMessage": {
+    "description": "Explanation under the failed-to-start heading."
+  },
+  "startupSendReport": "Send report",
+  "@startupSendReport": {
+    "description": "Button on the failed-to-start screen that sends a crash report to the developers."
+  },
+  "startupSendingReport": "Sending report",
+  "@startupSendingReport": {
+    "description": "Label of the report button while the report is being sent."
+  },
+  "startupReportSent": "Report sent",
+  "@startupReportSent": {
+    "description": "Label of the report button after the report was sent."
+  },
+  "startupReportFailed": "Couldn't send. Try again",
+  "@startupReportFailed": {
+    "description": "Label of the report button after sending failed. Pressing it tries again."
+  }
+}

@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/player/input_capabilities.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
@@ -62,7 +63,11 @@ Widget _buildTestWidget({LoginController? controller}) => ProviderScope(
         if (controller != null)
           loginControllerProvider.overrideWith(() => controller),
       ],
-      child: const MaterialApp(home: LoginScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: LoginScreen(),
+      ),
     );
 
 Future<void> _pumpLoginScreen(
