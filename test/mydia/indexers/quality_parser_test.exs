@@ -280,7 +280,9 @@ defmodule Mydia.Indexers.QualityParserTest do
 
     test "a bare Atmos label scores no audio tier" do
       base = Quality.new(resolution: "1080p", source: "WEB-DL", codec: "x264")
-      assert QualityParser.quality_score(%{base | audio: "Atmos"}) == 1300
+
+      assert QualityParser.quality_score(%{base | audio: "Atmos"}) ==
+               QualityParser.quality_score(base)
     end
   end
 

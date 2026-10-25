@@ -184,7 +184,8 @@ defmodule Mydia.Indexers.QualityParser do
 
   # Audio labels carry their channel layout ("DD+ 5.1", "TrueHD Atmos 7.1").
   # The tier is the codec, so the layout is dropped before scoring. A bare
-  # "Atmos" (no codec beside it) has no tier and scores 0.
+  # "Atmos" (no codec beside it) has no tier and scores 0. The strip relies on
+  # QualityExtractor emitting channels as "<d>.<d>" after exactly one space.
   defp audio_score(label) when is_binary(label),
     do: label |> String.replace(~r/ \d\.\d$/, "") |> audio_tier_score()
 

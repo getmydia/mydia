@@ -157,6 +157,14 @@ defmodule Mydia.Quality.SourcesTest do
       assert Sources.detect("Movie.2026.1080p.x264") == nil
     end
 
+    test "returns nil for a nil title" do
+      assert Sources.detect(nil) == nil
+    end
+
+    test "a cam word in an episode title is not a source" do
+      assert Sources.detect("Fake.Show.S02E03.Cam.and.Friends.1080p.x264-GRP") == nil
+    end
+
     test "agrees with QualityParser on a title carrying a slash" do
       title = "Movie 2026 1080p / BluRay / x264"
 
