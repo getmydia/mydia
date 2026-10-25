@@ -69,7 +69,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     resolution = extract_resolution(quality_tokens)
     source = extract_source(quality_tokens, next_by_token)
     codec = extract_codec(quality_tokens, all_tokens, next_by_token)
-    {hdr_format, dolby_vision} = extract_hdr(quality_tokens)
+    {hdr_format, dolby_vision} = extract_hdr(quality_tokens, all_tokens, next_by_token)
     audio = extract_audio(quality_tokens, next_by_token)
 
     %Quality{
@@ -310,25 +310,54 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # --- HDR ---
 
-  # Defensive fold, not a load-bearing one: Resolver.@singleton_labels treats
-  # :hdr as a singleton, and resolve_one_label/2 strips every losing :hdr
-  # candidate before quality_tokens is built, so this producer receives at
-  # most one :hdr-labeled token per release. The scan-and-fold shape mirrors
-  # QualityParser.extract_hdr/1, which scans a release title's raw text with
-  # a regex and genuinely can see several HDR tokens (no resolver sits
-  # between it and the string), so it keeps this shape for consistency and
-  # to stay correct if the resolver's singleton constraint on :hdr is ever
-  # relaxed.
-  defp extract_hdr(quality_tokens) do
-    quality_tokens
-    |> Enum.filter(&(&1.label == :hdr))
-    |> Enum.reduce({nil, false}, fn entry, {base, dv} ->
-      case Hdr.from_release_token(token_text(entry)) do
-        :dolby_vision -> {base, true}
-        {:base, found} -> {base || found, dv}
-        :unknown -> {base, dv}
-      end
+  # The resolver passes every :hdr token, in token order, because they
+  # stack: `DV.HDR10` is a Dolby Vision layer over an HDR10 base, and
+  # keeping only one of them loses either the layer or the base. The fold
+  # is QualityParser.extract_hdr/1's: the first base token wins and Dolby
+  # Vision is sticky.
+  #
+  # The vocabulary's canonical value is folded, not the raw token text, so
+  # a listed tag (`[HEVC, HDR10, DV]`) reads the same as a dotted one. Two
+  # spellings split across tokens are rejoined here: `HDR10.PLUS` and
+  # `Dolby.Vision`. "Dolby" has no vocabulary entry of its own, so it is
+  # only read when the classifier left it unclaimed, which keeps a title
+  # word ("Dolby.Vision.Story.2020") out.
+  defp extract_hdr(quality_tokens, all_tokens, next_by_token) do
+    {base, dv} =
+      quality_tokens
+      |> Enum.filter(&(&1.label == :hdr))
+      |> Enum.reduce({nil, false}, fn entry, {base, dv} ->
+        case Hdr.from_release_token(hdr_text(entry, next_by_token)) do
+          :dolby_vision -> {base, true}
+          {:base, found} -> {base || found, dv}
+          :unknown -> {base, dv}
+        end
+      end)
+
+    {base, dv or spaced_dolby_vision?(all_tokens, next_by_token)}
+  end
+
+  defp hdr_text(%{value: "HDR10", token: %Token{} = token}, next_by_token) do
+    if next_word(token, next_by_token) == "plus", do: "HDR10+", else: "HDR10"
+  end
+
+  defp hdr_text(%{value: value}, _next_by_token) when is_binary(value), do: value
+  defp hdr_text(entry, _next_by_token), do: token_text(entry)
+
+  defp spaced_dolby_vision?(all_tokens, next_by_token) do
+    Enum.any?(all_tokens, fn %Token{value: value, candidates: candidates} = token ->
+      candidates == [] and String.downcase(value) == "dolby" and
+        next_word(token, next_by_token) == "vision"
     end)
+  end
+
+  # The next token's text, downcased, without the comma of a listed tag
+  # set (`Dolby Vision, WEB-DL`).
+  defp next_word(%Token{} = token, next_by_token) do
+    case next_token(token, next_by_token) do
+      %Token{value: value} -> value |> String.downcase() |> String.trim_trailing(",")
+      nil -> nil
+    end
   end
 
   # --- Audio ---

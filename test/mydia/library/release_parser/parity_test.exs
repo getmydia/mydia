@@ -2345,26 +2345,18 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Chucky.2021.2160p.BluRay.REMUX.DV.HDR.HEVC-LTN.mkv")
 
-      # The resolver's :hdr label is a singleton (Resolver.resolve_one_label/2):
-      # only the highest zone-adjusted-confidence HDR-ish token survives per
-      # release, and DV (0.8 base + 0.1 metadata-zone bonus = 0.9) ties the
-      # bare HDR token (0.9 base + 0.0 = 0.9); Enum.max_by/2 keeps the first
-      # on a tie, and DV appears first in this title. The bare HDR token is
-      # demoted to a title candidate and never reaches QualityExtractor, so
-      # hdr_format stays nil here even though the release also says "HDR".
+      # Every HDR token reaches QualityExtractor, so the Dolby Vision layer
+      # keeps the HDR10 base the release also names.
       assert result.quality.dolby_vision
-      assert result.quality.hdr_format == nil
+      assert result.quality.hdr_format == :hdr10
     end
 
     test "DoVi abbreviation" do
       result =
         FileParser.parse("Game.of.Thrones.S01E01.2160p.DoVi.HDR.BluRay.REMUX.HEVC-PB69.mkv")
 
-      # DoVi (0.95 base + 0.05 metadata-zone bonus, clamped to 1.0) outranks
-      # the bare HDR token (0.9) outright in the :hdr singleton conflict, so
-      # HDR is demoted and hdr_format stays nil. See the DV test above.
       assert result.quality.dolby_vision
-      assert result.quality.hdr_format == nil
+      assert result.quality.hdr_format == :hdr10
     end
   end
 

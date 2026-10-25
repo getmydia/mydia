@@ -35,7 +35,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   1. For each token, pick the single best candidate per label
      (highest-confidence wins per-token).
   2. Resolve label-wide conflicts: only one `:year`, `:resolution`,
-     `:episode_marker`, `:source`, `:hdr`, `:release_group` and one
+     `:episode_marker`, `:source`, `:release_group` and one
      `:codec` candidate may survive. Losing tokens are demoted to
      `:title_candidate` with half their original confidence.
   3. Assemble the season + episode list from the surviving episode
@@ -71,7 +71,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     :episode_marker,
     :season_marker,
     :source,
-    :hdr,
     :codec,
     :release_group,
     :language,
@@ -358,12 +357,17 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   defp pick_confidence(nil), do: nil
   defp pick_confidence({_, %Candidate{confidence: c}}), do: c
 
-  # Audio is not a singleton: a release can list several tracks, and the
-  # QualityExtractor picks among them. An audio word with title words
-  # after it ("Fake.Dts.Story.2020") is a title word, never a track, so it
-  # does not reach the extractor. One in the run of tags that ends the
-  # title zone ("German.DTS.720p", "[X264-AAC][720P]") is still a track,
-  # and without anchors there is no boundary and nothing is cut.
+  # Audio and HDR are not singletons. A release can list several audio
+  # tracks, and the QualityExtractor picks among them. HDR tokens stack
+  # (`DV.HDR10`: a Dolby Vision layer over an HDR10 base), so every one
+  # reaches the extractor in token order and it folds them. A word of
+  # either kind with title words after it ("Fake.Dts.Story.2020",
+  # "Hdr.Fake.Story.2020") is a title word, never a tag, so it does not
+  # reach the extractor. One in the run of tags that ends the title zone
+  # ("German.DTS.720p", "[X264-AAC][720P]") is still a tag, and without
+  # anchors there is no boundary and nothing is cut.
+  @multi_quality_labels [:audio, :hdr]
+
   defp collect_quality_tokens(assignments, boundary) do
     @quality_labels
     |> Enum.flat_map(fn label ->
@@ -373,9 +377,9 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         [] ->
           []
 
-        list when label == :audio ->
+        list when label in @multi_quality_labels ->
           list
-          |> Enum.reject(fn {token, _} -> title_word_audio?(token, assignments, boundary) end)
+          |> Enum.reject(fn {token, _} -> title_word_tag?(token, assignments, boundary) end)
           |> Enum.map(&to_quality_entry/1)
 
         list ->
@@ -384,9 +388,9 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     end)
   end
 
-  defp title_word_audio?(_token, _assignments, :infinity), do: false
+  defp title_word_tag?(_token, _assignments, :infinity), do: false
 
-  defp title_word_audio?(%Token{byte_offset: offset} = token, assignments, boundary) do
+  defp title_word_tag?(%Token{byte_offset: offset} = token, assignments, boundary) do
     in_title_zone?(token, boundary) and
       Enum.any?(assignments, fn {other, c} ->
         c.label == :title_candidate and other.byte_offset > offset and
