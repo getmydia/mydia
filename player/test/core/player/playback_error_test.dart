@@ -1,10 +1,16 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/playback_error.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
+
+final _en = lookupAppLocalizations(const Locale('en'));
 
 void main() {
   group('playbackErrorMessage', () {
     test('explains a source that would not open', () {
       final message = playbackErrorMessage(
+        _en,
         'Failed to open http://127.0.0.1:12345/direct/file-old/stream.',
       );
 
@@ -19,13 +25,13 @@ void main() {
 
     test('matches regardless of how mpv cases the phrase', () {
       expect(
-        playbackErrorMessage('FAILED TO OPEN whatever'),
+        playbackErrorMessage(_en, 'FAILED TO OPEN whatever'),
         contains('Could not open this stream'),
       );
     });
 
     test('passes an unrecognised error through rather than swallowing it', () {
-      final message = playbackErrorMessage('Audio device init failed');
+      final message = playbackErrorMessage(_en, 'Audio device init failed');
 
       expect(message, contains('Audio device init failed'));
       expect(
@@ -36,8 +42,8 @@ void main() {
     });
 
     test('still says something when the error is empty', () {
-      expect(playbackErrorMessage('   '), isNotEmpty);
-      expect(playbackErrorMessage(''), contains('unknown reason'));
+      expect(playbackErrorMessage(_en, '   '), isNotEmpty);
+      expect(playbackErrorMessage(_en, ''), contains('unknown reason'));
     });
   });
 

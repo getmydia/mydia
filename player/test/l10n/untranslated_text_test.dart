@@ -17,6 +17,7 @@ const convertedPaths = <String>[
   'lib/domain',
   'lib/presentation/screens/sources',
   'lib/presentation/screens/downloads',
+  'lib/presentation/screens/player',
 ];
 
 void main() {

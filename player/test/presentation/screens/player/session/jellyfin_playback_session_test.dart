@@ -56,7 +56,8 @@ void main() {
     o.server.playbackErrorCode = 'NotAllowed';
     final prep = await o.session.prepareStreaming(
         owner: Object(), onProgress: (_) {}, isCurrent: () => true);
-    expect((prep as StreamingUnavailable).message, contains('not allowed'));
+    expect(
+        (prep as StreamingUnavailable).problem.text, contains('not allowed'));
   });
 
   test('detail lists the sidecar subtitle only, and fetches it', () async {

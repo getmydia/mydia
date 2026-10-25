@@ -15,6 +15,7 @@ import '../../../../core/sources/plex/plex_server_client.dart';
 import '../../../../core/sources/transcode_codecs.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../domain/sources/source_error.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
@@ -119,7 +120,9 @@ class PlexPlaybackSession extends SourcePlaybackSession {
             CastSubtitleTrack(
               trackId: s.id,
               url: '',
-              label: s.title ?? s.language ?? 'Subtitles',
+              label: s.title ??
+                  s.language ??
+                  currentAppLocalizations().commonSubtitles,
               language: s.language ?? 'und',
               burnedIn: true,
             ),

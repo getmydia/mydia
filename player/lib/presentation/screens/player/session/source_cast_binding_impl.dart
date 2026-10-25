@@ -16,6 +16,8 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/sources/source_error.dart';
+import '../../../../l10n/l10n.dart';
+import 'playback_problem.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 import 'source_playback_sessions.dart';
@@ -41,8 +43,9 @@ class SessionSourceCastBinding implements SourceCastBinding {
       await _session.candidates(CandidateScope.file);
       final (detail, version) = await _session.pickedVersion();
       if (version == null) {
-        throw const CastBackendException(
-          'This item has no playable file on the server.',
+        throw CastBackendException(
+          currentAppLocalizations()
+              .playbackIssueText(PlaybackIssue.noPlayableFile),
           CastFailureKind.mediaLoadFailed,
         );
       }
@@ -121,20 +124,20 @@ Future<SourceCastBinding> bindSourceCast(
   final id = content.item.sourceId;
   final media = ref.read(mediaSourceProvider(id));
   if (media == null) {
-    throw const CastBackendException(
-      'This server is no longer in the app.',
+    throw CastBackendException(
+      currentAppLocalizations().castBindingServerGone,
       CastFailureKind.unknown,
     );
   }
   if (media.source.account.needsReauth) {
-    throw const CastBackendException(
-      'Sign in to this server again to cast from it.',
+    throw CastBackendException(
+      currentAppLocalizations().castBindingSignInAgain,
       CastFailureKind.notAuthorized,
     );
   }
   if (ref.read(gatedSourceIdsProvider).contains(id)) {
-    throw const CastBackendException(
-      'Unlock the app to cast from this server.',
+    throw CastBackendException(
+      currentAppLocalizations().castBindingUnlock,
       CastFailureKind.unknown,
     );
   }
@@ -145,8 +148,8 @@ Future<SourceCastBinding> bindSourceCast(
     proxy: () => ref.read(localProxyServiceProvider),
   );
   if (session is! SourcePlaybackSession) {
-    throw const CastBackendException(
-      'Casting is not available for this server.',
+    throw CastBackendException(
+      currentAppLocalizations().castBindingUnsupported,
       CastFailureKind.unknown,
     );
   }

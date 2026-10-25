@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/playback/loading_step.dart';
 import 'package:player/core/playback/playback_controller.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/stream_urls.dart';
@@ -223,11 +224,15 @@ void main() {
       final server =
           _server(starts: [startStreamingSessionResponse(sessionId: 's1')]);
       final controller = _controller(server, probe: probe);
-      final messages = <String>[];
+      final steps = <LoadingStep>[];
       await controller.open(_copy,
-          fileId: 'file-1', startAt: Duration.zero, onProgress: messages.add);
+          fileId: 'file-1', startAt: Duration.zero, onProgress: steps.add);
       expect(polls, 3);
-      expect(messages, contains('Preparing stream... 33%'));
+      expect(
+        steps,
+        contains(
+            const LoadingStep(LoadingStepKind.preparingStream, percent: 33)),
+      );
     });
 
     test(

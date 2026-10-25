@@ -4,6 +4,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:player/core/connection/connection_summary.dart';
 import 'package:player/core/downloads/download_notification_text.dart';
 import 'package:player/core/logging/log_uploader.dart';
+import 'package:player/core/playback/loading_step.dart';
+import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
@@ -20,6 +22,7 @@ import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/domain/models/storage_settings.dart';
+import 'package:player/domain/models/subtitle_search_outcome.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
@@ -29,6 +32,9 @@ import 'package:player/l10n/formatters.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/login/login_failure.dart';
+import 'package:player/presentation/screens/player/session/playback_problem.dart';
+import 'package:player/presentation/screens/player/subtitle_track_builder.dart'
+    show SubtitleDelayNotice, SubtitleDelayNoticeKind, SubtitleNotice;
 
 import '../presentation/screens/calendar/calendar_test_items.dart';
 
@@ -491,6 +497,124 @@ void main() {
           en.libraryTitle(
               const Library(ref: ref, kind: LibraryKind.videos, scenes: true)),
           'Scenes');
+    });
+  });
+
+  group('player screen text', () {
+    test('every loading step, fallback and why reads in every language',
+        () async {
+      for (final tag in const ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final kind in LoadingStepKind.values) {
+          expect(
+            loc.loadingStepText(
+                LoadingStep(kind, percent: 33, attempt: 2, maxAttempts: 20)),
+            isNotEmpty,
+          );
+        }
+        for (final reason in FailureReason.values) {
+          expect(loc.fallbackMessage(reason), isNotEmpty);
+          expect(loc.statsWhyText(StatsWhyFallback(reason)), isNotEmpty);
+        }
+        for (final kind in StatsWhyKind.values) {
+          expect(loc.statsWhyText(StatsWhyPlain(kind)), isNotEmpty);
+        }
+        for (final notice in SubtitleNotice.values) {
+          expect(loc.subtitleNoticeText(notice), isNotEmpty);
+        }
+        for (final kind in SubtitleDelayNoticeKind.values) {
+          expect(
+              loc.subtitleDelayNoticeText(
+                  SubtitleDelayNotice(kind, totalMs: 100)),
+              isNotEmpty);
+        }
+        for (final issue in SubtitleIssue.values) {
+          expect(loc.subtitleIssueText(issue), isNotEmpty);
+        }
+        for (final issue in PlaybackIssue.values) {
+          expect(loc.playbackIssueText(issue), isNotEmpty);
+        }
+      }
+    });
+
+    test('the loading step carries its numbers', () async {
+      final en = await l10n('en');
+      expect(
+          en.loadingStepText(
+              const LoadingStep(LoadingStepKind.preparingStream, percent: 33)),
+          'Preparing stream... 33%');
+      expect(
+          en.loadingStepText(const LoadingStep(
+              LoadingStepKind.startingTranscode,
+              attempt: 2,
+              maxAttempts: 20)),
+          'Starting transcoding... (2/20)');
+    });
+
+    test('the Why row words each reason', () async {
+      final en = await l10n('en');
+      const capped = QualityRung(label: '720p', height: 720);
+      expect(en.statsWhyText(const StatsWhyCapped(capped)),
+          'Quality capped to 720p');
+      expect(en.statsWhyText(const StatsWhyCapped(QualityRung.original)),
+          'Quality capped to Original');
+      expect(en.statsWhyText(const StatsWhyRemembered('hevc')),
+          'Remembered decode failure on hevc');
+      expect(en.statsWhyText(const StatsWhyStalled(12)),
+          'Stalled on this connection 12 min ago');
+      expect(en.statsWhyText(const StatsWhyFallback(FailureReason.bandwidth)),
+          'Switched to transcoding for your connection');
+      expect(
+          en.fallbackMessage(FailureReason.decodeFailed),
+          "Switched to transcoding: your device can't play this file "
+          'directly');
+    });
+
+    test('the Playing quality names Auto and what it resolved to', () async {
+      final en = await l10n('en');
+      const r720 = QualityRung(label: '720p', height: 720);
+      expect(
+          en.statsQualityText(const StatsQuality(selected: QualityRung.auto)),
+          'Auto');
+      expect(
+          en.statsQualityText(
+              const StatsQuality(selected: QualityRung.auto, effective: r720)),
+          'Auto · 720p');
+      expect(
+          en.statsQualityText(
+              const StatsQuality(selected: QualityRung.original)),
+          'Original');
+    });
+
+    test('the link row counts peers with a plural', () async {
+      final en = await l10n('en');
+      expect(en.statsLinkPeers('direct', 1), 'direct - 1 peer');
+      expect(en.statsLinkPeers('direct', 3), 'direct - 3 peers');
+    });
+
+    test('subtitle delay toasts show the signed delay', () async {
+      final en = await l10n('en');
+      expect(
+          en.subtitleDelayNoticeText(const SubtitleDelayNotice(
+              SubtitleDelayNoticeKind.adjusted,
+              totalMs: 100)),
+          'Subtitle delay +100 ms');
+      expect(
+          en.subtitleDelayNoticeText(const SubtitleDelayNotice(
+              SubtitleDelayNoticeKind.adjustedAfterSave,
+              totalMs: -200)),
+          'Subtitle delay will be -200 ms after Save');
+    });
+
+    test('a playback problem is the app\'s sentence or the server\'s text',
+        () async {
+      final en = await l10n('en');
+      expect(
+          en.playbackProblemText(
+              const PlaybackProblem(PlaybackIssue.noPlayableFile)),
+          'This item has no playable file on the server.');
+      expect(en.playbackProblemText(const PlaybackProblem.fromText('Nope')),
+          'Nope');
     });
   });
 }

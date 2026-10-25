@@ -277,33 +277,33 @@ bool subtitleLanguagesCompatible(String a, String b) {
   return left == right;
 }
 
-/// Shown when a restore after a source switch cannot find the viewer's
-/// track on the new source.
-const kSubtitleNotCarriedMessage =
-    "Couldn't keep your subtitles at this quality. Pick them again.";
+/// What a subtitle toast says, as data: the screen words it in the viewer's
+/// language (`AppFormatters.subtitleNoticeText`).
+enum SubtitleNotice {
+  /// A restore after a source switch cannot find the viewer's track on the
+  /// new source.
+  notCarried,
 
-/// Shown when the viewer's track is a bitmap (PGS, VobSub, DVB, XSUB) and
-/// the source cannot deliver it: a web transcode, or a server too old to
-/// serve bitmap sidecars.
-const kImageSubtitleUnavailableMessage =
-    'Image-based subtitles only play at Original quality.';
+  /// The viewer's track is a bitmap (PGS, VobSub, DVB, XSUB) and the source
+  /// cannot deliver it: a web transcode, or a server too old to serve bitmap
+  /// sidecars.
+  imageOnlyAtOriginal,
 
-/// Shown when a picked track's text body or bitmap sidecar could not be
-/// fetched.
-const kSubtitleLoadFailedMessage =
-    'Could not load that subtitle track. Try again.';
+  /// A picked track's text body or bitmap sidecar could not be fetched.
+  loadFailed,
 
-/// Shown while the server copies a bitmap track out of the source, which
-/// on a large file takes minutes the first time.
-const kImageSubtitlePreparingMessage = 'Preparing subtitles...';
+  /// The server is copying a bitmap track out of the source, which on a large
+  /// file takes minutes the first time.
+  preparingImage,
+}
 
-/// The line for a bitmap sidecar that could not be fetched. A 404 comes
+/// The notice for a bitmap sidecar that could not be fetched. A 404 comes
 /// from a server that cannot serve sidecars, where the track plays only at
 /// Original; anything else is worth another try.
-String imageSidecarFailureMessage(SidecarFetch fetch) =>
+SubtitleNotice imageSidecarFailureNotice(SidecarFetch fetch) =>
     fetch is SidecarUnsupported
-        ? kImageSubtitleUnavailableMessage
-        : kSubtitleLoadFailedMessage;
+        ? SubtitleNotice.imageOnlyAtOriginal
+        : SubtitleNotice.loadFailed;
 
 /// The viewer's subtitle choice while a source switch carries it, in the
 /// server's id space, which every source can resolve.
@@ -381,11 +381,11 @@ final class RestoreOff extends SubtitleRestore {
   const RestoreOff();
 }
 
-/// Apply "Off" and tell the viewer [message]: their track cannot be shown
+/// Apply "Off" and tell the viewer [notice]: their track cannot be shown
 /// on the new source.
 final class RestoreUnavailable extends SubtitleRestore {
-  final String message;
-  const RestoreUnavailable(this.message);
+  final SubtitleNotice notice;
+  const RestoreUnavailable(this.notice);
 }
 
 /// mpv's own track for embedded [serverTrack], found by ffprobe stream
@@ -433,7 +433,7 @@ SubtitleRestore resolveSubtitleIntent({
     case IntentOff():
       return const RestoreOff();
     case IntentUnmappable():
-      return const RestoreUnavailable(kSubtitleNotCarriedMessage);
+      return const RestoreUnavailable(SubtitleNotice.notCarried);
     case IntentTrack(:final track):
       final same = tracks.where((t) => t.id == track.id).firstOrNull;
       if (same != null) return RestoreTrack(same);
@@ -449,10 +449,10 @@ SubtitleRestore resolveSubtitleIntent({
         final onNativeSource =
             tracks.any((t) => isMpvNativeSubtitleTrackId(t.id));
         if (isImageSubtitleTrack(track) && !onNativeSource) {
-          return const RestoreUnavailable(kImageSubtitleUnavailableMessage);
+          return const RestoreUnavailable(SubtitleNotice.imageOnlyAtOriginal);
         }
       }
-      return const RestoreUnavailable(kSubtitleNotCarriedMessage);
+      return const RestoreUnavailable(SubtitleNotice.notCarried);
   }
 }
 
@@ -534,6 +534,32 @@ int? subtitleDelayDisplayMs({
   return storedOffsetMs + nudgeMs;
 }
 
+/// What a subtitle delay toast reports, as data: the screen words it in the
+/// viewer's language (`AppFormatters.subtitleDelayNoticeText`).
+enum SubtitleDelayNoticeKind {
+  /// The nudge took effect; [SubtitleDelayNotice.totalMs] is the new delay.
+  adjusted,
+
+  /// The nudge is tracked but not visible until Save (web).
+  adjustedAfterSave,
+
+  /// The delay was saved and is already on screen.
+  saved,
+
+  /// The delay was saved but shows only when the track next loads (web).
+  savedAppliesLater,
+
+  /// The server refused or the write failed.
+  saveFailed,
+}
+
+class SubtitleDelayNotice {
+  const SubtitleDelayNotice(this.kind, {this.totalMs = 0});
+
+  final SubtitleDelayNoticeKind kind;
+  final int totalMs;
+}
+
 /// What the toast should say right after a `z`/`shift+z` nudge (or a
 /// sheet stepper tap), given the new total delay in [totalMs].
 ///
@@ -543,23 +569,25 @@ int? subtitleDelayDisplayMs({
 /// `SubtitleContent` query. The live nudge is still tracked and still
 /// contributes to what Save persists, so the nudge itself is not dropped on
 /// web; only the wording changes, to stop claiming a visible change that has
-/// not happened yet. See [subtitleDelaySavedMessage] for the other half of
+/// not happened yet. See [subtitleDelaySavedNotice] for the other half of
 /// this: Save does not make the change visible on web either, only
 /// persists it.
-String subtitleDelayToastMessage({
+SubtitleDelayNotice subtitleDelayNudgeNotice({
   required int totalMs,
   required bool appliesImmediately,
-}) {
-  final signed = '${totalMs >= 0 ? '+' : ''}$totalMs ms';
-  if (appliesImmediately) return 'Subtitle delay $signed';
-  return 'Subtitle delay will be $signed after Save';
-}
+}) =>
+    SubtitleDelayNotice(
+      appliesImmediately
+          ? SubtitleDelayNoticeKind.adjusted
+          : SubtitleDelayNoticeKind.adjustedAfterSave,
+      totalMs: totalMs,
+    );
 
 /// What the toast should say right after a successful subtitle delay
 /// save.
 ///
 /// [appliesImmediately] is `false` on web for a second, distinct reason from
-/// [subtitleDelayToastMessage]'s: `SubtitleDelayController.save` persists the
+/// [subtitleDelayNudgeNotice]'s: `SubtitleDelayController.save` persists the
 /// offset to the server and updates its stored offsets and live nudge, but
 /// never evicts or refetches the `SubtitleContent` body already cached in
 /// `_mediaKitSubtitleTrackMap` for this track. That cached body still has the
@@ -575,7 +603,10 @@ String subtitleDelayToastMessage({
 /// `shouldApplySubtitleSelection`) that took real effort to get right, on a
 /// surface (the Flutter web build) that is not the primary UI. The message
 /// is corrected instead of the behavior.
-String subtitleDelaySavedMessage({required bool appliesImmediately}) {
-  if (appliesImmediately) return 'Subtitle delay saved';
-  return 'Subtitle delay saved. It applies next time this track loads.';
-}
+SubtitleDelayNotice subtitleDelaySavedNotice(
+        {required bool appliesImmediately}) =>
+    SubtitleDelayNotice(
+      appliesImmediately
+          ? SubtitleDelayNoticeKind.saved
+          : SubtitleDelayNoticeKind.savedAppliesLater,
+    );

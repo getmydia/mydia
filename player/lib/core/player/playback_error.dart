@@ -5,6 +5,8 @@
 /// [resume_plan.dart].
 library;
 
+import '../../l10n/l10n.dart';
+
 /// mpv's wording when a source cannot be resolved at all.
 ///
 /// This is what a stream that 404s looks like from the player's side: the
@@ -74,22 +76,23 @@ bool audioOutputUnavailable(String raw) =>
 bool sourceLost(String raw) =>
     raw.trim().toLowerCase().startsWith(_openFailure);
 
-/// A viewer-facing sentence for a raw media_kit error string.
+/// A viewer-facing sentence for a raw media_kit error string, in the
+/// language of [l10n].
 ///
-/// Falls through to the raw text for anything unrecognised. Showing an ugly
-/// mpv string is worse than showing a clean one, but it is far better than the
-/// alternative this function exists to replace, which was showing nothing at
-/// all and leaving a black screen running a timeline.
-String playbackErrorMessage(String raw) {
+/// Falls through to the raw text for anything unrecognised, inside a fixed
+/// sentence. The raw text itself is mpv's or the browser's and stays as it
+/// came. Showing an ugly mpv string is worse than showing a clean one, but it
+/// is far better than the alternative this function exists to replace, which
+/// was showing nothing at all and leaving a black screen running a timeline.
+String playbackErrorMessage(AppLocalizations l10n, String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
-    return 'Playback failed for an unknown reason.';
+    return l10n.playbackErrorUnknown;
   }
 
   if (trimmed.toLowerCase().contains(_openFailure)) {
-    return 'Could not open this stream. The file may have been moved, '
-        'replaced, or deleted on the server. Try playing it again.';
+    return l10n.playbackErrorOpenFailed;
   }
 
-  return 'Playback failed: $trimmed';
+  return l10n.playbackErrorFailed(trimmed);
 }

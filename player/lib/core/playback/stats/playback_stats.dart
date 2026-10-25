@@ -8,6 +8,9 @@
 /// plan, the track list and the p2p status.
 library;
 
+import '../../../domain/models/quality_rung.dart';
+import '../playback_memory.dart' show FailureReason;
+
 /// How the current source is reaching the decoder.
 enum PlaybackMode {
   /// The file's own bytes, no server-side work.
@@ -64,11 +67,104 @@ class StatsSample {
   final List<StatsPoint> history;
 }
 
+/// The sentences of the Why row that carry no data.
+enum StatsWhyKind {
+  containerNotDirect,
+  copyRejectedByMime,
+  serverReencoding,
+  browserReencodes,
+  switchedEarlier,
+  recentStall,
+}
+
+/// Why the panel says the current delivery is not the obvious one, as data.
+/// `AppFormatters.statsWhyText` words it in the viewer's language and
+/// `statsClipboardText` words it in English for bug reports.
+sealed class StatsWhy {
+  const StatsWhy();
+}
+
+/// A sentence with nothing to fill in.
+final class StatsWhyPlain extends StatsWhy {
+  const StatsWhyPlain(this.kind);
+  final StatsWhyKind kind;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsWhyPlain && other.kind == kind;
+
+  @override
+  int get hashCode => kind.hashCode;
+}
+
+/// The viewer capped the quality at [rung].
+final class StatsWhyCapped extends StatsWhy {
+  const StatsWhyCapped(this.rung);
+  final QualityRung rung;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsWhyCapped && other.rung == rung;
+
+  @override
+  int get hashCode => rung.hashCode;
+}
+
+/// A decode failure remembered for [codec] is why the file is transcoded.
+final class StatsWhyRemembered extends StatsWhy {
+  const StatsWhyRemembered(this.codec);
+  final String codec;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsWhyRemembered && other.codec == codec;
+
+  @override
+  int get hashCode => codec.hashCode;
+}
+
+/// The connection stalled [minutes] ago (at least one) and capped the plan.
+final class StatsWhyStalled extends StatsWhy {
+  const StatsWhyStalled(this.minutes);
+  final int minutes;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsWhyStalled && other.minutes == minutes;
+
+  @override
+  int get hashCode => minutes.hashCode;
+}
+
+/// The adaptation policy switched to transcoding for [reason].
+final class StatsWhyFallback extends StatsWhy {
+  const StatsWhyFallback(this.reason);
+  final FailureReason reason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsWhyFallback && other.reason == reason;
+
+  @override
+  int get hashCode => reason.hashCode;
+}
+
+/// The viewer's quality choice and what it resolved to.
+class StatsQuality {
+  const StatsQuality({required this.selected, this.effective});
+
+  final QualityRung selected;
+
+  /// The rung the server reported applying. Only read when [selected] is Auto.
+  final QualityRung? effective;
+}
+
 /// What the screen knows without measuring.
 class StatsContext {
   const StatsContext({
     required this.mode,
     required this.qualityLabel,
+    this.quality,
     required this.duration,
     this.why,
     this.whyDetail,
@@ -84,13 +180,17 @@ class StatsContext {
   final PlaybackMode mode;
 
   /// The viewer's choice and what it resolved to, for example
-  /// `Auto -> 1080p` or `Original`.
+  /// `Auto -> 1080p` or `Original`. English, for the clipboard: the panel
+  /// words [quality] when it is set and falls back to this text otherwise.
   final String qualityLabel;
+
+  /// The same choice as data, for the panel to word in the viewer's language.
+  final StatsQuality? quality;
   final Duration duration;
 
-  /// One viewer-facing sentence explaining a mode that is not the obvious
-  /// one. Null when there is nothing to say, which drops the row.
-  final String? why;
+  /// Why a mode that is not the obvious one was chosen. Null when there is
+  /// nothing to say, which drops the row.
+  final StatsWhy? why;
 
   /// The raw adaptation detail behind [why], for the clipboard only.
   final String? whyDetail;

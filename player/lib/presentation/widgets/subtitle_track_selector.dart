@@ -56,8 +56,13 @@ const _chipLanguages = SubtitleCandidate.searchLanguages;
 
 /// The line to show a viewer for [error]: its own message when it was
 /// written for one, and [fallback] for everything else.
-String _viewerMessage(Object error, String fallback) =>
-    error is SubtitleActionException ? error.message : fallback;
+String _viewerMessage(AppLocalizations l10n, Object error, String fallback) {
+  if (error is! SubtitleActionException) return fallback;
+  final issue = error.issue;
+  return issue == null
+      ? error.message ?? fallback
+      : l10n.subtitleIssueText(issue);
+}
 
 /// Shows a bottom sheet for selecting a subtitle track, or for searching for
 /// and downloading one that is not already on the file.
@@ -183,7 +188,10 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _outcome = outcome;
-        _error = outcome.error;
+        final issue = outcome.issue;
+        _error = issue == null
+            ? outcome.error
+            : context.l10n.subtitleIssueText(issue);
         _mode = _SheetMode.results;
       });
     } catch (e) {
@@ -196,7 +204,8 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _outcome = const SubtitleSearchOutcome(results: [], providers: []);
-        _error = _viewerMessage(e, context.l10n.subtitleSearchFailed);
+        _error =
+            _viewerMessage(context.l10n, e, context.l10n.subtitleSearchFailed);
         _mode = _SheetMode.results;
       });
     }
@@ -245,7 +254,8 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _mode = _SheetMode.results;
-        _error = _viewerMessage(e, context.l10n.subtitleDownloadFailed);
+        _error = _viewerMessage(
+            context.l10n, e, context.l10n.subtitleDownloadFailed);
       });
     }
   }
@@ -267,7 +277,8 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay nudge failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, context.l10n.subtitleDelayAdjustFailed);
+        _delayError = _viewerMessage(
+            context.l10n, e, context.l10n.subtitleDelayAdjustFailed);
       });
     }
   }
@@ -280,7 +291,8 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay reset failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, context.l10n.subtitleDelayResetFailed);
+        _delayError = _viewerMessage(
+            context.l10n, e, context.l10n.subtitleDelayResetFailed);
       });
     }
   }
@@ -293,7 +305,8 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay save failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, context.l10n.subtitleDelaySaveFailed);
+        _delayError = _viewerMessage(
+            context.l10n, e, context.l10n.subtitleDelaySaveFailed);
       });
     }
   }

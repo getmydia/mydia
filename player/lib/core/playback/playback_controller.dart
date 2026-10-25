@@ -21,6 +21,7 @@ import '../player/stream_timeline.dart';
 import '../player/web_session_limits.dart';
 import '../sources/mydia/mydia_client.dart';
 import '../sources/mydia/root_typename.dart';
+import 'loading_step.dart';
 import 'playback_plan.dart';
 import 'playback_transport.dart';
 import 'stream_urls.dart';
@@ -164,7 +165,7 @@ class PlaybackController implements PlaybackTransport {
     required String fileId,
     required Duration startAt,
     Duration? totalDuration,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   }) async {
     final lifetime = _lifetime;
     switch (plan) {
@@ -197,11 +198,11 @@ class PlaybackController implements PlaybackTransport {
     required String fileId,
     required Duration startAt,
     required Duration? totalDuration,
-    required void Function(String message)? onProgress,
+    required void Function(LoadingStep step)? onProgress,
     required Completer<void> lifetime,
   }) async {
     _requireActive(lifetime);
-    onProgress?.call('Starting stream...');
+    onProgress?.call(const LoadingStep(LoadingStepKind.startingStream));
     // Do not abandon the mutation itself on teardown: a late response can
     // still create a server session, and must be observed and ended here.
     final session = await _startSession(plan,
@@ -332,7 +333,7 @@ class PlaybackController implements PlaybackTransport {
   Future<bool> _awaitPlaylist(
     String url, {
     required Map<String, String>? headers,
-    required void Function(String message)? onProgress,
+    required void Function(LoadingStep step)? onProgress,
     required Completer<void> lifetime,
   }) async {
     const maxRetries = 20;
@@ -352,15 +353,18 @@ class PlaybackController implements PlaybackTransport {
             return response.body.contains('#EXT-X-ENDLIST');
           }
           final percentage = (segments / minSegments * 100).round();
-          onProgress?.call('Preparing stream... $percentage%');
+          onProgress?.call(LoadingStep(LoadingStepKind.preparingStream,
+              percent: percentage));
         } else {
-          onProgress?.call('Starting transcoding... (${i + 1}/$maxRetries)');
+          onProgress?.call(LoadingStep(LoadingStepKind.startingTranscode,
+              attempt: i + 1, maxAttempts: maxRetries));
         }
       } catch (e) {
         if (lifetime.isCompleted) rethrow;
         debugPrint('[PlaybackController] Playlist probe failed '
             '(attempt ${i + 1}/$maxRetries): $e');
-        onProgress?.call('Starting transcoding... (${i + 1}/$maxRetries)');
+        onProgress?.call(LoadingStep(LoadingStepKind.startingTranscode,
+            attempt: i + 1, maxAttempts: maxRetries));
       }
       final delay = Duration(
         milliseconds: (baseDelay.inMilliseconds * (1.5 * i + 1))
@@ -386,7 +390,7 @@ class PlaybackController implements PlaybackTransport {
     required Duration realPosition,
     Duration? totalDuration,
     required Future<Stream<Duration>> Function(PlaybackSource source) attach,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   }) async {
     if (_switching) throw StateError('a source switch is already in flight');
     _switching = true;

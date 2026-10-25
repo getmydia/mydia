@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../player/stream_timeline.dart';
+import 'loading_step.dart';
 import 'playback_controller.dart' show PlaybackSource, awaitFirstAdvance;
 import 'playback_plan.dart';
 import 'playback_transport.dart';
@@ -71,10 +72,10 @@ class SimplePlaybackTransport implements PlaybackTransport {
     required String fileId,
     required Duration startAt,
     Duration? totalDuration,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   }) async {
     final lifetime = _lifetime;
-    onProgress?.call('Starting stream...');
+    onProgress?.call(const LoadingStep(LoadingStepKind.startingStream));
     final resolved =
         await _resolver.resolve(plan, fileId: fileId, startAt: startAt);
     final id = resolved.sessionId;
@@ -101,7 +102,7 @@ class SimplePlaybackTransport implements PlaybackTransport {
     required Duration realPosition,
     Duration? totalDuration,
     required Future<Stream<Duration>> Function(PlaybackSource source) attach,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   }) async {
     if (_switching) throw StateError('a source switch is already in flight');
     _switching = true;

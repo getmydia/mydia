@@ -8,6 +8,7 @@ import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/router/legacy_routes.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import 'player_screen.dart';
 import 'session/source_playback_sessions.dart';
 
@@ -87,7 +88,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
     } catch (e) {
       debugPrint('Error decoding queue: $e');
       setState(() {
-        _error = 'Failed to decode queue: $e';
+        // The technical text only; `build` words it, because `initState`
+        // has no localizations yet.
+        _error = '$e';
       });
     }
   }
@@ -137,7 +140,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
               Text(
-                _error!,
+                context.l10n.queueDecodeFailed(_error!),
                 style: const TextStyle(color: Colors.white),
                 textAlign: TextAlign.center,
               ),
@@ -150,7 +153,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     context.go('/');
                   }
                 },
-                child: const Text('Go Back'),
+                child: Text(context.l10n.routerGoBack),
               ),
             ],
           ),
@@ -167,9 +170,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
             children: [
               const Icon(Icons.queue_music, size: 64, color: Colors.grey),
               const SizedBox(height: 16),
-              const Text(
-                'Queue is empty',
-                style: TextStyle(color: Colors.white, fontSize: 18),
+              Text(
+                context.l10n.queueEmpty,
+                style: const TextStyle(color: Colors.white, fontSize: 18),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -180,7 +183,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     context.go('/');
                   }
                 },
-                child: const Text('Go Back'),
+                child: Text(context.l10n.routerGoBack),
               ),
             ],
           ),
@@ -207,10 +210,10 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
             proxy: () => ref.read(mediaProxyProvider),
           );
     if (session == null) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
-          key: Key('queue-player-unavailable'),
-          child: Text('This server is not available to play from.'),
+          key: const Key('queue-player-unavailable'),
+          child: Text(context.l10n.queueServerUnavailable),
         ),
       );
     }
@@ -279,7 +282,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     backgroundColor: Colors.black.withValues(alpha: 0.7),
                     padding: const EdgeInsets.all(12),
                   ),
-                  tooltip: 'Previous',
+                  tooltip: context.l10n.queuePrevious,
                 ),
               if (hasPrevious && hasNext) const SizedBox(width: 24),
               if (hasNext)
@@ -291,7 +294,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     backgroundColor: Colors.black.withValues(alpha: 0.7),
                     padding: const EdgeInsets.all(12),
                   ),
-                  tooltip: 'Next',
+                  tooltip: context.l10n.queueNext,
                 ),
             ],
           ),
@@ -321,9 +324,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                       onPressed: _toggleQueueOverlay,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Play Queue',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.queueTitle,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -331,7 +334,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      '${_queue.length} items',
+                      context.l10n.collectionItemCount(_queue.length),
                       style: TextStyle(
                         color: Colors.grey[400],
                         fontSize: 14,
@@ -383,7 +386,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
-                        item.type == 'movie' ? 'Movie' : 'Episode',
+                        item.type == 'movie'
+                            ? context.l10n.queueItemMovie
+                            : context.l10n.queueItemEpisode,
                         style: TextStyle(
                           color: Colors.grey[500],
                           fontSize: 12,
