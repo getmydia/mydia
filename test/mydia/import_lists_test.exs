@@ -959,6 +959,13 @@ defmodule Mydia.ImportListsTest do
 
       assert "is required for this list type" in errors_on(changeset).list_url
     end
+
+    test "changing the type does not carry the stored URL across unvalidated" do
+      list = stored_url_list("custom_url", "https://example.com/feed.json")
+
+      assert {:error, changeset} = ImportLists.update_import_list(list, %{type: "tmdb_list"})
+      assert "is required for this list type" in errors_on(changeset).list_url
+    end
   end
 
   describe "check_duplicate/2" do
