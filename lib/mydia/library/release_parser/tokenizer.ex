@@ -320,28 +320,33 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   defp apply_glued_source_splits(tokens, boundary) do
     Enum.flat_map(tokens, fn %Token{} = token ->
       case source_then_resolution(token.value) do
-        [_, left, dash, right] ->
-          left_len = byte_size(left)
-
-          resolution = %Token{
-            token
-            | value: right,
-              byte_offset: token.byte_offset + left_len + byte_size(dash),
-              byte_length: byte_size(right)
-          }
-
-          if noise_prefix?(left),
-            do: [resolution],
-            else: [%Token{token | value: left, byte_length: left_len}, resolution]
-
-        nil ->
-          cond do
-            resolution_then_source?(token.value) -> split_compound_dash(token)
-            metadata_zone?(token, boundary) -> split_dashed_codecs(token)
-            true -> [token]
-          end
+        nil -> split_unglued(token, boundary)
+        match -> split_glued(token, match)
       end
     end)
+  end
+
+  defp split_glued(%Token{} = token, [_, left, dash, right]) do
+    left_len = byte_size(left)
+
+    resolution = %Token{
+      token
+      | value: right,
+        byte_offset: token.byte_offset + left_len + byte_size(dash),
+        byte_length: byte_size(right)
+    }
+
+    if noise_prefix?(left),
+      do: [resolution],
+      else: [%Token{token | value: left, byte_length: left_len}, resolution]
+  end
+
+  defp split_unglued(%Token{} = token, boundary) do
+    cond do
+      resolution_then_source?(token.value) -> split_compound_dash(token)
+      metadata_zone?(token, boundary) -> split_dashed_codecs(token)
+      true -> [token]
+    end
   end
 
   # The mirror order, a resolution then its source (`720p-web`). The

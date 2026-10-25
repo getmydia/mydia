@@ -647,60 +647,42 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     end
   end
 
+  # First match wins. `:channels` appends the first number in the value;
+  # `AC3 5.1` drops its codec name first, whose `3` would otherwise read as
+  # the channel count. `DTS-HD` with `ma` anywhere is Master Audio.
+  @audio_display [
+    {~r/^eac3$/, "Dolby Digital Plus", :bare},
+    {~r/^(ddp|dd\+)\s?(\d+\.?\d*)?$/, "Dolby Digital Plus", :channels},
+    {~r/^ac3$/, "Dolby Digital", :bare},
+    {~r/^ac3\s\d+\.?\d*$/, "Dolby Digital", :channels_after_ac3},
+    {~r/^dd(\d+\.?\d*)?$/, "Dolby Digital", :channels},
+    {~r/^(?=.*dts-hd)(?=.*ma)/s, "DTS-HD Master Audio", :bare},
+    {~r/dts-hd/, "DTS-HD High Resolution Audio", :bare},
+    {~r/^dts[-:]x$/, "DTS:X", :bare},
+    {~r/^dts$/, "DTS", :bare},
+    {~r/truehd atmos/, "Dolby TrueHD Atmos", :channels},
+    {~r/truehd/, "Dolby TrueHD", :channels},
+    {~r/^atmos$/, "Dolby Atmos", :bare},
+    {~r/^aac-lc/, "AAC-LC", :bare},
+    {~r/^aac/, "AAC", :channels}
+  ]
+
   defp standardize_audio(nil), do: nil
 
   defp standardize_audio(value) do
     normalized = String.downcase(value)
 
-    cond do
-      Regex.match?(~r/^eac3$/i, normalized) ->
-        "Dolby Digital Plus"
-
-      Regex.match?(~r/^(ddp|dd\+)\s?(\d+\.?\d*)?$/i, normalized) ->
-        extract_channels(value, "Dolby Digital Plus")
-
-      Regex.match?(~r/^ac3$/i, normalized) ->
-        "Dolby Digital"
-
-      Regex.match?(~r/^ac3\s\d+\.?\d*$/i, normalized) ->
-        extract_channels(String.replace(value, ~r/^ac3\s/i, ""), "Dolby Digital")
-
-      Regex.match?(~r/^dd(\d+\.?\d*)?$/i, normalized) ->
-        extract_channels(value, "Dolby Digital")
-
-      String.contains?(normalized, "dts-hd") and String.contains?(normalized, "ma") ->
-        "DTS-HD Master Audio"
-
-      String.contains?(normalized, "dts-hd") ->
-        "DTS-HD High Resolution Audio"
-
-      Regex.match?(~r/^dts[-:]x$/i, normalized) ->
-        "DTS:X"
-
-      Regex.match?(~r/^dts$/i, normalized) ->
-        "DTS"
-
-      String.contains?(normalized, "truehd atmos") ->
-        extract_channels(value, "Dolby TrueHD Atmos")
-
-      String.contains?(normalized, "truehd") ->
-        extract_channels(value, "Dolby TrueHD")
-
-      Regex.match?(~r/^atmos$/i, normalized) ->
-        "Dolby Atmos"
-
-      Regex.match?(~r/^aac-lc/i, normalized) ->
-        "AAC-LC"
-
-      Regex.match?(~r/^aac/i, normalized) ->
-        extract_channels(value, "AAC")
-
-      true ->
-        value
+    case Enum.find(@audio_display, fn {re, _, _} -> Regex.match?(re, normalized) end) do
+      {_, display, :bare} -> display
+      {_, display, :channels} -> with_channels(value, display)
+      {_, display, :channels_after_ac3} -> value |> drop_ac3_name() |> with_channels(display)
+      nil -> value
     end
   end
 
-  defp extract_channels(value, base_name) do
+  defp drop_ac3_name(value), do: String.replace(value, ~r/^ac3\s/i, "")
+
+  defp with_channels(value, base_name) do
     case Regex.run(~r/(\d+\.?\d*)/, value) do
       [_, channels] -> "#{base_name} #{channels}"
       _ -> base_name
