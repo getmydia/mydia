@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/download_option.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 /// Dialog for choosing what to download before a download starts.
@@ -50,7 +51,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Download Quality',
+            context.l10n.downloadQualityTitle,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -94,7 +95,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           ),
           const SizedBox(height: 12),
           Text(
-            'No download options available',
+            context.l10n.downloadNoOptions,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: palette.textSecondary,
                 ),
@@ -108,8 +109,12 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
       final option = options.first;
       final container = option.container;
       return Text(
-        'Download original, ${option.formattedSize}'
-        '${container == null ? '' : ' ${container.toUpperCase()}'}?',
+        container == null
+            ? context.l10n.downloadConfirmOriginal(option.formattedSize)
+            : context.l10n.downloadConfirmOriginalWithContainer(
+                option.formattedSize,
+                container.toUpperCase(),
+              ),
         key: const Key('download-confirm-original'),
         style: Theme.of(context).textTheme.bodyMedium,
       );
@@ -144,7 +149,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Select Quality',
+          context.l10n.downloadSelectQuality,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -249,7 +254,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
-          'Ready',
+          context.l10n.downloadOptionReady,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.success,
                 fontWeight: FontWeight.w600,
@@ -265,7 +270,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
-          'Transcoding ${(progress * 100).toStringAsFixed(0)}%',
+          context.l10n.downloadOptionTranscoding((progress * 100).round()),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.warning,
                 fontWeight: FontWeight.w600,
@@ -277,12 +282,12 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   }
 
   Widget _buildLoadingContent() {
-    return const Column(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CircularProgressIndicator(),
-        SizedBox(height: 16),
-        Text('Loading quality options...'),
+        const CircularProgressIndicator(),
+        const SizedBox(height: 16),
+        Text(context.l10n.downloadLoadingOptions),
       ],
     );
   }
@@ -299,7 +304,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Failed to load options',
+          context.l10n.downloadLoadFailed,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -333,7 +338,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         onPressed:
             _isStartingDownload ? null : () => Navigator.of(context).pop(null),
         child: Text(
-          'Cancel',
+          context.l10n.commonCancel,
           style: TextStyle(
             color: _isStartingDownload
                 ? palette.textDisabled
@@ -358,7 +363,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : const Text('Download'),
+            : Text(context.l10n.commonDownload),
       ),
     ];
   }

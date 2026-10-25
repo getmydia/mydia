@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
+import '../../l10n/l10n.dart';
 
 Future<MediaFile?> showQualitySelector(
   BuildContext context,
@@ -40,7 +41,7 @@ class QualitySelectorSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'Select Quality',
+                context.l10n.downloadSelectQuality,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -56,7 +57,7 @@ class QualitySelectorSheet extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                subtitle: _buildFileDetails(file, palette),
+                subtitle: _buildFileDetails(context.l10n, file, palette),
                 trailing: const Icon(Icons.chevron_right),
               ),
             ),
@@ -67,7 +68,11 @@ class QualitySelectorSheet extends StatelessWidget {
     );
   }
 
-  Widget? _buildFileDetails(MediaFile file, MydiaPalette palette) {
+  Widget? _buildFileDetails(
+    AppLocalizations l10n,
+    MediaFile file,
+    MydiaPalette palette,
+  ) {
     final details = <String>[];
 
     if (file.bitrate != null) {
@@ -81,7 +86,7 @@ class QualitySelectorSheet extends StatelessWidget {
     }
 
     if (file.directPlaySupported) {
-      details.add('Direct Play');
+      details.add(l10n.qualityDirectPlay);
     }
 
     if (details.isEmpty) return null;

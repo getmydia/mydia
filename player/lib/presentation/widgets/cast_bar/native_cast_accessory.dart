@@ -7,6 +7,7 @@ import '../../../core/cast/cast_providers.dart';
 import '../../../core/platform/native_tab_bar_channel.dart';
 import '../../../core/router/navigator_keys.dart';
 import '../../../domain/models/cast_device.dart';
+import '../../../l10n/l10n.dart';
 import '../cast_controls_sheet.dart';
 import 'cast_bar_state.dart';
 
@@ -16,37 +17,42 @@ import 'cast_bar_state.dart';
 /// Play/pause appears only while playing and not syncing, which is when the
 /// Flutter bar's play/pause button is enabled. Every other action
 /// (reconnect, stop, dismiss) is in the sheet a tap opens.
-NativeAccessory? nativeAccessoryFor(CastBarState? state) => switch (state) {
+NativeAccessory? nativeAccessoryFor(
+  AppLocalizations l10n,
+  CastBarState? state,
+) =>
+    switch (state) {
       null => null,
       CastBarAmbient(:final target, :final deviceName) => NativeAccessory(
           title: target.snapshot.title,
-          subtitle: CastBarText.ambientStatus(deviceName),
+          subtitle: CastBarText.ambientStatus(l10n, deviceName),
           artwork: target.snapshot.imageUrl,
           symbol: 'tv',
         ),
       CastBarOffline(:final device) => NativeAccessory(
           title: device.name,
-          subtitle: CastBarText.offlineStatus,
+          subtitle: CastBarText.offlineStatus(l10n),
           symbol: 'airplayvideo',
         ),
       CastBarConnecting(:final device) => NativeAccessory(
-          title: CastBarText.connectingTitle(device.name),
+          title: CastBarText.connectingTitle(l10n, device.name),
           symbol: 'airplayvideo',
         ),
       CastBarStale(:final session) => NativeAccessory(
           title: session.mediaInfo?.title ?? session.device.name,
-          subtitle: CastBarText.staleStatus(session.device.name),
+          subtitle: CastBarText.staleStatus(l10n, session.device.name),
           artwork: session.mediaInfo?.imageUrl,
           symbol: 'airplayvideo',
         ),
       CastBarIdle(:final device) => NativeAccessory(
-          title: CastBarText.idleTitle(device.name),
-          subtitle: CastBarText.idleStatus,
+          title: CastBarText.idleTitle(l10n, device.name),
+          subtitle: CastBarText.idleStatus(l10n),
           symbol: 'airplayvideo.circle.fill',
         ),
       CastBarPlaying(:final session) => NativeAccessory(
           title: session.mediaInfo?.title ?? session.device.name,
           subtitle: CastBarText.playingStatus(
+            l10n,
             session.device.name,
             syncing: session.isSyncing,
           ),
@@ -135,7 +141,10 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
 
   @override
   Widget build(BuildContext context) {
-    final accessory = nativeAccessoryFor(ref.watch(castBarStateProvider));
+    final accessory = nativeAccessoryFor(
+      context.l10n,
+      ref.watch(castBarStateProvider),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_channel.setAccessory(accessory));
     });

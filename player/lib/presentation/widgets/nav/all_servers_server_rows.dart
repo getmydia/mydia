@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/sources_providers.dart';
 import '../../screens/detail/detail_links.dart';
+import '../../../l10n/l10n.dart';
 import '../connection_status_dot.dart';
 import 'rail_scope.dart';
 import 'sidebar_row.dart';
@@ -28,8 +29,10 @@ class AllServersServerRows extends ConsumerWidget {
         if (!inRail)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child:
-                Text('Servers', style: Theme.of(context).textTheme.labelSmall),
+            child: Text(
+              context.l10n.settingsServers,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
           ),
         for (final s in sources)
           SidebarRow(

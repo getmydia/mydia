@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/window/decoration_layout.dart';
 import 'package:player/core/window/window_frame_state.dart';
@@ -37,6 +38,8 @@ Future<void> _pump(
   try {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DesktopWindowChrome(
           layout: ValueNotifier(layout),
           controller: window,
@@ -551,6 +554,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: DesktopWindowChrome(
                 layout: ValueNotifier(layout),
                 controller: windowController,

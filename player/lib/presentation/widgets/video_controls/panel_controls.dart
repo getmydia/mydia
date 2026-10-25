@@ -7,6 +7,7 @@ import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
+import '../../../l10n/l10n.dart';
 import '../glass/glass_slider.dart';
 import 'chrome_top_bar.dart' show scalingIcon, scalingTooltip;
 import 'control_button.dart';
@@ -89,7 +90,9 @@ class _VolumeSurfaceState extends State<VolumeSurface> {
           icon: _glyph,
           iconSize: 20,
           size: 40,
-          tooltip: widget.volume == 0 ? 'Unmute' : 'Mute',
+          tooltip: widget.volume == 0
+              ? context.l10n.videoUnmute
+              : context.l10n.videoMute,
           onTap: widget.onToggleMute,
         ),
         MouseRegion(
@@ -286,7 +289,9 @@ class SecondaryCluster extends StatelessWidget {
           iconSize: 18,
           size: 32,
           enabled: onSubtitleTap != null,
-          tooltip: 'Subtitles: ${selectedSubtitleLabel ?? 'Off'}',
+          tooltip: context.l10n.videoSubtitlesTooltip(
+            selectedSubtitleLabel ?? context.l10n.commonOff,
+          ),
           onTap: onSubtitleTap,
         ),
         SizedBox(width: gap),
@@ -297,8 +302,10 @@ class SecondaryCluster extends StatelessWidget {
           size: 32,
           enabled: audioEnabled,
           tooltip: audioEnabled
-              ? 'Audio: ${selectedAudioLabel ?? 'Default'}'
-              : 'No audio tracks',
+              ? context.l10n.videoAudioTooltip(
+                  selectedAudioLabel ?? context.l10n.commonDefault,
+                )
+              : context.l10n.videoNoAudioTracks,
           onTap: audioEnabled ? onAudioTap : null,
         ),
         if (onQualityTap != null) ...[
@@ -313,8 +320,8 @@ class SecondaryCluster extends StatelessWidget {
             // single rendition per session. A caller that cannot name the
             // current rung gets the bare noun rather than a fiction.
             tooltip: selectedQualityLabel == null
-                ? 'Quality'
-                : 'Quality: $selectedQualityLabel',
+                ? context.l10n.videoQuality
+                : context.l10n.videoQualityCurrent(selectedQualityLabel!),
             onTap: onQualityTap,
           ),
         ],
@@ -331,7 +338,9 @@ class SecondaryCluster extends StatelessWidget {
                 : Icons.fullscreen_rounded,
             iconSize: 18,
             size: 32,
-            tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
+            tooltip: isFullscreen
+                ? context.l10n.videoExitFullscreen
+                : context.l10n.videoFullscreen,
             onTap: onFullscreenTap,
           ),
         ],
@@ -342,7 +351,7 @@ class SecondaryCluster extends StatelessWidget {
             icon: scalingIcon(scaling),
             iconSize: 18,
             size: 32,
-            tooltip: scalingTooltip(scaling),
+            tooltip: scalingTooltip(context.l10n, scaling),
             onTap: onScalingTap,
           ),
         ],
@@ -373,7 +382,9 @@ class SecondaryCluster extends StatelessWidget {
                 icon: Icons.push_pin_rounded,
                 iconSize: 18,
                 size: 32,
-                tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
+                tooltip: isAlwaysOnTop
+                    ? context.l10n.videoExitAlwaysOnTop
+                    : context.l10n.videoAlwaysOnTop,
                 onTap: onAlwaysOnTopTap,
               ),
             ),

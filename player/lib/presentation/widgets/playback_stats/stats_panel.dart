@@ -15,6 +15,7 @@ import '../../../core/playback/stats/stats_report.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../glass_surface.dart';
 import 'stats_sparkline.dart';
 
@@ -45,6 +46,7 @@ class StatsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext buildContext) {
     final palette = buildContext.palette;
+    final l10n = buildContext.l10n;
     final rows = statsRows(sample, context, metrics.density);
     final tv = metrics.density == StatsDensity.tv;
 
@@ -69,7 +71,7 @@ class StatsPanel extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _header(tv, palette),
+                _header(l10n, tv, palette),
                 Container(
                   height: 1,
                   margin: EdgeInsets.only(bottom: tv ? 14 : 11),
@@ -96,14 +98,15 @@ class StatsPanel extends StatelessWidget {
                           if (row != rows.last)
                             SizedBox(height: metrics.rowGap),
                         ],
-                        if (metrics.showSparkline) _sparkline(tv, palette),
+                        if (metrics.showSparkline)
+                          _sparkline(l10n, tv, palette),
                       ],
                     ),
                   ),
                 ),
                 if (metrics.density == StatsDensity.compact)
-                  _compactFootnote(palette),
-                if (tv) _remoteHint(palette),
+                  _compactFootnote(l10n, palette),
+                if (tv) _remoteHint(l10n, palette),
               ],
             ),
           ),
@@ -112,9 +115,9 @@ class StatsPanel extends StatelessWidget {
     );
   }
 
-  Widget _header(bool tv, MydiaPalette palette) {
+  Widget _header(AppLocalizations l10n, bool tv, MydiaPalette palette) {
     final title = Text(
-      'STATS FOR NERDS',
+      l10n.settingsStatsOverlayTitle.toUpperCase(),
       style: TextStyle(
         fontSize: tv ? 12.5 : 10.5,
         fontWeight: FontWeight.w600,
@@ -136,7 +139,7 @@ class StatsPanel extends StatelessWidget {
           onPressed: onCopy,
           icon: const Icon(Icons.copy, size: 15),
           color: palette.textSecondary,
-          tooltip: 'Copy stats',
+          tooltip: l10n.statsCopy,
           // A finger-sized target where a finger is the pointer, and a
           // tight one where a mouse is: 44px icon buttons would double the
           // header's height on the compact panel that can least afford it.
@@ -152,7 +155,7 @@ class StatsPanel extends StatelessWidget {
           onPressed: onClose,
           icon: const Icon(Icons.close, size: 15),
           color: palette.textSecondary,
-          tooltip: 'Hide stats',
+          tooltip: l10n.statsHide,
           constraints: BoxConstraints.tightFor(
             width: metrics.density == StatsDensity.compact ? 44 : 32,
             height: metrics.density == StatsDensity.compact ? 44 : 32,
@@ -245,7 +248,8 @@ class StatsPanel extends StatelessWidget {
         ),
       );
 
-  Widget _sparkline(bool tv, MydiaPalette palette) => Padding(
+  Widget _sparkline(AppLocalizations l10n, bool tv, MydiaPalette palette) =>
+      Padding(
         padding: EdgeInsets.only(top: tv ? 15 : 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -257,13 +261,14 @@ class StatsPanel extends StatelessWidget {
             ),
             Row(
               children: [
-                _legend(
-                    'throughput', StatsSparkline.throughputColor, tv, palette),
+                _legend(l10n.statsLegendThroughput,
+                    StatsSparkline.throughputColor, tv, palette),
                 const SizedBox(width: 12),
-                _legend('buffer', StatsSparkline.bufferColor, tv, palette),
+                _legend(l10n.statsLegendBuffer, StatsSparkline.bufferColor, tv,
+                    palette),
                 const Spacer(),
                 Text(
-                  'last 60 s',
+                  l10n.statsLast60Seconds,
                   style: TextStyle(
                     fontSize: tv ? 12.5 : 10,
                     color: palette.textSecondary,
@@ -296,11 +301,11 @@ class StatsPanel extends StatelessWidget {
         ],
       );
 
-  Widget _compactFootnote(MydiaPalette palette) => Padding(
+  Widget _compactFootnote(AppLocalizations l10n, MydiaPalette palette) =>
+      Padding(
         padding: const EdgeInsets.only(top: 9),
         child: Text(
-          'Short height: source, decoder, audio and the graph move '
-          'into Copy.',
+          l10n.statsCompactFootnote,
           style: TextStyle(
             fontSize: 9.5,
             color: palette.textSecondary,
@@ -309,7 +314,7 @@ class StatsPanel extends StatelessWidget {
         ),
       );
 
-  Widget _remoteHint(MydiaPalette palette) => Padding(
+  Widget _remoteHint(AppLocalizations l10n, MydiaPalette palette) => Padding(
         padding: const EdgeInsets.only(top: 16),
         child: Row(
           children: [
@@ -324,7 +329,7 @@ class StatsPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Text(
-                'OK',
+                l10n.statsRemoteOk,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -335,7 +340,7 @@ class StatsPanel extends StatelessWidget {
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                'then Stats for nerds, to hide this',
+                l10n.statsRemoteHint(l10n.settingsStatsOverlayTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

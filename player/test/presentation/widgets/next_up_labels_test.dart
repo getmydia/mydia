@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/domain/models/show_next_up.dart';
 import 'package:player/presentation/widgets/next_up_labels.dart';
@@ -23,16 +25,19 @@ NextUpEpisode _episode({
             ),
     );
 
+final _en = lookupAppLocalizations(const Locale('en'));
+
 // Progress requires positionSeconds, percentage and watched; durationSeconds
 // and lastWatchedAt are optional. See player/lib/domain/models/progress.dart.
 
 void main() {
   group('nextUpLabel', () {
     test('matches the web UI wording', () {
-      expect(nextUpLabel(NextUpState.continueWatching), 'Continue Watching');
-      expect(nextUpLabel(NextUpState.next), 'Play Next Episode');
-      expect(nextUpLabel(NextUpState.start), 'Start Watching');
-      expect(nextUpLabel(NextUpState.unknown), 'Play');
+      expect(
+          nextUpLabel(_en, NextUpState.continueWatching), 'Continue Watching');
+      expect(nextUpLabel(_en, NextUpState.next), 'Play Next Episode');
+      expect(nextUpLabel(_en, NextUpState.start), 'Start Watching');
+      expect(nextUpLabel(_en, NextUpState.unknown), 'Play');
     });
   });
 
@@ -73,19 +78,19 @@ void main() {
       );
 
       expect(
-        nextUpCueLine(episode, NextUpState.continueWatching,
+        nextUpCueLine(_en, episode, NextUpState.continueWatching,
             resolution: '1080p'),
         'S02E05 · 1080p · 35 min left',
       );
       expect(
-        nextUpCueLine(episode, NextUpState.next, resolution: '1080p'),
+        nextUpCueLine(_en, episode, NextUpState.next, resolution: '1080p'),
         'S02E05 · 1080p',
       );
     });
 
     test('omits the resolution when none is known', () {
       expect(
-        nextUpCueLine(_episode(), NextUpState.start),
+        nextUpCueLine(_en, _episode(), NextUpState.start),
         'S02E05',
       );
     });

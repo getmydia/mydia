@@ -274,8 +274,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         child: CastBarRow(
           leading: const CastIconTile(
               accent: true, child: Icon(Icons.cast_connected)),
-          title: CastBarText.idleTitle(device.name),
-          status: CastBarText.idleStatus,
+          title: CastBarText.idleTitle(context.l10n, device.name),
+          status: CastBarText.idleStatus(context.l10n),
           dot: CastDot.live,
           actions: [
             _closeButton(
@@ -297,7 +297,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   strokeWidth: 2, color: context.palette.primary),
             ),
           ),
-          title: CastBarText.connectingTitle(device.name),
+          title: CastBarText.connectingTitle(context.l10n, device.name),
           actions: [
             _closeButton(
               key: const Key('cast-bar-connecting-cancel'),
@@ -316,7 +316,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         child: CastBarRow(
           leading: const CastIconTile(child: Icon(Icons.cast)),
           title: device.name,
-          status: CastBarText.offlineStatus,
+          status: CastBarText.offlineStatus(context.l10n),
           dot: CastDot.idle,
           actions: [
             CastPrimaryAction(
@@ -339,7 +339,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       child: CastBarRow(
         leading: CastThumb(imageUrl: ambientTarget.snapshot.imageUrl),
         title: ambientTarget.snapshot.title,
-        status: CastBarText.ambientStatus(name),
+        status: CastBarText.ambientStatus(context.l10n, name),
         dot: CastDot.live,
         actions: [
           CastPrimaryAction(
@@ -349,8 +349,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           ),
           _closeButton(
             key: const Key('cast-bar-ambient-dismiss'),
-            tooltip:
-                context.l10n.castBarHideStatus(CastBarText.ambientStatus(name)),
+            tooltip: context.l10n.castBarHideStatus(
+              CastBarText.ambientStatus(context.l10n, name),
+            ),
             onPressed: () => ref
                 .read(ambientDismissalsProvider.notifier)
                 .dismiss(ambientTarget),
@@ -432,7 +433,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             dimmed: true,
           ),
           title: session.mediaInfo?.title ?? session.device.name,
-          status: CastBarText.staleStatus(session.device.name),
+          status: CastBarText.staleStatus(context.l10n, session.device.name),
           dot: CastDot.lost,
           actions: [
             // Re-cast what the *stale session* was playing. Anything else
@@ -482,7 +483,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           CastBarRow(
             leading: CastThumb(imageUrl: info.imageUrl),
             title: info.title,
-            status: CastBarText.playingStatus(session.device.name,
+            status: CastBarText.playingStatus(context.l10n, session.device.name,
                 syncing: syncing),
             dot: syncing ? CastDot.idle : CastDot.live,
             actions: [

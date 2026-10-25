@@ -26,6 +26,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/player/stream_timeline.dart';
@@ -77,6 +78,8 @@ Widget _host(
   required double paddingTop,
 }) =>
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => MediaQuery(
           // `MediaQuery.of(context).copyWith`, not a bare `MediaQueryData(...)`:
@@ -309,6 +312,8 @@ void main() {
     // view. `copyWith` keeps the real, resized `size` and overrides only
     // `padding`.
     Widget chromeHost() => MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Builder(
             builder: (context) => MediaQuery(
               data: MediaQuery.of(context).copyWith(padding: padding),

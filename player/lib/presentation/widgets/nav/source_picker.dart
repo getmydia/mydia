@@ -16,6 +16,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
+import '../../../l10n/l10n.dart';
 import '../glass/glass_emergence.dart';
 import '../glass/glass_popover.dart';
 import '../glass/glass_sheet.dart';
@@ -226,11 +227,26 @@ class SourceStatusDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label) = switch (status) {
-      SourceConnectionStatus.local => (AppColors.success, 'Local'),
-      SourceConnectionStatus.remote => (AppColors.success, 'Remote'),
-      SourceConnectionStatus.relay => (AppColors.warning, 'Relay'),
-      SourceConnectionStatus.connecting => (AppColors.info, 'Connecting'),
-      SourceConnectionStatus.unreachable => (AppColors.error, 'Unreachable'),
+      SourceConnectionStatus.local => (
+          AppColors.success,
+          context.l10n.sourceStatusLocal
+        ),
+      SourceConnectionStatus.remote => (
+          AppColors.success,
+          context.l10n.sourceStatusRemote
+        ),
+      SourceConnectionStatus.relay => (
+          AppColors.warning,
+          context.l10n.sourceStatusRelay
+        ),
+      SourceConnectionStatus.connecting => (
+          AppColors.info,
+          context.l10n.sourceStatusConnecting
+        ),
+      SourceConnectionStatus.unreachable => (
+          AppColors.error,
+          context.l10n.sourceStatusUnreachable
+        ),
     };
     return Tooltip(
       message: label,
@@ -300,7 +316,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 focusNode: widget.currentId == null ? _currentNode : null,
                 icon: Icons.layers_rounded,
                 selectedIcon: Icons.layers_rounded,
-                label: 'All servers',
+                label: context.l10n.navAllServers,
                 isSelected: widget.currentId == null,
                 onTap: () => _pick(const PickAllServers()),
               ),
@@ -321,7 +337,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                       'source-switcher-switch-user-${group.first.account.id}'),
                   icon: Icons.switch_account_rounded,
                   selectedIcon: Icons.switch_account_rounded,
-                  label: 'Switch user (${group.first.profile.name})',
+                  label: context.l10n.navSwitchUser(group.first.profile.name),
                   isSelected: false,
                   onTap: () => _pick(SwitchUser(group.first.account)),
                 ),
@@ -338,7 +354,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 key: const ValueKey('source-switcher-add'),
                 icon: Icons.add_rounded,
                 selectedIcon: Icons.add_rounded,
-                label: 'Add server',
+                label: context.l10n.navAddServer,
                 isSelected: false,
                 onTap: () => _pick(const AddServer()),
               ),
@@ -346,7 +362,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 key: const ValueKey('source-switcher-manage'),
                 icon: Icons.tune_rounded,
                 selectedIcon: Icons.tune_rounded,
-                label: 'Manage servers',
+                label: context.l10n.navManageServers,
                 isSelected: false,
                 onTap: () => _pick(const ManageServers()),
               ),
@@ -355,7 +371,9 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 icon: unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
                 selectedIcon:
                     unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
-                label: unlocked ? 'Lock now' : 'Show hidden servers',
+                label: unlocked
+                    ? context.l10n.navLockNow
+                    : context.l10n.navShowHiddenServers,
                 isSelected: false,
                 onTap: () => _pick(const ToggleHidden()),
               ),
@@ -418,7 +436,7 @@ class _SourceRow extends StatelessWidget {
             icon: sourceKindIcon(source.kind),
             selectedIcon: sourceKindIcon(source.kind),
             label: source.account.needsReauth
-                ? '${source.displayName} (sign in again)'
+                ? context.l10n.navSourceNeedsSignIn(source.displayName)
                 : source.displayName,
             isSelected: isCurrent,
             badge: locked

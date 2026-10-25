@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/domain/navigation/source_nav.dart';
 import 'package:player/domain/sources/library.dart';
@@ -36,6 +37,8 @@ Future<List<String>> _pump(
   final navigations = <String>[];
   await tester.pumpWidget(ProviderScope(
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         bottomNavigationBar: BottomNav(
           location: '/s/${fakeSourceId.value}',
@@ -99,6 +102,8 @@ Future<List<String>> _pumpBar(
   final navigations = <String>[];
   await tester.pumpWidget(ProviderScope(
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(padding: padding),
         child: child!,

@@ -9,6 +9,7 @@ import '../../../core/remote/ambient_dismissals.dart';
 import '../../../core/remote/ambient_targets.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/cast_device.dart';
+import '../../../l10n/l10n.dart';
 
 /// What the cast bar shows, whichever surface draws it: the Flutter
 /// `CastMiniController` or the native tab bar's accessory.
@@ -152,14 +153,25 @@ CastBarAmbient? _ambient(Ref ref) {
 abstract final class CastBarText {
   /// "Ready to play on" rather than "Will play on": this is a statement about
   /// a connection that exists, not a promise about the future.
-  static String idleTitle(String device) => 'Ready to play on $device';
-  static const String idleStatus = 'Connected';
-  static String connectingTitle(String device) => 'Connecting to $device…';
-  static const String offlineStatus = 'Not connected';
-  static String staleStatus(String device) => 'Lost connection to $device';
-  static String ambientStatus(String device) => 'Playing on $device';
-  static String playingStatus(String device, {required bool syncing}) =>
-      syncing ? 'Reconnecting to $device…' : 'Casting to $device';
+  static String idleTitle(AppLocalizations l10n, String device) =>
+      l10n.castBarIdleTitle(device);
+  static String idleStatus(AppLocalizations l10n) => l10n.castBarIdleStatus;
+  static String connectingTitle(AppLocalizations l10n, String device) =>
+      l10n.castBarConnectingTitle(device);
+  static String offlineStatus(AppLocalizations l10n) =>
+      l10n.castBarOfflineStatus;
+  static String staleStatus(AppLocalizations l10n, String device) =>
+      l10n.castBarStaleStatus(device);
+  static String ambientStatus(AppLocalizations l10n, String device) =>
+      l10n.castBarAmbientStatus(device);
+  static String playingStatus(
+    AppLocalizations l10n,
+    String device, {
+    required bool syncing,
+  }) =>
+      syncing
+          ? l10n.castBarReconnectingStatus(device)
+          : l10n.castBarCastingStatus(device);
 }
 
 /// The play/pause control, shared by the bar's button and the native

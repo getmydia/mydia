@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../l10n/l10n.dart';
 import '../glass_surface.dart';
 
 /// The glyph for the mode in effect, shared by the top-bar pill and the TV
@@ -12,9 +13,10 @@ IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
     };
 
 /// The tooltip naming the mode in effect, shown on both scaling controls.
-String scalingTooltip(VideoScaling scaling) => switch (scaling) {
-      VideoScaling.fit => 'Scaling: Fit',
-      VideoScaling.fill => 'Scaling: Fill',
+String scalingTooltip(AppLocalizations l10n, VideoScaling scaling) =>
+    switch (scaling) {
+      VideoScaling.fit => l10n.videoScalingFit,
+      VideoScaling.fill => l10n.videoScalingFill,
     };
 
 /// A 36px-tall pill in the OSD material ([GlassSurface.osd]).
@@ -175,12 +177,12 @@ class ChromeTopBar extends StatelessWidget {
                     : GlassPill(
                         key: backKey,
                         onTap: onBack,
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.chevron_left_rounded),
-                            SizedBox(width: 2),
-                            Text('Back'),
+                            const Icon(Icons.chevron_left_rounded),
+                            const SizedBox(width: 2),
+                            Text(context.l10n.commonBack),
                           ],
                         ),
                       ),
@@ -228,7 +230,7 @@ class ChromeTopBar extends StatelessWidget {
                   children: [
                     if (onScalingTap != null)
                       Tooltip(
-                        message: scalingTooltip(scaling),
+                        message: scalingTooltip(context.l10n, scaling),
                         child: GlassPill(
                           key: scalingKey,
                           onTap: onScalingTap,

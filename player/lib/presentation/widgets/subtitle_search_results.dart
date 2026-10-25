@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/subtitle_candidate.dart';
+import '../../l10n/l10n.dart';
 
 /// The results list for an online subtitle search.
 ///
@@ -56,8 +57,11 @@ class SubtitleSearchResults extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(20),
             child: Text(
-              'No subtitles found for ${languages.join(', ')}. '
-              'Try adding another language.',
+              context.l10n.subtitleSearchNoResults(
+                languages
+                    .map((c) => context.l10n.languageName(c) ?? c)
+                    .join(', '),
+              ),
               style: TextStyle(color: palette.textSecondary),
             ),
           )
@@ -90,9 +94,11 @@ class _ResultTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final language =
+        context.l10n.languageName(candidate.language) ?? candidate.language;
     return ListTile(
       title: Text(
-        candidate.releaseName ?? candidate.displayLanguage,
+        candidate.releaseName ?? language,
         style: TextStyle(color: palette.textPrimary),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -102,13 +108,14 @@ class _ResultTile extends StatelessWidget {
         spacing: 8,
         children: [
           Text(
-            candidate.displayLanguage,
+            language,
             style: TextStyle(color: palette.textSecondary),
           ),
           if (candidate.hashMatch)
-            const Text(
-              'Exact match',
-              style: TextStyle(color: AppColors.successText, fontSize: 12),
+            Text(
+              context.l10n.subtitleSearchExactMatch,
+              style:
+                  const TextStyle(color: AppColors.successText, fontSize: 12),
             ),
           if (candidate.rating != null)
             Row(

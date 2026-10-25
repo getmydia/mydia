@@ -52,7 +52,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
                   value: state.playerVersion,
                 ),
                 _VersionRow(
-                  label: context.l10n.compatDetailsServer,
+                  label: context.l10n.commonServer,
                   value: state.serverVersion ?? context.l10n.commonUnknown,
                 ),
                 if (requiredVersion != null)

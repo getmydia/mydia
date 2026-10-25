@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/nav/current_source.dart';
 import 'package:player/presentation/widgets/nav/native_sidebar.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
@@ -40,6 +41,8 @@ void main() {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
               width: 260,
@@ -66,6 +69,7 @@ void main() {
       ];
 
       final sidebar = nativeSidebarFor(
+        l10n: lookupAppLocalizations(const Locale('en')),
         entries: container.read(sourceNavEntriesProvider(location)),
         servers: const [],
         canFilter: flutterRows.contains('new-filter'),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/sources/current_source_status.dart';
 import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
+import '../../l10n/l10n.dart';
 import 'banner_button.dart';
 
 /// Banner displayed at the top of the screen when the selected source cannot be reached.
@@ -63,10 +64,10 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
               color: AppColors.warning,
             ),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
-                "You're offline - only downloads available",
-                style: TextStyle(
+                context.l10n.offlineBannerMessage,
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: AppColors.warning,
@@ -75,7 +76,7 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
             ),
             const SizedBox(width: 12),
             BannerButton(
-              label: 'Retry',
+              label: context.l10n.commonRetry,
               color: AppColors.warning,
               isLoading: _isRetrying,
               onPressed: _retryConnection,

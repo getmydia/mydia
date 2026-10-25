@@ -11,6 +11,7 @@ import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass_surface.dart';
+import '../../../l10n/l10n.dart';
 import '../toast/toast_obstruction.dart';
 import 'back_to_mydia_button.dart';
 import 'rail_scope.dart';
@@ -278,7 +279,9 @@ class _RailFooter extends ConsumerWidget {
               dimension: RailScope.iconBox,
               child: IconButton(
                 key: const Key('rail-toggle'),
-                tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
+                tooltip: expanded
+                    ? context.l10n.navCollapseSidebar
+                    : context.l10n.navExpandSidebar,
                 onPressed: onToggle,
                 color: palette.textSecondary,
                 visualDensity: VisualDensity.standard,
@@ -302,7 +305,9 @@ class _RailFooter extends ConsumerWidget {
                     children: [
                       IconButton(
                         key: const Key('rail-pin'),
-                        tooltip: pinned ? 'Unpin sidebar' : 'Pin sidebar',
+                        tooltip: pinned
+                            ? context.l10n.navUnpinSidebar
+                            : context.l10n.navPinSidebar,
                         onPressed: () =>
                             ref.read(railPinnedProvider.notifier).toggle(),
                         icon: Icon(
@@ -314,7 +319,7 @@ class _RailFooter extends ConsumerWidget {
                       IconButton(
                         key: const Key('rail-edit'),
                         focusNode: editFocus,
-                        tooltip: 'Edit sidebar',
+                        tooltip: context.l10n.navEditSidebar,
                         onPressed: () =>
                             ref.read(sidebarEditModeProvider.notifier).toggle(),
                         icon: Icon(

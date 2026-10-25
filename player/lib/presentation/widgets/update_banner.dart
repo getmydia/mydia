@@ -145,7 +145,7 @@ class UpdateBanner extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                errorMessage ?? 'Mydia Player $version is available.',
+                errorMessage ?? context.l10n.updateBannerAvailable(version),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -155,14 +155,15 @@ class UpdateBanner extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             BannerButton(
-              label: failed ? 'Retry' : 'Update',
+              label:
+                  failed ? context.l10n.commonRetry : context.l10n.commonUpdate,
               color: color,
               isLoading: updateState.isApplying,
               onPressed: () => startUpdate(context, ref),
             ),
             const SizedBox(width: 8),
             BannerButton(
-              label: 'Notes',
+              label: context.l10n.updateBannerNotes,
               color: color,
               onPressed: () => _openReleaseNotes(update.releaseNotesUrl),
             ),
@@ -171,7 +172,7 @@ class UpdateBanner extends ConsumerWidget {
               icon: const Icon(Icons.close, size: 16),
               color: color,
               visualDensity: VisualDensity.compact,
-              tooltip: 'Dismiss',
+              tooltip: context.l10n.commonDismiss,
               onPressed: () =>
                   ref.read(updateDismissalProvider.notifier).dismiss(version),
             ),

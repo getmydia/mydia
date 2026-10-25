@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../focus_highlight.dart';
 import 'rail_scope.dart';
 
@@ -18,9 +19,13 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
   bool _isHovered = false;
 
   /// The rail form: the arrow in the standard icon box, the words beside it.
-  Widget _buildRail(RailScope rail, MydiaPalette palette) {
+  Widget _buildRail(
+    BuildContext context,
+    RailScope rail,
+    MydiaPalette palette,
+  ) {
     return RailEntry(
-      tooltip: 'Back to Mydia',
+      tooltip: context.l10n.navBackToMydia,
       labelsVisible: rail.labelsVisible,
       onTap: navigateToMydiaApp,
       iconBox: FocusHighlight(
@@ -35,7 +40,7 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
         ),
       ),
       label: Text(
-        'Back to Mydia',
+        context.l10n.navBackToMydia,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
@@ -51,7 +56,7 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final rail = RailScope.maybeOf(context);
-    if (rail != null) return _buildRail(rail, palette);
+    if (rail != null) return _buildRail(context, rail, palette);
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -76,7 +81,7 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
               ),
               const SizedBox(width: 12),
               Text(
-                'Back to Mydia',
+                context.l10n.navBackToMydia,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,

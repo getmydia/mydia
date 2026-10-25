@@ -28,7 +28,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Subtitle size',
+              context.l10n.settingsSubtitleSizeTitle,
               style: TextStyle(color: palette.textSecondary, fontSize: 13),
             ),
           ),
@@ -40,7 +40,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
                   Icons.text_decrease,
                   color: palette.textPrimary,
                 ),
-                tooltip: 'Smaller',
+                tooltip: context.l10n.subtitleSizeSmaller,
                 onPressed: smaller == null ? null : () => notifier.set(smaller),
               ),
               Expanded(
@@ -61,7 +61,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
                   Icons.text_increase,
                   color: palette.textPrimary,
                 ),
-                tooltip: 'Larger',
+                tooltip: context.l10n.subtitleSizeLarger,
                 onPressed: larger == null ? null : () => notifier.set(larger),
               ),
             ],

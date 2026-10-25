@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../domain/navigation/source_nav.dart';
+import '../../../l10n/l10n.dart';
 import 'bottom_nav.dart';
 import 'native_tab_bar.dart';
 
@@ -160,6 +161,7 @@ const Set<String> kLibrarySidebarIds = {
 /// [grouped] (macOS) splits the middle rows under Library and Filters
 /// headings, keeping their order within each; New filter closes Filters.
 NativeSidebar nativeSidebarFor({
+  required AppLocalizations l10n,
   required List<SourceNavEntry> entries,
   required List<NativeSidebarServer> servers,
   required bool canFilter,
@@ -198,7 +200,7 @@ NativeSidebar nativeSidebarFor({
   final newFilter = canFilter
       ? NativeSidebarItem(
           id: kNewFilterId,
-          title: 'New filter',
+          title: l10n.navNewFilter,
           symbol: 'plus',
           enabled: !isOffline,
           kind: NativeSidebarItemKind.action,
@@ -210,7 +212,7 @@ NativeSidebar nativeSidebarFor({
       if (showBackToMydia)
         NativeSidebarItem(
           id: kMydiaBackTabId,
-          title: 'Mydia',
+          title: 'Mydia', // l10n-ignore: product name
           symbol: nativeSidebarSymbol(kMydiaBackTabId),
           kind: NativeSidebarItemKind.action,
         ),
@@ -225,11 +227,11 @@ NativeSidebar nativeSidebarFor({
         if (entry.anchored && entry.id == 'search') destination(entry),
     ]),
     if (grouped) ...[
-      NativeSidebarSection(id: 'library', title: 'Library', items: [
+      NativeSidebarSection(id: 'library', title: l10n.navLibrary, items: [
         for (final entry in middle)
           if (isLibrary(entry)) destination(entry),
       ]),
-      NativeSidebarSection(id: 'filters', title: 'Filters', items: [
+      NativeSidebarSection(id: 'filters', title: l10n.navFilters, items: [
         for (final entry in middle)
           if (!isLibrary(entry)) destination(entry),
         if (newFilter != null) newFilter,
@@ -239,7 +241,7 @@ NativeSidebar nativeSidebarFor({
         for (final entry in middle) destination(entry),
         if (newFilter != null) newFilter,
       ]),
-    NativeSidebarSection(id: 'servers', title: 'Servers', items: [
+    NativeSidebarSection(id: 'servers', title: l10n.settingsServers, items: [
       for (final server in servers)
         NativeSidebarItem(
           id: serverItemId(server.id),
@@ -249,9 +251,9 @@ NativeSidebar nativeSidebarFor({
         ),
     ]),
     NativeSidebarSection(id: 'trailing', items: [
-      const NativeSidebarItem(
+      NativeSidebarItem(
         id: kEditSidebarId,
-        title: 'Edit sidebar',
+        title: l10n.navEditSidebar,
         symbol: 'slider.horizontal.3',
         kind: NativeSidebarItemKind.action,
       ),

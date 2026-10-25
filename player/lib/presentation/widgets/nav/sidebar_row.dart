@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../focus_highlight.dart';
 import 'rail_scope.dart';
 
@@ -318,11 +319,20 @@ class _SidebarRowState extends State<SidebarRow> {
             onCanceled: () => setState(() => _isLongPressed = false),
             itemBuilder: (context) => [
               if (widget.onHide != null)
-                const PopupMenuItem(value: 'hide', child: Text('Hide')),
+                PopupMenuItem(
+                  value: 'hide',
+                  child: Text(context.l10n.navRowHide),
+                ),
               if (widget.onEdit != null)
-                const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Text(context.l10n.commonEdit),
+                ),
               if (widget.onDelete != null)
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(context.l10n.commonDelete),
+                ),
             ],
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/domain/models/show_next_up.dart';
@@ -27,6 +28,8 @@ const _partlyWatched = NextUpEpisode(
 const _unwatched = NextUpEpisode(id: 'e2', seasonNumber: 1, episodeNumber: 1);
 
 Widget _host(Widget child, double width) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Center(
           child: SizedBox(width: width, child: child),
@@ -43,6 +46,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SmartPlayButton(
               files: files,
@@ -62,6 +67,8 @@ void main() {
       files = [];
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SmartPlayButton(
               files: files,
@@ -178,6 +185,8 @@ void main() {
       // through without first bounding the control's width).
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Center(
               child: SizedBox(

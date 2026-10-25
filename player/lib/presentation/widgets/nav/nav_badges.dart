@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/player/platform_features.dart';
 import '../../../core/update/update_provider.dart';
+import '../../../l10n/l10n.dart';
 import '../connection_status_dot.dart';
 import 'bottom_nav.dart';
 import 'sidebar_row.dart';
@@ -87,7 +88,7 @@ class SettingsSidebarRow extends ConsumerWidget {
     return SidebarRow(
       icon: Icons.settings_outlined,
       selectedIcon: Icons.settings_rounded,
-      label: 'Settings',
+      label: context.l10n.settingsTitle,
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
@@ -126,7 +127,7 @@ class SettingsNavItem extends ConsumerWidget {
     return NavItem(
       icon: Icons.settings_outlined,
       selectedIcon: Icons.settings_rounded,
-      label: 'Settings',
+      label: context.l10n.settingsTitle,
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,

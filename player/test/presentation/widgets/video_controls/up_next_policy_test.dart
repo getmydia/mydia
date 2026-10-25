@@ -1,6 +1,10 @@
+import 'package:flutter/material.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_segment.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_policy.dart';
+
+final _en = lookupAppLocalizations(const Locale('en'));
 
 void main() {
   group('shouldOfferUpNext', () {
@@ -154,7 +158,7 @@ void main() {
     });
 
     test('reads "Next up" in-season and "Next season" when crossing', () {
-      expect(target.eyebrow, 'Next up');
+      expect(target.eyebrow(_en), 'Next up');
       expect(
         const UpNextTarget(
           episodeId: 'ep-1',
@@ -163,13 +167,13 @@ void main() {
           episodeNumber: 1,
           title: 'Premiere',
           crossesSeason: true,
-        ).eyebrow,
+        ).eyebrow(_en),
         'Next season',
       );
     });
 
     test('joins eyebrow and code with a middle dot for the pill', () {
-      expect(target.pillLabel, 'Next up · S1E8');
+      expect(target.pillLabel(_en), 'Next up · S1E8');
     });
   });
 
@@ -242,7 +246,7 @@ void main() {
       final target = resolveSeasonPremiere([premiere]);
       expect(target!.crossesSeason, isTrue);
       expect(target.episodeCode, 'S2E1');
-      expect(target.eyebrow, 'Next season');
+      expect(target.eyebrow(_en), 'Next season');
     });
 
     test('never mistakes a special numbered 0 for the premiere', () {
@@ -421,7 +425,7 @@ void main() {
       final crossing = resolveSeasonPremiere([premiere]);
       expect(crossing, isNotNull);
       expect(crossing!.seasonNumber, 2);
-      expect(crossing.pillLabel, 'Next season · S2E1');
+      expect(crossing.pillLabel(_en), 'Next season · S2E1');
       expect(crossing.thumbnailUrl, 'https://example.test/201.jpg');
     });
 
