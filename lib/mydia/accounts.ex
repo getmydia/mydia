@@ -106,6 +106,65 @@ defmodule Mydia.Accounts do
   end
 
   @doc """
+  Attaches an OIDC identity to an existing account.
+
+  Accounts are never merged: an identity already on another user is refused.
+  """
+  def link_oidc_identity(%User{oidc_sub: sub}, _oidc_sub, _oidc_issuer) when not is_nil(sub),
+    do: {:error, :already_linked}
+
+  def link_oidc_identity(%User{} = user, oidc_sub, oidc_issuer) do
+    case get_user_by_oidc(oidc_sub, oidc_issuer) do
+      %User{id: id} when id != user.id ->
+        {:error, :identity_taken}
+
+      _ ->
+        user
+        |> User.oidc_link_changeset(oidc_sub, oidc_issuer)
+        |> Repo.update()
+        |> case do
+          {:ok, linked} ->
+            Logger.info("Linked OIDC identity to user #{linked.id} (issuer: #{oidc_issuer})")
+            {:ok, linked}
+
+          {:error, %Ecto.Changeset{}} ->
+            {:error, :identity_taken}
+        end
+    end
+  end
+
+  @doc """
+  Detaches the OIDC identity, unless that would leave no way to sign in.
+  """
+  def unlink_oidc_identity(%User{oidc_sub: nil}), do: {:error, :not_linked}
+
+  def unlink_oidc_identity(%User{} = user) do
+    if can_unlink_oidc?(user) do
+      with {:ok, unlinked} <- user |> User.oidc_link_changeset(nil, nil) |> Repo.update() do
+        Logger.info("Unlinked OIDC identity from user #{unlinked.id}")
+        {:ok, unlinked}
+      end
+    else
+      {:error, :would_lock_out}
+    end
+  end
+
+  @doc """
+  True when the account is linked and keeps a local way to sign in after
+  unlinking: local auth is enabled and it has a password or a passkey.
+  """
+  def can_unlink_oidc?(%User{oidc_sub: nil}), do: false
+
+  def can_unlink_oidc?(%User{} = user) do
+    Mydia.Config.get().auth.local_enabled and (password_user?(user) or has_passkeys?(user))
+  end
+
+  @doc """
+  True when the account has a local password, whatever else it has.
+  """
+  def password_user?(%User{password_hash: hash}), do: not is_nil(hash)
+
+  @doc """
   Creates a user with local authentication.
   """
   def create_user(attrs \\ %{}) do
@@ -146,34 +205,80 @@ defmodule Mydia.Accounts do
   defp do_upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
     case get_user_by_oidc(oidc_sub, oidc_issuer) do
       nil ->
-        # New user - check if we need to auto-promote to admin
-        attrs_with_oidc = Map.merge(attrs, %{oidc_sub: oidc_sub, oidc_issuer: oidc_issuer})
+        case email_link_target(attrs) do
+          %User{} = local ->
+            with {:ok, linked} <- link_oidc_identity(local, oidc_sub, oidc_issuer) do
+              update_from_oidc_claims(linked, attrs)
+            end
 
-        final_attrs =
-          if admin_exists?() do
-            # Admin exists - use role from OIDC claims
-            attrs_with_oidc
-          else
-            # No admin exists - promote this first user to admin
-            Logger.info(
-              "Auto-promoting first OIDC user to admin (email: #{attrs[:email] || "unknown"})"
-            )
-
-            Map.put(attrs_with_oidc, :role, "admin")
-          end
-
-        %User{}
-        |> User.oidc_changeset(final_attrs)
-        |> Repo.insert()
+          nil ->
+            insert_oidc_user(oidc_sub, oidc_issuer, attrs)
+        end
 
       user ->
-        # Existing user - update with OIDC claims but preserve their role
-        # Role should only be changed via admin action, not OIDC login
-        attrs_without_role = Map.delete(attrs, :role)
+        update_from_oidc_claims(user, attrs)
+    end
+  end
 
-        user
-        |> User.oidc_changeset(attrs_without_role)
-        |> Repo.update()
+  # Existing user: refresh claims but preserve role. Role is only changed by
+  # an admin, never by an OIDC login.
+  defp update_from_oidc_claims(user, attrs) do
+    user
+    |> User.oidc_changeset(attrs |> Map.delete(:role) |> Map.delete(:email_verified))
+    |> Repo.update()
+  end
+
+  # The single unlinked local account whose email matches, when the operator
+  # opted in and the IdP vouches for the address. Anything ambiguous is nil.
+  defp email_link_target(%{email: email, email_verified: true}) when is_binary(email) do
+    if Mydia.Config.get().auth.oidc_link_by_email do
+      lowered = String.downcase(email)
+
+      User
+      |> where([u], fragment("lower(?)", u.email) == ^lowered)
+      |> Repo.all()
+      |> case do
+        [%User{oidc_sub: nil} = user] -> user
+        _ -> nil
+      end
+    end
+  end
+
+  defp email_link_target(_attrs), do: nil
+
+  defp insert_oidc_user(oidc_sub, oidc_issuer, attrs) do
+    attrs_with_oidc =
+      attrs
+      |> Map.delete(:email_verified)
+      |> Map.merge(%{oidc_sub: oidc_sub, oidc_issuer: oidc_issuer})
+
+    final_attrs =
+      if admin_exists?() do
+        attrs_with_oidc
+      else
+        Logger.info(
+          "Auto-promoting first OIDC user to admin (email: #{attrs[:email] || "unknown"})"
+        )
+
+        Map.put(attrs_with_oidc, :role, "admin")
+      end
+
+    %User{}
+    |> User.oidc_changeset(final_attrs)
+    |> Repo.insert()
+    |> case do
+      {:error, %Ecto.Changeset{errors: errors} = changeset} ->
+        if email_taken_error?(errors), do: {:error, :email_taken}, else: {:error, changeset}
+
+      ok ->
+        ok
+    end
+  end
+
+  defp email_taken_error?(errors) do
+    case Keyword.get(errors, :email) do
+      {_msg, opts} -> Keyword.get(opts, :constraint) == :unique
+      _ -> false
     end
   end
 
