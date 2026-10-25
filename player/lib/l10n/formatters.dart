@@ -39,6 +39,7 @@ import '../domain/navigation/source_nav.dart';
 import '../domain/sources/item.dart';
 import '../domain/sources/library.dart';
 import '../presentation/screens/calendar/calendar_dates.dart';
+import '../presentation/screens/library/library_sort.dart';
 import '../presentation/screens/login/login_failure.dart';
 import '../presentation/screens/player/subtitle_track_builder.dart'
     show SubtitleDelayNotice, SubtitleDelayNoticeKind, SubtitleNotice;
@@ -318,6 +319,21 @@ extension AppFormatters on AppLocalizations {
         SortName.mostPlayed => sortMostPlayed,
         SortName.watchState => sortWatchState,
         SortName.random => sortRandom,
+      };
+
+  /// A library sort sheet row.
+  String sortFieldName(SortField field) => switch (field) {
+        SortField.title => sortTitle,
+        SortField.year => sortYear,
+        SortField.addedAt => sortDateAdded,
+        SortField.rating => sortRating,
+        SortField.runtime => sortDuration,
+        SortField.popularity => sortPopularity,
+        SortField.contentRating => sortContentRating,
+        SortField.releaseDate => sortReleaseDate,
+        SortField.lastPlayed => sortLastPlayed,
+        SortField.watchState => sortWatchState,
+        SortField.random => sortRandom,
       };
 
   /// A filter chip's name.

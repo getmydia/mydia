@@ -18,6 +18,12 @@ const convertedPaths = <String>[
   'lib/presentation/screens/sources',
   'lib/presentation/screens/downloads',
   'lib/presentation/screens/player',
+  'lib/presentation/screens/detail',
+  'lib/presentation/screens/filter',
+  'lib/presentation/screens/home',
+  'lib/presentation/screens/library',
+  'lib/presentation/screens/movie',
+  'lib/presentation/screens/show',
 ];
 
 void main() {

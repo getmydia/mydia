@@ -15,6 +15,7 @@ import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
 import '../detail/detail_sections.dart';
+import '../detail/detail_states.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
@@ -35,7 +36,7 @@ class MovieDetailScreen extends ConsumerWidget {
     return DetailScreenFrame<MovieView>(
       target: target,
       value: ref.watch(movieViewProvider(target)),
-      noun: 'movie',
+      noun: DetailNoun.movie,
       onRetry: () => ref.read(movieActionsProvider(target)).refresh(),
       tintArt: (movie) => movie.backdrop,
       builder: (context, movie) => _buildContent(context, ref, movie),
@@ -55,7 +56,7 @@ class MovieDetailScreen extends ConsumerWidget {
       if (context.mounted) {
         showToast(
           context,
-          'Could not update watched status',
+          context.l10n.commonWatchedUpdateFailed,
           kind: ToastKind.error,
         );
       }
@@ -166,9 +167,9 @@ class MovieDetailScreen extends ConsumerWidget {
       final hours = remaining ~/ 3600;
       final minutes = (remaining % 3600) ~/ 60;
       if (hours > 0) {
-        remainingText = '${hours}h ${minutes}m remaining';
+        remainingText = context.l10n.movieRemainingHoursMinutes(hours, minutes);
       } else {
-        remainingText = '${minutes}m remaining';
+        remainingText = context.l10n.movieRemainingMinutes(minutes);
       }
     }
 

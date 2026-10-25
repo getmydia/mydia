@@ -41,7 +41,7 @@ class DetailScreenFrame<T> extends StatelessWidget {
   final AsyncValue<T> value;
 
   /// Named in the error state: "Failed to load [noun]".
-  final String noun;
+  final DetailNoun noun;
   final VoidCallback onRetry;
   final Widget Function(BuildContext context, T data) builder;
 

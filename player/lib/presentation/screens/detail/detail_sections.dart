@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 
 /// Below this width the hero body's action column and tag column stack
 /// instead of sitting side by side.
@@ -152,7 +153,7 @@ class DetailRatingLine extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(
-          'TMDB',
+          'TMDB', // l10n-ignore product name
           style: TextStyle(fontSize: 12, color: palette.textSecondary),
         ),
       ],
@@ -252,7 +253,7 @@ class DetailOverview extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'Overview',
+                context.l10n.detailOverview,
                 style: textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),

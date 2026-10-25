@@ -6,6 +6,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/start_download.dart';
 
 import '../../../test_utils/toast_harness.dart';
@@ -23,6 +24,8 @@ Future<void> _pump(WidgetTester tester, FakeMediaSource? source) async {
           .overrideWith((ref) async => EmptyDownloadService()),
     ],
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: Consumer(
         builder: (context, ref, _) => TextButton(

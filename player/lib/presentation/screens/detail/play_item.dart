@@ -11,6 +11,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/toast/toaster.dart';
 import '../sources/source_browse_providers.dart';
 import 'detail_links.dart';
@@ -42,20 +43,21 @@ Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
   }
 
   final toaster = Toaster.of(context);
+  final l10n = context.l10n;
   final screenWidth = MediaQuery.sizeOf(context).width;
   final ItemDetail detail;
   try {
     detail = await source.item(item);
   } catch (e) {
     toaster.show(
-      e is SourceException ? e.viewerMessage : 'Could not open this title.',
+      e is SourceException ? e.viewerMessage : l10n.detailOpenTitleFailed,
       kind: ToastKind.error,
     );
     return;
   }
   final fileId = await pickBestVersionId(detail.versions, screenWidth);
   if (fileId == null) {
-    toaster.show('This title has nothing to play.', kind: ToastKind.error);
+    toaster.show(l10n.detailNothingToPlay, kind: ToastKind.error);
     return;
   }
   if (!context.mounted) return;

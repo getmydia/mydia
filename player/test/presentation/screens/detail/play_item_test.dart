@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/play_item.dart';
 
 import '../../../test_utils/toast_harness.dart';
@@ -36,7 +37,12 @@ Future<List<String>> _pump(
   ]);
   await tester.pumpWidget(ProviderScope(
     overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
-    child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: router,
+      builder: toastLayerBuilder,
+    ),
   ));
   await tester.tap(find.byKey(const Key('play')));
   await tester.pumpAndSettle();

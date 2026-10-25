@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/shell_rail_inset.dart';
 
@@ -69,6 +70,9 @@ class DetailLoadingState extends StatelessWidget {
   }
 }
 
+/// What a detail screen failed to load; worded by `detailLoadFailed`.
+enum DetailNoun { movie, show, episode }
+
 /// The detail screens' error body: "Failed to load [noun]", the error, and a
 /// retry button. Shares the loaded hero's title row for the same reason as
 /// [DetailLoadingState].
@@ -80,8 +84,7 @@ class DetailErrorState extends StatelessWidget {
     required this.onRetry,
   });
 
-  /// "movie", "TV show" or "episode".
-  final String noun;
+  final DetailNoun noun;
   final Object error;
   final VoidCallback onRetry;
 
@@ -120,7 +123,12 @@ class DetailErrorState extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Failed to load $noun',
+                      switch (noun) {
+                        DetailNoun.movie => context.l10n.detailLoadFailedMovie,
+                        DetailNoun.show => context.l10n.detailLoadFailedShow,
+                        DetailNoun.episode =>
+                          context.l10n.detailLoadFailedEpisode,
+                      },
                       style: textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
@@ -135,7 +143,7 @@ class DetailErrorState extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: onRetry,
                       icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Try Again'),
+                      label: Text(context.l10n.commonTryAgain),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 32,

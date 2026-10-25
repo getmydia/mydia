@@ -10,6 +10,7 @@ import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/detail_screen_frame.dart';
+import 'package:player/presentation/screens/detail/detail_states.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
@@ -43,7 +44,7 @@ Future<void> _pump(
           child: DetailScreenFrame<String>(
             target: _target,
             value: value,
-            noun: 'movie',
+            noun: DetailNoun.movie,
             onRetry: () {},
             tintArt: (data) => UrlArt('https://art/$data.jpg'),
             builder: (context, data) {
@@ -89,7 +90,7 @@ void main() {
               child: DetailScreenFrame<String>(
                 target: _target,
                 value: const AsyncValue.loading(),
-                noun: 'movie',
+                noun: DetailNoun.movie,
                 onRetry: () {},
                 builder: (context, data) => const SizedBox(),
               ),

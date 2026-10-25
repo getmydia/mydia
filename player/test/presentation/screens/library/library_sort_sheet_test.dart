@@ -13,7 +13,7 @@ void main() {
                 for (final field in SortField.values)
                   ListTile(
                     key: Key('sort-field-${field.wireName}'),
-                    title: Text(field.displayName),
+                    title: Text(field.wireName),
                   ),
               ],
             ),

@@ -256,7 +256,7 @@ void main() {
     final cases = <String, WidgetBuilder>{
       'DetailLoadingState': (context) => const DetailLoadingState(),
       'DetailErrorState': (context) => DetailErrorState(
-            noun: 'movie',
+            noun: DetailNoun.movie,
             error: 'boom',
             onRetry: () {},
           ),
