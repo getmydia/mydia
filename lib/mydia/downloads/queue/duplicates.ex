@@ -74,13 +74,7 @@ defmodule Mydia.Downloads.Queue.Duplicates do
     # downloaded-but-awaiting-import, or import-retrying. A completed-but-not-yet
     # imported download still counts, so we don't grab a duplicate while the
     # first one is queued for import. See Mydia.Downloads.Download.occupying/1.
-    base_query = Download.occupying()
-
-    base_query =
-      case Keyword.get(opts, :exclude_download_id) do
-        nil -> base_query
-        id -> where(base_query, [d], d.id != ^id)
-      end
+    base_query = exclude_download(Download.occupying(), Keyword.get(opts, :exclude_download_id))
 
     # Add filters based on what we're downloading
     cond do
@@ -124,6 +118,9 @@ defmodule Mydia.Downloads.Queue.Duplicates do
         where(base_query, [d], d.download_url == ^search_result.download_url)
     end
   end
+
+  defp exclude_download(query, nil), do: query
+  defp exclude_download(query, id), do: where(query, [d], d.id != ^id)
 
   def check_for_active_download(search_result, media_item_id, episode_id, opts \\ []) do
     active_downloads =

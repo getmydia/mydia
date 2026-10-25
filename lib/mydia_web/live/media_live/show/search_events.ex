@@ -20,6 +20,35 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   require Logger
 
+  @doc """
+  Assigns the initial manual-search state used by the results stream and rows.
+  """
+  def assign_manual_search_defaults(socket) do
+    socket
+    |> assign(:raw_search_results, [])
+    # Untruncated, undeduplicated pool of every release seen so far in the
+    # current manual search, keyed by download_url. Progress messages fold
+    # onto this (never onto :raw_search_results, which is already truncated
+    # and deduplicated) so a later, weaker duplicate can never crown itself
+    # over a stronger release evicted by an earlier round's truncation. See
+    # apply_indexer_progress/2 in SearchHelpers.
+    |> assign(:indexer_raw_results, %{})
+    # Per-row grab state (:downloading, :downloaded, :duplicate, :grab_failed)
+    # keyed by download_url. The stream is rebuilt with reset: true on every
+    # progress message, filter change and re-sort, and a reset drops anything
+    # that only lived in the stream, so this is the assign those badges
+    # actually survive in. See SearchHelpers.stream_prepared_results/2.
+    |> assign(:result_states, %{})
+    # Releases that already failed for the searched target or are
+    # blacklisted, keyed by download_url, plus every URL already looked up
+    # (a release with no prior attempt is never a key in :prior_attempts).
+    # Folded in under :result_states, so a live grab state wins.
+    |> assign(:prior_attempts, %{})
+    |> assign(:prior_attempts_checked, MapSet.new())
+    # Downloads that would block any grab in the open manual search dialog.
+    |> assign(:manual_search_blocking, [])
+  end
+
   def manual_search(_params, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       media_item = socket.assigns.media_item
