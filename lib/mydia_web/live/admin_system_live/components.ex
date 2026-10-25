@@ -32,10 +32,9 @@ defmodule MydiaWeb.AdminSystemLive.Components do
           </div>
           <div class="text-sm opacity-80">
             {gettext(
-              "Each one is holding its replacement and the copy it was meant to replace, so that disk space stays spoken for until the upgrade finishes. This happens when the finalize step never ran or failed after import. Look for failed"
+              "Each one is holding its replacement and the copy it was meant to replace, so that disk space stays spoken for until the upgrade finishes. This happens when the finalize step never ran or failed after import. Look for failed %{worker} jobs.",
+              worker: "UpgradeFinalize"
             )}
-            <span class="font-mono">UpgradeFinalize</span>
-            {gettext("jobs.")}
           </div>
         </div>
         <.link navigate={~p"/admin/jobs"} class="btn btn-sm">{gettext("View jobs")}</.link>

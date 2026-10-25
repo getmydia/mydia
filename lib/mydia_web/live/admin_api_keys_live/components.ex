@@ -11,11 +11,11 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
   def api_keys_tab(assigns) do
     ~H"""
     <p class="text-sm text-base-content/70">
-      {gettext("Keys for the Library API at")} <code>/api/library/graphql</code>{gettext(
-        ", sent as the"
+      {gettext(
+        "Keys for the Library API at %{path}, sent as the %{header} header. Each key acts as you.",
+        path: "/api/library/graphql",
+        header: "x-api-key"
       )}
-      <code>x-api-key</code>
-      {gettext("header. Each key acts as you.")}
     </p>
 
     <div :if={@env_key_set} class="bg-base-200 rounded-box">

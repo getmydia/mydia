@@ -449,7 +449,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
   defp error_message(changeset) do
     changeset
-    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Ecto.Changeset.traverse_errors(&translate_error/1)
     |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
   end
 

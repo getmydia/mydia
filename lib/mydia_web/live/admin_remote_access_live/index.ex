@@ -161,11 +161,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   ## Private Helpers
 
   defp format_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
+    changeset
+    |> Ecto.Changeset.traverse_errors(&translate_error/1)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 

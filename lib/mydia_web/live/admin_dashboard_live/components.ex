@@ -488,7 +488,13 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
   defp video_line(%{video: %{action: :encode} = video}) do
     tier = tier_label(video.tier)
-    base = "#{video.from_codec || gettext("unknown")} -> #{video.to_codec}"
+
+    base =
+      gettext("%{from} -> %{to}",
+        from: video.from_codec || gettext("unknown"),
+        to: video.to_codec
+      )
+
     if tier, do: "#{base} (#{tier})", else: base
   end
 
@@ -518,7 +524,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     codecs =
       if action == :copy,
         do: gettext("%{codec} (copy)", codec: from),
-        else: "#{from || gettext("unknown")} -> #{to}"
+        else: gettext("%{from} -> %{to}", from: from || gettext("unknown"), to: to)
 
     if audio.language, do: "#{codecs} - #{audio.language}", else: codecs
   end

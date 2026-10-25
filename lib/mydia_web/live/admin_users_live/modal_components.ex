@@ -434,7 +434,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
       </div>
       <label :if={@field.errors != []} class="label">
         <span class="label-text-alt text-error">
-          {Enum.map_join(@field.errors, ", ", fn {msg, _} -> msg end)}
+          {Enum.map_join(@field.errors, ", ", &translate_error/1)}
         </span>
       </label>
     </div>

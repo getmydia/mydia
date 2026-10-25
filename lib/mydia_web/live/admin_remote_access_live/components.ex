@@ -74,8 +74,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     </div>
 
     <p :if={@remote_access_locked} id="remote-access-env-note" class="text-xs text-base-content/60">
-      {gettext("Set by")} <code>ENABLE_REMOTE_ACCESS</code>{gettext(
-        ". Remove the variable to change it here."
+      {gettext("Set by %{var}. Remove the variable to change it here.",
+        var: "ENABLE_REMOTE_ACCESS"
       )}
     </p>
 
@@ -235,19 +235,19 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
         <.icon name="hero-light-bulb" class="w-5 h-5 text-primary" />
         <div class="text-xs">
           <span class="font-semibold">{gettext("Tip:")}</span>
-          {gettext("Use")}
+          {gettext(
+            "Use %{tailscale} for secure access from anywhere. Add your Tailscale address, for example %{example}.",
+            tailscale: "Tailscale",
+            example: "http://mydia.tail1234.ts.net:4000"
+          )}
           <a
             href="https://tailscale.com"
             target="_blank"
             rel="noopener"
             class="link link-info font-medium"
           >
-            Tailscale
+            {gettext("About Tailscale")}
           </a>
-          {gettext("for secure access anywhere. Add your Tailscale address, e.g.")}
-          <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-primary">
-            http://mydia.tail1234.ts.net:4000
-          </code>
         </div>
       </div>
     <% else %>
