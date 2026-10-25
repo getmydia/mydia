@@ -265,6 +265,20 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
       assert parsed.title == "GRP-Remux Fake Show X 21"
     end
 
+    test "a padded or multi-word leading group tag ending in Remux is not a remux" do
+      for title <- [
+            "[ GRP-Remux ] Fake Show - 21 [720p]",
+            "[Some Subs-Remux] Fake Show - 21 [720p]"
+          ] do
+        refute ReleaseParser.parse(title).quality.source == "REMUX", title
+      end
+    end
+
+    test "a codec in a non-leading bracket still splits" do
+      parsed = ReleaseParser.parse("[Grp] Fake Show - 07 (1280x720 x264-AAC)")
+      assert parsed.quality.codec == "x264"
+    end
+
     test "a disc count before a DVD" do
       assert source("Fake.Movie.2000.2DVD5") == "DVD"
       assert source("Fake.Movie.2020.PAL.2xDVD9") == "DVD"

@@ -369,7 +369,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   # unless it is the leading `[Group]` tag.
   defp metadata_zone?(%Token{} = token, boundary) do
     token.byte_offset + token.byte_length > boundary or
-      (token.bracket_context != nil and token.byte_offset > 1)
+      (token.bracket_context != nil and token.bracket_offset not in [nil, 0])
   end
 
   # A source (or `HD`) followed by its resolution, dash optional.
