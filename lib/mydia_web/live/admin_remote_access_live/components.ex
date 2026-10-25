@@ -44,17 +44,17 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           />
         </div>
         <div>
-          <div class="font-semibold">Allow player connections</div>
+          <div class="font-semibold">{gettext("Allow player connections")}</div>
           <p class="text-xs text-base-content/50">
             <%= cond do %>
               <% !@remote_access_setting -> %>
-                Connect mobile apps from anywhere
+                {gettext("Connect mobile apps from anywhere")}
               <% @pairing_available -> %>
-                Players can connect via P2P
+                {gettext("Players can connect via P2P")}
               <% @p2p_running -> %>
-                Connecting to relay...
+                {gettext("Connecting to relay...")}
               <% true -> %>
-                Initializing...
+                {gettext("Initializing...")}
             <% end %>
           </p>
         </div>
@@ -74,7 +74,9 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     </div>
 
     <p :if={@remote_access_locked} id="remote-access-env-note" class="text-xs text-base-content/60">
-      Set by <code>ENABLE_REMOTE_ACCESS</code>. Remove the variable to change it here.
+      {gettext("Set by")} <code>ENABLE_REMOTE_ACCESS</code>{gettext(
+        ". Remove the variable to change it here."
+      )}
     </p>
 
     <%= if @remote_access_setting && @ra_config do %>
@@ -96,25 +98,27 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
               <div class="font-medium text-sm">
                 <%= cond do %>
                   <% @pairing_available -> %>
-                    P2P Online
+                    {gettext("P2P Online")}
                   <% @p2p_running -> %>
-                    P2P Connecting...
+                    {gettext("P2P Connecting...")}
                   <% true -> %>
-                    P2P Starting...
+                    {gettext("P2P Starting...")}
                 <% end %>
               </div>
               <div class="text-xs text-base-content/50">
                 <%= if @p2p_status && @p2p_status.relay_connected do %>
-                  <span class="text-success">Relay connected</span>
+                  <span class="text-success">{gettext("Relay connected")}</span>
                 <% else %>
-                  <span class="text-warning">Relay disconnected</span>
+                  <span class="text-warning">{gettext("Relay disconnected")}</span>
                 <% end %>
                 <%= if @p2p_status && @p2p_status.connected_peers > 0 do %>
                   <span class="mx-1">·</span>
                   <span>
-                    {@p2p_status.connected_peers} device{if @p2p_status.connected_peers == 1,
-                      do: "",
-                      else: "s"} online
+                    {ngettext(
+                      "%{count} device online",
+                      "%{count} devices online",
+                      @p2p_status.connected_peers
+                    )}
                   </span>
                   <%= if @p2p_status.peer_connection_type do %>
                     <span class="mx-1">·</span>
@@ -133,7 +137,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                 phx-click="copy_peer_id"
                 data-node-id={@p2p_status.node_id}
                 onclick="navigator.clipboard?.writeText(this.dataset.nodeId)"
-                title={"Copy Node ID: #{@p2p_status.node_id}"}
+                title={gettext("Copy Node ID: %{id}", id: @p2p_status.node_id)}
               >
                 <code class="font-mono">{String.slice(@p2p_status.node_id, 0..7)}</code>
                 <.icon name="hero-clipboard-document" class="w-3 h-3" />
@@ -143,7 +147,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             <button
               class="btn btn-ghost btn-xs btn-square opacity-50 hover:opacity-100 shrink-0"
               phx-click="refresh_p2p"
-              title="Refresh"
+              title={gettext("Refresh")}
             >
               <.icon name="hero-arrow-path" class="w-3.5 h-3.5" />
             </button>
@@ -153,7 +157,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           <%= if @p2p_status do %>
             <div class="flex items-center gap-2 pt-1 border-t border-base-300/50 mt-1">
               <.icon name="hero-server-stack" class="w-3 h-3 text-base-content/40 shrink-0" />
-              <span class="text-xs text-base-content/40">Relay:</span>
+              <span class="text-xs text-base-content/40">{gettext("Relay:")}</span>
               <code class="text-xs font-mono text-base-content/50 truncate flex-1">
                 {display_relay_url(@p2p_status.relay_url)}
               </code>
@@ -162,7 +166,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-xs text-base-content/30 hover:text-secondary transition-colors shrink-0"
-                title="P2P powered by iroh"
+                title={gettext("P2P powered by iroh")}
               >
                 iroh
               </a>
@@ -173,17 +177,19 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
 
       <.admin_section
         id="direct-urls"
-        title="Direct URLs"
+        title={gettext("Direct URLs")}
         icon="hero-link"
         count={length(@ra_config.direct_urls || [])}
       >
         <:actions>
           <button type="button" class="btn btn-sm btn-ghost" phx-click="new_direct_url">
-            <.icon name="hero-plus" class="w-4 h-4" /> Add URL
+            <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add URL")}
           </button>
         </:actions>
         <p class="text-xs text-base-content/60">
-          Direct URLs allow the app to bypass the relay when on the same network for faster streaming.
+          {gettext(
+            "Direct URLs allow the app to bypass the relay when on the same network for faster streaming."
+          )}
         </p>
         <.admin_list id="direct-urls-list" items={@ra_config.direct_urls || []}>
           <:row :let={url}>
@@ -193,7 +199,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                 <.row_actions>
                   <.row_action
                     icon="hero-trash"
-                    title="Remove URL"
+                    title={gettext("Remove URL")}
                     destructive
                     phx-click="delete_direct_url"
                     phx-value-url={url}
@@ -202,13 +208,15 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
               </:actions>
             </.admin_row>
           </:row>
-          <:empty>No manual URLs yet. Add one so the player can skip the relay.</:empty>
+          <:empty>
+            {gettext("No manual URLs yet. Add one so the player can skip the relay.")}
+          </:empty>
         </.admin_list>
       </.admin_section>
 
       <.admin_section
         id="detected-urls"
-        title="Auto-detected URLs"
+        title={gettext("Auto-detected URLs")}
         icon="hero-signal"
         count={length(@detected_urls)}
       >
@@ -216,18 +224,18 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           <:row :let={url}>
             <.admin_row id={"detected-url-#{:erlang.phash2(url)}"}>
               <:title><code class="font-mono text-sm break-all">{url}</code></:title>
-              <:badges><span class="badge badge-sm badge-outline">Auto</span></:badges>
+              <:badges><span class="badge badge-sm badge-outline">{gettext("Auto")}</span></:badges>
             </.admin_row>
           </:row>
-          <:empty>No URLs detected. Check the server's network configuration.</:empty>
+          <:empty>{gettext("No URLs detected. Check the server's network configuration.")}</:empty>
         </.admin_list>
       </.admin_section>
 
       <div class="alert bg-info/10 border-info/20 py-2.5">
         <.icon name="hero-light-bulb" class="w-5 h-5 text-primary" />
         <div class="text-xs">
-          <span class="font-semibold">Tip:</span>
-          Use
+          <span class="font-semibold">{gettext("Tip:")}</span>
+          {gettext("Use")}
           <a
             href="https://tailscale.com"
             target="_blank"
@@ -236,7 +244,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           >
             Tailscale
           </a>
-          for secure access anywhere. Add your Tailscale address, e.g.
+          {gettext("for secure access anywhere. Add your Tailscale address, e.g.")}
           <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-primary">
             http://mydia.tail1234.ts.net:4000
           </code>
@@ -247,9 +255,11 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
       <div class="alert">
         <.icon name="hero-device-phone-mobile" class="w-6 h-6 opacity-40" />
         <div>
-          <div class="font-medium">Connect Players from Anywhere</div>
+          <div class="font-medium">{gettext("Connect Players from Anywhere")}</div>
           <div class="text-sm opacity-70">
-            Enable remote access so your phone and tablet can connect to this Mydia server.
+            {gettext(
+              "Enable remote access so your phone and tablet can connect to this Mydia server."
+            )}
           </div>
         </div>
       </div>
@@ -264,8 +274,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     <.admin_modal
       id="direct-url-modal"
       icon="hero-link"
-      title="Add direct URL"
-      subtitle="Where this server can be reached directly, e.g. on the same network"
+      title={gettext("Add direct URL")}
+      subtitle={gettext("Where this server can be reached directly, e.g. on the same network")}
       on_close="close_direct_url_modal"
     >
       <.form
@@ -284,9 +294,11 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
         />
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_direct_url_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" class="btn btn-primary" disabled={@direct_url == ""}>Add</button>
+          <button type="submit" class="btn btn-primary" disabled={@direct_url == ""}>
+            {pgettext("direct url", "Add")}
+          </button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -303,12 +315,12 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     |> Enum.uniq()
   end
 
-  defp display_relay_url(nil), do: "(connecting...)"
+  defp display_relay_url(nil), do: gettext("(connecting...)")
   defp display_relay_url(url), do: url
 
-  defp connection_type_label("direct"), do: "Direct"
-  defp connection_type_label("relay"), do: "Relay"
-  defp connection_type_label("mixed"), do: "Mixed"
+  defp connection_type_label("direct"), do: pgettext("connection type", "Direct")
+  defp connection_type_label("relay"), do: pgettext("connection type", "Relay")
+  defp connection_type_label("mixed"), do: pgettext("connection type", "Mixed")
   defp connection_type_label(_), do: nil
 
   defp connection_type_class("direct"), do: "text-success font-medium"

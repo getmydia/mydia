@@ -11,23 +11,25 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
   def api_keys_tab(assigns) do
     ~H"""
     <p class="text-sm text-base-content/70">
-      Keys for the Library API at <code>/api/library/graphql</code>, sent as the
+      {gettext("Keys for the Library API at")} <code>/api/library/graphql</code>{gettext(
+        ", sent as the"
+      )}
       <code>x-api-key</code>
-      header. Each key acts as you.
+      {gettext("header. Each key acts as you.")}
     </p>
 
     <div :if={@env_key_set} class="bg-base-200 rounded-box">
       <.admin_row id="env-library-api-key">
         <:title>LIBRARY_API_KEY <.env_lock_badge /></:title>
         <:details>
-          Set by LIBRARY_API_KEY. Remove the variable and restart to revoke.
+          {gettext("Set by LIBRARY_API_KEY. Remove the variable and restart to revoke.")}
         </:details>
       </.admin_row>
     </div>
 
     <.admin_list id="api-keys" items={@api_keys}>
       <:row :let={key}><.api_key_row key={key} display={@display} /></:row>
-      <:empty>No API keys yet. Create one to use the Library API.</:empty>
+      <:empty>{gettext("No API keys yet. Create one to use the Library API.")}</:empty>
     </.admin_list>
     """
   end
@@ -36,7 +38,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
   def header_actions(assigns) do
     ~H"""
     <button id="new-api-key" class="btn btn-sm btn-primary" phx-click="new_api_key">
-      <.icon name="hero-plus" class="w-4 h-4" /> New
+      <.icon name="hero-plus" class="w-4 h-4" /> {pgettext("api key", "New")}
     </button>
     """
   end
@@ -52,11 +54,11 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
       <:title>{@key.name}</:title>
       <:descriptor>
         <span class="font-mono">{@key.key_prefix}...</span>
-        · Created {date(@key.inserted_at, @display)} · Last used {date(@key.last_used_at, @display) ||
-          "never"} · Expires {date(
-          @key.expires_at,
-          @display
-        ) || "never"}
+        · {gettext("Created %{created} · Last used %{last_used} · Expires %{expires}",
+          created: date(@key.inserted_at, @display),
+          last_used: date(@key.last_used_at, @display) || gettext("never"),
+          expires: date(@key.expires_at, @display) || gettext("never")
+        )}
       </:descriptor>
       <:badges>
         <span class="badge badge-sm badge-outline">{scope(@key)}</span>
@@ -68,14 +70,14 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
             :if={@state == :active}
             id={"revoke-api-key-#{@key.id}"}
             icon="hero-no-symbol"
-            title="Revoke"
+            title={gettext("Revoke")}
             phx-click="confirm_revoke_api_key"
             phx-value-id={@key.id}
           />
           <.row_action
             id={"delete-api-key-#{@key.id}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             phx-click="confirm_delete_api_key"
             phx-value-id={@key.id}
@@ -93,34 +95,41 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     <.admin_modal
       id="api-key-modal"
       icon="hero-key"
-      title="New API key"
-      subtitle="A key for the Library API"
+      title={gettext("New API key")}
+      subtitle={gettext("A key for the Library API")}
       on_close="close_api_key_modal"
     >
       <.form for={@form} id="api-key-form" phx-change="validate_api_key" phx-submit="save_api_key">
-        <.input field={@form[:name]} type="text" label="Name" placeholder="Home automation" />
+        <.input
+          field={@form[:name]}
+          type="text"
+          label={gettext("Name")}
+          placeholder={gettext("Home automation")}
+        />
         <.input
           field={@form[:expiry]}
           type="select"
-          label="Expires"
+          label={gettext("Expires")}
           options={[
-            {"Never", "never"},
-            {"In 30 days", "30"},
-            {"In 90 days", "90"},
-            {"In 365 days", "365"}
+            {gettext("Never"), "never"},
+            {gettext("In 30 days"), "30"},
+            {gettext("In 90 days"), "90"},
+            {gettext("In 365 days"), "365"}
           ]}
         />
         <.input
           field={@form[:scope]}
           type="select"
-          label="Scope"
-          options={[{"Library API", "library"}]}
+          label={gettext("Scope")}
+          options={[{gettext("Library API"), "library"}]}
         />
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_api_key_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" id="save-api-key" class="btn btn-primary">Create key</button>
+          <button type="submit" id="save-api-key" class="btn btn-primary">
+            {gettext("Create key")}
+          </button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -134,8 +143,8 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     <.admin_modal
       id="created-api-key-modal"
       icon="hero-key"
-      title="Your new API key"
-      subtitle="Copy it now. It is shown only once and cannot be recovered."
+      title={gettext("Your new API key")}
+      subtitle={gettext("Copy it now. It is shown only once and cannot be recovered.")}
       on_close={nil}
     >
       <div class="join w-full">
@@ -155,7 +164,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
           phx-click="copy_api_key"
           data-key={@created_api_key}
           onclick="navigator.clipboard?.writeText(this.dataset.key)"
-          title="Copy key"
+          title={gettext("Copy key")}
         >
           <.icon name="hero-clipboard-document" class="w-4 h-4" />
         </button>
@@ -163,7 +172,9 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
       <div class="alert alert-warning mt-4">
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
         <span>
-          This key also authenticates on the player API as you. Treat it like your password.
+          {gettext(
+            "This key also authenticates on the player API as you. Treat it like your password."
+          )}
         </span>
       </div>
       <:actions>
@@ -172,7 +183,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
           class="btn btn-primary"
           phx-click="close_created_api_key_modal"
         >
-          Done
+          {gettext("Done")}
         </button>
       </:actions>
     </.admin_modal>
@@ -189,14 +200,14 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
       id="api-key-confirm-modal"
       tone={:error}
       icon={if @action == :revoke, do: "hero-no-symbol", else: "hero-trash"}
-      title={"#{if @action == :revoke, do: "Revoke", else: "Delete"} '#{@key.name}'?"}
+      title={confirm_title(@action, @key)}
       on_close="close_api_key_confirm_modal"
     >
       <p>
         <%= if @action == :revoke do %>
-          Anything using this key stops working immediately. It stays listed as revoked.
+          {gettext("Anything using this key stops working immediately. It stays listed as revoked.")}
         <% else %>
-          Anything using this key stops working immediately, and it leaves this list.
+          {gettext("Anything using this key stops working immediately, and it leaves this list.")}
         <% end %>
       </p>
       <:actions>
@@ -205,15 +216,15 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
           class="btn btn-ghost"
           phx-click="close_api_key_confirm_modal"
         >
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           id="confirm-api-key-action"
           class="btn btn-error"
           phx-click={"#{@action}_api_key"}
-          phx-disable-with="Working..."
+          phx-disable-with={gettext("Working...")}
         >
-          {if @action == :revoke, do: "Revoke key", else: "Delete key"}
+          {if @action == :revoke, do: gettext("Revoke key"), else: gettext("Delete key")}
         </button>
       </:actions>
     </.admin_modal>
@@ -231,9 +242,12 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
 
   def state(%ApiKey{}), do: :active
 
-  defp state_label(:active), do: "Active"
-  defp state_label(:revoked), do: "Revoked"
-  defp state_label(:expired), do: "Expired"
+  defp confirm_title(:revoke, key), do: gettext("Revoke '%{name}'?", name: key.name)
+  defp confirm_title(:delete, key), do: gettext("Delete '%{name}'?", name: key.name)
+
+  defp state_label(:active), do: gettext("Active")
+  defp state_label(:revoked), do: gettext("Revoked")
+  defp state_label(:expired), do: gettext("Expired")
 
   defp state_class(:active), do: "badge-success"
   defp state_class(_state), do: "badge-ghost"
@@ -241,7 +255,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
   # Keys minted elsewhere (the player API's createApiKey) default to read/write,
   # which the Library API refuses.
   defp scope(%ApiKey{permissions: permissions}) do
-    if "admin" in (permissions || []), do: "Library API", else: "Player API"
+    if "admin" in (permissions || []), do: gettext("Library API"), else: gettext("Player API")
   end
 
   defp date(nil, _display), do: nil

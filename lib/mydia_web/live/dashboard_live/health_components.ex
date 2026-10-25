@@ -99,7 +99,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 
@@ -148,7 +148,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 
@@ -188,7 +188,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 

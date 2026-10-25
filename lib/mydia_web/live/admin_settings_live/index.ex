@@ -11,7 +11,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Settings")
+     |> assign(:page_title, gettext("Configuration - Settings"))
      |> load_data()}
   end
 
@@ -68,7 +68,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       end)
 
     if Enum.all?(results, fn result -> match?({:ok, _}, result) end) do
-      {:noreply, after_config_write(socket, "Settings updated successfully")}
+      {:noreply, after_config_write(socket, gettext("Settings updated successfully"))}
     else
       failed_results =
         results
@@ -134,7 +134,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
       case Settings.upsert_config_setting(validated_data_with_user) do
         {:ok, _setting} ->
-          {:noreply, after_config_write(socket, "Setting updated successfully")}
+          {:noreply, after_config_write(socket, gettext("Setting updated successfully"))}
 
         {:error, changeset} ->
           MydiaLogger.log_error(:liveview, "Failed to toggle setting",
@@ -156,7 +156,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     else
       {:noreply,
        socket
-       |> put_flash(:error, "Invalid setting value")}
+       |> put_flash(:error, gettext("Invalid setting value"))}
     end
   end
 
@@ -167,10 +167,10 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         {:noreply, socket}
 
       {:ok, _written} ->
-        {:noreply, after_config_write(socket, "Setting updated successfully")}
+        {:noreply, after_config_write(socket, gettext("Setting updated successfully"))}
 
       {:error, key, :invalid} ->
-        {:noreply, put_flash(socket, :error, "Invalid value for #{key}")}
+        {:noreply, put_flash(socket, :error, gettext("Invalid value for %{key}", key: key))}
 
       {:error, key, reason} ->
         MydiaLogger.log_error(:liveview, "Failed to update language setting",
@@ -193,7 +193,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     {:noreply,
      socket
      |> load_data()
-     |> put_flash(:info, "Crash report queue cleared")}
+     |> put_flash(:info, gettext("Crash report queue cleared"))}
   end
 
   @impl true
@@ -236,9 +236,9 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         socket
         |> put_flash(
           :error,
-          "Setting saved, but the runtime config could not be reloaded because the merged " <>
-            "configuration is invalid. The change will take effect once the configuration " <>
-            "is valid. Check the logs for the validation error."
+          gettext(
+            "Setting saved, but the runtime config could not be reloaded because the merged configuration is invalid. The change will take effect once the configuration is valid. Check the logs for the validation error."
+          )
         )
         |> load_data()
     end
@@ -257,7 +257,8 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   defp delete_invalid_config_setting(socket, setting) do
     case Settings.delete_config_setting(setting) do
       {:ok, _} ->
-        {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+        {:noreply,
+         socket |> load_data() |> put_flash(:info, gettext("Removed %{key}", key: setting.key))}
 
       {:error, changeset} ->
         MydiaLogger.log_error(:liveview, "Failed to delete invalid config setting",
@@ -267,11 +268,13 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           setting_key: setting.key
         )
 
-        {:noreply, put_flash(socket, :error, "Failed to remove #{setting.key}")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Failed to remove %{key}", key: setting.key))}
     end
   rescue
     Ecto.StaleEntryError ->
-      {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+      {:noreply,
+       socket |> load_data() |> put_flash(:info, gettext("Removed %{key}", key: setting.key))}
   end
 
   # Validates and persists a single key, then reloads the runtime config.
@@ -301,7 +304,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         persist_setting(socket, changeset, key, category)
 
       true ->
-        {:noreply, put_flash(socket, :error, "Invalid setting value")}
+        {:noreply, put_flash(socket, :error, gettext("Invalid setting value"))}
     end
   end
 
@@ -332,7 +335,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
     case Settings.upsert_config_setting(attrs) do
       {:ok, _setting} ->
-        {:noreply, after_config_write(socket, "Setting updated successfully")}
+        {:noreply, after_config_write(socket, gettext("Setting updated successfully"))}
 
       {:error, error} ->
         MydiaLogger.log_error(:liveview, "Failed to update setting",
@@ -378,28 +381,24 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Server" => [
         %{
           key: "server.port",
-          label: "Port",
           type: :integer,
           value: config.server.port,
           source: Settings.config_source("PORT", "server.port", all_db_settings)
         },
         %{
           key: "server.host",
-          label: "Host",
           type: :string,
           value: config.server.host,
           source: Settings.config_source("HOST", "server.host", all_db_settings)
         },
         %{
           key: "server.url_scheme",
-          label: "URL Scheme",
           type: :string,
           value: config.server.url_scheme,
           source: Settings.config_source("URL_SCHEME", "server.url_scheme", all_db_settings)
         },
         %{
           key: "server.url_host",
-          label: "URL Host",
           type: :string,
           value: config.server.url_host,
           source: Settings.config_source("URL_HOST", "server.url_host", all_db_settings)
@@ -413,7 +412,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Database" => [
         %{
           key: "database.path",
-          label: "Database Path",
           type: :string,
           value: config.database.path,
           editable: false,
@@ -421,7 +419,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         },
         %{
           key: "database.pool_size",
-          label: "Pool Size",
           type: :integer,
           value: config.database.pool_size,
           editable: false,
@@ -431,7 +428,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Authentication" => [
         %{
           key: "auth.local_enabled",
-          label: "Local Auth Enabled",
           type: :boolean,
           value: config.auth.local_enabled,
           source:
@@ -439,7 +435,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         },
         %{
           key: "auth.oidc_enabled",
-          label: "OIDC Enabled",
           type: :boolean,
           value: config.auth.oidc_enabled,
           source: Settings.config_source("OIDC_ENABLED", "auth.oidc_enabled", all_db_settings)
@@ -448,14 +443,12 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Media" => [
         %{
           key: "media.movies_path",
-          label: "Movies Path",
           type: :string,
           value: config.media.movies_path,
           source: Settings.config_source("MOVIES_PATH", "media.movies_path", all_db_settings)
         },
         %{
           key: "media.tv_path",
-          label: "TV Path",
           type: :string,
           value: config.media.tv_path,
           source: Settings.config_source("TV_PATH", "media.tv_path", all_db_settings)
@@ -464,7 +457,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Downloads" => [
         %{
           key: "downloads.monitor_interval_minutes",
-          label: "Monitor Interval (minutes)",
           type: :integer,
           value: config.downloads.monitor_interval_minutes,
           source:
@@ -476,14 +468,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         },
         %{
           key: "downloads.min_seeders",
-          label: "Minimum Seeders (automatic search)",
-          description:
-            "Minimum seeders a result must report for automatic searches to consider it. " <>
-              "This is a hard filter applied before ranking, so a torrent below it is " <>
-              "removed rather than demoted. Manual searches have their own control, and " <>
-              "Usenet results report no seeders at all and are exempt. 0, the default, " <>
-              "filters nothing. Careful above 0: some indexers report 0 when they mean " <>
-              "\"unknown\" rather than \"dead\", so a floor can silently empty their results.",
           type: :integer,
           value: config.downloads.min_seeders,
           placeholder: "0",
@@ -498,15 +482,8 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Streaming" => [
         %{
           key: "streaming.max_transcode_height",
-          label: "Max Transcode Height",
-          description:
-            "Ceiling in pixels on the output height of any transcode, for example 720. " <>
-              "Empty means no ceiling and a transcode keeps the source resolution, which " <>
-              "a small server may not sustain in realtime for a 4K file. Never upscales, " <>
-              "and never applies when the file is streamed without re-encoding.",
           type: :integer,
           value: streaming.max_transcode_height,
-          placeholder: "no limit",
           source:
             Settings.config_source(
               "MAX_TRANSCODE_HEIGHT",
@@ -518,7 +495,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Crash Reporting" => [
         %{
           key: "crash_reporting.enabled",
-          label: "Share Crashes with Developers",
           type: :boolean,
           value: get_crash_reporting_enabled(all_db_settings),
           # Unlike other settings where env wins, Mydia.CrashReporter.enabled?/0
@@ -531,7 +507,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Feedback" => [
         %{
           key: "feedback.enabled",
-          label: "Show Send feedback button",
           type: :boolean,
           value: Mydia.Feedback.enabled?(),
           editable: true,
@@ -541,14 +516,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Updates" => [
         %{
           key: "update_check.enabled",
-          label: "Check for updates",
-          description:
-            "Shortly after startup and once a week, ask the metadata relay whether a newer " <>
-              "Mydia release exists, and show it on the System page. The check sends a random " <>
-              "install ID, the Mydia version, the CPU architecture and the database type. That " <>
-              "also lets the developers count active installs and decide which versions and " <>
-              "platforms to prioritise. Nothing about your library, accounts or network is sent, " <>
-              "and the relay does not store your address.",
           type: :boolean,
           value: Mydia.UpdateCheck.enabled?(),
           source:
@@ -562,9 +529,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Library" => [
         %{
           key: "library.auto_repair_enabled",
-          label: "Auto-Repair Database Issues",
-          description:
-            "Automatically queue a library re-scan on startup when database issues (orphaned files) are detected",
           type: :boolean,
           value: get_library_auto_repair_enabled(all_db_settings),
           source:
@@ -576,8 +540,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         },
         %{
           key: "library.auto_repair_threshold",
-          label: "Auto-Repair Threshold",
-          description: "Minimum number of issues required to trigger auto-repair",
           type: :integer,
           value: get_library_auto_repair_threshold(all_db_settings),
           source:

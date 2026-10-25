@@ -30,7 +30,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
     <.dash_section
       id="now-playing"
-      title="Now Playing"
+      title={gettext("Now Playing")}
       icon="hero-play-circle"
       empty?={@active_sessions == []}
       empty_text={now_playing_idle_text(@last_play_at)}
@@ -48,7 +48,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     <.admin_section
       :if={@background_jobs != []}
       id="background-transcodes"
-      title="Background transcodes"
+      title={gettext("Background transcodes")}
       icon="hero-cog-6-tooth"
       count={length(@background_jobs)}
     >
@@ -60,13 +60,13 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
               {job_type_label(job.type)}<span :if={job.file_size}> · {format_file_size(job.file_size)}</span>
             </:descriptor>
             <:badges>
-              <span class="badge badge-sm badge-outline">{job.status}</span>
+              <span class="badge badge-sm badge-outline">{job_status_label(job.status)}</span>
             </:badges>
             <:actions>
               <.row_actions>
                 <.row_action
                   icon="hero-x-mark"
-                  title="Cancel transcode"
+                  title={gettext("Cancel transcode")}
                   destructive
                   phx-click="cancel_transcode_job"
                   phx-value-id={job.id}
@@ -75,7 +75,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             </:actions>
           </.admin_row>
         </:row>
-        <:empty>No background transcodes.</:empty>
+        <:empty>{gettext("No background transcodes.")}</:empty>
       </.admin_list>
     </.admin_section>
 
@@ -83,10 +83,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
     <.dash_section
       id="recent-activity"
-      title="Recent Activity"
+      title={gettext("Recent Activity")}
       icon="hero-clock"
       empty?={@recent_activity == []}
-      empty_text="Nothing has happened yet."
+      empty_text={gettext("Nothing has happened yet.")}
     >
       <div class="bg-base-200 rounded-box divide-y divide-base-300">
         <%= for item <- @recent_activity do %>
@@ -101,17 +101,24 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     """
   end
 
-  defp job_type_label("direct"), do: "Direct"
-  defp job_type_label("stream"), do: "Stream"
-  defp job_type_label(_download), do: "Download"
+  defp job_type_label("direct"), do: pgettext("transcode type", "Direct")
+  defp job_type_label("stream"), do: pgettext("transcode type", "Stream")
+  defp job_type_label(_download), do: pgettext("transcode type", "Download")
+
+  defp job_status_label("pending"), do: pgettext("transcode status", "pending")
+  defp job_status_label("transcoding"), do: pgettext("transcode status", "transcoding")
+  defp job_status_label("playing"), do: pgettext("transcode status", "playing")
+  defp job_status_label("ready"), do: pgettext("transcode status", "ready")
+  defp job_status_label("failed"), do: pgettext("transcode status", "failed")
+  defp job_status_label(status), do: status
 
   # `recent_plays/1` reads playback.started events, so this is when a play
   # began. There is no durable session-end record, and claiming a stream
   # "ended" would be a lie the data cannot support.
-  defp now_playing_idle_text(nil), do: "Nobody is watching."
+  defp now_playing_idle_text(nil), do: gettext("Nobody is watching.")
 
   defp now_playing_idle_text(at) do
-    "Nobody is watching. Last played #{elapsed_label(at)} ago."
+    gettext("Nobody is watching. Last played %{elapsed} ago.", elapsed: elapsed_label(at))
   end
 
   attr :active_streams, :integer, required: true
@@ -125,22 +132,24 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     ~H"""
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div id="kpi-active-streams" class="stat bg-base-200 rounded-box shadow-sm">
-        <div class="stat-title">Active streams</div>
+        <div class="stat-title">{gettext("Active streams")}</div>
         <div class="stat-value text-2xl">{@active_streams}</div>
-        <div :if={@active_streams == 0 and @idle_for} class="stat-desc">Idle for {@idle_for}</div>
+        <div :if={@active_streams == 0 and @idle_for} class="stat-desc">
+          {gettext("Idle for %{duration}", duration: @idle_for)}
+        </div>
       </div>
       <div id="kpi-plays-today" class="stat bg-base-200 rounded-box shadow-sm">
-        <div class="stat-title">Plays today</div>
+        <div class="stat-title">{gettext("Plays today")}</div>
         <div class="stat-value text-2xl">{@plays_today}</div>
         <div :if={@plays_today > 0 or @plays_yesterday > 0} class="stat-desc">
-          {@plays_yesterday} yesterday
+          {gettext("%{count} yesterday", count: @plays_yesterday)}
         </div>
       </div>
       <div id="kpi-plays-week" class="stat bg-base-200 rounded-box shadow-sm">
-        <div class="stat-title">Plays this week</div>
+        <div class="stat-title">{gettext("Plays this week")}</div>
         <div class="stat-value text-2xl">{@plays_week}</div>
         <div :if={@plays_week > 0 or @plays_prior_week > 0} class="stat-desc">
-          {@plays_prior_week} the week before
+          {gettext("%{count} the week before", count: @plays_prior_week)}
         </div>
       </div>
     </div>
@@ -187,10 +196,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     diff = DateTime.diff(DateTime.utc_now(), datetime, :second)
 
     cond do
-      diff < 60 -> "under a minute"
-      diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86_400 -> "#{div(diff, 3600)}h"
-      true -> "#{div(diff, 86_400)}d"
+      diff < 60 -> gettext("under a minute")
+      diff < 3600 -> gettext("%{count}m", count: div(diff, 60))
+      diff < 86_400 -> gettext("%{count}h", count: div(diff, 3600))
+      true -> gettext("%{count}d", count: div(diff, 86_400))
     end
   end
 
@@ -234,7 +243,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         <%= if @session.poster_path do %>
           <div class="avatar">
             <div class="w-10 rounded">
-              <img src={build_image_url(@session.poster_path)} alt="Poster" />
+              <img src={build_image_url(@session.poster_path)} alt={gettext("Poster")} />
             </div>
           </div>
         <% else %>
@@ -251,7 +260,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             {@session.media_title}
           </div>
           <div class="text-xs opacity-60 truncate">
-            {@session.episode_info || "Movie"}
+            {@session.episode_info || gettext("Movie")}
           </div>
           <div class="text-xs opacity-60 truncate">{@username}</div>
         </div>
@@ -260,7 +269,9 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             {@mode_label}
           </span>
           <%= if @mbps do %>
-            <span class="text-xs font-mono opacity-60">{format_mbps(@mbps)} Mbps</span>
+            <span class="text-xs font-mono opacity-60">{gettext("%{rate} Mbps",
+              rate: format_mbps(@mbps)
+            )}</span>
           <% end %>
         </div>
       </div>
@@ -280,13 +291,13 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         class="text-xs font-mono opacity-60 space-y-0.5"
       >
         <div :if={@video_line} id={"now-playing-video-#{@session.media_file_id}"}>
-          <span class="opacity-60">Video</span> {@video_line}
+          <span class="opacity-60">{gettext("Video")}</span> {@video_line}
         </div>
         <div :if={@resolution_line} id={"now-playing-resolution-#{@session.media_file_id}"}>
-          <span class="opacity-60">Res</span> {@resolution_line}
+          <span class="opacity-60">{pgettext("resolution abbreviation", "Res")}</span> {@resolution_line}
         </div>
         <div :if={@audio_line} id={"now-playing-audio-#{@session.media_file_id}"}>
-          <span class="opacity-60">Audio</span> {@audio_line}
+          <span class="opacity-60">{gettext("Audio")}</span> {@audio_line}
         </div>
       </div>
     </div>
@@ -319,14 +330,20 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         <div class="text-xs opacity-50 flex items-center gap-1">
           <%= cond do %>
             <% @job.type == "direct" -> %>
-              <span class="badge badge-xs badge-success">Direct</span>
+              <span class="badge badge-xs badge-success">
+                {pgettext("transcode type", "Direct")}
+              </span>
             <% @job.type == "stream" -> %>
-              <span class="badge badge-xs badge-info">Stream</span>
+              <span class="badge badge-xs badge-info">
+                {pgettext("transcode type", "Stream")}
+              </span>
             <% true -> %>
-              <span class="badge badge-xs badge-ghost">DL</span>
+              <span class="badge badge-xs badge-ghost">
+                {pgettext("download abbreviation", "DL")}
+              </span>
           <% end %>
           <span class={["badge badge-xs", @status_badge]}>
-            {@job.status}
+            {job_status_label(@job.status)}
           </span>
           <%= if @job.file_size do %>
             <span class="font-mono">{format_file_size(@job.file_size)}</span>
@@ -344,7 +361,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
           aria-label={@action_label}
           phx-click="cancel_transcode_job"
           phx-value-id={@job.id}
-          data-confirm={if @job.status == "ready", do: "Delete this file?", else: nil}
+          data-confirm={if @job.status == "ready", do: gettext("Delete this file?"), else: nil}
         >
           <.icon name="hero-x-mark" class="w-3 h-3" />
         </button>
@@ -354,8 +371,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   end
 
   # A finished row's button deletes the file; only a live job is cancelled.
-  defp job_action_label(status) when status in ["ready", "failed"], do: "Delete"
-  defp job_action_label(_in_progress), do: "Cancel transcode"
+  defp job_action_label(status) when status in ["ready", "failed"],
+    do: gettext("Delete")
+
+  defp job_action_label(_in_progress), do: gettext("Cancel transcode")
 
   defp job_status_tone("ready"), do: {"hero-check-circle", "text-success", "badge-success"}
   defp job_status_tone("failed"), do: {"hero-x-circle", "text-error", "badge-error"}
@@ -380,7 +399,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       <%= if @poster_path do %>
         <div class="avatar">
           <div class="w-8 rounded">
-            <img src={build_image_url(@poster_path)} alt="Poster" />
+            <img src={build_image_url(@poster_path)} alt={gettext("Poster")} />
           </div>
         </div>
       <% else %>
@@ -446,16 +465,16 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
       true ->
         path = job.media_file.relative_path || job.media_file.path
-        if path, do: Path.basename(path), else: "Unknown"
+        if path, do: Path.basename(path), else: gettext("Unknown")
     end
   end
 
   # The badge follows the VIDEO action, not "either stream encodes". A
   # video-copy stream that converts audio is a remux, and calling that a
   # transcode would have an operator hunting for CPU load that is not there.
-  defp mode_label(nil), do: "Direct Play"
-  defp mode_label(%{video: %{action: :copy}}), do: "Remux"
-  defp mode_label(_plan), do: "Transcode"
+  defp mode_label(nil), do: pgettext("playback mode", "Direct Play")
+  defp mode_label(%{video: %{action: :copy}}), do: pgettext("playback mode", "Remux")
+  defp mode_label(_plan), do: pgettext("playback mode", "Transcode")
 
   defp mode_class(nil), do: "badge-success"
   defp mode_class(%{video: %{action: :copy}}), do: "badge-info"
@@ -464,20 +483,20 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   defp video_line(nil), do: nil
 
   defp video_line(%{video: %{action: :copy, from_codec: codec}}) when is_binary(codec) do
-    "#{codec} (copy)"
+    gettext("%{codec} (copy)", codec: codec)
   end
 
   defp video_line(%{video: %{action: :encode} = video}) do
     tier = tier_label(video.tier)
-    base = "#{video.from_codec || "unknown"} -> #{video.to_codec}"
+    base = "#{video.from_codec || gettext("unknown")} -> #{video.to_codec}"
     if tier, do: "#{base} (#{tier})", else: base
   end
 
   defp video_line(_plan), do: nil
 
   defp tier_label(:full_hardware), do: "VAAPI"
-  defp tier_label(:hybrid), do: "hybrid"
-  defp tier_label(:software), do: "software"
+  defp tier_label(:hybrid), do: pgettext("transcode tier", "hybrid")
+  defp tier_label(:software), do: pgettext("transcode tier", "software")
   defp tier_label(_other), do: nil
 
   # Omitted rather than guessed when the source dimensions are unknown, which
@@ -496,16 +515,20 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   defp audio_line(nil), do: nil
 
   defp audio_line(%{audio: %{action: action, from_codec: from, to_codec: to} = audio}) do
-    codecs = if action == :copy, do: "#{from} (copy)", else: "#{from || "unknown"} -> #{to}"
+    codecs =
+      if action == :copy,
+        do: gettext("%{codec} (copy)", codec: from),
+        else: "#{from || gettext("unknown")} -> #{to}"
+
     if audio.language, do: "#{codecs} - #{audio.language}", else: codecs
   end
 
   defp audio_line(_plan), do: nil
 
-  defp user_label(nil), do: "Unknown"
+  defp user_label(nil), do: gettext("Unknown")
   defp user_label(%{username: username}) when is_binary(username) and username != "", do: username
   defp user_label(%{email: email}) when is_binary(email) and email != "", do: email
-  defp user_label(_), do: "Unknown"
+  defp user_label(_), do: gettext("Unknown")
 
   defp build_image_url(path) when is_binary(path), do: ImageUrl.image_url(path, "w92")
   defp build_image_url(_), do: nil
@@ -515,10 +538,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     diff = DateTime.diff(now, datetime, :second)
 
     cond do
-      diff < 60 -> "Just now"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86400 -> "#{div(diff, 3600)}h ago"
-      true -> "#{div(diff, 86400)}d ago"
+      diff < 60 -> gettext("Just now")
+      diff < 3600 -> gettext("%{count}m ago", count: div(diff, 60))
+      diff < 86400 -> gettext("%{count}h ago", count: div(diff, 3600))
+      true -> gettext("%{count}d ago", count: div(diff, 86400))
     end
   end
 end

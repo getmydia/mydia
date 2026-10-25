@@ -40,9 +40,9 @@ defmodule MydiaWeb.AdminNavTest do
 
     test "every page has a label, a one-line description and a hero icon" do
       for page <- AdminNav.pages() do
-        assert page.label != ""
-        assert page.description != ""
-        refute page.description =~ "\n"
+        assert AdminNav.page_label(page) != ""
+        assert AdminNav.page_description(page) != ""
+        refute AdminNav.page_description(page) =~ "\n"
         assert String.starts_with?(page.icon, "hero-")
       end
     end
@@ -93,8 +93,8 @@ defmodule MydiaWeb.AdminNavTest do
 
   describe "lookups" do
     test "fetch!/1 returns the page" do
-      assert %Page{label: "Trash", hub: :administration, path: "/admin/trash"} =
-               AdminNav.fetch!(:trash)
+      assert %Page{hub: :administration, path: "/admin/trash"} = AdminNav.fetch!(:trash)
+      assert AdminNav.page_label(:trash) == "Trash"
     end
 
     test "fetch!/1 raises on an unknown key" do

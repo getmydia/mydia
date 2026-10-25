@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Manage Users")
+     |> assign(:page_title, gettext("Manage Users"))
      |> assign(:search_query, "")
      |> assign(:filter_role, "all")
      |> assign(:show_create_modal, false)
@@ -138,8 +138,8 @@ defmodule MydiaWeb.AdminUsersLive.Index do
            |> put_flash(
              :info,
              if(password,
-               do: "User created! Save the password shown below.",
-               else: "User created successfully."
+               do: gettext("User created! Save the password shown below."),
+               else: gettext("User created successfully.")
              )
            )
            |> load_users()}
@@ -147,14 +147,14 @@ defmodule MydiaWeb.AdminUsersLive.Index do
         {:error, changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to create user")
+           |> put_flash(:error, gettext("Failed to create user"))
            |> assign(:create_form, to_form(changeset, as: :create))}
       end
     else
       # Validation failed - show errors
       {:noreply,
        socket
-       |> put_flash(:error, "Please fix the errors below")
+       |> put_flash(:error, gettext("Please fix the errors below"))
        |> assign(:create_form, to_form(Map.put(changeset, :action, :insert), as: :create))}
     end
   end
@@ -194,19 +194,19 @@ defmodule MydiaWeb.AdminUsersLive.Index do
            socket
            |> assign(:show_edit_role_modal, false)
            |> assign(:selected_user, nil)
-           |> put_flash(:info, "User role updated successfully.")
+           |> put_flash(:info, gettext("User role updated successfully."))
            |> load_users()}
 
         {:error, changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to update user role")
+           |> put_flash(:error, gettext("Failed to update user role"))
            |> assign(:edit_role_form, to_form(changeset, as: :edit_role))}
       end
     else
       {:noreply,
        socket
-       |> put_flash(:error, "Please fix the errors below")
+       |> put_flash(:error, gettext("Please fix the errors below"))
        |> assign(:edit_role_form, to_form(changeset, as: :edit_role))}
     end
   end
@@ -217,7 +217,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     if is_oidc_user?(user) do
       {:noreply,
        socket
-       |> put_flash(:error, "Cannot reset password for OIDC users")}
+       |> put_flash(:error, gettext("Cannot reset password for OIDC users"))}
     else
       {:noreply,
        socket
@@ -297,21 +297,21 @@ defmodule MydiaWeb.AdminUsersLive.Index do
            |> put_flash(
              :info,
              if(password,
-               do: "Password reset! Save the password shown below.",
-               else: "Password reset successfully."
+               do: gettext("Password reset! Save the password shown below."),
+               else: gettext("Password reset successfully.")
              )
            )}
 
         {:error, changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to reset password")
+           |> put_flash(:error, gettext("Failed to reset password"))
            |> assign(:reset_password_form, to_form(changeset, as: :reset_password))}
       end
     else
       {:noreply,
        socket
-       |> put_flash(:error, "Please fix the errors below")
+       |> put_flash(:error, gettext("Please fix the errors below"))
        |> assign(
          :reset_password_form,
          to_form(Map.put(changeset, :action, :insert), as: :reset_password)
@@ -326,7 +326,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     if user.id == socket.assigns.current_user.id do
       {:noreply,
        socket
-       |> put_flash(:error, "You cannot delete your own account")}
+       |> put_flash(:error, gettext("You cannot delete your own account"))}
     else
       {:noreply,
        socket
@@ -351,13 +351,13 @@ defmodule MydiaWeb.AdminUsersLive.Index do
          socket
          |> assign(:show_delete_modal, false)
          |> assign(:selected_user, nil)
-         |> put_flash(:info, "User deleted successfully.")
+         |> put_flash(:info, gettext("User deleted successfully."))
          |> load_users()}
 
       {:error, _changeset} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to delete user")}
+         |> put_flash(:error, gettext("Failed to delete user"))}
     end
   end
 
@@ -366,7 +366,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Two-factor authentication turned off.")
+     |> put_flash(:info, gettext("Two-factor authentication turned off."))
      |> load_users()}
   end
 
@@ -396,16 +396,16 @@ defmodule MydiaWeb.AdminUsersLive.Index do
       {:noreply,
        socket
        |> assign(:show_access_modal, false)
-       |> put_flash(:info, "Access updated")
+       |> put_flash(:info, gettext("Access updated"))
        |> load_users()}
     else
       # A value that is not a whole number must not read as "no limit" and
       # silently lift an existing one.
       :invalid_age ->
-        {:noreply, put_flash(socket, :error, "Choose an age rating from the list")}
+        {:noreply, put_flash(socket, :error, gettext("Choose an age rating from the list"))}
 
       {:error, :admin} ->
-        {:noreply, put_flash(socket, :error, "Admins always have full access")}
+        {:noreply, put_flash(socket, :error, gettext("Admins always have full access"))}
 
       {:error, changeset} ->
         {:noreply, put_flash(socket, :error, error_message(changeset))}
@@ -418,7 +418,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     {:noreply,
      socket
      |> assign(:show_access_modal, false)
-     |> put_flash(:info, "Restrictions removed")}
+     |> put_flash(:info, gettext("Restrictions removed"))}
   end
 
   ## Private Helpers
