@@ -34,20 +34,24 @@ defmodule Mydia.Library.ReleaseParser.VocabularyTest do
   end
 
   describe "lookup/1 — codecs" do
-    test "x264 and h264 and AVC all map to H.264/AVC" do
-      for value <- ["x264", "h264", "AVC"] do
+    test "h264 and AVC map to H.264, x264 stays the encoder label" do
+      for value <- ["h264", "AVC"] do
         [%VocabularyEntry{} = entry] = Vocabulary.lookup(value)
-        assert entry.canonical == "H.264/AVC"
+        assert entry.canonical == "H.264"
         assert entry.label == :codec
       end
+
+      assert [%VocabularyEntry{canonical: "x264", label: :codec}] = Vocabulary.lookup("x264")
     end
 
-    test "x265 and h265 and HEVC all map to H.265/HEVC" do
-      for value <- ["x265", "h265", "HEVC"] do
+    test "h265 and HEVC map to H.265, x265 stays the encoder label" do
+      for value <- ["h265", "HEVC"] do
         [%VocabularyEntry{} = entry] = Vocabulary.lookup(value)
-        assert entry.canonical == "H.265/HEVC"
+        assert entry.canonical == "H.265"
         assert entry.label == :codec
       end
+
+      assert [%VocabularyEntry{canonical: "x265", label: :codec}] = Vocabulary.lookup("x265")
     end
   end
 
@@ -63,10 +67,10 @@ defmodule Mydia.Library.ReleaseParser.VocabularyTest do
     end
 
     test "x265 / X265 / xHEVC variants all match" do
-      assert [%VocabularyEntry{canonical: "H.265/HEVC"}] = Vocabulary.lookup("x265")
-      assert [%VocabularyEntry{canonical: "H.265/HEVC"}] = Vocabulary.lookup("X265")
-      assert [%VocabularyEntry{canonical: "H.265/HEVC"}] = Vocabulary.lookup("HEVC")
-      assert [%VocabularyEntry{canonical: "H.265/HEVC"}] = Vocabulary.lookup("hevc")
+      assert [%VocabularyEntry{canonical: "x265"}] = Vocabulary.lookup("x265")
+      assert [%VocabularyEntry{canonical: "x265"}] = Vocabulary.lookup("X265")
+      assert [%VocabularyEntry{canonical: "H.265"}] = Vocabulary.lookup("HEVC")
+      assert [%VocabularyEntry{canonical: "H.265"}] = Vocabulary.lookup("hevc")
     end
   end
 

@@ -64,7 +64,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
       assert result.quality.audio == "TrueHD 7.1"
       assert result.quality.hdr_format == :hdr10
       assert result.release_group == "MR"
@@ -79,8 +79,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.codec == "H.265"
+      assert result.quality.audio == "DTS-HD MA"
       assert result.release_group == "FGT"
     end
 
@@ -115,7 +115,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.year == 2024
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.quality.hdr_format == :hdr10_plus
       assert result.release_group == "GROUP"
     end
@@ -144,7 +144,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [5]
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "Game of Thrones S06E09 4K with TrueHD Atmos" do
@@ -159,7 +159,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
 
@@ -173,7 +173,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [4]
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "BEN"
     end
   end
@@ -189,8 +189,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [19]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ADWeb"
     end
 
@@ -203,7 +203,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "BYNDR"
     end
 
@@ -217,8 +217,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [5]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
 
@@ -233,7 +233,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
 
@@ -247,8 +247,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ZeroTV"
     end
 
@@ -263,8 +263,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.year == 2024
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "GROUP"
     end
 
@@ -278,7 +278,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "DiN"
     end
 
@@ -292,7 +292,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end
 
@@ -308,7 +308,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA"
       assert result.release_group == "MgB"
     end
   end
@@ -404,7 +404,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.title == "Top Gun"
       assert result.year == 1986
       assert result.quality.source == "DVDRip"
-      assert result.quality.codec == "Xvid"
+      assert result.quality.codec == "XviD"
       assert result.release_group == "pirat"
     end
 
@@ -415,7 +415,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.title == "Jack Reacher"
       assert result.year == 2012
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
@@ -427,8 +427,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.title == "Cloud Atlas"
       assert result.year == 2012
-      assert result.quality.source == "dvdrip"
-      assert result.quality.codec == "xvid"
+      assert result.quality.source == "DVDRip"
+      assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
 
@@ -439,7 +439,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.title == "The Last Samurai"
       assert result.year == 2003
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.quality.audio == "AC3"
       assert result.release_group == "HuSh"
@@ -475,9 +475,9 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Fast.and.Furious.2001.2160p.UHD.Bluray.REMUX.HEVC-MIXED.mkv")
 
-      assert result.quality.source == "Bluray"
+      assert result.quality.source == "BluRay"
       assert result.quality.resolution == "2160p"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "BluRay REMUX release" do
@@ -486,7 +486,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
         FileParser.parse("Dune.Part.Two.2024.BluRay.1080p.REMUX.AVC.DTS-HD.MA.5.1-FGT.mkv")
 
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "AVC"
+      assert result.quality.codec == "H.264"
       assert result.release_group == "FGT"
     end
   end
@@ -532,7 +532,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
         FileParser.parse("DREAM.2023.1080p.WEBRip.H264.AAC.mkv")
 
       assert result.quality.source == "WEBRip"
-      assert result.quality.codec == "H264"
+      assert result.quality.codec == "H.264"
       assert result.quality.audio == "AAC"
     end
 
@@ -549,7 +549,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
         FileParser.parse("Oh.My.School.2023.1080p.WEB-DL.H265.DDP5.1-DreamHD.mkv")
 
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H265"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "DreamHD"
     end
   end
@@ -665,14 +665,14 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Monster.House.2006.1080p.BluRay.x264.DTS-HD.MA.5.1-ParkHD.mkv")
 
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
     end
 
     test "DTS-HD MA 7.1" do
       result =
         FileParser.parse("A.Haunting.in.Venice.2023.BluRay.1080p.DTS-HD.MA.7.1.x264-MTeam.mkv")
 
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 7.1"
     end
   end
 
@@ -683,21 +683,21 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
           "Final.Destination.Bloodlines.2025.1080p.AMZN.WEB-DL.DDP5.1.H.265-TBMovies.mkv"
         )
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "DDP5.1 with Atmos" do
       result =
         FileParser.parse("Heart.of.Stone.2023.1080p.NF.WEB-DL.x264.DDP5.1.Atmos-MOMOWEB.mkv")
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "EAC3 format" do
       result =
         FileParser.parse("Dahmer.S01E05.1080p.NF.WEB-DL.EAC3.x264-K83.mkv")
 
-      assert result.quality.audio == "EAC3"
+      assert result.quality.audio == "DD+"
     end
   end
 
@@ -735,7 +735,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Fast.and.Furious.2001.2160p.UHD.Bluray.REMUX.HEVC-MIXED.mkv")
 
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
     end
 
     test "x265 codec" do
@@ -760,7 +760,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Seoul.Busters.S01E19.1080p.DSNP.WEB-DL.H264.DDP5.1-ADWeb.mkv")
 
-      assert result.quality.codec == "H264"
+      assert result.quality.codec == "H.264"
     end
 
     test "x264 codec" do
@@ -790,7 +790,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Cloud.Atlas.2012.dvdrip.xvid-T911.avi")
 
-      assert result.quality.codec == "xvid"
+      assert result.quality.codec == "XviD"
     end
   end
 
@@ -799,7 +799,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Madame.Web.2024.BluRay.1080p.REMUX.AVC.DTS-HD.MA.5.1-LEGi0N.mkv")
 
-      assert result.quality.codec == "AVC"
+      assert result.quality.codec == "H.264"
     end
   end
 
@@ -1104,7 +1104,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "DiN"
       assert result.confidence > 0.8
     end
@@ -1119,7 +1119,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.year == 2023
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       # DV sets dolby_vision, not hdr_format
       assert result.quality.dolby_vision
       assert result.release_group == "GROUP"
@@ -1133,7 +1133,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.type == :movie
       assert result.title == "Jack Reacher"
       assert result.year == 2012
-      assert result.quality.source == "DVDRiP"
+      assert result.quality.source == "DVDRip"
       assert result.quality.codec == "XviD"
       assert result.release_group == "T911"
     end
@@ -1152,7 +1152,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
 
@@ -1166,8 +1166,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.codec == "H264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "ZeroTV"
     end
 
@@ -1195,7 +1195,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end
 
@@ -1210,7 +1210,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.release_group == "K83"
     end
   end

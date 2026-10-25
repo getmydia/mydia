@@ -29,7 +29,7 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
              end)
 
       assert Enum.any?(result.quality_tokens, fn entry ->
-               entry.label == :codec and entry.value == "H.264/AVC"
+               entry.label == :codec and entry.value == "x264"
              end)
 
       assert result.field_confidence[:title] >= 0.5
@@ -92,7 +92,7 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
              end)
 
       assert Enum.any?(result.quality_tokens, fn e ->
-               e.label == :codec and e.value == "H.265/HEVC"
+               e.label == :codec and e.value == "x265"
              end)
     end
 

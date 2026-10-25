@@ -94,8 +94,8 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       result1 = FileParser.parse("Movie 2020 4K.mkv")
       result2 = FileParser.parse("Movie 2020 UHD.mkv")
 
-      assert result1.quality.resolution == "4K"
-      assert result2.quality.resolution == "UHD"
+      assert result1.quality.resolution == "2160p"
+      assert result2.quality.resolution == "2160p"
     end
 
     test "handles P2P release naming" do
@@ -179,8 +179,8 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.season == 2
       assert result.episodes == [8]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "WEB"
-      assert result.quality.codec == "H264"
+      assert result.quality.source == "WEB-DL"
+      assert result.quality.codec == "H.264"
       assert result.release_group == "GROUP"
     end
 
@@ -214,8 +214,8 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       result = FileParser.parse("Show.S01E01.1080p.WEB-DL.DD5.1.H264.mkv")
 
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DD5.1"
-      assert result.quality.codec == "H264"
+      assert result.quality.audio == "AC3 5.1"
+      assert result.quality.codec == "H.264"
     end
 
     test "handles two-digit episodes" do
@@ -310,8 +310,8 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.title == "Ghosts (Us)"
       assert result.season == 5
       assert result.episodes == [5]
-      assert result.quality.codec == "h264"
-      assert result.quality.audio == "EAC3"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+"
     end
 
     test "parses Ghosts (US) S05E04" do
@@ -326,8 +326,8 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.title == "Ghosts (Us)"
       assert result.season == 5
       assert result.episodes == [4]
-      assert result.quality.codec == "h264"
-      assert result.quality.audio == "EAC3"
+      assert result.quality.codec == "H.264"
+      assert result.quality.audio == "DD+"
     end
 
     test "parses TV show with parentheses in title" do
@@ -401,7 +401,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles BDRip source" do
       result = FileParser.parse("Movie 2020 1080p BDRip.mkv")
 
-      assert result.quality.source == "BDRip"
+      assert result.quality.source == "BluRay"
     end
 
     test "handles HDTV source" do
@@ -444,7 +444,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles DDP5.1 audio codec" do
       result = FileParser.parse("Movie 2020 1080p WEB-DL DDP5.1 Atmos.mkv")
 
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       assert result.title == "Movie"
       assert result.year == 2020
     end
@@ -549,7 +549,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.year == 2009
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "HEVC"
+      assert result.quality.codec == "H.265"
       assert result.quality.audio == "Atmos"
     end
 
@@ -560,7 +560,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.title == "The Matrix Reloaded"
       assert result.year == 2003
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BDRip"
+      assert result.quality.source == "BluRay"
     end
 
     test "parses movie with 10bit pattern (no space)" do
@@ -604,7 +604,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.quality.codec == "x265"
       assert result.quality.hdr_format == :hdr10
       # Audio codec case is preserved from the filename (lowercase "aac")
-      assert result.quality.audio == "aac"
+      assert result.quality.audio == "AAC"
       assert result.release_group == "Rosy"
     end
 
@@ -624,9 +624,9 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
       # Codec case is preserved from the filename (uppercase "X265")
-      assert result.quality.codec == "X265"
+      assert result.quality.codec == "x265"
     end
   end
 
@@ -634,37 +634,37 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles audio codec variations with dots" do
       # DD5.1 with dot
       result1 = FileParser.parse("Movie.2024.1080p.DD5.1.mkv")
-      assert result1.quality.audio == "DD5.1"
+      assert result1.quality.audio == "AC3 5.1"
       assert result1.title == "Movie"
 
       # DDP5.1 with dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP5.1.mkv")
-      assert result2.quality.audio == "DDP5.1"
+      assert result2.quality.audio == "DD+ 5.1"
       assert result2.title == "Movie"
     end
 
     test "handles audio codec variations without dots" do
       # DD51 without dot
       result1 = FileParser.parse("Movie.2024.1080p.DD51.mkv")
-      assert result1.quality.audio == "DD51"
+      assert result1.quality.audio == "AC3 51"
       assert result1.title == "Movie"
 
       # DDP51 without dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv")
-      assert result2.quality.audio == "DDP51"
+      assert result2.quality.audio == "DD+ 51"
       assert result2.title == "Movie"
     end
 
     test "handles EAC3 audio codec (alternative name for DDP)" do
       result = FileParser.parse("Movie.2024.1080p.EAC3.mkv")
-      assert result.quality.audio == "EAC3"
+      assert result.quality.audio == "DD+"
       assert result.title == "Movie"
     end
 
     test "handles DD+ audio codec" do
       result = FileParser.parse("Movie.2024.1080p.DD+.mkv")
       # DD+ is parsed as "DD" since + is normalized away
-      assert result.quality.audio == "DD"
+      assert result.quality.audio == "DD+"
       # The + character is normalized to space and removed during title cleaning
       assert result.title == "Movie"
     end
@@ -683,11 +683,11 @@ defmodule Mydia.Library.ReleaseParserPortTest do
 
       # DTS-HD.MA
       result2 = FileParser.parse("Movie.2024.1080p.DTS-HD.MA.mkv")
-      assert result2.quality.audio == "DTS-HD.MA"
+      assert result2.quality.audio == "DTS-HD MA"
 
       # DTS-X
       result3 = FileParser.parse("Movie.2024.1080p.DTS-X.mkv")
-      assert result3.quality.audio == "DTS-X"
+      assert result3.quality.audio == "DTS:X"
 
       # Plain DTS
       result4 = FileParser.parse("Movie.2024.1080p.DTS.mkv")
@@ -697,7 +697,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles video codec variations with dots" do
       # x.264 - dots are normalized to spaces, then restored to dots
       result1 = FileParser.parse("Movie.2024.1080p.x.264.mkv")
-      assert result1.quality.codec == "x.264"
+      assert result1.quality.codec == "x264"
       assert result1.title == "Movie"
 
       # H.264 - dots are normalized to spaces, then restored to dots
@@ -713,7 +713,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
 
       # h264
       result2 = FileParser.parse("Movie.2024.1080p.h264.mkv")
-      assert result2.quality.codec == "h264"
+      assert result2.quality.codec == "H.264"
     end
 
     test "handles x265 and h265 variations" do
@@ -721,19 +721,19 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result1.quality.codec == "x265"
 
       result2 = FileParser.parse("Movie.2024.1080p.h265.mkv")
-      assert result2.quality.codec == "h265"
+      assert result2.quality.codec == "H.265"
 
       # x.265 - dots are normalized to spaces, then restored to dots
       result3 = FileParser.parse("Movie.2024.1080p.x.265.mkv")
-      assert result3.quality.codec == "x.265"
+      assert result3.quality.codec == "x265"
     end
 
     test "handles HEVC and AVC codec names" do
       result1 = FileParser.parse("Movie.2024.1080p.HEVC.mkv")
-      assert result1.quality.codec == "HEVC"
+      assert result1.quality.codec == "H.265"
 
       result2 = FileParser.parse("Movie.2024.1080p.AVC.mkv")
-      assert result2.quality.codec == "AVC"
+      assert result2.quality.codec == "H.264"
     end
 
     test "handles resolution pattern variations" do
@@ -747,16 +747,16 @@ defmodule Mydia.Library.ReleaseParserPortTest do
 
       # 4K, 8K, UHD
       result3 = FileParser.parse("Movie.2024.4K.mkv")
-      assert result3.quality.resolution == "4K"
+      assert result3.quality.resolution == "2160p"
 
       result4 = FileParser.parse("Movie.2024.UHD.mkv")
-      assert result4.quality.resolution == "UHD"
+      assert result4.quality.resolution == "2160p"
     end
 
     test "handles source pattern variations" do
       # WEB
       result1 = FileParser.parse("Movie.2024.1080p.WEB.mkv")
-      assert result1.quality.source == "WEB"
+      assert result1.quality.source == "WEB-DL"
 
       # WEB-DL
       result2 = FileParser.parse("Movie.2024.1080p.WEB-DL.mkv")
@@ -784,14 +784,14 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.year == 1999
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
-      assert result.quality.codec == "x.264"
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.codec == "x264"
+      assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "GROUP"
     end
 
     test "handles DDP7.1 audio codec" do
       result = FileParser.parse("Movie.2024.1080p.DDP7.1.mkv")
-      assert result.quality.audio == "DDP7.1"
+      assert result.quality.audio == "DD+ 7.1"
       assert result.title == "Movie"
     end
 
@@ -800,7 +800,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result1.quality.audio == "AAC"
 
       result2 = FileParser.parse("Movie.2024.1080p.AAC-LC.mkv")
-      assert result2.quality.audio == "AAC-LC"
+      assert result2.quality.audio == "AAC"
     end
   end
 

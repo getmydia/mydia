@@ -1,16 +1,19 @@
 defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   @moduledoc """
   Stage 5 of the V3 release parser: project the resolver's
-  `quality_tokens` into a `%Quality{}` struct, matching V2's raw and
-  canonical-form outputs.
+  `quality_tokens` into a `%Quality{}` struct.
 
   Two flavors of output, controlled by `opts[:standardize]`:
 
-  - `false` (default) — raw token values, matching V2's default API.
-    `BluRay` stays `"BluRay"`, `x264` stays `"x264"`, `DDP5.1` stays
-    `"DDP5.1"`.
-  - `true` — canonical forms (`"H.264/AVC"`, `"Blu-ray"`,
-    `"Dolby Digital Plus 5.1"`, `"2160p (4K)"`).
+  - `false` (default) - the canonical labels shared with the rest of the
+    app (`Mydia.Quality`, the scorers): resolution `"2160p"`, source
+    `"BluRay"` / `"WEB-DL"` / `"WEBRip"` / `"REMUX"`, codec `"H.265"` or
+    the encoder `"x264"`, audio `"DD+ 5.1"` / `"AC3 5.1"` /
+    `"DTS-HD MA 5.1"` / `"TrueHD 7.1"`. Spelling variants of one value
+    (`HEVC`, `h265`; `BDRip`, `BRRip`; `DDP5.1`, `EAC3`) fold into one label.
+  - `true` - display strings (`"H.265/HEVC"`, `"Blu-ray"`,
+    `"Dolby Digital Plus 5.1"`, `"2160p (4K)"`), projected from the
+    canonical labels.
 
   ## Adjacency rejoin
 
@@ -70,14 +73,109 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     audio = extract_audio(quality_tokens, next_by_token)
 
     %Quality{
-      resolution: resolution,
-      source: source,
-      codec: codec,
+      resolution: canonical_resolution(resolution),
+      source: canonical_source(source),
+      codec: canonical_codec(codec),
       hdr_format: hdr_format,
       dolby_vision: dolby_vision,
-      audio: audio
+      audio: canonical_audio(audio)
     }
   end
+
+  # ---- Canonical labels ----
+  #
+  # The rejoin code below produces whatever spelling the release used;
+  # these fold each spelling into the one label the scorers and
+  # `Mydia.Quality.Attrs` understand. Unknown values pass through.
+
+  defp canonical_resolution(nil), do: nil
+
+  defp canonical_resolution(value) do
+    down = String.downcase(value)
+
+    cond do
+      down in ["4k", "uhd"] -> "2160p"
+      down == "8k" -> "4320p"
+      down == "1440p" -> "1080p"
+      Regex.match?(~r/^\d{3,4}i$/, down) -> String.replace_suffix(down, "i", "p")
+      true -> value
+    end
+  end
+
+  defp canonical_source(nil), do: nil
+
+  defp canonical_source(value) do
+    case String.downcase(value) do
+      v when v in ["bluray", "bd", "bdrip", "brrip"] -> "BluRay"
+      "web" -> "WEB-DL"
+      v when v in ["web-rip", "webrip"] -> "WEBRip"
+      "remux" -> "REMUX"
+      "dvdrip" -> "DVDRip"
+      _ -> value
+    end
+  end
+
+  defp canonical_codec(nil), do: nil
+
+  defp canonical_codec(value) do
+    down = String.downcase(value)
+
+    cond do
+      down == "hevc" -> "H.265"
+      down == "avc" -> "H.264"
+      m = Regex.run(~r/^([hx])[\s.]?(26[45])$/, down) -> canonical_h26x(m)
+      down == "xvid" -> "XviD"
+      down == "divx" -> "DivX"
+      down == "vp9" -> "VP9"
+      down == "av1" -> "AV1"
+      true -> value
+    end
+  end
+
+  defp canonical_h26x([_, "h", digits]), do: "H.#{digits}"
+  defp canonical_h26x([_, "x", digits]), do: "x#{digits}"
+
+  defp canonical_audio(nil), do: nil
+
+  defp canonical_audio(value) do
+    # Whole value first: `EAC3` and `MP3` end in digits that are not channels.
+    case canonical_audio_name(String.downcase(value)) do
+      nil ->
+        {name, channels} = split_audio_channels(value)
+
+        case canonical_audio_name(String.downcase(name)) do
+          nil -> value
+          label -> join_channels(label, channels)
+        end
+
+      label ->
+        label
+    end
+  end
+
+  defp canonical_audio_name(name) when name in ["ddp", "eac3", "e-ac3", "dd+"], do: "DD+"
+  defp canonical_audio_name(name) when name in ["dd", "ac3"], do: "AC3"
+  defp canonical_audio_name(name) when name in ["dts-hd.ma", "dts-hd ma"], do: "DTS-HD MA"
+  defp canonical_audio_name("dts-hd"), do: "DTS-HD"
+  defp canonical_audio_name(name) when name in ["dts-x", "dts:x", "dtsx"], do: "DTS:X"
+  defp canonical_audio_name("truehd"), do: "TrueHD"
+  defp canonical_audio_name(name) when name in ["aac", "aac-lc"], do: "AAC"
+  defp canonical_audio_name("flac"), do: "FLAC"
+  defp canonical_audio_name("opus"), do: "Opus"
+  defp canonical_audio_name("vorbis"), do: "Vorbis"
+  defp canonical_audio_name("mp3"), do: "MP3"
+  defp canonical_audio_name(_), do: nil
+
+  # Channels arrive glued on (`DDP5.1`) or after a space (`TrueHD 7.1`).
+  defp split_audio_channels(value) do
+    case Regex.run(~r/^(.*?)\s*(\d+(?:\.\d+)?)$/, value) do
+      [_, name, channels] when name != "" -> {name, channels}
+      _ -> {value, nil}
+    end
+  end
+
+  defp join_channels(label, nil), do: label
+  defp join_channels(label, channels), do: "#{label} #{channels}"
 
   # --- Resolution ---
   #
@@ -262,9 +360,16 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
       entry ->
         raw = token_text(entry)
-        rejoin_audio(raw, entry, next_by_token)
+        rejoin_audio(keep_dd_plus(raw, entry), entry, next_by_token)
     end
   end
+
+  # `token_text/1` drops trailing `+`, which would turn `DD+` into plain `DD`.
+  defp keep_dd_plus("DD", %{token: %Token{value: value}}) do
+    if String.upcase(value) == "DD+", do: "DD+", else: "DD"
+  end
+
+  defp keep_dd_plus(raw, _entry), do: raw
 
   defp rejoin_audio(raw, entry, next_by_token) do
     upper = String.upcase(raw)
@@ -282,7 +387,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
         rejoin_trailing_channel(raw, entry, next_by_token)
 
       # AAC: optional channel spec
-      upper in ["AAC", "AAC-LC"] ->
+      upper in ["AAC", "AAC-LC", "DD+"] ->
         rejoin_trailing_channel(raw, entry, next_by_token)
 
       # DDP / DD: may have channel suffix as separate token (`DDP5` `1` → `DDP5.1`).
@@ -310,10 +415,10 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
           rejoined = "DTS-HD"
 
           case next_token(hd_token, next_by_token) do
-            %Token{value: ma_value, byte_offset: mo}
+            %Token{value: ma_value, byte_offset: mo} = ma_token
             when ma_value in ["MA", "ma", "Ma"] ->
               if mo == ho + hl + 1 do
-                "DTS-HD.MA"
+                rejoin_trailing_channel("DTS-HD.MA", %{token: ma_token}, next_by_token)
               else
                 rejoined
               end
@@ -504,11 +609,14 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       Regex.match?(~r/^eac3$/i, normalized) ->
         "Dolby Digital Plus"
 
-      Regex.match?(~r/^ddp(\d+\.?\d*)?$/i, normalized) ->
+      Regex.match?(~r/^(ddp|dd\+)\s?(\d+\.?\d*)?$/i, normalized) ->
         extract_channels(value, "Dolby Digital Plus")
 
       Regex.match?(~r/^ac3$/i, normalized) ->
         "Dolby Digital"
+
+      Regex.match?(~r/^ac3\s\d+\.?\d*$/i, normalized) ->
+        extract_channels(String.replace(value, ~r/^ac3\s/i, ""), "Dolby Digital")
 
       Regex.match?(~r/^dd(\d+\.?\d*)?$/i, normalized) ->
         extract_channels(value, "Dolby Digital")
@@ -519,7 +627,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       String.contains?(normalized, "dts-hd") ->
         "DTS-HD High Resolution Audio"
 
-      Regex.match?(~r/^dts-x$/i, normalized) ->
+      Regex.match?(~r/^dts[-:]x$/i, normalized) ->
         "DTS:X"
 
       Regex.match?(~r/^dts$/i, normalized) ->

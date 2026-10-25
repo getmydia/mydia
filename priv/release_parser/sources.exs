@@ -29,7 +29,7 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
   %VocabularyEntry{
     label: :source,
     aliases: ["BDRip"],
-    canonical: "BDRip",
+    canonical: "BluRay",
     confidence: 0.9,
     title_zone_bonus: -0.2,
     metadata_zone_bonus: 0.05
@@ -37,7 +37,7 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
   %VocabularyEntry{
     label: :source,
     aliases: ["BRRip"],
-    canonical: "BRRip",
+    canonical: "BluRay",
     confidence: 0.9,
     title_zone_bonus: -0.2,
     metadata_zone_bonus: 0.05

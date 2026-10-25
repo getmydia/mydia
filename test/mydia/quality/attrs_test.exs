@@ -233,6 +233,14 @@ defmodule Mydia.Quality.AttrsTest do
       assert attrs.file_size_mb == 20_480
     end
 
+    test "reads the parser's canonical audio labels with their channels" do
+      eac3 = Attrs.from_quality(%Quality{audio: "DD+ 5.1"}, nil, :movie)
+      assert {eac3.audio_codec, eac3.audio_channels} == {"eac3", "5.1"}
+
+      ac3 = Attrs.from_quality(%Quality{audio: "AC3 5.1"}, nil, :movie)
+      assert {ac3.audio_codec, ac3.audio_channels} == {"ac3", "5.1"}
+    end
+
     test "leaves every unmentioned dimension nil, hdr_tokens included" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)
