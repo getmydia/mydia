@@ -10,8 +10,8 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Settings
   alias Mydia.Media.AddDefaults
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
-  alias MydiaWeb.SearchLive.ReleaseAdd
-  alias MydiaWeb.SearchLive.ResultType
+  alias MydiaWeb.OperationErrors
+  alias MydiaWeb.SearchLive.{ReleaseAdd, ResultType}
 
   import MydiaWeb.IndexerComponents
   import MydiaWeb.AddMediaComponents, only: [add_config_fields: 1]
@@ -921,8 +921,7 @@ defmodule MydiaWeb.SearchLive.Index do
   # Shared by every `handle_async` clause above that falls back to showing
   # `reason` verbatim. `:restricted` gets Media's own generic wording instead
   # of `inspect/1`, which would otherwise print the bare atom in the flash.
-  defp add_to_library_error_message(:restricted),
-    do: MydiaWeb.OperationErrors.restricted_message()
+  defp add_to_library_error_message(:restricted), do: OperationErrors.restricted_message()
 
   defp add_to_library_error_message({:metadata_error, reason}),
     do: metadata_error_message(reason)

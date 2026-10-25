@@ -51,7 +51,7 @@ defmodule MydiaWeb.Live.UserAuth do
       _ ->
         socket =
           socket
-          |> put_flash(:error, "You must be logged in to access this page")
+          |> put_flash(:error, gettext("You must be logged in to access this page"))
           |> redirect(to: "/auth/login")
 
         {:halt, socket}
@@ -79,7 +79,7 @@ defmodule MydiaWeb.Live.UserAuth do
         else
           socket =
             socket
-            |> put_flash(:error, "You do not have permission to access this page")
+            |> put_flash(:error, gettext("You do not have permission to access this page"))
             |> redirect(to: "/")
 
           {:halt, socket}
@@ -88,7 +88,7 @@ defmodule MydiaWeb.Live.UserAuth do
       _ ->
         socket =
           socket
-          |> put_flash(:error, "You do not have permission to access this page")
+          |> put_flash(:error, gettext("You do not have permission to access this page"))
           |> redirect(to: "/")
 
         {:halt, socket}
@@ -406,7 +406,7 @@ defmodule MydiaWeb.Live.UserAuth do
          |> push_event("theme_changed", Mydia.Accounts.Themes.to_client(selection))}
 
       {:error, _changeset} ->
-        {:halt, put_flash(socket, :error, "Could not save your theme")}
+        {:halt, put_flash(socket, :error, gettext("Could not save your theme"))}
     end
   end
 

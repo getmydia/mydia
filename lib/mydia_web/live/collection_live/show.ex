@@ -14,8 +14,7 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias Mydia.Collections
   alias Mydia.Collections.Collection
   alias Mydia.Media
-  alias MydiaWeb.CollectionLive.RuleLabels
-  alias MydiaWeb.CollectionLive.SmartRulesParams
+  alias MydiaWeb.CollectionLive.{RuleLabels, SmartRulesParams}
 
   import MydiaWeb.CollectionLive.Components,
     only: [smart_rules_editor: 1, load_value_options: 1, value_string: 1]
@@ -732,11 +731,7 @@ defmodule MydiaWeb.CollectionLive.Show do
     # Validate smart rules before saving
     case validation_result do
       {:error, errors} ->
-        error_msg =
-          gettext("Invalid smart rules: %{errors}",
-            errors: Enum.map_join(errors, ", ", &RuleLabels.validation_error/1)
-          )
-
+        error_msg = RuleLabels.invalid_rules_message(errors)
         {:noreply, put_flash(socket, :error, error_msg)}
 
       {:ok, _} ->

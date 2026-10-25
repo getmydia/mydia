@@ -104,9 +104,10 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
         <div role="tabpanel" class="tab-content border-base-300 bg-base-100 p-4">
           <h4 class="font-semibold mb-2">{gettext("Network requests")}</h4>
           <p class="text-xs text-base-content/60 mb-2">
-            {gettext("Every outbound request this plugin made, gated against its")}
-            <code class="text-xs">net:http</code>
-            {gettext("allowlist.")}
+            {gettext(
+              "Every outbound request this plugin made, gated against its %{capability} allowlist.",
+              capability: "net:http"
+            )}
           </p>
           <div class="sm:overflow-x-auto rounded bg-base-200">
             <table class="table table-xs font-mono">

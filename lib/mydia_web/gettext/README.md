@@ -44,7 +44,7 @@ file. Untranslated messages fall back to English.
 - `priv/gettext/*.pot` are generated: run `./dev mix gettext.extract` after
   changing UI text and commit them. CI fails if they are stale.
 - Never edit or merge `.po` files by hand. Weblate runs msgmerge and opens PRs.
-- The untranslated-text check in `mix mydia.ratchet` fails a branch that adds
-  literal English to a template. Converted files stay converted.
+- `test/mydia_web/untranslated_text_test.exs` fails on any literal English in
+  `lib/mydia_web` templates and on `put_flash` with a literal string.
 - `test/mydia_web/gettext_po_test.exs` fails a translation whose placeholders
   do not match its msgid, so a Weblate PR cannot break a page.

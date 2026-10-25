@@ -12,7 +12,12 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
   alias MydiaWeb.AdminPluginsLive.CapabilitySummary
 
   defp empty_catalog_message(%{source_count: count}) when count > 1,
-    do: gettext("The plugin store has no plugins yet (checked %{count} sources).", count: count)
+    do:
+      ngettext(
+        "The plugin store has no plugins yet (checked %{count} source).",
+        "The plugin store has no plugins yet (checked %{count} sources).",
+        count
+      )
 
   defp empty_catalog_message(_), do: gettext("The plugin store has no plugins yet.")
 
@@ -44,7 +49,10 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
         <div :if={@browse.error} id="browse-error" class="alert alert-error">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
           <span>
-            {gettext("%{failed} of %{total} sources could not be loaded: %{error}",
+            {ngettext(
+              "%{failed} of %{total} source could not be loaded: %{error}",
+              "%{failed} of %{total} sources could not be loaded: %{error}",
+              @browse.source_count,
               failed: @browse.failed_count,
               total: @browse.source_count,
               error: @browse.error

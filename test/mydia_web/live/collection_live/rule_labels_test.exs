@@ -66,11 +66,15 @@ defmodule MydiaWeb.CollectionLive.RuleLabelsTest do
       assert length(errors) > 15
 
       for error <- errors do
+        assert RuleLabels.known?(error), "no msgid for validator sentence: #{error}"
         assert RuleLabels.validation_error(error) == error
       end
     end
 
     test "passes an unknown error through" do
+      refute RuleLabels.known?("something new broke")
+      refute RuleLabels.known?("conditions[0]: a new complaint")
+
       assert RuleLabels.validation_error("something new broke") == "something new broke"
 
       assert RuleLabels.validation_error("conditions[0]: a new complaint") ==

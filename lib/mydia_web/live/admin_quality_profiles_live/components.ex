@@ -157,7 +157,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
     ~H"""
     <button class="btn btn-sm btn-ghost" phx-click="open_quality_profile_presets_modal">
       <.icon name="hero-sparkles" class="w-4 h-4" />
-      <span class="hidden sm:inline">{gettext("Browse")}</span> {gettext("Presets")}
+      <span class="hidden sm:inline">{gettext("Browse Presets")}</span>
+      <span class="sm:hidden">{gettext("Presets")}</span>
     </button>
     <button class="btn btn-sm btn-ghost" phx-click="open_import_quality_profile_modal">
       <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> {pgettext("import", "Import")}

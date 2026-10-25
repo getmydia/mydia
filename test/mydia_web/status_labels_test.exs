@@ -100,6 +100,15 @@ defmodule MydiaWeb.StatusLabelsTest do
     end
   end
 
+  describe "regional_source/2" do
+    test "matches the domain label for every source" do
+      for source <- [:in_cinemas, :coming_soon, {:service, 8, "Fakeflix"}] do
+        assert StatusLabels.regional_source(source, "US") ==
+                 Mydia.Metadata.RegionalSources.label(source, "US")
+      end
+    end
+  end
+
   describe "media_category/1" do
     test "matches the domain label for every category" do
       for category <- MediaCategory.all() do

@@ -58,6 +58,23 @@ defmodule Mydia.Ratchet.TemplateTextTest do
     assert TemplateText.count("<%= if %>") == 0
   end
 
+  test "technical tokens, units and single letters alone are not counted" do
+    assert TemplateText.count(~S|<p>1080p</p><p>0 GB</p><p>JSON</p><p>2FA</p><p>S</p>|) == 0
+    assert TemplateText.count(~S|<span>v{@version}</span><span>{@ms} ms</span>|) == 0
+    assert TemplateText.count(~S|<p>Export as JSON file</p>|) == 1
+  end
+
+  test "example values in attributes are not counted, words are" do
+    assert TemplateText.count(~S|<input placeholder="https://x.example.org" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="/path/to/dir" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="john@example.com" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="localhost" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="en-US" />|) == 0
+    assert TemplateText.count(~S|<input title="localhost" />|) == 1
+    assert TemplateText.count(~S|<input placeholder="Search" />|) == 1
+    assert TemplateText.count(~S|<input placeholder="Type a path: /data" />|) == 1
+  end
+
   test "allowlisted proper nouns and entities alone are not counted" do
     assert TemplateText.count(~S|<p>Mydia</p><p>TMDB · TVDB</p><p>&nbsp;</p>|) == 0
     assert TemplateText.count(~S|<p>Open in Plex</p>|) == 1

@@ -18,6 +18,7 @@ defmodule MydiaWeb.StatusLabels do
   alias Mydia.Media.ContentRating
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaCategory
+  alias Mydia.Metadata.RegionalSources
   alias Mydia.Plugins.PageWrites
 
   @doc """
@@ -32,13 +33,13 @@ defmodule MydiaWeb.StatusLabels do
   end
 
   defp availability_state(%AvailabilityStatus{state: :downloaded}),
-    do: pgettext("availability", "Downloaded")
+    do: pgettext("download", "Downloaded")
 
   defp availability_state(%AvailabilityStatus{state: :downloading}),
-    do: pgettext("availability", "Downloading")
+    do: pgettext("download", "Downloading")
 
   defp availability_state(%AvailabilityStatus{state: :missing}),
-    do: pgettext("availability", "Missing")
+    do: pgettext("download", "Missing")
 
   defp availability_state(%AvailabilityStatus{state: :partial}),
     do: pgettext("availability", "Partial")
@@ -109,7 +110,7 @@ defmodule MydiaWeb.StatusLabels do
     if Date.compare(air_date, Date.utc_today()) == :gt do
       upcoming_date(air_date)
     else
-      pgettext("availability", "Missing")
+      pgettext("download", "Missing")
     end
   end
 
@@ -212,12 +213,20 @@ defmodule MydiaWeb.StatusLabels do
   def page_write_surface("media:add"), do: gettext("Adding media")
   def page_write_surface(other), do: PageWrites.surface_label(other)
 
+  @doc "Row and chip title of a regional discovery source."
+  @spec regional_source(RegionalSources.source(), String.t() | nil) :: String.t()
+  def regional_source(:in_cinemas, _country), do: gettext("In cinemas")
+  def regional_source(:coming_soon, _country), do: gettext("Coming soon")
+
+  def regional_source({:service, _id, name}, _country),
+    do: gettext("Latest on %{service}", service: name)
+
   @doc "Display name of a media category."
   @spec media_category(MediaCategory.t()) :: String.t()
-  def media_category(:movie), do: pgettext("media category", "Movie")
+  def media_category(:movie), do: gettext("Movie")
   def media_category(:anime_movie), do: pgettext("media category", "Anime Movie")
   def media_category(:cartoon_movie), do: pgettext("media category", "Cartoon Movie")
-  def media_category(:tv_show), do: pgettext("media category", "TV Show")
+  def media_category(:tv_show), do: gettext("TV Show")
   def media_category(:anime_series), do: pgettext("media category", "Anime Series")
   def media_category(:cartoon_series), do: pgettext("media category", "Cartoon Series")
   def media_category(other), do: to_string(other)

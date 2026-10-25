@@ -215,23 +215,6 @@ defmodule Mydia.RatchetTest do
     end
   end
 
-  describe "text_regressions/2" do
-    test "flags a new file with literal text, ignores a new clean file" do
-      assert Ratchet.text_regressions(%{"a.ex" => 2, "b.ex" => 0}, %{}) == [{:new, "a.ex", 2}]
-    end
-
-    test "flags growth, allows equal or fewer" do
-      assert Ratchet.text_regressions(%{"a.ex" => 3}, %{"a.ex" => 2}) == [{:grew, "a.ex", 2, 3}]
-      assert Ratchet.text_regressions(%{"a.ex" => 2}, %{"a.ex" => 2}) == []
-      assert Ratchet.text_regressions(%{"a.ex" => 1}, %{"a.ex" => 2}) == []
-    end
-
-    test "formats both kinds" do
-      assert Ratchet.format_text_regression({:new, "a.ex", 2}) =~ "a.ex"
-      assert Ratchet.format_text_regression({:grew, "a.ex", 2, 3}) =~ "2 -> 3"
-    end
-  end
-
   describe "formatting" do
     test "names the file, the counts and the fix" do
       assert Ratchet.format_size_regression({:new, "lib/a.ex", 900}) =~ "lib/a.ex"
