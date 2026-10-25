@@ -416,6 +416,15 @@ defmodule Mydia.Downloads do
   defdelegate blocking_downloads(media_item, context), to: Mydia.Downloads.Queue
 
   @doc """
+  Maps each manual search result's `download_url` to a
+  `Mydia.Downloads.PriorAttempt` when the release already failed for this target
+  or is blacklisted. Never raises; returns `%{}` on error.
+  """
+  defdelegate prior_attempts_for_results(results, media_item, context),
+    to: Mydia.Downloads.PriorAttempts,
+    as: :for_results
+
+  @doc """
   Checks if there's already an active download for the given media.
   """
   defdelegate check_for_active_download(search_result, media_item_id, episode_id),
