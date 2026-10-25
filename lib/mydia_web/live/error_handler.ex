@@ -21,12 +21,12 @@ defmodule MydiaWeb.Live.ErrorHandler do
           fn -> Settings.create_quality_profile(params) end,
           success: fn socket, profile ->
             socket
-            |> put_flash(:info, "Profile saved successfully")
+            |> put_flash(:info, gettext("Profile saved successfully"))
             |> assign(:quality_profile, profile)
           end,
           error: fn socket, err ->
             socket
-            |> put_flash(:error, "Failed to save profile")
+            |> put_flash(:error, gettext("Failed to save profile"))
           end
         )
   """
@@ -60,11 +60,11 @@ defmodule MydiaWeb.Live.ErrorHandler do
         fn -> MyContext.save_item(params) end,
         success: fn socket, item ->
           socket
-          |> put_flash(:info, "Saved!")
+          |> put_flash(:info, gettext("Saved!"))
           |> assign(:item, item)
         end,
         error: fn socket, _err ->
-          socket |> put_flash(:error, "Failed to save item")
+          socket |> put_flash(:error, gettext("Failed to save item"))
         end
       )
   """

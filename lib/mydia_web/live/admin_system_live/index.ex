@@ -18,7 +18,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Status")
+     |> assign(:page_title, gettext("Configuration - Status"))
      |> load_data()
      |> load_system_data()}
   end
@@ -93,7 +93,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
 
         format_file_size(size_bytes)
       rescue
-        _ -> "Unknown"
+        _ -> gettext("Unknown")
       end
 
     %{
@@ -142,10 +142,17 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     days = div(hours, 24)
 
     cond do
-      days > 0 -> "#{days}d #{rem(hours, 24)}h"
-      hours > 0 -> "#{hours}h #{rem(minutes, 60)}m"
-      minutes > 0 -> "#{minutes}m #{rem(seconds, 60)}s"
-      true -> "#{seconds}s"
+      days > 0 ->
+        gettext("%{days}d %{hours}h", days: days, hours: rem(hours, 24))
+
+      hours > 0 ->
+        gettext("%{hours}h %{minutes}m", hours: hours, minutes: rem(minutes, 60))
+
+      minutes > 0 ->
+        gettext("%{minutes}m %{seconds}s", minutes: minutes, seconds: rem(seconds, 60))
+
+      true ->
+        gettext("%{seconds}s", seconds: seconds)
     end
   end
 end

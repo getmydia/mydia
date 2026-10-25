@@ -29,7 +29,7 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
              end)
 
       assert Enum.any?(result.quality_tokens, fn entry ->
-               entry.label == :codec and entry.value == "H.264/AVC"
+               entry.label == :codec and entry.value == "x264"
              end)
 
       assert result.field_confidence[:title] >= 0.5
@@ -92,7 +92,7 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
              end)
 
       assert Enum.any?(result.quality_tokens, fn e ->
-               e.label == :codec and e.value == "H.265/HEVC"
+               e.label == :codec and e.value == "x265"
              end)
     end
 
@@ -282,11 +282,11 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
       assert result.language == nil
     end
 
-    test "an audio word inside the title stays a tag" do
+    test "an audio word inside the title stays a tag but is not reported as a track" do
       result = resolve("Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264")
 
       assert result.title == "Quiet Harbor"
-      assert Enum.any?(result.quality_tokens, &(&1.label == :audio))
+      refute Enum.any?(result.quality_tokens, &(&1.label == :audio))
     end
 
     test "a vocab word that ends the title zone stays a tag, even before a year" do

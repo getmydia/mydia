@@ -18,7 +18,9 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         />
       </:row>
       <:empty>
-        No subtitle providers configured yet. Built-in providers appear here on a fresh install.
+        {gettext(
+          "No subtitle providers configured yet. Built-in providers appear here on a fresh install."
+        )}
       </:empty>
     </.admin_list>
     """
@@ -41,15 +43,13 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         <span
           :if={@registry?}
           class="badge badge-ghost badge-xs tooltip"
-          data-tip="Built-in default. Saving an edit creates a database row."
+          data-tip={gettext("Built-in default. Saving an edit creates a database row.")}
         >
-          Default
+          {gettext("Default")}
         </span>
       </:title>
       <:descriptor>
-        Priority: {@provider.priority} · Quota: {format_quota(@provider.quota_remaining)} · Circuit: {if @available?,
-          do: "available",
-          else: "open"}
+        {descriptor(@provider, @available?)}
       </:descriptor>
       <:badges>
         <span class="badge badge-sm badge-outline">{format_type(@provider.type)}</span>
@@ -57,17 +57,21 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
           "badge badge-sm",
           if(@provider.enabled, do: "badge-success", else: "badge-ghost")
         ]}>
-          {if @provider.enabled, do: "Enabled", else: "Disabled"}
+          {if @provider.enabled, do: gettext("Enabled"), else: gettext("Disabled")}
         </span>
         <span class={["badge badge-sm", if(@available?, do: "badge-success", else: "badge-error")]}>
-          {if @available?, do: "Healthy", else: "Circuit open"}
+          {if @available?,
+            do: pgettext("health status", "Healthy"),
+            else: gettext("Circuit open")}
         </span>
         <input
           id={"subtitle-provider-toggle-#{@provider.id}"}
           type="checkbox"
           class="toggle toggle-success toggle-sm"
           aria-label={
-            if @provider.enabled, do: "Disable #{@provider.name}", else: "Enable #{@provider.name}"
+            if @provider.enabled,
+              do: gettext("Disable %{name}", name: @provider.name),
+              else: gettext("Enable %{name}", name: @provider.name)
           }
           checked={@provider.enabled}
           disabled={@runtime?}
@@ -79,13 +83,13 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         <.row_actions>
           <.row_action
             icon="hero-signal"
-            title="Test configuration"
+            title={gettext("Test configuration")}
             phx-click="test_subtitle_provider"
             phx-value-id={@provider.id}
           />
           <.row_action
             icon="hero-pencil"
-            title="Edit"
+            title={gettext("Edit")}
             disabled={@runtime?}
             disabled_reason={@runtime? && env_read_only_reason()}
             phx-click="edit_subtitle_provider"
@@ -93,15 +97,16 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
           />
           <.row_action
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             disabled={@registry? or @runtime?}
             disabled_reason={
-              (@registry? or @runtime?) && "Built-in and environment providers cannot be deleted"
+              (@registry? or @runtime?) &&
+                gettext("Built-in and environment providers cannot be deleted")
             }
             phx-click="delete_subtitle_provider"
             phx-value-id={@provider.id}
-            data-confirm="Are you sure you want to delete this subtitle provider?"
+            data-confirm={gettext("Are you sure you want to delete this subtitle provider?")}
           />
         </.row_actions>
       </:actions>
@@ -117,7 +122,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
       class="btn btn-sm btn-primary"
       phx-click="new_subtitle_provider"
     >
-      <.icon name="hero-plus" class="w-4 h-4" /> New
+      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("New")}
     </button>
     """
   end
@@ -135,19 +140,19 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
       icon={if @subtitle_provider_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square"}
       title={
         if @subtitle_provider_mode == :new,
-          do: "Add Subtitle Provider",
-          else: "Edit Subtitle Provider"
+          do: gettext("Add Subtitle Provider"),
+          else: gettext("Edit Subtitle Provider")
       }
       subtitle={
         if @subtitle_provider_mode == :new,
-          do: "Configure a subtitle search provider",
-          else: "Update provider settings"
+          do: gettext("Configure a subtitle search provider"),
+          else: gettext("Update provider settings")
       }
       on_close="close_subtitle_provider_modal"
     >
       <:header_aside>
         <label class="label cursor-pointer gap-2">
-          <span class="label-text text-sm">Enabled</span>
+          <span class="label-text text-sm">{gettext("Enabled")}</span>
           <input
             type="hidden"
             name={@subtitle_provider_form[:enabled].name}
@@ -175,19 +180,28 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         <div class="space-y-5">
           <div class="grid grid-cols-6 gap-3">
             <div class="col-span-6 md:col-span-3">
-              <.input field={@subtitle_provider_form[:name]} type="text" label="Name" required />
+              <.input
+                field={@subtitle_provider_form[:name]}
+                type="text"
+                label={gettext("Name")}
+                required
+              />
             </div>
             <div class="col-span-3 md:col-span-2">
               <.input
                 field={@subtitle_provider_form[:type]}
                 type="select"
-                label="Type"
+                label={pgettext("subtitle provider", "Type")}
                 options={type_options()}
                 required
               />
             </div>
             <div class="col-span-3 md:col-span-1">
-              <.input field={@subtitle_provider_form[:priority]} type="number" label="Priority" />
+              <.input
+                field={@subtitle_provider_form[:priority]}
+                type="number"
+                label={gettext("Priority")}
+              />
             </div>
           </div>
 
@@ -196,7 +210,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
           <div class="space-y-3">
             <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
               <.icon name="hero-key" class="w-4 h-4" />
-              <span>Credentials</span>
+              <span>{gettext("Credentials")}</span>
             </div>
             <p class="text-sm text-base-content/60">
               {credentials_hint(@provider_type)}
@@ -206,20 +220,28 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
             <.input
               field={@subtitle_provider_form[:api_key]}
               type="password"
-              label="API Key"
-              placeholder="API key"
+              label={gettext("API Key")}
+              placeholder={gettext("API key")}
             />
-            <.input field={@subtitle_provider_form[:username]} type="text" label="Username" />
-            <.input field={@subtitle_provider_form[:password]} type="password" label="Password" />
+            <.input
+              field={@subtitle_provider_form[:username]}
+              type="text"
+              label={gettext("Username")}
+            />
+            <.input
+              field={@subtitle_provider_form[:password]}
+              type="password"
+              label={gettext("Password")}
+            />
           </div>
         </div>
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_subtitle_provider_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary gap-2">
-            <.icon name="hero-check" class="w-4 h-4" /> Save Provider
+            <.icon name="hero-check" class="w-4 h-4" /> {gettext("Save Provider")}
           </button>
         </.admin_modal_actions>
       </.form>
@@ -233,18 +255,32 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
   end
 
   defp credentials_hint(type) when type in ["subdl", :subdl],
-    do: "SubDL requires an API key."
+    do: gettext("SubDL requires an API key.")
 
   defp credentials_hint(type) when type in ["opensubtitles", :opensubtitles],
-    do: "OpenSubtitles requires an API key, a username and a password."
+    do: gettext("OpenSubtitles requires an API key, a username and a password.")
 
   defp credentials_hint(_),
-    do: "This provider needs no credentials. Leave these fields blank."
+    do: gettext("This provider needs no credentials. Leave these fields blank.")
 
   defp format_type(type) when is_atom(type), do: type |> to_string() |> String.capitalize()
   defp format_type(type), do: to_string(type)
 
-  defp format_quota(nil), do: "unknown"
+  defp descriptor(provider, true) do
+    gettext("Priority: %{priority} · Quota: %{quota} · Circuit: available",
+      priority: provider.priority,
+      quota: format_quota(provider.quota_remaining)
+    )
+  end
+
+  defp descriptor(provider, false) do
+    gettext("Priority: %{priority} · Quota: %{quota} · Circuit: open",
+      priority: provider.priority,
+      quota: format_quota(provider.quota_remaining)
+    )
+  end
+
+  defp format_quota(nil), do: gettext("unknown")
   defp format_quota(remaining), do: to_string(remaining)
 
   @doc "True for a built-in provider that has no database row yet."

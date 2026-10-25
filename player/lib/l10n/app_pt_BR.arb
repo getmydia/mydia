@@ -299,8 +299,6 @@
   "downloadSelectQuality": "Selecionar qualidade",
   "episodeActionsTooltip": "Ações do episódio",
   "episodeMarkThisAndPreviousWatched": "Marcar este e os anteriores como assistidos",
-  "freshnessFailed": "Não foi possível alcançar seu servidor. Mostrando sua biblioteca de {time}.",
-  "freshnessStale": "Mostrando sua biblioteca de {time}.",
   "gestureSeekSeconds": "{seconds} s",
   "qualityDialogTitle": "Qualidade do vídeo",
   "qualityStatsToggleHint": "Também em Configurações. Continua ativo depois que os controles somem.",
@@ -450,5 +448,7 @@
   "windowMinimize": "Minimizar",
   "windowMaximize": "Maximizar",
   "windowRestore": "Restaurar",
-  "calendarMovie": "Filme"
+  "calendarMovie": "Filme",
+  "freshnessStaleBanner": "Mostrando sua biblioteca de {time}.",
+  "freshnessFailedBanner": "Não foi possível conectar ao seu servidor. Mostrando sua biblioteca de {time}."
 }

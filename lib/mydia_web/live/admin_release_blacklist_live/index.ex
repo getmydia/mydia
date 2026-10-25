@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Release Blacklist")
+     |> assign(:page_title, gettext("Release Blacklist"))
      |> assign(:failure_reason_filter, "")
      |> assign(:page, 1)
      |> assign(:page_size, @page_size)
@@ -70,14 +70,14 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
       {:ok, _row} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Release will be blocked forever.")
+         |> put_flash(:info, gettext("Release will be blocked forever."))
          |> load_data()}
 
       {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "Blacklist row not found.")}
+        {:noreply, put_flash(socket, :error, gettext("Blacklist row not found."))}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update blacklist row.")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update blacklist row."))}
     end
   end
 
@@ -86,11 +86,11 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
       {:ok, _row} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Release removed from blacklist.")
+         |> put_flash(:info, gettext("Release removed from blacklist."))
          |> load_data()}
 
       {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "Blacklist row not found.")}
+        {:noreply, put_flash(socket, :error, gettext("Blacklist row not found."))}
     end
   end
 

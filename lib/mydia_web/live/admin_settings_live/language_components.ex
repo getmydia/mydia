@@ -12,15 +12,19 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
   def language_section(assigns) do
     ~H"""
-    <.admin_section id="language-settings" title="Language" icon="hero-language">
+    <.admin_section id="language-settings" title={gettext("Language")} icon="hero-language">
       <.form for={%{}} id="language-settings-form" phx-change="save_language_settings">
         <div class="bg-base-200 rounded-box divide-y divide-base-300">
           <.language_row
             id="language-row-download-audio"
-            label="Download audio"
+            label={gettext("Download audio")}
             key="downloads.audio_language"
             source={@settings["downloads.audio_language"].source}
-            description="Search and upgrades prefer releases with this audio. Choosing a language prefers that dub and falls back to the original. Each show can override this."
+            description={
+              gettext(
+                "Search and upgrades prefer releases with this audio. Choosing a language prefers that dub and falls back to the original. Each show can override this."
+              )
+            }
           >
             <.download_audio_control setting={@settings["downloads.audio_language"]} />
           </.language_row>
@@ -28,10 +32,14 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <.language_row
             :if={@player_enabled?}
             id="language-row-playback-audio"
-            label="Playback audio"
+            label={gettext("Playback audio")}
             key="streaming.audio_language"
             source={@settings["streaming.audio_language"].source}
-            description="Which audio track plays. Tries Preferred, then Fallback, then the track the file marks as default."
+            description={
+              gettext(
+                "Which audio track plays. Tries Preferred, then Fallback, then the track the file marks as default."
+              )
+            }
           >
             <.playback_audio_control setting={@settings["streaming.audio_language"]} />
           </.language_row>
@@ -39,20 +47,28 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <.language_row
             :if={@player_enabled?}
             id="language-row-default-track"
-            label="Use the file's default track"
+            label={gettext("Use the file's default track")}
             key="streaming.prefer_default_audio_track"
             source={@settings["streaming.prefer_default_audio_track"].source}
-            description="Ignore the playback languages above and play the track the file marks as default."
+            description={
+              gettext(
+                "Ignore the playback languages above and play the track the file marks as default."
+              )
+            }
           >
             <.default_track_control setting={@settings["streaming.prefer_default_audio_track"]} />
           </.language_row>
 
           <.language_row
             id="language-row-subtitles"
-            label="Subtitle languages"
+            label={gettext("Subtitle languages")}
             key="downloads.subtitle_language"
             source={@settings["downloads.subtitle_language"].source}
-            description="Subtitles fetched for your files, and the languages subtitle search starts with."
+            description={
+              gettext(
+                "Subtitles fetched for your files, and the languages subtitle search starts with."
+              )
+            }
             stacked
           >
             <.subtitle_languages_control setting={@settings["downloads.subtitle_language"]} />
@@ -61,28 +77,33 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <.language_row
             :if={@player_enabled?}
             id="language-row-subtitle-playback"
-            label="Playback subtitles"
+            label={gettext("Playback subtitles")}
             key="streaming.subtitle_language"
             source={@settings["streaming.subtitle_language"].source}
-            description="Subtitles switched on automatically for a show nobody has picked one for. Leave empty for none."
+            description={
+              gettext(
+                "Subtitles switched on automatically for a show nobody has picked one for. Leave empty for none."
+              )
+            }
             stacked
           >
             <.subtitle_languages_control
               setting={@settings["streaming.subtitle_language"]}
               field="subtitle_playback_language"
-              label="Playback subtitles"
+              label={gettext("Playback subtitles")}
               can_be_empty?
             />
           </.language_row>
 
           <.language_row
             id="language-row-metadata"
-            label="Metadata language"
+            label={gettext("Metadata language")}
             key="metadata.language"
             source={@settings["metadata.language"].source}
             description={
-              "Locale sent to TMDB/TVDB through the metadata relay (ISO 639-1 like \"de\" or " <>
-                "BCP 47 like \"de-DE\"). Affects displayed titles, descriptions, and posters."
+              gettext(
+                "Locale sent to TMDB/TVDB through the metadata relay (ISO 639-1 like \"de\" or BCP 47 like \"de-DE\"). Affects displayed titles, descriptions, and posters."
+              )
             }
           >
             <.metadata_language_control setting={@settings["metadata.language"]} />
@@ -145,14 +166,17 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
   defp download_audio_control(assigns) do
     current = assigns.setting.value
-    none = if is_nil(current), do: [{"", "No preference"}], else: []
+    none = if is_nil(current), do: [{"", gettext("No preference")}], else: []
 
     assigns =
       assign(
         assigns,
         :options,
         none ++
-          [{"original", "Original language"} | LanguageSettings.language_options(current)]
+          [
+            {"original", gettext("Original language")}
+            | LanguageSettings.language_options(current)
+          ]
       )
 
     ~H"""
@@ -185,7 +209,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
       |> assign(:fallback, Enum.at(shown, 1))
       |> assign(:hidden_count, length(languages) - length(shown))
       |> assign(:options, [
-        {"original", "Original language"} | LanguageSettings.language_options(shown)
+        {"original", gettext("Original language")} | LanguageSettings.language_options(shown)
       ])
       |> assign(:locked?, assigns.setting.source == :env)
 
@@ -193,28 +217,32 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
     <div class="flex flex-col gap-1">
       <div class="flex flex-col sm:flex-row gap-2">
         <label class="flex flex-col gap-1">
-          <span class="text-xs opacity-60">Preferred</span>
+          <span class="text-xs opacity-60">{gettext("Preferred")}</span>
           <select
             id="language-playback-preferred"
             name="playback_audio[preferred]"
             class="select select-sm select-bordered w-full sm:w-44"
             disabled={@locked?}
           >
-            <option :if={is_nil(@preferred)} value="" selected>No preference</option>
+            <option :if={is_nil(@preferred)} value="" selected>
+              {gettext("No preference")}
+            </option>
             <option :for={{value, label} <- @options} value={value} selected={value == @preferred}>
               {label}
             </option>
           </select>
         </label>
         <label class="flex flex-col gap-1">
-          <span class="text-xs opacity-60">Fallback</span>
+          <span class="text-xs opacity-60">{gettext("Fallback")}</span>
           <select
             id="language-playback-fallback"
             name="playback_audio[fallback]"
             class="select select-sm select-bordered w-full sm:w-44"
             disabled={@locked?}
           >
-            <option value="" selected={is_nil(@fallback)}>None</option>
+            <option value="" selected={is_nil(@fallback)}>
+              {pgettext("fallback language", "None")}
+            </option>
             <option :for={{value, label} <- @options} value={value} selected={value == @fallback}>
               {label}
             </option>
@@ -222,8 +250,11 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
         </label>
       </div>
       <p :if={@hidden_count > 0} id="language-playback-truncation" class="text-xs text-warning">
-        {@hidden_count} more configured {if @hidden_count == 1, do: "language", else: "languages"}.
-        Saving here keeps only these two.
+        {ngettext(
+          "%{count} more configured language. Saving here keeps only these two.",
+          "%{count} more configured languages. Saving here keeps only these two.",
+          @hidden_count
+        )}
       </p>
     </div>
     """
@@ -255,7 +286,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
   attr :setting, :map, required: true
   attr :field, :string, default: "subtitle_language"
-  attr :label, :string, default: "Subtitle languages"
+  attr :label, :string, default: nil
   attr :can_be_empty?, :boolean, default: false
 
   # Same chip set as the subtitle search modal: the common languages plus any
@@ -286,6 +317,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
     assigns =
       assigns
       |> assign(:selected, selected)
+      |> assign(:label, assigns.label || gettext("Subtitle languages"))
       |> assign(:chips, chips)
       |> assign(:lock_last?, not assigns.can_be_empty?)
       |> assign(
@@ -326,7 +358,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
         class="select select-sm select-bordered w-40"
         disabled={@locked?}
       >
-        <option value="" selected>More languages</option>
+        <option value="" selected>{gettext("More languages")}</option>
         <option :for={{code, label} <- @more} value={code}>{label}</option>
       </select>
     </div>

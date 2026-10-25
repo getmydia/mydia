@@ -73,6 +73,7 @@ class StartupSplash extends StatelessWidget {
       // Follows the device locale: no settings exist yet at this point.
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      localeListResolutionCallback: resolveAppLocale,
       home: const Scaffold(
         key: Key('startup-splash'),
         body: Center(

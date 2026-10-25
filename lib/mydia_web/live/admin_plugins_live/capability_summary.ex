@@ -19,6 +19,8 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
   Background mechanics (events, schedule, storage) go to the `also` footer.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Plugins.Manifest
   alias MydiaWeb.AdminPluginsLive.CapabilitySummary.{Group, Line}
 
@@ -26,45 +28,20 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
 
   @type t :: %__MODULE__{groups: [Group.t()], also: [Line.t()]}
 
-  # {key, title, emphasized?}. Only Talks to is emphasized: it is the one group
-  # whose data leaves Mydia.
+  # {key, emphasized?}. Only Talks to is emphasized: it is the one group
+  # whose data leaves Mydia. Titles come from `group_title/1` at build time,
+  # never from a module attribute, so they follow the viewer's locale.
   @groups [
-    {:talks_to, "Talks to", true},
-    {:can_see, "Can see", false},
-    {:can_change, "Can change", false},
-    {:adds, "Adds to Mydia", false}
+    {:talks_to, true},
+    {:can_see, false},
+    {:can_change, false},
+    {:adds, false}
   ]
 
-  @data_labels %{
-    "media_item" => "Media items",
-    "playback_progress" => "Watch progress",
-    "library_item" => "Library items",
-    "media_request" => "Requests",
-    "download" => "Downloads",
-    "collection" => "Collections",
-    "watch_history" => "Watch history"
-  }
-
-  @surface_labels %{
-    "playback:watched" => "Mark items watched",
-    "collections:favorite" => "Favorite items",
-    "media:add" => "Add media",
-    "collections:write" => "Edit collections"
-  }
-
-  @event_phrases %{
-    "media_item.added" => "new titles",
-    "media_item.updated" => "title updates",
-    "media_item.removed" => "removed titles",
-    "media_file.imported" => "new imports",
-    "download.completed" => "finished downloads",
-    "download.failed" => "failed downloads",
-    "playback.started" => "playback starting",
-    "playback.progressed" => "playback progress",
-    "playback.paused" => "paused playback",
-    "playback.finished" => "finished playback",
-    "playback.unwatched" => "items marked unwatched"
-  }
+  defp group_title(:talks_to), do: gettext("Talks to")
+  defp group_title(:can_see), do: gettext("Can see")
+  defp group_title(:can_change), do: gettext("Can change")
+  defp group_title(:adds), do: gettext("Adds to Mydia")
 
   @doc """
   Builds the summary for `capabilities` (`%{class => values}`).
@@ -84,10 +61,13 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
         host_field_entries(Keyword.get(opts, :settings_schema, []))
 
     groups =
-      Enum.flat_map(@groups, fn {key, title, emphasized?} ->
+      Enum.flat_map(@groups, fn {key, emphasized?} ->
         case for({^key, line} <- entries, do: line) do
-          [] -> []
-          lines -> [%Group{key: key, title: title, emphasized?: emphasized?, lines: lines}]
+          [] ->
+            []
+
+          lines ->
+            [%Group{key: key, title: group_title(key), emphasized?: emphasized?, lines: lines}]
         end
       end)
 
@@ -112,15 +92,37 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
 
   @doc "Host-owned label for a `data:read` namespace."
   @spec data_label(String.t()) :: String.t()
-  def data_label(namespace), do: Map.get(@data_labels, namespace, namespace)
+  def data_label("media_item"), do: gettext("Media items")
+  def data_label("playback_progress"), do: gettext("Watch progress")
+  def data_label("library_item"), do: gettext("Library items")
+  def data_label("media_request"), do: gettext("Requests")
+  def data_label("download"), do: gettext("Downloads")
+  def data_label("collection"), do: gettext("Collections")
+  def data_label("watch_history"), do: gettext("Watch history")
+  def data_label(namespace), do: namespace
 
   @doc "Host-owned label for a `surfaces:write` surface."
   @spec surface_label(String.t()) :: String.t()
-  def surface_label(surface), do: Map.get(@surface_labels, surface, surface)
+  def surface_label("playback:watched"), do: gettext("Mark items watched")
+  def surface_label("collections:favorite"), do: gettext("Favorite items")
+  def surface_label("media:add"), do: gettext("Add media")
+  def surface_label("collections:write"), do: gettext("Edit collections")
+  def surface_label(surface), do: surface
 
   @doc "Host-owned noun phrase for a subscribed event (\"reacts to <phrase>\")."
   @spec event_phrase(String.t()) :: String.t()
-  def event_phrase(event), do: Map.get(@event_phrases, event, event)
+  def event_phrase("media_item.added"), do: gettext("new titles")
+  def event_phrase("media_item.updated"), do: gettext("title updates")
+  def event_phrase("media_item.removed"), do: gettext("removed titles")
+  def event_phrase("media_file.imported"), do: gettext("new imports")
+  def event_phrase("download.completed"), do: gettext("finished downloads")
+  def event_phrase("download.failed"), do: gettext("failed downloads")
+  def event_phrase("playback.started"), do: gettext("playback starting")
+  def event_phrase("playback.progressed"), do: gettext("playback progress")
+  def event_phrase("playback.paused"), do: gettext("paused playback")
+  def event_phrase("playback.finished"), do: gettext("finished playback")
+  def event_phrase("playback.unwatched"), do: gettext("items marked unwatched")
+  def event_phrase(event), do: event
 
   # Sorted by class so lines inside a group have a stable order.
   defp capability_entries(capabilities, new) do
@@ -137,40 +139,46 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
     do: per_value(:talks_to, hosts, new_values, & &1)
 
   defp entries_for("net:private", hosts, new_values),
-    do: per_value(:talks_to, hosts, new_values, &"#{&1} (private network)")
+    do:
+      per_value(
+        :talks_to,
+        hosts,
+        new_values,
+        &gettext("%{host} (private network)", host: &1)
+      )
 
   defp entries_for("data:read", namespaces, new_values),
     do: per_value(:can_see, namespaces, new_values, &data_label/1)
 
   defp entries_for("data:search", _, new_values),
-    do: flag(:can_see, "Search your library as the person using it", new_values)
+    do: flag(:can_see, gettext("Search your library as the person using it"), new_values)
 
   defp entries_for("users:connections", _, new_values),
-    do: flag(:can_see, "Accounts people link to it", new_values)
+    do: flag(:can_see, gettext("Accounts people link to it"), new_values)
 
   defp entries_for("surfaces:write", surfaces, new_values),
     do: per_value(:can_change, surfaces, new_values, &surface_label/1)
 
   defp entries_for("surfaces:page", _, new_values),
-    do: flag(:adds, "Its own page", new_values)
+    do: flag(:adds, gettext("Its own page"), new_values)
 
   defp entries_for("surfaces:shelf", _, new_values),
-    do: flag(:adds, "Suggestions on each person's Home page", new_values)
+    do: flag(:adds, gettext("Suggestions on each person's Home page"), new_values)
 
   # Approved and newly requested events are separate lines, so a re-approval
   # marks only the events that are actually new.
   defp entries_for("events:subscribe", events, new_values) do
     {added, kept} = Enum.split_with(events, &(is_list(new_values) and &1 in new_values))
-    added_prefix = if kept == [], do: "reacts to ", else: "also reacts to "
+    added_kind = if kept == [], do: :reacts, else: :also_reacts
 
-    event_line(kept, "reacts to ", false) ++ event_line(added, added_prefix, true)
+    event_line(kept, :reacts, false) ++ event_line(added, added_kind, true)
   end
 
   defp entries_for("schedule:interval", _, new_values),
-    do: flag(:also, "runs on a schedule", new_values)
+    do: flag(:also, gettext("runs on a schedule"), new_values)
 
   defp entries_for("state:kv", _, new_values),
-    do: flag(:also, "keeps its own storage", new_values)
+    do: flag(:also, gettext("keeps its own storage"), new_values)
 
   defp entries_for(class, values, new_values),
     do: flag(:also, Enum.join([class | values], " "), new_values)
@@ -185,12 +193,20 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
 
   defp event_line([], _prefix, _new?), do: []
 
-  defp event_line(events, prefix, new?),
-    do: [{:also, %Line{label: prefix <> join_and(Enum.map(events, &event_phrase/1)), new?: new?}}]
+  defp event_line(events, kind, new?) do
+    phrases = join_and(Enum.map(events, &event_phrase/1))
+    [{:also, %Line{label: event_sentence(kind, phrases), new?: new?}}]
+  end
+
+  defp event_sentence(:reacts, events), do: gettext("reacts to %{events}", events: events)
+
+  defp event_sentence(:also_reacts, events),
+    do: gettext("also reacts to %{events}", events: events)
 
   defp host_field_entries(schema) do
     for field <- Manifest.host_granting_fields(schema) do
-      {:talks_to, %Line{label: "The server you enter in #{field_name(field)}"}}
+      {:talks_to,
+       %Line{label: gettext("The server you enter in %{field}", field: field_name(field))}}
     end
   end
 
@@ -214,6 +230,6 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
 
   defp join_and(list) do
     {init, [last]} = Enum.split(list, -1)
-    Enum.join(init, ", ") <> " and " <> last
+    gettext("%{list} and %{last}", list: Enum.join(init, ", "), last: last)
   end
 end

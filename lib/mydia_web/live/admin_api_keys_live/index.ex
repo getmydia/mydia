@@ -21,7 +21,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - API Keys")
+     |> assign(:page_title, gettext("Configuration - API Keys"))
      |> assign(:env_key_set, is_binary(Application.get_env(:mydia, :library_api_key)))
      |> assign(:show_api_key_modal, false)
      |> assign(:created_api_key, nil)
@@ -59,7 +59,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   end
 
   def handle_event("copy_api_key", _params, socket) do
-    {:noreply, put_flash(socket, :info, "Key copied to clipboard")}
+    {:noreply, put_flash(socket, :info, gettext("Key copied to clipboard"))}
   end
 
   def handle_event("confirm_revoke_api_key", %{"id" => id}, socket),
@@ -77,7 +77,9 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
         _params,
         %{assigns: %{api_key_confirm: {:revoke, key}}} = socket
       ) do
-    socket |> assign(:api_key_confirm, nil) |> finish(Accounts.revoke_api_key(key), "Key revoked")
+    socket
+    |> assign(:api_key_confirm, nil)
+    |> finish(Accounts.revoke_api_key(key), gettext("Key revoked"))
   end
 
   def handle_event(
@@ -85,7 +87,9 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
         _params,
         %{assigns: %{api_key_confirm: {:delete, key}}} = socket
       ) do
-    socket |> assign(:api_key_confirm, nil) |> finish(Accounts.delete_api_key(key), "Key deleted")
+    socket
+    |> assign(:api_key_confirm, nil)
+    |> finish(Accounts.delete_api_key(key), gettext("Key deleted"))
   end
 
   # A second click after the modal closed has nothing to act on.
@@ -98,7 +102,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   # revoking another's key by posting its id.
   defp confirm(socket, action, id) do
     case Enum.find(socket.assigns.api_keys, &(&1.id == id)) do
-      nil -> {:noreply, put_flash(socket, :error, "That key no longer exists")}
+      nil -> {:noreply, put_flash(socket, :error, gettext("That key no longer exists"))}
       key -> {:noreply, assign(socket, :api_key_confirm, {action, key})}
     end
   end
@@ -108,7 +112,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   end
 
   defp finish(socket, {:error, _reason}, _message) do
-    {:noreply, socket |> put_flash(:error, "Could not update the key") |> load_keys()}
+    {:noreply, socket |> put_flash(:error, gettext("Could not update the key")) |> load_keys()}
   end
 
   # v1 offers one scope, the Library API, stored as the admin permission the
@@ -125,7 +129,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
          |> load_keys()}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create the key")}
+        {:noreply, put_flash(socket, :error, gettext("Could not create the key"))}
     end
   end
 

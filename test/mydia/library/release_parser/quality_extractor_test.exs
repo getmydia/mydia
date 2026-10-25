@@ -11,7 +11,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractorTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "normalizes resolution casing (1080P → 1080p)" do
@@ -31,12 +31,12 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractorTest do
 
     test "rejoins DTS-HD.MA across split tokens" do
       result = ReleaseParser.parse("Movie.2020.1080p.DTS-HD.MA.mkv")
-      assert result.quality.audio == "DTS-HD.MA"
+      assert result.quality.audio == "DTS-HD MA"
     end
 
     test "rejoins DTS-X across split tokens" do
       result = ReleaseParser.parse("Movie.2020.1080p.DTS-X.mkv")
-      assert result.quality.audio == "DTS-X"
+      assert result.quality.audio == "DTS:X"
     end
   end
 

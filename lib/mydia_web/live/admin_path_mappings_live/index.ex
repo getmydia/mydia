@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Path Mappings")
+     |> assign(:page_title, gettext("Configuration - Path Mappings"))
      |> load_data()}
   end
 
@@ -85,7 +85,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
         {:noreply,
          socket
          |> assign(:show_path_mapping_modal, false)
-         |> put_flash(:info, "Path mapping saved")
+         |> put_flash(:info, gettext("Path mapping saved"))
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -104,11 +104,11 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
         {:ok, _} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Path mapping deleted")
+           |> put_flash(:info, gettext("Path mapping deleted"))
            |> load_data()}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to delete path mapping")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete path mapping"))}
       end
     end
   end
@@ -127,6 +127,6 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
   end
 
   defp env_readonly_message do
-    "This mapping is configured via environment variables and is read-only in the UI."
+    gettext("This mapping is configured via environment variables and is read-only in the UI.")
   end
 end

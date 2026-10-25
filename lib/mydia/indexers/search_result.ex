@@ -43,6 +43,11 @@ defmodule Mydia.Indexers.SearchResult do
     * `:duplicate` - `true` when the grab was skipped as an existing download.
     * `:grab_failed` - the formatted error message when the grab failed, or
       `nil` otherwise.
+    * `:prior_attempt` - a `Mydia.Downloads.PriorAttempt` when this release
+      already failed for the searched target or is blacklisted, or `nil`.
+      Unlike the four fields above it comes from the database rather than a
+      grab in this dialog, and is written by
+      `MydiaWeb.MediaLive.Show.SearchHelpers.put_prior_attempt/2`.
 
   ## Quality Information
 
@@ -53,12 +58,15 @@ defmodule Mydia.Indexers.SearchResult do
         resolution: "1080p" | "720p" | "2160p" | "480p" | nil,
         source: "BluRay" | "WEB-DL" | "WEBRip" | "HDTV" | nil,
         codec: "x264" | "x265" | "H.264" | "H.265" | nil,
-        audio: "AAC" | "AC3" | "DTS" | "TrueHD" | nil,
+        audio: "DD+ 5.1" | "TrueHD Atmos 7.1" | "AAC" | nil,
         hdr_format: :hdr10 | :hdr10_plus | :hlg | nil,
         dolby_vision: true | false,
         proper: true | false,
         repack: true | false
       }
+
+  `audio` is the parser's canonical codec label, followed by the channel
+  layout when the title gives one (for example `"DD+ 5.1"`).
 
   ## Examples
 
@@ -100,7 +108,8 @@ defmodule Mydia.Indexers.SearchResult do
           downloading: boolean(),
           downloaded: boolean(),
           duplicate: boolean(),
-          grab_failed: String.t() | nil
+          grab_failed: String.t() | nil,
+          prior_attempt: Mydia.Downloads.PriorAttempt.t() | nil
         }
 
   @enforce_keys [:title, :size, :seeders, :leechers, :download_url, :indexer]
@@ -126,11 +135,13 @@ defmodule Mydia.Indexers.SearchResult do
     :guid,
     # Per-row display state; see the moduledoc section above. Never enforced
     # (they are not part of a result's identity) and never set by `new/1` or
-    # an indexer adapter, only by SearchEvents.mark_result/3.
+    # an indexer adapter, only by SearchEvents.mark_result/3 (and
+    # :prior_attempt by SearchHelpers.put_prior_attempt/2).
     downloading: false,
     downloaded: false,
     duplicate: false,
-    grab_failed: nil
+    grab_failed: nil,
+    prior_attempt: nil
   ]
 
   @info_url_schemes ~w(http https)

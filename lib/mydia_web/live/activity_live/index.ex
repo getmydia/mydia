@@ -4,6 +4,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   alias Mydia.Events.Presentation
   alias Mydia.Events.Visibility
   alias MydiaWeb.ActivityLive.DateFilter
+  alias MydiaWeb.ActivityLive.EventText
   alias Phoenix.PubSub
 
   @page_size 50
@@ -274,9 +275,11 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp event_summary(event) do
     presentation = Presentation.for_event(event)
 
+    title = EventText.title(presentation.type, presentation.title)
+
     case presentation.detail do
-      nil -> presentation.title
-      detail -> "#{presentation.title}: #{detail}"
+      nil -> title
+      detail -> gettext("%{title}: %{detail}", title: title, detail: detail)
     end
   end
 
@@ -418,7 +421,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   # Delegates to Presentation.field_label/1, the single source of truth for
   # these labels, so this expanded breakdown cannot drift from the one-line
   # summary rendered by Presentation.detail/1 for the same event.
-  defp humanize_field_name(field), do: Presentation.field_label(field)
+  defp humanize_field_name(field), do: EventText.field_label(field)
 
   defp format_change_value("monitored", true), do: pgettext("monitoring", "monitored")
   defp format_change_value("monitored", false), do: pgettext("monitoring", "not monitored")

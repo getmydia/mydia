@@ -5,10 +5,14 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
   alias MydiaWeb.AdminImportListsLive.Index
 
   @status_legend [
-    {"badge-warning", "Pending = Waiting to add"},
-    {"badge-success", "In library = Already in your library"},
-    {"badge-error", "Failed = Error occurred"}
+    {"badge-warning", :pending},
+    {"badge-success", :in_library},
+    {"badge-error", :failed}
   ]
+
+  defp legend_text(:pending), do: gettext("Pending = Waiting to add")
+  defp legend_text(:in_library), do: gettext("In library = Already in your library")
+  defp legend_text(:failed), do: gettext("Failed = Error occurred")
 
   attr :selected_list, :any, required: true
   attr :items, :list, required: true
@@ -22,14 +26,14 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
     <.admin_modal
       id="import-list-items-modal"
       icon={Index.media_type_icon(@selected_list.media_type)}
-      title={"#{@selected_list.name} - Items"}
+      title={gettext("%{name} - Items", name: @selected_list.name)}
       size={:lg}
       on_close="close_import_list_items_modal"
     >
       <div class="flex flex-wrap gap-2 mb-4 text-xs">
-        <div :for={{badge, text} <- @status_legend} class="flex items-center gap-1">
+        <div :for={{badge, key} <- @status_legend} class="flex items-center gap-1">
           <span class={["badge badge-xs", badge]}></span>
-          <span class="text-base-content/60">{text}</span>
+          <span class="text-base-content/60">{legend_text(key)}</span>
         </div>
       </div>
 
@@ -39,11 +43,11 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
           value={@items_filter}
           event="filter_import_list_items"
           param="status"
-          label="Filter items by status"
+          label={gettext("Filter items by status")}
         >
-          <:option value="to_add" label="To add" />
-          <:option value="in_library" label="In library" />
-          <:option value="all" label="All" />
+          <:option value="to_add" label={gettext("To add")} />
+          <:option value="in_library" label={gettext("In library")} />
+          <:option value="all" label={pgettext("selection", "All")} />
         </.segmented_control>
 
         <button
@@ -52,7 +56,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
           phx-click="add_all_pending"
           class="btn btn-primary btn-sm gap-1"
         >
-          <.icon name="hero-plus" class="w-4 h-4" /> Add All Pending to Library
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add All Pending to Library")}
         </button>
       </div>
 
@@ -71,22 +75,24 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
         <% @items_filter == "to_add" and @total_count > 0 -> %>
           <div id="import-list-items-all-owned" class="alert alert-success">
             <.icon name="hero-check-circle" class="w-5 h-5" />
-            <span>Everything on this list is already in your library.</span>
+            <span>{gettext("Everything on this list is already in your library.")}</span>
           </div>
         <% true -> %>
           <div id="import-list-items-empty" class="alert">
             <.icon name="hero-information-circle" class="w-5 h-5" />
             <span>
-              No items found. {if @items_filter != "all",
-                do: "Try a different filter or ",
-                else: ""}Sync the list to fetch items.
+              <%= if @items_filter != "all" do %>
+                {gettext("No items found. Try a different filter or Sync the list to fetch items.")}
+              <% else %>
+                {gettext("No items found. Sync the list to fetch items.")}
+              <% end %>
             </span>
           </div>
       <% end %>
 
       <:actions>
         <button type="button" phx-click="close_import_list_items_modal" class="btn btn-ghost">
-          Close
+          {gettext("Close")}
         </button>
         <button
           type="button"
@@ -94,7 +100,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
           phx-value-id={@selected_list.id}
           class="btn btn-primary"
         >
-          <.icon name="hero-arrow-path" class="w-4 h-4" /> Sync Now
+          <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Sync Now")}
         </button>
       </:actions>
     </.admin_modal>
@@ -133,7 +139,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
       </div>
       <div class="p-2">
         <h4 class="font-medium text-xs line-clamp-2" title={@item.title}>{@item.title}</h4>
-        <p class="text-xs text-base-content/60">{@item.year || "Unknown year"}</p>
+        <p class="text-xs text-base-content/60">{@item.year || gettext("Unknown year")}</p>
         <p
           :if={@status == "failed" and @item.skip_reason}
           class="text-xs text-error truncate"
@@ -148,7 +154,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
             phx-value-id={@item.id}
             class="btn btn-primary btn-xs flex-1 gap-1"
           >
-            <.icon name="hero-plus" class="w-3 h-3" /> Add
+            <.icon name="hero-plus" class="w-3 h-3" /> {pgettext("add to library", "Add")}
           </button>
           <button
             :if={@status == "failed"}
@@ -156,7 +162,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
             phx-value-id={@item.id}
             class="btn btn-ghost btn-xs flex-1"
           >
-            Reset
+            {gettext("Reset")}
           </button>
         </div>
       </div>

@@ -74,7 +74,7 @@ Future<LanguageChoice?> showLanguagePicker(
                   selected: current == null,
                   choice: const LanguageSystemDefault(),
                 ),
-                for (final l in AppLocalizations.supportedLocales)
+                for (final l in pickableLocales)
                   tile(
                     key: Key('language-option-${l.toLanguageTag()}'),
                     label: localeDisplayName(l),

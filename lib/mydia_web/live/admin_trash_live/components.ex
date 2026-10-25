@@ -12,17 +12,26 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   alias Mydia.Library.MediaFile
 
-  @reasons [
-    {:missing, "Missing", "The file was gone from disk when a scan looked for it"},
-    {:upgraded, "Upgraded", "A better release replaced this file"},
-    {:upgrade_rejected, "Rejected", "This release did not deliver the quality it claimed"},
-    {:pruned, "Pruned", "A redundant copy, removed in favour of a keeper"},
-    {:manual, "Manual", "Someone deleted this file by hand"},
-    {:unknown, "Unknown", "Trashed before Mydia recorded a reason"}
-  ]
-
-  @doc "The reason list, for the filter segmented control and the row badges."
-  def reasons, do: @reasons
+  @doc """
+  The reason list as `{key, label, hint}`, for the filter segmented control and
+  the row badges. Built per call: the labels are translated, so they cannot
+  live in a module attribute.
+  """
+  def reasons do
+    [
+      {:missing, pgettext("trash reason", "Missing"),
+       gettext("The file was gone from disk when a scan looked for it")},
+      {:upgraded, pgettext("trash reason", "Upgraded"),
+       gettext("A better release replaced this file")},
+      {:upgrade_rejected, pgettext("trash reason", "Rejected"),
+       gettext("This release did not deliver the quality it claimed")},
+      {:pruned, pgettext("trash reason", "Pruned"),
+       gettext("A redundant copy, removed in favour of a keeper")},
+      {:manual, pgettext("trash reason", "Manual"), gettext("Someone deleted this file by hand")},
+      {:unknown, pgettext("trash reason", "Unknown"),
+       gettext("Trashed before Mydia recorded a reason")}
+    ]
+  end
 
   attr :summary, :map, required: true
   attr :retention_days, :integer, required: true
@@ -43,11 +52,13 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       <.summary_bar summary={@summary} retention_days={@retention_days} />
 
       <div :if={@scanning} class="alert">
-        <span class="loading loading-spinner loading-sm"></span> Reading the trash directory...
+        <span class="loading loading-spinner loading-sm"></span>
+        {gettext("Reading the trash directory...")}
       </div>
 
       <div :if={@sweeping} class="alert">
-        <span class="loading loading-spinner loading-sm"></span> Sweeping the trash directory...
+        <span class="loading loading-spinner loading-sm"></span>
+        {gettext("Sweeping the trash directory...")}
       </div>
 
       <.audit_result :if={@audit} audit={@audit} />
@@ -88,7 +99,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         class="btn btn-sm btn-ghost join-item"
         phx-click="scan_trash_directory"
       >
-        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan directory
+        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> {gettext("Scan directory")}
       </button>
       <button
         id="trash-empty"
@@ -97,7 +108,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         phx-click="open_empty_trash_modal"
         disabled={@summary.count == 0}
       >
-        <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
+        <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Empty trash")}
       </button>
     </div>
     """
@@ -109,8 +120,17 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   def summary_bar(assigns) do
     ~H"""
     <p id="trash-summary" class="text-sm text-base-content/60">
-      {file_count(@summary.count)} tracked, using {format_file_size(@summary.bytes)}. Files are
-      permanently deleted after {@retention_days} days.
+      {ngettext(
+        "%{count} file tracked, using %{size}.",
+        "%{count} files tracked, using %{size}.",
+        @summary.count,
+        size: format_file_size(@summary.bytes)
+      )}
+      {ngettext(
+        "Files are permanently deleted after %{count} day.",
+        "Files are permanently deleted after %{count} days.",
+        @retention_days
+      )}
     </p>
     """
   end
@@ -129,13 +149,13 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         value={@active || ""}
         event="filter_trash"
         param="reason"
-        label="Filter by reason"
+        label={gettext("Filter by reason")}
       >
-        <:option value="" label="All" id="trash-filter-all" />
+        <:option value="" label={pgettext("selection", "All")} id="trash-filter-all" />
         <:option
           :for={{reason, label, _hint} <- visible_reasons(@counts)}
           value={reason}
-          label={"#{label} (#{count_for(@counts, reason)})"}
+          label={gettext("%{label} (%{count})", label: label, count: count_for(@counts, reason))}
           id={"trash-filter-#{reason}"}
         />
       </.segmented_control>
@@ -150,7 +170,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   def trash_list(assigns) do
     ~H"""
     <.admin_list id="trash-list" items={@files}>
-      <:empty>Nothing in the trash.</:empty>
+      <:empty>{gettext("Nothing in the trash.")}</:empty>
       <:row :let={file}>
         <.admin_row id={"trash-row-#{file.id}"}>
           <:title>
@@ -165,9 +185,10 @@ defmodule MydiaWeb.AdminTrashLive.Components do
             {label_for(file)}
           </:title>
           <:descriptor>
-            {format_file_size(file.size)} · Trashed {relative_age(file.trashed_at)} · Purges {purge_due(
-              file.trashed_at,
-              @retention_days
+            {gettext("%{size} · Trashed %{age} · Purges %{due}",
+              size: format_file_size(file.size),
+              age: relative_age(file.trashed_at),
+              due: purge_due(file.trashed_at, @retention_days)
             )}
           </:descriptor>
           <:badges>
@@ -183,18 +204,18 @@ defmodule MydiaWeb.AdminTrashLive.Components do
               <.row_action
                 id={"trash-restore-#{file.id}"}
                 icon="hero-arrow-uturn-left"
-                title="Restore"
+                title={gettext("Restore")}
                 phx-click="restore_trash_file"
                 phx-value-id={file.id}
               />
               <.row_action
                 id={"trash-purge-#{file.id}"}
                 icon="hero-x-mark"
-                title="Delete permanently"
+                title={gettext("Delete permanently")}
                 destructive
                 phx-click="purge_trash_file"
                 phx-value-id={file.id}
-                data-confirm="Permanently delete this file? This cannot be undone."
+                data-confirm={gettext("Permanently delete this file? This cannot be undone.")}
               />
             </.row_actions>
           </:actions>
@@ -222,7 +243,11 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       class="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-base-200"
     >
       <span class="font-medium">
-        {selection_count(@selection, @total_matching)} selected
+        {ngettext(
+          "%{count} selected",
+          "%{count} selected",
+          selection_count(@selection, @total_matching)
+        )}
       </span>
 
       <button
@@ -231,16 +256,16 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         class="btn btn-sm"
         phx-click="restore_selected_trash"
       >
-        <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Restore
+        <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {gettext("Restore")}
       </button>
       <button
         id="trash-bulk-purge"
         type="button"
         class="btn btn-sm btn-error"
         phx-click="purge_selected_trash"
-        data-confirm="Permanently delete every selected file? This cannot be undone."
+        data-confirm={gettext("Permanently delete every selected file? This cannot be undone.")}
       >
-        <.icon name="hero-x-mark" class="w-4 h-4" /> Delete permanently
+        <.icon name="hero-x-mark" class="w-4 h-4" /> {gettext("Delete permanently")}
       </button>
 
       <button
@@ -249,7 +274,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         class="btn btn-sm btn-ghost"
         phx-click="clear_trash_selection"
       >
-        Clear
+        {pgettext("selection", "Clear")}
       </button>
 
       <%!--
@@ -264,7 +289,11 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         class="btn btn-sm btn-ghost"
         phx-click="select_all_trash"
       >
-        Select all {@total_matching} matching
+        {ngettext(
+          "Select all %{count} matching",
+          "Select all %{count} matching",
+          @total_matching
+        )}
       </button>
     </div>
     """
@@ -284,7 +313,11 @@ defmodule MydiaWeb.AdminTrashLive.Components do
     ~H"""
     <div id="trash-pagination" class="flex items-center justify-between gap-3">
       <span class="text-sm text-base-content/60">
-        Showing {@from}-{@to} of {@total_matching}
+        {gettext("Showing %{from}-%{to} of %{total}",
+          from: @from,
+          to: @to,
+          total: @total_matching
+        )}
       </span>
 
       <div class="join">
@@ -296,7 +329,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           phx-click="paginate_trash"
           phx-value-page={@page - 1}
         >
-          <.icon name="hero-chevron-left" class="w-4 h-4" /> Prev
+          <.icon name="hero-chevron-left" class="w-4 h-4" /> {gettext("Prev")}
         </button>
         <button
           id="trash-page-next"
@@ -306,7 +339,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           phx-click="paginate_trash"
           phx-value-page={@page + 1}
         >
-          Next <.icon name="hero-chevron-right" class="w-4 h-4" />
+          {gettext("Next")} <.icon name="hero-chevron-right" class="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -322,14 +355,24 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       id="trash-empty-modal"
       tone={:error}
       icon="hero-trash"
-      title="Empty the trash?"
-      subtitle={"#{file_count(@count)}, reclaiming #{format_file_size(@bytes)}."}
+      title={gettext("Empty the trash?")}
+      subtitle={
+        ngettext(
+          "%{count} file, reclaiming %{size}.",
+          "%{count} files, reclaiming %{size}.",
+          @count,
+          size: format_file_size(@bytes)
+        )
+      }
       on_close="close_empty_trash_modal"
     >
       <p class="py-2">
-        This purges everything in the trash now, including files trashed moments ago, rather
-        than waiting out the retention period. Rows trashed because their file had already
-        vanished from disk only lose the row; nothing on your library path is touched.
+        {gettext(
+          "This purges everything in the trash now, including files trashed moments ago, rather than waiting out the retention period."
+        )}
+        {gettext(
+          "Rows trashed because their file had already vanished from disk only lose the row; nothing on your library path is touched."
+        )}
       </p>
 
       <:actions>
@@ -339,16 +382,16 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           class="btn btn-ghost"
           phx-click="close_empty_trash_modal"
         >
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           id="trash-empty-confirm"
           type="button"
           class="btn btn-error"
           phx-click="empty_trash"
-          phx-disable-with="Emptying..."
+          phx-disable-with={gettext("Emptying...")}
         >
-          <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
+          <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Empty trash")}
         </button>
       </:actions>
     </.admin_modal>
@@ -363,17 +406,23 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
       <div>
         <div class="font-medium">
-          {file_count(audit_total(@audit))} in the trash directory that nothing will purge
+          {ngettext(
+            "%{count} file in the trash directory that nothing will purge",
+            "%{count} files in the trash directory that nothing will purge",
+            audit_total(@audit)
+          )}
         </div>
         <div class="text-sm opacity-80">
-          {length(@audit.retained)} kept by a restore that found the library path occupied, {length(
-            @audit.orphaned
-          )} with no record behind them.
-          Total {format_file_size(audit_bytes(@audit))}.
+          {gettext(
+            "%{retained} kept by a restore that found the library path occupied, %{orphaned} with no record behind them.",
+            retained: length(@audit.retained),
+            orphaned: length(@audit.orphaned)
+          )}
+          {gettext("Total %{size}.", size: format_file_size(audit_bytes(@audit)))}
         </div>
       </div>
       <button id="trash-sweep" type="button" class="btn btn-sm" phx-click="sweep_trash">
-        Sweep them
+        {gettext("Sweep them")}
       </button>
     </div>
     """
@@ -386,17 +435,17 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   end
 
   defp visible_reasons(counts),
-    do: Enum.filter(@reasons, fn {r, _, _} -> count_for(counts, r) > 0 end)
+    do: Enum.filter(reasons(), fn {r, _, _} -> count_for(counts, r) > 0 end)
 
   defp count_for(counts, :unknown), do: Map.get(counts, nil, 0)
   defp count_for(counts, reason), do: Map.get(counts, reason, 0)
 
-  defp reason_label(nil), do: "Unknown"
+  defp reason_label(nil), do: pgettext("trash reason", "Unknown")
 
   defp reason_label(reason) do
-    case Enum.find(@reasons, fn {r, _, _} -> r == reason end) do
+    case Enum.find(reasons(), fn {r, _, _} -> r == reason end) do
       {_, label, _} -> label
-      nil -> "Unknown"
+      nil -> pgettext("trash reason", "Unknown")
     end
   end
 
@@ -428,31 +477,28 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   def label_for(%MediaFile{media_item: %{title: title}}) when is_binary(title), do: title
 
   def label_for(%MediaFile{relative_path: path}) when is_binary(path), do: path
-  def label_for(%MediaFile{}), do: "Unknown file"
+  def label_for(%MediaFile{}), do: gettext("Unknown file")
 
   defp pad(nil), do: "??"
   defp pad(n), do: String.pad_leading(to_string(n), 2, "0")
 
-  defp file_count(1), do: "1 file"
-  defp file_count(n), do: "#{n} files"
-
-  defp relative_age(nil), do: "at an unknown time"
+  defp relative_age(nil), do: gettext("at an unknown time")
 
   defp relative_age(%DateTime{} = at) do
     case DateTime.diff(DateTime.utc_now(), at, :day) do
-      0 -> "today"
-      1 -> "yesterday"
-      n -> "#{n} days ago"
+      0 -> gettext("today")
+      1 -> gettext("yesterday")
+      n -> ngettext("%{count} day ago", "%{count} days ago", n)
     end
   end
 
-  defp purge_due(nil, _days), do: "on an unknown date"
+  defp purge_due(nil, _days), do: gettext("on an unknown date")
 
   defp purge_due(%DateTime{} = at, days) do
     case days - DateTime.diff(DateTime.utc_now(), at, :day) do
-      n when n <= 0 -> "on the next cleanup run"
-      1 -> "tomorrow"
-      n -> "in #{n} days"
+      n when n <= 0 -> gettext("on the next cleanup run")
+      1 -> gettext("tomorrow")
+      n -> ngettext("in %{count} day", "in %{count} days", n)
     end
   end
 end
