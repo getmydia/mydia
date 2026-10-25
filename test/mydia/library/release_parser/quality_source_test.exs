@@ -33,6 +33,47 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
     assert parsed.title == "The Screener"
   end
 
+  describe "cam-tier words in an episode title" do
+    alias Mydia.Library.ReleaseParser.EpisodeTitle
+
+    test "a short form counts only in capitals" do
+      title = "Fake.Show.S02E03.Cam.and.Mitch.1080p.x264-GRP"
+      parsed = ReleaseParser.parse(title)
+      assert parsed.quality.source == nil
+      assert {parsed.title, parsed.season, parsed.episodes} == {"Fake Show", 2, [3]}
+      assert EpisodeTitle.extract(title) == "Cam and Mitch"
+
+      title = "Fake.Show.S01E04.Tc.Talk.720p.x264-GRP"
+      assert source(title) == nil
+      assert EpisodeTitle.extract(title) == "Tc Talk"
+    end
+
+    test "a long form beside another title word is a title word" do
+      title = "Fake.Show.S01E04.The.Screener.720p.x264-GRP"
+      parsed = ReleaseParser.parse(title)
+      assert parsed.quality.source == nil
+      assert {parsed.title, parsed.season, parsed.episodes} == {"Fake Show", 1, [4]}
+      assert EpisodeTitle.extract(title) == "The Screener"
+
+      assert source("Fake.Show.S01E04.Telecine.Night.720p.x264-GRP") == nil
+      assert source("Fake.Show.S01E04.Workprint.Blues.720p.x264-GRP") == nil
+    end
+
+    test "a tag after the marker still counts" do
+      assert source("Fake.Show.S01E04.Screener.720p.x264-GRP") == "Screener"
+      assert source("Fake.Show.S01E04.SCREENER.Some.Title.x264-GRP") == "Screener"
+      assert source("Fake.Show.S01E04.720p.TS.x264-GRP") == "Telesync"
+    end
+
+    test "capitalised short forms and long forms still count in a movie" do
+      assert source("Fake.Movie.2020.CAM.x264-GRP") == "CAM"
+      assert source("Fake.Movie.2020.TS.x264-GRP") == "Telesync"
+      assert source("Fake.Movie.2020.SCREENER.x264-GRP") == "Screener"
+      assert source("Fake.Movie.2020.Screener.x264-GRP") == "Screener"
+      assert source("Fake.Movie.2020.cam.x264-GRP") == nil
+    end
+  end
+
   test "an explicit good source outranks a cam-tier token" do
     assert source("Fake.Movie.2020.HDTS.1080p.WEB-DL.x264-GRP") == "WEB-DL"
     assert source("Fake.Movie.2020.DVD.PDVD.x264-GRP") == "DVD"

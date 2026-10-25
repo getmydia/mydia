@@ -78,12 +78,19 @@ defmodule Mydia.Library.ReleaseParser.Vocabulary do
   def all, do: @entries
 
   @doc """
-  Look up vocabulary entries that match a token value (case-insensitive).
-  Returns `[]` for unknown tokens.
+  Look up vocabulary entries that match a token value (case-insensitive,
+  except for `uppercase_only` entries). Returns `[]` for unknown tokens.
   """
   @spec lookup(String.t()) :: [VocabularyEntry.t()]
   def lookup(token_value) when is_binary(token_value) do
-    Map.get(@index, String.downcase(token_value), [])
+    case Map.get(@index, String.downcase(token_value), []) do
+      [] ->
+        []
+
+      entries ->
+        capitals? = String.upcase(token_value) == token_value
+        Enum.filter(entries, &(capitals? or not &1.uppercase_only))
+    end
   end
 
   @doc """

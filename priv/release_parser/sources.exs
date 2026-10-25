@@ -173,14 +173,17 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
   # dot, space or bracket on both sides; the trailing `-TS` group position
   # is excluded by the release-group pre-pass in `ReleaseParser`. They are
   # also ordinary words (`Cam`, `Ts`), and the title-zone penalty drops them
-  # below the resolver's vocabulary floor there.
+  # below the resolver's vocabulary floor there. Past the boundary nothing
+  # does, and an episode title follows the marker there
+  # (`S02E03.Cam.and.Mitch`), so only the capitalised tag counts.
   %VocabularyEntry{
     label: :source,
     aliases: ["CAM"],
     canonical: "CAM",
     confidence: 0.7,
     title_zone_bonus: -0.7,
-    metadata_zone_bonus: 0.05
+    metadata_zone_bonus: 0.05,
+    uppercase_only: true
   },
   %VocabularyEntry{
     label: :source,
@@ -188,7 +191,8 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
     canonical: "Telesync",
     confidence: 0.7,
     title_zone_bonus: -0.7,
-    metadata_zone_bonus: 0.05
+    metadata_zone_bonus: 0.05,
+    uppercase_only: true
   },
   %VocabularyEntry{
     label: :source,
@@ -196,7 +200,8 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
     canonical: "Telecine",
     confidence: 0.7,
     title_zone_bonus: -0.7,
-    metadata_zone_bonus: 0.05
+    metadata_zone_bonus: 0.05,
+    uppercase_only: true
   },
   %VocabularyEntry{
     label: :source,
@@ -204,7 +209,8 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
     canonical: "Screener",
     confidence: 0.7,
     title_zone_bonus: -0.7,
-    metadata_zone_bonus: 0.05
+    metadata_zone_bonus: 0.05,
+    uppercase_only: true
   },
   %VocabularyEntry{
     label: :source,
@@ -212,6 +218,7 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
     canonical: "Workprint",
     confidence: 0.7,
     title_zone_bonus: -0.7,
-    metadata_zone_bonus: 0.05
+    metadata_zone_bonus: 0.05,
+    uppercase_only: true
   }
 ]

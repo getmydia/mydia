@@ -55,9 +55,51 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
       candidates = candidates_for(token, anchors, zone, index, total_tokens, tag_groups)
       %Token{token | candidates: candidates}
     end)
+    |> demote_episode_title_sources()
   end
 
   # ---- Internals ----
+
+  # A cam-tier source that is also a dictionary word (`Screener`,
+  # `Telecine`) right after the episode marker is often the episode title
+  # (`S01E04.The.Screener`), and the title-zone penalty does not reach past
+  # the marker. In the run between the marker and the next tag, such a word
+  # with another title word in the run is a title word too. One in capitals
+  # (`SCREENER`) or alone in the run (`S01E04.Screener.720p`) is still a
+  # tag.
+  @cam_title_words ~w(SCREENER WORKPRINT TELECINE TELESYNC)
+
+  defp demote_episode_title_sources(tokens) do
+    case Enum.split_while(tokens, &(not episode_marker?(&1))) do
+      {_, []} ->
+        tokens
+
+      {before, [marker | rest]} ->
+        {span, tail} = Enum.split_while(rest, &(&1.candidates == [] or cam_title_word?(&1)))
+        before ++ [marker | demote_cam_title_words(span)] ++ tail
+    end
+  end
+
+  defp demote_cam_title_words(span) do
+    if Enum.any?(span, &(&1.candidates == [])),
+      do: Enum.map(span, &demote_cam_title_word/1),
+      else: span
+  end
+
+  defp demote_cam_title_word(%Token{value: value} = token) do
+    if cam_title_word?(token) and String.upcase(value) != value,
+      do: %Token{token | candidates: []},
+      else: token
+  end
+
+  defp cam_title_word?(%Token{value: value, candidates: [_ | _] = candidates}) do
+    String.upcase(value) in @cam_title_words and Enum.all?(candidates, &(&1.label == :source))
+  end
+
+  defp cam_title_word?(%Token{}), do: false
+
+  defp episode_marker?(%Token{candidates: candidates}),
+    do: Enum.any?(candidates, &(&1.label == :episode_marker))
 
   defp candidates_for(%Token{} = token, anchors, zone, index, total, tag_groups) do
     anchor_candidates = anchor_candidates(token, anchors, zone)
