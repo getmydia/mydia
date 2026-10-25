@@ -1300,6 +1300,14 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
       row = "##{positioned_result_dom_id(release)}"
       assert has_element?(view, "#{row}-prior-attempt", "Blacklisted")
       refute has_element?(view, row, "cancelled_stalled")
+
+      assert has_element?(
+               view,
+               "#{row} button[phx-click=download_from_search]",
+               "Grab anyway"
+             )
+
+      refute has_element?(view, row, "Failed — retry")
     end
 
     test "an in-flight download for the searched episode shows the blocking banner",

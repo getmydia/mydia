@@ -82,6 +82,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   # download_from_search event as the plain Download button.
   attr :result, SearchResult, required: true
   attr :reason, :string, default: nil
+  # A stored blacklist entry is not a failed download, and a manual grab
+  # overrides it, so the button offers "Grab anyway" instead of a retry.
+  attr :blacklisted, :boolean, default: false
 
   def retry_button(assigns) do
     ~H"""
@@ -95,18 +98,24 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       phx-value-seeders={@result.seeders || 0}
       phx-value-leechers={@result.leechers || 0}
       phx-value-quality={get_search_quality_badge(@result)}
-      title={
-        if(@reason,
-          do: gettext("Failed: %{reason} — click to retry", reason: @reason),
-          else: gettext("Download this release")
-        )
-      }
+      title={retry_title(@blacklisted, @reason)}
     >
       <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-      <span class="hidden sm:inline">{gettext("Failed — retry")}</span>
+      <span class="hidden sm:inline">{retry_label(@blacklisted)}</span>
     </button>
     """
   end
+
+  defp retry_label(true), do: gettext("Grab anyway")
+  defp retry_label(false), do: gettext("Failed — retry")
+
+  defp retry_title(true, reason) when is_binary(reason),
+    do: gettext("Blacklisted: %{reason}. Click to grab it anyway.", reason: reason)
+
+  defp retry_title(false, reason) when is_binary(reason),
+    do: gettext("Failed: %{reason} — click to retry", reason: reason)
+
+  defp retry_title(_blacklisted, _reason), do: gettext("Download this release")
 
   # A live grab state from this dialog (in flight, done, duplicate or failed)
   # wins over the recorded prior attempt everywhere in the row.

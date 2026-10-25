@@ -1210,7 +1210,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <% Map.get(result, :grab_failed) -> %>
                       <.retry_button result={result} reason={Map.get(result, :grab_failed)} />
                     <% Map.get(result, :prior_attempt) -> %>
-                      <.retry_button result={result} reason={prior_attempt_reason(result)} />
+                      <.retry_button
+                        result={result}
+                        reason={prior_attempt_reason(result)}
+                        blacklisted={result.prior_attempt.kind == :blacklisted}
+                      />
                     <% true -> %>
                       <button
                         class="btn btn-primary btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
