@@ -22,6 +22,12 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/scripted_mydia_transport.dart';
 
+Matcher _kind(LoginFailureKind kind) =>
+    isA<LoginFailureOfKind>().having((f) => f.kind, 'kind', kind);
+
+Matcher _fromServer(String message) =>
+    isA<LoginFailureFromServer>().having((f) => f.message, 'message', message);
+
 class _FakePairing extends PairingService {
   _FakePairing(this.credentials);
   final PairingCredentials credentials;
@@ -290,7 +296,8 @@ void main() {
         .pairWithClaimCode('ABC123', reauthAccountId: 'minst-9');
 
     final state = c.read(loginControllerProvider);
-    expect(state.error, 'That code belongs to a different server.');
+    expect(
+        state.error, _fromServer('That code belongs to a different server.'));
     expect(state.success, isFalse);
     expect((await store.load()).accounts, isEmpty);
   });
@@ -321,7 +328,8 @@ void main() {
     expect(state.success, isFalse);
     expect(state.isLoading, isFalse);
     // The save's own wording, not the login mapping's "Cannot connect".
-    expect(state.error, const SourceException.unreachable().viewerMessage);
+    expect(state.error,
+        _fromServer(const SourceException.unreachable().viewerMessage));
   });
 
   test('an unexpected stored-session outcome ends loading with an error',
@@ -400,36 +408,36 @@ void main() {
 
     test('unreachable', () async {
       expect((await loginFailing(const SourceException.unreachable())).error,
-          'Cannot connect to server. Check the URL and your network.');
+          _kind(LoginFailureKind.cannotConnect));
     });
 
     test('not found', () async {
       expect((await loginFailing(const SourceException.notFound())).error,
-          'Server not found. Check the URL.');
+          _kind(LoginFailureKind.serverNotFound));
     });
 
     test('unauthorized', () async {
       expect((await loginFailing(const SourceException.unauthorized())).error,
-          'Invalid username or password');
+          _kind(LoginFailureKind.invalidCredentials));
     });
 
     test('the server says the credentials are wrong', () async {
       expect(
           (await loginFailing(graphqlError('Invalid username or password')))
               .error,
-          'Invalid username or password');
+          _fromServer('Invalid username or password'));
     });
 
     test('the server has local login turned off', () async {
       expect(
           (await loginFailing(graphqlError('Local authentication is disabled')))
               .error,
-          'Local authentication is disabled');
+          _fromServer('Local authentication is disabled'));
     });
 
     test('any other server error', () async {
       expect((await loginFailing(graphqlError('Something broke'))).error,
-          'Login failed. Please check your credentials.');
+          _kind(LoginFailureKind.loginFailed));
     });
   });
 
@@ -462,26 +470,26 @@ void main() {
 
     test('unreachable', () async {
       expect((await submitFailing(const SourceException.unreachable())).error,
-          'Cannot connect to server. Check the URL and your network.');
+          _kind(LoginFailureKind.cannotConnect));
     });
 
     test('too many attempts keeps the challenge', () async {
       final state = await submitFailing(
           graphqlError('Too many login attempts. Please try again later.'));
-      expect(state.error, 'Too many login attempts. Please try again later.');
+      expect(state.error, _kind(LoginFailureKind.tooManyAttempts));
       expect(state.totpChallenge, isNotNull);
     });
 
     test('an expired sign-in drops the challenge', () async {
       final state = await submitFailing(
           graphqlError('Sign-in expired, please try again'));
-      expect(state.error, 'Sign-in expired, please try again');
+      expect(state.error, _kind(LoginFailureKind.signInExpired));
       expect(state.totpChallenge, isNull);
     });
 
     test('a wrong code', () async {
       final state = await submitFailing(graphqlError('Invalid code'));
-      expect(state.error, 'Invalid code');
+      expect(state.error, _kind(LoginFailureKind.invalidCode));
       expect(state.totpChallenge, isNotNull);
     });
   });

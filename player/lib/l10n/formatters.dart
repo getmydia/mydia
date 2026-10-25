@@ -15,9 +15,24 @@ import '../core/update/update_provider.dart';
 import '../core/update/update_track.dart';
 import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
+import '../presentation/screens/login/login_failure.dart';
 import 'gen/app_localizations.dart';
 
 extension AppFormatters on AppLocalizations {
+  /// The sign-in error line for [failure]; the server's own words verbatim.
+  String loginFailure(LoginFailure failure) => switch (failure) {
+        LoginFailureFromServer(:final message) => message,
+        LoginFailureOfKind(:final kind) => switch (kind) {
+            LoginFailureKind.cannotConnect => loginErrorCannotConnect,
+            LoginFailureKind.serverNotFound => loginErrorServerNotFound,
+            LoginFailureKind.invalidCredentials => loginErrorInvalidCredentials,
+            LoginFailureKind.loginFailed => loginErrorFailed,
+            LoginFailureKind.invalidCode => loginErrorInvalidCode,
+            LoginFailureKind.signInExpired => loginErrorSignInExpired,
+            LoginFailureKind.tooManyAttempts => loginErrorTooManyAttempts,
+          },
+      };
+
   /// A coarse relative time ("3 hours ago"). [now] pins the clock in tests.
   String relativeTime(DateTime timestamp, {DateTime? now}) {
     final d = (now ?? DateTime.now()).difference(timestamp);

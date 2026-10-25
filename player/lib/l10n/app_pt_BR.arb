@@ -191,5 +191,12 @@
   "qualityAutoCopy": "Automática · Original, sem recodificação",
   "qualityAutoReencodeOriginal": "Automática · Original, requer recodificação",
   "qualityAutoRung": "Automática · {quality}",
-  "qualityClampNote": "Limitada a {quality} pela sua conexão"
+  "qualityClampNote": "Limitada a {quality} pela sua conexão",
+  "loginErrorCannotConnect": "Não foi possível conectar ao servidor. Verifique a URL e sua rede.",
+  "loginErrorServerNotFound": "Servidor não encontrado. Verifique a URL.",
+  "loginErrorInvalidCredentials": "Nome de usuário ou senha inválidos",
+  "loginErrorFailed": "Falha no login. Verifique suas credenciais.",
+  "loginErrorInvalidCode": "Código inválido",
+  "loginErrorSignInExpired": "O login expirou, tente novamente",
+  "loginErrorTooManyAttempts": "Muitas tentativas de login. Tente novamente mais tarde."
 }

@@ -191,5 +191,12 @@
   "qualityAutoCopy": "Automática · Original, sin recodificar",
   "qualityAutoReencodeOriginal": "Automática · Original, requiere recodificar",
   "qualityAutoRung": "Automática · {quality}",
-  "qualityClampNote": "Limitada a {quality} por tu conexión"
+  "qualityClampNote": "Limitada a {quality} por tu conexión",
+  "loginErrorCannotConnect": "No se puede conectar con el servidor. Revisa la URL y tu red.",
+  "loginErrorServerNotFound": "Servidor no encontrado. Revisa la URL.",
+  "loginErrorInvalidCredentials": "Nombre de usuario o contraseña no válidos",
+  "loginErrorFailed": "Error al iniciar sesión. Revisa tus credenciales.",
+  "loginErrorInvalidCode": "Código no válido",
+  "loginErrorSignInExpired": "El inicio de sesión ha caducado, inténtalo de nuevo",
+  "loginErrorTooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde."
 }

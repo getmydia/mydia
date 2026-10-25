@@ -723,5 +723,19 @@
   "qualityAutoRung": "Auto · {quality}",
   "@qualityAutoRung": {"description": "Subtitle of the Auto row in the player's quality picker naming the quality Auto is streaming at, such as 720p.", "placeholders": {"quality": {"type": "String", "example": "720p"}}},
   "qualityClampNote": "Limited to {quality} by your connection",
-  "@qualityClampNote": {"description": "Note in the player's quality picker when the server delivers a lower quality than requested.", "placeholders": {"quality": {"type": "String", "example": "720p"}}}
+  "@qualityClampNote": {"description": "Note in the player's quality picker when the server delivers a lower quality than requested.", "placeholders": {"quality": {"type": "String", "example": "720p"}}},
+  "loginErrorCannotConnect": "Cannot connect to server. Check the URL and your network.",
+  "@loginErrorCannotConnect": {"description": "Error under the sign-in form when the server cannot be reached."},
+  "loginErrorServerNotFound": "Server not found. Check the URL.",
+  "@loginErrorServerNotFound": {"description": "Error under the sign-in form when nothing answers at the server address."},
+  "loginErrorInvalidCredentials": "Invalid username or password",
+  "@loginErrorInvalidCredentials": {"description": "Error under the sign-in form when the server rejects the username or password."},
+  "loginErrorFailed": "Login failed. Please check your credentials.",
+  "@loginErrorFailed": {"description": "Error under the sign-in form for a failed sign-in with no more specific cause."},
+  "loginErrorInvalidCode": "Invalid code",
+  "@loginErrorInvalidCode": {"description": "Error under the two-factor code field when the code is wrong."},
+  "loginErrorSignInExpired": "Sign-in expired, please try again",
+  "@loginErrorSignInExpired": {"description": "Error shown when the pending two-factor sign-in expired and the viewer must enter the password again."},
+  "loginErrorTooManyAttempts": "Too many login attempts. Please try again later.",
+  "@loginErrorTooManyAttempts": {"description": "Error shown when the server is rate limiting sign-in attempts."}
 }

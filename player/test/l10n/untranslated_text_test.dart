@@ -11,6 +11,7 @@ const convertedPaths = <String>[
   'lib/presentation/screens/settings',
   'lib/presentation/widgets/language_picker.dart',
   'lib/presentation/screens/login_screen.dart',
+  'lib/presentation/screens/login',
   'lib/core/startup/startup_error_app.dart',
 ];
 

@@ -1696,7 +1696,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _buildErrorMessage(String error) {
+  Widget _buildErrorMessage(LoginFailure error) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -1711,7 +1711,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              error,
+              context.l10n.loginFailure(error),
               style: const TextStyle(
                 color: AppColors.error,
                 fontSize: 12,

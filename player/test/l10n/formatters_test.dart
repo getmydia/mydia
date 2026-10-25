@@ -12,6 +12,7 @@ import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/l10n/formatters.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/presentation/screens/login/login_failure.dart';
 
 Future<AppLocalizations> l10n(String tag) =>
     AppLocalizations.delegate.load(Locale.fromSubtags(
@@ -214,6 +215,30 @@ void main() {
       final es = await l10n('es');
       expect(es.qualityClampNote('720p'), isNot(contains('Limited')));
       expect(es.qualityAutoRung('720p'), contains('720p'));
+    });
+  });
+
+  group('loginFailure', () {
+    test('every kind has text in every locale and server text is verbatim',
+        () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final kind in LoginFailureKind.values) {
+          expect(loc.loginFailure(LoginFailureOfKind(kind)), isNotEmpty);
+        }
+        expect(loc.loginFailure(const LoginFailureFromServer('Nope, said it')),
+            'Nope, said it');
+      }
+      final en = await l10n('en');
+      expect(
+          en.loginFailure(
+              const LoginFailureOfKind(LoginFailureKind.invalidCode)),
+          'Invalid code');
+      final es = await l10n('es');
+      expect(
+          es.loginFailure(
+              const LoginFailureOfKind(LoginFailureKind.cannotConnect)),
+          isNot(contains('Cannot')));
     });
   });
 }
