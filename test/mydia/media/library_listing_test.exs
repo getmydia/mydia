@@ -781,6 +781,95 @@ defmodule Mydia.Media.LibraryListingTest do
     end
   end
 
+  describe "letters" do
+    test "title sort folds accents and puts the # group first, last under Z-A", %{user: user} do
+      for title <- ["Brindle Coast", "Élan Quarry", "9 Lanterns", "Amber Tide", "[Redacted] Fen"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      assert titles(page(user, sort_by: "title_asc")) ==
+               ["9 Lanterns", "[Redacted] Fen", "Amber Tide", "Brindle Coast", "Élan Quarry"]
+
+      assert titles(page(user, sort_by: "title_desc")) ==
+               ["Élan Quarry", "Brindle Coast", "Amber Tide", "[Redacted] Fen", "9 Lanterns"]
+    end
+
+    test "initial/1 buckets by folded first letter", %{user: user} do
+      for title <- ["Élan Quarry", "9 Lanterns", "amber tide", "Ørsted Drift"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      initials =
+        page(user, sort_by: "title_asc").rows
+        |> Map.new(&{&1.item.title, LibraryListing.initial(&1)})
+
+      assert initials == %{
+               "9 Lanterns" => "#",
+               "amber tide" => "a",
+               "Élan Quarry" => "e",
+               # Ø has no decomposition, so it stays outside a-z.
+               "Ørsted Drift" => "#"
+             }
+    end
+
+    test "letters/0 is # then a to z" do
+      assert LibraryListing.letters() == ["#" | Enum.map(?a..?z, &<<&1>>)]
+    end
+
+    test "letter_offsets index each letter's first row under title sorts", %{user: user} do
+      for title <- ["9 Lanterns", "Amber Tide", "Ashen Pier", "Marrow Lane"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      assert page(user, sort_by: "title_asc").letter_offsets == %{"#" => 0, "a" => 1, "m" => 3}
+      assert page(user, sort_by: "title_desc").letter_offsets == %{"m" => 0, "a" => 1, "#" => 3}
+    end
+
+    test "letter_offsets are empty under other sorts and while searching", %{user: user} do
+      media_item_fixture(%{type: "movie", title: "Amber Tide"})
+
+      assert page(user, sort_by: "year_desc").letter_offsets == %{}
+      assert page(user, sort_by: "title_asc", search: "amber").letter_offsets == %{}
+    end
+
+    test ":letter starts rows at that letter", %{user: user} do
+      for title <- ["Amber Tide", "Ashen Pier", "Marrow Lane", "Mistral Gate", "Zephyr Hollow"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      listing = page(user, sort_by: "title_asc", letter: "m", limit: 2)
+      assert listing.start == 2
+      assert titles(listing) == ["Marrow Lane", "Mistral Gate"]
+      assert length(listing.ids) == 5
+    end
+
+    test ":letter with no rows starts at the next letter in sort order", %{user: user} do
+      for title <- ["Amber Tide", "Marrow Lane", "Zephyr Hollow"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      assert titles(page(user, sort_by: "title_asc", letter: "q")) == ["Zephyr Hollow"]
+
+      assert titles(page(user, sort_by: "title_desc", letter: "q")) == [
+               "Marrow Lane",
+               "Amber Tide"
+             ]
+
+      assert page(user, sort_by: "title_asc", letter: "#").start == 0
+      # Nothing after it: back to the top.
+      assert page(user, sort_by: "title_desc", letter: "#").start == 0
+    end
+
+    test ":letter is ignored when offsets do not apply", %{user: user} do
+      for title <- ["Amber Tide", "Marrow Lane"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      assert page(user, sort_by: "year_desc", letter: "m").start == 0
+      assert page(user, sort_by: "title_asc", letter: "bogus").start == 0
+    end
+  end
+
   defp page(user, opts) do
     LibraryListing.snapshot(
       Scope.unrestricted(),
