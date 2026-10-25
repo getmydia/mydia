@@ -11,8 +11,11 @@ import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/l10n/formatters.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/login/login_failure.dart';
+
+import '../presentation/screens/calendar/calendar_test_items.dart';
 
 Future<AppLocalizations> l10n(String tag) =>
     AppLocalizations.delegate.load(Locale.fromSubtags(
@@ -24,6 +27,49 @@ void main() {
   final now = DateTime(2026, 10, 25, 12);
 
   setUpAll(() => initializeDateFormatting());
+
+  group('calendar dates', () {
+    final monday = DateTime(2026, 10, 26);
+    final october = DateTime(2026, 10);
+
+    test('en matches the old hand-written names', () async {
+      final en = await l10n('en');
+      expect(en.weekdayShort(monday), 'Mon');
+      expect(en.weekdayShort(DateTime(2026, 10, 25)), 'Sun');
+      expect(en.weekdayNarrow(monday), 'M');
+      expect(en.monthName(october), 'October');
+      expect(en.monthYear(october), 'October 2026');
+      expect(en.monthLabel(DateTime(2026, 11), DateTime(2026, 10, 16)),
+          'November');
+      expect(en.monthLabel(DateTime(2027, 1), DateTime(2026, 10, 16)),
+          'January 2027');
+    });
+
+    test('es and pt_BR differ from en', () async {
+      final en = await l10n('en');
+      for (final tag in ['es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        expect(loc.weekdayShort(monday), isNot(en.weekdayShort(monday)));
+        expect(loc.monthName(october), isNot(en.monthName(october)));
+        expect(loc.monthYear(october), isNot(en.monthYear(october)));
+        expect(loc.monthYear(october), contains('2026'));
+      }
+    });
+
+    test('numbering is the episode code, or the Movie word for a movie',
+        () async {
+      final en = await l10n('en');
+      final episode = calendarEntry('1', DateTime(2026, 10, 16),
+          title: 'The Tide Ledger', season: 2, episode: 5);
+      final movie = calendarEntry('2', DateTime(2026, 10, 16),
+          kind: ItemKind.movie, title: 'Brasswork');
+      expect(en.calendarNumbering(episode), 'S02E05');
+      expect(en.calendarSubtitle(episode), 'S02E05 · The Tide Ledger');
+      expect(en.calendarNumbering(movie), 'Movie');
+      expect(en.calendarSubtitle(movie), 'Movie');
+      expect((await l10n('es')).calendarNumbering(movie), isNot('Movie'));
+    });
+  });
 
   group('relativeTime', () {
     test('en thresholds match the old formatter', () async {

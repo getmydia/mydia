@@ -6,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/play_button.dart';
 import '../detail/detail_links.dart';
 import 'calendar_artwork.dart';
@@ -96,7 +97,7 @@ class CalendarCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    entry.calendarSubtitle,
+                    context.l10n.calendarSubtitle(entry),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

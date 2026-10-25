@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/navigation/source_nav.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
@@ -59,8 +60,11 @@ Widget shellScaffold({required Widget child}) => Scaffold(
     );
 
 /// [shellScaffold] mounted as the `home` of a plain `MaterialApp`.
-Widget shellHarness({required Widget child}) =>
-    MaterialApp(home: shellScaffold(child: child));
+Widget shellHarness({required Widget child}) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: shellScaffold(child: child),
+    );
 
 /// The measured height of the harness's dock, safe-area inset included.
 double dockHeightOf(WidgetTester tester) =>

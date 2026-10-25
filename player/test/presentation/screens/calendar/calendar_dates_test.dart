@@ -51,13 +51,6 @@ void main() {
     });
   });
 
-  group('weekdayAbbreviation', () {
-    test('names Monday and Sunday', () {
-      expect(weekdayAbbreviation(DateTime(2026, 9, 14)), 'Mon');
-      expect(weekdayAbbreviation(DateTime(2026, 9, 20)), 'Sun');
-    });
-  });
-
   group('groupByDay', () {
     test('groups entries under their date, preserving server order', () {
       final grouped = groupByDay([
@@ -119,11 +112,10 @@ void main() {
         episode: 5,
       );
       expect(e.calendarTitle, 'A Show');
-      expect(e.calendarNumbering, 'S02E05');
-      expect(e.calendarSubtitle, 'S02E05 · The Tide Ledger');
+      expect(e.episodeCode, 'S02E05');
     });
 
-    test('a movie is titled by itself and labelled Movie', () {
+    test('a movie is titled by itself and has no episode code', () {
       final m = calendarEntry(
         '2',
         DateTime(2026, 10, 16),
@@ -131,22 +123,11 @@ void main() {
         title: 'Brasswork',
       );
       expect(m.calendarTitle, 'Brasswork');
-      expect(m.calendarNumbering, 'Movie');
-      expect(m.calendarSubtitle, 'Movie');
+      expect(m.episodeCode, isNull);
     });
   });
 
   group('month helpers', () {
-    test('formatMonth omits the current year and names another', () {
-      final today = DateTime(2026, 10, 16);
-      expect(formatMonth(DateTime(2026, 11), today), 'November');
-      expect(formatMonth(DateTime(2027, 1), today), 'January 2027');
-    });
-
-    test('formatMonthYear always names the year', () {
-      expect(formatMonthYear(DateTime(2026, 11)), 'November 2026');
-    });
-
     test('monthsInWindow lists every month the window touches', () {
       expect(monthsInWindow(DateTime(2026, 9, 16), DateTime(2027, 1, 14)), [
         DateTime(2026, 9),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import 'calendar_artwork.dart';
 import 'calendar_dates.dart';
@@ -74,7 +75,7 @@ class CalendarRow extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          entry.calendarNumbering,
+                          context.l10n.calendarNumbering(entry),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

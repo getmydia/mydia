@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/focus_highlight.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import 'calendar_dates.dart';
@@ -67,15 +68,8 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
     return index < 0 ? 0 : index;
   }
 
-  static const List<String> _weekdayInitials = [
-    'M',
-    'T',
-    'W',
-    'T',
-    'F',
-    'S',
-    'S'
-  ];
+  /// Any fixed Monday-first week gives the grid's header its letters.
+  static final DateTime _aMonday = DateTime(2026, 1, 5);
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +90,7 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      formatMonthYear(month),
+                      context.l10n.monthYear(month),
                       key: const ValueKey('calendar-sheet-title'),
                       style: TextStyle(
                         fontSize: 17,
@@ -124,10 +118,13 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  for (final initial in _weekdayInitials)
+                  for (var i = 0; i < DateTime.daysPerWeek; i++)
                     Expanded(
                       child: Text(
-                        initial,
+                        context.l10n.weekdayNarrow(
+                          DateTime(
+                              _aMonday.year, _aMonday.month, _aMonday.day + i),
+                        ),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 11,

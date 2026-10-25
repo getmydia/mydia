@@ -737,5 +737,7 @@
   "loginErrorSignInExpired": "Sign-in expired, please try again",
   "@loginErrorSignInExpired": {"description": "Error shown when the pending two-factor sign-in expired and the viewer must enter the password again."},
   "loginErrorTooManyAttempts": "Too many login attempts. Please try again later.",
-  "@loginErrorTooManyAttempts": {"description": "Error shown when the server is rate limiting sign-in attempts."}
+  "@loginErrorTooManyAttempts": {"description": "Error shown when the server is rate limiting sign-in attempts."},
+  "calendarMovie": "Movie",
+  "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."}
 }

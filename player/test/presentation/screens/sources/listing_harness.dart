@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/toast_harness.dart';
@@ -72,7 +73,12 @@ Future<PushedLocations> pumpListing(
       sourceArtworkProvider.overrideWith((ref, key) async => null),
       ...overrides,
     ],
-    child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
+    child: MaterialApp.router(
+      routerConfig: router,
+      builder: toastLayerBuilder,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+    ),
   ));
   await tester.pumpAndSettle();
   return pushed;

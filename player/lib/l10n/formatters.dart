@@ -15,6 +15,8 @@ import '../core/update/update_provider.dart';
 import '../core/update/update_track.dart';
 import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
+import '../domain/sources/item.dart';
+import '../presentation/screens/calendar/calendar_dates.dart';
 import '../presentation/screens/login/login_failure.dart';
 import 'gen/app_localizations.dart';
 
@@ -68,6 +70,36 @@ extension AppFormatters on AppLocalizations {
     return local.year == now.year
         ? DateFormat.MMMd(localeName).format(local)
         : DateFormat.yMMMd(localeName).format(local);
+  }
+
+  /// `Mon` for any Monday.
+  String weekdayShort(DateTime day) => DateFormat.E(localeName).format(day);
+
+  /// `M` for any Monday; a single letter, for the month grid's header.
+  String weekdayNarrow(DateTime day) =>
+      DateFormat.EEEEE(localeName).format(day);
+
+  /// `October` for any day in October.
+  String monthName(DateTime day) => DateFormat.MMMM(localeName).format(day);
+
+  /// `October 2026`, always naming the year.
+  String monthYear(DateTime month) =>
+      DateFormat.yMMMM(localeName).format(month);
+
+  /// The month button's label: the month, with the year when it is not
+  /// [today]'s year.
+  String monthLabel(DateTime month, DateTime today) =>
+      month.year == today.year ? monthName(month) : monthYear(month);
+
+  /// `S02E05` for an episode, the word for a movie.
+  String calendarNumbering(ItemSummary entry) =>
+      entry.episodeCode ?? calendarMovie;
+
+  /// The numbering, then the episode title when there is one.
+  String calendarSubtitle(ItemSummary entry) {
+    final code = entry.episodeCode;
+    if (code == null || entry.title.isEmpty) return calendarNumbering(entry);
+    return '$code · ${entry.title}';
   }
 
   String remoteDeviceStatus(RemoteDeviceStatus status) => switch (status) {

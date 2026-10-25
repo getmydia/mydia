@@ -29,51 +29,15 @@ extension CalendarItem on ItemSummary {
   String get calendarTitle =>
       ref.kind == ItemKind.movie ? title : showTitle ?? '';
 
-  /// `S02E05` for an episode, `Movie` for a movie.
-  String get calendarNumbering {
-    if (ref.kind == ItemKind.movie) return 'Movie';
+  /// `S02E05` for an episode, null for a movie, which the widget labels with
+  /// its own translated word.
+  String? get episodeCode {
+    if (ref.kind == ItemKind.movie) return null;
     final season = (parentIndex ?? 0).toString().padLeft(2, '0');
     final episode = (index ?? 0).toString().padLeft(2, '0');
     return 'S${season}E$episode';
   }
-
-  /// The numbering, then the episode title when there is one.
-  String get calendarSubtitle {
-    if (ref.kind == ItemKind.movie || title.isEmpty) return calendarNumbering;
-    return '$calendarNumbering · $title';
-  }
 }
-
-/// Short weekday names, indexed by `DateTime.weekday - 1` (Monday first).
-///
-/// `package:intl` is not a dependency of this app, so the calendar's labels
-/// are hand-formatted from these const tables rather than pulling in
-/// `DateFormat` for a handful of strings.
-const List<String> _weekdayAbbreviations = [
-  'Mon',
-  'Tue',
-  'Wed',
-  'Thu',
-  'Fri',
-  'Sat',
-  'Sun',
-];
-
-/// Full month names, indexed by `DateTime.month - 1`.
-const List<String> _monthNames = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 /// [date] with its time-of-day dropped, at local midnight.
 DateTime truncateToDay(DateTime date) =>
@@ -82,10 +46,6 @@ DateTime truncateToDay(DateTime date) =>
 /// Whether [a] and [b] fall on the same calendar day, ignoring time-of-day.
 bool isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
-
-/// `Mon` through `Sun` for [day].
-String weekdayAbbreviation(DateTime day) =>
-    _weekdayAbbreviations[day.weekday - DateTime.monday];
 
 /// Entries grouped into day sections, in the order the server sent them.
 ///
@@ -105,18 +65,6 @@ List<MapEntry<DateTime, List<ItemSummary>>> groupByDay(
 
   return groups.entries.toList();
 }
-
-/// `October` for any day in October.
-String monthName(DateTime day) => _monthNames[day.month - 1];
-
-/// The month button's label: `October`, or `January 2027` outside [today]'s
-/// year.
-String formatMonth(DateTime month, DateTime today) => month.year == today.year
-    ? monthName(month)
-    : '${monthName(month)} ${month.year}';
-
-/// The month sheet's title, which always names the year.
-String formatMonthYear(DateTime month) => '${monthName(month)} ${month.year}';
 
 /// The first of every month that touches `[start, end]`, oldest first.
 ///

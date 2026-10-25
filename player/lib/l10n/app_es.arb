@@ -198,5 +198,6 @@
   "loginErrorFailed": "Error al iniciar sesión. Revisa tus credenciales.",
   "loginErrorInvalidCode": "Código no válido",
   "loginErrorSignInExpired": "El inicio de sesión ha caducado, inténtalo de nuevo",
-  "loginErrorTooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde."
+  "loginErrorTooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde.",
+  "calendarMovie": "Película"
 }

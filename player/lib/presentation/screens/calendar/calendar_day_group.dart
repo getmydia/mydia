@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import 'calendar_card.dart';
 import 'calendar_dates.dart';
 import 'calendar_row.dart';
@@ -125,7 +126,7 @@ class _Gutter extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            weekdayAbbreviation(day).toUpperCase(),
+            context.l10n.weekdayShort(day).toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               height: TimelineLayout.weekdayLine / 11,
@@ -169,7 +170,7 @@ class CalendarMonthRule extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            monthName(month).toUpperCase(),
+            context.l10n.monthName(month).toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               height: TimelineLayout.monthLine / 11,

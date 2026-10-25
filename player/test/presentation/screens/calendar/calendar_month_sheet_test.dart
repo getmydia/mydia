@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/calendar/calendar_month_sheet.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 
@@ -16,6 +17,8 @@ Future<List<DateTime?>> _pump(WidgetTester tester,
   final results = <DateTime?>[];
 
   await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: Builder(
         builder: (context) => TextButton(

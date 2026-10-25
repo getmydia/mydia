@@ -198,5 +198,6 @@
   "loginErrorFailed": "Falha no login. Verifique suas credenciais.",
   "loginErrorInvalidCode": "Código inválido",
   "loginErrorSignInExpired": "O login expirou, tente novamente",
-  "loginErrorTooManyAttempts": "Muitas tentativas de login. Tente novamente mais tarde."
+  "loginErrorTooManyAttempts": "Muitas tentativas de login. Tente novamente mais tarde.",
+  "calendarMovie": "Filme"
 }

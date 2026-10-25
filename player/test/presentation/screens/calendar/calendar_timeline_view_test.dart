@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/util/iso_date.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_jump_requests.dart';
 import 'package:player/presentation/screens/calendar/calendar_timeline_view.dart';
@@ -39,6 +40,8 @@ Future<({CalendarJumpRequests jumps, List<DateTime> months})> _pump(
     ProviderScope(
       overrides: [sourceArtworkProvider.overrideWith((ref, key) async => null)],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CalendarTimelineView(
             entries: entries,
