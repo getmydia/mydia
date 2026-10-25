@@ -35,6 +35,19 @@ void main() {
     expect(icuArguments('Added {title}'), {'title'});
   });
 
+  test('argument parsing finds arguments inside branch bodies', () {
+    expect(
+      icuArguments('{count, plural, one{one {item}} other{{count} items}}'),
+      {'count', 'item'},
+    );
+    expect(
+      icuArguments('{kind, select, movie{the movie {title}} other{{title}}}'),
+      {'kind', 'title'},
+    );
+    expect(
+        icuArguments('{count, plural, =0 {none} other {# left}}'), {'count'});
+  });
+
   test('a translation with branch text instead of a number still passes', () {
     expect(
       missingPlaceholders(
@@ -122,18 +135,80 @@ void main() {
   }
 }
 
-/// Argument names at ICU argument positions: `{name}` or `{name,` where the
-/// brace is not the opening of a plural branch body (`one{...}`, `=0{...}`).
-/// Extra names from select branch bodies are harmless: callers only check
-/// that required names are present.
+/// Argument names in an ICU [message], found by structure: in message text a
+/// `{` opens an argument; inside a plural or select argument's branch list a
+/// `{` opens a branch body, which is message text again. Quoting with `'` is
+/// not handled; no message here uses it.
 Set<String> icuArguments(String message) {
   final names = <String>{};
-  final argument = RegExp(
-    r'(?<!\b(?:zero|one|two|few|many|other)\s*)(?<!=\d+\s*)\{\s*(\w+)\s*(?:,|\})',
-  );
-  for (final m in argument.allMatches(message)) {
-    names.add(m.group(1)!);
+  var i = 0;
+
+  void skipSpace() {
+    while (i < message.length && message[i].trim().isEmpty) {
+      i++;
+    }
   }
+
+  String readWord() {
+    final start = i;
+    while (i < message.length && RegExp(r'[\w=]').hasMatch(message[i])) {
+      i++;
+    }
+    return message.substring(start, i);
+  }
+
+  late void Function() parseText;
+
+  // At an argument's `{`: records its name, then consumes up to its `}`.
+  void parseArgument() {
+    i++;
+    skipSpace();
+    final name = readWord();
+    if (name.isNotEmpty) names.add(name);
+    skipSpace();
+    if (i < message.length && message[i] == '}') {
+      i++;
+      return;
+    }
+    if (i < message.length && message[i] == ',') i++;
+    skipSpace();
+    final type = readWord();
+    skipSpace();
+    if (!const {'plural', 'select', 'selectordinal'}.contains(type)) {
+      // A formatted argument ({n, number}): skip to its closing brace.
+      while (i < message.length && message[i] != '}') {
+        i++;
+      }
+      if (i < message.length) i++;
+      return;
+    }
+    if (i < message.length && message[i] == ',') i++;
+    // Branch list: selectors (`one`, `=0`, `offset:1`) each followed by a
+    // `{body}`, until the argument's own `}`.
+    while (i < message.length && message[i] != '}') {
+      if (message[i] == '{') {
+        i++;
+        parseText();
+        if (i < message.length) i++;
+      } else {
+        i++;
+      }
+    }
+    if (i < message.length) i++;
+  }
+
+  // Message text up to an unmatched `}` (left for the caller) or the end.
+  parseText = () {
+    while (i < message.length && message[i] != '}') {
+      if (message[i] == '{') {
+        parseArgument();
+      } else {
+        i++;
+      }
+    }
+  };
+
+  parseText();
   return names;
 }
 
