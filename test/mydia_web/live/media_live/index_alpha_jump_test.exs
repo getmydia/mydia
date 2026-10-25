@@ -33,8 +33,6 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
   defp card(item), do: "media_items-#{item.id}"
 
-  @tag :alpha_bar
-  @tag skip: "bar lands in Task 4"
   test "the bar shows on title sorts and marks letters without titles", %{conn: conn} do
     library()
     {:ok, view, _html} = live(conn, ~p"/movies")
@@ -45,8 +43,6 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     assert has_element?(view, "span#alpha-jump-hash[aria-disabled=true]")
   end
 
-  @tag :alpha_bar
-  @tag skip: "bar lands in Task 4"
   test "the bar is hidden under other sorts and while searching", %{conn: conn} do
     library()
     {:ok, view, _html} = live(conn, ~p"/movies?sort=year_desc")
@@ -60,7 +56,8 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     %{marrows: [first_m | _]} = library()
     {:ok, view, _html} = live(conn, ~p"/movies")
 
-    render_patch(view, "/movies?letter=m")
+    view |> element("a#alpha-jump-m") |> render_click()
+    assert_patch(view, "/movies?letter=m")
     assert_push_event(view, "alpha_jump:scroll_top", %{})
 
     assert hd(card_ids(view)) == card(first_m)

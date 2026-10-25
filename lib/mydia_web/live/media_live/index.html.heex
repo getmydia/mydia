@@ -453,15 +453,26 @@
     >
     </div>
 
+    <.alpha_jump_bar
+      :if={@letter_offsets != %{}}
+      offsets={@letter_offsets}
+      path={&letter_path(assigns, &1)}
+    />
+
     <%!-- After an A-Z jump, loads the titles above the letter one batch per
-          scroll up to it. No prefetch margin and no chaining: see the hook. --%>
+          scroll up to it. No prefetch margin and no chaining: see the hook.
+          The negative top margin is because the jump leaves the sentinel's
+          bottom on (grid) or a pixel under (list, -mt-px) the viewport's top
+          edge, which an observer counts as intersecting, so it would never be
+          seen off screen and never arm. --%>
     <div
       :if={@has_previous}
       id="media-items-top-sentinel"
       phx-hook="LoadMoreSentinel"
       data-event="load_previous"
-      data-margin="0px"
+      data-margin="-8px 0px 0px 0px"
       data-chain="false"
+      data-anchor="media-items"
       data-has-more="true"
       class="flex justify-center py-8"
     >
@@ -476,7 +487,8 @@
         @view_mode == :grid && "grid gap-3 md:gap-4 pb-6 md:pb-8",
         @view_mode == :grid && grid_columns_class(@grid_density),
         @view_mode == :list && "card bg-base-100 shadow-lg overflow-hidden -mt-px",
-        @selection_mode && "selection-mode"
+        @selection_mode && "selection-mode",
+        @letter_offsets != %{} && "pr-6 lg:pr-8"
       ]}
     >
       <div

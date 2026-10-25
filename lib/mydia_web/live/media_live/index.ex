@@ -33,6 +33,7 @@ defmodule MydiaWeb.MediaLive.Index do
     only: [batch_monitored_message: 2, auto_search_flash: 2, format_episode_count: 1]
 
   import MydiaWeb.GridDensityComponents
+  import MydiaWeb.MediaLive.Index.AlphaJumpComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
   import MydiaWeb.MediaLive.Index.SelectionComponents
 
@@ -947,6 +948,12 @@ defmodule MydiaWeb.MediaLive.Index do
       to: ListingParams.path(listing_base_path(socket.assigns), params),
       replace: true
     )
+  end
+
+  # A jump keeps the filters and sort and starts a fresh first batch.
+  defp letter_path(assigns, letter) do
+    params = %{Window.listing_params(assigns) | letter: letter, shown: ListingParams.first_page()}
+    ListingParams.path(listing_base_path(assigns), params)
   end
 
   defp get_poster_url(media_item),

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createLoader, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
+import { createLoader, keepInPlace, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -112,4 +112,27 @@ test("does nothing when the server has no more rows", () => {
   el.dataset.hasMore = "true";
   loader.maybeLoad();
   assert.equal(calls.length, 1);
+});
+
+test("keepInPlace scrolls by however far the anchor moved during the push", async () => {
+  let top = 100;
+  const scrolls = [];
+  const push = () => Promise.resolve().then(() => (top = 2500));
+  const anchored = keepInPlace(push, () => ({ top: () => top, connected: () => true }), (dy) =>
+    scrolls.push(dy),
+  );
+  await anchored("load_previous", {});
+  assert.deepEqual(scrolls, [2400]);
+});
+
+test("keepInPlace leaves the scroll alone without an anchor or after a rejection", async () => {
+  const scrolls = [];
+  const scrollBy = (dy) => scrolls.push(dy);
+  await keepInPlace(() => Promise.resolve(), () => null, scrollBy)("load_previous", {});
+  const failing = keepInPlace(() => Promise.reject(new Error("down")), () => ({
+    top: () => 0,
+    connected: () => true,
+  }), scrollBy);
+  await assert.rejects(failing("load_previous", {}));
+  assert.deepEqual(scrolls, []);
 });
