@@ -418,7 +418,8 @@ defmodule Mydia.Downloads do
   @doc """
   Maps each manual search result's `download_url` to a
   `Mydia.Downloads.PriorAttempt` when the release already failed for this target
-  or is blacklisted. Never raises; returns `%{}` on error.
+  or is blacklisted. Returns `{:ok, map}`; never raises, returns
+  `{:error, reason}` when the lookup fails.
   """
   defdelegate prior_attempts_for_results(results, media_item, context),
     to: Mydia.Downloads.PriorAttempts,

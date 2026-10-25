@@ -42,7 +42,7 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     d = download_fixture(%{media_item_id: item.id, download_url: res.download_url})
     fail!(d, "boom")
 
-    assert %{} = map = Downloads.prior_attempts_for_results([res], item, nil)
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
     assert %PriorAttempt{kind: :failed, reason: "boom", at: %DateTime{}} = map[res.download_url]
   end
 
@@ -52,12 +52,14 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     other = result()
     download_fixture(%{media_item_id: item.id, download_url: res.download_url})
 
-    assert Downloads.prior_attempts_for_results([res, other], item, nil) == %{}
+    assert Downloads.prior_attempts_for_results([res, other], item, nil) == {:ok, %{}}
   end
 
   test "results without a download_url are skipped" do
     item = media_item_fixture(%{type: "movie"})
-    assert Downloads.prior_attempts_for_results([result(download_url: nil)], item, nil) == %{}
+
+    assert Downloads.prior_attempts_for_results([result(download_url: nil)], item, nil) ==
+             {:ok, %{}}
   end
 
   test "another episode's failure does not leak into an episode context" do
@@ -76,10 +78,9 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     fail!(d, "bad")
 
     assert Downloads.prior_attempts_for_results([res], show, %{type: :episode, episode_id: ep2.id}) ==
-             %{}
+             {:ok, %{}}
 
-    assert %{} =
-             map =
+    assert {:ok, map} =
              Downloads.prior_attempts_for_results([res], show, %{
                type: :episode,
                episode_id: ep1.id
@@ -109,11 +110,11 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
       fail!(d, "bad")
     end
 
-    map =
-      Downloads.prior_attempts_for_results([s2, s3, plain], show, %{
-        type: :season,
-        season_number: 2
-      })
+    assert {:ok, map} =
+             Downloads.prior_attempts_for_results([s2, s3, plain], show, %{
+               type: :season,
+               season_number: 2
+             })
 
     assert Map.keys(map) == [s2.download_url]
   end
@@ -123,7 +124,7 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     res = result(indexer: "MyIndexer", guid: "abc")
     {:ok, _} = Blacklists.add("myindexer", "abc", "T", "stalled")
 
-    map = Downloads.prior_attempts_for_results([res], item, nil)
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
     assert %PriorAttempt{kind: :blacklisted, reason: "stalled"} = map[res.download_url]
   end
 
@@ -133,7 +134,7 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     res = result(download_url: "magnet:?xt=urn:btih:#{hash}", guid: "other-guid")
     {:ok, _} = Blacklists.add("elsewhere", "g1", "T", "par fail", info_hash: hash)
 
-    map = Downloads.prior_attempts_for_results([res], item, nil)
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
     assert %PriorAttempt{kind: :blacklisted, reason: "par fail"} = map[res.download_url]
   end
 
@@ -143,7 +144,7 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     past = DateTime.add(DateTime.utc_now(), -3600, :second)
     {:ok, _} = Blacklists.add("idx", "old", "T", "x", expires_at: past)
 
-    assert Downloads.prior_attempts_for_results([res], item, nil) == %{}
+    assert Downloads.prior_attempts_for_results([res], item, nil) == {:ok, %{}}
     assert Repo.aggregate(ReleaseBlacklist, :count) == 1
   end
 
@@ -156,7 +157,7 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     fail!(old, "older", DateTime.add(now, -600, :second))
     fail!(new, "newer", now)
 
-    map = Downloads.prior_attempts_for_results([res], item, nil)
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
     assert map[res.download_url].reason == "newer"
   end
 
@@ -167,7 +168,15 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     fail!(d, "failed")
     {:ok, _} = Blacklists.add("idx", "both", "T", "banned")
 
-    map = Downloads.prior_attempts_for_results([res], item, nil)
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
     assert %PriorAttempt{kind: :blacklisted, reason: "banned"} = map[res.download_url]
+  end
+
+  test "a failed lookup returns an error rather than an empty map" do
+    item = media_item_fixture(%{type: "movie"})
+    # No :indexer key, so the blacklist step raises and is rescued.
+    broken = %{download_url: "https://example.test/broken.torrent"}
+
+    assert {:error, %KeyError{}} = Downloads.prior_attempts_for_results([broken], item, nil)
   end
 end

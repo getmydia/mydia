@@ -20,27 +20,30 @@ defmodule Mydia.Downloads.PriorAttempts do
   require Logger
 
   @doc """
-  Returns `%{download_url => %PriorAttempt{}}` for the results that have a
-  prior attempt. `context` uses the manual search shapes: `%{type: :episode,
+  Returns `{:ok, %{download_url => %PriorAttempt{}}}` for the results that have
+  a prior attempt. `context` uses the manual search shapes: `%{type: :episode,
   episode_id: id}`, `%{type: :season, season_number: n}`, or anything else for
-  the whole item. Never raises; on error it logs and returns `%{}`.
+  the whole item. Never raises; on error it logs and returns `{:error, reason}`,
+  so callers can tell a failed lookup from an empty one and retry.
   """
-  @spec for_results([struct()], MediaItem.t(), term()) :: %{String.t() => PriorAttempt.t()}
+  @spec for_results([struct()], MediaItem.t(), term()) ::
+          {:ok, %{String.t() => PriorAttempt.t()}} | {:error, Exception.t()}
   def for_results(results, %MediaItem{} = media_item, context) do
     results = Enum.filter(results, &is_binary(&1.download_url))
 
     if results == [] do
-      %{}
+      {:ok, %{}}
     else
-      Map.merge(
-        failed_attempts(results, media_item, context),
-        blacklisted_attempts(results)
-      )
+      {:ok,
+       Map.merge(
+         failed_attempts(results, media_item, context),
+         blacklisted_attempts(results)
+       )}
     end
   rescue
     error ->
       Logger.warning("Prior attempts lookup failed: #{Exception.message(error)}")
-      %{}
+      {:error, error}
   end
 
   defp failed_attempts(results, media_item, context) do

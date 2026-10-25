@@ -95,30 +95,35 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   # Looks up prior attempts only for releases not checked yet this search. A
   # release with no prior attempt never becomes a key in :prior_attempts, so
   # :prior_attempts_checked is what stops it being re-queried on every
-  # progress message.
-  defp track_prior_attempts(socket, results) do
+  # progress message. A failed lookup marks nothing checked, so the next
+  # progress message retries it.
+  @doc false
+  def track_prior_attempts(socket, results) do
     checked = Map.get(socket.assigns, :prior_attempts_checked, MapSet.new())
     fresh = Enum.reject(results, &MapSet.member?(checked, &1.download_url))
 
     if fresh == [] do
       socket
     else
-      found =
-        Downloads.prior_attempts_for_results(
-          fresh,
-          socket.assigns.media_item,
-          socket.assigns.manual_search_context || %{type: :media_item}
-        )
+      case Downloads.prior_attempts_for_results(
+             fresh,
+             socket.assigns.media_item,
+             socket.assigns.manual_search_context || %{type: :media_item}
+           ) do
+        {:ok, found} ->
+          socket
+          |> Phoenix.Component.assign(
+            :prior_attempts,
+            Map.merge(Map.get(socket.assigns, :prior_attempts, %{}), found)
+          )
+          |> Phoenix.Component.assign(
+            :prior_attempts_checked,
+            Enum.reduce(fresh, checked, &MapSet.put(&2, &1.download_url))
+          )
 
-      socket
-      |> Phoenix.Component.assign(
-        :prior_attempts,
-        Map.merge(Map.get(socket.assigns, :prior_attempts, %{}), found)
-      )
-      |> Phoenix.Component.assign(
-        :prior_attempts_checked,
-        Enum.reduce(fresh, checked, &MapSet.put(&2, &1.download_url))
-      )
+        {:error, _reason} ->
+          socket
+      end
     end
   end
 
