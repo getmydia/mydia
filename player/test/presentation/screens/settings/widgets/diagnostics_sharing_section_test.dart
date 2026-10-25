@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:player/core/diagnostics/diagnostics_provider.dart';
 import 'package:player/core/diagnostics/diagnostics_settings.dart';
 import 'package:player/core/logging/log_uploader.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/widgets/diagnostics_sharing_section.dart';
 
 import '../../../../test_utils/memory_log_store.dart';
@@ -78,6 +79,8 @@ Future<void> _pumpWith(
             .overrideWithValue(canShareLogs ? _uploader() : null),
       ],
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         home: Scaffold(
           body: SingleChildScrollView(child: DiagnosticsSharingSection()),

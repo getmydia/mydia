@@ -12,6 +12,7 @@ import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
@@ -33,7 +34,11 @@ Future<GoRouter> _pump(WidgetTester tester, String location) async {
   router.go(location);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: router,
+    ),
   ));
   await tester.pumpAndSettle();
   return router;

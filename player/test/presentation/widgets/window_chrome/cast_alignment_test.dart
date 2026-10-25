@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
@@ -94,6 +95,8 @@ Future<void> pumpWithInsets(
     ProviderScope(
       overrides: [...castCapableOverrides(), ...extraOverrides],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: MediaQuery(
           data: MediaQueryData(
             size: Size(width, 800),

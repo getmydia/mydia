@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -14,6 +15,8 @@ Widget _buildTestWidget({MockAuthStorage? storage}) {
       authServiceProvider.overrideWithValue(AuthService(storage: mockStorage)),
     ],
     child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: LoginScreen(),
     ),
   );
@@ -32,6 +35,8 @@ Widget _buildMacTestWidget({MockAuthStorage? storage}) {
       authServiceProvider.overrideWithValue(AuthService(storage: mockStorage)),
     ],
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => MediaQuery(
           data: MediaQuery.of(context).copyWith(

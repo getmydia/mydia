@@ -8,18 +8,26 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/palette.dart';
+import '../../../../l10n/l10n.dart';
 import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
-  playback('Playback', Icons.play_circle_outline),
-  servers('Servers', Icons.dns_rounded),
-  diagnostics('Diagnostics', Icons.lan_outlined),
-  about('About', Icons.info_outline);
+  playback(Icons.play_circle_outline),
+  servers(Icons.dns_rounded),
+  diagnostics(Icons.lan_outlined),
+  about(Icons.info_outline);
 
-  const SettingsCategory(this.label, this.icon);
+  const SettingsCategory(this.icon);
 
-  final String label;
   final IconData icon;
+
+  /// The sidebar label, which is also the category's root page title.
+  String label(AppLocalizations l10n) => switch (this) {
+        playback => l10n.settingsPlayback,
+        servers => l10n.settingsServers,
+        diagnostics => l10n.settingsDiagnostics,
+        about => l10n.settingsAbout,
+      };
 }
 
 class SettingsDialogController extends ValueNotifier<SettingsCategory> {
@@ -209,7 +217,7 @@ class SettingsPane extends StatelessWidget {
                 if (canPop)
                   IconButton(
                     key: const Key('settings-dialog-back'),
-                    tooltip: 'Back',
+                    tooltip: context.l10n.commonBack,
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.of(context).pop(),
                   )
@@ -225,7 +233,7 @@ class SettingsPane extends StatelessWidget {
                 ...actions,
                 IconButton(
                   key: const Key('settings-dialog-close'),
-                  tooltip: 'Close',
+                  tooltip: context.l10n.commonClose,
                   icon: const Icon(Icons.close),
                   onPressed: SettingsDialogScope.of(context).close,
                 ),

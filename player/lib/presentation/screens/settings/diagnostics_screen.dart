@@ -13,6 +13,7 @@ import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider;
 import '../../../core/theme/palette.dart';
 import '../../../core/update/update_provider.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
@@ -48,7 +49,7 @@ class DiagnosticsScreen extends StatelessWidget {
             height: WindowTitleRow.heightOf(context),
             leading: const BackButton(),
             title: Text(
-              'Diagnostics',
+              context.l10n.settingsDiagnostics,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             // Read-only diagnostics, nothing to cast to from here. Kept as
@@ -92,6 +93,7 @@ class DiagnosticsBody extends ConsumerWidget {
       type: status.peerConnectionType,
       isInitialized: status.isInitialized,
     );
+    final l10n = context.l10n;
 
     return ListView(
       padding: padding,
@@ -103,7 +105,7 @@ class DiagnosticsBody extends ConsumerWidget {
           const SizedBox(height: 18),
         ],
         SettingsSection(
-          label: 'Transport',
+          label: l10n.settingsDiagnosticsTransport,
           children: [
             SettingsRow.action(
               icon: Icons.lan_outlined,
@@ -113,29 +115,31 @@ class DiagnosticsBody extends ConsumerWidget {
             ),
             SettingsRow.action(
               icon: Icons.dns_outlined,
-              title: 'Relay',
+              title: l10n.settingsDiagnosticsRelay,
               trailing: _Value(
-                status.isRelayConnected ? 'Connected' : 'Not connected',
+                status.isRelayConnected
+                    ? l10n.settingsDiagnosticsConnected
+                    : l10n.settingsDiagnosticsNotConnected,
               ),
             ),
             if (status.relayUrl != null)
               SettingsRow.action(
                 icon: Icons.link,
-                title: 'Relay server',
+                title: l10n.settingsDiagnosticsRelayServer,
                 subtitle: status.relayUrl,
               ),
           ],
         ),
         const SizedBox(height: 18),
         SettingsSection(
-          label: 'Peers',
+          label: l10n.settingsDiagnosticsPeers,
           children: [
             SettingsRow.action(
               icon: Icons.hub_outlined,
-              title: 'Connected peers',
+              title: l10n.settingsDiagnosticsConnectedPeers,
               trailing: _Value(
                 status.connectedPeersCount == 0
-                    ? 'None connected'
+                    ? l10n.settingsDiagnosticsNoPeers
                     : '${status.connectedPeersCount}',
               ),
             ),
@@ -144,11 +148,11 @@ class DiagnosticsBody extends ConsumerWidget {
         if (status.nodeAddr != null) ...[
           const SizedBox(height: 18),
           SettingsSection(
-            label: 'Identity',
+            label: l10n.settingsDiagnosticsIdentity,
             children: [
               SettingsRow.action(
                 icon: Icons.fingerprint,
-                title: 'Node address',
+                title: l10n.settingsDiagnosticsNodeAddress,
                 subtitle: status.nodeAddr,
               ),
             ],
@@ -164,7 +168,7 @@ class DiagnosticsBody extends ConsumerWidget {
           key: const Key('copy-diagnostics'),
           onPressed: () => _copy(context, summary, status, version),
           icon: const Icon(Icons.copy, size: 18),
-          label: const Text('Copy diagnostics'),
+          label: Text(l10n.settingsDiagnosticsCopy),
         ),
       ],
     );
@@ -176,6 +180,8 @@ class DiagnosticsBody extends ConsumerWidget {
     P2pStatus status,
     String version,
   ) async {
+    // Stays English: the report is pasted into bug reports for the
+    // developers, not read on screen.
     final report = [
       'Mydia Player $version',
       'Transport: ${summary.label}',
@@ -190,7 +196,11 @@ class DiagnosticsBody extends ConsumerWidget {
     await Clipboard.setData(ClipboardData(text: report));
 
     if (!context.mounted) return;
-    showToast(context, 'Diagnostics copied', kind: ToastKind.success);
+    showToast(
+      context,
+      context.l10n.settingsDiagnosticsCopied,
+      kind: ToastKind.success,
+    );
   }
 }
 
@@ -206,14 +216,15 @@ class _PlaybackSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final report = this.report;
+    final l10n = context.l10n;
     return SettingsSection(
-      label: 'Playback',
+      label: l10n.settingsPlayback,
       children: [
         if (report == null)
-          const SettingsRow.action(
+          SettingsRow.action(
             icon: Icons.fullscreen,
-            title: 'Fullscreen',
-            subtitle: 'Nothing played yet this session',
+            title: l10n.settingsDiagnosticsFullscreen,
+            subtitle: l10n.settingsDiagnosticsNothingPlayed,
           )
         else
           for (final (label, value) in report.rows)

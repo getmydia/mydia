@@ -13,6 +13,7 @@ import '../../core/layout/window_chrome_inset.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import '../widgets/focus_highlight.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/pin_code_display.dart';
@@ -157,8 +158,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       showToast(
         context,
         _isRelayUrlModified
-            ? 'Custom relay URL saved'
-            : 'Relay URL reset to default',
+            ? context.l10n.loginRelaySaved
+            : context.l10n.loginRelayResetDone,
         kind: ToastKind.success,
       );
     }
@@ -217,7 +218,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // Not a valid Mydia QR code - show error briefly and continue scanning
       showToast(
         context,
-        'Invalid QR code. Please scan a Mydia pairing code.',
+        context.l10n.loginInvalidQr,
         kind: ToastKind.error,
       );
       return;
@@ -576,11 +577,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       onPressed: _closeQrScanner,
                       icon: const Icon(Icons.close, color: Colors.white),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Scan QR Code',
+                        context.l10n.loginScanQrCode,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -622,7 +623,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Point your camera at the QR code shown on your Mydia server',
+                  context.l10n.loginScanQrInstructions,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.7),
@@ -678,7 +679,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           children: [
             Flexible(
               child: Text(
-                _isAdding ? 'Add a Mydia server' : 'Mydia Player',
+                _isAdding
+                    ? context.l10n.loginAddServerTitle
+                    : 'Mydia Player', // l10n-ignore: product name
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -695,7 +698,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          'Stream your media library',
+          context.l10n.loginTagline,
           style: TextStyle(
             fontSize: 13,
             color: palette.textSecondary.withValues(alpha: 0.7),
@@ -834,7 +837,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 children: [
                   Flexible(
                     child: Text(
-                      _isAdding ? 'Add a Mydia server' : 'Mydia Player',
+                      _isAdding
+                          ? context.l10n.loginAddServerTitle
+                          : 'Mydia Player', // l10n-ignore: product name
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -852,8 +857,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               const SizedBox(height: 2),
               Text(
                 _showDirectConnection
-                    ? 'Sign in directly with your server credentials'
-                    : 'Pair with your server using claim code',
+                    ? context.l10n.loginDirectSubtitle
+                    : context.l10n.loginTvPairSubtitle,
                 style: TextStyle(
                   fontSize: 12,
                   color: palette.textSecondary.withValues(alpha: 0.7),
@@ -870,7 +875,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             onPressed: _openAdvancedSettings,
             icon: const Icon(Icons.settings_outlined, size: 20),
             color: palette.textSecondary,
-            tooltip: 'Relay & Network Settings',
+            tooltip: context.l10n.loginNetworkSettingsTooltip,
             style: IconButton.styleFrom(
               backgroundColor: palette.surfaceVariant.withValues(alpha: 0.3),
               shape: RoundedRectangleBorder(
@@ -897,12 +902,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInstructionStep(1, 'Open Mydia on phone or PC'),
+          _buildInstructionStep(1, context.l10n.loginTvStepOpenMydia),
           const SizedBox(height: 6),
-          _buildInstructionStep(
-              2, 'Go to Settings \u2192 Devices \u2192 Pair device'),
+          _buildInstructionStep(2, context.l10n.loginTvStepOpenDevices),
           const SizedBox(height: 6),
-          _buildInstructionStep(3, 'Enter the 6-character code below'),
+          _buildInstructionStep(3, context.l10n.loginTvStepEnterCode),
         ],
       ),
     );
@@ -1010,15 +1014,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   color: Colors.white,
                 ),
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Connect',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    context.l10n.loginConnect,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(width: 6),
-                  Icon(Icons.link_rounded, size: 18),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.link_rounded, size: 18),
                 ],
               ),
       ),
@@ -1045,14 +1050,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.refresh_rounded, size: 16),
-            SizedBox(width: 6),
+            const Icon(Icons.refresh_rounded, size: 16),
+            const SizedBox(width: 6),
             Text(
-              'Clear',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              context.l10n.loginClear,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -1096,7 +1101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Connect to Server',
+                context.l10n.loginConnectTitle,
                 style: TextStyle(
                   fontSize: isCompact ? 18 : 20,
                   fontWeight: FontWeight.w600,
@@ -1106,8 +1111,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               const SizedBox(height: 2),
               Text(
                 _showDirectConnection
-                    ? 'Sign in directly with your server credentials'
-                    : 'Pair with your server using QR code or claim code',
+                    ? context.l10n.loginDirectSubtitle
+                    : context.l10n.loginPairSubtitle,
                 style: TextStyle(
                   fontSize: 12,
                   color: palette.textSecondary.withValues(alpha: 0.7),
@@ -1121,7 +1126,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           onPressed: _openAdvancedSettings,
           icon: const Icon(Icons.settings_outlined, size: 20),
           color: palette.textSecondary,
-          tooltip: 'Relay & Network Settings',
+          tooltip: context.l10n.loginNetworkSettingsTooltip,
           style: IconButton.styleFrom(
             backgroundColor: palette.surfaceVariant.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
@@ -1149,7 +1154,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         children: [
           Expanded(
             child: _buildSegmentTab(
-              title: 'Quick Pair',
+              title: context.l10n.loginQuickPair,
               icon: Icons.qr_code_rounded,
               isSelected: !_showDirectConnection,
               onTap: loginState.isLoading
@@ -1164,7 +1169,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
           Expanded(
             child: _buildSegmentTab(
-              title: 'Direct Server',
+              title: context.l10n.loginDirectServer,
               icon: Icons.dns_outlined,
               isSelected: _showDirectConnection,
               onTap: loginState.isLoading
@@ -1262,7 +1267,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               onPressed: loginState.isLoading ? null : _openQrScanner,
               icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
               label: Text(
-                isMobile ? 'Scan QR Code' : 'Scan QR Code with Camera',
+                isMobile
+                    ? context.l10n.loginScanQrCode
+                    : context.l10n.loginScanQrWithCamera,
                 style:
                     const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
@@ -1312,7 +1319,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           _buildTextField(
             controller: _serverUrlController,
             focusNode: _serverUrlFocus,
-            label: 'Server URL',
+            label: context.l10n.loginServerUrlLabel,
             hint: 'https://mydia.example.com',
             icon: Icons.dns_outlined,
             enabled: !loginState.isLoading,
@@ -1321,11 +1328,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             onFieldSubmitted: (_) => _usernameFocus.requestFocus(),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter a server URL';
+                return context.l10n.loginServerUrlRequired;
               }
               if (!value.startsWith('http://') &&
                   !value.startsWith('https://')) {
-                return 'URL must start with http:// or https://';
+                return context.l10n.loginServerUrlScheme;
               }
               return null;
             },
@@ -1334,14 +1341,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           _buildTextField(
             controller: _usernameController,
             focusNode: _usernameFocus,
-            label: 'Username',
+            label: context.l10n.loginUsernameLabel,
             icon: Icons.person_outline_rounded,
             enabled: !loginState.isLoading,
             textInputAction: TextInputAction.next,
             onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter a username';
+                return context.l10n.loginUsernameRequired;
               }
               return null;
             },
@@ -1350,7 +1357,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           _buildTextField(
             controller: _passwordController,
             focusNode: _passwordFocus,
-            label: 'Password',
+            label: context.l10n.loginPasswordLabel,
             icon: Icons.lock_outline_rounded,
             enabled: !loginState.isLoading,
             obscureText: _obscurePassword,
@@ -1370,7 +1377,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter a password';
+                return context.l10n.loginPasswordRequired;
               }
               return null;
             },
@@ -1393,7 +1400,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Two-factor authentication',
+          context.l10n.loginTotpTitle,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -1402,7 +1409,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          'Enter the 6-digit code from your authenticator app, or one of your recovery codes.',
+          context.l10n.loginTotpBody,
           style: TextStyle(fontSize: 13, color: palette.textSecondary),
         ),
         const SizedBox(height: 14),
@@ -1426,7 +1433,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             letterSpacing: 3,
           ),
           decoration: InputDecoration(
-            labelText: 'Authentication code',
+            labelText: context.l10n.loginTotpCodeLabel,
             filled: true,
             fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
           ),
@@ -1458,7 +1465,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       color: Colors.white,
                     ),
                   )
-                : const Text('Verify'),
+                : Text(context.l10n.loginTotpVerify),
           ),
         ),
         const SizedBox(height: 8),
@@ -1470,7 +1477,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   _totpController.clear();
                   ref.read(loginControllerProvider.notifier).cancelTotp();
                 },
-          child: const Text('Back'),
+          child: Text(context.l10n.commonBack),
         ),
       ],
     );
@@ -1509,7 +1516,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         letterSpacing: 4,
       ),
       decoration: InputDecoration(
-        hintText: 'ABC123',
+        hintText: 'ABC123', // l10n-ignore: sample claim code
         hintStyle: TextStyle(
           color: palette.textDisabled.withValues(alpha: 0.4),
           fontSize: 22,
@@ -1523,7 +1530,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         suffixIcon: IconButton(
           icon: const Icon(Icons.content_paste_rounded, size: 18),
           color: palette.textSecondary,
-          tooltip: 'Paste claim code',
+          tooltip: context.l10n.loginPasteClaimCode,
           onPressed: loginState.isLoading
               ? null
               : () async {
@@ -1601,18 +1608,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   color: Colors.white,
                 ),
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Connect',
-                    style: TextStyle(
+                    context.l10n.loginConnect,
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(width: 6),
-                  Icon(Icons.link_rounded, size: 18),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.link_rounded, size: 18),
                 ],
               ),
       ),
@@ -1741,18 +1748,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   color: Colors.white,
                 ),
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Sign in',
-                    style: TextStyle(
+                    context.l10n.loginSignIn,
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(width: 6),
-                  Icon(Icons.arrow_forward_rounded, size: 18),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_forward_rounded, size: 18),
                 ],
               ),
       ),
@@ -1780,7 +1787,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
           const SizedBox(width: 6),
           Text(
-            p2pStatus.isRelayConnected ? 'P2P Ready' : 'Connecting...',
+            p2pStatus.isRelayConnected
+                ? context.l10n.loginP2pReady
+                : context.l10n.loginP2pConnecting,
             style: TextStyle(
               fontSize: 11,
               color: palette.textSecondary.withValues(alpha: 0.5),
@@ -1801,7 +1810,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(width: 4),
         Text(
-          'End-to-end encrypted',
+          context.l10n.loginEncrypted,
           style: TextStyle(
             fontSize: 11,
             color: palette.textSecondary.withValues(alpha: 0.4),
@@ -1850,7 +1859,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                'Advanced Settings',
+                                context.l10n.loginAdvancedSettings,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -1864,7 +1873,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               borderRadius: BorderRadius.circular(8),
                               child: IconButton(
                                 onPressed: _closeAdvancedSettings,
-                                tooltip: 'Close advanced settings',
+                                tooltip:
+                                    context.l10n.loginCloseAdvancedSettings,
                                 icon: Icon(
                                   Icons.close,
                                   color: palette.textSecondary,
@@ -1888,7 +1898,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Relay URL',
+                              context.l10n.loginRelayUrlLabel,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
@@ -1918,7 +1928,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.',
+                                      context.l10n.loginRelayUrlHelp,
                                       style: TextStyle(
                                         fontSize: 11,
                                         height: 1.35,
@@ -1971,18 +1981,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     width: 1.5,
                                   ),
                                 ),
-                                suffixIcon:
-                                    _relayUrlController.text != defaultRelayUrl
-                                        ? IconButton(
-                                            onPressed: _resetRelayUrlToDefault,
-                                            icon: Icon(
-                                              Icons.refresh,
-                                              size: 18,
-                                              color: palette.textSecondary,
-                                            ),
-                                            tooltip: 'Reset to default',
-                                          )
-                                        : null,
+                                suffixIcon: _relayUrlController.text !=
+                                        defaultRelayUrl
+                                    ? IconButton(
+                                        onPressed: _resetRelayUrlToDefault,
+                                        icon: Icon(
+                                          Icons.refresh,
+                                          size: 18,
+                                          color: palette.textSecondary,
+                                        ),
+                                        tooltip:
+                                            context.l10n.loginRelayResetTooltip,
+                                      )
+                                    : null,
                               ),
                               onChanged: (_) => setState(() {}),
                             ),
@@ -1999,7 +2010,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      'Using custom relay URL',
+                                      context.l10n.loginRelayCustomInUse,
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: palette.primary
@@ -2025,7 +2036,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           children: [
                             TextButton(
                               onPressed: _closeAdvancedSettings,
-                              child: const Text('Cancel'),
+                              child: Text(context.l10n.commonCancel),
                             ),
                             const SizedBox(width: 12),
                             ElevatedButton(
@@ -2045,9 +2056,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              child: const Text(
-                                'Save',
-                                style: TextStyle(
+                              child: Text(
+                                context.l10n.loginSave,
+                                style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),

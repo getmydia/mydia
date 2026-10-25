@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/theme_preset.dart';
 import '../../../../core/theme/theme_providers.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/theme_preset_picker.dart';
 import 'settings_row.dart';
 
@@ -18,8 +19,8 @@ class ThemePresetSettingsRow extends ConsumerWidget {
     return SettingsRow.navigation(
       key: const Key('theme-preset-row'),
       icon: Icons.palette_outlined,
-      title: 'Theme',
-      subtitle: 'Colours on this device',
+      title: context.l10n.settingsThemeTitle,
+      subtitle: context.l10n.settingsThemeSubtitle,
       value: preset.label,
       onTap: () async {
         final picked = await showThemePresetPicker(
