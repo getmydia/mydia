@@ -48,7 +48,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       <div class="alert alert-info">
         <.icon name="hero-information-circle" class="w-5 h-5" />
         <span>
-          No indexers configured yet. Add a Prowlarr/Jackett connection or browse the indexer library to get started.
+          {gettext(
+            "No indexers configured yet. Add a Prowlarr/Jackett connection or browse the indexer library to get started."
+          )}
         </span>
       </div>
     <% else %>
@@ -58,7 +60,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       <.admin_section
         :if={@indexers != []}
         id="indexer-connections-section"
-        title="Indexer Connections"
+        title={gettext("Indexer Connections")}
         icon="hero-server"
         count={length(@indexers)}
       >
@@ -71,7 +73,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               stats={Map.get(@search_stats, indexer.id, [])}
             />
           </:row>
-          <:empty>No indexer connections.</:empty>
+          <:empty>{gettext("No indexer connections.")}</:empty>
         </.admin_list>
       </.admin_section>
     <% end %>
@@ -79,7 +81,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     <.admin_section
       :if={@library_indexers != [] or (@cardigann_enabled and @cardigann_engine != nil)}
       id="library-indexers-section"
-      title="Library Indexers"
+      title={gettext("Library Indexers")}
       icon="hero-book-open"
       count={length(@library_indexers)}
     >
@@ -96,9 +98,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           id="add-more-library-indexers"
           phx-click="show_indexer_library"
           class="btn btn-xs btn-ghost text-primary"
-          title="Browse and add more indexers from the library"
+          title={gettext("Browse and add more indexers from the library")}
         >
-          <.icon name="hero-plus" class="w-3 h-3" /> Add More
+          <.icon name="hero-plus" class="w-3 h-3" /> {gettext("Add More")}
         </button>
       </div>
       <.admin_list id="library-indexers" items={@library_indexers}>
@@ -112,7 +114,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             }
           />
         </:row>
-        <:empty>No library indexers.</:empty>
+        <:empty>{gettext("No library indexers.")}</:empty>
       </.admin_list>
     </.admin_section>
     """
@@ -155,7 +157,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             phx-value-id={@indexer.id}
             disabled={@retesting}
           >
-            <span :if={@retesting} class="loading loading-spinner loading-xs"></span> Retest
+            <span :if={@retesting} class="loading loading-spinner loading-xs"></span> {gettext(
+              "Retest"
+            )}
           </button>
         </div>
       </:details>
@@ -165,7 +169,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           "badge badge-sm badge-outline",
           if(@indexer.enabled, do: "badge-success", else: "badge-ghost")
         ]}>
-          {if @indexer.enabled, do: "Enabled", else: "Disabled"}
+          {if @indexer.enabled, do: gettext("Enabled"), else: gettext("Disabled")}
         </span>
         <span class={"badge badge-sm badge-outline #{health_status_badge_class(@health.status)}"}>
           <.icon name={health_status_icon(@health.status)} class="w-3 h-3 mr-1" />
@@ -177,14 +181,23 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           </div>
         <% end %>
         <%= if @health.status == :healthy and @health[:details] && Map.get(@health.details, :version) do %>
-          <div class="tooltip tooltip-left" data-tip={"Version: #{@health.details.version}"}>
+          <div
+            class="tooltip tooltip-left"
+            data-tip={gettext("Version: %{version}", version: @health.details.version)}
+          >
             <.icon name="hero-information-circle" class="w-4 h-4 text-success" />
           </div>
         <% end %>
         <%= if @health[:consecutive_failures] && @health.consecutive_failures > 0 do %>
           <div
             class="tooltip tooltip-left"
-            data-tip={"#{@health.consecutive_failures} consecutive failures"}
+            data-tip={
+              ngettext(
+                "%{count} consecutive failure",
+                "%{count} consecutive failures",
+                @health.consecutive_failures
+              )
+            }
           >
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
           </div>
@@ -195,7 +208,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.row_action
             id={"test-indexer-#{@indexer.id}"}
             icon="hero-signal"
-            title="Test Connection"
+            title={gettext("Test Connection")}
             phx-click="test_indexer"
             phx-value-id={@indexer.id}
           />
@@ -203,20 +216,20 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.row_action
             id={"edit-indexer-#{@indexer.id}"}
             icon="hero-pencil"
-            title={if @runtime?, do: "Convert to database-managed", else: "Edit"}
+            title={if @runtime?, do: gettext("Convert to database-managed"), else: gettext("Edit")}
             phx-click="edit_indexer"
             phx-value-id={@indexer.id}
           />
           <.row_action
             id={"delete-indexer-#{@indexer.id}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             disabled={@runtime?}
-            disabled_reason={if(@runtime?, do: "Cannot delete runtime-configured indexers")}
+            disabled_reason={if(@runtime?, do: gettext("Cannot delete runtime-configured indexers"))}
             phx-click="delete_indexer"
             phx-value-id={@indexer.id}
-            data-confirm="Are you sure you want to delete this indexer?"
+            data-confirm={gettext("Are you sure you want to delete this indexer?")}
           />
         </.row_actions>
       </:actions>
@@ -241,7 +254,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       <:title>
         {@indexer.name}
         <span class={"badge badge-xs #{library_indexer_type_badge_class(@indexer.type)}"}>
-          {@indexer.type}
+          {library_indexer_type_label(@indexer.type)}
         </span>
         <span :if={@indexer.language} class="badge badge-xs badge-ghost">{@indexer.language}</span>
         <CardigannEngineComponents.verified_badge
@@ -251,27 +264,36 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       </:title>
       <:descriptor :if={@indexer.description}>{@indexer.description}</:descriptor>
       <:badges>
-        <span :if={!@indexer.enabled} class="badge badge-sm badge-ghost">Disabled</span>
+        <span :if={!@indexer.enabled} class="badge badge-sm badge-ghost">
+          {gettext("Disabled")}
+        </span>
         <%= if @indexer.health_status not in [nil, "unknown"] do %>
           <span class={"badge badge-sm badge-outline #{library_health_status_badge_class(@indexer.health_status)}"}>
             {library_health_status_label(@indexer.health_status)}
           </span>
         <% end %>
         <%= if needs_library_config?(@indexer) do %>
-          <div class="tooltip" data-tip="This indexer requires configuration">
+          <div class="tooltip" data-tip={gettext("This indexer requires configuration")}>
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
           </div>
         <% end %>
 
         <%!-- Toggles, not actions: they stay inline beside the badges. --%>
-        <div class="tooltip" data-tip={if @indexer.enabled, do: "Disable", else: "Enable"}>
+        <div
+          class="tooltip"
+          data-tip={if @indexer.enabled, do: gettext("Disable"), else: gettext("Enable")}
+        >
           <input
             type="checkbox"
             class="toggle toggle-success toggle-sm"
             checked={@indexer.enabled}
             phx-click="toggle_library_indexer"
             phx-value-id={@indexer.id}
-            aria-label={"#{if @indexer.enabled, do: "Disable", else: "Enable"} #{@indexer.name}"}
+            aria-label={
+              if @indexer.enabled,
+                do: gettext("Disable %{name}", name: @indexer.name),
+                else: gettext("Enable %{name}", name: @indexer.name)
+            }
           />
         </div>
 
@@ -280,8 +302,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             class="tooltip tooltip-left"
             data-tip={
               if @indexer.flaresolverr_required,
-                do: "Cloudflare bypass (recommended for this indexer)",
-                else: "Enable Cloudflare bypass via FlareSolverr"
+                do: gettext("Cloudflare bypass (recommended for this indexer)"),
+                else: gettext("Enable Cloudflare bypass via FlareSolverr")
             }
           >
             <label class="flex items-center gap-1.5 cursor-pointer">
@@ -299,7 +321,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                 checked={@indexer.flaresolverr_enabled}
                 phx-click="toggle_library_flaresolverr"
                 phx-value-id={@indexer.id}
-                aria-label={"#{if @indexer.flaresolverr_enabled, do: "Disable", else: "Enable"} Cloudflare bypass for #{@indexer.name}"}
+                aria-label={
+                  if @indexer.flaresolverr_enabled,
+                    do: gettext("Disable Cloudflare bypass for %{name}", name: @indexer.name),
+                    else: gettext("Enable Cloudflare bypass for %{name}", name: @indexer.name)
+                }
               />
             </label>
           </div>
@@ -314,25 +340,29 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.row_action
             id={"configure-library-indexer-#{@indexer.id}"}
             icon="hero-cog-6-tooth"
-            title="Configure"
+            title={gettext("Configure")}
             phx-click="configure_library_indexer"
             phx-value-id={@indexer.id}
           />
           <.row_action
             id={"test-library-indexer-#{@indexer.id}"}
             icon="hero-signal"
-            title="Test"
+            title={gettext("Test")}
             phx-click="test_library_indexer"
             phx-value-id={@indexer.id}
           />
           <.row_action
             id={"remove-library-indexer-#{@indexer.id}"}
             icon="hero-trash"
-            title="Remove"
+            title={gettext("Remove")}
             destructive
             phx-click="remove_library_indexer"
             phx-value-id={@indexer.id}
-            data-confirm={"Remove #{@indexer.name}? Its settings are kept if you add it again."}
+            data-confirm={
+              gettext("Remove %{name}? Its settings are kept if you add it again.",
+                name: @indexer.name
+              )
+            }
           />
         </.row_actions>
       </:actions>
@@ -351,7 +381,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     ~H"""
     <div class="dropdown dropdown-end">
       <div tabindex="0" role="button" class="btn btn-sm btn-primary">
-        <.icon name="hero-plus" class="w-4 h-4" /> Add Indexer
+        <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add Indexer")}
         <.icon name="hero-chevron-down" class="w-3 h-3" />
       </div>
       <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64">
@@ -359,9 +389,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <button phx-click="new_indexer" class="flex items-start gap-3">
             <.icon name="hero-server" class="w-5 h-5 mt-0.5 opacity-60" />
             <div class="text-left">
-              <div class="font-medium">Connect to Prowlarr/Jackett</div>
+              <div class="font-medium">{gettext("Connect to Prowlarr/Jackett")}</div>
               <div class="text-xs text-base-content/60">
-                Use an existing indexer aggregator
+                {gettext("Use an existing indexer aggregator")}
               </div>
             </div>
           </button>
@@ -371,9 +401,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             <button phx-click="show_indexer_library" class="flex items-start gap-3">
               <.icon name="hero-book-open" class="w-5 h-5 mt-0.5 opacity-60" />
               <div class="text-left">
-                <div class="font-medium">Browse Indexer Library</div>
+                <div class="font-medium">{gettext("Browse Indexer Library")}</div>
                 <div class="text-xs text-base-content/60">
-                  {@library_indexer_stats.total} indexers available
+                  {ngettext(
+                    "%{count} indexer available",
+                    "%{count} indexers available",
+                    @library_indexer_stats.total
+                  )}
                 </div>
               </div>
             </button>
@@ -439,6 +473,12 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   def library_indexer_type_badge_class(_), do: "badge-ghost"
 
   @doc false
+  def library_indexer_type_label("public"), do: pgettext("indexer type", "Public")
+  def library_indexer_type_label("private"), do: pgettext("indexer type", "Private")
+  def library_indexer_type_label("semi-private"), do: pgettext("indexer type", "Semi-Private")
+  def library_indexer_type_label(type), do: to_string(type)
+
+  @doc false
   def library_health_status_badge_class("healthy"), do: "badge-success"
   def library_health_status_badge_class("degraded"), do: "badge-warning"
   def library_health_status_badge_class("unhealthy"), do: "badge-error"
@@ -446,11 +486,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   def library_health_status_badge_class(_), do: "badge-ghost"
 
   @doc false
-  def library_health_status_label("healthy"), do: "Healthy"
-  def library_health_status_label("degraded"), do: "Degraded"
-  def library_health_status_label("unhealthy"), do: "Unhealthy"
-  def library_health_status_label("needs_login"), do: "Needs login"
-  def library_health_status_label(_), do: "Unknown"
+  def library_health_status_label("healthy"), do: gettext("Healthy")
+  def library_health_status_label("degraded"), do: gettext("Degraded")
+  def library_health_status_label("unhealthy"), do: gettext("Unhealthy")
+  def library_health_status_label("needs_login"), do: gettext("Needs login")
+  def library_health_status_label(_), do: gettext("Unknown")
 
   @doc false
   def needs_library_config?(%{type: "public"}), do: false
@@ -485,10 +525,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   defp health_status_icon(:unhealthy), do: "hero-x-circle"
   defp health_status_icon(:unknown), do: "hero-question-mark-circle"
 
-  defp health_status_label(:healthy), do: "Healthy"
-  defp health_status_label(:unhealthy), do: "Unhealthy"
-  defp health_status_label(:unknown), do: "Unknown"
+  defp health_status_label(:healthy), do: gettext("Healthy")
+  defp health_status_label(:unhealthy), do: gettext("Unhealthy")
+  defp health_status_label(:unknown), do: gettext("Unknown")
 
+  # Indexer kinds (prowlarr, jackett) are product names: shown as given.
   defp format_indexer_type(type) when is_atom(type) do
     type |> to_string() |> String.capitalize()
   end

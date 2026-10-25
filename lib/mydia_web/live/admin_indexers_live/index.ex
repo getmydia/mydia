@@ -14,7 +14,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   alias MydiaWeb.AdminIndexersLive.{
     CardigannEngineEvents,
     ErrorMessages,
+    FlareSolverrMessages,
     LoginFlow,
+    Messages,
     SearchStatsEvents
   }
 
@@ -24,7 +26,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Indexers")
+     |> assign(:page_title, gettext("Configuration - Indexers"))
      |> assign(:cardigann_enabled, CardigannFeatureFlags.enabled?())
      |> assign(:flaresolverr_status, %{configured: false, status: :loading})
      |> assign(:show_flaresolverr_modal, false)
@@ -58,10 +60,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         {:ok, stats} ->
           socket
           |> assign(:library_syncing, false)
-          |> put_flash(
-            :info,
-            "Sync completed: #{stats.created} created, #{stats.updated} updated, #{stats.failed} failed"
-          )
+          |> put_flash(:info, Messages.sync_completed(stats))
           |> load_library_definitions()
 
         {:error, reason} ->
@@ -69,7 +68,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
           socket
           |> assign(:library_syncing, false)
-          |> put_flash(:error, "Sync failed: #{ErrorMessages.format_sync_error(reason)}")
+          |> put_flash(:error, ErrorMessages.sync_failed_message(reason))
       end
 
     {:noreply, reload_library_indexers(socket)}
@@ -85,7 +84,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         {:error, reason} ->
           %{
             success: false,
-            message: "Test failed",
+            message: gettext("Test failed"),
             error: inspect(reason),
             response_time_ms: nil
           }
@@ -110,7 +109,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   def handle_async({:retest_paused, id}, {:exit, reason}, socket) do
     Logger.error("Paused indexer retest crashed: #{inspect(reason)}")
-    {:noreply, finish_retest(socket, id) |> put_flash(:error, "Retest failed unexpectedly")}
+
+    {:noreply,
+     finish_retest(socket, id) |> put_flash(:error, gettext("Retest failed unexpectedly"))}
   end
 
   defp finish_retest(socket, id) do
@@ -177,7 +178,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        |> assign(:available_env_indexers, available_env_indexers)
        |> init_prowlarr_indexer_assigns(existing_indexer_ids)
        |> maybe_auto_fetch_prowlarr_indexers(changeset)
-       |> put_flash(:info, "Converting runtime indexer to database-managed configuration")}
+       |> put_flash(
+         :info,
+         gettext("Converting runtime indexer to database-managed configuration")
+       )}
     else
       changeset = IndexerConfig.changeset(indexer, %{})
 
@@ -229,7 +233,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         {:noreply,
          socket
          |> assign(:show_indexer_modal, false)
-         |> put_flash(:info, "Indexer saved successfully")
+         |> put_flash(:info, gettext("Indexer saved successfully"))
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -244,16 +248,13 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     if Settings.runtime_config?(indexer) do
       {:noreply,
        socket
-       |> put_flash(
-         :error,
-         "Cannot delete runtime-configured indexer. This indexer is configured via environment variables and is read-only in the UI."
-       )}
+       |> put_flash(:error, Messages.runtime_indexer_read_only())}
     else
       case Settings.delete_indexer_config(indexer) do
         {:ok, _indexer} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Indexer deleted successfully")
+           |> put_flash(:info, gettext("Indexer deleted successfully"))
            |> load_data()}
 
         {:error, error} ->
@@ -294,7 +295,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        assign(
          socket,
          :prowlarr_indexers_error,
-         "Base URL and API Key are required to fetch indexers"
+         gettext("Base URL and API Key are required to fetch indexers")
        )}
     else
       socket = assign(socket, :fetching_prowlarr_indexers, true)
@@ -382,12 +383,15 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       # such as the Newznab API path.
       case Indexers.test_connection(Ecto.Changeset.apply_changes(changeset)) do
         {:ok, info} ->
-          version = Map.get(info, :version, "unknown")
+          version = Map.get(info, :version, gettext("unknown"))
 
           {:noreply,
            socket
            |> assign(:testing_indexer_connection, false)
-           |> put_flash(:info, "Connection successful! Version: #{version}")}
+           |> put_flash(
+             :info,
+             gettext("Connection successful! Version: %{version}", version: version)
+           )}
 
         {:error, error} ->
           error_msg = error.message
@@ -395,7 +399,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           {:noreply,
            socket
            |> assign(:testing_indexer_connection, false)
-           |> put_flash(:error, "Connection failed: #{error_msg}")}
+           |> put_flash(:error, gettext("Connection failed: %{error}", error: error_msg))}
       end
     else
       # An invalid changeset has no connection details worth probing: reassign
@@ -404,7 +408,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        socket
        |> assign(:testing_indexer_connection, false)
        |> assign(:indexer_form, to_form(Map.put(changeset, :action, :validate)))
-       |> put_flash(:error, "Fix the highlighted errors before testing the connection")}
+       |> put_flash(
+         :error,
+         gettext("Fix the highlighted errors before testing the connection")
+       )}
     end
   end
 
@@ -413,11 +420,14 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     case IndexerHealth.check_health(id, force: true) do
       {:ok, %{status: :healthy} = health} ->
         details = Map.get(health, :details, %{})
-        version = Map.get(details, :version, "unknown")
+        version = Map.get(details, :version, gettext("unknown"))
 
         {:noreply,
          socket
-         |> put_flash(:info, "Indexer connection successful! Version: #{version}")
+         |> put_flash(
+           :info,
+           gettext("Indexer connection successful! Version: %{version}", version: version)
+         )
          |> load_data()}
 
       {:ok, %{status: :unhealthy, error: error}} ->
@@ -430,11 +440,11 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
         {:noreply,
          socket
-         |> put_flash(:error, "Indexer connection failed: #{error}")
+         |> put_flash(:error, gettext("Indexer connection failed: %{error}", error: error))
          |> load_data()}
 
       {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "Indexer not found")}
+        {:noreply, put_flash(socket, :error, gettext("Indexer not found"))}
     end
   end
 
@@ -470,7 +480,12 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        {:noreply, put_flash(socket, :error, "Failed to test connection: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Failed to test connection: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -481,11 +496,15 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     case Indexers.update_flaresolverr_settings(definition, %{flaresolverr_enabled: new_enabled}) do
       {:ok, updated_definition} ->
-        action = if updated_definition.flaresolverr_enabled, do: "enabled", else: "disabled"
-
         {:noreply,
          socket
-         |> put_flash(:info, "FlareSolverr #{action} for #{definition.name}")
+         |> put_flash(
+           :info,
+           Messages.library_flaresolverr_toggled(
+             updated_definition.flaresolverr_enabled,
+             definition.name
+           )
+         )
          |> load_data()}
 
       {:error, changeset} ->
@@ -512,11 +531,12 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     case result do
       {:ok, updated_definition} ->
-        action = if updated_definition.enabled, do: "enabled", else: "disabled"
-
         {:noreply,
          socket
-         |> put_flash(:info, "#{definition.name} #{action}")
+         |> put_flash(
+           :info,
+           Messages.library_indexer_toggled(updated_definition.enabled, definition.name)
+         )
          |> reload_library_indexers()}
 
       {:error, changeset} ->
@@ -540,7 +560,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       {:ok, _removed} ->
         {:noreply,
          socket
-         |> put_flash(:info, "#{definition.name} removed")
+         |> put_flash(:info, gettext("%{name} removed", name: definition.name))
          |> reload_library_indexers()}
 
       {:error, changeset} ->
@@ -636,7 +656,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
          |> assign(:library_indexer_settings, [])
          |> assign(:library_config_testing, false)
          |> assign(:library_config_test_result, nil)
-         |> put_flash(:info, "Configuration saved for #{definition.name}")
+         |> put_flash(:info, gettext("Configuration saved for %{name}", name: definition.name))
          |> load_data()}
 
       {:error, changeset} ->
@@ -657,7 +677,11 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     case saved_flaresolverr_url() do
       nil ->
         {:noreply,
-         put_flash(socket, :error, "No FlareSolverr URL configured. Click Edit to set one.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("No FlareSolverr URL configured. Click Edit to set one.")
+         )}
 
       url ->
         result = FlareSolverr.health_check(url)
@@ -679,7 +703,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   def handle_event("test_flaresolverr_form", _params, socket) do
     case form_flaresolverr_url(socket) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Enter a FlareSolverr URL to test.")}
+        {:noreply, put_flash(socket, :error, gettext("Enter a FlareSolverr URL to test."))}
 
       url ->
         {:noreply, flash_flaresolverr_test(socket, FlareSolverr.health_check(url))}
@@ -747,7 +771,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
             {:noreply,
              socket
              |> assign(:flaresolverr_form, to_form(changeset, as: :flaresolverr))
-             |> put_flash(:error, "Failed to save FlareSolverr settings")}
+             |> put_flash(:error, gettext("Failed to save FlareSolverr settings"))}
         end
 
       {:error, changeset} ->
@@ -829,7 +853,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     {:noreply,
      socket
      |> assign(:library_syncing, true)
-     |> put_flash(:info, "Sync started - this may take a few minutes...")}
+     |> put_flash(:info, gettext("Sync started - this may take a few minutes..."))}
   end
 
   @impl true
@@ -871,7 +895,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
          socket
          |> assign(:library_configuring_definition, nil)
          |> assign(:library_config_form, nil)
-         |> put_flash(:info, "Configuration saved successfully")
+         |> put_flash(:info, gettext("Configuration saved successfully"))
          |> load_library_definitions()}
 
       {:error, changeset} ->
@@ -931,12 +955,19 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   defp get_indexer_health_status(indexers) do
+    locale = Gettext.get_locale(MydiaWeb.Gettext)
+
     indexers
     |> Task.async_stream(
       fn indexer ->
+        Gettext.put_locale(MydiaWeb.Gettext, locale)
+
         case IndexerHealth.check_health(indexer.id) do
-          {:ok, health} -> {indexer.id, health}
-          {:error, _} -> {indexer.id, %{status: :unknown, error: "Unable to check health"}}
+          {:ok, health} ->
+            {indexer.id, health}
+
+          {:error, _} ->
+            {indexer.id, %{status: :unknown, error: gettext("Unable to check health")}}
         end
       end,
       timeout: :infinity,
@@ -1104,17 +1135,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     end
   end
 
-  defp flash_flaresolverr_save(socket, :ok),
-    do: put_flash(socket, :info, "FlareSolverr settings saved")
-
-  defp flash_flaresolverr_save(socket, {:error, _reason}) do
-    put_flash(
-      socket,
-      :error,
-      "FlareSolverr settings saved, but the runtime config could not be reloaded because the " <>
-        "merged configuration is invalid. The change will take effect once the configuration " <>
-        "is valid. Check the logs for the validation error."
-    )
+  defp flash_flaresolverr_save(socket, result) do
+    {kind, message} = FlareSolverrMessages.save_flash(result)
+    put_flash(socket, kind, message)
   end
 
   # The saved effective URL (the merged runtime config), or nil when unset.
@@ -1153,44 +1176,18 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   # One reading of a FlareSolverr.health_check/1 result, shared by the row's
   # and the modal's Test buttons.
-  defp flash_flaresolverr_test(socket, {:ok, info}) do
-    version = info[:version] || "unknown"
-    sessions = length(info[:sessions] || [])
+  defp flash_flaresolverr_test(socket, result) do
+    with {:error, reason} <- result,
+         false <- FlareSolverrMessages.known_test_error?(reason) do
+      MydiaLogger.log_error(:liveview, "FlareSolverr health check failed",
+        error: reason,
+        operation: :test_flaresolverr,
+        user_id: socket.assigns.current_user.id
+      )
+    end
 
-    put_flash(
-      socket,
-      :info,
-      "FlareSolverr connection successful! Version: #{version}, Active sessions: #{sessions}"
-    )
-  end
-
-  defp flash_flaresolverr_test(socket, {:error, :invalid_url}) do
-    put_flash(
-      socket,
-      :error,
-      "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
-    )
-  end
-
-  defp flash_flaresolverr_test(socket, {:error, {:connection_error, reason}}) do
-    put_flash(
-      socket,
-      :error,
-      "FlareSolverr connection failed: #{ErrorMessages.format_transport_reason(reason)}"
-    )
-  end
-
-  defp flash_flaresolverr_test(socket, {:error, {:http_error, status, _body}}),
-    do: put_flash(socket, :error, "FlareSolverr returned HTTP #{status}")
-
-  defp flash_flaresolverr_test(socket, {:error, reason}) do
-    MydiaLogger.log_error(:liveview, "FlareSolverr health check failed",
-      error: reason,
-      operation: :test_flaresolverr,
-      user_id: socket.assigns.current_user.id
-    )
-
-    put_flash(socket, :error, "FlareSolverr test failed: #{inspect(reason)}")
+    {kind, message} = FlareSolverrMessages.test_flash(result)
+    put_flash(socket, kind, message)
   end
 
   defp init_library_assigns(socket) do

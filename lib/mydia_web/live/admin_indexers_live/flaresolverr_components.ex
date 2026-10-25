@@ -30,13 +30,16 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
         <.admin_row id="flaresolverr-panel">
           <:title>
             <.icon name="hero-shield-check" class="w-4 h-4 opacity-70" /> FlareSolverr
-            <.env_lock_badge :if={flaresolverr.env?} tip="Configured via environment variables" />
+            <.env_lock_badge
+              :if={flaresolverr.env?}
+              tip={gettext("Configured via environment variables")}
+            />
           </:title>
           <:descriptor>
             <%= if flaresolverr.configured do %>
               <span class="font-mono">{flaresolverr.url}</span>
             <% else %>
-              Cloudflare bypass for protected indexers (not configured)
+              {gettext("Cloudflare bypass for protected indexers (not configured)")}
             <% end %>
           </:descriptor>
           <:badges>
@@ -44,7 +47,7 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
               "badge badge-sm badge-outline",
               if(flaresolverr.enabled, do: "badge-success", else: "badge-ghost")
             ]}>
-              {if flaresolverr.enabled, do: "Enabled", else: "Disabled"}
+              {if flaresolverr.enabled, do: gettext("Enabled"), else: gettext("Disabled")}
             </span>
             <%!-- Connection health, shown only when enabled (the Enabled/Disabled
                   badge already conveys the off state). --%>
@@ -71,20 +74,20 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
               <.row_action
                 id="flaresolverr-row-test"
                 icon="hero-signal"
-                title="Test Connection"
+                title={gettext("Test Connection")}
                 phx-click="test_flaresolverr"
               />
               <.row_action
                 id="flaresolverr-row-edit"
                 icon="hero-pencil"
-                title="Edit"
+                title={gettext("Edit")}
                 phx-click="edit_flaresolverr"
               />
             </.row_actions>
           </:actions>
         </.admin_row>
       </:row>
-      <:empty>FlareSolverr is unavailable.</:empty>
+      <:empty>{gettext("FlareSolverr is unavailable.")}</:empty>
     </.admin_list>
     """
   end
@@ -110,7 +113,7 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
       id="flaresolverr-modal"
       icon="hero-shield-check"
       title="FlareSolverr"
-      subtitle="Cloudflare bypass proxy"
+      subtitle={gettext("Cloudflare bypass proxy")}
       on_close="close_flaresolverr_modal"
     >
       <.form
@@ -120,33 +123,33 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
         phx-submit="save_flaresolverr"
       >
         <p class="text-sm text-base-content/70 mb-4">
-          FlareSolverr is a local proxy that solves Cloudflare challenges so Mydia can reach
-          protected indexers. Configure the connection here, then enable Cloudflare bypass
-          per-indexer in the list.
+          {gettext(
+            "FlareSolverr is a local proxy that solves Cloudflare challenges so Mydia can reach protected indexers. Configure the connection here, then enable Cloudflare bypass per-indexer in the list."
+          )}
         </p>
 
         <.fs_modal_field
           field={@form[:enabled]}
-          label="Enabled"
+          label={gettext("Enabled")}
           type="checkbox"
           source={@sources["flaresolverr.enabled"]}
         />
         <.fs_modal_field
           field={@form[:url]}
-          label="URL"
+          label={gettext("URL")}
           type="text"
           placeholder="http://flaresolverr:8191"
           source={@sources["flaresolverr.url"]}
         />
         <.fs_modal_field
           field={@form[:timeout]}
-          label="Timeout (ms)"
+          label={gettext("Timeout (ms)")}
           type="number"
           source={@sources["flaresolverr.timeout"]}
         />
         <.fs_modal_field
           field={@form[:max_timeout]}
-          label="Max Timeout (ms)"
+          label={gettext("Max Timeout (ms)")}
           type="number"
           source={@sources["flaresolverr.max_timeout"]}
         />
@@ -158,12 +161,12 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
             class="btn btn-ghost gap-1.5"
             phx-click="test_flaresolverr_form"
           >
-            <.icon name="hero-signal" class="w-4 h-4" /> Test
+            <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test")}
           </button>
           <button type="button" class="btn btn-ghost" phx-click="close_flaresolverr_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="submit" class="btn btn-primary">{gettext("Save")}</button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -183,7 +186,9 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
         <span class="text-sm font-medium">{@label}</span>
         <.config_source_badge source={@source} size="xs" />
         <%= if @source == :env do %>
-          <span class="text-xs text-base-content/50">read-only (set via environment)</span>
+          <span class="text-xs text-base-content/50">
+            {gettext("read-only (set via environment)")}
+          </span>
         <% end %>
       </div>
       <.input field={@field} type={@type} placeholder={@placeholder} disabled={@source == :env} />
@@ -201,17 +206,21 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
   defp fs_badge_class(:loading), do: "badge-ghost"
   defp fs_badge_class(_), do: "badge-warning"
 
-  defp fs_status_label(:healthy), do: "Healthy"
-  defp fs_status_label(:unhealthy), do: "Unhealthy"
-  defp fs_status_label(:loading), do: "Checking…"
-  defp fs_status_label(_), do: "Unknown"
+  defp fs_status_label(:healthy), do: gettext("Healthy")
+  defp fs_status_label(:unhealthy), do: gettext("Unhealthy")
+  defp fs_status_label(:loading), do: gettext("Checking…")
+  defp fs_status_label(_), do: gettext("Unknown")
 
-  defp fs_format_error({:connection_error, reason}), do: "Connection error: #{reason}"
-  defp fs_format_error({:http_error, status, _}), do: "HTTP error: #{status}"
-  defp fs_format_error(:timeout), do: "Connection timed out"
-  defp fs_format_error(:not_configured), do: "Not configured"
-  defp fs_format_error(:disabled), do: "Service is disabled"
-  defp fs_format_error(:invalid_url), do: "Not a valid http(s) URL"
+  defp fs_format_error({:connection_error, reason}),
+    do: gettext("Connection error: %{reason}", reason: reason)
+
+  defp fs_format_error({:http_error, status, _}),
+    do: gettext("HTTP error: %{status}", status: status)
+
+  defp fs_format_error(:timeout), do: gettext("Connection timed out")
+  defp fs_format_error(:not_configured), do: gettext("Not configured")
+  defp fs_format_error(:disabled), do: gettext("Service is disabled")
+  defp fs_format_error(:invalid_url), do: gettext("Not a valid http(s) URL")
   defp fs_format_error(error) when is_binary(error), do: error
   defp fs_format_error(error), do: inspect(error)
 end
