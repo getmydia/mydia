@@ -203,4 +203,43 @@ defmodule MydiaWeb.Components.SegmentedControlTest do
     assert attrs(html, "id") == ["pick-alpha"]
     assert html |> buttons() |> Enum.count() == 2
   end
+
+  describe "class" do
+    test "is appended to the join container's classes" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.segmented_control
+          id="picker"
+          value="a"
+          event="pick"
+          param="choice"
+          label="Pick one"
+          class="join-vertical sm:join-horizontal"
+        >
+          <:option value="a" label="Alpha" />
+        </.segmented_control>
+        """)
+
+      [classes] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#picker")
+        |> LazyHTML.attribute("class")
+
+      assert String.split(classes) == ["join", "join-vertical", "sm:join-horizontal"]
+    end
+
+    test "leaves the container as a bare join when omitted" do
+      [classes] =
+        "a"
+        |> plain()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#picker")
+        |> LazyHTML.attribute("class")
+
+      assert String.split(classes) == ["join"]
+    end
+  end
 end
