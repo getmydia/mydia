@@ -105,6 +105,7 @@ defmodule Mydia.Config.Schema do
       field :oidc_client_secret, :string
       field :oidc_redirect_uri, :string
       field :oidc_scopes, :string, default: "openid profile email"
+      field :oidc_link_by_email, :boolean, default: false
       field :jwt_ttl_days, :integer, default: 30
       field :jwt_allowed_drift, :integer, default: 2000
     end
@@ -533,6 +534,7 @@ defmodule Mydia.Config.Schema do
       :oidc_client_secret,
       :oidc_redirect_uri,
       :oidc_scopes,
+      :oidc_link_by_email,
       :jwt_ttl_days,
       :jwt_allowed_drift
     ])
@@ -975,10 +977,7 @@ defmodule Mydia.Config.Schema do
 
     if oidc_enabled do
       changeset
-      |> validate_required([
-        :oidc_client_id,
-        :oidc_client_secret
-      ])
+      |> validate_required([:oidc_client_id, :oidc_client_secret])
       |> validate_oidc_issuer()
     else
       changeset

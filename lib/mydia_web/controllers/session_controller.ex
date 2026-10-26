@@ -43,14 +43,6 @@ defmodule MydiaWeb.SessionController do
     end
   end
 
-  # Check if OIDC is configured
-  defp oidc_configured? do
-    case Application.get_env(:ueberauth, Ueberauth) do
-      nil -> false
-      config -> Keyword.get(config, :providers, []) != []
-    end
-  end
-
   @doc """
   Handles local login with username and password.
   """
@@ -289,7 +281,7 @@ defmodule MydiaWeb.SessionController do
   defp render_login(conn) do
     render(conn, :new,
       changeset: Accounts.change_user(%User{}),
-      oidc_configured: oidc_configured?(),
+      oidc_configured: Accounts.oidc_configured?(),
       passkeys_available: match?({:ok, _}, PasskeySession.relying_party(conn))
     )
   end

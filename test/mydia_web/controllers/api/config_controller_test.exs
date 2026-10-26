@@ -33,6 +33,37 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
     end
   end
 
+  describe "auth settings set by environment variable" do
+    setup %{conn: conn, token: token} do
+      originals = Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES), &{&1, System.get_env(&1)})
+
+      on_exit(fn ->
+        Enum.each(originals, fn
+          {name, nil} -> System.delete_env(name)
+          {name, value} -> System.put_env(name, value)
+        end)
+      end)
+
+      %{conn: put_req_header(conn, "authorization", "Bearer #{token}")}
+    end
+
+    for {key, env, value} <- [
+          {"auth.oidc_link_by_email", "OIDC_LINK_BY_EMAIL", "true"},
+          {"auth.oidc_scopes", "OIDC_SCOPES", "openid email"}
+        ] do
+      test "#{key} reports #{env} as its source and refuses UI edits", %{conn: conn} do
+        System.put_env(unquote(env), unquote(value))
+
+        assert %{"data" => %{"source" => "environment_variable"}} =
+                 conn |> get("/api/v1/config/#{unquote(key)}") |> json_response(200)
+
+        assert conn
+               |> put("/api/v1/config/#{unquote(key)}", %{"value" => "x"})
+               |> json_response(403)
+      end
+    end
+  end
+
   describe "cardigann.engine" do
     alias Mydia.Indexers.Cardigann.EngineSwitcher
     alias Mydia.Settings.ConfigSetting

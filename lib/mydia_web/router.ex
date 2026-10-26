@@ -145,6 +145,20 @@ defmodule MydiaWeb.Router do
     live "/setup", FirstTimeSetupLive.Index, :index
   end
 
+  # Linking SSO to the signed-in account. Its own scope because the /auth
+  # scope below runs only :browser and so never knows who is signed in.
+  # Declared before that scope so its dynamic "/:provider" routes cannot
+  # shadow these.
+  scope "/auth/oidc", MydiaWeb do
+    pipe_through [:browser, :auth, :require_authenticated]
+
+    # POST, not GET: starting a link changes state, and :browser's
+    # protect_from_forgery only checks non-GET requests. A GET would let a
+    # cross-site <img> start a link to whatever IdP session the browser holds.
+    post "/link", AuthController, :link
+    delete "/link", AuthController, :unlink
+  end
+
   # Authentication routes
   scope "/auth", MydiaWeb do
     pipe_through :browser

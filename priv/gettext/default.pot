@@ -45,23 +45,23 @@ msgstr ""
 msgid "close"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:305
+#: lib/mydia_web/live/profile_live/index.ex:308
 #, elixir-autogen, elixir-format
 msgid "Automatic (browser language)"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:252
+#: lib/mydia_web/live/profile_live/index.html.heex:254
 #, elixir-autogen, elixir-format
 msgid "Automatic follows your browser. Percentages show how much of Mydia is translated; the rest stays in English."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:290
+#: lib/mydia_web/live/profile_live/index.ex:293
 #, elixir-autogen, elixir-format
 msgid "Could not save your language"
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:114
-#: lib/mydia_web/live/profile_live/index.html.heex:261
+#: lib/mydia_web/live/profile_live/index.html.heex:263
 #, elixir-autogen, elixir-format
 msgid "Interface language"
 msgstr ""
@@ -72,7 +72,7 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/components.ex:145
 #: lib/mydia_web/live/collection_live/preset_components.ex:124
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:447
-#: lib/mydia_web/live/profile_live/index.html.heex:249
+#: lib/mydia_web/live/profile_live/index.html.heex:251
 #, elixir-autogen, elixir-format
 msgid "Language"
 msgstr ""
@@ -136,7 +136,7 @@ msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:308
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:371
-#: lib/mydia_web/live/admin_users_live/components.ex:222
+#: lib/mydia_web/live/admin_users_live/components.ex:220
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:13
 #, elixir-autogen, elixir-format
 msgid "Admin"
@@ -242,7 +242,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:96
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:507
 #: lib/mydia_web/live/plugin_setup_live/modal.ex:259
-#: lib/mydia_web/live/profile_live/index.html.heex:532
+#: lib/mydia_web/live/profile_live/index.html.heex:585
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:292
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:304
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:318
@@ -290,7 +290,7 @@ msgid "Could not send feedback. Please try again later."
 msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:488
-#: lib/mydia_web/live/profile_live/index.html.heex:230
+#: lib/mydia_web/live/profile_live/index.html.heex:232
 #, elixir-autogen, elixir-format
 msgid "Dark theme"
 msgstr ""
@@ -298,7 +298,7 @@ msgstr ""
 #: lib/mydia_web/components/sidebar_components.ex:186
 #: lib/mydia_web/live/devices_live/index.ex:34
 #: lib/mydia_web/live/devices_live/index.html.heex:5
-#: lib/mydia_web/live/profile_live/index.html.heex:466
+#: lib/mydia_web/live/profile_live/index.html.heex:519
 #, elixir-autogen, elixir-format
 msgid "Devices"
 msgstr ""
@@ -380,7 +380,7 @@ msgstr ""
 #: lib/mydia_web/live/integrations_live/index.ex:43
 #: lib/mydia_web/live/integrations_live/index.html.heex:6
 #: lib/mydia_web/live/integrations_live/index.html.heex:16
-#: lib/mydia_web/live/profile_live/index.html.heex:448
+#: lib/mydia_web/live/profile_live/index.html.heex:501
 #, elixir-autogen, elixir-format
 msgid "Integrations"
 msgstr ""
@@ -395,7 +395,7 @@ msgid "Library"
 msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:478
-#: lib/mydia_web/live/profile_live/index.html.heex:222
+#: lib/mydia_web/live/profile_live/index.html.heex:224
 #, elixir-autogen, elixir-format
 msgid "Light theme"
 msgstr ""
@@ -512,7 +512,7 @@ msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:172
 #: lib/mydia_web/components/layouts.ex:575
-#: lib/mydia_web/live/profile_live/index.html.heex:314
+#: lib/mydia_web/live/profile_live/index.html.heex:316
 #, elixir-autogen, elixir-format
 msgid "Player"
 msgstr ""
@@ -639,8 +639,8 @@ msgstr ""
 
 #: lib/mydia_web/components/sidebar_components.ex:207
 #: lib/mydia_web/live/profile_live/components.ex:109
-#: lib/mydia_web/live/profile_live/index.html.heex:197
-#: lib/mydia_web/live/profile_live/index.html.heex:209
+#: lib/mydia_web/live/profile_live/index.html.heex:199
+#: lib/mydia_web/live/profile_live/index.html.heex:211
 #, elixir-autogen, elixir-format
 msgid "Theme"
 msgstr ""
@@ -721,19 +721,19 @@ msgstr ""
 msgid "Your browser does not support video playback."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:123
+#: lib/mydia_web/live/profile_live/index.html.heex:125
 #, elixir-autogen, elixir-format
 msgid "%{size} bytes"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:329
-#: lib/mydia_web/live/profile_live/index.html.heex:300
+#: lib/mydia_web/live/profile_live/index.ex:332
+#: lib/mydia_web/live/profile_live/index.html.heex:302
 #, elixir-autogen, elixir-format
 msgid "12-hour"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:330
-#: lib/mydia_web/live/profile_live/index.html.heex:301
+#: lib/mydia_web/live/profile_live/index.ex:333
+#: lib/mydia_web/live/profile_live/index.html.heex:303
 #, elixir-autogen, elixir-format
 msgid "24-hour"
 msgstr ""
@@ -748,7 +748,7 @@ msgstr ""
 msgid "Account Info"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:338
+#: lib/mydia_web/live/profile_live/index.html.heex:340
 #, elixir-autogen, elixir-format
 msgid "Add Defaults"
 msgstr ""
@@ -764,12 +764,12 @@ msgstr ""
 msgid "Adding a passkey needs a browser that supports them and a secure (https) address for Mydia."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:374
+#: lib/mydia_web/live/profile_live/index.html.heex:376
 #, elixir-autogen, elixir-format
 msgid "All seasons"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:192
+#: lib/mydia_web/live/profile_live/index.html.heex:194
 #, elixir-autogen, elixir-format
 msgid "Appearance"
 msgstr ""
@@ -797,80 +797,80 @@ msgstr ""
 msgid "Authentication code or recovery code"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:298
+#: lib/mydia_web/live/profile_live/index.html.heex:300
 #, elixir-autogen, elixir-format
 msgid "Auto (%{format})"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:106
+#: lib/mydia_web/live/profile_live/index.html.heex:108
 #, elixir-autogen, elixir-format
 msgid "Avatar Image"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:175
+#: lib/mydia_web/live/profile_live/index.html.heex:177
 #, elixir-autogen, elixir-format
 msgid "Avatar URL"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:117
+#: lib/mydia_web/live/profile_live/index.ex:120
 #, elixir-autogen, elixir-format
 msgid "Avatar removed"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:137
+#: lib/mydia_web/live/profile_live/index.html.heex:139
 #, elixir-autogen, elixir-format
 msgid "Cancel upload"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:422
-#: lib/mydia_web/live/profile_live/index.html.heex:495
+#: lib/mydia_web/live/profile_live/index.html.heex:415
+#: lib/mydia_web/live/profile_live/index.html.heex:548
 #, elixir-autogen, elixir-format
 msgid "Change Password"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:414
+#: lib/mydia_web/live/profile_live/index.html.heex:407
 #, elixir-autogen, elixir-format
 msgid "Change your password to keep your account secure."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:200
+#: lib/mydia_web/live/profile_live/index.html.heex:202
 #, elixir-autogen, elixir-format
 msgid "Choose how Mydia looks. System follows your device, using your light theme by day and your dark theme by night."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:293
+#: lib/mydia_web/live/profile_live/index.html.heex:295
 #, elixir-autogen, elixir-format
 msgid "Clock"
 msgstr ""
 
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:201
-#: lib/mydia_web/live/profile_live/index.html.heex:526
+#: lib/mydia_web/live/profile_live/index.html.heex:579
 #, elixir-autogen, elixir-format
 msgid "Confirm New Password"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:470
+#: lib/mydia_web/live/profile_live/index.html.heex:523
 #, elixir-autogen, elixir-format
 msgid "Connect a player to your account, or download one for your device."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:452
+#: lib/mydia_web/live/profile_live/index.html.heex:505
 #, elixir-autogen, elixir-format
 msgid "Connect third-party plugins to sync your watch history."
 msgstr ""
 
 #: lib/mydia_web/live/profile_live/components.ex:128
-#: lib/mydia_web/live/profile_live/index.html.heex:238
+#: lib/mydia_web/live/profile_live/index.html.heex:240
 #, elixir-autogen, elixir-format
 msgid "Corners"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:325
+#: lib/mydia_web/live/profile_live/index.ex:328
 #, elixir-autogen, elixir-format
 msgid "Could not save your date and time settings"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:514
+#: lib/mydia_web/live/profile_live/index.html.heex:567
 #, elixir-autogen, elixir-format
 msgid "Current Password"
 msgstr ""
@@ -882,24 +882,24 @@ msgstr ""
 msgid "Current password"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:224
+#: lib/mydia_web/live/profile_live/index.ex:227
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:173
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:122
 #, elixir-autogen, elixir-format
 msgid "Current password is incorrect"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:300
+#: lib/mydia_web/live/profile_live/index.ex:303
 #, elixir-autogen, elixir-format
 msgid "Dark"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:269
+#: lib/mydia_web/live/profile_live/index.html.heex:271
 #, elixir-autogen, elixir-format
 msgid "Date & time"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:100
+#: lib/mydia_web/live/profile_live/index.html.heex:102
 #, elixir-autogen, elixir-format
 msgid "Display Name"
 msgstr ""
@@ -919,7 +919,7 @@ msgstr ""
 msgid "Each code signs you in once if you lose your authenticator. They won't be shown again."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:87
+#: lib/mydia_web/live/profile_live/index.html.heex:89
 #, elixir-autogen, elixir-format
 msgid "Edit Profile"
 msgstr ""
@@ -936,12 +936,12 @@ msgstr ""
 msgid "Enabled %{date}"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:267
+#: lib/mydia_web/live/profile_live/index.ex:270
 #, elixir-autogen, elixir-format
 msgid "Failed to update the player setting"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:375
+#: lib/mydia_web/live/profile_live/index.html.heex:377
 #, elixir-autogen, elixir-format
 msgid "First season"
 msgstr ""
@@ -951,7 +951,7 @@ msgstr ""
 msgid "Follow your browser's prompt to create the passkey."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:376
+#: lib/mydia_web/live/profile_live/index.html.heex:378
 #, elixir-autogen, elixir-format
 msgid "Future only"
 msgstr ""
@@ -961,12 +961,12 @@ msgstr ""
 msgid "Generate"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:324
+#: lib/mydia_web/live/profile_live/index.html.heex:326
 #, elixir-autogen, elixir-format
 msgid "Hide the player"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:240
+#: lib/mydia_web/live/profile_live/index.html.heex:242
 #, elixir-autogen, elixir-format
 msgid "How round cards, buttons and inputs are. Theme keeps each theme's own corners."
 msgstr ""
@@ -976,7 +976,7 @@ msgstr ""
 msgid "I saved these"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:407
+#: lib/mydia_web/live/profile_live/index.ex:406
 #, elixir-autogen, elixir-format
 msgid "Image is too large (maximum 5MB)"
 msgstr ""
@@ -986,7 +986,7 @@ msgstr ""
 msgid "In use"
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:239
+#: lib/mydia_web/controllers/session_controller.ex:231
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:90
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:125
 #, elixir-autogen, elixir-format
@@ -994,28 +994,28 @@ msgid "Invalid code"
 msgstr ""
 
 #: lib/mydia_web/live/admin_users_live/components.ex:83
-#: lib/mydia_web/live/profile_live/index.html.heex:70
+#: lib/mydia_web/live/profile_live/index.html.heex:72
 #, elixir-autogen, elixir-format
 msgid "Last Login"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:299
+#: lib/mydia_web/live/profile_live/index.ex:302
 #, elixir-autogen, elixir-format
 msgid "Light"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:235
-#: lib/mydia_web/live/profile_live/index.ex:397
+#: lib/mydia_web/live/admin_users_live/components.ex:236
+#: lib/mydia_web/live/profile_live/index.ex:398
 #, elixir-autogen, elixir-format
 msgid "Local"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:473
+#: lib/mydia_web/live/profile_live/index.html.heex:526
 #, elixir-autogen, elixir-format
 msgid "Manage Devices"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:455
+#: lib/mydia_web/live/profile_live/index.html.heex:508
 #, elixir-autogen, elixir-format
 msgid "Manage Integrations"
 msgstr ""
@@ -1025,12 +1025,12 @@ msgstr ""
 msgid "Manage your account and customize your experience"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:382
+#: lib/mydia_web/live/profile_live/index.html.heex:384
 #, elixir-autogen, elixir-format
 msgid "Monitored on add"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:353
+#: lib/mydia_web/live/profile_live/index.html.heex:355
 #, elixir-autogen, elixir-format
 msgid "Movie library"
 msgstr ""
@@ -1064,17 +1064,17 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:114
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:497
-#: lib/mydia_web/live/admin_users_live/components.ex:219
+#: lib/mydia_web/live/admin_users_live/components.ex:217
 #: lib/mydia_web/live/jobs_live/components.ex:42
 #: lib/mydia_web/live/jobs_live/components.ex:332
-#: lib/mydia_web/live/profile_live/index.ex:401
+#: lib/mydia_web/live/profile_live/index.ex:400
 #, elixir-autogen, elixir-format
 msgid "Never"
 msgstr ""
 
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:170
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:194
-#: lib/mydia_web/live/profile_live/index.html.heex:520
+#: lib/mydia_web/live/profile_live/index.html.heex:573
 #, elixir-autogen, elixir-format
 msgid "New Password"
 msgstr ""
@@ -1086,26 +1086,26 @@ msgid "New recovery codes"
 msgstr ""
 
 #: lib/mydia_web/live/admin_system_live/components.ex:141
-#: lib/mydia_web/live/profile_live/index.html.heex:384
-#: lib/mydia_web/live/profile_live/index.html.heex:390
+#: lib/mydia_web/live/profile_live/index.html.heex:386
+#: lib/mydia_web/live/profile_live/index.html.heex:392
 #, elixir-autogen, elixir-format
 msgid "No"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/health_components.ex:164
 #: lib/mydia_web/live/media_live/show/modals.ex:512
-#: lib/mydia_web/live/profile_live/index.html.heex:377
+#: lib/mydia_web/live/profile_live/index.html.heex:379
 #: lib/mydia_web/live/search_live/index.html.heex:83
 #, elixir-autogen, elixir-format
 msgid "None"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:305
+#: lib/mydia_web/live/profile_live/index.html.heex:307
 #, elixir-autogen, elixir-format
 msgid "Now:"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:168
+#: lib/mydia_web/live/profile_live/index.html.heex:170
 #, elixir-autogen, elixir-format
 msgid "OR PROVIDE AN IMAGE URL"
 msgstr ""
@@ -1116,22 +1116,22 @@ msgstr ""
 msgid "On"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:410
+#: lib/mydia_web/live/profile_live/index.ex:409
 #, elixir-autogen, elixir-format
 msgid "Only one image can be uploaded at a time"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:395
+#: lib/mydia_web/live/profile_live/index.ex:397
 #, elixir-autogen, elixir-format
 msgid "OpenID Connect (SSO)"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:341
+#: lib/mydia_web/live/profile_live/index.html.heex:343
 #, elixir-autogen, elixir-format
 msgid "Override what happens when you add a movie or TV show. Leave a field on \"Use server default\" to follow the instance-wide setting."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:214
+#: lib/mydia_web/controllers/session_controller.ex:206
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:79
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:180
 #, elixir-autogen, elixir-format
@@ -1143,23 +1143,23 @@ msgstr ""
 msgid "Passkeys"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:221
+#: lib/mydia_web/live/profile_live/index.ex:224
 #, elixir-autogen, elixir-format
 msgid "Password changed successfully"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:74
+#: lib/mydia_web/live/profile_live/index.ex:77
 #: lib/mydia_web/live/profile_live/index.html.heex:6
 #, elixir-autogen, elixir-format
 msgid "Profile & Preferences"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:170
+#: lib/mydia_web/live/profile_live/index.ex:173
 #, elixir-autogen, elixir-format
 msgid "Profile updated successfully"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:365
+#: lib/mydia_web/live/profile_live/index.html.heex:367
 #, elixir-autogen, elixir-format
 msgid "Quality profile"
 msgstr ""
@@ -1182,7 +1182,7 @@ msgstr ""
 msgid "Remove %{name}? You won't be able to sign in with it again."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:156
+#: lib/mydia_web/live/profile_live/index.html.heex:158
 #, elixir-autogen, elixir-format
 msgid "Remove Avatar"
 msgstr ""
@@ -1235,7 +1235,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_media_servers_live/media_server_modal_components.ex:206
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:168
 #: lib/mydia_web/live/collection_live/show.ex:437
-#: lib/mydia_web/live/profile_live/index.html.heex:181
+#: lib/mydia_web/live/profile_live/index.html.heex:183
 #, elixir-autogen, elixir-format
 msgid "Save Changes"
 msgstr ""
@@ -1255,22 +1255,22 @@ msgstr ""
 msgid "Scan with your authenticator"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:388
+#: lib/mydia_web/live/profile_live/index.html.heex:390
 #, elixir-autogen, elixir-format
 msgid "Search for a release on add"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:371
+#: lib/mydia_web/live/profile_live/index.html.heex:373
 #, elixir-autogen, elixir-format
 msgid "Season monitoring"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:400
+#: lib/mydia_web/live/profile_live/index.html.heex:402
 #, elixir-autogen, elixir-format
 msgid "Security"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:283
+#: lib/mydia_web/live/profile_live/index.html.heex:285
 #, elixir-autogen, elixir-format
 msgid "Server default (%{zone})"
 msgstr ""
@@ -1290,9 +1290,9 @@ msgstr ""
 msgid "Sign in with your fingerprint, face or device PIN instead of a password. Once you add a passkey, signing in with your password will also ask for it (or your authenticator code)."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:163
-#: lib/mydia_web/controllers/session_controller.ex:186
-#: lib/mydia_web/controllers/session_controller.ex:264
+#: lib/mydia_web/controllers/session_controller.ex:155
+#: lib/mydia_web/controllers/session_controller.ex:178
+#: lib/mydia_web/controllers/session_controller.ex:256
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:84
 #, elixir-autogen, elixir-format
 msgid "Sign-in expired, please try again"
@@ -1310,17 +1310,17 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:58
 #: lib/mydia_web/live/admin_system_live/components.ex:47
 #: lib/mydia_web/live/collection_live/show.ex:147
-#: lib/mydia_web/live/profile_live/index.ex:298
+#: lib/mydia_web/live/profile_live/index.ex:301
 #, elixir-autogen, elixir-format
 msgid "System"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:359
+#: lib/mydia_web/live/profile_live/index.html.heex:361
 #, elixir-autogen, elixir-format
 msgid "TV library"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:316
+#: lib/mydia_web/live/profile_live/index.html.heex:318
 #, elixir-autogen, elixir-format
 msgid "Takes the player shortcuts out of the sidebar, the mobile dock and the dashboard. Play buttons on movies and episodes keep working, and the player itself stays available if you open it directly."
 msgstr ""
@@ -1340,19 +1340,19 @@ msgstr ""
 msgid "This device already has a passkey for this account"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:281
+#: lib/mydia_web/live/profile_live/index.html.heex:283
 #, elixir-autogen, elixir-format
 msgid "Time zone"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:271
+#: lib/mydia_web/live/profile_live/index.html.heex:273
 #, elixir-autogen, elixir-format
 msgid "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:69
-#: lib/mydia_web/controllers/session_controller.ex:210
-#: lib/mydia_web/controllers/session_controller.ex:236
+#: lib/mydia_web/controllers/session_controller.ex:61
+#: lib/mydia_web/controllers/session_controller.ex:202
+#: lib/mydia_web/controllers/session_controller.ex:228
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:172
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:155
 #, elixir-autogen, elixir-format
@@ -1391,17 +1391,17 @@ msgstr ""
 msgid "Two-factor authentication turned off."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:413
+#: lib/mydia_web/live/profile_live/index.ex:412
 #, elixir-autogen, elixir-format
 msgid "Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:535
+#: lib/mydia_web/live/profile_live/index.html.heex:588
 #, elixir-autogen, elixir-format
 msgid "Update Password"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:415
+#: lib/mydia_web/live/profile_live/index.ex:414
 #, elixir-autogen, elixir-format
 msgid "Upload error: %{error}"
 msgstr ""
@@ -1430,13 +1430,13 @@ msgid "Works at %{site} · Added %{added} · Last used %{last_used}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_system_live/components.ex:141
-#: lib/mydia_web/live/profile_live/index.html.heex:384
-#: lib/mydia_web/live/profile_live/index.html.heex:390
+#: lib/mydia_web/live/profile_live/index.html.heex:386
+#: lib/mydia_web/live/profile_live/index.html.heex:392
 #, elixir-autogen, elixir-format
 msgid "Yes"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:407
+#: lib/mydia_web/live/profile_live/index.html.heex:437
 #, elixir-autogen, elixir-format
 msgid "Your account is managed through your SSO provider. Password changes are not available."
 msgstr ""
@@ -1446,22 +1446,22 @@ msgstr ""
 msgid "Your current recovery codes will stop working."
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:101
+#: lib/mydia_web/live/profile_live/index.html.heex:103
 #, elixir-autogen, elixir-format
 msgid "Your display name"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:386
+#: lib/mydia_web/live/profile_live/index.ex:389
 #, elixir-autogen, elixir-format
 msgid "does not match new password"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.html.heex:176
+#: lib/mydia_web/live/profile_live/index.html.heex:178
 #, elixir-autogen, elixir-format
 msgid "https://example.com/avatar.jpg"
 msgstr ""
 
-#: lib/mydia_web/live/profile_live/index.ex:373
+#: lib/mydia_web/live/profile_live/index.ex:376
 #, elixir-autogen, elixir-format
 msgid "must be at least 8 characters"
 msgstr ""
@@ -1479,12 +1479,12 @@ msgstr ""
 msgid "A secure random password will be generated and displayed after creation."
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:99
+#: lib/mydia_web/live/first_time_setup_live/index.ex:92
 #, elixir-autogen, elixir-format
 msgid "Admin user created successfully!"
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:104
+#: lib/mydia_web/live/first_time_setup_live/index.ex:97
 #, elixir-autogen, elixir-format
 msgid "Admin user created successfully! You are now logged in."
 msgstr ""
@@ -1534,8 +1534,8 @@ msgstr ""
 msgid "Generate random password"
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:82
-#: lib/mydia_web/controllers/session_controller.ex:88
+#: lib/mydia_web/controllers/session_controller.ex:74
+#: lib/mydia_web/controllers/session_controller.ex:80
 #, elixir-autogen, elixir-format
 msgid "Invalid username or password"
 msgstr ""
@@ -1546,7 +1546,7 @@ msgid "Let's create your admin account to get started."
 msgstr ""
 
 #: lib/mydia_web/controllers/session_controller.ex:37
-#: lib/mydia_web/controllers/session_controller.ex:73
+#: lib/mydia_web/controllers/session_controller.ex:65
 #, elixir-autogen, elixir-format
 msgid "Local authentication is disabled"
 msgstr ""
@@ -1621,8 +1621,8 @@ msgid "Sign in with your username and password."
 msgstr ""
 
 #: lib/mydia_web/controllers/passkey_controller.ex:61
-#: lib/mydia_web/controllers/session_controller.ex:116
-#: lib/mydia_web/controllers/session_controller.ex:203
+#: lib/mydia_web/controllers/session_controller.ex:108
+#: lib/mydia_web/controllers/session_controller.ex:195
 #, elixir-autogen, elixir-format
 msgid "Successfully logged in!"
 msgstr ""
@@ -1659,7 +1659,7 @@ msgstr ""
 msgid "Welcome to Mydia"
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:119
+#: lib/mydia_web/live/first_time_setup_live/index.ex:112
 #: lib/mydia_web/live/first_time_setup_live/index.html.heex:59
 #, elixir-autogen, elixir-format
 msgid "Welcome to Mydia!"
@@ -10255,7 +10255,7 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:288
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:372
 #: lib/mydia_web/live/admin_users_live/components.ex:72
-#: lib/mydia_web/live/admin_users_live/components.ex:223
+#: lib/mydia_web/live/admin_users_live/components.ex:221
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:12
 #, elixir-autogen, elixir-format
 msgid "User"
@@ -12187,7 +12187,7 @@ msgid_plural "%{count} movies"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:187
+#: lib/mydia_web/live/admin_users_live/components.ex:188
 #, elixir-autogen, elixir-format
 msgid "%{count} passkey"
 msgid_plural "%{count} passkeys"
@@ -13196,9 +13196,9 @@ msgstr ""
 msgid "Auth Type"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:43
-#: lib/mydia_web/controllers/auth_controller.ex:74
-#: lib/mydia_web/controllers/auth_controller.ex:104
+#: lib/mydia_web/controllers/auth_controller.ex:47
+#: lib/mydia_web/controllers/auth_controller.ex:79
+#: lib/mydia_web/controllers/auth_controller.ex:220
 #, elixir-autogen, elixir-format
 msgid "Authentication failed: %{errors}"
 msgstr ""
@@ -13223,12 +13223,12 @@ msgstr ""
 msgid "Auto-Generate"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:45
+#: lib/mydia_web/live/admin_settings_live/labels.ex:46
 #, elixir-autogen, elixir-format
 msgid "Auto-Repair Database Issues"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:46
+#: lib/mydia_web/live/admin_settings_live/labels.ex:47
 #, elixir-autogen, elixir-format
 msgid "Auto-Repair Threshold"
 msgstr ""
@@ -13293,7 +13293,7 @@ msgstr ""
 msgid "Automatically add new items without manual approval"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:72
+#: lib/mydia_web/live/admin_settings_live/labels.ex:73
 #, elixir-autogen, elixir-format
 msgid "Automatically queue a library re-scan on startup when database issues (orphaned files) are detected"
 msgstr ""
@@ -13583,11 +13583,6 @@ msgstr ""
 msgid "Cannot edit runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/index.ex:220
-#, elixir-autogen, elixir-format
-msgid "Cannot reset password for OIDC users"
-msgstr ""
-
 #: lib/mydia_web/live/admin_subtitle_providers_live.ex:169
 #, elixir-autogen, elixir-format
 msgid "Cannot toggle a runtime-configured provider from the UI"
@@ -13644,7 +13639,7 @@ msgstr ""
 msgid "Category: %{category}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:60
+#: lib/mydia_web/live/admin_settings_live/labels.ex:61
 #, elixir-autogen, elixir-format
 msgid "Ceiling in pixels on the output height of any transcode, for example 720. Empty means no ceiling and a transcode keeps the source resolution, which a small server may not sustain in realtime for a 4K file. Never upscales, and never applies when the file is streamed without re-encoding."
 msgstr ""
@@ -13659,7 +13654,7 @@ msgstr ""
 msgid "Change role for %{user}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:44
+#: lib/mydia_web/live/admin_settings_live/labels.ex:45
 #, elixir-autogen, elixir-format
 msgid "Check for updates"
 msgstr ""
@@ -14370,7 +14365,7 @@ msgstr ""
 msgid "Delete this file?"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:127
+#: lib/mydia_web/live/admin_users_live/components.ex:128
 #, elixir-autogen, elixir-format
 msgid "Delete user"
 msgstr ""
@@ -15474,7 +15469,7 @@ msgid "Granted capabilities"
 msgstr ""
 
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:373
-#: lib/mydia_web/live/admin_users_live/components.ex:225
+#: lib/mydia_web/live/admin_users_live/components.ex:223
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:10
 #, elixir-autogen, elixir-format
 msgid "Guest"
@@ -15700,7 +15695,7 @@ msgstr ""
 msgid "Invalid JSON"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:122
+#: lib/mydia_web/controllers/auth_controller.ex:238
 #, elixir-autogen, elixir-format
 msgid "Invalid authentication token"
 msgstr ""
@@ -15710,7 +15705,7 @@ msgstr ""
 msgid "Invalid directory: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:135
+#: lib/mydia_web/controllers/auth_controller.ex:251
 #, elixir-autogen, elixir-format
 msgid "Invalid or expired authentication token"
 msgstr ""
@@ -15919,7 +15914,7 @@ msgstr ""
 msgid "Library Paths"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:120
+#: lib/mydia_web/live/admin_users_live/components.ex:121
 #, elixir-autogen, elixir-format
 msgid "Library access"
 msgstr ""
@@ -16123,7 +16118,7 @@ msgstr ""
 msgid "Max Timeout (ms)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:41
+#: lib/mydia_web/live/admin_settings_live/labels.ex:42
 #, elixir-autogen, elixir-format
 msgid "Max Transcode Height"
 msgstr ""
@@ -16223,12 +16218,12 @@ msgstr ""
 msgid "Minimum Resolution"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:40
+#: lib/mydia_web/live/admin_settings_live/labels.ex:41
 #, elixir-autogen, elixir-format
 msgid "Minimum Seeders (automatic search)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:77
+#: lib/mydia_web/live/admin_settings_live/labels.ex:78
 #, elixir-autogen, elixir-format
 msgid "Minimum number of issues required to trigger auto-repair"
 msgstr ""
@@ -16238,7 +16233,7 @@ msgstr ""
 msgid "Minimum seeder ratio (torrents)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:54
+#: lib/mydia_web/live/admin_settings_live/labels.ex:55
 #, elixir-autogen, elixir-format
 msgid "Minimum seeders a result must report for automatic searches to consider it. This is a hard filter applied before ranking, so a torrent below it is removed rather than demoted. Manual searches have their own control, and Usenet results report no seeders at all and are exempt. 0, the default, filters nothing. Careful above 0: some indexers report 0 when they mean \"unknown\" rather than \"dead\", so a floor can silently empty their results."
 msgstr ""
@@ -16264,7 +16259,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:39
+#: lib/mydia_web/live/admin_settings_live/labels.ex:40
 #, elixir-autogen, elixir-format
 msgid "Monitor Interval (minutes)"
 msgstr ""
@@ -16289,7 +16284,7 @@ msgstr ""
 msgid "Movie File Sizes"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:37
+#: lib/mydia_web/live/admin_settings_live/labels.ex:38
 #, elixir-autogen, elixir-format
 msgid "Movies Path"
 msgstr ""
@@ -16709,7 +16704,7 @@ msgstr ""
 msgid "No subtitle providers configured yet. Built-in providers appear here on a fresh install."
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:133
+#: lib/mydia_web/live/admin_users_live/components.ex:134
 #, elixir-autogen, elixir-format
 msgid "No users found"
 msgstr ""
@@ -16860,12 +16855,13 @@ msgstr ""
 msgid "OIDC Enabled"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:52
+#: lib/mydia_web/controllers/auth_controller.ex:56
 #, elixir-autogen, elixir-format
 msgid "OIDC authentication configuration error"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:59
+#: lib/mydia_web/controllers/auth_controller.ex:63
+#: lib/mydia_web/controllers/auth_controller.ex:115
 #, elixir-autogen, elixir-format
 msgid "OIDC authentication is not configured."
 msgstr ""
@@ -16992,7 +16988,7 @@ msgstr ""
 msgid "Page %{page} of %{total}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:185
+#: lib/mydia_web/live/admin_users_live/components.ex:186
 #, elixir-autogen, elixir-format
 msgid "Passkeys registered"
 msgstr ""
@@ -17453,7 +17449,7 @@ msgstr ""
 msgid "Reach this server from the player outside your network"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:224
+#: lib/mydia_web/live/admin_users_live/components.ex:222
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:11
 #, elixir-autogen, elixir-format
 msgid "Read Only"
@@ -17799,7 +17795,7 @@ msgstr ""
 msgid "Reset Password"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:99
+#: lib/mydia_web/live/admin_users_live/components.ex:100
 #, elixir-autogen, elixir-format
 msgid "Reset password"
 msgstr ""
@@ -17814,7 +17810,7 @@ msgstr ""
 msgid "Reset to the shipped definition"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:107
+#: lib/mydia_web/live/admin_users_live/components.ex:108
 #, elixir-autogen, elixir-format
 msgid "Reset two-factor authentication"
 msgstr ""
@@ -18310,17 +18306,17 @@ msgstr ""
 msgid "Settings updated successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:42
+#: lib/mydia_web/live/admin_settings_live/labels.ex:43
 #, elixir-autogen, elixir-format
 msgid "Share Crashes with Developers"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:66
+#: lib/mydia_web/live/admin_settings_live/labels.ex:67
 #, elixir-autogen, elixir-format
 msgid "Shortly after startup and once a week, ask the metadata relay whether a newer Mydia release exists, and show it on the System page. The check sends a random install ID, the Mydia version, the CPU architecture and the database type. That also lets the developers count active installs and decide which versions and platforms to prioritise. Nothing about your library, accounts or network is sent, and the relay does not store your address."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:43
+#: lib/mydia_web/live/admin_settings_live/labels.ex:44
 #, elixir-autogen, elixir-format
 msgid "Show Send feedback button"
 msgstr ""
@@ -18490,7 +18486,7 @@ msgstr ""
 msgid "Success: %{rate}%"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:95
+#: lib/mydia_web/controllers/auth_controller.ex:185
 #, elixir-autogen, elixir-format
 msgid "Successfully authenticated!"
 msgstr ""
@@ -18694,7 +18690,7 @@ msgstr ""
 msgid "TV Metadata Source"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:38
+#: lib/mydia_web/live/admin_settings_live/labels.ex:39
 #, elixir-autogen, elixir-format
 msgid "TV Path"
 msgstr ""
@@ -18841,7 +18837,7 @@ msgstr ""
 msgid "The file was gone from disk when a scan looked for it"
 msgstr ""
 
-#: lib/mydia_web/plugs/runtime_ueberauth.ex:48
+#: lib/mydia_web/plugs/runtime_ueberauth.ex:52
 #, elixir-autogen, elixir-format
 msgid "The identity provider did not respond in time. Please try again."
 msgstr ""
@@ -19222,12 +19218,12 @@ msgstr ""
 msgid "Trust and add"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:111
+#: lib/mydia_web/live/admin_users_live/components.ex:112
 #, elixir-autogen, elixir-format
 msgid "Turn off two-factor authentication for this user? This removes their authenticator app and all their passkeys. They will sign in with only their password until they set it up again."
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:177
+#: lib/mydia_web/live/admin_users_live/components.ex:178
 #, elixir-autogen, elixir-format
 msgid "Two-factor authentication is on"
 msgstr ""
@@ -19713,7 +19709,7 @@ msgstr ""
 msgid "You do not have permission to request media"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:153
+#: lib/mydia_web/controllers/auth_controller.ex:269
 #, elixir-autogen, elixir-format
 msgid "You have been logged out"
 msgstr ""
@@ -19734,7 +19730,7 @@ msgstr ""
 msgid "also reacts to %{events}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:205
+#: lib/mydia_web/live/admin_users_live/components.ex:206
 #, elixir-autogen, elixir-format
 msgid "approved"
 msgstr ""
@@ -20008,7 +20004,7 @@ msgstr ""
 msgid "new titles"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:82
+#: lib/mydia_web/live/admin_settings_live/labels.ex:83
 #, elixir-autogen, elixir-format
 msgid "no limit"
 msgstr ""
@@ -20069,7 +20065,7 @@ msgstr ""
 msgid "read-only (set via environment)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:210
+#: lib/mydia_web/live/admin_users_live/components.ex:211
 #, elixir-autogen, elixir-format
 msgid "rejected"
 msgstr ""
@@ -20109,7 +20105,7 @@ msgstr ""
 msgid "subfolder path"
 msgstr ""
 
-#: lib/mydia_web/live/admin_users_live/components.ex:200
+#: lib/mydia_web/live/admin_users_live/components.ex:201
 #, elixir-autogen, elixir-format
 msgid "submitted"
 msgstr ""
@@ -20833,4 +20829,109 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index/alpha_jump_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Titles starting with a number or symbol"
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:191
+#, elixir-autogen, elixir-format
+msgid "An account with this email already exists. Sign in with your password, then link SSO from your profile."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:319
+#, elixir-autogen, elixir-format
+msgid "Linking expired. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:164
+#, elixir-autogen, elixir-format
+msgid "SSO could not be unlinked. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:140
+#, elixir-autogen, elixir-format
+msgid "SSO has been unlinked from your account."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:202
+#: lib/mydia_web/controllers/auth_controller.ex:297
+#, elixir-autogen, elixir-format
+msgid "This SSO account is already linked to another Mydia account."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:293
+#, elixir-autogen, elixir-format
+msgid "Your SSO account is now linked."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:120
+#: lib/mydia_web/controllers/auth_controller.ex:300
+#, elixir-autogen, elixir-format
+msgid "Your account is already linked to an SSO account."
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:490
+#, elixir-autogen, elixir-format
+msgid "Link SSO account"
+msgstr ""
+
+#: lib/mydia_web/live/admin_users_live/components.ex:234
+#: lib/mydia_web/live/profile_live/index.ex:396
+#, elixir-autogen, elixir-format
+msgid "Local + SSO"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:482
+#, elixir-autogen, elixir-format
+msgid "Sign in with your SSO provider as well as your password."
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:449
+#, elixir-autogen, elixir-format
+msgid "Single sign-on"
+msgstr ""
+
+#: lib/mydia_web/live/admin_users_live/index.ex:230
+#, elixir-autogen, elixir-format
+msgid "This user has no local password to reset"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:462
+#, elixir-autogen, elixir-format
+msgid "Unlink SSO"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:459
+#, elixir-autogen, elixir-format
+msgid "Unlink SSO from your account?"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:452
+#, elixir-autogen, elixir-format
+msgid "Your account is linked to your SSO provider."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:98
+#, elixir-autogen, elixir-format
+msgid "Authentication failed. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:147
+#: lib/mydia_web/live/profile_live/index.html.heex:471
+#, elixir-autogen, elixir-format
+msgid "Local sign-in is disabled on this server, so SSO cannot be unlinked."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:211
+#, elixir-autogen, elixir-format
+msgid "This account was linked to SSO by another sign-in. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:155
+#: lib/mydia_web/live/profile_live/index.html.heex:475
+#, elixir-autogen, elixir-format
+msgid "Your sign-in is managed by your SSO provider, so it cannot be unlinked."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/labels.ex:37
+#, elixir-autogen, elixir-format
+msgid "Link SSO Accounts by Email"
 msgstr ""
