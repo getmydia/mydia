@@ -14,15 +14,15 @@ import 'package:player/presentation/screens/all_servers/all_servers_providers.da
 import '../../../domain/merged/fake_merged_source.dart';
 
 const _sorts = [
-  SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'added',
-      label: 'Added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
   SortOption(
       id: 'released',
-      label: 'Released',
+      name: SortName.releaseDate,
       descendingByDefault: true,
       shared: SharedSort.released),
 ];

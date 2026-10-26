@@ -12,6 +12,8 @@ import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 
 import 'download_test_harness.dart';
 import '../../test_utils/mydia_test_source.dart';
@@ -36,6 +38,13 @@ DownloadTask _task(String id,
       sourceId: sourceId,
       createdAt: DateTime(2026, 1, 1),
     );
+
+final _en = AppLocalizationsEn();
+
+/// Everything the notification would say.
+String _words(DownloadNotificationText text) =>
+    '${_en.downloadNotificationTitle(text.count)} '
+    '${_en.downloadNotificationLine(text.line)}';
 
 void main() {
   final body = Uint8List.fromList(List.generate(10, (i) => i));
@@ -245,14 +254,14 @@ void main() {
     test('a discreet single task never names its title', () {
       final text = buildDownloadNotificationText(
           [running('Secret Title', source: hidden)], discreet);
-      expect('${text.title} ${text.text}', isNot(contains('Secret Title')));
+      expect(_words(text), isNot(contains('Secret Title')));
       expect(text.progress, 50);
     });
 
     test('a visible single task still does', () {
       final text =
           buildDownloadNotificationText([running('Quill Harbor')], discreet);
-      expect(text.text, contains('Quill Harbor'));
+      expect(_en.downloadNotificationLine(text.line), contains('Quill Harbor'));
     });
 
     test('a discreet task counts but is never the one named', () {
@@ -260,8 +269,8 @@ void main() {
         running('Secret Title', source: hidden),
         running('Quill Harbor'),
       ], discreet);
-      expect(text.title, 'Downloading 2 items');
-      expect(text.text, contains('Quill Harbor'));
+      expect(_en.downloadNotificationTitle(text.count), 'Downloading 2 items');
+      expect(_en.downloadNotificationLine(text.line), contains('Quill Harbor'));
     });
 
     test('only discreet tasks give no title anywhere', () {
@@ -269,8 +278,8 @@ void main() {
         running('Secret One', source: hidden),
         running('Secret Two', source: hidden),
       ], discreet);
-      expect('${text.title} ${text.text}', isNot(contains('Secret')));
-      expect(text.title, 'Downloading 2 items');
+      expect(_words(text), isNot(contains('Secret')));
+      expect(_en.downloadNotificationTitle(text.count), 'Downloading 2 items');
     });
   });
 }

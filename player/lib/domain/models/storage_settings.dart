@@ -14,15 +14,6 @@ enum CleanupPolicy {
 
   /// Clean up least recently used downloads first
   lru;
-
-  String get display {
-    switch (this) {
-      case CleanupPolicy.byDate:
-        return 'Oldest First';
-      case CleanupPolicy.lru:
-        return 'Least Recently Used';
-    }
-  }
 }
 
 /// Storage settings configuration.
@@ -64,7 +55,9 @@ class StorageSettings {
 
   /// Get the cleanup policy enum value.
   CleanupPolicy get cleanupPolicy {
-    return cleanupPolicyValue == 'lru' ? CleanupPolicy.lru : CleanupPolicy.byDate;
+    return cleanupPolicyValue == 'lru'
+        ? CleanupPolicy.lru
+        : CleanupPolicy.byDate;
   }
 
   /// Check if storage limit is set.
@@ -102,7 +95,9 @@ class StorageSettings {
     bool clearMaxStorageLimit = false,
   }) {
     return StorageSettings(
-      maxStorageBytes: clearMaxStorageLimit ? null : (maxStorageBytes ?? this.maxStorageBytes),
+      maxStorageBytes: clearMaxStorageLimit
+          ? null
+          : (maxStorageBytes ?? this.maxStorageBytes),
       warningThreshold: warningThreshold ?? this.warningThreshold,
       autoCleanupEnabled: autoCleanupEnabled ?? this.autoCleanupEnabled,
       cleanupPolicyValue: cleanupPolicy?.name ?? cleanupPolicyValue,

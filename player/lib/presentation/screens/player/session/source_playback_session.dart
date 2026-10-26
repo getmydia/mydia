@@ -2,6 +2,8 @@
 /// source's neutral item detail. Transport and progress are the subclass's.
 library;
 
+import 'dart:ui' show Locale;
+
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/progress_reporter.dart';
@@ -15,6 +17,7 @@ import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/library.dart' show Cursor;
 import '../../../../domain/sources/source_error.dart';
+import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
@@ -111,7 +114,12 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     ];
     if (sameLanguage.isEmpty) return null;
 
-    final names = {local.title, local.displayName}.whereType<String>();
+    // Server titles that merely name the language are English, so the track
+    // is compared by the English name whatever the viewer's language.
+    final names = {
+      local.title,
+      lookupAppLocalizations(const Locale('en')).languageName(local.language),
+    }.whereType<String>();
     return (sameLanguage.where((s) => names.contains(s.title)).firstOrNull ??
             sameLanguage.first)
         .id;

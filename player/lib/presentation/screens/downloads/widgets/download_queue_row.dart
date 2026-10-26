@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/downloads/download_providers.dart';
 import '../../../../core/theme/palette.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../domain/models/download.dart';
 import 'download_recovery_banner.dart';
 import 'series_downloads_dialogs.dart';
@@ -110,7 +111,7 @@ class DownloadQueueRow extends ConsumerWidget {
 
         final parts = <String>[
           '${(progress * 100).toStringAsFixed(0)}%',
-          task.progressBytesDisplay ?? task.fileSizeDisplay,
+          task.progressBytesDisplay ?? context.l10n.downloadTaskSize(task),
         ];
         if (info != null && info.bytesPerSecond > 0) {
           parts.add(info.speedDisplay);

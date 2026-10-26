@@ -42,6 +42,10 @@ Future<void> _openPicker(WidgetTester tester) async {
 }
 
 void main() {
+  // LocaleSetting mirrors its state into a process-global; clear it so the
+  // choice made here cannot leak into later tests in the same isolate.
+  tearDown(() => rememberInterfaceLocale(null));
+
   testWidgets('shows Language with System default when nothing is stored',
       (tester) async {
     await tester.pumpWidget(_host(MockAuthStorage()));

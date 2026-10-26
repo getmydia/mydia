@@ -176,7 +176,7 @@ void main() {
 
       expect(backend.requests, 2);
       expect(container!.read(updateProvider).error, isNull);
-      expect(container.read(updateProvider).notice, "You're up to date");
+      expect(container.read(updateProvider).notice, UpdateNotice.upToDate);
     });
 
     testWidgets(
@@ -255,7 +255,7 @@ void main() {
     await container.read(updateProvider.notifier).requestUpdate();
 
     final state = container.read(updateProvider);
-    expect(state.notice, "You're up to date");
+    expect(state.notice, UpdateNotice.upToDate);
     expect(state.availableUpdate, isNull);
     expect(state.isApplying, isFalse);
   });
@@ -353,7 +353,7 @@ void main() {
     await container.read(updateProvider.notifier).restart();
 
     final state = container.read(updateProvider);
-    expect(state.notice, 'Update installed. Reopen Mydia to finish.');
+    expect(state.notice, UpdateNotice.reopenToFinish);
     expect(state.error, isNull);
     // A failed Spawn leaves this process on the stale build. Exiting it
     // anyway would strand the user with no running Mydia Player at all.

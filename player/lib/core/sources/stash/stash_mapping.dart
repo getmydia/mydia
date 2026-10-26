@@ -11,23 +11,28 @@ const stashScenesLibraryId = 'scenes';
 const stashSortOptions = [
   SortOption(
       id: 'created_at',
-      label: 'Recently added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
-  SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'date',
-      label: 'Date',
+      name: SortName.date,
       descendingByDefault: true,
       shared: SharedSort.released),
-  SortOption(id: 'rating', label: 'Rating', descendingByDefault: true),
-  SortOption(id: 'play_count', label: 'Most played', descendingByDefault: true),
+  SortOption(id: 'rating', name: SortName.rating, descendingByDefault: true),
   SortOption(
-      id: 'last_played_at', label: 'Last played', descendingByDefault: true),
-  SortOption(id: 'random', label: 'Random'),
+      id: 'play_count', name: SortName.mostPlayed, descendingByDefault: true),
+  SortOption(
+      id: 'last_played_at',
+      name: SortName.lastPlayed,
+      descendingByDefault: true),
+  SortOption(id: 'random', name: SortName.random),
 ];
 
-const stashFilterOptions = [FilterOption(id: 'unplayed', label: 'Unplayed')];
+const stashFilterOptions = [
+  FilterOption(id: 'unplayed', name: FilterName.unplayed),
+];
 
 /// A server-made URL as a path relative to the server, without the
 /// `apikey` parameter Stash adds when the request carried a key.
@@ -63,7 +68,8 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
     ref: ItemRef(sourceId: sourceId, kind: ItemKind.video, externalId: id),
     title: title != null && title.isNotEmpty
         ? title
-        : (file?['basename'] as String? ?? 'Scene $id'),
+        : (file?['basename'] as String? ??
+            'Scene $id'), // l10n-ignore: stored name for a scene that has none
     subtitle: (scene['studio'] as Map?)?['name'] as String? ?? date,
     year: date != null && date.length >= 4
         ? int.tryParse(date.substring(0, 4))

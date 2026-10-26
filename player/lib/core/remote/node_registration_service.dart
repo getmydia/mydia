@@ -195,12 +195,13 @@ class NodeRegistrationService {
 
         final nodeId = _desiredNodeId;
         if (nodeId == null) {
-          _emit(const RegistrationWaiting('this device to come online'));
+          _emit(const RegistrationWaiting(RegistrationDependency.deviceOnline));
           return;
         }
 
         if (!_clientReady) {
-          _emit(const RegistrationWaiting('a server connection'));
+          _emit(const RegistrationWaiting(
+              RegistrationDependency.serverConnection));
           return;
         }
 

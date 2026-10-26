@@ -63,10 +63,10 @@ class FakeMergedSource extends MediaSource
     this.movies = const [],
     this.shows = const [],
     this.sorts = const [
-      SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+      SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
       SortOption(
           id: 'added',
-          label: 'Added',
+          name: SortName.recentlyAdded,
           descendingByDefault: true,
           shared: SharedSort.added),
     ],

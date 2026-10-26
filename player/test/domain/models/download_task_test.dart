@@ -106,110 +106,6 @@ void main() {
       });
     });
 
-    group('statusDisplay getter', () {
-      group('non-progressive downloads', () {
-        test('returns status string directly', () {
-          final task = _createTask(
-            status: 'downloading',
-            isProgressive: false,
-          );
-          expect(task.statusDisplay, equals('downloading'));
-        });
-      });
-
-      group('progressive downloads', () {
-        test('shows preparing percentage for transcoding status', () {
-          final task = _createTask(
-            status: 'transcoding',
-            isProgressive: true,
-            transcodeProgress: 0.456,
-          );
-          expect(task.statusDisplay, equals('Preparing 46%'));
-        });
-
-        test('shows "Preparing & Downloading" when transcoding not complete',
-            () {
-          final task = _createTask(
-            status: 'downloading',
-            isProgressive: true,
-            transcodeProgress: 0.8,
-            downloadProgress: 0.2,
-          );
-          expect(task.statusDisplay, equals('Preparing & Downloading'));
-        });
-
-        test(
-            'shows "Starting Download..." when transcode complete but download at 0',
-            () {
-          final task = _createTask(
-            status: 'downloading',
-            isProgressive: true,
-            transcodeProgress: 1.0,
-            downloadProgress: 0.0,
-          );
-          expect(task.statusDisplay, equals('Starting Download...'));
-        });
-
-        test('shows downloading percentage when transcode complete', () {
-          final task = _createTask(
-            status: 'downloading',
-            isProgressive: true,
-            transcodeProgress: 1.0,
-            downloadProgress: 0.789,
-          );
-          expect(task.statusDisplay, equals('Downloading 79%'));
-        });
-
-        test('shows "Completed" for completed status', () {
-          final task = _createTask(
-            status: 'completed',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Completed'));
-        });
-
-        test('shows "Failed" for failed status', () {
-          final task = _createTask(
-            status: 'failed',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Failed'));
-        });
-
-        test('shows "Paused" for paused status', () {
-          final task = _createTask(
-            status: 'paused',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Paused'));
-        });
-
-        test('shows "Cancelled" for cancelled status', () {
-          final task = _createTask(
-            status: 'cancelled',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Cancelled'));
-        });
-
-        test('shows "Pending" for pending status', () {
-          final task = _createTask(
-            status: 'pending',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Pending'));
-        });
-
-        test('shows "Queued" for queued status', () {
-          final task = _createTask(
-            status: 'queued',
-            isProgressive: true,
-          );
-          expect(task.statusDisplay, equals('Queued'));
-        });
-      });
-    });
-
     group('type getter', () {
       test('returns movie for "movie" mediaType', () {
         final task = _createTask(mediaType: 'movie');
@@ -228,9 +124,9 @@ void main() {
     });
 
     group('fileSizeDisplay getter', () {
-      test('returns "Unknown size" when fileSize is null', () {
+      test('is null when fileSize is null, for the screen to word', () {
         final task = _createTask(fileSize: null);
-        expect(task.fileSizeDisplay, equals('Unknown size'));
+        expect(task.fileSizeDisplay, isNull);
       });
 
       test('formats bytes correctly', () {
@@ -463,14 +359,6 @@ void main() {
             DownloadStatus.interrupted);
         expect(base().copyWith(status: 'stalled').downloadStatus,
             DownloadStatus.stalled);
-      });
-
-      test('progressive statusDisplay labels interrupted and stalled', () {
-        final interrupted =
-            base().copyWith(isProgressive: true, status: 'interrupted');
-        final stalled = base().copyWith(isProgressive: true, status: 'stalled');
-        expect(interrupted.statusDisplay, 'Interrupted');
-        expect(stalled.statusDisplay, 'Stalled');
       });
     });
   });

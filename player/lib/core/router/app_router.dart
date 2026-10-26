@@ -40,6 +40,7 @@ import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
+import '../../l10n/l10n.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../config/web_config.dart' show isInstanceHostedWeb;
 import 'navigator_keys.dart';
@@ -655,7 +656,7 @@ GoRouter appRouter(Ref ref) {
                     const Icon(Icons.error_outline,
                         size: 64, color: Colors.red),
                     const SizedBox(height: 16),
-                    const Text('No items in queue'),
+                    Text(context.l10n.routerQueueEmpty),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
@@ -665,7 +666,7 @@ GoRouter appRouter(Ref ref) {
                           context.go('/');
                         }
                       },
-                      child: const Text('Go Back'),
+                      child: Text(context.l10n.routerGoBack),
                     ),
                   ],
                 ),
@@ -686,7 +687,7 @@ GoRouter appRouter(Ref ref) {
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
-        child: Text('Page not found: ${state.uri}'),
+        child: Text(context.l10n.routerPageNotFound('${state.uri}')),
       ),
     ),
   );

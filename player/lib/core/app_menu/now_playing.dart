@@ -94,7 +94,7 @@ class NowPlayingPublisher {
     if (!identical(_owner, owner)) return;
     if (_redact()) {
       state = NowPlaying(
-        title: 'Mydia',
+        title: 'Mydia', // l10n-ignore: product name
         isPlaying: state.isPlaying,
         hasNext: state.hasNext,
       );

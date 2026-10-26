@@ -469,8 +469,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         push: (path) {
           if (!mounted) return;
           // Nothing opens over a player or an open form; say so instead.
-          final message = pushRouteSafely(router, path).message;
-          if (message != null && context.mounted) showToast(context, message);
+          final outcome = pushRouteSafely(router, path);
+          if (!context.mounted) return;
+          final message = context.l10n.pushOutcomeMessage(outcome);
+          if (message != null) showToast(context, message);
         },
       );
     } catch (error, stackTrace) {

@@ -52,7 +52,10 @@ class UpdateCard extends ConsumerWidget {
       // only signal that anything happened at all. Without it here the row
       // presses, waits, and reports nothing, which reads as the check doing
       // nothing rather than failing.
-      final message = state.notice ?? context.l10n.updateErrorMessage(state);
+      final notice = state.notice;
+      final message = notice != null
+          ? context.l10n.updateNoticeText(notice)
+          : context.l10n.updateErrorMessage(state);
       if (message == null) {
         return const SizedBox.shrink();
       }

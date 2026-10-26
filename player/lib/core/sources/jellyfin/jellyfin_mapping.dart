@@ -32,23 +32,24 @@ ItemKind? jellyfinItemKind(String? type) => switch (type) {
     };
 
 const jellyfinSortOptions = [
-  SortOption(id: 'SortName', label: 'Title', shared: SharedSort.title),
+  SortOption(id: 'SortName', name: SortName.title, shared: SharedSort.title),
   SortOption(
       id: 'DateCreated',
-      label: 'Recently added',
+      name: SortName.recentlyAdded,
       descendingByDefault: true,
       shared: SharedSort.added),
   SortOption(
       id: 'PremiereDate',
-      label: 'Release date',
+      name: SortName.releaseDate,
       descendingByDefault: true,
       shared: SharedSort.released),
-  SortOption(id: 'CommunityRating', label: 'Rating', descendingByDefault: true),
+  SortOption(
+      id: 'CommunityRating', name: SortName.rating, descendingByDefault: true),
 ];
 
 const jellyfinFilterOptions = [
-  FilterOption(id: 'IsUnplayed', label: 'Unwatched'),
-  FilterOption(id: 'IsResumable', label: 'In progress'),
+  FilterOption(id: 'IsUnplayed', name: FilterName.unwatched),
+  FilterOption(id: 'IsResumable', name: FilterName.inProgress),
 ];
 
 /// The `Fields` a merged grid or row needs on top of the defaults.
@@ -90,7 +91,7 @@ Library? jellyfinLibrary(SourceId sourceId, Map<String, dynamic> json) {
   if (id == null || kind == null) return null;
   return Library(
     ref: LibraryRef(sourceId: sourceId, id: id),
-    title: json['Name'] as String? ?? 'Library',
+    title: json['Name'] as String?,
     kind: kind,
     sortOptions: jellyfinSortOptions,
     filterOptions: jellyfinFilterOptions,
@@ -119,7 +120,8 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       : null;
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
-    title: json['Name'] as String? ?? 'Untitled',
+    title: json['Name'] as String? ??
+        'Untitled', // l10n-ignore: stored name for a server item that has none
     subtitle: episode ? episodeSubtitle(parentIndex, index) : null,
     showTitle: episode ? json['SeriesName'] as String? : null,
     year: json['ProductionYear'] as int?,

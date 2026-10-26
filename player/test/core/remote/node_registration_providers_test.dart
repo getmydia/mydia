@@ -248,7 +248,7 @@ void main() {
     test('orders Failed over Waiting over InFlight over Succeeded over Idle',
         () {
       const failed = RegistrationFailed('x', 1, null);
-      const waiting = RegistrationWaiting('y');
+      const waiting = RegistrationWaiting(RegistrationDependency.deviceOnline);
       const inFlight = RegistrationInFlight('n', 1);
       final ok = RegistrationSucceeded('n', at);
       const idle = RegistrationIdle();

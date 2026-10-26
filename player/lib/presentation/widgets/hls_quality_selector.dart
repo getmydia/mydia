@@ -21,9 +21,8 @@ const Key statsToggleKey = Key('quality-stats-toggle');
 /// the client.
 ///
 /// [autoSubtitle] is what Auto is doing or would do (see
-/// `autoDeliverySubtitle`). [originalSubtitle] is the delivery-mode line for
-/// the Original rung (Direct Play / lossless / re-encoding), computed by the
-/// caller.
+/// `autoDeliverySubtitle`). [originalDelivery] says how the Original rung is
+/// delivered (Direct Play / lossless / re-encoding), computed by the caller.
 ///
 /// [statsEnabled] and [onStatsChanged] add a "Stats for nerds" row under a
 /// divider at the foot of the sheet. Both or neither: the settings
@@ -37,7 +36,7 @@ Future<QualityRung?> showQualityPicker(
   List<QualityRung> rungs,
   QualityRung current, {
   required String autoSubtitle,
-  required String originalSubtitle,
+  required OriginalDelivery originalDelivery,
   String? clampNote,
   bool? statsEnabled,
   ValueChanged<bool>? onStatsChanged,
@@ -71,7 +70,7 @@ Future<QualityRung?> showQualityPicker(
                   ),
                 for (final rung in rungs)
                   _rungTile(
-                      context, rung, current, autoSubtitle, originalSubtitle),
+                      context, rung, current, autoSubtitle, originalDelivery),
                 if (statsEnabled != null && onStatsChanged != null) ...[
                   const Divider(height: 17, color: DepthTokens.osdDivider),
                   StatefulBuilder(
@@ -128,15 +127,15 @@ Widget _rungTile(
   QualityRung rung,
   QualityRung current,
   String autoSubtitle,
-  String originalSubtitle,
+  OriginalDelivery originalDelivery,
 ) {
   final palette = context.palette;
   final isSelected = rung == current;
   final subtitle = rung.isAuto
       ? autoSubtitle
       : rung.isOriginal
-          ? originalSubtitle
-          : cappedRungDeliverySubtitle(rung.maxBitrateKbps);
+          ? context.l10n.originalDeliveryText(originalDelivery)
+          : context.l10n.cappedRungDeliveryText(rung.maxBitrateKbps);
   return ListTile(
     key: isSelected
         ? Key('quality-rung-selected-${rung.label}')

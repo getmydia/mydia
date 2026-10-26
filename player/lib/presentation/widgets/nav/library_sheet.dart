@@ -38,7 +38,7 @@ Future<void> showLibrarySheet(
                   ListTile(
                     key: ValueKey('library-sheet-${entry.id}'),
                     leading: Icon(entry.icon),
-                    title: Text(entry.label),
+                    title: Text(context.l10n.navEntryLabel(entry)),
                     onTap: () {
                       Navigator.of(sheetContext).pop();
                       onNavigate(entry.route);

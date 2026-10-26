@@ -88,18 +88,4 @@ class StreamingStrategyService {
     // Direct play does not
     return kIsWeb;
   }
-
-  /// Get human-readable strategy description
-  static String getStrategyDescription(StreamingStrategy strategy) {
-    switch (strategy) {
-      case StreamingStrategy.directPlay:
-        return 'Direct Play';
-      case StreamingStrategy.remux:
-        return 'Remux (fMP4)';
-      case StreamingStrategy.hlsCopy:
-        return 'HLS (Stream Copy)';
-      case StreamingStrategy.transcode:
-        return 'HLS (Transcoded)';
-    }
-  }
 }

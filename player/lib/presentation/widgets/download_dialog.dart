@@ -152,7 +152,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    file.displayQuality,
+                    file.displayQuality ?? context.l10n.commonUnknown,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),

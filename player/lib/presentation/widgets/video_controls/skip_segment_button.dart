@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/media_segment.dart';
+import '../../../l10n/l10n.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
 
@@ -104,7 +105,7 @@ class SkipSegmentButton extends StatelessWidget {
             children: [
               const Icon(Icons.fast_forward_rounded),
               const SizedBox(width: 6),
-              Text(segment.label),
+              Text(context.l10n.segmentSkipLabel(segment.type)),
             ],
           ),
         ),

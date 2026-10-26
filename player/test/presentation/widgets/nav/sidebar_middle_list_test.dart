@@ -1,8 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/nav/sidebar_middle_list.dart';
 
 List<SidebarEditRow> _rows({Set<String> hidden = const {}}) {
@@ -40,7 +41,9 @@ Future<void> _pumpList(
               height: 46,
               child: Row(
                 children: [
-                  Expanded(child: Text(row.destination.label)),
+                  Expanded(
+                      child: Text(AppLocalizationsEn()
+                          .navDestinationLabel(row.destination))),
                   if (editingTrailing != null) editingTrailing,
                 ],
               ),

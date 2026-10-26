@@ -92,7 +92,8 @@ Future<RangeFetchResult> fetchRange(
         requestOptions: response.requestOptions,
         type: DioExceptionType.connectionError,
         error: e,
-        message: 'Connection lost (${e.runtimeType})',
+        // Diagnostic text on a DioException; it is only logged.
+        message: 'Connection lost (${e.runtimeType})', // l10n-ignore: log text
       );
     }
   } finally {

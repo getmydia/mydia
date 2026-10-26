@@ -1,41 +1,42 @@
-/// User-facing subtitles for how a quality rung will be delivered.
+/// How a quality rung will be delivered, as typed values. The viewer-facing
+/// subtitles are worded by `AppFormatters.originalDeliveryText` and
+/// `AppFormatters.cappedRungDeliveryText`.
 library;
 
 import '../../core/playback/playback_plan.dart';
 
-const kOriginalDirectPlaySubtitle = 'Direct Play';
-const kOriginalLosslessSubtitle = 'Original · no re-encoding';
-const kOriginalTranscodeSubtitle = 'Original · re-encoding required';
+/// What the Original rung does, shown under it in the quality picker.
+enum OriginalDelivery {
+  /// The file plays as it is on this device.
+  directPlay,
 
-/// Neutral Original subtitle when there is no delivery context (e.g. Settings).
-const kOriginalPreferenceSubtitle = 'Source quality';
+  /// The server repackages the video without re-encoding it.
+  lossless,
 
-/// Subtitle for the Original rung given what the player could do.
+  /// The server must re-encode the video.
+  transcode,
+
+  /// No delivery context (e.g. Settings): just says it is the source quality.
+  preference,
+}
+
+/// The Original delivery for what the player could do.
 ///
 /// [canDirectPlay] means native and the same candidate gate the planner
 /// applies for a [DirectPlayPlan] (ignore the currently selected rung).
 /// [hasLosslessDelivery] means the HLS session will copy the video rather
-/// than re-encode it, per [deliverySubtitleForPlan].
-/// Ordering: Direct Play, then lossless, then re-encoding required.
-String originalDeliverySubtitle({
+/// than re-encode it, per [originalDeliveryForPlan].
+/// Ordering: direct play, then lossless, then re-encoding required.
+OriginalDelivery originalDelivery({
   required bool canDirectPlay,
   required bool hasLosslessDelivery,
 }) {
-  if (canDirectPlay) return kOriginalDirectPlaySubtitle;
-  if (hasLosslessDelivery) return kOriginalLosslessSubtitle;
-  return kOriginalTranscodeSubtitle;
+  if (canDirectPlay) return OriginalDelivery.directPlay;
+  if (hasLosslessDelivery) return OriginalDelivery.lossless;
+  return OriginalDelivery.transcode;
 }
 
-/// Subtitle for a capped ladder rung (always re-encodes today).
-///
-/// When [maxBitrateKbps] is null, returns a bitrate-free label rather than
-/// crashing — off-ladder synthesised rungs can omit a cap.
-String cappedRungDeliverySubtitle(int? maxBitrateKbps) {
-  if (maxBitrateKbps == null) return 'Transcodes';
-  return 'Transcodes · up to $maxBitrateKbps kbps';
-}
-
-/// The Original subtitle for what the planner would do with the Original
+/// The Original delivery for what the planner would do with the Original
 /// choice: direct play, stream copy, or a transcode.
 ///
 /// This is the single source of truth for the label: the planner already
@@ -45,8 +46,8 @@ String cappedRungDeliverySubtitle(int? maxBitrateKbps) {
 /// transcode, so the plan this reads from can never claim a re-encode is
 /// lossless. A 1080p HEVC episode therefore reports "Original · re-encoding
 /// required" here, matching what the server dashboard shows.
-String deliverySubtitleForPlan(PlaybackPlan plan) => switch (plan) {
-      DirectPlayPlan() => kOriginalDirectPlaySubtitle,
-      HlsPlan(strategy: HlsStrategy.copy) => kOriginalLosslessSubtitle,
-      HlsPlan() => kOriginalTranscodeSubtitle,
+OriginalDelivery originalDeliveryForPlan(PlaybackPlan plan) => switch (plan) {
+      DirectPlayPlan() => OriginalDelivery.directPlay,
+      HlsPlan(strategy: HlsStrategy.copy) => OriginalDelivery.lossless,
+      HlsPlan() => OriginalDelivery.transcode,
     };

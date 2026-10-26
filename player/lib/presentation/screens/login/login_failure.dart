@@ -1,3 +1,5 @@
+import '../../../core/channels/pairing_service.dart' show PairingFailure;
+
 /// Why a sign-in step failed, rendered by the screen through
 /// `AppLocalizations.loginFailure`.
 sealed class LoginFailure {
@@ -23,4 +25,11 @@ final class LoginFailureOfKind extends LoginFailure {
 final class LoginFailureFromServer extends LoginFailure {
   const LoginFailureFromServer(this.message);
   final String message;
+}
+
+/// Pairing with a claim code or QR code stopped; the screen words the reason
+/// from [failure].
+final class LoginFailureOfPairing extends LoginFailure {
+  const LoginFailureOfPairing(this.failure);
+  final PairingFailure failure;
 }

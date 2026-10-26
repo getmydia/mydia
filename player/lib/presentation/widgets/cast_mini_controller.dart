@@ -738,8 +738,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
-          final message = pushRouteSafely(router, path).message;
-          if (message != null && mounted) showToast(context, message);
+          final outcome = pushRouteSafely(router, path);
+          if (!mounted) return;
+          final message = context.l10n.pushOutcomeMessage(outcome);
+          if (message != null) showToast(context, message);
         },
       );
     } catch (e) {

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../l10n/l10n.dart';
 import 'platform_features.dart';
 
 /// Picture-in-Picture (PiP) service for mobile platforms
@@ -133,7 +135,9 @@ class PipToggleButton extends StatelessWidget {
         }
         onToggle?.call();
       },
-      tooltip: pipService.isEnabled ? 'Disable PiP' : 'Enable PiP',
+      tooltip: pipService.isEnabled
+          ? context.l10n.pipDisable
+          : context.l10n.pipEnable,
     );
   }
 }

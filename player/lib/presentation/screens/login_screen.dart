@@ -753,7 +753,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   isLoading: loginState.isLoading,
                 ),
               ),
-              if (loginState.claimCodeMessage != null &&
+              if (loginState.pairingStep != null &&
                   loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
                 const SizedBox(height: 12),
                 _buildTvLoadingIndicator(loginState),
@@ -972,7 +972,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ],
           Flexible(
             child: Text(
-              loginState.claimCodeMessage ?? '',
+              loginState.pairingStep == null
+                  ? ''
+                  : context.l10n.pairingStepText(loginState.pairingStep!),
               style: TextStyle(
                 color: palette.primary,
                 fontSize: 12,
@@ -1286,7 +1288,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
           ),
         ],
-        if (loginState.claimCodeMessage != null &&
+        if (loginState.pairingStep != null &&
             loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
           const SizedBox(height: 14),
           _buildProgressIndicator(loginState),
@@ -1574,7 +1576,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         border: Border.all(color: palette.primary.withValues(alpha: 0.2)),
       ),
       child: Text(
-        loginState.claimCodeMessage ?? '',
+        loginState.pairingStep == null
+            ? ''
+            : context.l10n.pairingStepText(loginState.pairingStep!),
         style: TextStyle(
           color: palette.primary,
           fontSize: 12,

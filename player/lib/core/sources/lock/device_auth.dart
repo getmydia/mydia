@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../../l10n/l10n.dart';
+
 enum DeviceAuthResult { success, cancelled, unavailable, failed }
 
 abstract class DeviceAuth {
@@ -57,7 +59,8 @@ class LocalAuthDeviceAuth implements DeviceAuth {
     if (!await available()) return DeviceAuthResult.unavailable;
     try {
       final ok = await _auth.authenticate(
-        localizedReason: 'Unlock hidden and locked servers',
+        // No BuildContext: the OS prompt is worded in the app's current language.
+        localizedReason: currentAppLocalizations().deviceAuthReason,
         // The OS falls back to the device passcode when biometrics fail or
         // are not enrolled.
         biometricOnly: false,

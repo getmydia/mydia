@@ -57,13 +57,29 @@ class LogUploadMeta {
       };
 }
 
-class LogUploadException implements Exception {
-  const LogUploadException(this.message);
+/// Why sending logs failed. The Send logs dialog words it
+/// (`AppFormatters.logUploadFailure`).
+enum LogUploadFailure {
+  relayBusy,
+  relayRejected,
+  relayNoCode,
+  relayUnreachable,
+  relayHttp,
+  noLogs,
+  unavailable,
+}
 
-  final String message;
+class LogUploadException implements Exception {
+  const LogUploadException(this.failure, {this.status});
+
+  final LogUploadFailure failure;
+
+  /// The HTTP status, for [LogUploadFailure.relayHttp].
+  final int? status;
 
   @override
-  String toString() => message;
+  String toString() =>
+      'LogUploadException(${failure.name}${status == null ? '' : ', $status'})';
 }
 
 sealed class _Outcome {
@@ -241,25 +257,24 @@ class LogUploader {
         }
         if (outcome is! _Sent) {
           throw LogUploadException(outcome is _Wait
-              ? 'The relay is busy. Try again in a minute.'
-              : 'The relay did not accept these logs.');
+              ? LogUploadFailure.relayBusy
+              : LogUploadFailure.relayRejected);
         }
         budget = maxBatchBytes;
         code ??= outcome.code;
         if (code == null) {
-          throw const LogUploadException('The relay did not return a code.');
+          throw const LogUploadException(LogUploadFailure.relayNoCode);
         }
         from = batch.next;
       }
       if (code == null) {
-        throw const LogUploadException('There are no logs on this device yet.');
+        throw const LogUploadException(LogUploadFailure.noLogs);
       }
       return code;
     } on LogUploadException {
       rethrow;
     } catch (_) {
-      throw const LogUploadException(
-          'Could not reach the relay. Check the connection and try again.');
+      throw const LogUploadException(LogUploadFailure.relayUnreachable);
     }
   }
 
@@ -328,7 +343,8 @@ class LogUploader {
         time: _now().toUtc(),
         level: LogLevel.warn,
         tag: 'LogUploader',
-        message: 'gap: local logs were rotated away before upload',
+        message:
+            'gap: local logs were rotated away before upload', // l10n-ignore: log text
         sessionId: _sessionId,
       ).toJson());
 
@@ -359,7 +375,7 @@ class LogUploader {
     if (status == 400 || status == 413) return const _Rejected();
     if (status == 429) return _Wait(_now().add(_retryAfter(response)));
     if (status == 404) return _Wait(_now().add(missingEndpointBackoff));
-    throw LogUploadException('The relay answered HTTP $status');
+    throw LogUploadException(LogUploadFailure.relayHttp, status: status);
   }
 
   static int _shrinkBudget(int budget) {

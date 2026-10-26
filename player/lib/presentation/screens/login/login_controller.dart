@@ -140,6 +140,24 @@ LoginFailure _totpFailure(Object e) {
   return _invalidCode;
 }
 
+/// What the claim code status is while the service is at [step].
+ClaimCodeStatus _claimStatusFor(PairingStep step) => switch (step) {
+      PairingStep.lookingUpCode ||
+      PairingStep.validatingQr =>
+        ClaimCodeStatus.lookingUp,
+      PairingStep.resolvingCode => ClaimCodeStatus.resolving,
+      PairingStep.connecting => ClaimCodeStatus.connecting,
+      PairingStep.initializing ||
+      PairingStep.submitting ||
+      PairingStep.succeeded =>
+        ClaimCodeStatus.handshaking,
+      PairingStep.paired => ClaimCodeStatus.paired,
+    };
+
+/// The error line for a pairing that stopped.
+LoginFailure _pairingFailure(PairingFailure? failure) => LoginFailureOfPairing(
+    failure ?? const PairingFailure(PairingFailureKind.other));
+
 /// State for the login screen.
 class LoginState {
   const LoginState({
@@ -148,7 +166,7 @@ class LoginState {
     this.error,
     this.success = false,
     this.claimCodeStatus = ClaimCodeStatus.idle,
-    this.claimCodeMessage,
+    this.pairingStep,
     this.credentialsNotPersisted = false,
     this.totpChallenge,
     this.addedSource,
@@ -159,7 +177,9 @@ class LoginState {
   final LoginFailure? error;
   final bool success;
   final ClaimCodeStatus claimCodeStatus;
-  final String? claimCodeMessage;
+
+  /// The progress line to show while pairing; the screen words it.
+  final PairingStep? pairingStep;
 
   /// Set when pairing or login succeeded but the credentials could not be
   /// written to durable storage, so they are lost when the app closes.
@@ -179,7 +199,7 @@ class LoginState {
     LoginFailure? error,
     bool? success,
     ClaimCodeStatus? claimCodeStatus,
-    String? claimCodeMessage,
+    PairingStep? pairingStep,
     bool? credentialsNotPersisted,
     TotpChallenge? totpChallenge,
     bool clearTotpChallenge = false,
@@ -191,7 +211,7 @@ class LoginState {
       error: error,
       success: success ?? this.success,
       claimCodeStatus: claimCodeStatus ?? this.claimCodeStatus,
-      claimCodeMessage: claimCodeMessage,
+      pairingStep: pairingStep,
       credentialsNotPersisted:
           credentialsNotPersisted ?? this.credentialsNotPersisted,
       totpChallenge:
@@ -250,7 +270,7 @@ class LoginController extends _$LoginController {
       isLoading: true,
       error: null,
       claimCodeStatus: ClaimCodeStatus.lookingUp,
-      claimCodeMessage: 'Looking up claim code...',
+      pairingStep: PairingStep.lookingUpCode,
     );
 
     try {
@@ -261,46 +281,28 @@ class LoginController extends _$LoginController {
       final result = await pairingService.pairWithClaimCodeOnly(
         claimCode: claimCode,
         deviceName: deviceName,
-        onStatusUpdate: (status) {
-          // Check if still mounted before updating state
-          if (!ref.mounted) return;
-
-          // Map status messages to claim code statuses
-          ClaimCodeStatus claimStatus;
-          if (status.contains('Resolving')) {
-            claimStatus = ClaimCodeStatus.resolving;
-          } else if (status.contains('Looking up') ||
-              status.contains('Finding')) {
-            claimStatus = ClaimCodeStatus.discovering;
-          } else if (status.contains('Connecting') ||
-              status.contains('Joining') ||
-              status.contains('relay')) {
-            claimStatus = ClaimCodeStatus.connecting;
-          } else if (status.contains('Dialing')) {
-            claimStatus = ClaimCodeStatus.dialing;
-          } else if (status.contains('Establishing') ||
-              status.contains('Submitting') ||
-              status.contains('secure')) {
-            claimStatus = ClaimCodeStatus.handshaking;
-          } else {
-            claimStatus = ClaimCodeStatus.handshaking;
-          }
-
-          state = state.copyWith(
-            claimCodeStatus: claimStatus,
-            claimCodeMessage: status,
-          );
-        },
+        onStatusUpdate: _onPairingStep,
       );
 
       if (!result.success) {
-        throw Exception(result.error ?? 'Pairing failed');
+        _failPairingWith(_pairingFailure(result.failure));
+        return;
       }
 
       await _savePairing(result.credentials!, reauthAccountId);
     } catch (e) {
       _failPairing(e);
     }
+  }
+
+  /// Shows the service's step under the code field.
+  void _onPairingStep(PairingStep step) {
+    // Check if still mounted before updating state
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      claimCodeStatus: _claimStatusFor(step),
+      pairingStep: step,
+    );
   }
 
   /// Perform login with the given credentials using GraphQL.
@@ -416,7 +418,7 @@ class LoginController extends _$LoginController {
         ),
         reauthAccountId,
         claimCodeStatus: ClaimCodeStatus.paired,
-        claimCodeMessage: 'Paired successfully!',
+        pairingStep: PairingStep.paired,
       );
 
   Future<void> _saveLogin(LoginGranted g, String? reauthAccountId) => _save(
@@ -433,7 +435,7 @@ class LoginController extends _$LoginController {
     MydiaCredentials credentials,
     String? reauthAccountId, {
     ClaimCodeStatus? claimCodeStatus,
-    String? claimCodeMessage,
+    PairingStep? pairingStep,
   }) async {
     final id = await saveMydiaServer(
       ref,
@@ -452,17 +454,19 @@ class LoginController extends _$LoginController {
       addedSource: id,
       clearTotpChallenge: true,
       claimCodeStatus: claimCodeStatus,
-      claimCodeMessage: claimCodeMessage,
+      pairingStep: pairingStep,
     );
   }
 
-  void _failPairing(Object e) {
+  void _failPairing(Object e) => _failPairingWith(_saveFailure(e) ??
+      LoginFailureFromServer(e.toString().replaceFirst('Exception: ', '')));
+
+  void _failPairingWith(LoginFailure failure) {
     if (!ref.mounted) return;
     state = state.copyWith(
       isLoading: false,
       claimCodeStatus: ClaimCodeStatus.error,
-      error: _saveFailure(e) ??
-          LoginFailureFromServer(e.toString().replaceFirst('Exception: ', '')),
+      error: failure,
     );
   }
 
@@ -481,7 +485,7 @@ class LoginController extends _$LoginController {
       isLoading: true,
       error: null,
       claimCodeStatus: ClaimCodeStatus.lookingUp,
-      claimCodeMessage: 'Validating QR code...',
+      pairingStep: PairingStep.validatingQr,
     );
 
     try {
@@ -492,34 +496,12 @@ class LoginController extends _$LoginController {
       final result = await pairingService.pairWithQrData(
         qrData: qrData,
         deviceName: deviceName,
-        onStatusUpdate: (status) {
-          // Check if still mounted before updating state
-          if (!ref.mounted) return;
-
-          ClaimCodeStatus claimStatus;
-          if (status.contains('Validating')) {
-            claimStatus = ClaimCodeStatus.lookingUp;
-          } else if (status.contains('Connecting') ||
-              status.contains('Joining') ||
-              status.contains('relay')) {
-            claimStatus = ClaimCodeStatus.connecting;
-          } else if (status.contains('Establishing') ||
-              status.contains('Submitting') ||
-              status.contains('secure')) {
-            claimStatus = ClaimCodeStatus.handshaking;
-          } else {
-            claimStatus = ClaimCodeStatus.handshaking;
-          }
-
-          state = state.copyWith(
-            claimCodeStatus: claimStatus,
-            claimCodeMessage: status,
-          );
-        },
+        onStatusUpdate: _onPairingStep,
       );
 
       if (!result.success) {
-        throw Exception(result.error ?? 'Pairing failed');
+        _failPairingWith(_pairingFailure(result.failure));
+        return;
       }
 
       await _savePairing(result.credentials!, reauthAccountId);

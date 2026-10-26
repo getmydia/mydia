@@ -7,34 +7,34 @@ import 'package:flutter/foundation.dart' show immutable;
 /// device on the account. That failure used to be entirely silent, which is
 /// what let it persist unnoticed; this type exists so the settings screen can
 /// say which step is stuck.
+///
+/// The settings row words each status in the viewer's language
+/// (`AppFormatters.registrationStatusText`), so a status carries no prose.
 @immutable
 sealed class RegistrationStatus {
   const RegistrationStatus();
-
-  /// One line of user-facing prose. Lives here rather than in the widget so
-  /// the wording is covered by a unit test instead of a widget test.
-  String describe();
 }
 
 /// This device has opted out of being controlled, so nothing is published.
 @immutable
 class RegistrationIdle extends RegistrationStatus {
   const RegistrationIdle();
+}
 
-  @override
-  String describe() => 'Not advertising this device';
+/// What registration is waiting for.
+enum RegistrationDependency {
+  remoteControlSetting,
+  deviceOnline,
+  serverConnection,
 }
 
 /// A precondition has not arrived yet. Normal for the first seconds of a
 /// launch, and not an error.
 @immutable
 class RegistrationWaiting extends RegistrationStatus {
-  final String dependency;
+  final RegistrationDependency dependency;
 
   const RegistrationWaiting(this.dependency);
-
-  @override
-  String describe() => 'Waiting for $dependency';
 }
 
 /// A registration attempt is in flight. [attempt] counts from 1.
@@ -44,9 +44,6 @@ class RegistrationInFlight extends RegistrationStatus {
   final int attempt;
 
   const RegistrationInFlight(this.nodeId, this.attempt);
-
-  @override
-  String describe() => 'Registering with the server (attempt $attempt)';
 }
 
 /// The server has confirmed it holds [nodeId] for this device.
@@ -56,9 +53,6 @@ class RegistrationSucceeded extends RegistrationStatus {
   final DateTime at;
 
   const RegistrationSucceeded(this.nodeId, this.at);
-
-  @override
-  String describe() => 'Discoverable by your other devices';
 }
 
 /// The last attempt failed. [nextRetryAt] is null when nothing is scheduled.
@@ -69,9 +63,6 @@ class RegistrationFailed extends RegistrationStatus {
   final DateTime? nextRetryAt;
 
   const RegistrationFailed(this.reason, this.attempts, this.nextRetryAt);
-
-  @override
-  String describe() => 'Not discoverable: $reason';
 }
 
 /// The status a single row should show for several instances: the one that

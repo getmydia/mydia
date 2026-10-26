@@ -44,8 +44,9 @@ class ConnectionStatusDot extends ConsumerWidget {
     );
     final color = connectionToneColor(summary.tone);
     final tooltip = updatePending
-        ? context.l10n.connectionUpdateAvailable(summary.label)
-        : summary.label;
+        ? context.l10n
+            .connectionUpdateAvailable(context.l10n.connectionLabel(summary))
+        : context.l10n.connectionLabel(summary);
 
     // Pulse only while re-establishing a link that was previously up. A first
     // connection is pending too, but a pulsing dot at launch reads as a fault.

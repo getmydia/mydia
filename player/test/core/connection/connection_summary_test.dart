@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_summary.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
+
+final _en = AppLocalizationsEn();
 
 ConnectionSummary _summary({
   bool isP2P = true,
@@ -18,8 +22,10 @@ void main() {
     test('a non-p2p connection reads as a plain server connection', () {
       final summary = _summary(isP2P: false);
 
-      expect(summary.label, 'Connected to server');
-      expect(summary.detail, 'Direct connection, no relay involved');
+      expect(summary.kind, ConnectionKind.server);
+      expect(_en.connectionLabel(summary), 'Connected to server');
+      expect(_en.connectionDetail(summary),
+          'Direct connection, no relay involved');
       expect(summary.tone, ConnectionTone.good);
     });
 
@@ -30,32 +36,34 @@ void main() {
         isInitialized: true,
       );
 
-      expect(summary.label, 'Connected to server');
+      expect(_en.connectionLabel(summary), 'Connected to server');
       expect(summary.tone, ConnectionTone.good);
     });
 
     test('a direct peer link is good', () {
       final summary = _summary(type: P2pConnectionType.direct);
 
-      expect(summary.label, 'Connected directly');
-      expect(summary.detail, 'Peer-to-peer link with no relay in the path');
+      expect(_en.connectionLabel(summary), 'Connected directly');
+      expect(_en.connectionDetail(summary),
+          'Peer-to-peer link with no relay in the path');
       expect(summary.tone, ConnectionTone.good);
     });
 
     test('a relayed peer link warns', () {
       final summary = _summary(type: P2pConnectionType.relay);
 
-      expect(summary.label, 'Connected through a relay');
-      expect(summary.detail, 'Traffic is passing through a relay server');
+      expect(_en.connectionLabel(summary), 'Connected through a relay');
+      expect(_en.connectionDetail(summary),
+          'Traffic is passing through a relay server');
       expect(summary.tone, ConnectionTone.caution);
     });
 
     test('a mixed peer link warns and says so plainly', () {
       final summary = _summary(type: P2pConnectionType.mixed);
 
-      expect(summary.label, 'Partly relayed');
-      expect(
-          summary.detail, 'Some paths are direct and some go through a relay');
+      expect(_en.connectionLabel(summary), 'Partly relayed');
+      expect(_en.connectionDetail(summary),
+          'Some paths are direct and some go through a relay');
       expect(summary.tone, ConnectionTone.caution);
     });
 
@@ -65,7 +73,7 @@ void main() {
         isInitialized: true,
       );
 
-      expect(summary.label, 'Reconnecting');
+      expect(_en.connectionLabel(summary), 'Reconnecting');
       expect(summary.tone, ConnectionTone.pending);
     });
 
@@ -75,16 +83,16 @@ void main() {
         isInitialized: false,
       );
 
-      expect(summary.label, 'Connecting');
+      expect(_en.connectionLabel(summary), 'Connecting');
       expect(summary.tone, ConnectionTone.pending);
     });
 
     test('no label leaks the p2p jargon the old strings used', () {
       final labels = [
-        _summary(isP2P: false).label,
+        _en.connectionLabel(_summary(isP2P: false)),
         for (final type in P2pConnectionType.values) ...[
-          _summary(type: type, isInitialized: true).label,
-          _summary(type: type, isInitialized: false).label,
+          _en.connectionLabel(_summary(type: type, isInitialized: true)),
+          _en.connectionLabel(_summary(type: type, isInitialized: false)),
         ],
       ];
 
@@ -97,8 +105,8 @@ void main() {
     test('no copy uses an em dash', () {
       for (final type in P2pConnectionType.values) {
         final summary = _summary(type: type);
-        expect(summary.label, isNot(contains('—')));
-        expect(summary.detail, isNot(contains('—')));
+        expect(_en.connectionLabel(summary), isNot(contains('—')));
+        expect(_en.connectionDetail(summary), isNot(contains('—')));
       }
     });
   });

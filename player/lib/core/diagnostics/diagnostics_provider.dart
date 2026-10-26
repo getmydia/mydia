@@ -82,7 +82,7 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
   Future<String> sendReport({String? note}) {
     final uploader = ref.read(logUploaderProvider);
     if (uploader == null) {
-      throw const LogUploadException('Logs are not available on this device.');
+      throw const LogUploadException(LogUploadFailure.unavailable);
     }
     return uploader.sendReport(note: note);
   }

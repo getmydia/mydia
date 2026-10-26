@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/screens/home/home_rows.dart';
 import 'package:player/presentation/screens/home/home_rows_provider.dart';
 import 'package:player/presentation/screens/home/home_scope.dart';
@@ -47,7 +48,7 @@ void main() {
     expect(rows.continueWatching.single.ref.externalId, 'ar');
     expect(rows.recentMovies.single.ref.externalId, 'an');
     expect(rows.favorites.single.ref.externalId, 'af');
-    expect(rows.libraries.single.title, 'Films');
+    expect(rows.libraries.single.title(AppLocalizationsEn()), 'Films');
     expect(rows.libraries.single.items.single.ref.externalId, 'am');
     expect(rows.labelled, isFalse);
   });
@@ -56,7 +57,7 @@ void main() {
     final a = server('a'), b = server('b');
     final rows = await settled(containerFor([a, b]), const AllServers());
     expect(rows.continueWatching, hasLength(2));
-    expect(rows.libraries.map((r) => r.title),
+    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())),
         ['Films · Server a', 'Films · Server b']);
   });
 

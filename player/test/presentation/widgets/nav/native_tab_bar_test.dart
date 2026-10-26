@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/platform/native_tab_bar_channel.dart';
 import 'package:player/domain/navigation/source_nav.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 import 'package:player/presentation/widgets/nav/native_tab_bar.dart';
 import 'package:player/presentation/widgets/toast/toast_obstruction.dart';
 
+final _en = AppLocalizationsEn();
 const _name = 'test/native-tab-bar';
 const _channel = MethodChannel(_name);
 
-SourceNavEntry _entry(String id, String route, {String? shortLabel}) =>
+SourceNavEntry _entry(String id, String route, {bool shortLabel = false}) =>
     SourceNavEntry(
       id: id,
       label: '${id[0].toUpperCase()}${id.substring(1)}',
@@ -25,7 +28,7 @@ SourceNavEntry _entry(String id, String route, {String? shortLabel}) =>
 final _all = [
   _entry('home', '/s/aa'),
   _entry('movies', '/s/aa/library/movies'),
-  _entry('shows', '/s/aa/library/shows', shortLabel: 'Shows'),
+  _entry('shows', '/s/aa/library/shows', shortLabel: true),
   _entry('favorites', '/s/aa/favorites'),
   _entry('downloads', '/downloads'),
   _entry('settings', '/settings'),
@@ -73,6 +76,8 @@ Future<_Harness> _pump(
         viewPadding: EdgeInsets.only(bottom: homeIndicator),
       ),
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           extendBody: true,
           bottomNavigationBar: NativeTabBar(
@@ -119,8 +124,8 @@ Future<void> _fromNative(WidgetTester tester, String method,
 void main() {
   group('nativeTabsFor', () {
     test('the bar entries, in order, with symbols and short labels', () {
-      final tabs =
-          nativeTabsFor(_bar, isOffline: false, showBackToMydia: false);
+      final tabs = nativeTabsFor(_bar,
+          l10n: _en, isOffline: false, showBackToMydia: false);
       expect([for (final t in tabs) t.id],
           ['home', 'movies', 'shows', 'downloads', 'settings']);
       expect([
@@ -139,6 +144,7 @@ void main() {
     test('Favorites replaces Downloads where downloads are unsupported', () {
       final tabs = nativeTabsFor(
         bottomNavEntries(_all, downloadSupported: false),
+        l10n: _en,
         isOffline: false,
         showBackToMydia: false,
       );
@@ -148,7 +154,8 @@ void main() {
     });
 
     test('embed mode leads with the Mydia back item', () {
-      final tabs = nativeTabsFor(_bar, isOffline: true, showBackToMydia: true);
+      final tabs = nativeTabsFor(_bar,
+          l10n: _en, isOffline: true, showBackToMydia: true);
       expect(tabs.first.id, kMydiaBackTabId);
       expect(tabs.first.title, 'Mydia');
       expect(tabs.first.symbol, 'chevron.backward');
@@ -157,7 +164,8 @@ void main() {
     });
 
     test('offline disables everything except Downloads', () {
-      final tabs = nativeTabsFor(_bar, isOffline: true, showBackToMydia: false);
+      final tabs = nativeTabsFor(_bar,
+          l10n: _en, isOffline: true, showBackToMydia: false);
       expect({
         for (final t in tabs) t.id: t.enabled
       }, {
@@ -171,7 +179,10 @@ void main() {
 
     test('the badge goes on Settings only', () {
       final tabs = nativeTabsFor(_bar,
-          isOffline: false, showBackToMydia: false, settingsBadge: '1');
+          l10n: _en,
+          isOffline: false,
+          showBackToMydia: false,
+          settingsBadge: '1');
       expect({
         for (final t in tabs) t.id: t.badge
       }, {

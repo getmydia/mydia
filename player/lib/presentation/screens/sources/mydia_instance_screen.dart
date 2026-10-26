@@ -16,6 +16,7 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../settings/devices_screen.dart';
@@ -258,7 +259,7 @@ class _RegistrationSection extends ConsumerWidget {
       children: [
         SettingsRow.action(
           icon: Icons.settings_remote,
-          title: status.describe(),
+          title: context.l10n.registrationStatusText(status),
         ),
         if (status is RegistrationFailed)
           SettingsRow.action(

@@ -192,7 +192,7 @@ void main() {
     await _pump(tester, onSend: (_) async {
       attempts++;
       if (attempts == 1) {
-        throw const LogUploadException('The relay did not accept these logs.');
+        throw const LogUploadException(LogUploadFailure.relayRejected);
       }
       return 'LOG-7K2QX9';
     });

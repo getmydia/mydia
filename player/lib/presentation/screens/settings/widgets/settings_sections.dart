@@ -132,7 +132,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
       // A standing preference has no streaming candidates to derive delivery
       // from, so both open rows keep a neutral subtitle.
       autoSubtitle: context.l10n.qualityAutoPreference,
-      originalSubtitle: kOriginalPreferenceSubtitle,
+      originalDelivery: OriginalDelivery.preference,
     );
 
     if (picked == null || !context.mounted) return;
@@ -156,7 +156,7 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
       key: const Key('remote-control-enabled-switch'),
       icon: Icons.settings_remote,
       title: l10n.settingsRemoteControlTitle,
-      subtitle: registration.describe(),
+      subtitle: l10n.registrationStatusText(registration),
       value: controllableEnabled ?? true,
       onChanged: controllableEnabled == null
           ? null

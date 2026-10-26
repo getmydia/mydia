@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import '../../l10n/l10n.dart';
+
 /// Top-level callback required by flutter_foreground_task.
 /// Must be a top-level or static function.
 @pragma('vm:entry-point')
@@ -62,8 +64,11 @@ class DownloadNotificationService {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'mydia_downloads',
-        channelName: 'Downloads',
-        channelDescription: 'Shows progress while downloading media files.',
+        // Android keeps the channel's name and description from the first
+        // time it is created, so they follow the language of that moment.
+        channelName: currentAppLocalizations().navDownloads,
+        channelDescription:
+            currentAppLocalizations().downloadNotificationChannelDescription,
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
         onlyAlertOnce: true,

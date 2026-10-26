@@ -20,6 +20,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 /// The dual-language shape that exposed this: Italian first and flagged
@@ -56,7 +58,7 @@ void main() {
 
       expect(detection.tracks.map((t) => t.language), ['ita', 'eng']);
       expect(
-        detection.tracks.map((t) => t.displayName),
+        detection.tracks.map(AppLocalizationsEn().audioTrackName),
         ['Italian', 'English'],
       );
     });

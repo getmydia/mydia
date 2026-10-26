@@ -911,7 +911,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Cached because the candidate list is not retained after
   /// [_initializePlayer]. Defaults to re-encoding required until candidates
   /// resolve (honest worst case; matches the spec fallback).
-  String _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
+  OriginalDelivery _originalDelivery = OriginalDelivery.transcode;
 
   // Total duration from server (for HLS streams where playlist duration is incomplete)
   Duration? _totalDuration;
@@ -1345,7 +1345,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       .map((track) => CastSubtitleTrack(
             trackId: track.id,
             url: track.url ?? '',
-            label: track.displayName,
+            label: context.l10n.subtitleTrackName(track),
             language: track.language,
           ))
       .toList();
@@ -1472,7 +1472,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // for them and hides the control.
     _qualityLadder = const [QualityRung.original];
     _effectiveQuality = null;
-    _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
+    _originalDelivery = OriginalDelivery.transcode;
     // A stale plan from the previous file must not offer a control, or
     // narrate its old delivery, for the one about to load.
     _plan = null;
@@ -2434,7 +2434,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint(target == null
           ? '[PlayerScreen] Subtitle preference applied: Off'
           : '[PlayerScreen] Subtitle preference applied: '
-              '${target.displayName} via '
+              '${target.title ?? target.language} via '
               '${isMpvNativeSubtitleTrackId(target.id) ? 'mpv' : 'server'}');
     }
   }
@@ -2636,7 +2636,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The Original rung's subtitle: what the planner would do with the
   /// Original choice, whatever is selected now. Labels only.
   void _rememberOriginalDeliverySubtitle(PlanInputs inputs) {
-    _originalDeliverySubtitle = deliverySubtitleForPlan(
+    _originalDelivery = originalDeliveryForPlan(
       planPlayback(inputs.copyWith(choice: QualityChoice.original)),
     );
   }
@@ -4234,7 +4234,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       setState(() => _selectedSubtitleTrack = selected);
       _showSubtitleCues(enabled: true);
       await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
-      debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
+      debugPrint(
+          '[PlayerScreen] Set subtitle track: ${selected.title ?? selected.language}');
     } finally {
       _resetPendingSubtitleSelection(generation);
     }
@@ -4469,7 +4470,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final mkTrack = _mediaKitAudioTrackMap[selected.id];
       if (mkTrack != null) {
         await _setAudioTrack(player, mkTrack);
-        debugPrint('[PlayerScreen] Set audio track: ${selected.displayName}');
+        debugPrint(
+            '[PlayerScreen] Set audio track: ${selected.title ?? selected.language}');
       } else {
         debugPrint(
             '[PlayerScreen] No media_kit track found for: ${selected.id}');
@@ -4693,7 +4695,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       [QualityRung.auto, ..._qualityLadder],
       _selectedQuality,
       autoSubtitle: _autoDeliverySubtitle(),
-      originalSubtitle: _originalDeliverySubtitle,
+      originalDelivery: _originalDelivery,
       clampNote: _qualityClampNote(),
       statsEnabled: ref.read(statsOverlayEnabledProvider).value ?? false,
       onStatsChanged: (enabled) => unawaited(
@@ -5005,7 +5007,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _scalingTouched = true;
     setState(() => _scaling = next);
     unawaited(VideoScalingPrefs.save(next));
-    _showToast(next.toastMessage);
+    _showToast(context.l10n.videoScalingToast(next));
   }
 
   void _toggleScaling() => _setScaling(_scaling.toggled);
@@ -5257,11 +5259,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       muted: isPlayerVolumeMuted(player?.state.volume),
       audioTracks: _audioTracks
           .map((t) => FlutterTrackInfo(
-              id: t.id, label: t.displayName, language: t.language))
+              id: t.id,
+              label: context.l10n.audioTrackName(t),
+              language: t.language))
           .toList(),
       subtitleTracks: _subtitleTracks
           .map((t) => FlutterTrackInfo(
-              id: t.id, label: t.displayName, language: t.language))
+              id: t.id,
+              label: context.l10n.subtitleTrackName(t),
+              language: t.language))
           .toList(),
       selectedAudio: _selectedAudioTrack?.id,
       selectedSubtitle: _selectedSubtitleTrack?.id,
@@ -5660,8 +5666,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             isFullscreen: _fullscreen.isFullscreen.value,
             isAlwaysOnTop: _isAlwaysOnTop,
             audioTrackCount: _audioTracks.length,
-            selectedAudioLabel: _selectedAudioTrack?.displayName,
-            selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
+            selectedAudioLabel: _selectedAudioTrack == null
+                ? null
+                : context.l10n.audioTrackName(_selectedAudioTrack!),
+            selectedSubtitleLabel: _selectedSubtitleTrack == null
+                ? null
+                : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
             selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
                 selected: _selectedQuality, effective: _effectiveQuality)),
           ),
@@ -5803,8 +5813,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
       linkLabel: status == null
-          ? summary.label
-          : '${summary.label} - ${status.connectedPeersCount} peer'
+          ? context.l10n.connectionLabel(summary)
+          : '${context.l10n.connectionLabel(summary)} - ${status.connectedPeersCount} peer'
               '${status.connectedPeersCount == 1 ? '' : 's'}',
       linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,

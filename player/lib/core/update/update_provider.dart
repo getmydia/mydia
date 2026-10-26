@@ -65,6 +65,19 @@ class TrackNotPublished {
   const TrackNotPublished(this.track, {this.macos = false});
 }
 
+/// What the update card tells the viewer when nothing is left to do.
+enum UpdateNotice {
+  /// A check found nothing newer.
+  upToDate,
+
+  /// The install went to a window outside the app (Android's confirmation
+  /// dialog, Sparkle).
+  handedOff,
+
+  /// Installed, but the portal could not restart the app: reopen it.
+  reopenToFinish,
+}
+
 /// State for the update system.
 class UpdateState {
   /// Available update, if any. Null on platforms that update elsewhere.
@@ -88,8 +101,9 @@ class UpdateState {
   /// An update is installed and this process is still on the old build.
   final bool restartRequired;
 
-  /// A neutral message, such as confirming there was nothing to install.
-  final String? notice;
+  /// A neutral message, such as confirming there was nothing to install. The
+  /// update card words it (`AppFormatters.updateNoticeText`).
+  final UpdateNotice? notice;
 
   /// Error message from the last check or apply attempt.
   final String? error;
@@ -146,7 +160,7 @@ class UpdateState {
     bool? isApplying,
     double? downloadProgress,
     bool? restartRequired,
-    String? notice,
+    UpdateNotice? notice,
     String? error,
     TrackNotPublished? trackNotPublished,
     Set<UpdateTrack>? availableTracks,
@@ -343,7 +357,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         ),
       AlreadyUpToDate() => state.copyWith(
           isApplying: false,
-          notice: "You're up to date",
+          notice: UpdateNotice.upToDate,
           clearUpdate: true,
         ),
       UpdateUnsupported(:final reason, :final needsInstallPermission) =>
@@ -357,8 +371,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       // download while the first is still waiting on the user.
       UpdateDeferred() => state.copyWith(
           isApplying: false,
-          notice: 'Handed off outside Mydia. Confirm there to finish '
-              'installing.',
+          notice: UpdateNotice.handedOff,
           clearUpdate: true,
         ),
     };
@@ -417,7 +430,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       debugPrint('[UpdateNotifier] Restart failed: $e');
       if (!ref.mounted) return;
       state = state.copyWith(
-        notice: 'Update installed. Reopen Mydia to finish.',
+        notice: UpdateNotice.reopenToFinish,
         restartRequired: false,
       );
       return;

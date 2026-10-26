@@ -151,7 +151,8 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
   /// service emits while uncontrollable, so this cannot misfire.
   RegistrationStatus _reported(RegistrationStatus status) {
     if (_settingUnresolved && status is RegistrationIdle) {
-      return const RegistrationWaiting('the remote control setting');
+      return const RegistrationWaiting(
+          RegistrationDependency.remoteControlSetting);
     }
     return status;
   }

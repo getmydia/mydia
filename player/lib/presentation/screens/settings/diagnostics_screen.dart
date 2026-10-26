@@ -109,8 +109,8 @@ class DiagnosticsBody extends ConsumerWidget {
           children: [
             SettingsRow.action(
               icon: Icons.lan_outlined,
-              title: summary.label,
-              subtitle: summary.detail,
+              title: l10n.connectionLabel(summary),
+              subtitle: l10n.connectionDetail(summary),
               trailing: _Dot(color: connectionToneColor(summary.tone)),
             ),
             SettingsRow.action(
@@ -182,10 +182,11 @@ class DiagnosticsBody extends ConsumerWidget {
   ) async {
     // Stays English: the report is pasted into bug reports for the
     // developers, not read on screen.
+    final english = lookupAppLocalizations(const Locale('en'));
     final report = [
       'Mydia Player $version',
-      'Transport: ${summary.label}',
-      'Detail: ${summary.detail}',
+      'Transport: ${english.connectionLabel(summary)}',
+      'Detail: ${english.connectionDetail(summary)}',
       'Relay: ${status.isRelayConnected ? 'connected' : 'not connected'}',
       if (status.relayUrl != null) 'Relay server: ${status.relayUrl}',
       'Peers: ${status.connectedPeersCount}',

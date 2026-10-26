@@ -10,6 +10,7 @@ import '../../../domain/merged/merge_rows.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../all_servers/all_servers_providers.dart' show isMovieRow;
 
 /// Continue Watching keeps 20 cards. Recently Added keeps 40, so each half of
@@ -44,16 +45,24 @@ class HomeFeeds {
 @immutable
 class HomeLibraryRow {
   const HomeLibraryRow({
-    required this.library,
-    required this.title,
+    required this.info,
+    this.serverName,
     required this.items,
   });
 
-  final LibraryRef library;
+  final Library info;
+  LibraryRef get library => info.ref;
+
+  /// The server's name, set when two or more servers are in scope.
+  final String? serverName;
 
   /// The library's title, with its server's name when two or more servers
   /// are in scope.
-  final String title;
+  String title(AppLocalizations l10n) {
+    final title = l10n.libraryTitle(info);
+    final server = serverName;
+    return server == null ? title : '$title · $server';
+  }
 
   /// Empty while the preview loads.
   final List<ItemSummary> items;
@@ -202,8 +211,8 @@ HomeLibraryRow? _libraryRow(HomeFeeds f, Library library,
   final items = preview == null ? const <ItemSummary>[] : _valueOf(preview);
   if (preview != null && preview.hasValue && items.isEmpty) return null;
   return HomeLibraryRow(
-    library: library.ref,
-    title: labelled ? '${library.title} · ${f.name}' : library.title,
+    info: library,
+    serverName: labelled ? f.name : null,
     items: items,
   );
 }

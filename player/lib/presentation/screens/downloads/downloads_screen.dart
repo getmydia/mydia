@@ -22,6 +22,7 @@ import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import 'download_locations.dart';
 import 'series_downloads_screen.dart';
 import 'widgets/download_artwork.dart';
@@ -589,8 +590,8 @@ class DownloadsScreen extends ConsumerWidget {
                   Builder(
                     builder: (context) {
                       final task = activeTask;
-                      final bytesText =
-                          task.progressBytesDisplay ?? task.fileSizeDisplay;
+                      final bytesText = task.progressBytesDisplay ??
+                          context.l10n.downloadTaskSize(task);
 
                       return Consumer(
                         builder: (context, ref, _) {
@@ -1730,7 +1731,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                   items: CleanupPolicy.values.map((policy) {
                     return DropdownMenuItem(
                       value: policy,
-                      child: Text(policy.display),
+                      child: Text(context.l10n.cleanupPolicyName(policy)),
                     );
                   }).toList(),
                   onChanged: (value) {

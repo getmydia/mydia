@@ -82,14 +82,13 @@ class StorageQuotaStatus {
   /// Format used bytes for display.
   String get usedDisplay => StorageSettings.formatBytes(usedBytes);
 
-  /// Format max bytes for display.
-  String get maxDisplay =>
-      maxBytes != null ? StorageSettings.formatBytes(maxBytes!) : 'Unlimited';
+  /// Format max bytes for display, or null when there is no limit.
+  String? get maxDisplay =>
+      maxBytes != null ? StorageSettings.formatBytes(maxBytes!) : null;
 
-  /// Format remaining bytes for display.
-  String get remainingDisplay => remainingBytes >= 0
-      ? StorageSettings.formatBytes(remainingBytes)
-      : 'Unlimited';
+  /// Format remaining bytes for display, or null when there is no limit.
+  String? get remainingDisplay =>
+      remainingBytes >= 0 ? StorageSettings.formatBytes(remainingBytes) : null;
 
   /// Format in-progress bytes for display.
   String get inProgressDisplay => StorageSettings.formatBytes(inProgressBytes);

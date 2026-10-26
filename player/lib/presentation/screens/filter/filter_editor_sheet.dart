@@ -6,6 +6,7 @@ import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
+import '../../../l10n/l10n.dart';
 import '../library/library_sort.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import '../library/library_sort_sheet.dart';
@@ -245,7 +246,8 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                         for (final category in categories)
                           DropdownMenuItem(
                             value: category,
-                            child: Text(category.displayName),
+                            child:
+                                Text(context.l10n.categoryFilterName(category)),
                           ),
                       ],
                       onChanged: _setCategory,

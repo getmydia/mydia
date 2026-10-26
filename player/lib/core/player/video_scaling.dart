@@ -25,13 +25,6 @@ enum VideoScaling {
         VideoScaling.fit => VideoScaling.fill,
         VideoScaling.fill => VideoScaling.fit,
       };
-
-  /// Confirms the change, which matters when the video already matches the
-  /// screen and the two modes look identical.
-  String get toastMessage => switch (this) {
-        VideoScaling.fit => 'Fit: whole picture',
-        VideoScaling.fill => 'Fill: cropped to screen',
-      };
 }
 
 /// Remembers the viewer's [VideoScaling] on this device.

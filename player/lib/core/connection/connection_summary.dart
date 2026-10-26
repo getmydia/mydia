@@ -6,7 +6,20 @@ import '../p2p/p2p_service.dart' show P2pConnectionType;
 /// layer. `connection_tone_color.dart` does the mapping.
 enum ConnectionTone { good, caution, pending }
 
-/// The one place that turns connection state into words a person can read.
+/// Which path the connection takes. The words for each are chosen by
+/// `AppFormatters.connectionLabel` and `AppFormatters.connectionDetail`.
+enum ConnectionKind {
+  /// Plain connection to a server, no peer-to-peer.
+  server,
+  direct,
+  relay,
+  mixed,
+  reconnecting,
+  connecting,
+}
+
+/// The one place that turns connection state into a kind a person can be
+/// told about.
 ///
 /// This replaces three separate switch statements that produced three
 /// different vocabularies for the same states: `ConnectionStatusBadge`,
@@ -14,17 +27,12 @@ enum ConnectionTone { good, caution, pending }
 /// badge each named them differently, so the sidebar dot and the settings row
 /// could describe one connection two ways at the same moment.
 class ConnectionSummary {
-  /// Short label, for a status row or a tooltip.
-  final String label;
-
-  /// One sentence of detail, for a subtitle.
-  final String detail;
+  final ConnectionKind kind;
 
   final ConnectionTone tone;
 
   const ConnectionSummary({
-    required this.label,
-    required this.detail,
+    required this.kind,
     required this.tone,
   });
 
@@ -37,37 +45,31 @@ class ConnectionSummary {
   }) {
     if (!isP2P) {
       return const ConnectionSummary(
-        label: 'Connected to server',
-        detail: 'Direct connection, no relay involved',
+        kind: ConnectionKind.server,
         tone: ConnectionTone.good,
       );
     }
 
     return switch (type) {
       P2pConnectionType.direct => const ConnectionSummary(
-          label: 'Connected directly',
-          detail: 'Peer-to-peer link with no relay in the path',
+          kind: ConnectionKind.direct,
           tone: ConnectionTone.good,
         ),
       P2pConnectionType.relay => const ConnectionSummary(
-          label: 'Connected through a relay',
-          detail: 'Traffic is passing through a relay server',
+          kind: ConnectionKind.relay,
           tone: ConnectionTone.caution,
         ),
       P2pConnectionType.mixed => const ConnectionSummary(
-          label: 'Partly relayed',
-          detail: 'Some paths are direct and some go through a relay',
+          kind: ConnectionKind.mixed,
           tone: ConnectionTone.caution,
         ),
       P2pConnectionType.none => isInitialized
           ? const ConnectionSummary(
-              label: 'Reconnecting',
-              detail: 'Trying to re-establish the peer connection',
+              kind: ConnectionKind.reconnecting,
               tone: ConnectionTone.pending,
             )
           : const ConnectionSummary(
-              label: 'Connecting',
-              detail: 'Setting up the peer connection',
+              kind: ConnectionKind.connecting,
               tone: ConnectionTone.pending,
             ),
     };

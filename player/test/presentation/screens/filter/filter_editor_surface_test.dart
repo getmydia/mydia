@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/navigation/media_filter.dart';
@@ -11,6 +12,8 @@ Future<BuildContext> _pump(WidgetTester tester, {required bool liquid}) async {
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
         home: Scaffold(
           body: Builder(builder: (context) {

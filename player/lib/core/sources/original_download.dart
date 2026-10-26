@@ -29,7 +29,8 @@ int? estimatedBytes(MediaVersion version) {
 
 DownloadOption originalOption(MediaVersion version) => DownloadOption(
       resolution: originalOptionId,
-      label: 'Original',
+      label:
+          'Original', // l10n-ignore: identity, the dialog words it by resolution
       estimatedSize: estimatedBytes(version) ?? 0,
       container: version.container,
     );
