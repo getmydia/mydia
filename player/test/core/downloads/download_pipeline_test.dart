@@ -334,6 +334,31 @@ void main() {
       });
     }
 
+    test('a refused sign-in while polling fails typed, not as English text',
+        () async {
+      final h = await seeded(const SourceException.unauthorized());
+      addTearDown(h.dispose);
+
+      await h.service.resumeDownload('job');
+      await h.waitForStatus('job', 'failed');
+
+      final failure = h.database.getTask('job')!.failure!;
+      expect(failure.code, DownloadFailureCode.source);
+      expect(failure.sourceKind, SourceErrorKind.unauthorized);
+    });
+
+    test('an unreadable reply while polling keeps its fault', () async {
+      final h = await seeded(
+          const SourceException.fault(SourceFault.serverUnreadable));
+      addTearDown(h.dispose);
+
+      await h.service.resumeDownload('job');
+      await h.waitForStatus('job', 'failed');
+
+      final failure = h.database.getTask('job')!.failure!;
+      expect(failure.sourceException().fault, SourceFault.serverUnreadable);
+    });
+
     test('an unreachable guest parks without using up an attempt', () async {
       final h = await seeded(const SourceException.unreachable());
       addTearDown(h.dispose);

@@ -96,6 +96,7 @@ import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/source_error.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
@@ -470,7 +471,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   static const _lostSourceWindow = Duration(seconds: 30);
   bool _isLoading = true;
-  String? _error;
+
+  /// How to word the failure on the error page. A function of the
+  /// localizations, so a language change re-words it; it holds the typed
+  /// reason, not a sentence.
+  String Function(AppLocalizations l10n)? _error;
 
   /// Whether the browser refused to start playback for want of a user gesture.
   ///
@@ -1557,8 +1562,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (isOfflineMode) {
         if (downloadedMedia == null || kIsWeb) {
           setState(() {
-            _error = context.l10n
-                .playbackIssueText(PlaybackIssue.notAvailableOffline);
+            _error = (l10n) =>
+                l10n.playbackIssueText(PlaybackIssue.notAvailableOffline);
             _isLoading = false;
           });
           return;
@@ -1570,7 +1575,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (offlinePath == null) {
           setState(() {
             _error =
-                context.l10n.playbackIssueText(PlaybackIssue.downloadMissing);
+                (l10n) => l10n.playbackIssueText(PlaybackIssue.downloadMissing);
             _isLoading = false;
           });
           return;
@@ -1736,7 +1741,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         case StreamingUnavailable(:final problem):
           if (mounted) {
             setState(() {
-              _error = context.l10n.playbackProblemText(problem);
+              _error = (l10n) => l10n.playbackProblemText(problem);
               _isLoading = false;
             });
           }
@@ -1934,7 +1939,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (blocker != null) {
           if (mounted) {
             setState(() {
-              _error = context.l10n.playbackIssueText(blocker);
+              _error = (l10n) => l10n.playbackIssueText(blocker);
               _isLoading = false;
             });
           }
@@ -1994,12 +1999,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!_isCurrentLoad(gen)) return;
       if (mounted) {
         setState(() {
-          _error = context.l10n.playbackFailureText(e);
+          _error = (l10n) => _loadFailureText(l10n, e);
           _isLoading = false;
         });
       }
     }
   }
+
+  /// The error page's text for a load that threw: the app's own typed
+  /// failures are worded, anything else keeps the old `toString` text.
+  static String _loadFailureText(AppLocalizations l10n, Object e) =>
+      e is SourceException || e is PlaybackIssueException
+          ? l10n.playbackFailureText(e)
+          : e.toString();
 
   /// The real runtime, from the most trustworthy source available.
   Duration? _resolveRealDuration(PlaybackOffer? offer) {
@@ -2617,7 +2629,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Fallback failed: $e');
       if (!mounted) return;
       setState(() {
-        _error = context.l10n.playbackFailureText(e);
+        _error = (l10n) => _loadFailureText(l10n, e);
         _isLoading = false;
       });
     }
@@ -3487,11 +3499,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _showLostSourceError(String message,
       {PlaybackIssue? issue, Object? error}) {
     setState(() {
-      final l10n = context.l10n;
-      _error = issue != null
+      _error = (l10n) => issue != null
           ? l10n.playbackIssueText(issue)
           : error != null
-              ? l10n.playbackErrorFailed(l10n.playbackFailureText(error))
+              ? playbackErrorMessage(l10n, _loadFailureText(l10n, error))
               : playbackErrorMessage(l10n, message);
       _isLoading = false;
     });
@@ -3668,7 +3679,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     setState(() {
-      _error = playbackErrorMessage(context.l10n, message);
+      _error = (l10n) => playbackErrorMessage(l10n, message);
       _isLoading = false;
     });
     _remoteTargetController.notifyChanged();
@@ -4780,7 +4791,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       },
       stillActive: () => mounted,
       onGaveUp: (error) => setState(() {
-        _error = context.l10n.playbackFailureText(error);
+        _error = (l10n) => _loadFailureText(l10n, error);
         _isLoading = false;
       }),
     );
@@ -5617,7 +5628,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (_error != null) {
       return _withCastAffordance(
-        PlayerErrorView(message: _error!, onRetry: _initializePlayer),
+        PlayerErrorView(
+            message: _error!(context.l10n), onRetry: _initializePlayer),
       );
     }
 

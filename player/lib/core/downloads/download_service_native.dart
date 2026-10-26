@@ -1106,6 +1106,12 @@ class _NativeDownloadService implements DownloadService {
                   ? const DownloadFailure(DownloadFailureCode.unknown)
                   : DownloadFailure.text(message))
               .encode())));
+    } on SourceException catch (e) {
+      // A source failure that got past the resolve step (a job call failing
+      // with an unreadable reply, a refused sign-in): keep it typed so the
+      // card words it in the viewer's language.
+      await save(await withDiskProgress(current.copyWith(
+          status: 'failed', error: DownloadFailure.fromSource(e).encode())));
     } catch (e) {
       await save(await withDiskProgress(current.copyWith(
           status: 'failed', error: DownloadFailure.text('$e').encode())));
