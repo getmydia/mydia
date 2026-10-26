@@ -21,6 +21,7 @@ defmodule Mydia.Accounts do
     UserPreference,
     ApiKeyRateLimiter,
     Avatar,
+    OidcIdentity,
     UsernameSource,
     HomeLayout,
     RecoveryCode,
@@ -105,6 +106,39 @@ defmodule Mydia.Accounts do
     |> Repo.one()
   end
 
+  @doc "Attaches an OIDC identity to an existing account, never merging two."
+  defdelegate link_oidc_identity(user, oidc_sub, oidc_issuer), to: OidcIdentity, as: :link
+
+  @doc "Detaches the OIDC identity, unless that would leave no way to sign in."
+  defdelegate unlink_oidc_identity(user), to: OidcIdentity, as: :unlink
+
+  @doc "Why the account cannot unlink SSO, or `nil` when it can."
+  defdelegate oidc_unlink_blocker(user), to: OidcIdentity, as: :unlink_blocker
+
+  @doc "True when the account is linked and keeps a local way to sign in after unlinking."
+  defdelegate can_unlink_oidc?(user), to: OidcIdentity, as: :can_unlink?
+
+  @doc "How the account signs in: `:local`, `:oidc` or `:local_and_oidc`."
+  defdelegate auth_method(user), to: OidcIdentity
+
+  @doc "Plain-English `auth_method/1` label for command-line output."
+  defdelegate auth_method_label(user), to: OidcIdentity
+
+  @doc """
+  True when the account has a local password, whatever else it has.
+  """
+  def password_user?(%User{password_hash: hash}), do: not is_nil(hash)
+
+  @doc """
+  True when an OIDC provider is configured for Ueberauth.
+  """
+  def oidc_configured? do
+    case Application.get_env(:ueberauth, Ueberauth) do
+      nil -> false
+      config -> Keyword.get(config, :providers, []) != []
+    end
+  end
+
   @doc """
   Creates a user with local authentication.
   """
@@ -138,42 +172,8 @@ defmodule Mydia.Accounts do
   This ensures that production deployments with OIDC-only auth have an initial admin.
   """
   def upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
-    with {:ok, user} <- do_upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
+    with {:ok, user} <- OidcIdentity.upsert(oidc_sub, oidc_issuer, attrs) do
       {:ok, apply_derived_username(user, Map.put(attrs, :oidc_sub, oidc_sub))}
-    end
-  end
-
-  defp do_upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
-    case get_user_by_oidc(oidc_sub, oidc_issuer) do
-      nil ->
-        # New user - check if we need to auto-promote to admin
-        attrs_with_oidc = Map.merge(attrs, %{oidc_sub: oidc_sub, oidc_issuer: oidc_issuer})
-
-        final_attrs =
-          if admin_exists?() do
-            # Admin exists - use role from OIDC claims
-            attrs_with_oidc
-          else
-            # No admin exists - promote this first user to admin
-            Logger.info(
-              "Auto-promoting first OIDC user to admin (email: #{attrs[:email] || "unknown"})"
-            )
-
-            Map.put(attrs_with_oidc, :role, "admin")
-          end
-
-        %User{}
-        |> User.oidc_changeset(final_attrs)
-        |> Repo.insert()
-
-      user ->
-        # Existing user - update with OIDC claims but preserve their role
-        # Role should only be changed via admin action, not OIDC login
-        attrs_without_role = Map.delete(attrs, :role)
-
-        user
-        |> User.oidc_changeset(attrs_without_role)
-        |> Repo.update()
     end
   end
 

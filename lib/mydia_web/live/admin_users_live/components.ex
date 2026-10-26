@@ -94,7 +94,8 @@ defmodule MydiaWeb.AdminUsersLive.Components do
           phx-value-id={data.user.id}
         />
         <.row_action
-          :if={!oidc_user?(data.user)}
+          :if={Accounts.password_user?(data.user)}
+          id={"reset-password-#{data.user.id}"}
           icon="hero-key"
           title={gettext("Reset password")}
           phx-click="open_reset_password_modal"
@@ -213,9 +214,6 @@ defmodule MydiaWeb.AdminUsersLive.Components do
     """
   end
 
-  defp oidc_user?(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: true
-  defp oidc_user?(_user), do: false
-
   defp format_date(nil, _display), do: gettext("Never")
   defp format_date(%DateTime{} = dt, display), do: format(dt, :date, display)
 
@@ -231,8 +229,13 @@ defmodule MydiaWeb.AdminUsersLive.Components do
   defp role_badge_class("guest"), do: "badge-warning"
   defp role_badge_class(_), do: "badge-ghost"
 
-  defp auth_type_text(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: "OIDC"
-  defp auth_type_text(_user), do: gettext("Local")
+  defp auth_type_text(user) do
+    case {Accounts.password_user?(user), Accounts.oidc_user?(user)} do
+      {true, true} -> gettext("Local + SSO")
+      {false, true} -> "OIDC"
+      _local -> gettext("Local")
+    end
+  end
 
   defp passkey_count(%{passkeys: passkeys}) when is_list(passkeys), do: length(passkeys)
   defp passkey_count(_user), do: 0

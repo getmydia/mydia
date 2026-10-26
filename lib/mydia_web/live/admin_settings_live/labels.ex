@@ -34,6 +34,7 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def label("database.pool_size"), do: gettext("Pool Size")
   def label("auth.local_enabled"), do: gettext("Local Auth Enabled")
   def label("auth.oidc_enabled"), do: gettext("OIDC Enabled")
+  def label("auth.oidc_link_by_email"), do: gettext("Link SSO Accounts by Email")
   def label("media.movies_path"), do: gettext("Movies Path")
   def label("media.tv_path"), do: gettext("TV Path")
   def label("downloads.monitor_interval_minutes"), do: gettext("Monitor Interval (minutes)")

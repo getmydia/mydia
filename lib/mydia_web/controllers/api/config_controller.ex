@@ -454,6 +454,8 @@ defmodule MydiaWeb.Api.ConfigController do
       "auth.oidc_discovery_document_uri" => "OIDC_DISCOVERY_DOCUMENT_URI",
       "auth.oidc_client_id" => "OIDC_CLIENT_ID",
       "auth.oidc_client_secret" => "OIDC_CLIENT_SECRET",
+      "auth.oidc_scopes" => "OIDC_SCOPES",
+      "auth.oidc_link_by_email" => "OIDC_LINK_BY_EMAIL",
       "auth.local_enabled" => "LOCAL_AUTH_ENABLED",
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",

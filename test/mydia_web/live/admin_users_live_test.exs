@@ -214,6 +214,26 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       view
     end
 
+    test "a linked account with a password still offers reset", %{conn: conn, target: target} do
+      {:ok, linked} = Mydia.Accounts.link_oidc_identity(target, "sub-admin-1", "oidc")
+      {:ok, view, _} = live(conn, ~p"/admin/users")
+
+      assert has_element?(
+               view,
+               ~s{button[phx-click="open_reset_password_modal"][phx-value-id="#{linked.id}"]}
+             )
+    end
+
+    test "an SSO-only account has no reset action", %{conn: conn} do
+      sso = oidc_user_fixture()
+      {:ok, view, _} = live(conn, ~p"/admin/users")
+
+      refute has_element?(
+               view,
+               ~s{button[phx-click="open_reset_password_modal"][phx-value-id="#{sso.id}"]}
+             )
+    end
+
     test "auto-generate actually resets the password", %{conn: conn, target: target} do
       {:ok, view, _html} = live(conn, ~p"/admin/users")
       open_reset(view, target)
