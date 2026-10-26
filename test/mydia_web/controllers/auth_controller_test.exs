@@ -111,7 +111,7 @@ defmodule MydiaWeb.AuthControllerLinkTest do
       extra: %Ueberauth.Auth.Extra{
         raw_info: %UeberauthOidcc.RawInfo{
           claims: %{"sub" => sub},
-          userinfo: %{"email_verified" => verified}
+          userinfo: %{"email" => email, "email_verified" => verified}
         }
       }
     }
@@ -342,6 +342,33 @@ defmodule MydiaWeb.AuthControllerLinkTest do
       assert Accounts.get_user_by_oidc("sub-auto", "oidc") == nil
       assert Accounts.get_user!(local.id).oidc_sub == nil
       refute get_session(conn, :guardian_default_token)
+    end
+
+    test "a verified ID-token email does not vouch for a different userinfo email", %{
+      conn: conn,
+      local: local
+    } do
+      auth = %Ueberauth.Auth{
+        uid: "sub-auto",
+        provider: :oidc,
+        info: %Ueberauth.Auth.Info{email: "rowan@example.test", name: "Fictional Person"},
+        extra: %Ueberauth.Auth.Extra{
+          raw_info: %UeberauthOidcc.RawInfo{
+            opts: %{},
+            claims: %{
+              "sub" => "sub-auto",
+              "email" => "someone-else@example.test",
+              "email_verified" => true
+            },
+            userinfo: %{"email" => "rowan@example.test"}
+          }
+        }
+      }
+
+      conn = conn |> init_test_session(%{}) |> callback(auth)
+
+      assert redirected_to(conn) == "/auth/login"
+      assert Accounts.get_user!(local.id).oidc_sub == nil
     end
   end
 

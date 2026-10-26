@@ -334,7 +334,10 @@ defmodule MydiaWeb.AuthController do
 
   # Only the boolean `true` counts. Some IdPs send the string "true"; treating
   # that as verified would be guessing, and this claim gates account linking.
-  # The userinfo response wins over the ID token, as for every other claim.
+  # The flag is read from whichever claim set supplied `auth.info.email`:
+  # UeberauthOidcc takes the email from userinfo when that response carries
+  # one, and from the ID token otherwise. Mixing the two would let a verified
+  # ID-token address vouch for a different, unverified userinfo address.
   defp email_verified?(auth) do
     raw_info =
       case auth.extra do
@@ -344,8 +347,9 @@ defmodule MydiaWeb.AuthController do
 
     userinfo = map_or_empty(Map.get(raw_info, :userinfo))
     claims = map_or_empty(Map.get(raw_info, :claims))
+    source = if Map.has_key?(userinfo, "email"), do: userinfo, else: claims
 
-    Map.get(userinfo, "email_verified", Map.get(claims, "email_verified")) == true
+    Map.get(source, "email_verified") == true
   end
 
   defp map_or_empty(value) when is_map(value), do: value
