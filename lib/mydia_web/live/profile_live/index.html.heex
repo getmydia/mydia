@@ -12,7 +12,7 @@
 
     <div class="grid gap-6 lg:grid-cols-3">
       <%!-- Account Info Card --%>
-      <div class="lg:col-span-1">
+      <div class="lg:col-span-1 min-w-0">
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">{gettext("Account Info")}</h2>
@@ -81,7 +81,7 @@
       </div>
 
       <%!-- Right Column --%>
-      <div class="lg:col-span-2 space-y-6">
+      <div class="lg:col-span-2 space-y-6 min-w-0">
         <%!-- Edit Profile Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
@@ -205,6 +205,7 @@
               </p>
               <.segmented_control
                 id="theme-picker"
+                class="join-vertical w-full sm:join-horizontal sm:w-auto"
                 value={@theme_selection.mode}
                 event="set_theme_mode"
                 param="mode"
@@ -289,6 +290,7 @@
               <div class="mt-4">
                 <.segmented_control
                   id="clock-format-picker"
+                  class="join-vertical w-full sm:join-horizontal sm:w-auto"
                   value={UserPreference.clock_format(@preference)}
                   event="set_clock_format"
                   param="clock"

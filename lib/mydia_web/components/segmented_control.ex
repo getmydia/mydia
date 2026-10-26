@@ -89,6 +89,10 @@ defmodule MydiaWeb.SegmentedControl do
     default: false,
     doc: "square buttons whose label moves to aria-label and a tooltip"
 
+  attr :class, :any,
+    default: nil,
+    doc: "extra classes for the join container, e.g. a responsive join-vertical layout"
+
   attr :rest, :global, doc: "extra attributes for the join container, e.g. phx-hook"
 
   slot :option, required: true do
@@ -103,7 +107,7 @@ defmodule MydiaWeb.SegmentedControl do
 
   def segmented_control(assigns) do
     ~H"""
-    <div class="join" id={@id} role="group" aria-label={@label} {@rest}>
+    <div class={["join", @class]} id={@id} role="group" aria-label={@label} {@rest}>
       <%= for option <- @option do %>
         <%= if @icon_only do %>
           <div class={["tooltip tooltip-bottom", option[:class]]} data-tip={option.label}>

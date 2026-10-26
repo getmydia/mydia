@@ -117,6 +117,7 @@ defmodule MydiaWeb.ProfileLive.Components do
   A joined row of radio buttons for the corner roundness, one per
   `Mydia.Accounts.Themes.radii/0` id. Each shows a corner drawn at that
   preset's `--radius-box`.
+  Stacks vertically below `sm`, where four labelled buttons do not fit a phone.
   """
   attr :id, :string, required: true
   attr :selected, :string, required: true, doc: "the current radius id"
@@ -125,7 +126,12 @@ defmodule MydiaWeb.ProfileLive.Components do
     assigns = assign(assigns, :options, radius_options())
 
     ~H"""
-    <div id={@id} class="join" role="radiogroup" aria-label={gettext("Corners")}>
+    <div
+      id={@id}
+      class="join join-vertical w-full sm:join-horizontal sm:w-auto"
+      role="radiogroup"
+      aria-label={gettext("Corners")}
+    >
       <label
         :for={{value, label, corner} <- @options}
         class={["btn join-item", value == @selected && "btn-primary"]}
