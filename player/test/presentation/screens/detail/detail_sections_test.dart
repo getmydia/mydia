@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/detail_sections.dart';
 
 Future<void> _pump(WidgetTester tester, Widget child, {double width = 1000}) {
   return tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Align(
           alignment: Alignment.topLeft,

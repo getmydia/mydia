@@ -60,7 +60,7 @@ class CalendarDayGroup extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _entries(palette),
+                  children: _entries(context, palette),
                 ),
               ),
             ),
@@ -70,7 +70,7 @@ class CalendarDayGroup extends StatelessWidget {
     );
   }
 
-  List<Widget> _entries(MydiaPalette palette) {
+  List<Widget> _entries(BuildContext context, MydiaPalette palette) {
     if (item.entries.isEmpty) {
       return [
         SizedBox(
@@ -78,7 +78,7 @@ class CalendarDayGroup extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Nothing new today',
+              context.l10n.calendarNothingToday,
               key: const ValueKey('calendar-today-empty'),
               style: TextStyle(fontSize: 13, color: palette.textDisabled),
             ),

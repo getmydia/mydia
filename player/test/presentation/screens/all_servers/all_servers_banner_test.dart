@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_banner.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
@@ -20,6 +21,8 @@ void main() {
             allServersNeedSignInProvider.overrideWithValue(const []),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: AllServersBanner(unavailable: unavailable, onRetry: () {}),
             ),

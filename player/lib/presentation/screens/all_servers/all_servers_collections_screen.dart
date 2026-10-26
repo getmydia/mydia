@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/sources/collection.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/collection_card.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
@@ -29,7 +30,7 @@ class AllServersCollectionsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         leading: SourceDrawerButton.maybe(context),
-        title: const Text('Collections'),
+        title: Text(context.l10n.navCollections),
       ),
       body: Column(
         children: [
@@ -41,9 +42,9 @@ class AllServersCollectionsScreen extends ConsumerWidget {
                 SourceErrorView(error: error, onRetry: retry),
               _ when merged == null =>
                 const Center(child: CircularProgressIndicator()),
-              _ when collections.isEmpty => const SourceEmptyState(
-                  key: Key('all-collections-empty'),
-                  title: 'Nothing here yet.',
+              _ when collections.isEmpty => SourceEmptyState(
+                  key: const Key('all-collections-empty'),
+                  title: context.l10n.allServersNothingHere,
                 ),
               _ => RefreshIndicator(
                   onRefresh: () async {

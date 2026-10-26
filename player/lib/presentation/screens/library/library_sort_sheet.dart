@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import 'library_sort.dart';
 
 /// Bottom sheet for picking a library sort field and direction.
@@ -45,7 +46,7 @@ class LibrarySortSheet extends StatelessWidget {
                 const Icon(Icons.sort_rounded, size: 24),
                 const SizedBox(width: 12),
                 Text(
-                  'Sort by',
+                  context.l10n.librarySortBy,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -65,7 +66,9 @@ class LibrarySortSheet extends StatelessWidget {
                     size: 18,
                   ),
                   label: Text(
-                    currentSort.direction == SortDirection.asc ? 'Asc' : 'Desc',
+                    currentSort.direction == SortDirection.asc
+                        ? context.l10n.sortDirectionAsc
+                        : context.l10n.sortDirectionDesc,
                   ),
                 ),
               ],
@@ -81,7 +84,7 @@ class LibrarySortSheet extends StatelessWidget {
                 color: isSelected ? palette.primary : palette.textSecondary,
               ),
               title: Text(
-                field.displayName,
+                context.l10n.sortFieldName(field),
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? palette.primary : palette.textPrimary,

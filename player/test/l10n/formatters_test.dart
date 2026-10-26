@@ -31,6 +31,7 @@ import 'package:player/domain/sources/library.dart';
 import 'package:player/l10n/formatters.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/presentation/screens/library/library_sort.dart';
 import 'package:player/presentation/screens/login/login_failure.dart';
 import 'package:player/presentation/screens/player/session/playback_problem.dart';
 import 'package:player/presentation/screens/player/subtitle_track_builder.dart'
@@ -370,6 +371,9 @@ void main() {
         for (final name in SortName.values) {
           expect(loc.sortName(name), isNotEmpty, reason: '$tag $name');
         }
+        for (final field in SortField.values) {
+          expect(loc.sortFieldName(field), isNotEmpty, reason: '$tag $field');
+        }
         for (final name in FilterName.values) {
           expect(loc.filterOptionName(FilterOption(id: 'x', name: name)),
               isNotEmpty);
@@ -380,6 +384,24 @@ void main() {
       }
       final en = await l10n('en');
       expect(en.sortName(SortName.recentlyAdded), 'Recently added');
+      expect(en.sortFieldName(SortField.releaseDate), 'Release date');
+    });
+
+    test('collection and season toasts word their counts', () async {
+      final en = await l10n('en');
+      expect(en.collectionSyncQueuedBoth(1, 2, 0),
+          'Queued 1 movie and 2 episodes for download');
+      expect(en.collectionSyncQueuedMovies(3, 2),
+          'Queued 3 movies for download, 2 already downloaded');
+      expect(en.showDownloadQueued(1, 0, 0), 'Queued 1 episode');
+      expect(en.showDownloadQueued(4, 2, 1),
+          'Queued 4 episodes, 2 already downloaded or queued, 1 failed');
+      for (final tag in ['es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        expect(loc.showDownloadQueued(4, 2, 1), contains('4'), reason: tag);
+        expect(loc.collectionSyncQueuedBoth(1, 2, 3), contains('3'),
+            reason: tag);
+      }
     });
   });
 

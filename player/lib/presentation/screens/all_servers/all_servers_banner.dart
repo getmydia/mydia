@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../settings/dialog/open_settings.dart';
 import '../settings/dialog/settings_dialog.dart';
 
@@ -48,16 +49,16 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
       if (unavailable.isNotEmpty && !_dismissed)
         MaterialBanner(
           key: const Key('all-unavailable-banner'),
-          content: Text('${unavailable.map(name).join(', ')} '
-              'unavailable, showing other servers'),
+          content: Text(context.l10n.allServersUnavailable(
+              unavailable.length, unavailable.map(name).join(', '))),
           actions: [
             TextButton(
                 key: const Key('all-unavailable-retry'),
                 onPressed: widget.onRetry,
-                child: const Text('Retry')),
+                child: Text(context.l10n.commonRetry)),
             IconButton(
                 key: const Key('all-unavailable-dismiss'),
-                tooltip: 'Dismiss',
+                tooltip: context.l10n.commonDismiss,
                 onPressed: () => setState(() => _dismissed = true),
                 icon: const Icon(Icons.close)),
           ],
@@ -66,12 +67,12 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
         ListTile(
           key: const Key('all-needs-sign-in'),
           leading: Icon(Icons.lock_outline, color: theme.colorScheme.error),
-          title: Text('${signIn.map((s) => s.displayName).join(', ')} '
-              'need signing in again'),
+          title: Text(context.l10n.allServersNeedSignIn(
+              signIn.length, signIn.map((s) => s.displayName).join(', '))),
           trailing: TextButton(
               onPressed: () =>
                   openSettings(context, initial: SettingsCategory.servers),
-              child: const Text('Manage servers')),
+              child: Text(context.l10n.navManageServers)),
         ),
     ]);
   }

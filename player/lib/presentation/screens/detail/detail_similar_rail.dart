@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
+import '../../../l10n/l10n.dart';
 import '../sources/source_poster_row.dart';
 import 'source_detail_controllers.dart';
 
@@ -41,7 +42,7 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
 
     if (widget.movie != null) {
       return SourcePosterRow(
-        title: 'More like this',
+        title: context.l10n.detailMoreLikeThis,
         railId: 'similar',
         items: items,
       );
@@ -62,7 +63,7 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
                 children: [
                   Flexible(
                     child: Text(
-                      _title,
+                      context.l10n.detailSimilarInLibrary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style:
@@ -94,7 +95,7 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
           alignment: Alignment.topCenter,
           child: _expanded
               ? SourcePosterRow(
-                  title: _title,
+                  title: context.l10n.detailSimilarInLibrary,
                   railId: 'similar',
                   items: items,
                   showHeading: false,
@@ -104,6 +105,4 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
       ],
     );
   }
-
-  static const _title = 'Similar in your library';
 }

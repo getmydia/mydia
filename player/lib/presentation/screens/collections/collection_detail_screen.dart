@@ -24,6 +24,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/models/download_option.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
 import '../sources/source_browse_providers.dart';
@@ -67,9 +68,9 @@ class CollectionDetailScreen extends ConsumerWidget {
           }
         },
       ),
-      title: const Text(
-        'Collection',
-        style: TextStyle(
+      title: Text(
+        context.l10n.collectionDetailTitle,
+        style: const TextStyle(
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
         ),
@@ -224,7 +225,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Failed to load collection',
+              context.l10n.collectionDetailLoadFailed,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -242,7 +243,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
+              label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
@@ -276,7 +277,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Collection is empty',
+              context.l10n.collectionDetailEmptyTitle,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -284,7 +285,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Add items to this collection in Mydia',
+              context.l10n.collectionDetailEmptySubtitle,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: palette.textSecondary,
                   ),
@@ -341,6 +342,30 @@ class CollectionDetailScreen extends ConsumerWidget {
 }
 
 /// Download button for a collection that toggles between download and sync states.
+/// The toast text for a finished collection sync. Failures are reported
+/// whenever nothing was queued, so they are never hidden behind a
+/// "skipped" message.
+@visibleForTesting
+String collectionSyncResultMessage(
+    AppLocalizations l10n, CollectionSyncResult result) {
+  final movies = result.moviesQueued;
+  final episodes = result.episodesQueued;
+  final skipped = result.skipped;
+  if (result.totalQueued == 0 && result.failed > 0) {
+    return l10n.collectionSyncNothingQueuedFailed(result.failed, skipped);
+  }
+  if (result.totalQueued == 0 && skipped > 0) {
+    return l10n.collectionSyncAllSkipped(skipped);
+  }
+  if (movies > 0 && episodes > 0) {
+    return l10n.collectionSyncQueuedBoth(movies, episodes, skipped);
+  }
+  if (episodes > 0) {
+    return l10n.collectionSyncQueuedEpisodes(episodes, skipped);
+  }
+  return l10n.collectionSyncQueuedMovies(movies, skipped);
+}
+
 class _CollectionDownloadButton extends ConsumerStatefulWidget {
   final SourceId sourceId;
   final String collectionId;
@@ -370,7 +395,7 @@ class _CollectionDownloadButtonState
         if (c.id == widget.collectionId) return c.name;
       }
     }
-    return 'Collection';
+    return context.l10n.collectionDetailTitle;
   }
 
   /// The item whose options the dialog offers, for every item of the
@@ -409,47 +434,29 @@ class _CollectionDownloadButtonState
 
       if (!mounted) return;
 
-      final message = _buildResultMessage(result);
+      final message = collectionSyncResultMessage(context.l10n, result);
+      final nothingQueuedFailed = !result.hasNewDownloads && result.failed > 0;
       showToast(
         context,
         message,
         icon: result.hasNewDownloads ? Icons.download_rounded : null,
+        kind: nothingQueuedFailed ? ToastKind.error : ToastKind.info,
       );
     } catch (e) {
       debugPrint('Collection sync failed: $e');
       if (!mounted) return;
-      showToast(context, 'Sync failed: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.collectionSyncFailed('$e'),
+          kind: ToastKind.error);
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
-  }
-
-  String _buildResultMessage(CollectionSyncResult result) {
-    if (result.totalQueued == 0 && result.skipped > 0) {
-      return 'All ${result.skipped} items already downloaded or queued';
-    }
-    final parts = <String>[];
-    if (result.moviesQueued > 0) {
-      parts.add(
-          '${result.moviesQueued} movie${result.moviesQueued != 1 ? 's' : ''}');
-    }
-    if (result.episodesQueued > 0) {
-      parts.add(
-          '${result.episodesQueued} episode${result.episodesQueued != 1 ? 's' : ''}');
-    }
-    final queuedStr = parts.join(' and ');
-    final msg = 'Queued $queuedStr for download';
-    if (result.skipped > 0) {
-      return '$msg, ${result.skipped} already downloaded';
-    }
-    return msg;
   }
 
   Future<void> _handleDownloadTap() async {
     final downloadable =
         ref.read(mediaSourceProvider(widget.sourceId))?.as<Downloadable>();
     if (downloadable == null) {
-      showToast(context, 'This server is not available to download from',
+      showToast(context, context.l10n.commonDownloadServerUnavailable,
           kind: ToastKind.error);
       return;
     }
@@ -459,13 +466,13 @@ class _CollectionDownloadButtonState
       options = await downloadable.downloadOptions(_probe());
     } catch (e) {
       if (!mounted) return;
-      showToast(context, 'Could not list download options: $e',
+      showToast(context, context.l10n.collectionDownloadOptionsFailed('$e'),
           kind: ToastKind.error);
       return;
     }
     if (!mounted) return;
     if (options.isEmpty) {
-      showToast(context, 'Nothing in this collection can be downloaded',
+      showToast(context, context.l10n.collectionNothingDownloadable,
           kind: ToastKind.error);
       return;
     }
@@ -544,23 +551,23 @@ class _CollectionDownloadButtonState
           }
         },
         itemBuilder: (context) => [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'sync_now',
             child: Row(
               children: [
-                Icon(Icons.sync_rounded, size: 18),
-                SizedBox(width: 12),
-                Text('Sync Now'),
+                const Icon(Icons.sync_rounded, size: 18),
+                const SizedBox(width: 12),
+                Text(context.l10n.collectionSyncNow),
               ],
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'stop',
             child: Row(
               children: [
-                Icon(Icons.sync_disabled_rounded, size: 18),
-                SizedBox(width: 12),
-                Text('Stop Syncing'),
+                const Icon(Icons.sync_disabled_rounded, size: 18),
+                const SizedBox(width: 12),
+                Text(context.l10n.collectionStopSyncing),
               ],
             ),
           ),

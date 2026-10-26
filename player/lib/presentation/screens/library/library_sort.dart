@@ -5,25 +5,23 @@
 /// combination, which is how Plex and Jellyfin both present sorting and what
 /// keeps the sheet at eleven rows instead of twenty-one.
 enum SortField {
-  title('TITLE', 'Title'),
-  year('YEAR', 'Year'),
-  addedAt('ADDED_AT', 'Date Added'),
-  rating('RATING', 'Rating'),
-  runtime('RUNTIME', 'Duration'),
-  popularity('POPULARITY', 'Popularity'),
-  contentRating('CONTENT_RATING', 'Content Rating'),
-  releaseDate('RELEASE_DATE', 'Release Date'),
-  lastPlayed('LAST_PLAYED', 'Last Played'),
-  watchState('WATCH_STATE', 'Watch State'),
-  random('RANDOM', 'Random');
+  title('TITLE'),
+  year('YEAR'),
+  addedAt('ADDED_AT'),
+  rating('RATING'),
+  runtime('RUNTIME'),
+  popularity('POPULARITY'),
+  contentRating('CONTENT_RATING'),
+  releaseDate('RELEASE_DATE'),
+  lastPlayed('LAST_PLAYED'),
+  watchState('WATCH_STATE'),
+  random('RANDOM');
 
-  const SortField(this.wireName, this.displayName);
+  const SortField(this.wireName);
 
-  /// The GraphQL enum value.
+  /// The GraphQL enum value. The sort sheet words each field through
+  /// `AppFormatters.sortFieldName`.
   final String wireName;
-
-  /// The label shown in the sort sheet.
-  final String displayName;
 
   /// Random ignores direction: one shuffle has no ascending form.
   bool get supportsDirection => this != SortField.random;

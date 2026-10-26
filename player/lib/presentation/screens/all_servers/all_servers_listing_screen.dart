@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../domain/merged/merged_result.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/glass/glass_chip.dart';
 import '../detail/play_item.dart';
@@ -46,9 +47,10 @@ class _AllServersListingScreenState
       };
 
   String get _title => switch (widget.listing) {
-        AllServersListing.continueWatching => 'Continue Watching',
-        AllServersListing.recentlyAdded => 'Recently Added',
-        AllServersListing.favorites => 'Favorites',
+        AllServersListing.continueWatching =>
+          context.l10n.nextUpContinueWatching,
+        AllServersListing.recentlyAdded => context.l10n.navRecentlyAdded,
+        AllServersListing.favorites => context.l10n.navFavorites,
       };
 
   bool _keeps(ItemSummary i) => switch (_kind) {
@@ -85,9 +87,9 @@ class _AllServersListingScreenState
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
                     for (final (key, label, kind) in [
-                      ('all', 'All', null),
-                      ('movies', 'Movies', LibraryKind.movies),
-                      ('shows', 'TV Shows', LibraryKind.shows),
+                      ('all', context.l10n.commonAll, null),
+                      ('movies', context.l10n.navMovies, LibraryKind.movies),
+                      ('shows', context.l10n.navShows, LibraryKind.shows),
                     ])
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
@@ -110,9 +112,9 @@ class _AllServersListingScreenState
                 SourceErrorView(error: error, onRetry: retry),
               _ when merged == null =>
                 const Center(child: CircularProgressIndicator()),
-              _ when items.isEmpty => const SourceEmptyState(
-                  key: Key('all-listing-empty'),
-                  title: 'Nothing here yet.',
+              _ when items.isEmpty => SourceEmptyState(
+                  key: const Key('all-listing-empty'),
+                  title: context.l10n.allServersNothingHere,
                 ),
               _ => RefreshIndicator(
                   onRefresh: () async {

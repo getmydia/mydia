@@ -6,6 +6,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
@@ -58,6 +59,7 @@ class _ContinueWatchingScreenState
     // Captured before the await: the card is being removed from under this
     // context.
     final toaster = Toaster.of(context);
+    final l10n = context.l10n;
 
     // Every card of the same series leaves together; see `dismissRef`.
     final key = item.dismissRef;
@@ -67,7 +69,7 @@ class _ContinueWatchingScreenState
     } catch (_) {
       if (mounted) setState(() => _hidden.remove(key));
       toaster.show(
-        'Could not remove from Continue Watching',
+        l10n.continueRemoveFailed,
         kind: ToastKind.error,
       );
       return;
@@ -82,7 +84,7 @@ class _ContinueWatchingScreenState
     return SourceListingScreen(
       sourceId: sourceId,
       icon: Icons.play_circle_outline_rounded,
-      title: 'Continue Watching',
+      title: context.l10n.nextUpContinueWatching,
       queryKey: SourceKeys.continueWatching(sourceId),
       items: ref.watch(provider).whenData(
             (items) => [
@@ -91,8 +93,8 @@ class _ContinueWatchingScreenState
             ],
           ),
       onRetry: () => ref.invalidate(provider),
-      errorTitle: 'Failed to load continue watching',
-      emptyTitle: 'Nothing in progress.',
+      errorTitle: context.l10n.continueWatchingLoadFailed,
+      emptyTitle: context.l10n.continueWatchingEmptyTitle,
       // A tap plays, as on the home row; the menu carries details and removal.
       posterFor: (context, item, open) {
         // Null for a movie, so SourcePoster falls back to the year.

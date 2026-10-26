@@ -128,7 +128,7 @@ class _NewChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        'New today',
+        context.l10n.calendarNewToday,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,

@@ -18,13 +18,6 @@ void main() {
     expect(SortField.values.length, 11);
   });
 
-  test('every field has a display name and none uses an em dash', () {
-    for (final field in SortField.values) {
-      expect(field.displayName, isNotEmpty);
-      expect(field.displayName.contains('—'), isFalse);
-    }
-  });
-
   test('random is the only direction-less field', () {
     expect(SortField.random.supportsDirection, isFalse);
     for (final field in SortField.values.where((f) => f != SortField.random)) {

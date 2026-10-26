@@ -47,7 +47,7 @@ void main() {
       await _pumpSliverScreen(
         tester,
         DetailErrorState(
-          noun: 'TV show',
+          noun: DetailNoun.show,
           error: 'boom',
           onRetry: () => retries++,
         ),
@@ -57,7 +57,7 @@ void main() {
       expect(find.text('Failed to load TV show'), findsOneWidget);
       expect(find.text('boom'), findsOneWidget);
 
-      await tester.tap(find.text('Try Again'));
+      await tester.tap(find.text('Try again'));
       expect(retries, 1);
     });
   });
@@ -69,7 +69,7 @@ void main() {
         DetailScreenFrame<String>(
           target: _target,
           value: const AsyncValue.data('loaded'),
-          noun: 'movie',
+          noun: DetailNoun.movie,
           onRetry: () {},
           builder: (context, data) => Text('content: $data'),
         ),
@@ -86,7 +86,7 @@ void main() {
         DetailScreenFrame<String>(
           target: _target,
           value: const AsyncValue.error('boom', StackTrace.empty),
-          noun: 'movie',
+          noun: DetailNoun.movie,
           onRetry: () => retries++,
           builder: (context, data) => Text('content: $data'),
         ),
@@ -94,7 +94,7 @@ void main() {
       );
 
       expect(find.text('Failed to load movie'), findsOneWidget);
-      await tester.tap(find.text('Try Again'));
+      await tester.tap(find.text('Try again'));
       expect(retries, 1);
     });
   });

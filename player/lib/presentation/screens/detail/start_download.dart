@@ -6,6 +6,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download_request.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 
@@ -20,13 +21,13 @@ Future<void> startItemDownload(
   final manager = await ref.read(downloadManagerProvider.future);
   if (!context.mounted) return;
   if (manager.isDownloaded(item)) {
-    showToast(context, 'Already downloaded');
+    showToast(context, context.l10n.detailAlreadyDownloaded);
     return;
   }
   final downloadable =
       ref.read(mediaSourceProvider(item.sourceId))?.as<Downloadable>();
   if (downloadable == null) {
-    showToast(context, 'This server is not available to download from',
+    showToast(context, context.l10n.commonDownloadServerUnavailable,
         kind: ToastKind.error);
     return;
   }
@@ -47,11 +48,13 @@ Future<void> startItemDownload(
           (option.estimatedSize > 0 ? option.estimatedSize : null),
     ));
     if (context.mounted) {
-      showToast(context, 'Download started', kind: ToastKind.success);
+      showToast(context, context.l10n.detailDownloadStarted,
+          kind: ToastKind.success);
     }
   } catch (e) {
     if (context.mounted) {
-      showToast(context, 'Failed to start download: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.detailDownloadFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 }

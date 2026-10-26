@@ -91,7 +91,9 @@ class CalendarRow extends StatelessWidget {
                           key: ValueKey(_isFuture
                               ? 'calendar-upcoming-$id'
                               : 'calendar-absent-$id'),
-                          label: _isFuture ? 'Upcoming' : 'Not in library',
+                          label: _isFuture
+                              ? context.l10n.calendarStatusUpcoming
+                              : context.l10n.calendarStatusNotInLibrary,
                         ),
                       ],
                     ],

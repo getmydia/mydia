@@ -13,6 +13,7 @@ import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
 import '../detail/detail_sections.dart';
+import '../detail/detail_states.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
@@ -83,7 +84,7 @@ class ShowDetailScreen extends ConsumerWidget {
       child: DetailScreenFrame<ShowView>(
         target: target,
         value: showAsync,
-        noun: 'TV show',
+        noun: DetailNoun.show,
         onRetry: () => ref.read(showActionsProvider(target)).refresh(),
         tintArt: (show) => show.backdrop,
         builder: (context, show) => _buildContent(context, ref, show),
@@ -241,8 +242,10 @@ class ShowDetailScreen extends ConsumerWidget {
     final palette = context.palette;
     final isNextUp = show.nextUpEpisodeId == episode.id;
     final label = isNextUp
-        ? 'Next Up · S${episode.seasonNumber} E${episode.episodeNumber}'
-        : 'S${episode.seasonNumber} · E${episode.episodeNumber}';
+        ? context.l10n
+            .showEpisodePillNextUp(episode.seasonNumber, episode.episodeNumber)
+        : context.l10n
+            .showEpisodePill(episode.seasonNumber, episode.episodeNumber);
 
     return GlassBadge(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

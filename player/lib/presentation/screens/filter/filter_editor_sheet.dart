@@ -131,7 +131,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _nameError = 'Name is required');
+      setState(() => _nameError = context.l10n.filterEditorNameRequired);
       return;
     }
 
@@ -185,7 +185,9 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Text(
-                    widget.editing == null ? 'New filter' : 'Edit filter',
+                    widget.editing == null
+                        ? context.l10n.navNewFilter
+                        : context.l10n.filterEditorEditTitle,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -197,7 +199,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                     key: const Key('filter-editor-name'),
                     controller: _nameController,
                     decoration: InputDecoration(
-                      labelText: 'Name',
+                      labelText: context.l10n.filterEditorName,
                       errorText: _nameError,
                     ),
                     onChanged: (_) {
@@ -211,14 +213,14 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: SegmentedButton<MediaKind>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: MediaKind.movies,
-                        label: Text('Movies'),
+                        label: Text(context.l10n.navMovies),
                       ),
                       ButtonSegment(
                         value: MediaKind.shows,
-                        label: Text('TV Shows'),
+                        label: Text(context.l10n.navShows),
                       ),
                     ],
                     selected: {_filter.kind},
@@ -237,11 +239,12 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                     child: DropdownButtonFormField<MediaCategoryFilter?>(
                       key: const Key('filter-editor-category'),
                       initialValue: _filter.category,
-                      decoration: const InputDecoration(labelText: 'Category'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.filterEditorCategory),
                       items: [
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: null,
-                          child: Text('All'),
+                          child: Text(context.l10n.commonAll),
                         ),
                         for (final category in categories)
                           DropdownMenuItem(
@@ -258,18 +261,18 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: SegmentedButton<WatchScope>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: WatchScope.all,
-                        label: Text('All'),
+                        label: Text(context.l10n.commonAll),
                       ),
                       ButtonSegment(
                         value: WatchScope.unwatched,
-                        label: Text('Unwatched'),
+                        label: Text(context.l10n.navUnwatched),
                       ),
                       ButtonSegment(
                         value: WatchScope.favorites,
-                        label: Text('Favorites'),
+                        label: Text(context.l10n.navFavorites),
                       ),
                     ],
                     selected: {_filter.watch},
@@ -280,8 +283,9 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 const SizedBox(height: 8),
                 ListTile(
                   leading: const Icon(Icons.sort_rounded),
-                  title: const Text('Sort'),
-                  subtitle: Text(_filter.sort.field.displayName),
+                  title: Text(context.l10n.filterEditorSort),
+                  subtitle:
+                      Text(context.l10n.sortFieldName(_filter.sort.field)),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _showSortPicker,
                 ),
@@ -290,7 +294,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                   child: FilledButton(
                     key: const Key('filter-editor-save'),
                     onPressed: _save,
-                    child: const Text('Save'),
+                    child: Text(context.l10n.commonSave),
                   ),
                 ),
               ],

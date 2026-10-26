@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/detail_similar_rail.dart';
 import 'package:player/presentation/screens/detail/source_detail_controllers.dart';
 import 'package:player/presentation/screens/sources/source_poster_row.dart';
@@ -21,8 +22,11 @@ Future<void> _pump(WidgetTester tester, Widget rail, ItemRef item) async {
           .overrideWith((_) => Stream.value([fakeMovie(2), fakeMovie(3)])),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
-    child:
-        MaterialApp(home: Scaffold(body: SingleChildScrollView(child: rail))),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: SingleChildScrollView(child: rail)),
+    ),
   ));
   await tester.pumpAndSettle();
 }

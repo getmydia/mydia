@@ -7,6 +7,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../filter/filter_editor_sheet.dart';
 import '../sources/source_library_screen.dart';
 
@@ -80,9 +81,9 @@ class FilterScreen extends ConsumerWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'save_filter',
-                  child: Text('Save this view as a filter'),
+                  child: Text(context.l10n.sourcesLibrarySaveFilter),
                 ),
               ],
             ),
@@ -105,7 +106,7 @@ class _FilterNotFoundBody extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'This filter no longer exists.',
+              context.l10n.filterNotFound,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -114,7 +115,7 @@ class _FilterNotFoundBody extends StatelessWidget {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: () => context.go('/'),
-              child: const Text('Go home'),
+              child: Text(context.l10n.filterGoHome),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../domain/sources/library.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/browse_scaffold.dart';
@@ -14,10 +15,10 @@ import 'all_servers_banner.dart';
 import 'all_servers_cards.dart';
 import 'all_servers_providers.dart';
 
-String _sortLabel(SharedSort sort) => switch (sort) {
-      SharedSort.title => 'Title',
-      SharedSort.added => 'Date added',
-      SharedSort.released => 'Release date',
+String _sortLabel(AppLocalizations l10n, SharedSort sort) => switch (sort) {
+      SharedSort.title => l10n.sortTitle,
+      SharedSort.added => l10n.allServersSortAdded,
+      SharedSort.released => l10n.sortReleaseDate,
     };
 
 class AllServersGridScreen extends ConsumerWidget {
@@ -40,7 +41,9 @@ class AllServersGridScreen extends ConsumerWidget {
 
     return BrowseScaffold(
       icon: kind == LibraryKind.shows ? Icons.tv_rounded : Icons.movie_rounded,
-      title: kind == LibraryKind.shows ? 'TV Shows' : 'Movies',
+      title: kind == LibraryKind.shows
+          ? context.l10n.navShows
+          : context.l10n.navMovies,
       // Merged across servers, so no single cache key describes it.
       queryKeys: const [],
       onRefresh: () async => retry(),
@@ -59,7 +62,7 @@ class AllServersGridScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(right: 8),
                       child: GlassChip(
                         chipKey: Key('all-grid-sort-${s.name}'),
-                        label: Text(_sortLabel(s)),
+                        label: Text(_sortLabel(context.l10n, s)),
                         selected: (state?.sort ?? SharedSort.title) == s,
                         onSelected: (_) => notifier.setSort(s),
                       ),
@@ -73,8 +76,10 @@ class AllServersGridScreen extends ConsumerWidget {
               key: const Key('all-sort-skipped-note'),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(
-                'Not sorted by ${_sortLabel(state.sort)} on '
-                '${skipped.join(', ')}',
+                context.l10n.allServersSortSkipped(
+                  _sortLabel(context.l10n, state.sort),
+                  skipped.join(', '),
+                ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

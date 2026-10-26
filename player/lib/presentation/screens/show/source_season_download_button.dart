@@ -12,6 +12,7 @@ import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/download_metadata.dart';
@@ -52,14 +53,14 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
       return IconButton(
         key: const Key('source-season-download'),
         icon: icon,
-        tooltip: 'Download season',
+        tooltip: context.l10n.showDownloadSeasonTooltip,
         onPressed: () => _download(context, ref, [season]),
       );
     }
     return PopupMenuButton<String>(
       key: const Key('source-season-download'),
       icon: icon,
-      tooltip: 'Download season',
+      tooltip: context.l10n.showDownloadSeasonTooltip,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       style: const ButtonStyle(
@@ -78,18 +79,18 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
             children: [
               const Icon(Icons.folder_rounded, size: 18),
               const SizedBox(width: 12),
-              Text('Download Season ${season.number}'),
+              Text(context.l10n.showDownloadSeasonNumber(season.number)),
             ],
           ),
         ),
-        const PopupMenuItem(
-          key: Key('source-download-all-seasons'),
+        PopupMenuItem(
+          key: const Key('source-download-all-seasons'),
           value: 'all',
           child: Row(
             children: [
-              Icon(Icons.folder_copy_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Download All Seasons'),
+              const Icon(Icons.folder_copy_rounded, size: 18),
+              const SizedBox(width: 12),
+              Text(context.l10n.showDownloadAllSeasons),
             ],
           ),
         ),
@@ -125,8 +126,9 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     final picked = await pickDownloadOption(
       context,
       title: targets.length == 1
-          ? '${show.title} - Season ${targets.first.number}'
-          : '${show.title} - All Seasons',
+          ? context.l10n
+              .showDownloadPickerSeason(show.title, targets.first.number)
+          : context.l10n.showDownloadPickerAllSeasons(show.title),
       options: Future.value(options),
     );
     return picked?.resolution;
@@ -142,7 +144,8 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     final manager = await ref.read(downloadManagerProvider.future);
     if (!context.mounted) return;
     if (source == null) {
-      showToast(context, 'This source is not available', kind: ToastKind.error);
+      showToast(context, context.l10n.showSourceUnavailable,
+          kind: ToastKind.error);
       return;
     }
     var queued = 0, skipped = 0, failed = 0;
@@ -164,7 +167,7 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     } catch (e) {
       debugPrint('Failed to list season episodes: $e');
       if (context.mounted) {
-        showToast(context, "Could not list this season's episodes",
+        showToast(context, context.l10n.showSeasonListFailed,
             kind: ToastKind.error);
       }
       return;
@@ -172,9 +175,7 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     if (!context.mounted) return;
     showToast(
       context,
-      'Queued $queued episodes'
-      '${skipped > 0 ? ', $skipped already downloaded or queued' : ''}'
-      '${failed > 0 ? ', $failed failed' : ''}',
+      context.l10n.showDownloadQueued(queued, skipped, failed),
       kind: failed > 0 && queued == 0 ? ToastKind.error : ToastKind.info,
     );
   }
@@ -183,7 +184,8 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
       ItemSummary e, int fallbackSeason, ItemRef showRef) {
     final seasonNumber = e.parentIndex ?? fallbackSeason;
     return DownloadMetadata(
-      title: '${show.title} - '
+      title:
+          '${show.title} - ' // l10n-ignore stored title built from server data
           'S${seasonNumber.toString().padLeft(2, '0')}'
           'E${(e.index ?? 0).toString().padLeft(2, '0')}: ${e.title}',
       mediaType: MediaType.episode,

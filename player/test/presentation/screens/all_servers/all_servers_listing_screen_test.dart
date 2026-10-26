@@ -10,6 +10,7 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_cards.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_listing_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -46,7 +47,12 @@ Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
       sourceArtworkProvider.overrideWith((ref, key) async => null),
       ...extra,
     ],
-    child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: router,
+      builder: toastLayerBuilder,
+    ),
   ));
   await tester.pumpAndSettle();
   return pushed;

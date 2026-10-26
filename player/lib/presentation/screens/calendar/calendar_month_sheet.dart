@@ -103,14 +103,14 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                     visible: _index > 0,
                     key: const ValueKey('calendar-sheet-prev'),
                     icon: Icons.chevron_left_rounded,
-                    tooltip: 'Previous month',
+                    tooltip: context.l10n.calendarPreviousMonth,
                     onPressed: () => setState(() => _index--),
                   ),
                   _arrow(
                     visible: _index < _months.length - 1,
                     key: const ValueKey('calendar-sheet-next'),
                     icon: Icons.chevron_right_rounded,
-                    tooltip: 'Next month',
+                    tooltip: context.l10n.calendarNextMonth,
                     onPressed: () => setState(() => _index++),
                   ),
                 ],
@@ -150,9 +150,13 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _LegendDot(color: palette.primary, label: 'Ready to play'),
+                  _LegendDot(
+                      color: palette.primary,
+                      label: context.l10n.calendarLegendPlayable),
                   const SizedBox(width: 16),
-                  _LegendDot(color: palette.textDisabled, label: 'Scheduled'),
+                  _LegendDot(
+                      color: palette.textDisabled,
+                      label: context.l10n.calendarLegendScheduled),
                 ],
               ),
             ],

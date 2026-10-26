@@ -11,6 +11,7 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
@@ -92,15 +93,15 @@ Future<void> showAllServersContinueMenu(
     context: c,
     position: position,
     items: [
-      const PopupMenuItem(
-          key: Key('all-continue-details'),
+      PopupMenuItem(
+          key: const Key('all-continue-details'),
           value: 'details',
-          child: Text('Details')),
+          child: Text(c.l10n.commonDetails)),
       if (removable)
-        const PopupMenuItem(
-            key: Key('all-continue-remove'),
+        PopupMenuItem(
+            key: const Key('all-continue-remove'),
             value: 'remove',
-            child: Text('Remove from Continue Watching')),
+            child: Text(c.l10n.mediaMenuRemoveFromContinueWatching)),
     ],
   );
   if (choice == null || !c.mounted) return;
@@ -110,6 +111,7 @@ Future<void> showAllServersContinueMenu(
     case 'remove':
       if (cw == null) return;
       final toaster = Toaster.of(c);
+      final l10n = c.l10n;
       // The removal can outlive the caller; a container does not.
       final container = ProviderScope.containerOf(c, listen: false);
       try {
@@ -118,7 +120,7 @@ Future<void> showAllServersContinueMenu(
         toaster.show(
           e is SourceException
               ? e.viewerMessage
-              : 'Could not remove this title.',
+              : l10n.continueRemoveTitleFailed,
           kind: ToastKind.error,
         );
         return;

@@ -6,6 +6,7 @@ import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/watch_status.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/episode_rail.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
@@ -84,7 +85,7 @@ class ShowSeasonSection extends ConsumerWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'Episodes',
+                context.l10n.sourcesSearchKindEpisodes,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -127,7 +128,7 @@ class ShowSeasonSection extends ConsumerWidget {
                   key: ValueKey('season-chip-${season.number}'),
                   padding: const EdgeInsets.only(right: 10),
                   child: _SeasonChip(
-                    label: 'Season ${season.number}',
+                    label: context.l10n.downloadsSeasonNumber(season.number),
                     unwatched: unwatched,
                     watchStatus: season.watchStatus,
                     isSelected: isSelected,
@@ -196,14 +197,14 @@ class ShowEpisodeList extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'No episodes found',
+                      context.l10n.downloadsEpisodesNotFound,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'This season has no episodes available',
+                      context.l10n.showSeasonEmptyBody,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: palette.textSecondary,
                           ),
@@ -290,7 +291,7 @@ class ShowEpisodeList extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Failed to load episodes',
+                  context.l10n.showEpisodesLoadFailed,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -329,7 +330,7 @@ class SeasonActionsButton extends ConsumerWidget {
         color: palette.textSecondary,
         size: 22,
       ),
-      tooltip: 'Season actions',
+      tooltip: context.l10n.showSeasonActionsTooltip,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       style: const ButtonStyle(
@@ -342,23 +343,23 @@ class SeasonActionsButton extends ConsumerWidget {
       ),
       onSelected: (value) => _handleSeasonAction(context, ref, value),
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'season_watched',
           child: Row(
             children: [
-              Icon(Icons.visibility_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Mark season watched'),
+              const Icon(Icons.visibility_rounded, size: 18),
+              const SizedBox(width: 12),
+              Text(context.l10n.showSeasonMarkWatched),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'season_unwatched',
           child: Row(
             children: [
-              Icon(Icons.visibility_off_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Mark season unwatched'),
+              const Icon(Icons.visibility_off_rounded, size: 18),
+              const SizedBox(width: 12),
+              Text(context.l10n.showSeasonMarkUnwatched),
             ],
           ),
         ),
@@ -383,7 +384,7 @@ class SeasonActionsButton extends ConsumerWidget {
       if (context.mounted) {
         showToast(
           context,
-          'Could not update season watched status',
+          context.l10n.showSeasonWatchedUpdateFailed,
           kind: ToastKind.error,
         );
       }

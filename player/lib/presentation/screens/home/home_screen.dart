@@ -74,15 +74,16 @@ class HomeScreen extends ConsumerWidget {
         AllServers() => header(
             context,
             mobileTitle: const HomeMydiaLockup(),
-            desktopTitle: const HomeDesktopTitle(
-                icon: Icons.dns_rounded, label: 'All servers'),
+            desktopTitle: HomeDesktopTitle(
+                icon: Icons.dns_rounded, label: context.l10n.navAllServers),
             onSearch: () => context.go(allServersSearchLocation),
           ),
         OneServer(:final id) => () {
             final source = ref.watch(mediaSourceProvider(id));
             return header(
               context,
-              mobileTitle: HomeServerTitle(source?.displayName ?? 'Server'),
+              mobileTitle: HomeServerTitle(
+                  source?.displayName ?? context.l10n.commonServer),
               onSearch: source?.as<Searchable>() == null
                   ? null
                   : () => context.push(sourceSearchLocation(id)),
@@ -179,21 +180,21 @@ class HomeScreen extends ConsumerWidget {
               if (rows.recentMovies.isNotEmpty)
                 _rail(context, rows,
                     key: 'home-recent-movies',
-                    title: 'Recently Added Movies',
+                    title: context.l10n.homeRecentMovies,
                     items: rows.recentMovies,
                     location: _listing(SourceListing.recentlyAdded,
                         '$allServersRecentlyAddedLocation?kind=movies')),
               if (rows.recentShows.isNotEmpty)
                 _rail(context, rows,
                     key: 'home-recent-shows',
-                    title: 'Recently Added TV',
+                    title: context.l10n.homeRecentShows,
                     items: rows.recentShows,
                     location: _listing(SourceListing.recentlyAdded,
                         '$allServersRecentlyAddedLocation?kind=shows')),
               if (rows.favorites.isNotEmpty)
                 _rail(context, rows,
                     key: 'home-favorites',
-                    title: 'Favorites',
+                    title: context.l10n.navFavorites,
                     items: rows.favorites,
                     location: _listing(
                         SourceListing.favorites, allServersFavoritesLocation)),
@@ -211,9 +212,9 @@ class HomeScreen extends ConsumerWidget {
                       context.push(sourceLibraryLocation(row.library)),
                 ),
               if (rows.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(48),
-                  child: Center(child: Text('Nothing to show yet.')),
+                Padding(
+                  padding: const EdgeInsets.all(48),
+                  child: Center(child: Text(context.l10n.homeNothingToShow)),
                 ),
             ],
           ),

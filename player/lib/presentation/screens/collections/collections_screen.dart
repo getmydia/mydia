@@ -7,6 +7,7 @@ import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/collection_card.dart';
 import '../sources/source_browse_providers.dart';
@@ -25,7 +26,7 @@ class CollectionsScreen extends ConsumerWidget {
 
     return BrowseScaffold(
       icon: Icons.collections_bookmark_rounded,
-      title: 'Collections',
+      title: context.l10n.navCollections,
       queryKeys: [key],
       actions: sourceSearchActions(context, sourceId),
       onRefresh: () => ref.read(invalidatorProvider).invalidate([key.target]),
@@ -69,7 +70,7 @@ class CollectionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Failed to load collections',
+              context.l10n.collectionsLoadFailed,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -87,7 +88,7 @@ class CollectionsScreen extends ConsumerWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
+              label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
@@ -121,7 +122,7 @@ class CollectionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'No collections yet',
+              context.l10n.collectionsEmptyTitle,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -129,7 +130,7 @@ class CollectionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Create collections in Mydia to organize your media',
+              context.l10n.collectionsEmptySubtitle,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: palette.textSecondary,
                   ),

@@ -11,6 +11,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/toast/toaster.dart';
 import '../all_servers/all_servers_cards.dart' show allServersServerLabel;
@@ -57,7 +58,7 @@ class _HomeContinueWatchingRowState
     if (items.isEmpty) return const SizedBox.shrink();
     return SourcePosterRow(
       key: const Key('home-continue-watching'),
-      title: 'Continue Watching',
+      title: context.l10n.nextUpContinueWatching,
       railId: 'continue',
       items: items,
       itemWidth: ContinueWatchingCard.artSize.width,
@@ -91,16 +92,16 @@ class _HomeContinueWatchingRowState
       context: cardContext,
       position: position,
       items: [
-        const PopupMenuItem(
-          key: Key('home-continue-details'),
+        PopupMenuItem(
+          key: const Key('home-continue-details'),
           value: _Action.details,
-          child: Text('Details'),
+          child: Text(cardContext.l10n.commonDetails),
         ),
         if (removable)
-          const PopupMenuItem(
-            key: Key('home-continue-remove'),
+          PopupMenuItem(
+            key: const Key('home-continue-remove'),
             value: _Action.remove,
-            child: Text('Remove from Continue Watching'),
+            child: Text(cardContext.l10n.mediaMenuRemoveFromContinueWatching),
           ),
       ],
     );
@@ -117,6 +118,7 @@ class _HomeContinueWatchingRowState
     final continueWatching = _capability(item);
     if (continueWatching == null) return;
     final toaster = Toaster.of(context);
+    final l10n = context.l10n;
     // The removal can outlive this row; a container does not.
     final container = ProviderScope.containerOf(context, listen: false);
     final key = item.dismissRef;
@@ -126,7 +128,7 @@ class _HomeContinueWatchingRowState
     } catch (e) {
       if (mounted) setState(() => _hidden.remove(key));
       toaster.show(
-        e is SourceException ? e.viewerMessage : 'Could not remove this title.',
+        e is SourceException ? e.viewerMessage : l10n.continueRemoveTitleFailed,
         kind: ToastKind.error,
       );
       return;
