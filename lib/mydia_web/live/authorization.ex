@@ -6,6 +6,8 @@ defmodule MydiaWeb.Live.Authorization do
   in LiveView contexts with appropriate flash messages and error responses.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.LiveView, only: [put_flash: 3]
   alias Mydia.Accounts.Authorization
 
@@ -32,7 +34,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_create_media?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to add media items")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to add media items"))
+
           {:unauthorized, socket}
         end
 
@@ -53,7 +57,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_update_media?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to modify media items")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to modify media items"))
+
           {:unauthorized, socket}
         end
 
@@ -74,7 +80,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_delete_media?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to delete media items")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to delete media items"))
+
           {:unauthorized, socket}
         end
 
@@ -96,7 +104,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_update_media?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to manage downloads")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to manage downloads"))
+
           {:unauthorized, socket}
         end
 
@@ -118,7 +128,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_create_media?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to import media")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to import media"))
+
           {:unauthorized, socket}
         end
 
@@ -141,7 +153,9 @@ defmodule MydiaWeb.Live.Authorization do
         if Authorization.can_submit_request?(user) do
           :ok
         else
-          socket = put_flash(socket, :error, "You do not have permission to request media")
+          socket =
+            put_flash(socket, :error, gettext("You do not have permission to request media"))
+
           {:unauthorized, socket}
         end
 

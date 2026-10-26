@@ -4,15 +4,16 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
 
   alias Mydia.ImportLists.ImportList
   alias MydiaWeb.AdminImportListsLive.Index
+  alias MydiaWeb.AdminImportListsLive.Labels
 
   @doc "The page header's Sync All and New TMDB List buttons."
   def header_actions(assigns) do
     ~H"""
     <button id="sync-all-import-lists" class="btn btn-sm btn-ghost" phx-click="sync_all">
-      <.icon name="hero-arrow-path" class="w-4 h-4" /> Sync All
+      <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Sync All")}
     </button>
     <button id="new-import-list" class="btn btn-sm btn-primary" phx-click="new_import_list">
-      <.icon name="hero-plus" class="w-4 h-4" /> New TMDB List
+      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("New TMDB List")}
     </button>
     """
   end
@@ -34,9 +35,9 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
 
     ~H"""
     <div class="space-y-6 mt-6">
-      <.admin_section id="import-lists-quick-add" title="Quick Add" icon="hero-bolt">
+      <.admin_section id="import-lists-quick-add" title={gettext("Quick Add")} icon="hero-bolt">
         <%= if @available_presets == [] do %>
-          <p class="text-sm text-base-content/60">All presets enabled</p>
+          <p class="text-sm text-base-content/60">{gettext("All presets enabled")}</p>
         <% else %>
           <div class="flex flex-wrap gap-2">
             <button
@@ -58,13 +59,17 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
         <% end %>
       </.admin_section>
 
-      <.admin_section id="import-lists-section" title="Active Lists" icon="hero-list-bullet">
+      <.admin_section
+        id="import-lists-section"
+        title={gettext("Active Lists")}
+        icon="hero-list-bullet"
+      >
         <.admin_list id="import-lists" items={@import_lists}>
           <:row :let={list}>
             <.import_list_row list={list} syncing?={@syncing_list_id == list.id} />
           </:row>
           <:empty>
-            No import lists configured. Enable a preset above or create a custom list.
+            {gettext("No import lists configured. Enable a preset above or create a custom list.")}
           </:empty>
         </.admin_list>
       </.admin_section>
@@ -102,16 +107,20 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
           checked={@list.enabled}
           phx-click="toggle_import_list"
           phx-value-id={@list.id}
-          title={if @list.enabled, do: "Disable", else: "Enable"}
-          aria-label={"#{if @list.enabled, do: "Disable", else: "Enable"} #{@list.name}"}
+          title={if @list.enabled, do: gettext("Disable"), else: gettext("Enable")}
+          aria-label={
+            if @list.enabled,
+              do: gettext("Disable %{name}", name: @list.name),
+              else: gettext("Enable %{name}", name: @list.name)
+          }
         />
         <span :if={@list.auto_add} class="badge badge-info badge-sm badge-outline gap-1">
-          <.icon name="hero-bolt" class="w-3 h-3" /> Auto-add
+          <.icon name="hero-bolt" class="w-3 h-3" /> {gettext("Auto-add")}
         </span>
         <span
           :if={@list.target_collection}
           class="badge badge-accent badge-sm badge-outline gap-1"
-          title={"Add to: #{@list.target_collection.name}"}
+          title={gettext("Add to: %{name}", name: @list.target_collection.name)}
         >
           <.icon name="hero-folder" class="w-3 h-3" /> {@list.target_collection.name}
         </span>
@@ -122,9 +131,19 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
           phx-click="add_pending_from_table"
           phx-value-id={@list.id}
           class="badge badge-warning badge-sm gap-1 hover:brightness-110 cursor-pointer"
-          title={"Add #{@pending} pending items to library"}
+          title={
+            ngettext(
+              "Add %{count} pending item to library",
+              "Add %{count} pending items to library",
+              @pending
+            )
+          }
         >
-          <.icon name="hero-plus" class="w-3 h-3" /> {@pending} pending
+          <.icon name="hero-plus" class="w-3 h-3" /> {ngettext(
+            "%{count} pending",
+            "%{count} pending",
+            @pending
+          )}
         </button>
       </:badges>
       <:actions>
@@ -132,7 +151,7 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
           <.row_action
             id={"sync-import-list-#{@list.id}"}
             icon="hero-arrow-path"
-            title="Sync"
+            title={gettext("Sync")}
             loading={@syncing?}
             phx-click="sync_import_list"
             phx-value-id={@list.id}
@@ -140,25 +159,25 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
           <.row_action
             id={"view-import-list-items-#{@list.id}"}
             icon="hero-list-bullet"
-            title="Items"
+            title={gettext("Items")}
             phx-click="view_import_list_items"
             phx-value-id={@list.id}
           />
           <.row_action
             id={"edit-import-list-#{@list.id}"}
             icon="hero-pencil"
-            title="Edit"
+            title={gettext("Edit")}
             phx-click="edit_import_list"
             phx-value-id={@list.id}
           />
           <.row_action
             id={"delete-import-list-#{@list.id}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             phx-click="delete_import_list"
             phx-value-id={@list.id}
-            data-confirm="Are you sure you want to delete this import list?"
+            data-confirm={gettext("Are you sure you want to delete this import list?")}
           />
         </.row_actions>
       </:actions>
@@ -167,14 +186,14 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
   end
 
   defp descriptor(list) do
-    media = if list.media_type == "movie", do: "Movies", else: "TV Shows"
+    media = if list.media_type == "movie", do: gettext("Movies"), else: gettext("TV Shows")
 
     Enum.join(
       [
-        ImportList.type_label(list.type),
+        Labels.type_label(list.type),
         media,
-        ImportList.sync_interval_label(list.sync_interval),
-        "Synced " <> Index.format_last_synced(list.last_synced_at)
+        Labels.sync_interval_label(list.sync_interval),
+        gettext("Synced %{time}", time: Index.format_last_synced(list.last_synced_at))
       ],
       " · "
     )

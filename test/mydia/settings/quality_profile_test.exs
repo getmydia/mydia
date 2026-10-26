@@ -91,21 +91,52 @@ defmodule Mydia.Settings.QualityProfileTest do
     end
   end
 
-  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the indexer
-  # search/grab path, but the V3 release parser still emits canonical "BDRip"
-  # for on-disk files, and that value flows through Mydia.Quality.Attrs into
-  # scoring. So "BDRip" must remain selectable as a preference.
-  describe "quality_standards preferred_sources validation" do
-    test "accepts BDRip: the V3 parser still emits it for on-disk files" do
+  # Both parsers fold BDRip and BRRip into BluRay, so a stored "BDRip"
+  # preference could never match anything. Profiles that still carry one
+  # (YAML/env config, imports, old exports) must keep loading, so the
+  # changeset rewrites the value instead of rejecting it. An exclusion is
+  # dropped rather than folded: excluding BluRay would block every Blu-ray.
+  describe "BDRip folds into BluRay" do
+    test "preferences fold to BluRay and exclusions are dropped" do
       changeset =
         QualityProfile.changeset(%QualityProfile{}, %{
-          name: "Preferred BDRip",
-          quality_standards: %{preferred_resolutions: ["1080p"], preferred_sources: ["BDRip"]}
+          name: "Fold Test",
+          quality_standards: %{
+            preferred_resolutions: ["1080p"],
+            preferred_sources: ["BDRip", "BluRay", "WEB-DL", "BRRip"],
+            excluded_sources: ["BDRip", "CAM"]
+          }
         })
 
       assert changeset.valid?
+      standards = Ecto.Changeset.get_field(changeset, :quality_standards)
+      assert standards.preferred_sources == ["BluRay", "WEB-DL"]
+      assert standards.excluded_sources == ["CAM"]
     end
 
+    test "string-keyed standards from config normalise too" do
+      changeset =
+        QualityProfile.changeset(%QualityProfile{}, %{
+          "name" => "Fold Config",
+          "quality_standards" => %{
+            "preferred_resolutions" => ["1080p"],
+            "preferred_sources" => ["BRRip"]
+          }
+        })
+
+      assert changeset.valid?
+      standards = Ecto.Changeset.get_field(changeset, :quality_standards)
+      assert standards.preferred_sources == ["BluRay"]
+    end
+
+    test "BDRip is no longer a listed source" do
+      refute "BDRip" in QualityProfile.valid_sources()
+      refute "BRRip" in QualityProfile.valid_sources()
+      assert "BluRay" in QualityProfile.valid_sources()
+    end
+  end
+
+  describe "quality_standards preferred_sources validation" do
     test "accepts the remaining source vocabulary" do
       changeset =
         QualityProfile.changeset(%QualityProfile{}, %{

@@ -407,6 +407,25 @@ defmodule Mydia.Downloads do
   defdelegate check_for_duplicate_download(search_result, opts), to: Mydia.Downloads.Queue
 
   @doc """
+  Lists the downloads that would block a grab for `media_item` in the manual
+  search `context` (`%{type: :episode, episode_id: id}`, `%{type: :season,
+  season_number: n}`, or anything else for the whole item), oldest first.
+  Database only, no download client verification. Returns `[]` for a whole-show
+  context, which dedupes by release URL.
+  """
+  defdelegate blocking_downloads(media_item, context), to: Mydia.Downloads.Queue
+
+  @doc """
+  Maps each manual search result's `download_url` to a
+  `Mydia.Downloads.PriorAttempt` when the release already failed for this target
+  or is blacklisted. Returns `{:ok, map}`; never raises, returns
+  `{:error, reason}` when the lookup fails.
+  """
+  defdelegate prior_attempts_for_results(results, media_item, context),
+    to: Mydia.Downloads.PriorAttempts,
+    as: :for_results
+
+  @doc """
   Checks if there's already an active download for the given media.
   """
   defdelegate check_for_active_download(search_result, media_item_id, episode_id),

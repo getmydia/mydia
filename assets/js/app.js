@@ -39,6 +39,7 @@ import {
   initPasskeySecondFactor,
 } from "./hooks/passkey.mjs";
 import { LoadMoreSentinel } from "./hooks/load_more_sentinel.mjs";
+import { AlphaJumpBar } from "./hooks/alpha_jump_bar.mjs";
 import { RailWheel } from "./hooks/rail_wheel.mjs";
 import HomeWidgetSort from "./hooks/home_widget_sort.mjs";
 import {
@@ -448,6 +449,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     BatchSelect,
     MediaSelection,
     LoadMoreSentinel,
+    AlphaJumpBar,
     RailWheel,
     HomeWidgetSort,
     PasskeyRegister,

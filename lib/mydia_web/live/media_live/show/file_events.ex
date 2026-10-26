@@ -161,7 +161,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      socket
      |> assign(:reidentifying, false)
      |> assign(:show_reidentify_modal, false)
-     |> put_flash(:error, Media.restricted_message())}
+     |> put_flash(:error, MydiaWeb.OperationErrors.restricted_message())}
   end
 
   def handle_reidentify_adopt_async({:ok, {_target, {:error, reason}}}, socket) do

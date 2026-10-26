@@ -58,7 +58,7 @@ defmodule MydiaWeb.PasskeyController do
       conn
       |> configure_session(renew: true)
       |> SignIn.sign_in(user)
-      |> put_flash(:info, "Successfully logged in!")
+      |> put_flash(:info, gettext("Successfully logged in!"))
       |> json(%{redirect: "/"})
     else
       {:error, :rate_limited} ->

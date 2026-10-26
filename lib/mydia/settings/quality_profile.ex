@@ -8,6 +8,7 @@ defmodule Mydia.Settings.QualityProfile do
   alias Mydia.Quality.Attrs
   alias Mydia.Quality.Sources
   alias Mydia.Settings.JsonAtomMapType
+  alias Mydia.Settings.QualityProfile.LegacySources
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -57,26 +58,10 @@ defmodule Mydia.Settings.QualityProfile do
   ]
   @valid_audio_channels ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"]
   @valid_resolutions ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"]
-  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the
-  # indexer search/grab path, but the V3 release parser
-  # (priv/release_parser/sources.exs) still emits canonical "BDRip" for
-  # on-disk files, and that value flows through Mydia.Quality.Attrs into
-  # scoring. So "BDRip" remains a meaningful, selectable preference here.
-  @valid_sources [
-    "BluRay",
-    "BDRip",
-    "REMUX",
-    "WEB-DL",
-    "WEBRip",
-    "HDTV",
-    "SDTV",
-    "DVD",
-    "DVDRip"
-  ]
-  # Sources that may appear in an exclusion list. Superset of @valid_sources,
-  # since the whole point of the exclusion list is naming the cam-tier types
-  # that are never valid *preferences*.
-  @valid_excludable_sources @valid_sources ++ Sources.cam_tier()
+  # No "BDRip" or "BRRip": the release parser folds them into "BluRay", so a
+  # preference naming them could never match a release or a file. Profiles
+  # that still name them are folded by LegacySources.
+  @valid_sources ["BluRay", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"]
   @valid_hdr_formats Mydia.Library.Hdr.profile_format_strings()
 
   schema "quality_profiles" do
@@ -121,6 +106,7 @@ defmodule Mydia.Settings.QualityProfile do
     ])
     |> validate_required([:name])
     |> unique_constraint(:name)
+    |> LegacySources.fold()
     |> validate_quality_standards()
     |> validate_preferred_resolutions_present()
     |> validate_number(:upgrade_until_score,
@@ -333,6 +319,12 @@ defmodule Mydia.Settings.QualityProfile do
   @spec valid_resolutions() :: [String.t()]
   def valid_resolutions, do: @valid_resolutions
 
+  @doc """
+  The source names a profile may list as preferences, in display order.
+  """
+  @spec valid_sources() :: [String.t()]
+  def valid_sources, do: @valid_sources
+
   # A profile must specify at least one preferred resolution. With the
   # standalone `qualities` list gone, the allow-list lives entirely in
   # quality_standards.preferred_resolutions.
@@ -521,7 +513,11 @@ defmodule Mydia.Settings.QualityProfile do
         changeset
 
       sources when is_list(sources) ->
-        invalid = sources -- @valid_excludable_sources
+        # Superset of @valid_sources: the exclusion list names the cam-tier types
+        # that are never valid preferences. Built at runtime, since Sources reaches
+        # the release parser and a compile-time call would recompile this schema.
+        valid = @valid_sources ++ Sources.cam_tier()
+        invalid = sources -- valid
 
         if Enum.empty?(invalid) do
           changeset
@@ -530,7 +526,7 @@ defmodule Mydia.Settings.QualityProfile do
             changeset,
             :quality_standards,
             "contains invalid excluded sources: #{Enum.join(invalid, ", ")}. " <>
-              "Valid sources: #{Enum.join(@valid_excludable_sources, ", ")}"
+              "Valid sources: #{Enum.join(valid, ", ")}"
           )
         end
 

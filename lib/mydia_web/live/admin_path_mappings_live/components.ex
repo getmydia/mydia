@@ -12,8 +12,8 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
   def path_mappings_tab(assigns) do
     ~H"""
     <p class="text-sm text-base-content/70">
-      Translate paths reported by download clients into paths Mydia can see.
-      The longest matching prefix wins.
+      {gettext("Translate paths reported by download clients into paths Mydia can see.")}
+      {gettext("The longest matching prefix wins.")}
     </p>
 
     <.admin_list id="path-mappings" items={@path_mappings}>
@@ -21,10 +21,11 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
         <.path_mapping_row mapping={mapping} runtime?={Settings.runtime_config?(mapping)} />
       </:row>
       <:empty>
-        No path mappings configured yet. Add one above, or set the
-        <code class="font-mono">PATH_MAPPING_N_REMOTE</code>
-        / <code class="font-mono">PATH_MAPPING_N_LOCAL</code>
-        environment variables.
+        {gettext(
+          "No path mappings configured yet. Add one above, or set the %{remote} / %{local} environment variables.",
+          remote: "PATH_MAPPING_N_REMOTE",
+          local: "PATH_MAPPING_N_LOCAL"
+        )}
       </:empty>
     </.admin_list>
     """
@@ -34,7 +35,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
   def header_actions(assigns) do
     ~H"""
     <button class="btn btn-sm btn-primary" phx-click="new_path_mapping">
-      <.icon name="hero-plus" class="w-4 h-4" /> Add mapping
+      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add mapping")}
     </button>
     """
   end
@@ -59,22 +60,26 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
           <.row_action
             id={"edit-path-mapping-#{@mapping.id}"}
             icon="hero-pencil"
-            title="Edit"
+            title={gettext("Edit")}
             disabled={@runtime?}
-            disabled_reason={if(@runtime?, do: "Cannot edit environment-configured mappings")}
+            disabled_reason={
+              if(@runtime?, do: gettext("Cannot edit environment-configured mappings"))
+            }
             phx-click="edit_path_mapping"
             phx-value-id={@mapping.id}
           />
           <.row_action
             id={"delete-path-mapping-#{@mapping.id}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             disabled={@runtime?}
-            disabled_reason={if(@runtime?, do: "Cannot delete environment-configured mappings")}
+            disabled_reason={
+              if(@runtime?, do: gettext("Cannot delete environment-configured mappings"))
+            }
             phx-click="delete_path_mapping"
             phx-value-id={@mapping.id}
-            data-confirm="Are you sure you want to delete this path mapping?"
+            data-confirm={gettext("Are you sure you want to delete this path mapping?")}
           />
         </.row_actions>
       </:actions>
@@ -95,11 +100,15 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
     <.admin_modal
       id="path-mapping-modal"
       icon={if @path_mapping_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square"}
-      title={if @path_mapping_mode == :new, do: "Add Path Mapping", else: "Edit Path Mapping"}
+      title={
+        if @path_mapping_mode == :new,
+          do: gettext("Add Path Mapping"),
+          else: gettext("Edit Path Mapping")
+      }
       subtitle={
         if @path_mapping_mode == :new,
-          do: "Configure a new path translation",
-          else: "Update path translation"
+          do: gettext("Configure a new path translation"),
+          else: gettext("Update path translation")
       }
       on_close="close_path_mapping_modal"
     >
@@ -114,7 +123,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
             <.input
               field={@path_mapping_form[:remote_prefix]}
               type="text"
-              label="Remote prefix"
+              label={gettext("Remote prefix")}
               placeholder="/downloads/complete"
               list="remote-prefix-suggestions"
               autocomplete="off"
@@ -125,7 +134,9 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
             </datalist>
             <%= if @remote_suggestions != [] do %>
               <p class="text-xs text-base-content/60 mt-1">
-                Suggestions come from downloads that failed to import because their reported path could not be mapped.
+                {gettext(
+                  "Suggestions come from downloads that failed to import because their reported path could not be mapped."
+                )}
               </p>
             <% end %>
           </div>
@@ -133,7 +144,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
             <.input
               field={@path_mapping_form[:local_prefix]}
               type="text"
-              label="Local prefix"
+              label={gettext("Local prefix")}
               placeholder="/data/torrents/complete"
               list="local-prefix-suggestions"
               autocomplete="off"
@@ -143,18 +154,18 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
               <option :for={path <- @local_suggestions} value={path}></option>
             </datalist>
             <p class="text-xs text-base-content/60 mt-1">
-              As you type, Mydia suggests matching directories on its own filesystem.
+              {gettext("As you type, Mydia suggests matching directories on its own filesystem.")}
             </p>
           </div>
         </div>
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_path_mapping_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary gap-2">
             <.icon name="hero-check" class="w-4 h-4" />
-            {if @path_mapping_mode == :new, do: "Add Mapping", else: "Save Changes"}
+            {if @path_mapping_mode == :new, do: gettext("Add Mapping"), else: gettext("Save Changes")}
           </button>
         </.admin_modal_actions>
       </.form>

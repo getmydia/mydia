@@ -38,14 +38,14 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
       |> assign(:ranges, @ranges)
 
     ~H"""
-    <.admin_section id="plays" title="Plays" icon="hero-chart-bar">
+    <.admin_section id="plays" title={pgettext("playback", "Plays")} icon="hero-chart-bar">
       <:actions>
         <.segmented_control
           id="plays-range"
           value={@range}
           event="set_plays_range"
           param="range"
-          label="Plays range"
+          label={gettext("Plays range")}
         >
           <:option :for={days <- @ranges} value={days} label={"#{days}d"} />
         </.segmented_control>
@@ -91,7 +91,11 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
               />
               <rect x={col.x} y="0" width={col.width} height={@chart_h} fill="transparent">
                 <title>
-                  {col.label}: {col.movies.count} movies, {col.episodes.count} episodes
+                  {gettext("%{label}: %{movies}, %{episodes}",
+                    label: col.label,
+                    movies: ngettext("%{count} movie", "%{count} movies", col.movies.count),
+                    episodes: ngettext("%{count} episode", "%{count} episodes", col.episodes.count)
+                  )}
                 </title>
               </rect>
             <% end %>
@@ -110,11 +114,11 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
         <div id="plays-chart-legend" class="flex flex-wrap gap-3 mt-2">
           <div class="flex items-center gap-1.5 text-xs text-base-content">
             <span class="inline-block w-2.5 h-2.5 rounded-sm bg-primary"></span>
-            <span class="opacity-60">Episodes</span>
+            <span class="opacity-60">{pgettext("tv", "Episodes")}</span>
           </div>
           <div class="flex items-center gap-1.5 text-xs text-base-content">
             <span class="inline-block w-2.5 h-2.5 rounded-sm bg-secondary"></span>
-            <span class="opacity-60">Movies</span>
+            <span class="opacity-60">{gettext("Movies")}</span>
           </div>
         </div>
       </div>

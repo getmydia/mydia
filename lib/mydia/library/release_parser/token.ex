@@ -15,11 +15,16 @@ defmodule Mydia.Library.ReleaseParser.Token do
   alias Mydia.Library.ReleaseParser.Candidate
 
   @enforce_keys [:value, :byte_offset, :byte_length]
+  # `bracket_offset` is the byte offset of the opening bracket enclosing the
+  # token (nil outside brackets), so tokens sharing it came from the same
+  # `[...]` group. `[Web][MKV]` and `[Web MKV]` carry the same context but
+  # not the same offset.
   defstruct [
     :value,
     :byte_offset,
     :byte_length,
     :bracket_context,
+    :bracket_offset,
     candidates: []
   ]
 
@@ -30,6 +35,7 @@ defmodule Mydia.Library.ReleaseParser.Token do
           byte_offset: non_neg_integer(),
           byte_length: non_neg_integer(),
           bracket_context: bracket_context(),
+          bracket_offset: non_neg_integer() | nil,
           candidates: [Candidate.t()]
         }
 

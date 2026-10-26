@@ -36,7 +36,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
     ~H"""
     <.admin_section
       id="duplicates-needs-attention"
-      title="Needs Attention"
+      title={gettext("Needs Attention")}
       icon="hero-exclamation-triangle"
       count={length(@refusals)}
     >
@@ -48,7 +48,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           class="btn btn-sm btn-ghost"
           phx-click="reset_review_marks"
         >
-          <.icon name="hero-arrow-path" class="w-4 h-4" /> Mark flagged
+          <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Mark flagged")}
         </button>
         <button
           id="duplicates-review-selected"
@@ -58,15 +58,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           phx-click="open_review_modal"
         >
           <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-          Send {Components.file_count(MapSet.size(@returning))} to Review
+          {Components.send_to_review_label(MapSet.size(@returning))}
         </button>
       </:actions>
 
       <p class="text-sm text-base-content/60">
-        These are matching or scanning problems rather than duplicates. Files whose names don't
-        match their item start on <span class="font-medium text-base-content">Review</span>.
-        Sending a file to Review detaches it from the item, leaves it on disk, and holds it
-        there until someone matches it. Every item always keeps at least one file.
+        {gettext("These are matching or scanning problems rather than duplicates.")}
+        {gettext("Files whose names don't match their item start on %{review}.",
+          review: pgettext("review disposition", "Review")
+        )}
+        {gettext(
+          "Sending a file to Review detaches it from the item, leaves it on disk, and holds it there until someone matches it."
+        )}
+        {gettext("Every item always keeps at least one file.")}
       </p>
 
       <.admin_list id="duplicates-refusals" items={@refusals}>
@@ -79,7 +83,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
             returning={@returning}
           />
         </:row>
-        <:empty>Nothing needs attention.</:empty>
+        <:empty>{gettext("Nothing needs attention.")}</:empty>
       </.admin_list>
     </.admin_section>
     """
@@ -101,12 +105,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
     <.admin_modal
       id="duplicates-review-modal"
       icon="hero-arrow-uturn-left"
-      title={"Send #{Components.file_count(@count)} from #{Components.item_count(@items)} to Review?"}
+      title={Components.send_files_from_items_label(@count, @items)}
       on_close="close_review_modal"
     >
       <p class="py-2">
-        They stay on disk and wait in Review until someone matches them. Nothing is
-        re-attached automatically.
+        {gettext(
+          "They stay on disk and wait in Review until someone matches them. Nothing is re-attached automatically."
+        )}
       </p>
       <:actions>
         <button
@@ -115,16 +120,16 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           class="btn btn-ghost"
           phx-click="close_review_modal"
         >
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           id="duplicates-review-confirm"
           type="button"
           class="btn btn-primary"
           phx-click="confirm_review"
-          phx-disable-with="Sending..."
+          phx-disable-with={gettext("Sending...")}
         >
-          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Send to Review
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {gettext("Send to Review")}
         </button>
       </:actions>
     </.admin_modal>
@@ -157,7 +162,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
       <:badges>
         <span class="badge badge-sm badge-outline badge-warning">{refusal_label(@reason)}</span>
         <span :if={@controls? and @returning_count > 0} class="badge badge-sm badge-outline">
-          {@returning_count} to Review
+          {ngettext("%{count} to Review", "%{count} to Review", @returning_count)}
         </span>
       </:badges>
       <:actions>
@@ -165,11 +170,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           <.row_action
             id={"duplicates-review-group-#{@group.subject_id}"}
             icon="hero-arrow-uturn-left"
-            title={"Send #{Components.file_count(@returning_count)} to Review"}
+            title={Components.send_to_review_label(@returning_count)}
             disabled={@returning_count == 0}
             phx-click="send_group_to_review"
             phx-value-subject={@group.subject_id}
-            phx-disable-with="Sending..."
+            phx-disable-with={gettext("Sending...")}
           />
         </.row_actions>
       </:actions>
@@ -207,16 +212,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
   attr :last_left?, :boolean, required: true
   attr :id_prefix, :string, default: "duplicates"
   attr :target, :any, default: nil
-  attr :suspect_label, :string, default: "Doesn't match"
+  attr :suspect_label, :string, default: nil
 
   def review_file_row(assigns) do
     relative_path = assigns.file.relative_path || ""
 
     path_label =
-      if relative_path != "", do: relative_path, else: "file #{assigns.file.id}"
+      if relative_path != "",
+        do: relative_path,
+        else: gettext("file %{id}", id: assigns.file.id)
 
     assigns =
       assigns
+      |> assign(:suspect_text, assigns.suspect_label || gettext("Doesn't match"))
       |> assign(:name, Path.basename(relative_path))
       |> assign(:folder, Components.folder_of(relative_path))
       |> assign(:path_label, path_label)
@@ -237,7 +245,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           id={"#{@id_prefix}-suspect-#{@file.id}"}
           class="badge badge-sm badge-warning badge-outline shrink-0"
         >
-          {@suspect_label}
+          {@suspect_text}
         </span>
 
         <%!-- Same shape as the Keep/Trash radiogroup in Components.file_row/1,
@@ -246,14 +254,14 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         <div
           class="join shrink-0"
           role="radiogroup"
-          aria-label={"What to do with #{@path_label}"}
+          aria-label={gettext("What to do with %{path}", path: @path_label)}
         >
           <input
             type="radio"
             class="join-item btn btn-xs"
             id={"#{@id_prefix}-leave-#{@file.id}"}
             name={"#{@id_prefix}-review-#{@file.id}"}
-            aria-label="Leave"
+            aria-label={gettext("Leave")}
             checked={not @returning?}
             phx-click="leave_file"
             phx-value-subject={@subject_id}
@@ -269,7 +277,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
             ]}
             id={"#{@id_prefix}-review-#{@file.id}"}
             name={"#{@id_prefix}-review-#{@file.id}"}
-            aria-label="Review"
+            aria-label={pgettext("review disposition", "Review")}
             checked={@returning?}
             disabled={@last_left?}
             phx-click="review_file"
@@ -284,34 +292,47 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
   end
 
   # Moved verbatim from Components, which no longer renders refusals.
-  defp refusal_label(:duplicate_registration), do: "Registered twice"
-  defp refusal_label(:unanalyzed), do: "Not analyzed"
-  defp refusal_label(:duration_mismatch), do: "Different lengths"
-  defp refusal_label(:name_mismatch), do: "Names disagree"
-  defp refusal_label(:episode_mismatch), do: "Wrong episode"
-  defp refusal_label(:nothing_to_prune), do: "Nothing to trash"
+  defp refusal_label(:duplicate_registration), do: gettext("Registered twice")
+  defp refusal_label(:unanalyzed), do: gettext("Not analyzed")
+  defp refusal_label(:duration_mismatch), do: gettext("Different lengths")
+  defp refusal_label(:name_mismatch), do: gettext("Names disagree")
+  defp refusal_label(:episode_mismatch), do: gettext("Wrong episode")
+  defp refusal_label(:nothing_to_prune), do: gettext("Nothing to trash")
 
   defp refusal_explanation(:duplicate_registration, detail) do
-    "One file on disk is registered twice (#{detail.path}). Trashing a copy would move the only real file. Rescan this library path instead."
+    gettext(
+      "One file on disk is registered twice (%{path}). Trashing a copy would move the only real file. Rescan this library path instead.",
+      path: detail.path
+    )
   end
 
   defp refusal_explanation(:unanalyzed, detail) do
-    "#{detail.unanalyzed_count} file(s) have no duration, so they cannot be compared. Run analysis first."
+    ngettext(
+      "%{count} file has no duration, so it cannot be compared. Run analysis first.",
+      "%{count} files have no duration, so they cannot be compared. Run analysis first.",
+      detail.unanalyzed_count
+    )
   end
 
   defp refusal_explanation(:duration_mismatch, detail) do
-    "These files are #{percent(detail.spread)} apart in length, more than the #{percent(detail.tolerance)} allowed, so they are not the same content. This is usually bonus features or a file matched to the wrong item."
+    gettext(
+      "These files are %{spread} apart in length, more than the %{tolerance} allowed, so they are not the same content. This is usually bonus features or a file matched to the wrong item.",
+      spread: percent(detail.spread),
+      tolerance: percent(detail.tolerance)
+    )
   end
 
   defp refusal_explanation(:name_mismatch, _detail) do
-    "At least one filename does not belong to this item. Fix the match before trashing anything."
+    gettext(
+      "At least one filename does not belong to this item. Fix the match before trashing anything."
+    )
   end
 
   defp refusal_explanation(:episode_mismatch, _detail) do
-    "At least one filename names a different episode than the one it is attached to."
+    gettext("At least one filename names a different episode than the one it is attached to.")
   end
 
-  defp refusal_explanation(:nothing_to_prune, _detail), do: "Only one file remains."
+  defp refusal_explanation(:nothing_to_prune, _detail), do: gettext("Only one file remains.")
 
   # Formats a fraction (0.093) as a percentage string ("9.3%") for the
   # duration mismatch explanation.

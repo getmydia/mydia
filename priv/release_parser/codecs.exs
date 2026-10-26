@@ -1,9 +1,9 @@
 alias Mydia.Library.ReleaseParser.VocabularyEntry
 
 # Video codecs. Aliases are matched case-insensitively against token
-# values produced by the Tokenizer. Canonical forms follow the V2 output
-# (`H.264/AVC`, `H.265/HEVC`) so downstream Quality fields keep their
-# existing shape.
+# values produced by the Tokenizer. Canonical forms are the labels the
+# scorers use: `H.264` / `H.265` for the formats, `x264` / `x265` for the
+# encoders.
 
 [
   # Tokenizer splits on dots, so `x.264` arrives as two tokens (`x`,
@@ -12,16 +12,33 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
   # needed.
   %VocabularyEntry{
     label: :codec,
-    aliases: ["x264", "h264", "AVC"],
-    canonical: "H.264/AVC",
+    aliases: ["h264", "AVC"],
+    canonical: "H.264",
+    confidence: 0.95,
+    title_zone_bonus: -0.1,
+    metadata_zone_bonus: 0.0
+  },
+  # Encoders keep their own label; the extractor emits them as written.
+  %VocabularyEntry{
+    label: :codec,
+    aliases: ["x264"],
+    canonical: "x264",
     confidence: 0.95,
     title_zone_bonus: -0.1,
     metadata_zone_bonus: 0.0
   },
   %VocabularyEntry{
     label: :codec,
-    aliases: ["x265", "h265", "HEVC"],
-    canonical: "H.265/HEVC",
+    aliases: ["h265", "HEVC"],
+    canonical: "H.265",
+    confidence: 0.95,
+    title_zone_bonus: -0.1,
+    metadata_zone_bonus: 0.0
+  },
+  %VocabularyEntry{
+    label: :codec,
+    aliases: ["x265"],
+    canonical: "x265",
     confidence: 0.95,
     title_zone_bonus: -0.1,
     metadata_zone_bonus: 0.0

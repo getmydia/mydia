@@ -1,4 +1,7 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:player/core/sources/lock/device_auth.dart';
 
@@ -32,6 +35,11 @@ class _FakeLocalAuth extends Fake implements LocalAuthentication {
 }
 
 void main() {
+  // The prompt reason is worded from the global locale mirror: pin English
+  // rather than inherit whatever an earlier test left behind.
+  setUp(() => rememberInterfaceLocale(const Locale('en')));
+  tearDown(() => rememberInterfaceLocale(null));
+
   test('NoDeviceAuth is never available', () async {
     expect(await const NoDeviceAuth().available(), isFalse);
     expect(

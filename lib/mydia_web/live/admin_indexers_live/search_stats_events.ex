@@ -8,6 +8,8 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   whenever it reloads its library indexers (mount, Test, save, toggle).
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 2]
   import Phoenix.LiveView
 
@@ -47,6 +49,6 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
 
   defp indexer_name(socket, id) do
     (Map.get(socket.assigns, :indexers, []) ++ Map.get(socket.assigns, :library_indexers, []))
-    |> Enum.find_value("Indexer", fn indexer -> indexer.id == id && indexer.name end)
+    |> Enum.find_value(gettext("Indexer"), fn indexer -> indexer.id == id && indexer.name end)
   end
 end

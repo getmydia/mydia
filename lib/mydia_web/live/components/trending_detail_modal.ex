@@ -186,14 +186,14 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                             type="button"
                             disabled
                             class="btn btn-disabled"
-                            title={Mydia.Media.restricted_message()}
+                            title={MydiaWeb.OperationErrors.restricted_message()}
                           >
                             <.icon name="hero-lock-closed" class="w-4 h-4" /> {gettext(
                               "Not available"
                             )}
                           </button>
                           <p class="text-xs text-white/70 w-full">
-                            {Mydia.Media.restricted_message()}
+                            {MydiaWeb.OperationErrors.restricted_message()}
                           </p>
                         <% @current_user && @current_user.role == "guest" -> %>
                           <button

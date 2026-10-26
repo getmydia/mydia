@@ -8,7 +8,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
     ~H"""
     <details class="collapse collapse-arrow bg-base-200" id="download-client-remote-fetch">
       <summary class="collapse-title text-sm font-medium">
-        Remote seedbox (pull over SFTP)
+        {gettext("Remote seedbox (pull over SFTP)")}
       </summary>
       <div class="collapse-content space-y-3">
         <label class="label cursor-pointer justify-start gap-3">
@@ -25,18 +25,20 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
             class="checkbox checkbox-sm"
           />
           <span class="label-text">
-            Pull completed torrents from this client's host over SFTP
+            {gettext("Pull completed torrents from this client's host over SFTP")}
           </span>
         </label>
 
         <p class="text-xs text-base-content/60">
-          Connection trust is not verified (no host-key checking) — only connect to hosts you control.
+          {gettext(
+            "Connection trust is not verified (no host-key checking) — only connect to hosts you control."
+          )}
         </p>
 
         <.input
           name="download_client_config[connection_settings][remote_fetch][host]"
           type="text"
-          label="SFTP Host"
+          label={gettext("SFTP Host")}
           placeholder="seedbox.example.com"
           value={remote_fetch_value(@download_client_form, "host")}
         />
@@ -44,21 +46,21 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
         <.input
           name="download_client_config[connection_settings][remote_fetch][port]"
           type="number"
-          label="SFTP Port"
+          label={gettext("SFTP Port")}
           value={remote_fetch_value(@download_client_form, "port") || 22}
         />
 
         <.input
           name="download_client_config[connection_settings][remote_fetch][username]"
           type="text"
-          label="SFTP Username"
+          label={gettext("SFTP Username")}
           value={remote_fetch_value(@download_client_form, "username")}
         />
 
         <.input
           name="download_client_config[connection_settings][remote_fetch][auth_method]"
           type="select"
-          label="Authentication"
+          label={gettext("Authentication")}
           options={
             Enum.map(
               Mydia.Settings.DownloadClientConfig.remote_fetch_auth_methods(),
@@ -72,39 +74,43 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
           <.input
             name="download_client_config[connection_settings][remote_fetch][private_key]"
             type="textarea"
-            label="Private Key (PEM)"
+            label={gettext("Private Key (PEM)")}
             value={remote_fetch_value(@download_client_form, "private_key")}
           />
           <.input
             name="download_client_config[connection_settings][remote_fetch][passphrase]"
             type="password"
-            label="Passphrase (optional)"
+            label={gettext("Passphrase (optional)")}
             value={remote_fetch_value(@download_client_form, "passphrase")}
           />
         <% else %>
           <.input
             name="download_client_config[connection_settings][remote_fetch][password]"
             type="password"
-            label="SFTP Password"
+            label={gettext("SFTP Password")}
             value={remote_fetch_value(@download_client_form, "password")}
           />
         <% end %>
 
         <details class="collapse collapse-arrow bg-base-100">
-          <summary class="collapse-title text-xs font-medium">Advanced</summary>
+          <summary class="collapse-title text-xs font-medium">
+            {gettext("Advanced")}
+          </summary>
           <div class="collapse-content space-y-3">
             <.input
               name="download_client_config[connection_settings][remote_fetch][remote_path_prefix]"
               type="text"
-              label="Remote Path Prefix Override"
-              placeholder="Leave blank unless SFTP is chrooted differently from the torrent client"
+              label={gettext("Remote Path Prefix Override")}
+              placeholder={
+                gettext("Leave blank unless SFTP is chrooted differently from the torrent client")
+              }
               value={remote_fetch_value(@download_client_form, "remote_path_prefix")}
             />
 
             <.input
               name="download_client_config[connection_settings][remote_fetch][max_concurrent_transfers]"
               type="number"
-              label="Max Concurrent Transfers"
+              label={gettext("Max Concurrent Transfers")}
               value={remote_fetch_value(@download_client_form, "max_concurrent_transfers") || 2}
             />
 
@@ -126,7 +132,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
                 }
                 class="checkbox checkbox-sm"
               />
-              <span class="label-text">Delete the remote copy after a verified transfer</span>
+              <span class="label-text">
+                {gettext("Delete the remote copy after a verified transfer")}
+              </span>
             </label>
           </div>
         </details>
@@ -138,7 +146,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
             phx-click="test_seedbox_connection"
             disabled={remote_fetch_value(@download_client_form, "host") in [nil, ""]}
           >
-            <.icon name="hero-signal" class="w-4 h-4" /> Test SFTP Connection
+            <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test SFTP Connection")}
           </button>
         </div>
       </div>
@@ -157,6 +165,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.SeedboxComponents do
     )
   end
 
-  defp auth_method_label("password"), do: "Password"
-  defp auth_method_label("ssh_key"), do: "SSH key"
+  defp auth_method_label("password"), do: gettext("Password")
+  defp auth_method_label("ssh_key"), do: gettext("SSH key")
 end

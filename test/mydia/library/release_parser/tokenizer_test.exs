@@ -11,6 +11,17 @@ defmodule Mydia.Library.ReleaseParser.TokenizerTest do
       assert values == ["Show", "Name", "S01E01", "1080p"]
     end
 
+    test "a double quote separates only past the title boundary" do
+      input = ~s(Fake Show "Nick" S01E01 DVDRip."XviD"-GRP)
+      tokens = Tokenizer.tokenize(input)
+
+      assert Enum.map(tokens, & &1.value) ==
+               ["Fake", "Show", ~s("Nick"), "S01E01", "DVDRip", "XviD", "-GRP"]
+
+      for token <- tokens,
+          do: assert(:binary.part(input, token.byte_offset, token.byte_length) == token.value)
+    end
+
     test "drops common extensions" do
       tokens = Tokenizer.tokenize("Movie.2024.mkv")
       assert Enum.map(tokens, & &1.value) == ["Movie", "2024"]
