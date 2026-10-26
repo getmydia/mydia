@@ -18,7 +18,7 @@ defmodule MydiaWeb.JobsLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Background Jobs")
+     |> assign(:page_title, gettext("Background Jobs"))
      |> assign(:filter_worker, nil)
      |> assign(:filter_state, nil)
      |> assign(:page, 0)
@@ -106,14 +106,14 @@ defmodule MydiaWeb.JobsLive.Index do
         {:noreply,
          socket
          |> assign(:trigger_job_worker, nil)
-         |> put_flash(:info, "Job triggered successfully and added to queue")
+         |> put_flash(:info, gettext("Job triggered successfully and added to queue"))
          |> load_job_history(reset: true)}
 
       {:error, _changeset} ->
         {:noreply,
          socket
          |> assign(:trigger_job_worker, nil)
-         |> put_flash(:error, "Failed to trigger job")}
+         |> put_flash(:error, gettext("Failed to trigger job"))}
     end
   end
 
@@ -122,7 +122,7 @@ defmodule MydiaWeb.JobsLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Job cancelled")
+     |> put_flash(:info, gettext("Job cancelled"))
      |> load_job_history(reset: true)}
   end
 
@@ -131,7 +131,7 @@ defmodule MydiaWeb.JobsLive.Index do
      socket
      |> load_cron_jobs()
      |> load_job_history(reset: true)
-     |> put_flash(:info, "Refreshed")}
+     |> put_flash(:info, gettext("Refreshed"))}
   end
 
   @impl true

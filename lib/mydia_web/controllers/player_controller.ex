@@ -28,6 +28,9 @@ defmodule MydiaWeb.PlayerController do
   For authenticated users, injects:
   - Auth token (JWT)
   - User info (id, username)
+  - The interface locale the web UI resolved for this request (the user's
+    language preference, else the browser's, else the instance default), so
+    the player opens in the same language as the page that launched it
   - Server URL is auto-detected by Flutter from window.location.origin
   """
   def index(conn, _params) do
@@ -74,7 +77,7 @@ defmodule MydiaWeb.PlayerController do
     case Guardian.Plug.current_resource(conn) do
       nil ->
         # No authenticated user
-        %{authenticated: false, embedMode: true}
+        %{authenticated: false, embedMode: true, locale: conn.assigns[:locale]}
 
       user ->
         # Get the token from session (check both Guardian default key and legacy key)
@@ -88,7 +91,10 @@ defmodule MydiaWeb.PlayerController do
           token: token,
           userId: user.id,
           username: user.username,
-          embedMode: true
+          embedMode: true,
+          # Set by MydiaWeb.Plugs.UserLocale in the :auth pipeline. A Gettext
+          # code ("pt_BR", "zh_Hans"); the player maps it to its own locales.
+          locale: conn.assigns[:locale]
         }
     end
   end

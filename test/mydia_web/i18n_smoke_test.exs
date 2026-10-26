@@ -104,4 +104,75 @@ defmodule MydiaWeb.I18nSmokeTest do
     {:ok, _view, html} = live(conn, ~p"/integrations")
     assert text(html, "#integrations-browse-plugins") == "Explorar complementos"
   end
+
+  # Spanish page labels as `MydiaWeb.AdminNav.page_label/1` renders them, hardcoded
+  # for the reason in the moduledoc. The registry test below fails when a page is
+  # added to `AdminNav` without a row here.
+  @admin_page_labels %{
+    quality: "Calidad",
+    custom_formats: "Formatos personalizados",
+    clients: "Clientes",
+    indexers: "Indexadores",
+    library_paths: "Biblioteca",
+    path_mappings: "Asignaciones de rutas",
+    subtitle_providers: "Proveedores de subtítulos",
+    media_servers: "Servidores multimedia",
+    storage_backends: "Almacenamiento",
+    requests: "Solicitudes",
+    jobs: "Tareas en segundo plano",
+    release_blacklist: "Lista de bloqueo de lanzamientos",
+    duplicates: "Duplicados",
+    trash: "Papelera",
+    status: "Estado",
+    dashboard: "Panel",
+    settings: "Ajustes",
+    users: "Usuarios",
+    api_keys: "Claves de API",
+    remote_access: "Acceso remoto",
+    plugins: "Complementos"
+  }
+
+  @admin_hub_labels %{
+    configuration: "Configuración",
+    administration: "Administración",
+    system: "Sistema"
+  }
+
+  describe "admin pages" do
+    setup do
+      # Background Jobs reads the Oban crontab, and Oban is not started in test.
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+      start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
+      # Remote Access looks up the public IP over HTTP unless told not to.
+      original_direct_urls = Application.get_env(:mydia, :direct_urls, [])
+      Application.put_env(:mydia, :direct_urls, public_ip_enabled: false)
+      on_exit(fn -> Application.put_env(:mydia, :direct_urls, original_direct_urls) end)
+
+      :ok
+    end
+
+    test "every AdminNav page has an expected label here" do
+      assert Enum.sort(Map.keys(@admin_page_labels)) == Enum.sort(MydiaWeb.AdminNav.keys())
+    end
+
+    for {key, label} <- @admin_page_labels do
+      test "admin #{key}", %{conn: conn} do
+        page = MydiaWeb.AdminNav.fetch!(unquote(key))
+        {:ok, _view, html} = live(conn, page.path)
+
+        # The hub is the page header; the page itself is the active tab.
+        assert text(html, "#admin-page-title") == @admin_hub_labels[page.hub]
+        assert text(html, "#admin-tab-#{unquote(key)}") =~ unquote(label)
+      end
+    end
+
+    test "the sidebar names the three hubs", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin/trash")
+
+      assert text(html, "#admin-nav-configuration") == "Configuración"
+      assert text(html, "#admin-nav-administration") == "Administración"
+      assert text(html, "#admin-nav-system") == "Sistema"
+    end
+  end
 end

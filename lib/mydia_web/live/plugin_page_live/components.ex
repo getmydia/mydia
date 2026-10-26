@@ -2,7 +2,6 @@ defmodule MydiaWeb.PluginPageLive.Components do
   @moduledoc "Components for plugin pages: the write confirmation modal."
   use MydiaWeb, :html
 
-  alias Mydia.Plugins.PageWrites
   alias Phoenix.LiveView.JS
 
   attr :title, :string, required: true
@@ -16,7 +15,9 @@ defmodule MydiaWeb.PluginPageLive.Components do
     <.modal id="plugin-confirm-modal" show on_cancel={JS.push("decide", value: %{choice: "deny"})}>
       <:title>{gettext("%{title} wants to make changes", title: @title)}</:title>
       <div :for={{surface, rows} <- @groups} class="mb-4">
-        <p class="text-sm font-medium text-base-content/70">{PageWrites.surface_label(surface)}</p>
+        <p class="text-sm font-medium text-base-content/70">
+          {MydiaWeb.StatusLabels.page_write_surface(surface)}
+        </p>
         <ul class="mt-1 space-y-1">
           <li :for={row <- rows} class="text-sm flex gap-2">
             <.icon name="hero-arrow-right" class="w-4 h-4 mt-0.5 shrink-0 text-base-content/50" />

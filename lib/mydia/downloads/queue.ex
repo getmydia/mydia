@@ -28,6 +28,8 @@ defmodule Mydia.Downloads.Queue do
   defdelegate check_for_active_download(search_result, media_item_id, episode_id, opts \\ []),
     to: Duplicates
 
+  defdelegate blocking_downloads(media_item, context), to: Duplicates
+
   defdelegate check_for_existing_media_files(search_result, media_item_id, episode_id),
     to: Duplicates
 

@@ -9,7 +9,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
     <.row_action
       id={"indexer-login-#{@indexer.id}"}
       icon="hero-key"
-      title="Log in"
+      title={gettext("Log in")}
       phx-click="indexer_login"
       phx-value-id={@indexer.id}
     />
@@ -37,7 +37,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
   def login_modal(assigns) do
     ~H"""
     <.modal id="indexer-login-modal" show on_cancel={JS.push("indexer_login_close")}>
-      <:title>Log in to {@definition.name}</:title>
+      <:title>{gettext("Log in to %{name}", name: @definition.name)}</:title>
       <div :if={@error} class="alert alert-error mb-3 text-sm">{@error}</div>
       <.form
         for={%{}}
@@ -51,7 +51,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
             :if={@challenge.image}
             id="indexer-login-captcha"
             src={"data:#{@challenge.image_type};base64,#{Base.encode64(@challenge.image)}"}
-            alt="Captcha"
+            alt={gettext("Captcha")}
             class="rounded border border-base-300 bg-white"
           />
           <button
@@ -61,13 +61,13 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
             phx-click="indexer_login_refresh"
             disabled={@busy}
           >
-            <.icon name="hero-arrow-path" class="w-3 h-3" /> New image
+            <.icon name="hero-arrow-path" class="w-3 h-3" /> {gettext("New image")}
           </button>
           <.input
             id="indexer-login-field-captcha"
             name="login[captcha]"
             value=""
-            label="Text in the image"
+            label={gettext("Text in the image")}
             autocomplete="off"
           />
         </div>
@@ -76,7 +76,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
           id="indexer-login-field-2facode"
           name="login[2facode]"
           value=""
-          label="Two-factor code"
+          label={gettext("Two-factor code")}
           inputmode="numeric"
           autocomplete="one-time-code"
         />
@@ -87,10 +87,10 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
             class="btn btn-ghost"
             phx-click="indexer_login_close"
           >
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button id="indexer-login-submit" type="submit" class="btn btn-primary" disabled={@busy}>
-            <span :if={@busy} class="loading loading-spinner loading-sm"></span> Log in
+            <span :if={@busy} class="loading loading-spinner loading-sm"></span> {gettext("Log in")}
           </button>
         </div>
       </.form>

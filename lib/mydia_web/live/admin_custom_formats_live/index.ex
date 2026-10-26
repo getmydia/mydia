@@ -18,7 +18,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Custom Formats")
+     |> assign(:page_title, gettext("Custom Formats"))
      |> assign(:show_custom_format_modal, false)
      |> assign(:custom_format_test_results, [])
      |> load_formats()}
@@ -92,7 +92,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
       {:ok, _format} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Format saved")
+         |> put_flash(:info, gettext("Format saved"))
          |> assign(:show_custom_format_modal, false)
          |> load_formats()}
 
@@ -109,7 +109,10 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
       {:error, :not_found} ->
         {:noreply,
          socket
-         |> put_flash(:error, "That format no longer exists. The list has been refreshed.")
+         |> put_flash(
+           :error,
+           gettext("That format no longer exists. The list has been refreshed.")
+         )
          |> assign(:show_custom_format_modal, false)
          |> load_formats()}
     end
@@ -120,18 +123,22 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Format reset to the shipped definition")
+     |> put_flash(:info, gettext("Format reset to the shipped definition"))
      |> load_formats()}
   end
 
   def handle_event("delete_custom_format", %{"slug" => slug}, socket) do
     case CustomFormats.delete_format(slug) do
       :ok ->
-        {:noreply, socket |> put_flash(:info, "Format deleted") |> load_formats()}
+        {:noreply, socket |> put_flash(:info, gettext("Format deleted")) |> load_formats()}
 
       {:error, :builtin} ->
         {:noreply,
-         put_flash(socket, :error, "Built-in formats cannot be deleted. Reset instead.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Built-in formats cannot be deleted. Reset instead.")
+         )}
     end
   end
 

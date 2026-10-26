@@ -46,21 +46,64 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
   def classify(tokens, anchors) when is_list(tokens) and is_map(anchors) do
     boundary = title_boundary(anchors)
     total_tokens = length(tokens)
+    tag_groups = tag_groups(tokens, anchors)
 
     tokens
     |> Enum.with_index()
     |> Enum.map(fn {%Token{} = token, index} ->
       zone = zone_for(token, boundary)
-      candidates = candidates_for(token, anchors, zone, index, total_tokens)
+      candidates = candidates_for(token, anchors, zone, index, total_tokens, tag_groups)
       %Token{token | candidates: candidates}
     end)
+    |> demote_episode_title_sources()
   end
 
   # ---- Internals ----
 
-  defp candidates_for(%Token{} = token, anchors, zone, index, total) do
+  # A cam-tier source that is also a dictionary word (`Screener`,
+  # `Telecine`) right after the episode marker is often the episode title
+  # (`S01E04.The.Screener`), and the title-zone penalty does not reach past
+  # the marker. In the run between the marker and the next tag, such a word
+  # with another title word in the run is a title word too. One in capitals
+  # (`SCREENER`) or alone in the run (`S01E04.Screener.720p`) is still a
+  # tag.
+  @cam_title_words ~w(SCREENER WORKPRINT TELECINE TELESYNC)
+
+  defp demote_episode_title_sources(tokens) do
+    case Enum.split_while(tokens, &(not episode_marker?(&1))) do
+      {_, []} ->
+        tokens
+
+      {before, [marker | rest]} ->
+        {span, tail} = Enum.split_while(rest, &(&1.candidates == [] or cam_title_word?(&1)))
+        before ++ [marker | demote_cam_title_words(span)] ++ tail
+    end
+  end
+
+  defp demote_cam_title_words(span) do
+    if Enum.any?(span, &(&1.candidates == [])),
+      do: Enum.map(span, &demote_cam_title_word/1),
+      else: span
+  end
+
+  defp demote_cam_title_word(%Token{value: value} = token) do
+    if cam_title_word?(token) and String.upcase(value) != value,
+      do: %Token{token | candidates: []},
+      else: token
+  end
+
+  defp cam_title_word?(%Token{value: value, candidates: [_ | _] = candidates}) do
+    String.upcase(value) in @cam_title_words and Enum.all?(candidates, &(&1.label == :source))
+  end
+
+  defp cam_title_word?(%Token{}), do: false
+
+  defp episode_marker?(%Token{candidates: candidates}),
+    do: Enum.any?(candidates, &(&1.label == :episode_marker))
+
+  defp candidates_for(%Token{} = token, anchors, zone, index, total, tag_groups) do
     anchor_candidates = anchor_candidates(token, anchors, zone)
-    vocab_candidates = vocab_candidates(token, zone)
+    vocab_candidates = vocab_candidates(token, zone, MapSet.member?(tag_groups, token_key(token)))
 
     case anchor_candidates ++ vocab_candidates do
       [] ->
@@ -94,32 +137,78 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
     end
   end
 
-  defp vocab_candidates(%Token{value: value}, zone) do
+  defp vocab_candidates(%Token{value: value}, zone, tag_group?) do
     entries =
       case Vocabulary.lookup(value) do
-        [] -> Vocabulary.lookup(strip_trailing_punct(value))
+        [] -> value |> strip_trailing_punct() |> Vocabulary.lookup() |> or_disc_count(value)
         list -> list
       end
 
     Enum.map(entries, fn %VocabularyEntry{} = entry ->
+      bonus = if tag_group? and entry.label == :source, do: 0.0, else: zone_bonus(entry, zone)
+
       %Candidate{
         label: entry.label,
         value: entry.canonical,
-        confidence: clamp(entry.confidence + zone_bonus(entry, zone)),
+        confidence: clamp(entry.confidence + bonus),
         zone: zone
       }
     end)
   end
 
-  # Strip trailing punctuation bytes (e.g. `DD+` → `DD`). Limited to
-  # ASCII so we don't touch multibyte token text.
+  # A disc count before a DVD (`2DVD5`, `2xDVD9`) says how many discs, not
+  # which source.
+  @disc_count_re ~r/^\d{1,2}x?(?=DVD)/i
+
+  defp or_disc_count([], value) do
+    value
+    |> then(&Regex.replace(@disc_count_re, &1, ""))
+    |> Vocabulary.lookup()
+    |> Enum.filter(&(&1.label == :source))
+  end
+
+  defp or_disc_count(entries, _value), do: entries
+
+  # Anchorless anime names put the source in a bracket of its own
+  # (`- 07 [Site][Web][MKV]`) or ahead of the resolution in a tag list
+  # (`(WEB 1080p x264 AAC)`), both before any anchor, where `Web` takes the
+  # title-zone penalty. A source word that opens a non-leading bracket group
+  # and is followed by the resolution, or is alone in a square bracket, is a
+  # tag, so it drops the penalty (without the metadata bonus, so an explicit
+  # source past the boundary still wins). `(Spider Web)`, `[Web Story]` and a
+  # lone parenthesised word (`Fake Show (Web) 2020`, `(TS)`) stay title words.
+  defp tag_groups(tokens, anchors) do
+    tokens
+    |> Enum.filter(&(&1.bracket_offset not in [nil, 0]))
+    |> Enum.chunk_by(& &1.bracket_offset)
+    |> Enum.flat_map(fn
+      [%Token{bracket_context: :bracket} = first] ->
+        [token_key(first)]
+
+      [_first] ->
+        []
+
+      [first, second | _] ->
+        if resolution_anchor?(second, anchors), do: [token_key(first)], else: []
+    end)
+    |> MapSet.new()
+  end
+
+  defp resolution_anchor?(%Token{byte_offset: offset, byte_length: len}, %{resolution: pos}),
+    do: pos != nil and offset <= pos and pos < offset + len
+
+  defp token_key(%Token{byte_offset: offset, byte_length: len}), do: {offset, len}
+
+  # Strip trailing punctuation bytes (e.g. `DD+` → `DD`, and the comma of a
+  # listed tag set, `[2023, HEVC, HDR10]`). Limited to ASCII so we don't
+  # touch multibyte token text.
   defp strip_trailing_punct(""), do: ""
 
   defp strip_trailing_punct(value) do
     size = byte_size(value)
     last = :binary.at(value, size - 1)
 
-    if last in ~c"+!?'" do
+    if last in ~c"+!?'," do
       strip_trailing_punct(binary_part(value, 0, size - 1))
     else
       value

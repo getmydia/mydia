@@ -28,8 +28,13 @@ MydiaWebConfig? getWebConfig() {
         ? (embedModeVal as JSBoolean).toDart
         : false;
 
+    final localeVal = config['locale'];
+    final locale =
+        !localeVal.isUndefinedOrNull ? (localeVal as JSString).toDart : null;
+
     if (!authenticated) {
-      return MydiaWebConfig(authenticated: false, embedMode: embedMode);
+      return MydiaWebConfig(
+          authenticated: false, embedMode: embedMode, locale: locale);
     }
 
     final tokenVal = config['token'];
@@ -46,6 +51,7 @@ MydiaWebConfig? getWebConfig() {
           : null,
       serverUrl: getOriginUrl(),
       embedMode: embedMode,
+      locale: locale,
     );
   } catch (e) {
     // If parsing fails, return null

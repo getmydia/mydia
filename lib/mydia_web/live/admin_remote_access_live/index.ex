@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Remote Access")
+     |> assign(:page_title, gettext("Configuration - Remote Access"))
      |> assign(:show_direct_url_modal, false)
      |> assign(:direct_url, "")
      |> load_config()
@@ -55,24 +55,30 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
          |> load_config()
          |> load_remote_access_setting()
          |> load_p2p_status()
-         |> put_flash(:info, "Remote access #{if enabled, do: "enabled", else: "disabled"}")}
+         |> put_flash(
+           :info,
+           if(enabled,
+             do: gettext("Remote access enabled"),
+             else: gettext("Remote access disabled")
+           )
+         )}
 
       {:error, :env_locked} ->
         {:noreply,
          put_flash(
            socket,
            :error,
-           "Remote access is set by ENABLE_REMOTE_ACCESS and cannot be changed here."
+           gettext("Remote access is set by ENABLE_REMOTE_ACCESS and cannot be changed here.")
          )}
 
       {:error, reason} ->
         Logger.error("Failed to switch remote access: #{inspect(reason)}")
-        {:noreply, put_flash(socket, :error, "Failed to update remote access setting")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update remote access setting"))}
     end
   end
 
   def handle_event("copy_peer_id", _params, socket) do
-    {:noreply, put_flash(socket, :info, "Node ID copied to clipboard")}
+    {:noreply, put_flash(socket, :info, gettext("Node ID copied to clipboard"))}
   end
 
   def handle_event("new_direct_url", _params, socket) do
@@ -108,12 +114,15 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
            |> assign(:show_direct_url_modal, false)
            |> assign(:direct_url, "")
            |> load_config()
-           |> put_flash(:info, "Direct URL added successfully")}
+           |> put_flash(:info, gettext("Direct URL added successfully"))}
 
         {:error, changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to add direct URL: #{format_errors(changeset)}")}
+           |> put_flash(
+             :error,
+             gettext("Failed to add direct URL: %{reason}", reason: format_errors(changeset))
+           )}
       end
     else
       {:noreply, socket}
@@ -130,12 +139,15 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
         {:noreply,
          socket
          |> load_config()
-         |> put_flash(:info, "Direct URL removed successfully")}
+         |> put_flash(:info, gettext("Direct URL removed successfully"))}
 
       {:error, changeset} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to remove direct URL: #{format_errors(changeset)}")}
+         |> put_flash(
+           :error,
+           gettext("Failed to remove direct URL: %{reason}", reason: format_errors(changeset))
+         )}
     end
   end
 
@@ -143,21 +155,18 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     {:noreply,
      socket
      |> refresh_status()
-     |> put_flash(:info, "Status refreshed")}
+     |> put_flash(:info, gettext("Status refreshed"))}
   end
 
   ## Private Helpers
 
   defp format_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
+    changeset
+    |> Ecto.Changeset.traverse_errors(&translate_error/1)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 
-  defp format_errors(_), do: "unknown error"
+  defp format_errors(_), do: gettext("unknown error")
 
   defp schedule_refresh do
     Process.send_after(self(), :refresh_p2p, @refresh_interval_ms)

@@ -2,6 +2,8 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias MydiaWeb.AdminIndexersLive.Components
+
   @doc """
   Renders the Library Indexer Config modal.
 
@@ -17,7 +19,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
     <.admin_modal
       id="library-indexer-config-modal"
       icon="hero-cog-6-tooth"
-      title={"Configure #{@configuring_library_indexer.name}"}
+      title={gettext("Configure %{name}", name: @configuring_library_indexer.name)}
       subtitle={indexer_subtitle(@configuring_library_indexer)}
       on_close="close_library_config_modal"
     >
@@ -26,9 +28,9 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
         <.icon name="hero-information-circle" class="w-5 h-5 shrink-0" />
         <span class="text-sm">
           <%= if @configuring_library_indexer.type == "private" do %>
-            This indexer requires authentication to search and download torrents.
+            {gettext("This indexer requires authentication to search and download torrents.")}
           <% else %>
-            Configure optional settings for this indexer.
+            {gettext("Configure optional settings for this indexer.")}
           <% end %>
         </span>
       </div>
@@ -41,26 +43,26 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
               <%!-- Fallback: Generic username/password form --%>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text font-medium">Username</span>
+                  <span class="label-text font-medium">{gettext("Username")}</span>
                 </label>
                 <input
                   type="text"
                   name="config[username]"
                   value={get_in(@configuring_library_indexer.config || %{}, ["username"])}
                   class="input input-bordered w-full"
-                  placeholder="Enter your username"
+                  placeholder={gettext("Enter your username")}
                 />
               </div>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text font-medium">Password</span>
+                  <span class="label-text font-medium">{gettext("Password")}</span>
                 </label>
                 <input
                   type="password"
                   name="config[password]"
                   value={get_in(@configuring_library_indexer.config || %{}, ["password"])}
                   class="input input-bordered w-full"
-                  placeholder="Enter your password"
+                  placeholder={gettext("Enter your password")}
                 />
               </div>
             <% else %>
@@ -89,7 +91,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
               <div class="font-medium">{@test_result.message}</div>
               <%= if @test_result.response_time_ms do %>
                 <div class="text-sm opacity-80">
-                  Response time: {@test_result.response_time_ms}ms
+                  {gettext("Response time: %{ms}ms", ms: @test_result.response_time_ms)}
                 </div>
               <% end %>
               <%= if @test_result.error do %>
@@ -101,7 +103,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_library_config_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             type="submit"
@@ -111,12 +113,14 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
             disabled={@testing}
           >
             <%= if @testing do %>
-              <span class="loading loading-spinner loading-sm"></span> Testing...
+              <span class="loading loading-spinner loading-sm"></span> {gettext("Testing...")}
             <% else %>
-              <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
+              <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test Connection")}
             <% end %>
           </button>
-          <button type="submit" name="action" value="save" class="btn btn-primary">Save</button>
+          <button type="submit" name="action" value="save" class="btn btn-primary">
+            {gettext("Save")}
+          </button>
         </.admin_modal_actions>
       </form>
     </.admin_modal>
@@ -124,7 +128,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
   end
 
   defp indexer_subtitle(indexer) do
-    [indexer.type, indexer.language]
+    [indexer.type && Components.library_indexer_type_label(indexer.type), indexer.language]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" / ")
   end
@@ -206,7 +210,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
             <span class="label-text font-medium">{@field_label}</span>
           </label>
           <div class="text-sm text-base-content/70 bg-base-300 p-3 rounded-lg">
-            {@field_default || "No additional information"}
+            {@field_default || gettext("No additional information")}
           </div>
         <% _ -> %>
           <%!-- Default to text input for unknown types --%>
@@ -221,7 +225,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
           />
       <% end %>
       <p :if={@field_name == "cookie"} class="label-text-alt opacity-70 mt-1">
-        Paste the Cookie request header from a browser that is logged in to this site.
+        {gettext("Paste the Cookie request header from a browser that is logged in to this site.")}
       </p>
     </div>
     """

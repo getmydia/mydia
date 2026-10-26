@@ -7,12 +7,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   alias Mydia.Downloads.ClientHealth
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Download Clients")
+     |> assign(:page_title, gettext("Configuration - Download Clients"))
      |> assign(:pending_delete_download_client, nil)
      |> assign(:pending_delete_download_count, 0)
      |> load_data()}
@@ -47,7 +48,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
        socket
        |> put_flash(
          :error,
-         "Cannot edit runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
+         gettext(
+           "Cannot edit runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
+         )
        )}
     else
       changeset = DownloadClientConfig.changeset(client, %{})
@@ -99,7 +102,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
         {:noreply,
          socket
          |> assign(:show_download_client_modal, false)
-         |> put_flash(:info, "Download client saved successfully")
+         |> put_flash(:info, gettext("Download client saved successfully"))
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -116,7 +119,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
        socket
        |> put_flash(
          :error,
-         "Cannot delete runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
+         gettext(
+           "Cannot delete runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
+         )
        )}
     else
       # Counted before deletion, while the client still exists, so the operator
@@ -161,7 +166,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
          socket
          |> assign(:pending_delete_download_client, nil)
          |> assign(:pending_delete_download_count, 0)
-         |> put_flash(:info, "Download client deleted successfully")
+         |> put_flash(:info, gettext("Download client deleted successfully"))
          |> load_data()}
 
       {:error, error} ->
@@ -173,7 +178,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        error_msg = MydiaLogger.user_error_message(:delete_download_client, error)
+        error_msg = OperationErrors.user_error_message(:delete_download_client, error)
 
         {:noreply,
          socket
@@ -224,14 +229,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
     case test_client_connection(client_config) do
       {:ok, info} ->
-        version_info =
-          cond do
-            Map.has_key?(info, :version) -> "Version: #{info.version}"
-            Map.has_key?(info, :rpc_version) -> "RPC Version: #{info.rpc_version}"
-            true -> "Connected"
-          end
-
-        {:noreply, put_flash(socket, :info, "Connection successful! #{version_info}")}
+        {:noreply, put_flash(socket, :info, connection_successful_message(info))}
 
       {:error, error} ->
         MydiaLogger.log_error(:liveview, "Download client connection test failed",
@@ -249,7 +247,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
             _ -> MydiaLogger.extract_error_message(error)
           end
 
-        {:noreply, put_flash(socket, :error, "Connection failed: #{error_msg}")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Connection failed: %{error}", error: error_msg))}
     end
   end
 
@@ -307,17 +306,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
     case test_client_connection(test_config) do
       {:ok, info} ->
-        version_info =
-          cond do
-            Map.has_key?(info, :version) -> "Version: #{info.version}"
-            Map.has_key?(info, :rpc_version) -> "RPC Version: #{info.rpc_version}"
-            true -> "Connected"
-          end
-
         {:noreply,
          socket
          |> assign(:testing_download_client_connection, false)
-         |> put_flash(:info, "Connection successful! #{version_info}")}
+         |> put_flash(:info, connection_successful_message(info))}
 
       {:error, error} ->
         MydiaLogger.log_warning(:liveview, "Download client connection test failed",
@@ -336,7 +328,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
         {:noreply,
          socket
          |> assign(:testing_download_client_connection, false)
-         |> put_flash(:error, "Connection failed: #{error_msg}")}
+         |> put_flash(:error, gettext("Connection failed: %{error}", error: error_msg))}
     end
   end
 
@@ -359,7 +351,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     case Mydia.Downloads.Seedbox.Connection.open(remote_fetch) do
       {:ok, _channel, cleanup} ->
         cleanup.()
-        {:noreply, put_flash(socket, :info, "SFTP connection successful")}
+        {:noreply, put_flash(socket, :info, gettext("SFTP connection successful"))}
 
       {:error, reason} ->
         MydiaLogger.log_warning(:liveview, "Seedbox SFTP connection test failed",
@@ -368,7 +360,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        {:noreply, put_flash(socket, :error, "SFTP connection failed: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("SFTP connection failed: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -385,13 +382,34 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     |> assign(:testing_download_client_connection, false)
   end
 
+  # One whole sentence per version shape; the client reports version strings.
+  defp connection_successful_message(info) do
+    cond do
+      Map.has_key?(info, :version) ->
+        gettext("Connection successful! Version: %{version}", version: info.version)
+
+      Map.has_key?(info, :rpc_version) ->
+        gettext("Connection successful! RPC Version: %{version}", version: info.rpc_version)
+
+      true ->
+        gettext("Connection successful! Connected")
+    end
+  end
+
   defp get_client_health_status(clients) do
+    locale = Gettext.get_locale(MydiaWeb.Gettext)
+
     clients
     |> Task.async_stream(
       fn client ->
+        Gettext.put_locale(MydiaWeb.Gettext, locale)
+
         case ClientHealth.check_health(client.id) do
-          {:ok, health} -> {client.id, health}
-          {:error, _} -> {client.id, %{status: :unknown, error: "Unable to check health"}}
+          {:ok, health} ->
+            {client.id, health}
+
+          {:error, _} ->
+            {client.id, %{status: :unknown, error: gettext("Unable to check health")}}
         end
       end,
       timeout: :infinity,

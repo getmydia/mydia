@@ -523,11 +523,16 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       dv_title = "Movie.2160p.UHD.BluRay.DV.HEVC-GROUP"
       generic_hdr_title = "Movie.2160p.UHD.BluRay.HDR.HEVC-GROUP"
 
-      assert QualityParser.extract_hdr(hdr10_title) == {:hdr10, false}
-      assert QualityParser.extract_hdr(hdr10plus_title) == {:hdr10_plus, false}
-      assert QualityParser.extract_hdr(dv_title) == {nil, true}
+      hdr = fn title ->
+        quality = QualityParser.parse(title)
+        {quality.hdr_format, quality.dolby_vision}
+      end
+
+      assert hdr.(hdr10_title) == {:hdr10, false}
+      assert hdr.(hdr10plus_title) == {:hdr10_plus, false}
+      assert hdr.(dv_title) == {nil, true}
       # A bare "HDR" token canonicalizes to the same base as an explicit "HDR10" token.
-      assert QualityParser.extract_hdr(generic_hdr_title) == {:hdr10, false}
+      assert hdr.(generic_hdr_title) == {:hdr10, false}
     end
 
     test "HDR format scores are correctly tiered: Dolby Vision > HDR10+ > HDR10 > SDR" do
@@ -655,8 +660,9 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
         result = build_result(%{title: title, size: 50 * 1024 * 1024 * 1024})
         quality = result.quality
 
-        # STRICT: Must detect exact TrueHD Atmos, not just TrueHD or Atmos
-        assert quality.audio == "TrueHD Atmos",
+        # STRICT: Must detect exact TrueHD Atmos, not just TrueHD or Atmos.
+        # The channel layout follows when the title carries one.
+        assert quality.audio =~ ~r/^TrueHD Atmos( 7\.1)?$/,
                "Expected audio='TrueHD Atmos' but got '#{quality.audio}' for: #{title}"
       end
     end
@@ -672,8 +678,8 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
         quality = result.quality
 
         # STRICT: Must detect exact DTS-HD MA
-        assert quality.audio == "DTS-HD MA",
-               "Expected audio='DTS-HD MA' but got '#{quality.audio}' for: #{title}"
+        assert quality.audio == "DTS-HD MA 5.1",
+               "Expected audio='DTS-HD MA 5.1' but got '#{quality.audio}' for: #{title}"
       end
     end
 
@@ -700,7 +706,7 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       assert atmos_result.quality.audio == "TrueHD Atmos"
       assert truehd_result.quality.audio == "TrueHD"
       assert dts_hd_ma_result.quality.audio == "DTS-HD MA"
-      assert ddplus_result.quality.audio == "DD+"
+      assert ddplus_result.quality.audio == "DD+ 5.1"
       assert dts_result.quality.audio == "DTS"
       assert aac_result.quality.audio == "AAC"
 
@@ -753,7 +759,7 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       first = List.first(ranked)
 
       # STRICT: TrueHD Atmos must win when all else is equal
-      assert first.result.quality.audio == "TrueHD Atmos",
+      assert first.result.quality.audio == "TrueHD Atmos 7.1",
              "Expected TrueHD Atmos to rank first, but got #{first.result.quality.audio}"
     end
 
@@ -782,7 +788,7 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       first = List.first(ranked)
 
       # STRICT: DTS-HD MA + BluRay should rank higher than DD+ + WEB-DL
-      assert first.result.quality.audio == "DTS-HD MA",
+      assert first.result.quality.audio == "DTS-HD MA 5.1",
              "Expected DTS-HD MA to rank first, but got #{first.result.quality.audio}"
     end
   end

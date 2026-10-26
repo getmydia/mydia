@@ -86,4 +86,57 @@ defmodule MydiaWeb.MediaLive.Index.ListingParamsTest do
     assert ListingParams.path("/tv", %ListingParams{search: "a b", progress: :partial}) ==
              "/tv?q=a+b&progress=partial"
   end
+
+  describe "letter" do
+    test "parses # and a-z, lowercased" do
+      assert ListingParams.parse(%{"letter" => "M"}, []).letter == "m"
+      assert ListingParams.parse(%{"letter" => "#"}, []).letter == "#"
+    end
+
+    test "rejects anything else" do
+      for value <- ["mm", "", "1", "é", nil, ["m"]] do
+        assert ListingParams.parse(%{"letter" => value}, []).letter == nil
+      end
+    end
+
+    test "round-trips through the query string" do
+      params = %ListingParams{letter: "#", shown: 100}
+      query = ListingParams.to_query(params)
+      assert {"letter", "#"} in query
+      assert ListingParams.parse(Map.new(query), []) == params
+      assert ListingParams.path("/movies", params) == "/movies?letter=%23&shown=100"
+    end
+
+    test "a jump alone is not a filter, but is a different listing" do
+      refute ListingParams.filtered?(%ListingParams{letter: "m"})
+      refute ListingParams.same_listing?(%ListingParams{letter: "m"}, %ListingParams{})
+    end
+  end
+
+  describe "above" do
+    test "parses a non-negative count clamped to max_shown, 0 otherwise" do
+      assert ListingParams.parse(%{"above" => "48"}, []).above == 48
+      assert ListingParams.parse(%{"above" => "5000"}, []).above == 1000
+
+      for value <- ["-3", "lots", "", nil, ["48"]] do
+        assert ListingParams.parse(%{"above" => value}, []).above == 0
+      end
+    end
+
+    test "round-trips through the query string, and is left out at 0" do
+      params = %ListingParams{letter: "m", above: 96}
+      assert ListingParams.path("/movies", params) == "/movies?letter=m&above=96"
+      assert ListingParams.parse(%{"letter" => "m", "above" => "96"}, []) == params
+      assert ListingParams.path("/movies", %{params | above: 0}) == "/movies?letter=m"
+    end
+
+    test "is neither a filter nor a different listing" do
+      refute ListingParams.filtered?(%ListingParams{above: 48})
+
+      assert ListingParams.same_listing?(
+               %ListingParams{letter: "m", above: 48},
+               %ListingParams{letter: "m"}
+             )
+    end
+  end
 end

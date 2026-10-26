@@ -101,7 +101,7 @@ defmodule MydiaWeb.IndexerComponents do
             id="indexer-search-cardigann"
             class="badge badge-sm badge-ghost"
           >
-            {CardigannSummary.label(@cardigann)}
+            {MydiaWeb.StatusLabels.cardigann(@cardigann)}
           </span>
           <span :if={@failed > 0} class="badge badge-sm badge-error">
             {ngettext("%{count} failed", "%{count} failed", @failed)}

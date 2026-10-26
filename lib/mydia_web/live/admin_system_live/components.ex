@@ -24,35 +24,38 @@ defmodule MydiaWeb.AdminSystemLive.Components do
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
         <div class="flex-1">
           <div class="font-medium">
-            {@stuck_upgrades} {if @stuck_upgrades == 1,
-              do: "file is",
-              else: "files are"} stuck mid-upgrade
+            {ngettext(
+              "%{count} file is stuck mid-upgrade",
+              "%{count} files are stuck mid-upgrade",
+              @stuck_upgrades
+            )}
           </div>
           <div class="text-sm opacity-80">
-            Each one is holding its replacement and the copy it was meant to replace, so that
-            disk space stays spoken for until the upgrade finishes. This happens when the
-            finalize step never ran or failed after import. Look for failed
-            <span class="font-mono">UpgradeFinalize</span>
-            jobs.
+            {gettext(
+              "Each one is holding its replacement and the copy it was meant to replace, so that disk space stays spoken for until the upgrade finishes. This happens when the finalize step never ran or failed after import. Look for failed %{worker} jobs.",
+              worker: "UpgradeFinalize"
+            )}
           </div>
         </div>
-        <.link navigate={~p"/admin/jobs"} class="btn btn-sm">View jobs</.link>
+        <.link navigate={~p"/admin/jobs"} class="btn btn-sm">{gettext("View jobs")}</.link>
       </div>
     <% end %>
 
     <%!-- Top Row: System Info + Database --%>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <%!-- System Information --%>
-      <.admin_section id="status-system" title="System" icon="hero-server">
+      <.admin_section id="status-system" title={gettext("System")} icon="hero-server">
         <div class="grid grid-cols-2 gap-2 sm:gap-4">
           <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
-            <div class="stat-title text-xs sm:text-sm">Version</div>
+            <div class="stat-title text-xs sm:text-sm">{gettext("Version")}</div>
             <div class="stat-value text-base sm:text-xl">
               <.link navigate={~p"/changelog"} class="link link-hover">
                 {@system_info.app_version}
               </.link>
               <%= if @system_info.dev_mode do %>
-                <span class="badge badge-warning badge-xs sm:badge-sm ml-1">dev</span>
+                <span class="badge badge-warning badge-xs sm:badge-sm ml-1">
+                  {gettext("dev")}
+                </span>
               <% end %>
             </div>
             <div :if={@system_info.available_update} class="stat-desc mt-1">
@@ -64,7 +67,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
                 class="badge badge-info badge-sm gap-1 hover:brightness-110"
               >
                 <.icon name="hero-arrow-up-circle" class="size-3.5" />
-                {@system_info.available_update.version} available
+                {gettext("%{version} available", version: @system_info.available_update.version)}
               </a>
             </div>
           </div>
@@ -73,67 +76,69 @@ defmodule MydiaWeb.AdminSystemLive.Components do
             <div class="stat-value text-base sm:text-xl">{@system_info.elixir_version}</div>
           </div>
           <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
-            <div class="stat-title text-xs sm:text-sm">Memory</div>
+            <div class="stat-title text-xs sm:text-sm">{gettext("Memory")}</div>
             <div class="stat-value text-base sm:text-xl">{@system_info.memory_used}</div>
           </div>
           <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
-            <div class="stat-title text-xs sm:text-sm">Uptime</div>
+            <div class="stat-title text-xs sm:text-sm">{gettext("Uptime")}</div>
             <div class="stat-value text-base sm:text-xl">{@system_info.uptime}</div>
           </div>
         </div>
       </.admin_section>
 
       <%!-- Database Information --%>
-      <.admin_section id="status-database" title="Database" icon="hero-circle-stack">
+      <.admin_section id="status-database" title={gettext("Database")} icon="hero-circle-stack">
         <:actions>
           <span class={"badge badge-sm sm:badge-md #{health_badge(@database_info.health)}"}>
-            {if @database_info.health == :healthy, do: "Healthy", else: "Unhealthy"}
+            {if @database_info.health == :healthy,
+              do: gettext("Healthy"),
+              else: gettext("Unhealthy")}
           </span>
         </:actions>
         <div class="space-y-2 sm:space-y-3 bg-base-200 rounded-lg p-3 sm:p-5">
           <%= if @database_info.adapter == :postgres do %>
             <div class="flex justify-between items-center gap-2">
-              <span class="text-base-content/70 text-sm">Adapter</span>
+              <span class="text-base-content/70 text-sm">{gettext("Adapter")}</span>
               <span class="badge badge-info badge-sm">PostgreSQL</span>
             </div>
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2">
-              <span class="text-base-content/70 text-sm">Host</span>
+              <span class="text-base-content/70 text-sm">{gettext("Host")}</span>
               <code class="text-xs sm:text-sm bg-base-300 px-2 py-1 rounded truncate">
                 {@database_info.hostname}:{@database_info.port}
               </code>
             </div>
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2">
-              <span class="text-base-content/70 text-sm">Database</span>
+              <span class="text-base-content/70 text-sm">{gettext("Database")}</span>
               <code class="text-xs sm:text-sm bg-base-300 px-2 py-1 rounded truncate">
                 {@database_info.database}
               </code>
             </div>
             <div class="flex justify-between items-center gap-2">
-              <span class="text-base-content/70 text-sm">Size</span>
+              <span class="text-base-content/70 text-sm">{gettext("Size")}</span>
               <span class="font-medium text-sm">{@database_info.size}</span>
             </div>
           <% else %>
             <div class="flex justify-between items-center gap-2">
-              <span class="text-base-content/70 text-sm">Adapter</span>
+              <span class="text-base-content/70 text-sm">{gettext("Adapter")}</span>
               <span class="badge badge-info badge-sm">SQLite</span>
             </div>
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2">
-              <span class="text-base-content/70 text-sm">Location</span>
+              <span class="text-base-content/70 text-sm">{gettext("Location")}</span>
               <code class="text-xs sm:text-sm bg-base-300 px-2 py-1 rounded truncate max-w-full sm:max-w-[250px]">
                 {@database_info.path}
               </code>
             </div>
             <div class="flex justify-between items-center gap-2">
-              <span class="text-base-content/70 text-sm">Size</span>
+              <span class="text-base-content/70 text-sm">{gettext("Size")}</span>
               <span class="font-medium text-sm">{@database_info.size}</span>
             </div>
             <div class="flex justify-between items-center gap-2">
-              <span class="text-base-content/70 text-sm">Exists</span>
+              <span class="text-base-content/70 text-sm">{gettext("Exists")}</span>
               <span class={[
                 "badge badge-sm",
                 if(@database_info.exists, do: "badge-success", else: "badge-error")
               ]}>
-                {if @database_info.exists, do: "Yes", else: "No"}
+                {if @database_info.exists, do: gettext("Yes"), else: gettext("No")}
               </span>
             </div>
           <% end %>
@@ -144,7 +149,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
     <%!-- Bottom Row: Configuration Summary --%>
     <.admin_section
       id="status-configuration"
-      title="Configuration"
+      title={gettext("Configuration")}
       icon="hero-adjustments-horizontal"
     >
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -152,13 +157,13 @@ defmodule MydiaWeb.AdminSystemLive.Components do
           <div class="stat-figure text-primary">
             <.icon name="hero-folder" class="w-8 h-8" />
           </div>
-          <div class="stat-title">Library Paths</div>
+          <div class="stat-title">{gettext("Library Paths")}</div>
           <div class="stat-value text-xl">{@library_paths_count}</div>
           <div class="stat-desc">
             <%= if @library_paths_count == 0 do %>
-              No paths configured
+              {gettext("No paths configured")}
             <% else %>
-              Configured
+              {gettext("Configured")}
             <% end %>
           </div>
         </div>
@@ -167,13 +172,13 @@ defmodule MydiaWeb.AdminSystemLive.Components do
           <div class="stat-figure text-primary">
             <.icon name="hero-arrow-down-tray" class="w-8 h-8" />
           </div>
-          <div class="stat-title">Download Clients</div>
+          <div class="stat-title">{gettext("Download Clients")}</div>
           <div class="stat-value text-xl">{@download_clients_count}</div>
           <div class="stat-desc">
             <%= if @download_clients_count == 0 do %>
-              No clients configured
+              {gettext("No clients configured")}
             <% else %>
-              Configured
+              {gettext("Configured")}
             <% end %>
           </div>
         </div>
@@ -182,13 +187,13 @@ defmodule MydiaWeb.AdminSystemLive.Components do
           <div class="stat-figure text-primary">
             <.icon name="hero-magnifying-glass" class="w-8 h-8" />
           </div>
-          <div class="stat-title">Indexers</div>
+          <div class="stat-title">{gettext("Indexers")}</div>
           <div class="stat-value text-xl">{@indexers_count}</div>
           <div class="stat-desc">
             <%= if @indexers_count == 0 do %>
-              No indexers configured
+              {gettext("No indexers configured")}
             <% else %>
-              Configured
+              {gettext("Configured")}
             <% end %>
           </div>
         </div>

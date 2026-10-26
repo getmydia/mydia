@@ -139,7 +139,11 @@ defmodule Mydia.Indexers.ProfileLimits do
   end
 
   defp result_source(%SearchResult{quality: %{source: source}}) when is_binary(source), do: source
-  defp result_source(%SearchResult{title: title}) when is_binary(title), do: Sources.detect(title)
+  # Adapters build quality from the title, so a parsed quality with no source
+  # would only re-parse to nil. The title is read only when there is no quality.
+  defp result_source(%SearchResult{quality: nil, title: title}) when is_binary(title),
+    do: Sources.detect(title)
+
   defp result_source(_), do: nil
 
   # A release with no resolution token counts as

@@ -298,8 +298,6 @@
   "downloadSelectQuality": "Seleccionar calidad",
   "episodeActionsTooltip": "Acciones del episodio",
   "episodeMarkThisAndPreviousWatched": "Marcar este y los anteriores como vistos",
-  "freshnessFailed": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}.",
-  "freshnessStale": "Mostrando tu biblioteca de {time}.",
   "gestureSeekSeconds": "{seconds} s",
   "qualityDialogTitle": "Calidad de vídeo",
   "qualityStatsToggleHint": "También en Ajustes. Sigue activo cuando los controles se ocultan.",
@@ -984,5 +982,7 @@
   "castErrorTargetRefused": "Error al transmitir: el reproductor de Mydia rechazó este dispositivo.",
   "castErrorMydiaItemsOnly": "Error al transmitir: los reproductores de Mydia solo pueden reproducir elementos de Mydia.",
   "castErrorServerNotCastable": "Error al transmitir: no se puede transmitir desde este servidor.",
-  "castErrorNoSessionToReconnect": "Error al transmitir: no hay ninguna sesión de transmisión a la que reconectar."
+  "castErrorNoSessionToReconnect": "Error al transmitir: no hay ninguna sesión de transmisión a la que reconectar.",
+  "freshnessStaleBanner": "Mostrando tu biblioteca de {time}.",
+  "freshnessFailedBanner": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}."
 }

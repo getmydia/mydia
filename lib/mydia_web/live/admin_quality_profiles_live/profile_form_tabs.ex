@@ -15,27 +15,27 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ProfileFormTabs do
         <div class="alert alert-warning">
           <.icon name="hero-lock-closed" class="w-5 h-5" />
           <div>
-            <div class="font-semibold">System Profile</div>
+            <div class="font-semibold">{gettext("System Profile")}</div>
             <div class="text-sm">
-              This is a built-in system profile. Some fields may be restricted.
+              {gettext("This is a built-in system profile. Some fields may be restricted.")}
             </div>
           </div>
         </div>
       <% end %>
 
-      <.input field={@form[:name]} type="text" label="Name" required />
+      <.input field={@form[:name]} type="text" label={gettext("Name")} required />
 
       <.input
         field={@form[:description]}
         type="textarea"
-        label="Description"
+        label={gettext("Description")}
         rows="3"
       />
 
       <.input
         field={@form[:upgrades_allowed]}
         type="checkbox"
-        label="Allow automatic quality upgrades"
+        label={gettext("Allow automatic quality upgrades")}
       />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -43,20 +43,28 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ProfileFormTabs do
           field={@form[:upgrade_until_score]}
           type="number"
           id="quality-profile-upgrade-score"
-          label="Upgrade cutoff score"
+          label={gettext("Upgrade cutoff score")}
           min="0"
           max="100"
-          hint="Files scoring below this are eligible for an automatic upgrade. Setting it near 100 means almost nothing is ever good enough, so the sweep will keep searching indefinitely."
+          hint={
+            gettext(
+              "Files scoring below this are eligible for an automatic upgrade. Setting it near 100 means almost nothing is ever good enough, so the sweep will keep searching indefinitely."
+            )
+          }
         />
 
         <.input
           field={@form[:min_upgrade_margin]}
           type="number"
           id="quality-profile-upgrade-margin"
-          label="Minimum upgrade margin"
+          label={gettext("Minimum upgrade margin")}
           min="0"
           max="100"
-          hint="How much higher a candidate release's score must be than the current file's before it counts as a real upgrade. Keeps a sweep from swapping files for a negligible gain."
+          hint={
+            gettext(
+              "How much higher a candidate release's score must be than the current file's before it counts as a real upgrade. Keeps a sweep from swapping files for a negligible gain."
+            )
+          }
         />
       </div>
 
@@ -64,10 +72,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ProfileFormTabs do
         field={@form[:grab_delay_hours]}
         type="number"
         id="quality-profile-grab-delay"
-        label="Wait before grabbing (hours)"
+        label={gettext("Wait before grabbing (hours)")}
         min="0"
         max="168"
-        hint="Hold automatic grabs until the first acceptable release is this old, so better releases have time to appear. A release that already meets the upgrade cutoff is grabbed right away. Searches you start yourself never wait. 0 grabs immediately."
+        hint={
+          gettext(
+            "Hold automatic grabs until the first acceptable release is this old, so better releases have time to appear. A release that already meets the upgrade cutoff is grabbed right away. Searches you start yourself never wait. 0 grabs immediately."
+          )
+        }
       />
     </div>
     """
@@ -90,14 +102,18 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ProfileFormTabs do
     <div class="space-y-4">
       <div class="form-control">
         <label class="label">
-          <span class="label-text font-semibold">Never Grab These Release Types</span>
-          <span class="label-text-alt text-xs">Dropped before ranking, even if nothing else is available</span>
+          <span class="label-text font-semibold">
+            {gettext("Never Grab These Release Types")}
+          </span>
+          <span class="label-text-alt text-xs">
+            {gettext("Dropped before ranking, even if nothing else is available")}
+          </span>
         </label>
 
         <p class="text-sm opacity-70 mb-3">
-          Camcorder and pre-release captures. When a film is still in cinemas these are
-          often the only releases that exist, so without this list Mydia will download one
-          rather than wait for a proper release.
+          {gettext(
+            "Camcorder and pre-release captures. When a film is still in cinemas these are often the only releases that exist, so without this list Mydia will download one rather than wait for a proper release."
+          )}
         </p>
 
         <input

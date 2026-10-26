@@ -389,7 +389,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
 
   def episode_status_icon(status), do: AvailabilityStatus.icon(status)
 
-  def episode_status_label(status), do: AvailabilityStatus.label(status)
+  def episode_status_label(status), do: MydiaWeb.StatusLabels.availability(status)
 
   @doc "Human-readable label for a TV metadata provider."
   def provider_label(:tvdb), do: "TheTVDB"
@@ -397,14 +397,14 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def provider_label(other), do: to_string(other)
 
   def episode_status_details(episode) do
-    EpisodeStatus.status_details(episode)
+    MydiaWeb.StatusLabels.episode_detail(episode)
   end
 
   @doc """
   Returns an enhanced tooltip for episode status that includes filenames for quick reference.
   """
   def episode_status_tooltip(episode) do
-    base_status = EpisodeStatus.status_details(episode)
+    base_status = MydiaWeb.StatusLabels.episode_detail(episode)
 
     case episode.media_files do
       [_ | _] = files ->

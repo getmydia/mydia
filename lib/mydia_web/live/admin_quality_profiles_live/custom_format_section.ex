@@ -37,15 +37,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
       open={@configured?}
       phx-mounted={JS.ignore_attributes(["open"])}
     >
-      <summary class="collapse-title font-semibold">Custom Formats</summary>
+      <summary class="collapse-title font-semibold">{gettext("Custom Formats")}</summary>
       <div class="collapse-content space-y-2">
         <p class="text-sm opacity-70">
-          Score releases by what their title contains. A rejected format is never grabbed.
-          Define formats on the
+          {gettext("Score releases by what their title contains. A rejected format is never grabbed.")}
+          {gettext("Define formats on the Custom Formats page.")}
           <.link navigate={~p"/admin/custom-formats"} class="link">
-            Custom Formats
+            {gettext("Open Custom Formats")}
           </.link>
-          page.
         </p>
 
         <div class="divide-y divide-base-200">
@@ -67,7 +66,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
                 name={"custom_formats[#{format.slug}][score]"}
                 value={assignment(@assignments, format.slug).score}
                 class="input input-bordered input-sm w-24"
-                aria-label={"#{format.name} score"}
+                aria-label={gettext("%{name} score", name: format.name)}
               />
 
               <label class="label cursor-pointer gap-2">
@@ -80,7 +79,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
                   checked={assignment(@assignments, format.slug).reject}
                   class="checkbox checkbox-sm checkbox-error"
                 />
-                <span class="label-text">Reject</span>
+                <span class="label-text">{gettext("Reject")}</span>
               </label>
             </div>
           </div>

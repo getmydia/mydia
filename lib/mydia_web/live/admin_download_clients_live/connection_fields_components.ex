@@ -10,14 +10,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
         <.icon name="hero-cloud" class="w-4 h-4" />
-        <span>Debrid Service</span>
+        <span>{gettext("Debrid Service")}</span>
       </div>
 
       <div class="alert alert-info text-sm py-2">
         <.icon name="hero-information-circle" class="w-4 h-4" />
         <span>
-          Releases are submitted to your chosen provider and downloaded on their
-          infrastructure. Your IP never participates in the swarm.
+          {gettext(
+            "Releases are submitted to your chosen provider and downloaded on their infrastructure. Your IP never participates in the swarm."
+          )}
         </span>
       </div>
 
@@ -25,7 +26,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           name="download_client_config[connection_settings][provider]"
           type="select"
-          label="Provider"
+          label={gettext("Provider")}
           options={[
             {"Real-Debrid", "real_debrid"},
             {"AllDebrid", "all_debrid"},
@@ -44,7 +45,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           field={@download_client_form[:api_key]}
           type="password"
-          label="API Key"
+          label={gettext("API Key")}
           required
         />
       </div>
@@ -53,18 +54,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           field={@download_client_form[:download_directory]}
           type="text"
-          label="Download Directory (optional)"
+          label={gettext("Download Directory (optional)")}
           placeholder="/data/debrid-downloads"
         />
       </div>
 
       <p class="text-xs text-base-content/60">
-        Where Mydia writes files pulled from the debrid provider before
-        importing them into your library. Defaults to <code>/data/debrid-downloads</code>
-        when the standard <code>/data</code>
-        volume is mounted, otherwise the system temp directory.
-        Override only if you need a specific filesystem (e.g., a faster
-        disk or one with more headroom).
+        {gettext(
+          "Where Mydia writes files pulled from the debrid provider before importing them into your library. Defaults to %{default_dir} when the standard %{data_dir} volume is mounted, otherwise the system temp directory. Override only if you need a specific filesystem (e.g., a faster disk or one with more headroom).",
+          default_dir: "/data/debrid-downloads",
+          data_dir: "/data"
+        )}
       </p>
     </div>
     """
@@ -78,13 +78,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
         <.icon name="hero-folder" class="w-4 h-4" />
-        <span>Folder Settings</span>
+        <span>{gettext("Folder Settings")}</span>
       </div>
 
       <div class="alert alert-info text-sm py-2">
         <.icon name="hero-information-circle" class="w-4 h-4" />
         <span>
-          Blackhole writes .torrent files to a watch folder for external processing.
+          {gettext("Blackhole writes .torrent files to a watch folder for external processing.")}
         </span>
       </div>
 
@@ -92,7 +92,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           name="download_client_config[connection_settings][watch_folder]"
           type="text"
-          label="Watch Folder"
+          label={gettext("Watch Folder")}
           placeholder="/path/to/watch"
           value={
             get_in(
@@ -106,7 +106,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           name="download_client_config[connection_settings][completed_folder]"
           type="text"
-          label="Completed Folder"
+          label={gettext("Completed Folder")}
           placeholder="/path/to/completed"
           value={
             get_in(
@@ -123,8 +123,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <div class="flex items-center gap-3">
           <.icon name="hero-folder-open" class="w-4 h-4 text-base-content/60" />
           <div>
-            <span class="text-sm font-medium">Category Subfolders</span>
-            <p class="text-xs text-base-content/50">Create movies/tv subfolders</p>
+            <span class="text-sm font-medium">{gettext("Category Subfolders")}</span>
+            <p class="text-xs text-base-content/50">{gettext("Create movies/tv subfolders")}</p>
           </div>
         </div>
         <input
@@ -159,7 +159,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
         <.icon name="hero-server" class="w-4 h-4" />
-        <span>Connection</span>
+        <span>{gettext("Connection")}</span>
       </div>
 
       <div class="grid grid-cols-6 gap-3">
@@ -167,7 +167,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
           <.input
             field={@download_client_form[:host]}
             type="text"
-            label="Host"
+            label={gettext("Host")}
             placeholder="localhost"
             required
           />
@@ -176,18 +176,26 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
           <.input
             field={@download_client_form[:port]}
             type="number"
-            label="Port"
+            label={gettext("Port")}
             required
           />
         </div>
         <div class="col-span-3 md:col-span-1">
-          <.input field={@download_client_form[:use_ssl]} type="checkbox" label="SSL" />
+          <.input field={@download_client_form[:use_ssl]} type="checkbox" label={gettext("SSL")} />
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <.input field={@download_client_form[:username]} type="text" label="Username" />
-        <.input field={@download_client_form[:password]} type="password" label="Password" />
+        <.input
+          field={@download_client_form[:username]}
+          type="text"
+          label={gettext("Username")}
+        />
+        <.input
+          field={@download_client_form[:password]}
+          type="password"
+          label={gettext("Password")}
+        />
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -195,17 +203,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         <.input
           field={@download_client_form[:api_key]}
           type="password"
-          label="API Key"
+          label={gettext("API Key")}
           hint={
             if(@selected_type == "sabnzbd",
-              do: "Config > General > API Key in SABnzbd, not the NZB Key"
+              do: gettext("Config > General > API Key in SABnzbd, not the NZB Key")
             )
           }
         />
         <.input
           field={@download_client_form[:url_base]}
           type="text"
-          label="URL Base"
+          label={gettext("URL Base")}
           placeholder="/transmission/"
         />
       </div>
@@ -213,18 +221,18 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
       <.input
         field={@download_client_form[:web_ui_url]}
         type="url"
-        label="Web UI URL (optional)"
+        label={gettext("Web UI URL (optional)")}
         placeholder="https://qbittorrent.example.org"
       />
       <p class="text-xs text-base-content/60 -mt-2">
-        Address your browser uses to open this client. Leave blank to use host and port.
+        {gettext("Address your browser uses to open this client. Leave blank to use host and port.")}
       </p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <.input
           field={@download_client_form[:download_directory]}
           type="text"
-          label="Download Directory"
+          label={gettext("Download Directory")}
         />
       </div>
     </div>

@@ -819,7 +819,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         {:noreply,
          socket
          |> clear_adding(ref)
-         |> put_flash(:error, Media.restricted_message())}
+         |> put_flash(:error, MydiaWeb.OperationErrors.restricted_message())}
 
       {:error, {:changeset, changeset}} ->
         {:noreply,
