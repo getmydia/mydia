@@ -490,7 +490,6 @@ extension AppFormatters on AppLocalizations {
         StatsRowId.position => statsRowPosition,
       };
 
-  /// The badge before the Playing value.
   /// Confirms a scaling change, which matters when the video already matches
   /// the screen and the two modes look identical.
   String videoScalingToast(VideoScaling scaling) => switch (scaling) {
@@ -498,6 +497,7 @@ extension AppFormatters on AppLocalizations {
         VideoScaling.fill => videoScalingFillToast,
       };
 
+  /// The badge before the Playing value.
   String statsPill(PlaybackMode mode) => switch (mode) {
         PlaybackMode.direct => statsPillDirect,
         PlaybackMode.copy => statsPillCopy,

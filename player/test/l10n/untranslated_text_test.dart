@@ -4,50 +4,24 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'untranslated_text_scanner.dart';
 
-/// Converted to `context.l10n`. Literal English added under these paths
-/// fails here; converting a screen means adding its path. See
-/// docs/l10n.md.
-const convertedPaths = <String>[
-  'lib/presentation/screens/settings',
-  'lib/presentation/screens/login_screen.dart',
-  'lib/presentation/screens/login',
-  'lib/core/startup/startup_error_app.dart',
-  'lib/presentation/widgets',
-  'lib/core',
-  'lib/domain',
-  'lib/presentation/screens/sources',
-  'lib/presentation/screens/downloads',
-  'lib/presentation/screens/player',
-  'lib/presentation/screens/all_servers',
-  'lib/presentation/screens/calendar',
-  'lib/presentation/screens/collections',
-  'lib/presentation/screens/continue_watching',
-  'lib/presentation/screens/detail',
-  'lib/presentation/screens/favorites',
-  'lib/presentation/screens/filter',
-  'lib/presentation/screens/home',
-  'lib/presentation/screens/library',
-  'lib/presentation/screens/movie',
-  'lib/presentation/screens/recently_added',
-  'lib/presentation/screens/show',
-  'lib/presentation/screens/unwatched',
-];
+/// Generated code, which nobody writes by hand. `lib/graphql/` holds only
+/// graphql_codegen output and its export file.
+const excludedPaths = <String>['lib/l10n/gen/', 'lib/graphql/'];
+const excludedSuffixes = <String>['.g.dart', '.freezed.dart', '.gql.dart'];
 
+/// Everything under `lib/` is checked. Literal English added anywhere fails
+/// here; see docs/l10n.md.
 void main() {
-  test('converted code has no literal English', () {
+  test('lib/ has no literal English', () {
     final found = <UntranslatedLiteral>[];
-    for (final path in convertedPaths) {
-      final entity = FileSystemEntity.typeSync(path);
-      expect(entity, isNot(FileSystemEntityType.notFound), reason: path);
-      final files = entity == FileSystemEntityType.directory
-          ? Directory(path)
-              .listSync(recursive: true)
-              .whereType<File>()
-              .where((f) => f.path.endsWith('.dart'))
-          : [File(path)];
-      for (final f in files) {
-        found.addAll(findUntranslated(f.readAsStringSync(), path: f.path));
-      }
+    final files = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .where((f) => !excludedPaths.any(f.path.startsWith))
+        .where((f) => !excludedSuffixes.any(f.path.endsWith));
+    for (final f in files) {
+      found.addAll(findUntranslated(f.readAsStringSync(), path: f.path));
     }
     expect(
       found,
