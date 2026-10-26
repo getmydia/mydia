@@ -49,8 +49,8 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
       if (unavailable.isNotEmpty && !_dismissed)
         MaterialBanner(
           key: const Key('all-unavailable-banner'),
-          content: Text(context.l10n
-              .allServersUnavailable(unavailable.map(name).join(', '))),
+          content: Text(context.l10n.allServersUnavailable(
+              unavailable.length, unavailable.map(name).join(', '))),
           actions: [
             TextButton(
                 key: const Key('all-unavailable-retry'),
@@ -68,7 +68,7 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
           key: const Key('all-needs-sign-in'),
           leading: Icon(Icons.lock_outline, color: theme.colorScheme.error),
           title: Text(context.l10n.allServersNeedSignIn(
-              signIn.map((s) => s.displayName).join(', '))),
+              signIn.length, signIn.map((s) => s.displayName).join(', '))),
           trailing: TextButton(
               onPressed: () =>
                   openSettings(context, initial: SettingsCategory.servers),
