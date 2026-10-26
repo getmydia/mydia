@@ -342,6 +342,30 @@ class CollectionDetailScreen extends ConsumerWidget {
 }
 
 /// Download button for a collection that toggles between download and sync states.
+/// The toast text for a finished collection sync. Failures are reported
+/// whenever nothing was queued, so they are never hidden behind a
+/// "skipped" message.
+@visibleForTesting
+String collectionSyncResultMessage(
+    AppLocalizations l10n, CollectionSyncResult result) {
+  final movies = result.moviesQueued;
+  final episodes = result.episodesQueued;
+  final skipped = result.skipped;
+  if (result.totalQueued == 0 && result.failed > 0) {
+    return l10n.collectionSyncNothingQueuedFailed(result.failed, skipped);
+  }
+  if (result.totalQueued == 0 && skipped > 0) {
+    return l10n.collectionSyncAllSkipped(skipped);
+  }
+  if (movies > 0 && episodes > 0) {
+    return l10n.collectionSyncQueuedBoth(movies, episodes, skipped);
+  }
+  if (episodes > 0) {
+    return l10n.collectionSyncQueuedEpisodes(episodes, skipped);
+  }
+  return l10n.collectionSyncQueuedMovies(movies, skipped);
+}
+
 class _CollectionDownloadButton extends ConsumerStatefulWidget {
   final SourceId sourceId;
   final String collectionId;
@@ -410,11 +434,13 @@ class _CollectionDownloadButtonState
 
       if (!mounted) return;
 
-      final message = _buildResultMessage(result);
+      final message = collectionSyncResultMessage(context.l10n, result);
+      final nothingQueuedFailed = !result.hasNewDownloads && result.failed > 0;
       showToast(
         context,
         message,
         icon: result.hasNewDownloads ? Icons.download_rounded : null,
+        kind: nothingQueuedFailed ? ToastKind.error : ToastKind.info,
       );
     } catch (e) {
       debugPrint('Collection sync failed: $e');
@@ -424,23 +450,6 @@ class _CollectionDownloadButtonState
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
-  }
-
-  String _buildResultMessage(CollectionSyncResult result) {
-    final l10n = context.l10n;
-    final movies = result.moviesQueued;
-    final episodes = result.episodesQueued;
-    final skipped = result.skipped;
-    if (result.totalQueued == 0 && skipped > 0) {
-      return l10n.collectionSyncAllSkipped(skipped);
-    }
-    if (movies > 0 && episodes > 0) {
-      return l10n.collectionSyncQueuedBoth(movies, episodes, skipped);
-    }
-    if (episodes > 0) {
-      return l10n.collectionSyncQueuedEpisodes(episodes, skipped);
-    }
-    return l10n.collectionSyncQueuedMovies(movies, skipped);
   }
 
   Future<void> _handleDownloadTap() async {

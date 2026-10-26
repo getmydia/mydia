@@ -2056,6 +2056,8 @@
   "@collectionSyncFailed": {"description": "Toast when downloading or syncing a collection failed. {error} is the technical error text.", "placeholders": {"error": {"type": "String"}}},
   "collectionSyncAllSkipped": "{count, plural, one{The {count} item is already downloaded or queued} other{All {count} items already downloaded or queued}}",
   "@collectionSyncAllSkipped": {"description": "Toast after syncing a collection when nothing new needed downloading. {count} is the number of items skipped.", "placeholders": {"count": {"type": "int"}}},
+  "collectionSyncNothingQueuedFailed": "{failed, plural, one{{failed} item could not be queued} other{{failed} items could not be queued}}{skipped, plural, =0{} other{, {skipped} already downloaded}}",
+  "@collectionSyncNothingQueuedFailed": {"description": "Toast after syncing a collection when nothing was queued and at least one item failed. {failed} is how many items failed, {skipped} how many were already downloaded or queued, zero when none.", "placeholders": {"failed": {"type": "int"}, "skipped": {"type": "int"}}},
   "collectionSyncQueuedMovies": "Queued {count, plural, one{{count} movie} other{{count} movies}} for download{skipped, plural, =0{} other{, {skipped} already downloaded}}",
   "@collectionSyncQueuedMovies": {"description": "Toast after syncing a collection that queued only movies. {skipped} is how many items were already downloaded, zero when none.", "placeholders": {"count": {"type": "int"}, "skipped": {"type": "int"}}},
   "collectionSyncQueuedEpisodes": "Queued {count, plural, one{{count} episode} other{{count} episodes}} for download{skipped, plural, =0{} other{, {skipped} already downloaded}}",

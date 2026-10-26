@@ -858,6 +858,7 @@
   "collectionDetailEmptySubtitle": "Adicione itens a esta coleção no Mydia",
   "collectionSyncFailed": "Falha na sincronização: {error}",
   "collectionSyncAllSkipped": "{count, plural, one{O {count} item já foi baixado ou está na fila} other{Todos os {count} itens já foram baixados ou estão na fila}}",
+  "collectionSyncNothingQueuedFailed": "{failed, plural, one{Não foi possível colocar {failed} item na fila} other{Não foi possível colocar {failed} itens na fila}}{skipped, plural, =0{} other{, {skipped} já baixados}}",
   "collectionSyncQueuedMovies": "{count, plural, one{{count} filme na fila} other{{count} filmes na fila}} para download{skipped, plural, =0{} other{, {skipped} já baixados}}",
   "collectionSyncQueuedEpisodes": "{count, plural, one{{count} episódio na fila} other{{count} episódios na fila}} para download{skipped, plural, =0{} other{, {skipped} já baixados}}",
   "collectionSyncQueuedBoth": "{movies, plural, one{{movies} filme} other{{movies} filmes}} e {episodes, plural, one{{episodes} episódio} other{{episodes} episódios}} na fila para download{skipped, plural, =0{} other{, {skipped} já baixados}}",
