@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createLoader, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
+import { createLoader, insetMargin, keepInPlace, ROOT_MARGIN } from "../../js/hooks/load_more_sentinel.mjs";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -60,6 +60,54 @@ test("stops after the reply once it is no longer visible", async () => {
   assert.equal(calls.length, 1);
 });
 
+test("pushes the event it was created with", () => {
+  const el = { dataset: { hasMore: "true" } };
+  const calls = [];
+  const loader = createLoader(el, (event) => new Promise(() => calls.push(event)), {
+    event: "load_previous",
+  });
+  loader.setVisible(true);
+  assert.deepEqual(calls, ["load_previous"]);
+});
+
+function setupTop() {
+  const el = { dataset: { hasMore: "true" } };
+  const calls = [];
+  const push = (event, payload) =>
+    new Promise((resolve, reject) => calls.push({ event, payload, resolve, reject }));
+  const loader = createLoader(el, push, { event: "load_previous", chain: false });
+  return { calls, loader };
+}
+
+test("a non-chaining loader fires on its first visibility, then not again until it leaves and returns", async () => {
+  const { calls, loader } = setupTop();
+  loader.setVisible(true);
+  assert.equal(calls.length, 1);
+
+  calls[0].resolve({});
+  await flush();
+  loader.maybeLoad();
+  assert.equal(calls.length, 1);
+
+  loader.setVisible(false);
+  loader.setVisible(true);
+  assert.equal(calls.length, 2);
+});
+
+test("without chaining, one batch per time the sentinel comes into view", async () => {
+  const { calls, loader } = setupTop();
+  loader.setVisible(false);
+  loader.setVisible(true);
+  calls[0].resolve({});
+  await flush();
+  loader.maybeLoad();
+  assert.equal(calls.length, 1);
+
+  loader.setVisible(false);
+  loader.setVisible(true);
+  assert.equal(calls.length, 2);
+});
+
 test("does nothing when the server has no more rows", () => {
   const { el, calls, loader } = setup("false");
   loader.setVisible(true);
@@ -68,4 +116,32 @@ test("does nothing when the server has no more rows", () => {
   el.dataset.hasMore = "true";
   loader.maybeLoad();
   assert.equal(calls.length, 1);
+});
+
+test("keepInPlace scrolls by however far the anchor moved during the push", async () => {
+  let top = 100;
+  const scrolls = [];
+  const push = () => Promise.resolve().then(() => (top = 2500));
+  const anchored = keepInPlace(push, () => ({ top: () => top, connected: () => true }), (dy) =>
+    scrolls.push(dy),
+  );
+  await anchored("load_previous", {});
+  assert.deepEqual(scrolls, [2400]);
+});
+
+test("keepInPlace leaves the scroll alone without an anchor or after a rejection", async () => {
+  const scrolls = [];
+  const scrollBy = (dy) => scrolls.push(dy);
+  await keepInPlace(() => Promise.resolve(), () => null, scrollBy)("load_previous", {});
+  const failing = keepInPlace(() => Promise.reject(new Error("down")), () => ({
+    top: () => 0,
+    connected: () => true,
+  }), scrollBy);
+  await assert.rejects(failing("load_previous", {}));
+  assert.deepEqual(scrolls, []);
+});
+
+test("insetMargin starts the viewport a little below an inset", () => {
+  assert.equal(insetMargin(0), "-8px 0px 0px 0px");
+  assert.equal(insetMargin(64), "-72px 0px 0px 0px");
 });

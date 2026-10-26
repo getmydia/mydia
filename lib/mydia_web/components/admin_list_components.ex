@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminListComponents do
   strings. Pages still own their events, assigns and forms.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
@@ -169,15 +170,15 @@ defmodule MydiaWeb.AdminListComponents do
     """
   end
 
-  @env_read_only_reason "Configured via environment variables (read-only)"
-
   @doc "Why an env or YAML row cannot be edited; the default tip and disabled_reason."
-  def env_read_only_reason, do: @env_read_only_reason
+  def env_read_only_reason, do: gettext("Configured via environment variables (read-only)")
 
-  attr :tip, :string, default: @env_read_only_reason
+  attr :tip, :string, default: nil, doc: "defaults to `env_read_only_reason/0`"
 
   @doc "Marks a row that comes from env or YAML and cannot be edited here."
   def env_lock_badge(assigns) do
+    assigns = assign(assigns, :tip, assigns.tip || env_read_only_reason())
+
     ~H"""
     <span class="badge badge-primary badge-xs tooltip gap-1" data-tip={@tip}>
       <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
@@ -229,7 +230,7 @@ defmodule MydiaWeb.AdminListComponents do
         <thead class="max-sm:hidden">
           <tr>
             <th :for={col <- @col} class={col[:class]}>{col[:label]}</th>
-            <th :if={@action != []}><span class="sr-only">Actions</span></th>
+            <th :if={@action != []}><span class="sr-only">{gettext("Actions")}</span></th>
           </tr>
         </thead>
         <tbody class="max-sm:block">

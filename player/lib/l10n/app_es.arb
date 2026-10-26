@@ -299,8 +299,6 @@
   "downloadSelectQuality": "Seleccionar calidad",
   "episodeActionsTooltip": "Acciones del episodio",
   "episodeMarkThisAndPreviousWatched": "Marcar este y los anteriores como vistos",
-  "freshnessFailed": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}.",
-  "freshnessStale": "Mostrando tu biblioteca de {time}.",
   "gestureSeekSeconds": "{seconds} s",
   "qualityDialogTitle": "Calidad de vídeo",
   "qualityStatsToggleHint": "También en Ajustes. Sigue activo cuando los controles se ocultan.",
@@ -828,5 +826,7 @@
   "castBindingSignInAgain": "Inicia sesión de nuevo en este servidor para transmitir desde él.",
   "castBindingUnlock": "Desbloquea la app para transmitir desde este servidor.",
   "castBindingUnsupported": "La transmisión no está disponible para este servidor.",
-  "calendarMovie":"Película"
+  "calendarMovie": "Película",
+  "freshnessStaleBanner": "Mostrando tu biblioteca de {time}.",
+  "freshnessFailedBanner": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}."
 }

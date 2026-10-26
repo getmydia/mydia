@@ -47,34 +47,6 @@ defmodule Mydia.Ratchet do
     end
   end
 
-  @type text_regression ::
-          {:new, Path.t(), pos_integer()} | {:grew, Path.t(), non_neg_integer(), pos_integer()}
-
-  @doc """
-  Templates with more literal English than at the base (see
-  `Mydia.Ratchet.TemplateText`). A new file must start at zero; an existing
-  file may only keep or lower its count, so converted files stay converted.
-  """
-  @spec text_regressions(map(), map()) :: [text_regression()]
-  def text_regressions(current, base) do
-    current
-    |> Enum.flat_map(fn {path, count} ->
-      case Map.fetch(base, path) do
-        :error when count > 0 -> [{:new, path, count}]
-        {:ok, before} when count > before -> [{:grew, path, before, count}]
-        _ -> []
-      end
-    end)
-    |> Enum.sort_by(&elem(&1, 1))
-  end
-
-  @spec format_text_regression(text_regression()) :: String.t()
-  def format_text_regression({:new, path, count}),
-    do: "#{path}: new template with #{count} untranslated text node(s); wrap them in gettext"
-
-  def format_text_regression({:grew, path, before, count}),
-    do: "#{path}: untranslated text nodes #{before} -> #{count}; wrap new text in gettext"
-
   @doc "Extracts the `issues` list from `mix credo --format json` output."
   @spec parse_credo_json(binary()) :: [map()]
   def parse_credo_json(output) do

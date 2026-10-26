@@ -645,4 +645,42 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
              }
     end
   end
+
+  describe "track_prior_attempts/2" do
+    test "a failed lookup leaves the URLs unchecked so the next message retries" do
+      item = Mydia.MediaFixtures.media_item_fixture(%{type: "movie"})
+      # No :indexer key, so the lookup raises inside PriorAttempts and errors.
+      broken = %{download_url: "https://example.test/broken.torrent"}
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          media_item: item,
+          manual_search_context: nil,
+          prior_attempts: %{},
+          prior_attempts_checked: MapSet.new()
+        }
+      }
+
+      assert SearchHelpers.track_prior_attempts(socket, [broken]) == socket
+    end
+
+    test "a successful lookup marks the URLs checked" do
+      item = Mydia.MediaFixtures.media_item_fixture(%{type: "movie"})
+      res = build_result(%{download_url: "https://example.test/ok.torrent"})
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          media_item: item,
+          manual_search_context: nil,
+          prior_attempts: %{},
+          prior_attempts_checked: MapSet.new()
+        }
+      }
+
+      updated = SearchHelpers.track_prior_attempts(socket, [res])
+      assert MapSet.member?(updated.assigns.prior_attempts_checked, res.download_url)
+    end
+  end
 end

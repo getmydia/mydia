@@ -5,7 +5,6 @@ defmodule MydiaWeb.IntegrationsLive.Index do
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.DeviceFlow
   alias Mydia.Plugins.Grants
-  alias Mydia.Plugins.PageWrites
 
   require Logger
 

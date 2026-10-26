@@ -1,7 +1,8 @@
 defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @moduledoc """
   The library listing's URL state: search, filters, sort and how many rows are
-  on screen.
+  on screen. `letter` is where an A-Z jump started the window; `shown` counts
+  rows from there, and `above` the rows loaded before it by scrolling up.
 
   Keeping it in the URL is what lets Back from a title restore the list as it
   was. Default values are left out of the URL, so an untouched page keeps a
@@ -28,7 +29,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
             monitored: nil,
             quality: nil,
             sort: @default_sort,
-            shown: @first_page
+            letter: nil,
+            shown: @first_page,
+            above: 0
 
   @type t :: %__MODULE__{
           search: String.t(),
@@ -37,7 +40,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
           monitored: boolean() | nil,
           quality: String.t() | nil,
           sort: String.t(),
-          shown: pos_integer()
+          letter: String.t() | nil,
+          shown: pos_integer(),
+          above: non_neg_integer()
         }
 
   @spec first_page() :: pos_integer()
@@ -60,7 +65,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
           do: params["sort"],
           else: @default_sort
         ),
-      shown: shown(params["shown"])
+      letter: letter(params["letter"]),
+      shown: shown(params["shown"]),
+      above: above(params["above"])
     }
   end
 
@@ -73,7 +80,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
       {"monitored", if(is_nil(p.monitored), do: nil, else: to_string(p.monitored))},
       {"quality", p.quality},
       {"sort", if(p.sort == @default_sort, do: nil, else: p.sort)},
-      {"shown", if(p.shown == @first_page, do: nil, else: Integer.to_string(p.shown))}
+      {"letter", p.letter},
+      {"shown", if(p.shown == @first_page, do: nil, else: Integer.to_string(p.shown))},
+      {"above", if(p.above == 0, do: nil, else: Integer.to_string(p.above))}
     ]
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
   end
@@ -86,13 +95,24 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
     end
   end
 
-  @doc "Whether anything the Clear filters button would undo is set."
+  @doc "Whether anything the Clear filters button would undo is set. A letter jump is not."
   @spec filtered?(t()) :: boolean()
-  def filtered?(%__MODULE__{} = p), do: not same_listing?(p, %__MODULE__{})
+  def filtered?(%__MODULE__{} = p), do: not same_listing?(%{p | letter: nil}, %__MODULE__{})
 
+  @doc """
+  Whether two URL states describe the same listing. `shown` and `above` only
+  say how much of it is loaded, and change as the user scrolls.
+  """
   @spec same_listing?(t(), t()) :: boolean()
   def same_listing?(%__MODULE__{} = a, %__MODULE__{} = b),
-    do: %{a | shown: @first_page} == %{b | shown: @first_page}
+    do: %{a | shown: @first_page, above: 0} == %{b | shown: @first_page, above: 0}
+
+  defp letter(value) when is_binary(value) do
+    letter = String.downcase(value)
+    if letter in LibraryListing.letters(), do: letter
+  end
+
+  defp letter(_value), do: nil
 
   defp monitored("true"), do: true
   defp monitored("false"), do: false
@@ -106,4 +126,13 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   end
 
   defp shown(_value), do: @first_page
+
+  defp above(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} -> n |> max(0) |> min(@max_shown)
+      _ -> 0
+    end
+  end
+
+  defp above(_value), do: 0
 end

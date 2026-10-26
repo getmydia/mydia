@@ -24,26 +24,22 @@ defmodule Mydia.Library.ReleaseParser.ClassifierTest do
   end
 
   describe "vocabulary-driven candidates" do
-    test "x265 token produces a :codec candidate with canonical H.265/HEVC" do
+    test "x265 token produces a :codec candidate with canonical x265" do
       tokens = classify("Show.S01E01.1080p.x265")
       x265 = find_token(tokens, "x265")
       codec = candidate(x265, :codec)
 
       assert codec
-      assert codec.value == "H.265/HEVC"
+      assert codec.value == "x265"
       assert codec.confidence >= 0.85
     end
 
-    test "all H.265 aliases map to the same canonical" do
-      for input <- [
-            "Show.S01E01.1080p.x265",
-            "Show.S01E01.1080p.h265",
-            "Show.S01E01.1080p.HEVC"
-          ] do
+    test "H.265 format aliases map to the same canonical" do
+      for input <- ["Show.S01E01.1080p.h265", "Show.S01E01.1080p.HEVC"] do
         tokens = classify(input)
         codec_token = Enum.find(tokens, &candidate(&1, :codec))
         codec = candidate(codec_token, :codec)
-        assert codec.value == "H.265/HEVC", "failed for #{input}"
+        assert codec.value == "H.265", "failed for #{input}"
       end
     end
 
@@ -169,7 +165,7 @@ defmodule Mydia.Library.ReleaseParser.ClassifierTest do
       assert candidate(find_token(tokens, "1080p"), :resolution)
       web_source = candidate(find_token(tokens, "WEB"), :source)
       assert web_source.confidence >= 0.85
-      assert candidate(find_token(tokens, "x264"), :codec).value == "H.264/AVC"
+      assert candidate(find_token(tokens, "x264"), :codec).value == "x264"
     end
 
     test "every emitted candidate has confidence in [0.0, 1.0]" do

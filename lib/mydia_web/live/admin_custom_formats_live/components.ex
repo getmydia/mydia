@@ -13,7 +13,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
       <:row :let={format}>
         <.custom_format_row format={format} />
       </:row>
-      <:empty>No custom formats yet.</:empty>
+      <:empty>{gettext("No custom formats yet.")}</:empty>
     </.admin_list>
     """
   end
@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
   def header_actions(assigns) do
     ~H"""
     <button id="custom-format-new" class="btn btn-sm btn-primary" phx-click="new_custom_format">
-      <.icon name="hero-plus" class="w-4 h-4" /> New
+      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("New")}
     </button>
     """
   end
@@ -35,9 +35,11 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
       <:title>{@format.name}</:title>
       <:descriptor><span class="font-mono">{row_descriptor(@format)}</span></:descriptor>
       <:badges>
-        <span :if={@format.builtin?} class="badge badge-sm badge-outline">Built-in</span>
+        <span :if={@format.builtin?} class="badge badge-sm badge-outline">
+          {gettext("Built-in")}
+        </span>
         <span :if={@format.overridden?} class="badge badge-sm badge-outline badge-warning">
-          Edited
+          {gettext("Edited")}
         </span>
       </:badges>
       <:actions>
@@ -45,7 +47,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
           <.row_action
             id={"custom-format-edit-#{@format.slug}"}
             icon="hero-pencil"
-            title="Edit"
+            title={gettext("Edit")}
             phx-click="edit_custom_format"
             phx-value-slug={@format.slug}
           />
@@ -53,9 +55,9 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             :if={@format.builtin?}
             id={"custom-format-reset-#{@format.slug}"}
             icon="hero-arrow-uturn-left"
-            title="Reset to the shipped definition"
+            title={gettext("Reset to the shipped definition")}
             disabled={not @format.overridden?}
-            disabled_reason={if(not @format.overridden?, do: "Not modified")}
+            disabled_reason={if(not @format.overridden?, do: gettext("Not modified"))}
             phx-click="reset_custom_format"
             phx-value-slug={@format.slug}
           />
@@ -63,11 +65,11 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             :if={not @format.builtin?}
             id={"custom-format-delete-#{@format.slug}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             phx-click="delete_custom_format"
             phx-value-slug={@format.slug}
-            data-confirm={"Delete #{@format.name}?"}
+            data-confirm={gettext("Delete %{name}?", name: @format.name)}
           />
         </.row_actions>
       </:actions>
@@ -77,7 +79,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
 
   # Formats normally show their patterns. A format with none would otherwise
   # render a blank second line, so fall back to the description.
-  defp row_descriptor(%{patterns: []} = format), do: format.description || "No patterns"
+  defp row_descriptor(%{patterns: []} = format), do: format.description || gettext("No patterns")
   defp row_descriptor(format), do: Enum.join(format.patterns, "  ")
 
   @doc """
@@ -95,14 +97,14 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
       icon={if(@custom_format_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square")}
       title={
         if(@custom_format_mode == :new,
-          do: "New Format",
-          else: "Edit #{@editing_custom_format.name}"
+          do: gettext("New Format"),
+          else: gettext("Edit %{name}", name: @editing_custom_format.name)
         )
       }
       subtitle={
         if(@custom_format_mode == :new,
-          do: "Match release titles by regex. Scores are set per quality profile.",
-          else: "Update its patterns. Scores are set per quality profile."
+          do: gettext("Match release titles by regex. Scores are set per quality profile."),
+          else: gettext("Update its patterns. Scores are set per quality profile.")
         )
       }
       on_close="close_custom_format_modal"
@@ -118,32 +120,38 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             <.input
               field={@custom_format_form[:name]}
               type="text"
-              label="Name"
+              label={gettext("Name")}
               disabled={@editing_custom_format.builtin?}
             />
             <p :if={@editing_custom_format.builtin?} class="text-xs text-base-content/60 mt-1">
-              Built-in names are fixed. Saving stores a local override of the shipped definition.
+              {gettext(
+                "Built-in names are fixed. Saving stores a local override of the shipped definition."
+              )}
             </p>
           </div>
 
-          <.input field={@custom_format_form[:description]} type="text" label="Description" />
+          <.input
+            field={@custom_format_form[:description]}
+            type="text"
+            label={gettext("Description")}
+          />
 
           <.input
             field={@custom_format_form[:patterns_text]}
             type="textarea"
-            label="Patterns (one per line)"
+            label={gettext("Patterns (one per line)")}
             rows="6"
           />
 
           <div class="divider text-xs text-base-content/40 my-2">
-            Test against a release title
+            {gettext("Test against a release title")}
           </div>
 
           <.input
             field={@custom_format_form[:test_title]}
             id="custom-format-test-input"
             type="text"
-            label="Paste a release title"
+            label={gettext("Paste a release title")}
             placeholder="Film.2024.VFF.1080p.WEB-DL.x264-GROUP"
           />
 
@@ -165,11 +173,14 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_custom_format_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary gap-2">
             <.icon name="hero-check" class="w-4 h-4" />
-            {if(@custom_format_mode == :new, do: "Add Format", else: "Save Changes")}
+            {if(@custom_format_mode == :new,
+              do: gettext("Add Format"),
+              else: gettext("Save Changes")
+            )}
           </button>
         </.admin_modal_actions>
       </.form>

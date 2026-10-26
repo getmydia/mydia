@@ -233,6 +233,24 @@ defmodule Mydia.Quality.AttrsTest do
       assert attrs.file_size_mb == 20_480
     end
 
+    test "reads the parser's canonical audio labels with their channels" do
+      eac3 = Attrs.from_quality(%Quality{audio: "DD+ 5.1"}, nil, :movie)
+      assert {eac3.audio_codec, eac3.audio_channels} == {"eac3", "5.1"}
+
+      ac3 = Attrs.from_quality(%Quality{audio: "AC3 5.1"}, nil, :movie)
+      assert {ac3.audio_codec, ac3.audio_channels} == {"ac3", "5.1"}
+    end
+
+    test "a bare Atmos label is not the TrueHD Atmos tier" do
+      bare = Attrs.from_quality(%Quality{audio: "Atmos 5.1"}, nil, :movie)
+      assert {bare.audio_codec, bare.audio_channels} == {nil, "5.1"}
+
+      assert Attrs.from_quality(%Quality{audio: "Atmos"}, nil, :movie).audio_codec == nil
+
+      truehd = Attrs.from_quality(%Quality{audio: "TrueHD Atmos 7.1"}, nil, :movie)
+      assert truehd.audio_codec == "atmos"
+    end
+
     test "leaves every unmentioned dimension nil, hdr_tokens included" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)
@@ -267,7 +285,7 @@ defmodule Mydia.Quality.AttrsTest do
       # in collect_violations/2 requires is_binary(source), and the whole
       # excluded-source mechanism silently no-ops on the upgrade path.
       relative_path =
-        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
+        "The Wayfarer (2026)/The Wayfarer (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
 
       detected_source = Mydia.Quality.Sources.detect(relative_path)
       assert detected_source == "Telesync"
@@ -286,7 +304,7 @@ defmodule Mydia.Quality.AttrsTest do
     end
 
     test "clean sources still normalize correctly" do
-      relative_path = "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.x264.mkv"
+      relative_path = "The Lattice (1999)/The.Lattice.1999.1080p.BluRay.x264.mkv"
       detected_source = Mydia.Quality.Sources.detect(relative_path)
       assert detected_source == "BluRay"
 
@@ -311,7 +329,7 @@ defmodule Mydia.Quality.AttrsTest do
   describe "from_media_file/2 falls back to filename detection when metadata.source is absent" do
     test "a nil metadata.source still detects a cam-tier source from the filename" do
       relative_path =
-        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
+        "The Wayfarer (2026)/The Wayfarer (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
 
       file = %MediaFile{
         relative_path: relative_path,
@@ -327,7 +345,7 @@ defmodule Mydia.Quality.AttrsTest do
 
     test "an absent metadata still detects a cam-tier source from the filename" do
       relative_path =
-        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
+        "The Wayfarer (2026)/The Wayfarer (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
 
       file = %MediaFile{
         relative_path: relative_path,
@@ -347,7 +365,7 @@ defmodule Mydia.Quality.AttrsTest do
     # scores by up to +/-9 points (source weight 0.12) against a default
     # upgrade_until_score of 85, churning upgrade decisions library-wide.
     test "a clean file with no metadata.source still yields nil, not BluRay" do
-      relative_path = "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.x264.mkv"
+      relative_path = "The Lattice (1999)/The.Lattice.1999.1080p.BluRay.x264.mkv"
 
       file = %MediaFile{
         relative_path: relative_path,
@@ -375,7 +393,7 @@ defmodule Mydia.Quality.AttrsTest do
     # carry the violation, not silently no-op.
     test "a profile excluding Telesync scores a nil-metadata telesync file zero with a violation" do
       relative_path =
-        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
+        "The Wayfarer (2026)/The Wayfarer (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
 
       file = %MediaFile{
         relative_path: relative_path,
@@ -415,6 +433,20 @@ defmodule Mydia.Quality.AttrsTest do
     test "PDTV is a known source" do
       quality = QualityParser.parse("Quiet.Harbor.S01E01.PDTV.x264-GRP")
       assert %{source: "PDTV"} = Attrs.from_quality(quality, nil, :episode)
+    end
+  end
+
+  # Files imported before the parser folded BDRip into BluRay still carry
+  # "BDRip" or "BRRip" in their stored metadata.
+  describe "stored BDRip metadata" do
+    test "scores as BluRay from a parsed quality" do
+      attrs = Attrs.from_quality(%Quality{source: "BDRip"}, nil, :movie)
+      assert attrs.source == "BluRay"
+    end
+
+    test "scores as BluRay from a media file" do
+      file = %MediaFile{metadata: %FileMetadata{source: "BRRip"}}
+      assert Attrs.from_media_file(file, :movie).source == "BluRay"
     end
   end
 

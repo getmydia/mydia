@@ -143,12 +143,27 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
     end
   end
 
+  # The details modal reads client state (`status`, `progress`,
+  # `estimated_completion`) that only the enriched rows in
+  # :downloads_with_status carry, never the bare schema row. A row the page
+  # has not loaded yet (grabbed since the last refresh) gets one refresh.
   def show_download_details(%{"download-id" => download_id}, socket) do
     with_download(socket, download_id, fn download ->
-      {:noreply,
-       socket
-       |> assign(:show_download_details_modal, true)
-       |> assign(:download_details, download)}
+      socket =
+        if Enum.any?(socket.assigns.downloads_with_status, &(&1.id == download.id)),
+          do: socket,
+          else: refresh_downloads(socket)
+
+      case Enum.find(socket.assigns.downloads_with_status, &(&1.id == download.id)) do
+        nil ->
+          {:noreply, put_flash(socket, :info, gettext("That download no longer exists."))}
+
+        details ->
+          {:noreply,
+           socket
+           |> assign(:show_download_details_modal, true)
+           |> assign(:download_details, details)}
+      end
     end)
   end
 

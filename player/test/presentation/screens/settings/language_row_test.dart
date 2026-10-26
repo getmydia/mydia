@@ -42,6 +42,10 @@ Future<void> _openPicker(WidgetTester tester) async {
 }
 
 void main() {
+  // LocaleSetting mirrors its state into a process-global; clear it so the
+  // choice made here cannot leak into later tests in the same isolate.
+  tearDown(() => rememberInterfaceLocale(null));
+
   testWidgets('shows Language with System default when nothing is stored',
       (tester) async {
     await tester.pumpWidget(_host(MockAuthStorage()));
@@ -59,6 +63,15 @@ void main() {
     expect(find.byKey(const Key('language-option-en')), findsOneWidget);
     expect(find.byKey(const Key('language-option-es')), findsOneWidget);
     expect(find.text('Español'), findsOneWidget);
+  });
+
+  testWidgets('the picker offers pt-BR but not the empty pt stub',
+      (tester) async {
+    await tester.pumpWidget(_host(MockAuthStorage()));
+    await tester.pumpAndSettle();
+    await _openPicker(tester);
+    expect(find.byKey(const Key('language-option-pt-BR')), findsOneWidget);
+    expect(find.byKey(const Key('language-option-pt')), findsNothing);
   });
 
   testWidgets('only the current language tile is marked selected',

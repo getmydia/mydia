@@ -27,6 +27,7 @@ defmodule Mydia.Library.ReleaseParser do
   alias Mydia.Library.PathParser
   alias Mydia.Library.ReleaseParser.Classifier
   alias Mydia.Library.ReleaseParser.QualityExtractor
+  alias Mydia.Library.ReleaseParser.ReleaseGroup
   alias Mydia.Library.ReleaseParser.Resolver
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.ReleaseParser.Tokenizer
@@ -204,11 +205,16 @@ defmodule Mydia.Library.ReleaseParser do
     # cleanly. The dash before a trailing group has no semantic meaning
     # we want to preserve — it just makes the codec/quality token
     # downstream attach to the group name.
-    {prepared, detected_group} = strip_trailing_release_group(filename)
+    {prepared, detected_group, group_offset} = ReleaseGroup.strip_trailing(filename)
 
     tokens = Tokenizer.tokenize(prepared)
     anchors = Tokenizer.anchor_positions(prepared)
-    classified = Classifier.classify(tokens, anchors)
+
+    classified =
+      tokens
+      |> Classifier.classify(anchors)
+      |> ReleaseGroup.drop_sources(group_offset)
+
     resolver_result = Resolver.resolve(classified, target)
 
     # Pre-pass detection wins over vocab matches: the trailing
@@ -218,134 +224,6 @@ defmodule Mydia.Library.ReleaseParser do
     final_group = detected_group || resolver_result.release_group
 
     Map.put(resolver_result, :release_group, final_group)
-  end
-
-  # V2's release-group regex: a hyphen/dot prefix or double-space
-  # prefix, then one or two `[A-Z0-9]+` groups, optionally followed by
-  # a bracket site tag, optionally followed by whitespace and the end.
-  @release_group_re ~r/(?:[-.]|\s{2,})([A-Z0-9]+(?:[.\s][A-Z0-9]+)?)(?:\[[^\]]+\])?\s*$/i
-
-  # Detect a trailing release-group separator (`-GROUP` or `. GROUP`)
-  # and, when present, rewrite the separator to a space so the
-  # tokenizer cleanly separates the group from the preceding token.
-  #
-  # V2 normalizes `.` and `_` to spaces before running the regex; we
-  # replicate that for matching only (the rewritten input keeps the
-  # original separators except for the matched span).
-  defp strip_trailing_release_group(filename) do
-    stripped_for_match = Tokenizer.drop_extension(filename)
-    normalized = String.replace(stripped_for_match, ~r/[._]/, " ")
-
-    case Regex.run(@release_group_re, normalized, return: :index) do
-      [{full_start, _full_len}, {g_start, g_len}] ->
-        group_name = :binary.part(normalized, g_start, g_len)
-        # Check if the preceding token forms a known compound (e.g.
-        # `AAC-LC`, `DTS-HD`) — if so, leave the dash intact.
-        compound? = forms_known_compound?(stripped_for_match, full_start, group_name)
-
-        if compound? do
-          {filename, nil}
-        else
-          case sanitize_release_group(group_name) do
-            nil ->
-              {filename, nil}
-
-            group ->
-              rewritten = rewrite_trailing_separator(filename, normalized)
-              {rewritten, group}
-          end
-        end
-
-      _ ->
-        {filename, nil}
-    end
-  end
-
-  # When the captured "group" is actually a known compound suffix
-  # (e.g. `AAC-LC`, `DTS-HD`, `WEB-DL`, `DTS-X`), don't treat it as a
-  # release group.
-  @known_compound_suffixes MapSet.new(["LC", "HD", "DL", "RIP", "X", "MA", "265", "264"])
-
-  defp forms_known_compound?(_stripped, _full_start, group_name) do
-    String.upcase(group_name) in @known_compound_suffixes
-  end
-
-  # Replace the trailing separator in the original input. We find the
-  # match position in the *normalized* form (which shares leading bytes
-  # with the original) and rewrite the corresponding span in the
-  # original — substituting any dot/underscore characters in the
-  # separator with spaces.
-  defp rewrite_trailing_separator(filename, normalized) do
-    case Regex.run(@release_group_re, normalized, return: :index) do
-      [{full_start, _full_len} | _] ->
-        before = :binary.part(filename, 0, full_start)
-        # Preserve the entire suffix from the match position onwards
-        # but flatten the *first* character of the separator to space.
-        suffix =
-          :binary.part(filename, full_start + 1, byte_size(filename) - full_start - 1)
-
-        before <> " " <> suffix
-
-      _ ->
-        filename
-    end
-  end
-
-  # Reject candidates that are clearly not a release group: known
-  # quality markers, single-letter, or starts with a digit indicating a
-  # resolution that slipped through.
-  @quality_marker_words MapSet.new(~w(
-                            web bluray bdrip brrip webrip webdl hdtv dvd dvdrip dvdscr
-                            remux hdr hdr10 hdr10+ dolbyvision dovi dv
-                            atmos dts dts-x dts-hd truehd aac ac3 dd ddp eac3
-                            hevc avc xvid divx vp9 av1 nvenc opus flac mp3
-                            x264 x265 h264 h265
-                            proper repack internal limited unrated extended theatrical hybrid
-                            amzn nf atvp dsnp hmax hulu pmtp pcok stan
-                            4k 8k uhd 720p 1080p 2160p 480p 540p 576p 1440p 4320p
-                            ddp5 ddp7 dd5 dd7 ddp51 ddp71 dd51 dd71 ddp20 dd20
-                            aac20 aac51
-                          ))
-
-  # Token forms that the trailing-group regex sometimes captures (e.g.
-  # `1080p.AAC` or `DDP5.1`). These should be rejected.
-  @combined_marker_re ~r/^\d{3,4}[pPiIkK]?\.[A-Z0-9]+$/i
-  @ddp_dd_channel_re ~r/^DD[P]?\d+(?:\.\d+)?$/i
-  @dotted_codec_re ~r/^(?:[HX]\.?\d{3}|HEVC|AVC)$/i
-  @contains_resolution_re ~r/\b(?:480p|540p|576p|720p|1080p|1440p|2160p|4320p|4K|8K|UHD)\b/i
-  @episode_marker_in_group_re ~r/^(?:S\d{1,3}E\d{1,4}|E\d{1,4})(?:[-\s.]?E?\d{1,4})*/i
-
-  defp sanitize_release_group(group) do
-    cond do
-      String.downcase(group) in @quality_marker_words ->
-        nil
-
-      Regex.match?(@combined_marker_re, group) ->
-        nil
-
-      Regex.match?(@ddp_dd_channel_re, group) ->
-        nil
-
-      Regex.match?(@dotted_codec_re, group) ->
-        nil
-
-      # Group contains a resolution token — false positive from `.1080p`
-      # being captured as part of a "compound" group.
-      Regex.match?(@contains_resolution_re, group) ->
-        nil
-
-      # Group starts with an episode-range fragment (`E03.1080p`).
-      Regex.match?(@episode_marker_in_group_re, group) ->
-        nil
-
-      # Single-character "groups" are almost always tokenizer artifacts
-      # like the trailing `X` from `DTS-X`.
-      byte_size(group) < 2 ->
-        nil
-
-      true ->
-        group
-    end
   end
 
   defp build_parsed_file_info(resolver_result, filename, opts) do

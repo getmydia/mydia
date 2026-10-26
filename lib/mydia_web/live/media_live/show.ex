@@ -209,20 +209,7 @@ defmodule MydiaWeb.MediaLive.Show do
        :can_update_media,
        Mydia.Accounts.Authorization.can_update_media?(socket.assigns.current_user)
      )
-     |> assign(:raw_search_results, [])
-     # Untruncated, undeduplicated pool of every release seen so far in the
-     # current manual search, keyed by download_url. Progress messages fold
-     # onto this (never onto :raw_search_results, which is already truncated
-     # and deduplicated) so a later, weaker duplicate can never crown itself
-     # over a stronger release evicted by an earlier round's truncation. See
-     # apply_indexer_progress/2 in SearchHelpers.
-     |> assign(:indexer_raw_results, %{})
-     # Per-row grab state (:downloading, :downloaded, :duplicate, :grab_failed)
-     # keyed by download_url. The stream is rebuilt with reset: true on every
-     # progress message, filter change and re-sort, and a reset drops anything
-     # that only lived in the stream, so this is the assign those badges
-     # actually survive in. See SearchHelpers.stream_prepared_results/2.
-     |> assign(:result_states, %{})
+     |> SearchEvents.assign_manual_search_defaults()
      # Category modal state
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)

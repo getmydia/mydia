@@ -41,7 +41,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            )}
 
         {:error, :restricted} ->
-          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+          {:noreply, put_flash(socket, :error, MydiaWeb.OperationErrors.restricted_message())}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, gettext("Failed to update monitoring"))}

@@ -35,7 +35,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   1. For each token, pick the single best candidate per label
      (highest-confidence wins per-token).
   2. Resolve label-wide conflicts: only one `:year`, `:resolution`,
-     `:episode_marker`, `:source`, `:hdr`, `:release_group` and one
+     `:episode_marker`, `:source`, `:release_group` and one
      `:codec` candidate may survive. Losing tokens are demoted to
      `:title_candidate` with half their original confidence.
   3. Assemble the season + episode list from the surviving episode
@@ -58,6 +58,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   alias Mydia.Library.ReleaseParser.Candidate
   alias Mydia.Library.ReleaseParser.Config
+  alias Mydia.Library.ReleaseParser.Resolver.TitleZone
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.ReleaseParser.TitleAssembler
   alias Mydia.Library.ReleaseParser.Token
@@ -71,7 +72,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     :episode_marker,
     :season_marker,
     :source,
-    :hdr,
     :codec,
     :release_group,
     :language,
@@ -99,7 +99,10 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   # Labels mapped through to `quality_tokens` for QualityExtractor in
   # Unit 6.
-  @quality_labels [:resolution, :source, :codec, :hdr, :audio]
+  @quality_labels [:resolution, :source, :codec, :hdr, :audio, :proper, :repack]
+
+  # PROPER / REPACK only flag the release; they carry no field confidence.
+  @revision_labels [:proper, :repack]
 
   @doc """
   Resolve the given tokens to a field assignment.
@@ -113,7 +116,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {assignments, demoted_tokens} =
       tokens
       |> per_token_best()
-      |> reclaim_title_words(boundary)
+      |> TitleZone.reclaim(boundary)
       |> resolve_singleton_conflicts()
 
     assignments_map = group_assignments_by_token(assignments)
@@ -125,7 +128,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     year_value = pick_year_value(year_pick)
     year_confidence = pick_confidence(year_pick)
 
-    quality_tokens = collect_quality_tokens(assignments)
+    quality_tokens = collect_quality_tokens(assignments, boundary)
     release_group = pick_release_group(assignments)
     language = pick_language(assignments)
 
@@ -180,85 +183,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   defp drop_weak_vocab?(_), do: false
 
-  # ---- Title-word reclamation ----
-  #
-  # A title word that is also a language tag ("Italian", "Multi") has only
-  # its language label left after per_token_best/1: the classifier gives a
-  # title fallback only to tokens no vocabulary matched, and the title-zone
-  # penalty leaves these above @vocab_min_confidence. A lone language word
-  # followed by a plain title word is part of the title
-  # ("The.Italian.Harbor"), and so is a single language word that is the
-  # whole title zone ("French.2031"). Reclaiming runs before singleton
-  # resolution, so a reclaimed word reports no language and cannot displace
-  # a real tag. A tag at the end of the title zone ("Show.S01.FRENCH.1080p")
-  # and words of a tag run ("MULTi.BluRay.x264") are not reclaimed here.
-  #
-  # Only language words are reclaimed, not the other vocab-derived labels
-  # (source, codec, hdr, audio, streaming_service, release_group). A
-  # quality word ("HDTV", "DVD", "x264") sitting next to a title word is
-  # usually not part of the title. It's release noise the parser has no
-  # vocabulary for ("Series.10910.hdtv-lol"), and reclaiming it folded that
-  # noise straight into already-wrong titles with no corresponding fix
-  # anywhere else.
-
-  @reclaimed_fallback_confidence 0.3
-
-  defp reclaim_title_words(per_token, boundary) do
-    {title_zone, rest} =
-      Enum.split_while(per_token, fn {token, _} -> in_title_zone?(token, boundary) end)
-
-    reclaim_zone(title_zone, boundary) ++ rest
-  end
-
-  defp reclaim_zone([{token, cands}], boundary) when boundary != :infinity do
-    case slate_kind(cands) do
-      :language -> [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
-      _ -> [{token, cands}]
-    end
-  end
-
-  defp reclaim_zone(title_zone, _boundary) do
-    kinds = Enum.map(title_zone, fn {_, cands} -> slate_kind(cands) end)
-    previous_kinds = [nil | kinds]
-    next_entries = Enum.drop(title_zone, 1) ++ [nil]
-
-    # Enum.zip/1 truncates to the shortest list, aligning each token with its kind, prior kind, and next entry.
-    [title_zone, kinds, previous_kinds, next_entries]
-    |> Enum.zip()
-    |> Enum.map(&maybe_reclaim/1)
-  end
-
-  defp maybe_reclaim({{token, cands}, :language, previous_kind, {_, next_cands}})
-       when previous_kind != :language do
-    if slate_kind(next_cands) == :plain,
-      do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
-      else: {token, cands}
-  end
-
-  defp maybe_reclaim({entry, _kind, _previous_kind, _next}), do: entry
-
-  defp in_title_zone?(_token, :infinity), do: true
-  defp in_title_zone?(%Token{byte_offset: offset}, boundary), do: offset < boundary
-
-  defp slate_kind([]), do: :plain
-
-  defp slate_kind(cands) do
-    cond do
-      Enum.any?(cands, &(&1.label == :title_candidate)) -> :plain
-      Enum.all?(cands, &(&1.label == :language)) -> :language
-      true -> :other
-    end
-  end
-
-  defp reclaimed_candidate(confidence) do
-    %Candidate{label: :title_candidate, value: nil, confidence: confidence, zone: :title}
-  end
-
-  defp neighbor_confidence([]), do: @reclaimed_fallback_confidence
-  defp neighbor_confidence(cands), do: max_confidence(cands)
-
-  defp max_confidence(cands), do: cands |> Enum.map(& &1.confidence) |> Enum.max()
-
   # ---- Singleton-conflict resolution ----
   #
   # Walks each singleton label and keeps the highest-confidence
@@ -294,7 +218,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         {per_token, demoted}
 
       multi ->
-        winner_pair = Enum.max_by(multi, fn {_, c} -> c.confidence end)
+        winner_pair = Enum.max_by(multi, fn {_, c} -> {c.confidence, tie_rank(c)} end)
         losers = multi -- [winner_pair]
 
         per_token = strip_losers(per_token, losers, label)
@@ -302,6 +226,12 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         {per_token, demoted}
     end
   end
+
+  # A remux names its disc (`BluRay.REMUX`), and both tokens clamp to the
+  # same metadata-zone confidence. REMUX is the more specific source, so it
+  # wins the tie; every other tie still goes to the earliest token.
+  defp tie_rank(%Candidate{label: :source, value: "REMUX"}), do: 1
+  defp tie_rank(_candidate), do: 0
 
   defp strip_losers(per_token, losers, label) do
     loser_token_ids = MapSet.new(losers, fn {tok, _} -> token_key(tok) end)
@@ -352,17 +282,35 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   defp pick_confidence(nil), do: nil
   defp pick_confidence({_, %Candidate{confidence: c}}), do: c
 
-  defp collect_quality_tokens(assignments) do
-    @quality_labels
-    |> Enum.flat_map(fn label ->
+  # Audio and HDR are not singletons. A release can list several audio
+  # tracks, and the QualityExtractor picks among them. HDR tokens stack
+  # (`DV.HDR10`: a Dolby Vision layer over an HDR10 base), so every one
+  # reaches the extractor in token order and it folds them. A word of
+  # either kind with title words after it ("Fake.Dts.Story.2020",
+  # "Hdr.Fake.Story.2020") is a title word, never a tag, so it does not
+  # reach the extractor. One in the run of tags that ends the title zone
+  # ("German.DTS.720p", "[X264-AAC][720P]") is still a tag, and without
+  # anchors there is no boundary and nothing is cut.
+  @multi_quality_labels [:audio, :hdr]
+
+  defp collect_quality_tokens(assignments, boundary) do
+    Enum.flat_map(@quality_labels, fn label ->
       assignments
       |> Enum.filter(fn {_, c} -> c.label == label end)
-      |> case do
-        [] -> []
-        list when label == :audio -> Enum.map(list, &to_quality_entry/1)
-        list -> [list |> Enum.max_by(fn {_, c} -> c.confidence end) |> to_quality_entry()]
-      end
+      |> quality_entries(label, assignments, boundary)
     end)
+  end
+
+  defp quality_entries([], _label, _assignments, _boundary), do: []
+
+  defp quality_entries(list, label, assignments, boundary) when label in @multi_quality_labels do
+    list
+    |> Enum.reject(fn {token, _} -> TitleZone.title_word_tag?(token, assignments, boundary) end)
+    |> Enum.map(&to_quality_entry/1)
+  end
+
+  defp quality_entries(list, _label, _assignments, _boundary) do
+    [list |> Enum.max_by(fn {_, c} -> c.confidence end) |> to_quality_entry()]
   end
 
   defp to_quality_entry({token, %Candidate{} = c}) do
@@ -715,7 +663,9 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   end
 
   defp apply_quality_confidence(result, quality_tokens) do
-    Enum.reduce(quality_tokens, result, fn entry, acc ->
+    quality_tokens
+    |> Enum.reject(&(&1.label in @revision_labels))
+    |> Enum.reduce(result, fn entry, acc ->
       put_field_confidence(acc, quality_field_key(entry.label), entry.confidence)
     end)
   end

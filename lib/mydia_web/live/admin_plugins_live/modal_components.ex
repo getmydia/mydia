@@ -12,9 +12,14 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
   alias MydiaWeb.AdminPluginsLive.CapabilitySummary
 
   defp empty_catalog_message(%{source_count: count}) when count > 1,
-    do: "The plugin store has no plugins yet (checked #{count} sources)."
+    do:
+      ngettext(
+        "The plugin store has no plugins yet (checked %{count} source).",
+        "The plugin store has no plugins yet (checked %{count} sources).",
+        count
+      )
 
-  defp empty_catalog_message(_), do: "The plugin store has no plugins yet."
+  defp empty_catalog_message(_), do: gettext("The plugin store has no plugins yet.")
 
   @doc """
   The store modal. It opens on every Browse store click and renders the
@@ -29,7 +34,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
     <.admin_modal
       id="plugin-store-modal"
       icon="hero-squares-plus"
-      title="Plugin store"
+      title={gettext("Plugin store")}
       size={:lg}
       on_close="close_plugin_store_modal"
     >
@@ -44,7 +49,14 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
         <div :if={@browse.error} id="browse-error" class="alert alert-error">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
           <span>
-            {@browse.failed_count} of {@browse.source_count} sources could not be loaded: {@browse.error}
+            {ngettext(
+              "%{failed} of %{total} source could not be loaded: %{error}",
+              "%{failed} of %{total} sources could not be loaded: %{error}",
+              @browse.source_count,
+              failed: @browse.failed_count,
+              total: @browse.source_count,
+              error: @browse.error
+            )}
           </span>
         </div>
 
@@ -73,7 +85,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
           class="btn btn-ghost"
           phx-click="close_plugin_store_modal"
         >
-          Close
+          {gettext("Close")}
         </button>
       </:actions>
     </.admin_modal>
@@ -110,15 +122,19 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
     <.admin_modal
       id="plugin-approval-modal"
       icon="hero-shield-check"
-      title={"#{if(@reapproval?, do: "Re-approve", else: "Approve")} #{@approval.name}"}
+      title={
+        if(@reapproval?,
+          do: gettext("Re-approve %{name}", name: @approval.name),
+          else: gettext("Approve %{name}", name: @approval.name)
+        )
+      }
       on_close="decline_approval"
     >
       <p :if={not @reapproval?} class="text-sm text-base-content/70">
-        It can't run until you approve. Approval is all-or-nothing.
+        {gettext("It can't run until you approve. Approval is all-or-nothing.")}
       </p>
       <p :if={@reapproval?} id="approval-reapproval-note" class="text-sm text-base-content/70">
-        v{@approval.version} asks for {things(@new_count)} you haven't approved. It keeps
-        running on the old grant until you re-approve.
+        {reapproval_note(@approval.version, @new_count)}
       </p>
 
       <div
@@ -128,8 +144,10 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
       >
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
         <span>
-          This plugin comes from {@approval.publisher}, not the Mydia plugin index. Mydia has not
-          reviewed it; you are trusting whoever holds that source's signing key.
+          {gettext(
+            "This plugin comes from %{publisher}, not the Mydia plugin index. Mydia has not reviewed it; you are trusting whoever holds that source's signing key.",
+            publisher: @approval.publisher
+          )}
         </span>
       </div>
       <div
@@ -139,9 +157,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
       >
         <.icon name="hero-arrow-path" class="w-5 h-5" />
         <span>
-          This replaces {@approval.name} from {@approval.replaces}. Future updates will come from {@approval[
-            :publisher
-          ] || "the Mydia plugin index"}.
+          {replaces_note(@approval)}
         </span>
       </div>
 
@@ -156,7 +172,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
           class="btn btn-ghost"
           phx-click="decline_approval"
         >
-          Decline
+          {gettext("Decline")}
         </button>
         <button
           id="confirm-approval"
@@ -164,15 +180,40 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
           class="btn btn-primary"
           phx-click="confirm_approval"
         >
-          {if(@reapproval?, do: "Re-approve", else: "Approve & activate")}
+          {if(@reapproval?, do: gettext("Re-approve"), else: gettext("Approve & activate"))}
         </button>
       </:actions>
     </.admin_modal>
     """
   end
 
-  defp things(1), do: "1 thing"
-  defp things(n), do: "#{n} things"
+  defp reapproval_note(version, count) do
+    ngettext(
+      "v%{version} asks for %{count} thing you haven't approved. It keeps running on the old grant until you re-approve.",
+      "v%{version} asks for %{count} things you haven't approved. It keeps running on the old grant until you re-approve.",
+      count,
+      version: version
+    )
+  end
+
+  defp replaces_note(%{replaces: replaces, name: name} = approval) do
+    case approval[:publisher] do
+      nil ->
+        gettext(
+          "This replaces %{name} from %{source}. Future updates will come from the Mydia plugin index.",
+          name: name,
+          source: replaces
+        )
+
+      publisher ->
+        gettext(
+          "This replaces %{name} from %{source}. Future updates will come from %{publisher}.",
+          name: name,
+          source: replaces,
+          publisher: publisher
+        )
+    end
+  end
 
   @doc """
   Per-plugin detail modal: granted capabilities and host grants.
@@ -208,25 +249,28 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
       </p>
 
       <div class="mt-4">
-        <h4 class="font-semibold mb-2">Granted capabilities</h4>
+        <h4 class="font-semibold mb-2">{gettext("Granted capabilities")}</h4>
         <.capability_summary
           :if={@detail.granted != %{}}
           id="detail-capabilities"
           summary={@granted_summary}
         />
         <p :if={@detail.granted == %{}} class="text-sm text-base-content/60">
-          No capabilities granted.
+          {gettext("No capabilities granted.")}
         </p>
       </div>
 
       <div :if={@detail.ungranted != %{}} id="detail-ungranted" class="mt-4">
         <h4 class="font-semibold mb-2 flex items-center gap-2 text-warning">
-          <.icon name="hero-exclamation-triangle" class="w-4 h-4" /> Requested but not granted
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4" /> {gettext(
+            "Requested but not granted"
+          )}
         </h4>
         <.capability_summary id="detail-ungranted-capabilities" summary={@ungranted_summary} />
         <p class="text-xs text-base-content/60 mt-2">
-          This version's manifest asks for these. Calls into them are denied until you re-approve
-          the plugin from its row.
+          {gettext(
+            "This version's manifest asks for these. Calls into them are denied until you re-approve the plugin from its row."
+          )}
         </p>
       </div>
 
@@ -238,7 +282,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
           phx-click="show_plugin_logs"
           phx-value-slug={@detail.slug}
         >
-          <.icon name="hero-document-text" class="w-4 h-4" /> View logs
+          <.icon name="hero-document-text" class="w-4 h-4" /> {gettext("View logs")}
         </button>
         <button
           id="close-plugin-detail"
@@ -246,7 +290,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
           class="btn btn-ghost btn-sm"
           phx-click="close_plugin_detail_modal"
         >
-          Close
+          {gettext("Close")}
         </button>
       </:actions>
     </.admin_modal>
@@ -266,7 +310,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
     <.admin_modal
       id="plugin-settings-modal"
       icon="hero-cog-6-tooth"
-      title={"#{@settings.name} settings"}
+      title={gettext("%{name} settings", name: @settings.name)}
       on_close="close_plugin_settings_modal"
     >
       <.form
@@ -293,7 +337,7 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
               class="flex items-center gap-2 text-xs text-base-content/60"
             >
               <.config_source_badge source={:env} size="xs" />
-              Set in the environment or config file. Change it there.
+              {gettext("Set in the environment or config file. Change it there.")}
             </p>
           </div>
         </div>
@@ -303,10 +347,10 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
             class="btn btn-ghost"
             phx-click="close_plugin_settings_modal"
           >
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary">
-            Save settings
+            {gettext("Save settings")}
           </button>
         </.admin_modal_actions>
       </.form>
@@ -315,17 +359,24 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
     """
   end
 
-  @ceiling_options [
-    {"Nothing", "none"},
-    {"Ask every time", "once"},
-    {"Up to a session", "session"},
-    {"Up to always", "always"}
-  ]
+  defp ceiling_options do
+    [
+      {gettext("Nothing"), "none"},
+      {gettext("Ask every time"), "once"},
+      {gettext("Up to a session"), "session"},
+      {gettext("Up to always"), "always"}
+    ]
+  end
+
+  defp role_label("admin"), do: gettext("Admin")
+  defp role_label("user"), do: gettext("User")
+  defp role_label("guest"), do: gettext("Guest")
+  defp role_label("readonly"), do: gettext("Readonly")
 
   attr :settings, :map, required: true
 
   defp ceilings_form(assigns) do
-    assigns = assign(assigns, :options, @ceiling_options)
+    assigns = assign(assigns, :options, ceiling_options())
 
     ~H"""
     <.form
@@ -335,16 +386,18 @@ defmodule MydiaWeb.AdminPluginsLive.ModalComponents do
       class="border-t border-base-300 pt-4 space-y-2"
     >
       <input type="hidden" name="slug" value={@settings.slug} />
-      <h4 class="font-medium">What each role may allow without asking</h4>
+      <h4 class="font-medium">{gettext("What each role may allow without asking")}</h4>
       <.input
         :for={role <- ~w(admin user guest readonly)}
         field={@settings.ceilings_form[role]}
         type="select"
-        label={String.capitalize(role)}
+        label={role_label(role)}
         options={@options}
       />
       <div class="flex justify-end">
-        <button type="submit" id="save-ceilings" class="btn btn-sm">Save permissions</button>
+        <button type="submit" id="save-ceilings" class="btn btn-sm">
+          {gettext("Save permissions")}
+        </button>
       </div>
     </.form>
     """
