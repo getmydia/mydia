@@ -13,6 +13,7 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
@@ -52,7 +53,7 @@ class ManageSourcesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Other servers'),
+          title: Text(context.l10n.sourcesOtherServers),
           actions: [
             AddServerButton(
                 onPressed: () => SettingsNavScope.of(context).addServer()),
@@ -74,7 +75,7 @@ class AddServerButton extends StatelessWidget {
         key: const Key('manage-add'),
         onPressed: onPressed,
         icon: const Icon(Icons.add),
-        label: const Text('Add server'),
+        label: Text(context.l10n.navAddServer),
       );
 }
 
@@ -116,9 +117,9 @@ class ManageSourcesBody extends ConsumerWidget {
           padding: padding,
           children: [
             if (addButton != null) addButton,
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: Text('No servers yet.')),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text(context.l10n.sourcesNoServers)),
             ),
             const ShowHiddenSourcesRow(),
           ],
@@ -135,8 +136,7 @@ class ManageSourcesBody extends ConsumerWidget {
             const ShowHiddenSourcesRow(),
           ],
         ),
-      AsyncError() =>
-        const Center(child: Text('Could not read the saved servers.')),
+      AsyncError() => Center(child: Text(context.l10n.sourcesLoadFailed)),
       _ => const Center(child: CircularProgressIndicator()),
     };
   }
@@ -153,7 +153,7 @@ class _AllServersSwitch extends ConsumerWidget {
         key: ValueKey('manage-all-servers-${source.id.value}'),
         dense: true,
         contentPadding: EdgeInsets.zero,
-        title: const Text('Include in All servers'),
+        title: Text(context.l10n.sourcesIncludeInAll),
         value:
             includedInAllServers(source, ref.watch(allServersChoicesProvider)),
         onChanged: (on) => ref
@@ -172,10 +172,11 @@ class _AccountCard extends ConsumerWidget {
     final confirmed = await confirmRemoveAccount(context, ref, record.account);
     if (!confirmed || !context.mounted) return;
     final toaster = Toaster.of(context);
+    final l10n = context.l10n;
     try {
       await removeMydiaInstance(ref, record.account);
     } catch (_) {
-      toaster.show('Could not remove this account.', kind: ToastKind.error);
+      toaster.show(l10n.sourcesRemoveAccountFailed, kind: ToastKind.error);
     }
   }
 
@@ -192,10 +193,10 @@ class _AccountCard extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleMedium),
             Text(
                 switch (account.kind) {
-                  SourceKind.plex => 'Plex account',
-                  SourceKind.stash => 'Stash server',
-                  SourceKind.jellyfin => 'Jellyfin user',
-                  SourceKind.mydia => 'Mydia account',
+                  SourceKind.plex => context.l10n.sourcesAccountPlex,
+                  SourceKind.stash => context.l10n.sourcesAccountStash,
+                  SourceKind.jellyfin => context.l10n.sourcesAccountJellyfin,
+                  SourceKind.mydia => context.l10n.sourcesAccountMydia,
                 },
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
@@ -208,11 +209,13 @@ class _AccountCard extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(server.name),
                   subtitle: server.gone
-                      ? const Text('No longer on this account')
-                      : (!server.presence ? const Text('Offline') : null),
+                      ? Text(context.l10n.sourcesServerGone)
+                      : (!server.presence
+                          ? Text(context.l10n.commonOffline)
+                          : null),
                   trailing: IconButton(
                     key: Key('manage-lock-${server.id}'),
-                    tooltip: 'Lock',
+                    tooltip: context.l10n.sourcesLockTooltip,
                     icon: Icon(switch (record.lockOf(server.id)) {
                       SourceLock.none => Icons.lock_open_rounded,
                       SourceLock.locked => Icons.lock_rounded,
@@ -236,7 +239,7 @@ class _AccountCard extends ConsumerWidget {
                 if (account.kind == SourceKind.mydia)
                   IconButton(
                     key: Key('manage-settings-${account.id}'),
-                    tooltip: 'Settings',
+                    tooltip: context.l10n.settingsTitle,
                     icon: const Icon(Icons.settings_rounded),
                     onPressed: () => SettingsNavScope.of(context)
                         .openInstance(mydiaSourceIdOf(record)),
@@ -251,26 +254,27 @@ class _AccountCard extends ConsumerWidget {
                       onSwitched: (id) =>
                           SettingsNavScope.of(context).switchedTo(id),
                     ),
-                    child: const Text('Switch user'),
+                    child: Text(context.l10n.sourcesSwitchUser),
                   ),
                 OutlinedButton(
                   key: Key('manage-reauth-${account.id}'),
                   onPressed: () => SettingsNavScope.of(context)
                       .reauth(account.kind, account.id),
                   child: Text(account.needsReauth
-                      ? 'Sign in again'
+                      ? context.l10n.navSourceSignInAgain
                       : switch (account.kind) {
-                          SourceKind.plex => 'Sign in again or choose servers',
-                          SourceKind.jellyfin => 'Change address or sign in',
+                          SourceKind.plex => context.l10n.sourcesReauthPlex,
+                          SourceKind.jellyfin =>
+                            context.l10n.sourcesReauthJellyfin,
                           SourceKind.stash ||
                           SourceKind.mydia =>
-                            'Change address or key',
+                            context.l10n.sourcesReauthKey,
                         }),
                 ),
                 TextButton(
                   key: Key('manage-remove-${account.id}'),
                   onPressed: () => _remove(context, ref),
-                  child: const Text('Remove'),
+                  child: Text(context.l10n.commonRemove),
                 ),
               ],
             ),
@@ -290,13 +294,13 @@ class SourcesSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (kIsWeb) return const SizedBox.shrink();
     return SettingsSection(
-      label: 'Other servers',
+      label: context.l10n.sourcesOtherServers,
       children: [
         SettingsRow.navigation(
           key: const Key('manage-sources-row'),
           icon: Icons.dns_rounded,
-          title: 'Plex, Jellyfin and Stash',
-          subtitle: 'Add or remove servers',
+          title: context.l10n.sourcesSettingsRowTitle,
+          subtitle: context.l10n.sourcesSettingsRowSubtitle,
           onTap: () => context.push('/sources/manage'),
         ),
       ],

@@ -10,6 +10,7 @@ import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/artwork_image.dart';
 import 'package:player/presentation/widgets/glass/glass_badge.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import 'fake_media_source.dart';
@@ -46,6 +47,8 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       home: Scaffold(
         body: SingleChildScrollView(
@@ -226,6 +229,8 @@ void main() {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               disableAnimations: reduceMotion,

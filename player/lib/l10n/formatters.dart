@@ -10,6 +10,8 @@ import '../core/channels/pairing_service.dart';
 import '../core/connection/connection_summary.dart';
 import '../core/downloads/download_notification_text.dart';
 import '../core/logging/log_uploader.dart';
+import '../core/playback/loading_step.dart';
+import '../core/playback/playback_memory.dart' show FailureReason;
 import '../core/playback/playback_plan.dart';
 import '../core/playback/stats/playback_stats.dart';
 import '../core/playback/stats/stats_report.dart';
@@ -29,6 +31,7 @@ import '../domain/models/quality_delivery_subtitle.dart';
 import '../domain/models/quality_rung.dart';
 import '../domain/models/remote_device.dart';
 import '../domain/models/storage_settings.dart';
+import '../domain/models/subtitle_search_outcome.dart';
 import '../domain/models/subtitle_track.dart';
 import '../domain/navigation/media_filter.dart';
 import '../domain/navigation/nav_destination.dart';
@@ -37,6 +40,8 @@ import '../domain/sources/item.dart';
 import '../domain/sources/library.dart';
 import '../presentation/screens/calendar/calendar_dates.dart';
 import '../presentation/screens/login/login_failure.dart';
+import '../presentation/screens/player/subtitle_track_builder.dart'
+    show SubtitleDelayNotice, SubtitleDelayNoticeKind, SubtitleNotice;
 import 'gen/app_localizations.dart';
 
 extension AppFormatters on AppLocalizations {
@@ -374,6 +379,8 @@ extension AppFormatters on AppLocalizations {
 
   String statsValue(StatsValue value) => switch (value) {
         StatsText(:final text) => text,
+        StatsWhyValue(:final why) => statsWhyText(why),
+        StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),
         StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
             null => label,
@@ -509,6 +516,83 @@ extension AppFormatters on AppLocalizations {
           settingsDiagnosticsRelayHttp(error.status ?? 0),
         LogUploadFailure.noLogs => settingsDiagnosticsNoLogs,
         LogUploadFailure.unavailable => settingsDiagnosticsLogsUnavailable,
+      };
+
+  /// The line under the player's spinner while a stream opens.
+  String loadingStepText(LoadingStep step) => switch (step.kind) {
+        LoadingStepKind.startingStream => playerLoadingStarting,
+        LoadingStepKind.preparingStream => playerLoadingPreparing(step.percent),
+        LoadingStepKind.startingTranscode =>
+          playerLoadingTranscoding(step.attempt, step.maxAttempts),
+        LoadingStepKind.connectingP2p => playerLoadingP2p,
+        LoadingStepKind.checkingCompatibility => playerLoadingCompatibility,
+      };
+
+  /// The toast after the player switched to transcoding on its own.
+  String fallbackMessage(FailureReason reason) => switch (reason) {
+        FailureReason.decodeFailed => playerFallbackDecodeFailed,
+        FailureReason.decodeTooSlow => playerFallbackDecodeTooSlow,
+        FailureReason.bandwidth => playerFallbackBandwidth,
+      };
+
+  /// The Why row of the stats panel.
+  String statsWhyText(StatsWhy why) => switch (why) {
+        StatsWhyPlain(:final kind) => switch (kind) {
+            StatsWhyKind.containerNotDirect => statsWhyContainerNotDirect,
+            StatsWhyKind.copyRejectedByMime => statsWhyCopyRejected,
+            StatsWhyKind.serverReencoding => statsWhyServerReencoding,
+            StatsWhyKind.browserReencodes => statsWhyBrowserReencodes,
+            StatsWhyKind.switchedEarlier => statsWhySwitchedEarlier,
+            StatsWhyKind.recentStall => statsWhyRecentStall,
+          },
+        StatsWhyCapped(:final rung) => statsWhyQualityCapped(qualityName(rung)),
+        StatsWhyRemembered(:final codec) => statsWhyRememberedFailure(codec),
+        StatsWhyStalled(:final minutes) => statsWhyStalledMinutes(minutes),
+        StatsWhyFallback(:final reason) => fallbackMessage(reason),
+      };
+
+  /// The Playing row's quality: the choice, and for Auto what it resolved to.
+  String statsQualityText(StatsQuality quality) {
+    final selected = quality.selected;
+    if (!selected.isAuto) return qualityName(selected);
+    final effective = quality.effective;
+    return effective == null
+        ? qualityAuto
+        : qualityAutoRung(qualityName(effective));
+  }
+
+  /// A subtitle toast the player raised on its own.
+  String subtitleNoticeText(SubtitleNotice notice) => switch (notice) {
+        SubtitleNotice.notCarried => subtitleNoticeNotCarried,
+        SubtitleNotice.imageOnlyAtOriginal => subtitleNoticeImageOnlyAtOriginal,
+        SubtitleNotice.loadFailed => subtitleNoticeLoadFailed,
+        SubtitleNotice.preparingImage => subtitleNoticePreparingImage,
+      };
+
+  /// The toast for a subtitle delay nudge or save.
+  String subtitleDelayNoticeText(SubtitleDelayNotice notice) {
+    final delay = subtitleDelayAmount(
+      '${notice.totalMs >= 0 ? '+' : ''}${notice.totalMs}',
+    );
+    return switch (notice.kind) {
+      SubtitleDelayNoticeKind.adjusted => subtitleDelayToastAdjusted(delay),
+      SubtitleDelayNoticeKind.adjustedAfterSave =>
+        subtitleDelayToastAfterSave(delay),
+      SubtitleDelayNoticeKind.saved => subtitleDelayToastSaved,
+      SubtitleDelayNoticeKind.savedAppliesLater => subtitleDelayToastSavedLater,
+      SubtitleDelayNoticeKind.saveFailed => subtitleDelaySaveFailed,
+    };
+  }
+
+  /// Why a subtitle search or download did not happen.
+  String subtitleIssueText(SubtitleIssue issue) => switch (issue) {
+        SubtitleIssue.searchMydiaOnly => subtitleIssueSearchMydiaOnly,
+        SubtitleIssue.downloadMydiaOnly => subtitleIssueDownloadMydiaOnly,
+        SubtitleIssue.searchOffline => subtitleIssueSearchOffline,
+        SubtitleIssue.downloadOffline => subtitleIssueDownloadOffline,
+        SubtitleIssue.searchUnreachable => subtitleIssueSearchUnreachable,
+        SubtitleIssue.searchFailed => subtitleSearchFailed,
+        SubtitleIssue.downloadFailed => subtitleDownloadFailed,
       };
 }
 

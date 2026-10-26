@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/sources/plex/plex_tv_client.dart';
+import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import 'plex_sign_in_controller.dart';
+import 'sign_in_problem.dart';
 
 class PlexSignInScreen extends ConsumerStatefulWidget {
   const PlexSignInScreen({super.key, this.reauthAccountId});
@@ -48,7 +50,7 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
       PlexSignInWaiting(:final code) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Go to plex.tv/link and enter this code',
+            Text(context.l10n.sourcesPlexLinkPrompt,
                 style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
             SelectableText(
@@ -65,19 +67,21 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
                 onPressed: () => launchUrl(Uri.parse(PlexTvClient.linkUrl),
                     mode: LaunchMode.externalApplication),
                 icon: const Icon(Icons.open_in_new),
-                label: const Text('Open plex.tv/link'),
+                label: Text(context.l10n.sourcesPlexOpenLink),
               ),
             const SizedBox(height: 24),
             const SizedBox(width: 200, child: LinearProgressIndicator()),
             const SizedBox(height: 8),
-            Text('Waiting for approval', style: theme.textTheme.bodySmall),
+            Text(context.l10n.sourcesPlexWaiting,
+                style: theme.textTheme.bodySmall),
           ],
         ),
       PlexSignInChoosing(:final servers, :final chosen) => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Choose servers to add', style: theme.textTheme.titleMedium),
+            Text(context.l10n.sourcesPlexChooseServers,
+                style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             for (final (i, server) in servers.indexed)
               CheckboxListTile(
@@ -87,37 +91,38 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
                 onChanged: (_) => controller.toggle(server.clientIdentifier),
                 title: Text(server.name),
                 subtitle: Text([
-                  server.owned ? 'Yours' : 'Shared with you',
-                  if (!server.presence) 'Offline',
+                  server.owned
+                      ? context.l10n.sourcesPlexOwned
+                      : context.l10n.sourcesPlexShared,
+                  if (!server.presence) context.l10n.commonOffline,
                 ].join(' · ')),
               ),
             const SizedBox(height: 16),
             FilledButton(
               key: const Key('plex-add-servers'),
               onPressed: chosen.isEmpty ? null : controller.save,
-              child: Text(chosen.length == 1
-                  ? 'Add 1 server'
-                  : 'Add ${chosen.length} servers'),
+              child: Text(context.l10n.sourcesPlexAddServers(chosen.length)),
             ),
           ],
         ),
-      PlexSignInFailed(:final message) => Column(
+      PlexSignInFailed(:final problem) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message, textAlign: TextAlign.center),
+            Text(context.l10n.signInProblemText(problem),
+                textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton(
               key: const Key('plex-try-again'),
               autofocus: true,
               onPressed: controller.start,
-              child: const Text('Try again'),
+              child: Text(context.l10n.commonTryAgain),
             ),
           ],
         ),
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in to Plex')),
+      appBar: AppBar(title: Text(context.l10n.sourcesPlexSignInTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),

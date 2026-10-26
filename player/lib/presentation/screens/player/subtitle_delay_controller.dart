@@ -30,7 +30,7 @@ class SubtitleDelayController {
 
   /// Not offline, and the session can write.
   final bool Function() canPersist;
-  final void Function(String message, {ToastKind kind}) toast;
+  final void Function(SubtitleDelayNotice notice, {ToastKind kind}) toast;
   final bool Function() mounted;
   final VoidCallback onChanged;
 
@@ -183,7 +183,7 @@ class SubtitleDelayController {
     // and still contributes to what Save persists, but the OSD must not
     // claim a visible change that has not happened yet.
     toast(
-      subtitleDelayToastMessage(
+      subtitleDelayNudgeNotice(
         totalMs: total,
         appliesImmediately: !kIsWeb,
       ),
@@ -220,7 +220,7 @@ class SubtitleDelayController {
   /// never evicts or refetches the `SubtitleContent` body already cached in
   /// the screen's media_kit track map for the track, so what the viewer sees
   /// does not actually change until the track loads again. See
-  /// [subtitleDelaySavedMessage]'s dartdoc for why that gap is closed with
+  /// [subtitleDelaySavedNotice]'s dartdoc for why that gap is closed with
   /// an honest message rather than a reload.
   Future<void> save() async {
     final track = selectedTrack();
@@ -235,7 +235,8 @@ class SubtitleDelayController {
       case WriteOutcome.unavailable:
         return;
       case WriteOutcome.failed:
-        toast('Could not save the subtitle delay', kind: ToastKind.error);
+        toast(const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
+            kind: ToastKind.error);
         return;
       case WriteOutcome.done:
         break;
@@ -262,15 +263,16 @@ class SubtitleDelayController {
       // On web this save never touches the SubtitleContent body already
       // cached in the screen's media_kit track map for this track -- it still
       // has the old offset baked in, so nothing the viewer sees actually
-      // moves yet. See subtitleDelaySavedMessage's dartdoc for why a refetch
+      // moves yet. See subtitleDelaySavedNotice's dartdoc for why a refetch
       // was not built to close that gap.
       toast(
-        subtitleDelaySavedMessage(appliesImmediately: !kIsWeb),
+        subtitleDelaySavedNotice(appliesImmediately: !kIsWeb),
         kind: ToastKind.success,
       );
     } catch (e) {
       debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
-      toast('Could not save the subtitle delay', kind: ToastKind.error);
+      toast(const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
+          kind: ToastKind.error);
     }
   }
 

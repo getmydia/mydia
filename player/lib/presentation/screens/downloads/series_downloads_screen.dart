@@ -9,6 +9,7 @@ import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/quality_badge.dart';
 import 'widgets/download_queue_row.dart';
 import 'widgets/downloaded_episode_rail.dart';
@@ -84,9 +85,10 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 if (showDownloads.isNotEmpty)
                   ..._buildDownloadedSection(context, ref, showDownloads),
                 if (showQueue.isEmpty && showDownloads.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: Text('No episodes found')),
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                        child: Text(context.l10n.downloadsEpisodesNotFound)),
                   ),
               ]),
             ),
@@ -297,13 +299,13 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         _buildStatBadge(
           palette,
           Icons.movie_rounded,
-          '$totalEpisodes Ep${totalEpisodes != 1 ? 's' : ''}',
+          context.l10n.downloadsHeroEpisodes(totalEpisodes),
         ),
         if (seasons.length > 1)
           _buildStatBadge(
             palette,
             Icons.folder_rounded,
-            '${seasons.length} Seasons',
+            context.l10n.downloadsHeroSeasons(seasons.length),
           ),
         _buildStatBadge(
           palette,
@@ -377,7 +379,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
-          'Downloaded',
+          context.l10n.commonDownloaded,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: AppColors.success,
                 fontWeight: FontWeight.bold,
@@ -413,7 +415,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   Widget _buildSeasonHeader(
       BuildContext context, WidgetRef ref, int seasonNumber, int episodeCount) {
     final palette = context.palette;
-    final label = seasonLabel(seasonNumber);
+    final label = seasonLabel(context.l10n, seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -437,7 +439,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              '($episodeCount episode${episodeCount != 1 ? 's' : ''})',
+              context.l10n.downloadsSeasonEpisodeCount(episodeCount),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: palette.textSecondary.withValues(alpha: 0.7),
                   ),
@@ -466,7 +468,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 color: AppColors.error,
                 padding: EdgeInsets.zero,
-                tooltip: 'Delete $label',
+                tooltip: context.l10n.downloadsDeleteSeasonTooltip(label),
               ),
             ),
           ],
@@ -486,7 +488,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
-          'Downloading',
+          context.l10n.downloadsSectionDownloading,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: palette.primary,
                 fontWeight: FontWeight.bold,
@@ -533,7 +535,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   Widget _buildQueueSeasonHeader(
       BuildContext context, int seasonNumber, int taskCount) {
     final palette = context.palette;
-    final label = seasonLabel(seasonNumber);
+    final label = seasonLabel(context.l10n, seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -557,7 +559,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              '($taskCount downloading)',
+              context.l10n.downloadsSeasonDownloadingCount(taskCount),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: palette.textSecondary.withValues(alpha: 0.7),
                   ),

@@ -11,6 +11,7 @@ import '../../../../core/sources/stash/stash_documents.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
+import '../../../../l10n/l10n.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
@@ -89,7 +90,9 @@ class StashPlaybackSession extends SourcePlaybackSession {
                       ...u.queryParameters,
                       ...credential
                     }).toString()),
-            label: s.title ?? s.language ?? 'Subtitles',
+            label: s.title ??
+                s.language ??
+                currentAppLocalizations().commonSubtitles,
             language: s.language ?? 'und',
           ),
     ];

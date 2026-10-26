@@ -4,6 +4,7 @@ library;
 
 import 'dart:ui' show Locale;
 
+import '../../../../core/playback/loading_step.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/progress_reporter.dart';
@@ -19,6 +20,7 @@ import '../../../../domain/sources/library.dart' show Cursor;
 import '../../../../domain/sources/source_error.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
+import 'playback_problem.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
@@ -203,7 +205,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
-    required void Function(String message) onProgress,
+    required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
   }) async {
     try {
@@ -211,7 +213,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
       if (!isCurrent()) return const StreamingSuperseded();
       if (version == null) {
         return const StreamingUnavailable(
-            'This item has no playable file on the server.');
+            PlaybackProblem(PlaybackIssue.noPlayableFile));
       }
       return StreamingReady(StreamingSetup(
         memoryKey: 'source:${source.id}',
@@ -221,7 +223,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
         ),
       ));
     } on SourceException catch (e) {
-      return StreamingUnavailable(e.viewerMessage);
+      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
     }
   }
 
@@ -290,13 +292,13 @@ abstract class SourcePlaybackSession implements PlaybackSession {
       const SubtitleSearchOutcome(
         results: [],
         providers: [],
-        error: 'Subtitle search is available on Mydia servers only.',
+        issue: SubtitleIssue.searchMydiaOnly,
       );
 
   @override
   Future<SubtitleTrack> downloadSubtitle(SubtitleCandidate candidate) =>
-      throw const SubtitleActionException(
-          'Subtitle downloads are available on Mydia servers only.');
+      throw const SubtitleActionException.issue(
+          SubtitleIssue.downloadMydiaOnly);
 
   @override
   bool get canWrite => false;

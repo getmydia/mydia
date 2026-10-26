@@ -71,7 +71,7 @@ void main() {
     );
 
     expect(context.mode, PlaybackMode.transcode);
-    expect(context.why, contains('hevc'));
+    expect(context.why, const StatsWhyRemembered('hevc'));
     expect(context.sourceLabel, '2160p hevc - 14.2 Mb/s - mkv');
   });
 
@@ -107,7 +107,7 @@ void main() {
       linkHealthy: false,
     );
 
-    expect(context.why, fallbackMessageFor(FailureReason.bandwidth));
+    expect(context.why, const StatsWhyFallback(FailureReason.bandwidth));
     expect(
       context.whyDetail,
       'bandwidth: buffer drained for 4 samples',
@@ -148,8 +148,8 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, isNot(fallbackMessageFor(FailureReason.bandwidth)));
-    expect(context.why, contains('capped'));
+    expect(context.why, isNot(const StatsWhyFallback(FailureReason.bandwidth)));
+    expect(context.why, isA<StatsWhyCapped>());
     expect(context.whyDetail, isNull);
   });
 
@@ -178,9 +178,7 @@ void main() {
     );
 
     expect(context.mode, PlaybackMode.copy);
-    // Sentence case, matching every other Why message ("Quality capped
-    // to...", "Remembered decode failure on...").
-    expect(context.why, contains('Container'));
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.containerNotDirect));
   });
 
   test('a fixed rung says the quality was capped on purpose', () {
@@ -207,7 +205,7 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, contains('capped'));
+    expect(context.why, const StatsWhyCapped(_r720));
   });
 
   // A downloaded file has no server, so no link and no throughput. It is
@@ -276,9 +274,8 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, isNot(contains('Remembered decode failure')));
-    expect(context.why, isNot(contains('hevc')));
-    expect(context.why, 'Recent stall on this connection');
+    expect(context.why, isNot(isA<StatsWhyRemembered>()));
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.recentStall));
   });
 
   test('a recent stall says how long ago it happened', () {
@@ -310,12 +307,12 @@ void main() {
 
     expect(
       build(const Duration(minutes: 12)).why,
-      'Stalled on this connection 12 min ago',
+      const StatsWhyStalled(12),
     );
     // Under a minute still reads as a minute, never "0 min ago".
     expect(
       build(const Duration(seconds: 20)).why,
-      'Stalled on this connection 1 min ago',
+      const StatsWhyStalled(1),
     );
   });
 
@@ -343,7 +340,7 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, contains('re-encoding'));
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.copyRejectedByMime));
   });
 
   test('no direct-play candidate reads as a server decision', () {
@@ -370,7 +367,7 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, 'Server is re-encoding for this device');
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.serverReencoding));
   });
 
   // Unreachable through `planPlayback` itself (see `playback_planner.dart`:
@@ -402,7 +399,7 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, 'Server is re-encoding for this device');
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.serverReencoding));
   });
 
   test('web reads its own inherent limit, not a file or connection problem',
@@ -430,7 +427,7 @@ void main() {
       linkHealthy: true,
     );
 
-    expect(context.why, 'Browser playback always re-encodes');
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.browserReencodes));
   });
 
   // Also unreachable in a real session: `_fallbackToTranscode` sets

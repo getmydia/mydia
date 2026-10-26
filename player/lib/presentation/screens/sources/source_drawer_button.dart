@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../l10n/l10n.dart';
 import '../../widgets/app_shell.dart';
 
 /// Opens the shell's navigation drawer.
@@ -35,7 +36,7 @@ class SourceDrawerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       key: const Key('source-open-drawer'),
-      tooltip: 'Menu',
+      tooltip: context.l10n.commonMenu,
       icon: const Icon(Icons.menu_rounded),
       color: color,
       onPressed: () => AppShell.scaffoldKey.currentState?.openDrawer(),

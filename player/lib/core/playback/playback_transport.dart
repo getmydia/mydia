@@ -5,6 +5,7 @@
 /// player screen imports it.
 library;
 
+import 'loading_step.dart';
 import 'playback_controller.dart' show PlaybackSource;
 import 'playback_plan.dart';
 import 'stream_urls.dart' show ResolvedSource;
@@ -25,7 +26,7 @@ abstract interface class PlaybackTransport {
     required String fileId,
     required Duration startAt,
     Duration? totalDuration,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   });
 
   Future<PlaybackSource> replaceSource(
@@ -34,7 +35,7 @@ abstract interface class PlaybackTransport {
     required Duration realPosition,
     Duration? totalDuration,
     required Future<Stream<Duration>> Function(PlaybackSource source) attach,
-    void Function(String message)? onProgress,
+    void Function(LoadingStep step)? onProgress,
   });
 
   /// Ends every session this transport owns. Safe to call more than once.

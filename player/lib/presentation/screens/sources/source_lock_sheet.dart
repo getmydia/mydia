@@ -10,6 +10,7 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
@@ -32,6 +33,7 @@ Future<void> changeServerLock(BuildContext context, WidgetRef ref,
     return;
   }
   final toaster = Toaster.of(context);
+  final l10n = context.l10n;
   final pins = ref.read(pinStoreProvider);
   try {
     if (choice != SourceLock.none && !await pins.hasPin()) {
@@ -44,12 +46,11 @@ Future<void> changeServerLock(BuildContext context, WidgetRef ref,
         .read(sourceRecordsProvider.notifier)
         .setServerLock(record.account.id, server.id, choice);
   } catch (_) {
-    toaster.show('Could not change the lock.', kind: ToastKind.error);
+    toaster.show(l10n.sourcesLockChangeFailed, kind: ToastKind.error);
     return;
   }
   if (choice == SourceLock.hidden && !ref.read(sourceLockProvider)) {
-    toaster.show('${server.name} is hidden. Use Show hidden servers to see '
-        'it again.');
+    toaster.show(l10n.sourcesLockHiddenToast(server.name));
   }
 }
 
@@ -74,11 +75,21 @@ class _LockSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            choice(SourceLock.none, 'Not locked', 'Anyone can open it.'),
-            choice(SourceLock.locked, 'Locked',
-                'Shown with a lock. Opening it asks for Face ID, your passcode or PIN.'),
-            choice(SourceLock.hidden, 'Hidden',
-                'Not shown anywhere until you unlock.'),
+            choice(
+              SourceLock.none,
+              context.l10n.sourcesLockNoneTitle,
+              context.l10n.sourcesLockNoneBody,
+            ),
+            choice(
+              SourceLock.locked,
+              context.l10n.sourcesLockLockedTitle,
+              context.l10n.sourcesLockLockedBody,
+            ),
+            choice(
+              SourceLock.hidden,
+              context.l10n.sourcesLockHiddenTitle,
+              context.l10n.sourcesLockHiddenBody,
+            ),
           ],
         ),
       ),
@@ -97,7 +108,9 @@ class ShowHiddenSourcesRow extends ConsumerWidget {
     return ListTile(
       key: const Key('show-hidden-sources'),
       leading: Icon(unlocked ? Icons.lock_rounded : Icons.visibility_rounded),
-      title: Text(unlocked ? 'Lock now' : 'Show hidden servers'),
+      title: Text(
+        unlocked ? context.l10n.navLockNow : context.l10n.navShowHiddenServers,
+      ),
       onTap: () => unlocked
           ? ref.read(sourceLockProvider.notifier).lock()
           : context.push(unlockLocation()),

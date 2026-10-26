@@ -82,7 +82,10 @@ class UpNextCandidate {
   final String id;
   final int seasonNumber;
   final int episodeNumber;
-  final String title;
+
+  /// Null when the server gave the episode no title; the prompt then reads
+  /// "Episode N".
+  final String? title;
 
   /// Ids of the playable files for this episode, in the order the server
   /// returned them. An empty list means the episode cannot be played, which
@@ -115,7 +118,9 @@ class UpNextTarget {
   final String fileId;
   final int seasonNumber;
   final int episodeNumber;
-  final String title;
+
+  /// Null when the server gave the episode no title.
+  final String? title;
   final String? thumbnailUrl;
 
   /// Whether reaching this target leaves the season the viewer is watching.
@@ -134,7 +139,8 @@ class UpNextTarget {
 
   /// The title written into the player route, matching the format
   /// `UpNextController.playNext` already builds.
-  String get routeTitle => '$episodeCode - $title';
+  String get routeTitle =>
+      title == null ? episodeCode : '$episodeCode - $title';
 }
 
 UpNextTarget? _toTarget(UpNextCandidate candidate,

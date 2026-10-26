@@ -10,6 +10,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/jellyfin_connect_screen.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/sources/jellyfin_sign_in_controller.dart';
 
 import '../../../core/sources/jellyfin/fake_jellyfin_server.dart';
@@ -53,7 +54,11 @@ Future<FakeJellyfinServer> pumpScreen(WidgetTester tester,
   await container.read(sourceRecordsProvider.future);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: router,
+    ),
   ));
   return server;
 }

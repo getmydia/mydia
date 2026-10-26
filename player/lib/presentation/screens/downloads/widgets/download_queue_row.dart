@@ -23,7 +23,7 @@ class DownloadQueueRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final progress = task.isProgressive ? task.combinedProgress : task.progress;
-    final recovering = downloadStateLabel(task).isNotEmpty;
+    final recovering = downloadStateLabel(context.l10n, task).isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -69,7 +69,7 @@ class DownloadQueueRow extends ConsumerWidget {
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                tooltip: 'Cancel download',
+                tooltip: context.l10n.downloadsCancelDownloadTooltip,
               ),
             ],
           ),

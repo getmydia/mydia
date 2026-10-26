@@ -561,25 +561,19 @@ void main() {
     });
   });
 
-  group('subtitleDelayToastMessage', () {
+  group('subtitleDelayNudgeNotice', () {
     test('reports the delay plainly when it applies immediately', () {
-      expect(
-        subtitleDelayToastMessage(totalMs: 100, appliesImmediately: true),
-        'Subtitle delay +100 ms',
-      );
+      final notice =
+          subtitleDelayNudgeNotice(totalMs: 100, appliesImmediately: true);
+      expect(notice.kind, SubtitleDelayNoticeKind.adjusted);
+      expect(notice.totalMs, 100);
     });
 
-    test('signs a negative total the same way', () {
+    test('carries a negative total as it is', () {
       expect(
-        subtitleDelayToastMessage(totalMs: -200, appliesImmediately: true),
-        'Subtitle delay -200 ms',
-      );
-    });
-
-    test('signs zero as positive', () {
-      expect(
-        subtitleDelayToastMessage(totalMs: 0, appliesImmediately: true),
-        'Subtitle delay +0 ms',
+        subtitleDelayNudgeNotice(totalMs: -200, appliesImmediately: true)
+            .totalMs,
+        -200,
       );
     });
 
@@ -587,25 +581,24 @@ void main() {
     // genuine no-op (media_kit's web backend has no mpv sub-delay to set),
     // so a viewer nudging there sees an OSD claiming a change that has not
     // happened. Saving is what actually persists the nudge -- see
-    // subtitleDelaySavedMessage below for why even Save does not make it
+    // subtitleDelaySavedNotice below for why even Save does not make it
     // visible on web either.
     test('does not claim an immediate change when it does not apply yet', () {
-      final message = subtitleDelayToastMessage(
+      final notice = subtitleDelayNudgeNotice(
         totalMs: 100,
         appliesImmediately: false,
       );
 
-      expect(message, isNot('Subtitle delay +100 ms'));
-      expect(message, contains('100 ms'));
-      expect(message, contains('Save'));
+      expect(notice.kind, SubtitleDelayNoticeKind.adjustedAfterSave);
+      expect(notice.totalMs, 100);
     });
   });
 
-  group('subtitleDelaySavedMessage', () {
+  group('subtitleDelaySavedNotice', () {
     test('confirms the save plainly when it applies immediately', () {
       expect(
-        subtitleDelaySavedMessage(appliesImmediately: true),
-        'Subtitle delay saved',
+        subtitleDelaySavedNotice(appliesImmediately: true).kind,
+        SubtitleDelayNoticeKind.saved,
       );
     });
 
@@ -618,11 +611,9 @@ void main() {
     // "after Save", which made this gap into a promise the code does not
     // keep unless this message says otherwise.
     test('does not claim an immediate change when it does not apply yet', () {
-      final message = subtitleDelaySavedMessage(appliesImmediately: false);
+      final notice = subtitleDelaySavedNotice(appliesImmediately: false);
 
-      expect(message, isNot('Subtitle delay saved'));
-      expect(message, contains('saved'));
-      expect(message, contains('next time'));
+      expect(notice.kind, SubtitleDelayNoticeKind.savedAppliesLater);
     });
   });
 
@@ -900,7 +891,7 @@ void main() {
           streamIndexByMpvId: const {},
         ),
         isA<RestoreUnavailable>().having(
-            (r) => r.message, 'message', kImageSubtitleUnavailableMessage),
+            (r) => r.notice, 'notice', SubtitleNotice.imageOnlyAtOriginal),
       );
     });
 
@@ -936,7 +927,7 @@ void main() {
           streamIndexByMpvId: const {},
         ),
         isA<RestoreUnavailable>()
-            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
       );
     });
 
@@ -960,7 +951,7 @@ void main() {
           streamIndexByMpvId: const {},
         ),
         isA<RestoreUnavailable>()
-            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
       );
     });
 
@@ -973,7 +964,7 @@ void main() {
           streamIndexByMpvId: const {},
         ),
         isA<RestoreUnavailable>()
-            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
       );
     });
   });
@@ -1014,7 +1005,7 @@ void main() {
     test('keeps the intent after an unavailable restore', () {
       expect(
         subtitleRestoreConsumed(
-          restore: const RestoreUnavailable(kImageSubtitleUnavailableMessage),
+          restore: const RestoreUnavailable(SubtitleNotice.imageOnlyAtOriginal),
           selected: null,
         ),
         isFalse,
@@ -1063,18 +1054,18 @@ void main() {
     });
   });
 
-  group('imageSidecarFailureMessage', () {
-    test('a server that cannot serve sidecars keeps the Original message', () {
+  group('imageSidecarFailureNotice', () {
+    test('a server that cannot serve sidecars keeps the Original notice', () {
       expect(
-        imageSidecarFailureMessage(const SidecarUnsupported()),
-        kImageSubtitleUnavailableMessage,
+        imageSidecarFailureNotice(const SidecarUnsupported()),
+        SubtitleNotice.imageOnlyAtOriginal,
       );
     });
 
     test('anything else invites a retry', () {
       expect(
-        imageSidecarFailureMessage(const SidecarFailed('HTTP 415')),
-        kSubtitleLoadFailedMessage,
+        imageSidecarFailureNotice(const SidecarFailed('HTTP 415')),
+        SubtitleNotice.loadFailed,
       );
     });
   });

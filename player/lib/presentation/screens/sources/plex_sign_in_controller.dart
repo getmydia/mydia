@@ -15,6 +15,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
+import 'sign_in_problem.dart';
 
 final plexPinPollIntervalProvider =
     Provider<Duration>((ref) => const Duration(seconds: 2));
@@ -48,8 +49,8 @@ final class PlexSignInDone extends PlexSignInState {
 }
 
 final class PlexSignInFailed extends PlexSignInState {
-  const PlexSignInFailed(this.message);
-  final String message;
+  const PlexSignInFailed(this.problem);
+  final SignInProblem problem;
 }
 
 class PlexSignInController extends Notifier<PlexSignInState> {
@@ -89,7 +90,9 @@ class PlexSignInController extends Notifier<PlexSignInState> {
         (_) => unawaited(_check(tv, pin.id)),
       );
     } on SourceException catch (e) {
-      if (ref.mounted) state = PlexSignInFailed(e.viewerMessage);
+      if (ref.mounted) {
+        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+      }
     } catch (_) {
       // An unexpected reply (a malformed PIN, say) must not leave a spinner.
       _poll?.cancel();
@@ -97,7 +100,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
     }
   }
 
-  static const _genericFailure = 'Could not sign in to Plex. Try again.';
+  static const _genericFailure = SignInProblem(SignInIssue.plexSignInFailed);
 
   Future<void> _check(PlexTvClient tv, int pinId) async {
     if (_checking || !ref.mounted) return;
@@ -105,8 +108,8 @@ class PlexSignInController extends Notifier<PlexSignInState> {
     try {
       if (DateTime.now().isAfter(_deadline!)) {
         _poll?.cancel();
-        state = const PlexSignInFailed(
-            'The code expired. Start again for a new one.');
+        state =
+            const PlexSignInFailed(SignInProblem(SignInIssue.plexCodeExpired));
         return;
       }
       final token = await tv.checkPin(pinId);
@@ -123,14 +126,16 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       final servers = await tv.servers(token);
       if (!ref.mounted) return;
       state = servers.isEmpty
-          ? const PlexSignInFailed('This Plex account has no servers.')
+          ? const PlexSignInFailed(SignInProblem(SignInIssue.plexNoServers))
           : PlexSignInChoosing(
               servers: servers,
               chosen: {for (final s in servers) s.clientIdentifier},
             );
     } on SourceException catch (e) {
       _poll?.cancel();
-      if (ref.mounted) state = PlexSignInFailed(e.viewerMessage);
+      if (ref.mounted) {
+        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+      }
     } catch (_) {
       _poll?.cancel();
       if (ref.mounted) state = const PlexSignInFailed(_genericFailure);
@@ -248,11 +253,13 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       }
       if (ref.mounted) state = PlexSignInDone(first);
     } on SourceException catch (e) {
-      if (ref.mounted) state = PlexSignInFailed(e.viewerMessage);
+      if (ref.mounted) {
+        state = PlexSignInFailed(SignInProblem.fromServer(e.viewerMessage));
+      }
     } catch (_) {
       if (ref.mounted) {
-        state = const PlexSignInFailed(
-            'Could not save this account on this device.');
+        state =
+            const PlexSignInFailed(SignInProblem(SignInIssue.plexSaveFailed));
       }
     }
   }

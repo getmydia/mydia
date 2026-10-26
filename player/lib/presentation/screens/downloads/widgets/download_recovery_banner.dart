@@ -3,16 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../../core/downloads/download_recovery.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
+import '../../../../l10n/l10n.dart';
 
 /// A short line describing a task that is recovering, or empty when the task is
 /// progressing normally.
-String downloadStateLabel(DownloadTask task) {
+String downloadStateLabel(AppLocalizations l10n, DownloadTask task) {
   switch (task.status) {
     case 'interrupted':
-      return 'Interrupted, resuming';
+      return l10n.downloadsStateInterrupted;
     case 'stalled':
-      return 'Stalled, retrying '
-          '${task.recoveryAttempts} of $maxRecoveryAttempts';
+      return l10n.downloadsStateStalled(
+          task.recoveryAttempts, maxRecoveryAttempts);
     default:
       return '';
   }
@@ -38,7 +39,7 @@ class DownloadRecoveryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = downloadStateLabel(task);
+    final label = downloadStateLabel(context.l10n, task);
     if (label.isEmpty) return const SizedBox.shrink();
 
     final palette = context.palette;
@@ -66,7 +67,8 @@ class DownloadRecoveryBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             minimumSize: const Size(0, 28),
           ),
-          child: const Text('Resume', style: TextStyle(fontSize: 11)),
+          child: Text(context.l10n.commonResume,
+              style: const TextStyle(fontSize: 11)),
         ),
       ],
     );

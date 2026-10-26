@@ -367,7 +367,7 @@ class UpNextController {
             id: episode.id,
             seasonNumber: episode.seasonNumber,
             episodeNumber: episode.episodeNumber,
-            title: episode.title ?? 'Episode ${episode.episodeNumber}',
+            title: episode.title,
             fileIds: (episode.fileIds ?? const <String?>[])
                 .whereType<String>()
                 .toList(),

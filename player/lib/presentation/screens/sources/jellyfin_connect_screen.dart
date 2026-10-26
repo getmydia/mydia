@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/sources_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import 'jellyfin_sign_in_controller.dart';
+import 'sign_in_problem.dart';
 
 class JellyfinConnectScreen extends ConsumerStatefulWidget {
   const JellyfinConnectScreen({super.key, this.reauthAccountId});
@@ -59,7 +61,7 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
     });
     final state = ref.watch(provider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect Jellyfin')),
+      appBar: AppBar(title: Text(context.l10n.sourcesJellyfinConnectTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -82,24 +84,24 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
     );
   }
 
-  Widget _error(String? error) => error == null
+  Widget _error(SignInProblem? error) => error == null
       ? const SizedBox.shrink()
       : Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: Text(error,
+          child: Text(context.l10n.signInProblemText(error),
               key: const Key('jellyfin-error'),
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
         );
 
-  List<Widget> _address(String? error) => [
+  List<Widget> _address(SignInProblem? error) => [
         TextField(
           key: const Key('jellyfin-url-field'),
           controller: _url,
           autofocus: true,
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            labelText: 'Server address',
-            hintText: 'http://192.168.1.30:8096',
+          decoration: InputDecoration(
+            labelText: context.l10n.sourcesServerAddressLabel,
+            hintText: 'http://192.168.1.30:8096', // l10n-ignore: example URL
           ),
           onSubmitted: (_) => _ctl.submitAddress(_url.text),
         ),
@@ -108,7 +110,7 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
         FilledButton(
           key: const Key('jellyfin-continue-button'),
           onPressed: () => _ctl.submitAddress(_url.text),
-          child: const Text('Continue'),
+          child: Text(context.l10n.commonContinue),
         ),
       ];
 
@@ -117,8 +119,8 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
     return [
       Text(
         expired
-            ? 'Code expired.'
-            : 'Approve this code in Jellyfin: Settings, Quick Connect.',
+            ? context.l10n.sourcesJellyfinCodeExpired
+            : context.l10n.sourcesJellyfinApproveCode,
         style: theme.textTheme.titleMedium,
         textAlign: TextAlign.center,
       ),
@@ -136,31 +138,35 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
           key: const Key('jellyfin-new-code-button'),
           autofocus: true,
           onPressed: _ctl.startQuickConnect,
-          child: const Text('Get a new code'),
+          child: Text(context.l10n.sourcesJellyfinNewCode),
         ),
       const SizedBox(height: 24),
       TextButton(
         key: const Key('jellyfin-use-password-button'),
         autofocus: !expired,
         onPressed: _ctl.usePassword,
-        child: const Text('Use a password instead'),
+        child: Text(context.l10n.sourcesJellyfinUsePassword),
       ),
     ];
   }
 
-  List<Widget> _passwordForm(String? error, bool quickConnectAvailable) => [
+  List<Widget> _passwordForm(
+          SignInProblem? error, bool quickConnectAvailable) =>
+      [
         TextField(
           key: const Key('jellyfin-username-field'),
           controller: _user,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Username'),
+          decoration:
+              InputDecoration(labelText: context.l10n.loginUsernameLabel),
         ),
         const SizedBox(height: 16),
         TextField(
           key: const Key('jellyfin-password-field'),
           controller: _password,
           obscureText: true,
-          decoration: const InputDecoration(labelText: 'Password'),
+          decoration:
+              InputDecoration(labelText: context.l10n.loginPasswordLabel),
           onSubmitted: (_) => _ctl.submitPassword(_user.text, _password.text),
         ),
         _error(error),
@@ -168,14 +174,14 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
         FilledButton(
           key: const Key('jellyfin-sign-in-button'),
           onPressed: () => _ctl.submitPassword(_user.text, _password.text),
-          child: const Text('Sign in'),
+          child: Text(context.l10n.loginSignIn),
         ),
         if (quickConnectAvailable) ...[
           const SizedBox(height: 8),
           TextButton(
             key: const Key('jellyfin-use-quick-connect-button'),
             onPressed: _ctl.startQuickConnect,
-            child: const Text('Use Quick Connect instead'),
+            child: Text(context.l10n.sourcesJellyfinUseQuickConnect),
           ),
         ],
       ];

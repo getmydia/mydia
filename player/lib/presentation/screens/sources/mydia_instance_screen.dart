@@ -51,15 +51,30 @@ final serverCompatibilityProvider = FutureProvider.autoDispose
 });
 
 /// Where the instance is reached: its address, or p2p for a paired server.
-final mydiaInstanceAddressProvider =
-    FutureProvider.autoDispose.family<String?, SourceId>((ref, sourceId) async {
+sealed class MydiaInstanceAddress {
+  const MydiaInstanceAddress();
+}
+
+final class MydiaInstanceUrl extends MydiaInstanceAddress {
+  const MydiaInstanceUrl(this.url);
+
+  final String url;
+}
+
+final class MydiaInstanceP2p extends MydiaInstanceAddress {
+  const MydiaInstanceP2p();
+}
+
+final mydiaInstanceAddressProvider = FutureProvider.autoDispose
+    .family<MydiaInstanceAddress?, SourceId>((ref, sourceId) async {
   final account =
       mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
   if (account == null) return null;
   final credentials =
       await readMydiaCredentials(ref.watch(sourceSecretsProvider), account);
-  return credentials?.serverUrl ??
-      (credentials?.isP2p == true ? 'Paired over p2p' : null);
+  final url = credentials?.serverUrl;
+  if (url != null) return MydiaInstanceUrl(url);
+  return credentials?.isP2p == true ? const MydiaInstanceP2p() : null;
 });
 
 ProviderAccount? mydiaAccountFor(SourceSnapshot? snapshot, SourceId sourceId) {
@@ -71,17 +86,18 @@ ProviderAccount? mydiaAccountFor(SourceSnapshot? snapshot, SourceId sourceId) {
   return null;
 }
 
-String _verdictLabel(CompatibilityVerdict v) => switch (v) {
-      CompatibilityVerdict.compatible => 'Compatible with this player',
+String _verdictLabel(AppLocalizations l10n, CompatibilityVerdict v) =>
+    switch (v) {
+      CompatibilityVerdict.compatible => l10n.sourcesInstanceCompatible,
       CompatibilityVerdict.playerUpdateRecommended =>
-        'A player update is recommended',
+        l10n.sourcesInstancePlayerUpdateRecommended,
       CompatibilityVerdict.playerUpdateRequired =>
-        'A player update is required',
+        l10n.sourcesInstancePlayerUpdateRequired,
       CompatibilityVerdict.serverUpdateRecommended =>
-        'A server update is recommended',
+        l10n.sourcesInstanceServerUpdateRecommended,
       CompatibilityVerdict.serverUpdateRequired =>
-        'A server update is required',
-      CompatibilityVerdict.unknown => 'Compatibility unknown',
+        l10n.sourcesInstanceServerUpdateRequired,
+      CompatibilityVerdict.unknown => l10n.sourcesInstanceCompatibilityUnknown,
     };
 
 class MydiaInstanceScreen extends StatelessWidget {
@@ -104,7 +120,7 @@ class MydiaInstanceScreen extends StatelessWidget {
                 height: WindowTitleRow.heightOf(context),
                 leading: const BackButton(),
                 title: Text(
-                  account?.displayName ?? 'Server',
+                  account?.displayName ?? context.l10n.commonServer,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 decorate: (row) => ColoredBox(
@@ -141,19 +157,20 @@ class MydiaInstanceBody extends ConsumerWidget {
   ) async {
     final nav = SettingsNavScope.of(context);
     final toaster = Toaster.of(context);
+    final l10n = context.l10n;
     try {
       final confirmed = await confirmRemoveAccount(
         context,
         ref,
         account,
-        title: 'Remove this server from this device?',
-        confirmLabel: 'Remove server',
+        title: l10n.sourcesRemoveServerTitle,
+        confirmLabel: l10n.sourcesRemoveServerConfirm,
       );
       if (!confirmed) return;
       await removeMydiaInstance(ref, account);
       nav.instanceRemoved();
     } catch (_) {
-      toaster.show('Could not remove this server.', kind: ToastKind.error);
+      toaster.show(l10n.sourcesInstanceRemoveFailed, kind: ToastKind.error);
     }
   }
 
@@ -162,7 +179,7 @@ class MydiaInstanceBody extends ConsumerWidget {
     final account =
         mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
     return account == null
-        ? const Center(child: Text('This server is no longer saved.'))
+        ? Center(child: Text(context.l10n.sourcesInstanceMissing))
         : ListView(
             padding: padding,
             children: [
@@ -189,13 +206,14 @@ class MydiaInstanceBody extends ConsumerWidget {
                       ),
                       const SizedBox(height: 18),
                       SettingsSection(
-                        label: 'Remove',
+                        label: context.l10n.commonRemove,
                         children: [
                           SettingsRow.action(
                             key: const Key('mydia-instance-remove'),
                             icon: Icons.logout,
-                            title: 'Remove this server',
-                            subtitle: 'Signs out on this device only',
+                            title: context.l10n.sourcesInstanceRemoveRow,
+                            subtitle:
+                                context.l10n.sourcesInstanceRemoveRowSubtitle,
                             danger: true,
                             onTap: () => _remove(context, ref, account),
                           ),
@@ -221,24 +239,31 @@ class _ServerSection extends ConsumerWidget {
     final address = ref.watch(mydiaInstanceAddressProvider(sourceId)).value;
     final compat = ref.watch(serverCompatibilityProvider(sourceId));
     final version = compat.value?.info?.version;
+    final l10n = context.l10n;
     return SettingsSection(
-      label: 'Server',
+      label: l10n.commonServer,
       children: [
         SettingsRow.action(
           icon: Icons.dns_rounded,
           title: account.displayName,
-          subtitle: address,
+          subtitle: switch (address) {
+            MydiaInstanceUrl(:final url) => url,
+            MydiaInstanceP2p() => l10n.sourcesInstanceP2p,
+            null => null,
+          },
         ),
         SettingsRow.action(
           key: const Key('mydia-instance-version'),
           icon: Icons.info_outline,
           title: switch (compat) {
-            AsyncData() => version == null ? 'Version unknown' : 'v$version',
-            _ => 'Checking the server',
+            AsyncData() => version == null
+                ? l10n.sourcesInstanceVersionUnknown
+                : 'v$version',
+            _ => l10n.sourcesInstanceChecking,
           },
           subtitle: compat.value == null
               ? null
-              : _verdictLabel(compat.value!.verdict),
+              : _verdictLabel(l10n, compat.value!.verdict),
         ),
       ],
     );
@@ -255,7 +280,7 @@ class _RegistrationSection extends ConsumerWidget {
     final status = ref.watch(nodeRegistrationsProvider)[sourceId] ??
         const RegistrationIdle();
     return SettingsSection(
-      label: 'This device',
+      label: context.l10n.sourcesInstanceThisDevice,
       children: [
         SettingsRow.action(
           icon: Icons.settings_remote,
@@ -265,8 +290,8 @@ class _RegistrationSection extends ConsumerWidget {
           SettingsRow.action(
             key: const Key('mydia-instance-registration-retry'),
             icon: Icons.refresh,
-            title: 'Retry registration',
-            subtitle: 'Try to make this device discoverable again',
+            title: context.l10n.settingsRetryRegistrationTitle,
+            subtitle: context.l10n.settingsRetryRegistrationSubtitle,
             onTap: () =>
                 ref.read(nodeRegistrationsProvider.notifier).retry(sourceId),
           ),

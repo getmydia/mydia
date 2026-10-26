@@ -11,6 +11,7 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/glass/glass_chip.dart';
@@ -74,16 +75,22 @@ final sourceSearchProvider = NotifierProvider.autoDispose
 
 /// What the chips under the search box keep, by the result's own kind.
 enum _KindFilter {
-  all('All', Icons.search_rounded, null),
-  movies('Movies', Icons.movie_rounded, ItemKind.movie),
-  shows('Shows', Icons.tv_rounded, ItemKind.show),
-  episodes('Episodes', Icons.playlist_play_rounded, ItemKind.episode);
+  all(Icons.search_rounded, null),
+  movies(Icons.movie_rounded, ItemKind.movie),
+  shows(Icons.tv_rounded, ItemKind.show),
+  episodes(Icons.playlist_play_rounded, ItemKind.episode);
 
-  const _KindFilter(this.label, this.icon, this.kind);
+  const _KindFilter(this.icon, this.kind);
 
-  final String label;
   final IconData icon;
   final ItemKind? kind;
+
+  String label(AppLocalizations l10n) => switch (this) {
+        all => l10n.sourcesSearchKindAll,
+        movies => l10n.navMovies,
+        shows => l10n.navShowsShort,
+        episodes => l10n.sourcesSearchKindEpisodes,
+      };
 
   List<ItemSummary> apply(List<ItemSummary> items) => kind == null
       ? items
@@ -139,19 +146,19 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
     if (!searchable) {
       return BrowseScaffold(
         icon: Icons.search_rounded,
-        title: 'Search',
+        title: context.l10n.navSearch,
         queryKeys: const [],
-        body: (context, scrollTopPadding) => const Center(
+        body: (context, scrollTopPadding) => Center(
           child: Text(
-            'This server does not support search.',
-            key: Key('source-search-unsupported'),
+            context.l10n.sourcesSearchUnsupported,
+            key: const Key('source-search-unsupported'),
           ),
         ),
       );
     }
     return BrowseScaffold(
       icon: Icons.search_rounded,
-      title: 'Search',
+      title: context.l10n.navSearch,
       queryKeys: const [],
       secondRow: Center(
         child: TextField(
@@ -160,7 +167,7 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
           autofocus: true,
           style: const TextStyle(fontSize: 18),
           decoration: InputDecoration(
-            hintText: 'Search this server',
+            hintText: context.l10n.sourcesSearchHint,
             hintStyle: TextStyle(
               color: context.palette.textSecondary.withValues(alpha: 0.6),
               fontSize: 18,
@@ -200,7 +207,9 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
   }
 
   Widget _results(List<ItemSummary> items) {
-    if (items.isEmpty) return const Center(child: Text('Nothing found.'));
+    if (items.isEmpty) {
+      return Center(child: Text(context.l10n.sourcesSearchNothingFound));
+    }
     return BrowseGrid(
       scrollTopPadding: 8,
       itemCount: items.length,
@@ -233,7 +242,7 @@ class _KindChips extends StatelessWidget {
                 GlassChip(
                   chipKey: Key('source-search-kind-${kind.name}'),
                   avatar: Icon(kind.icon, size: 18),
-                  label: Text(kind.label),
+                  label: Text(kind.label(context.l10n)),
                   selected: selected == kind,
                   onSelected: (_) => onSelected(kind),
                 ),

@@ -10,6 +10,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/jellyfin_sign_in_controller.dart';
+import 'package:player/presentation/screens/sources/sign_in_problem.dart';
 
 import '../../../core/sources/jellyfin/fake_jellyfin_server.dart';
 import '../../../test_utils/mock_auth_storage.dart';
@@ -71,7 +72,10 @@ void main() {
 
   test('refuses plain HTTP to a public host before any request', () async {
     await ctl().submitAddress('http://203.0.113.9:8096');
-    expect((state() as JellyfinEnterAddress).error, contains('https://'));
+    expect(
+      (state() as JellyfinEnterAddress).error,
+      const SignInProblem(SignInIssue.jellyfinHttpsRequired),
+    );
     expect(server.requests, isEmpty);
   });
 
@@ -80,14 +84,14 @@ void main() {
     await ctl().submitAddress('https://media.example.test');
     expect(
       (state() as JellyfinEnterAddress).error,
-      'This is not a Jellyfin server.',
+      const SignInProblem(SignInIssue.jellyfinNotJellyfin),
     );
     server.productName = 'Jellyfin Server';
     server.version = '10.8.13';
     await ctl().submitAddress('https://media.example.test');
     expect(
       (state() as JellyfinEnterAddress).error,
-      'Jellyfin 10.9 or newer is required.',
+      const SignInProblem(SignInIssue.jellyfinTooOld),
     );
   });
 
@@ -141,7 +145,10 @@ void main() {
     server.quickConnectEnabled = false;
     await ctl().submitAddress('https://media.example.test');
     await ctl().submitPassword(FakeJellyfinServer.username, 'nope');
-    expect((state() as JellyfinPassword).error, 'Wrong username or password.');
+    expect(
+      (state() as JellyfinPassword).error,
+      const SignInProblem(SignInIssue.jellyfinWrongCredentials),
+    );
     await ctl().submitPassword(
       FakeJellyfinServer.username,
       FakeJellyfinServer.password,
@@ -160,7 +167,7 @@ void main() {
     );
     expect(
       (state() as JellyfinPassword).error,
-      'Could not save this server on this device.',
+      const SignInProblem(SignInIssue.saveServerFailed),
     );
   });
 
@@ -174,7 +181,7 @@ void main() {
     expect(
       (s.container.read(jellyfinSignInProvider(null)) as JellyfinEnterAddress)
           .error,
-      'Could not reach this Jellyfin server. Try again.',
+      const SignInProblem(SignInIssue.jellyfinUnreachable),
     );
   });
 

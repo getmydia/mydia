@@ -10,7 +10,6 @@ library;
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/format/bitrate.dart';
-import '../../../core/playback/adaptation_policy.dart' as policy;
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_plan.dart';
 import '../../../core/playback/playback_planner.dart' show PlanInputs;
@@ -28,11 +27,6 @@ class StatsFallback {
   /// the clipboard, never to the panel.
   final String detail;
 }
-
-/// The viewer-facing sentence for [reason]. Re-exported so the test does
-/// not have to reach into `adaptation_policy.dart` for it.
-String fallbackMessageFor(FailureReason reason) =>
-    policy.fallbackMessage(reason);
 
 StatsContext buildStatsContext({
   required PlaybackPlan? plan,
@@ -79,6 +73,8 @@ StatsContext buildStatsContext({
   return StatsContext(
     mode: mode,
     qualityLabel: _qualityLabel(selectedQuality, effectiveQuality),
+    quality:
+        StatsQuality(selected: selectedQuality, effective: effectiveQuality),
     duration: duration,
     why: why,
     whyDetail: activeFallback?.detail,
@@ -116,7 +112,7 @@ PlaybackMode _mode(PlaybackPlan? plan, bool isDownloadedSource) {
 /// -- rather than from guessing it back out of [mode] and [selectedQuality],
 /// which is what let a remembered failure at one resolution mislabel an
 /// unrelated transcode of a different resolution as the same failure.
-String? _why({
+StatsWhy? _why({
   required PlaybackPlan? plan,
   required PlaybackMode mode,
   required StatsFallback? lastFallback,
@@ -128,7 +124,7 @@ String? _why({
   required DateTime? now,
 }) {
   if (lastFallback != null) {
-    return policy.fallbackMessage(lastFallback.reason);
+    return StatsWhyFallback(lastFallback.reason);
   }
   // A downloaded file may carry a stale plan from before it was recognised
   // as local; `mode` already folds that in, and nothing needs explaining
@@ -139,31 +135,31 @@ String? _why({
     // Direct play is the obvious case; only `mode == direct` ever reaches
     // it, and that already reads as "nothing to explain".
     PlanReason.directPlayAccepted => null,
-    PlanReason.copyAccepted => 'Container is not playable directly',
+    PlanReason.copyAccepted =>
+      const StatsWhyPlain(StatsWhyKind.containerNotDirect),
     PlanReason.copyRejectedByMime =>
-      "Browser can't stream-copy this container, so the server is "
-          're-encoding',
-    PlanReason.shapeKnownToFail => _shapeKnownToFailMessage(
+      const StatsWhyPlain(StatsWhyKind.copyRejectedByMime),
+    PlanReason.shapeKnownToFail => _shapeKnownToFailWhy(
         knownFailures,
         sourceHeight,
         sourceCodec,
       ),
-    PlanReason.recentStallOnPath => _recentStallMessage(recentStall, now),
-    PlanReason.fixedRungRequested =>
-      'Quality capped to ${selectedQuality.label}',
+    PlanReason.recentStallOnPath => _recentStallWhy(recentStall, now),
+    PlanReason.fixedRungRequested => StatsWhyCapped(selectedQuality),
     // Both mean the server decided this file needs re-encoding for every
     // device, not just this one -- the same generic sentence the plan-blind
     // version of this function always fell back to.
     PlanReason.noDirectPlayCandidate ||
     PlanReason.noCopyCandidate =>
-      'Server is re-encoding for this device',
-    PlanReason.webNeverDirectPlays => 'Browser playback always re-encodes',
+      const StatsWhyPlain(StatsWhyKind.serverReencoding),
+    PlanReason.webNeverDirectPlays =>
+      const StatsWhyPlain(StatsWhyKind.browserReencodes),
     // Unreachable in practice: `_fallbackToTranscode` sets `lastFallback` in
     // the same breath it sets a plan with this reason, so the
     // `lastFallback != null` branch above always wins first. Kept only so
     // this switch stays exhaustive over `PlanReason`.
-    PlanReason.fallbackFromFailure => 'Switched to transcoding earlier '
-        'this session',
+    PlanReason.fallbackFromFailure =>
+      const StatsWhyPlain(StatsWhyKind.switchedEarlier),
   };
 }
 
@@ -178,7 +174,7 @@ String? _why({
 /// Matching on codec alone here would let a failure remembered at one
 /// resolution narrate a transcode of a different resolution of the same
 /// codec, which is not what happened.
-String _shapeKnownToFailMessage(
+StatsWhy _shapeKnownToFailWhy(
   Set<FailureKey> knownFailures,
   int? sourceHeight,
   String? sourceCodec,
@@ -189,16 +185,18 @@ String _shapeKnownToFailMessage(
     sourceCodec,
   );
   return remembered == null
-      ? 'Server is re-encoding for this device'
-      : 'Remembered decode failure on $remembered';
+      ? const StatsWhyPlain(StatsWhyKind.serverReencoding)
+      : StatsWhyRemembered(remembered);
 }
 
-/// The Why sentence for [PlanReason.recentStallOnPath]: how long ago the
+/// The Why for [PlanReason.recentStallOnPath]: how long ago the
 /// stall that capped this plan happened, when the record is at hand.
-String _recentStallMessage(StallRecord? stall, DateTime? now) {
-  if (stall == null || now == null) return 'Recent stall on this connection';
+StatsWhy _recentStallWhy(StallRecord? stall, DateTime? now) {
+  if (stall == null || now == null) {
+    return const StatsWhyPlain(StatsWhyKind.recentStall);
+  }
   final minutes = now.difference(stall.at).inMinutes;
-  return 'Stalled on this connection ${minutes < 1 ? 1 : minutes} min ago';
+  return StatsWhyStalled(minutes < 1 ? 1 : minutes);
 }
 
 String? _rememberedFailureCodec(
@@ -216,6 +214,7 @@ String? _rememberedFailureCodec(
   return null;
 }
 
+/// English, for the clipboard; the panel words `StatsContext.quality`.
 String _qualityLabel(QualityRung selected, QualityRung? effective) {
   if (selected.isAuto) {
     return effective == null ? 'Auto' : 'Auto -> ${effective.label}';

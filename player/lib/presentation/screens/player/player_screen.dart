@@ -34,6 +34,7 @@ import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
 import '../../../core/player/tracks_ready.dart';
 import '../../../core/playback/isolated_fetches.dart';
+import '../../../core/playback/loading_step.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/local_playback_progress.dart' show progressKey;
 import '../../../core/playback/playback_progress_store.dart';
@@ -113,6 +114,7 @@ import '../../../core/settings/subtitle_size_setting.dart';
 import '../../../core/update/update_provider.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
+import 'session/playback_problem.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
 import 'player_screen_views.dart';
@@ -489,7 +491,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// than a race to try to win.
   bool _autoplayBlocked = false;
 
-  String? _loadingMessage;
+  LoadingStep? _loadingStep;
   int? _savedPositionSeconds;
   int? _savedDurationSeconds;
 
@@ -760,7 +762,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     saveOffset: ({required trackRef, required offsetMs}) =>
         _session.saveSubtitleOffset(trackRef: trackRef, offsetMs: offsetMs),
     canPersist: () => widget.fileId != 'offline' && _session.canWrite,
-    toast: _showToast,
+    toast: (notice, {kind = ToastKind.info}) =>
+        _showToast((l10n) => l10n.subtitleDelayNoticeText(notice), kind: kind),
     mounted: () => mounted,
     onChanged: () => setState(() {}),
   );
@@ -879,14 +882,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// turn away most of this site's viewers. Whether WebKit's loader does the
   /// same is the open question, and it needs the manual browser matrix to
   /// answer, not a guess. See that getter's doc.
-  String? _relayedPlaybackBlocker() {
+  PlaybackIssue? _relayedPlaybackBlocker() {
     if (!_relayed) return null;
 
     // Neither MediaSource nor ManagedMediaSource, so hls.js cannot run at all.
     // iOS Safari below 17.1 is the real-world case.
     if (!CodecSupport.hasHlsMediaSourceSupport) {
-      return 'This browser cannot play video here. Try the Mydia '
-          'app instead, or a browser released after 2023.';
+      return PlaybackIssue.browserUnsupported;
     }
 
     return null;
@@ -1405,10 +1407,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // outcome, but silently ignoring the chosen device is not, so say why.
     if (fileId == 'offline') {
       if (mounted) {
-        showToast(
-          context,
-          'Downloads cannot be cast — playing on this device.',
-        );
+        showToast(context, context.l10n.castDownloadsCannotCast);
       }
       return false;
     }
@@ -1426,7 +1425,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         device: target,
         request: CastLaunchRequest.forContent(
           content: _castContent(fileId),
-          title: widget.title ?? 'Untitled',
+          // Sent to the receiver, and read after an await: no `context`.
+          title: widget.title ?? currentAppLocalizations().playerUntitled,
           duration: _knownCastDuration(),
           startPosition: plan.position,
           subtitles: _session is SourcePlaybackSession
@@ -1451,7 +1451,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               ref: ref,
               isMydiaTarget: target.protocol == CastProtocolKind.mydia);
         } else {
-          showToast(context, 'Failed to start casting: $e',
+          showToast(context, context.l10n.castStartFailed('$e'),
               kind: ToastKind.error);
         }
       }
@@ -1557,8 +1557,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (isOfflineMode) {
         if (downloadedMedia == null || kIsWeb) {
           setState(() {
-            _error =
-                'This content is not available offline. Download it first to watch without a connection.';
+            _error = context.l10n
+                .playbackIssueText(PlaybackIssue.notAvailableOffline);
             _isLoading = false;
           });
           return;
@@ -1570,7 +1570,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (offlinePath == null) {
           setState(() {
             _error =
-                'Downloaded file not found. Please re-download the content.';
+                context.l10n.playbackIssueText(PlaybackIssue.downloadMissing);
             _isLoading = false;
           });
           return;
@@ -1725,7 +1725,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Online mode: the session sets up its own transport and progress.
       final preparation = await _session.prepareStreaming(
         owner: this,
-        onProgress: _setLoadingMessage,
+        onProgress: _setLoadingStep,
         isCurrent: () => _isCurrentLoad(gen),
       );
       if (!_isCurrentLoad(gen)) return;
@@ -1733,10 +1733,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       switch (preparation) {
         case StreamingSuperseded():
           return;
-        case StreamingUnavailable(:final message):
+        case StreamingUnavailable(:final problem):
           if (mounted) {
             setState(() {
-              _error = message;
+              _error = context.l10n.playbackProblemText(problem);
               _isLoading = false;
             });
           }
@@ -1769,7 +1769,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Fetch streaming candidates to determine optimal strategy
       if (mounted) {
         setState(() {
-          _loadingMessage = 'Checking file compatibility...';
+          _loadingStep =
+              const LoadingStep(LoadingStepKind.checkingCompatibility);
         });
       }
 
@@ -1831,9 +1832,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // missing P2P server address.
       final playFileId = usesServerRankedFile
           ? offer?.fileId ??
-              (throw Exception(
-                  'Could not reach the server to find a playable file for '
-                  'this title. Check your connection and try again.'))
+              (throw const PlaybackIssueException(PlaybackIssue.noFileOffered))
           : widget.fileId;
 
       await _resolveQualityForFile(offer, gen);
@@ -1935,7 +1934,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (blocker != null) {
           if (mounted) {
             setState(() {
-              _error = blocker;
+              _error = context.l10n.playbackIssueText(blocker);
               _isLoading = false;
             });
           }
@@ -1955,7 +1954,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         fileId: playFileId,
         startAt: plan.position,
         totalDuration: _totalDuration,
-        onProgress: _setLoadingMessage,
+        onProgress: _setLoadingStep,
       );
       if (!_isCurrentLoad(gen)) {
         // Opened for a file this State has moved past. The switch already
@@ -1995,7 +1994,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!_isCurrentLoad(gen)) return;
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e is PlaybackIssueException
+              ? context.l10n.playbackIssueText(e.issue)
+              : e.toString();
           _isLoading = false;
         });
       }
@@ -2328,7 +2329,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (generation != _subtitleSelectionGeneration) return;
 
     if (restore is RestoreUnavailable) {
-      _showToast(restore.message);
+      _showToast((l10n) => l10n.subtitleNoticeText(restore.notice));
       return;
     }
     if (subtitleRestoreConsumed(
@@ -2600,7 +2601,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
     // here either, since one file failing says nothing about the next.
-    _showToast(fallbackMessage(action.reason));
+    _showToast((l10n) => l10n.fallbackMessage(action.reason));
     try {
       final switched = await _switchSource(plan, at: position);
       // For the panel's Why row, recorded only once the switch actually
@@ -2624,13 +2625,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  void _showToast(String message, {ToastKind kind = ToastKind.info}) {
+  /// [message] words the toast once the State is known to be mounted, so a
+  /// caller after an `await` never reads `context` for nothing.
+  void _showToast(String Function(AppLocalizations l10n) message,
+      {ToastKind kind = ToastKind.info}) {
     if (!mounted) return;
-    showToast(context, message, kind: kind);
+    showToast(context, message(context.l10n), kind: kind);
   }
 
-  void _setLoadingMessage(String message) {
-    if (mounted) setState(() => _loadingMessage = message);
+  void _setLoadingStep(LoadingStep step) {
+    if (mounted) setState(() => _loadingStep = step);
   }
 
   /// The Original rung's subtitle: what the planner would do with the
@@ -2739,7 +2743,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (mounted) {
       setState(() {
-        _loadingMessage = null;
+        _loadingStep = null;
       });
     }
 
@@ -3482,7 +3486,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _showLostSourceError(String message) {
     setState(() {
-      _error = playbackErrorMessage(message);
+      _error = playbackErrorMessage(context.l10n, message);
       _isLoading = false;
     });
     _remoteTargetController.notifyChanged();
@@ -3656,7 +3660,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     setState(() {
-      _error = playbackErrorMessage(message);
+      _error = playbackErrorMessage(context.l10n, message);
       _isLoading = false;
     });
     _remoteTargetController.notifyChanged();
@@ -4171,8 +4175,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? null
           : Toaster.of(context).show(
               preparingImage
-                  ? kImageSubtitlePreparingMessage
-                  : 'Loading subtitle...',
+                  ? context.l10n
+                      .subtitleNoticeText(SubtitleNotice.preparingImage)
+                  : context.l10n.playerLoadingSubtitle,
               kind: ToastKind.progress,
               duration: preparingImage ? kImageSidecarTimeLimit : null,
             );
@@ -4213,7 +4218,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // so it cannot itself prove `context` is safe to use here. This
         // repeats the same check directly so it can.
         if (!mounted) return generation;
-        showToast(context, resolved.failureMessage, kind: ToastKind.error);
+        final failure = resolved.failure;
+        if (failure != null) {
+          showToast(context, context.l10n.subtitleNoticeText(failure),
+              kind: ToastKind.error);
+        }
         return generation;
       }
 
@@ -4370,14 +4379,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     required int generation,
   }) async {
     final cached = _mediaKitSubtitleTrackMap[track.id];
-    if (cached != null) return (track: cached, failureMessage: '');
+    if (cached != null) return (track: cached, failure: null);
 
     if (isImageSubtitleTrack(track)) {
       return _fetchImageSubtitleTrack(track, generation: generation);
     }
 
     final fetched = await _fetchTextSubtitleTrack(track);
-    return (track: fetched, failureMessage: kSubtitleLoadFailedMessage);
+    return (track: fetched, failure: SubtitleNotice.loadFailed);
   }
 
   /// Fetches bitmap [track] as the sidecar the server copies out of the
@@ -4393,7 +4402,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }) async {
     final source = _playback?.sessionFile(imageSidecarName(track.id));
     if (source == null) {
-      return (track: null, failureMessage: kImageSubtitleUnavailableMessage);
+      return (track: null, failure: SubtitleNotice.imageOnlyAtOriginal);
     }
 
     final fetch = await fetchImageSidecar(
@@ -4411,13 +4420,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           language: track.language,
         );
         _mediaKitSubtitleTrackMap[track.id] = mkTrack;
-        return (track: mkTrack, failureMessage: '');
+        return (track: mkTrack, failure: null);
       case SidecarCancelled():
-        return (track: null, failureMessage: '');
+        return (track: null, failure: null);
       case SidecarUnsupported() || SidecarFailed():
         debugPrint(
             '[PlayerScreen] Bitmap subtitle ${track.id} unavailable: $fetch');
-        return (track: null, failureMessage: imageSidecarFailureMessage(fetch));
+        return (track: null, failure: imageSidecarFailureNotice(fetch));
     }
   }
 
@@ -4756,9 +4765,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           return true;
         }
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
-        _showToast(isFallback
-            ? 'Returning to ${rung.label}'
-            : 'Switching to ${rung.label}');
+        _showToast((l10n) => isFallback
+            ? l10n.playerReturningQuality(l10n.qualityName(rung))
+            : l10n.playerSwitchingQuality(l10n.qualityName(rung)));
         return _switchSource(plan, at: position);
       },
       stillActive: () => mounted,
@@ -5007,7 +5016,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _scalingTouched = true;
     setState(() => _scaling = next);
     unawaited(VideoScalingPrefs.save(next));
-    _showToast(context.l10n.videoScalingToast(next));
+    _showToast((l10n) => l10n.videoScalingToast(next));
   }
 
   void _toggleScaling() => _setScaling(_scaling.toggled);
@@ -5248,7 +5257,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // `widget.mediaId` is the media item itself and there is no episode.
       mediaItemId: widget.mediaType == 'episode' ? _showId : widget.mediaId,
       episodeId: widget.mediaType == 'episode' ? widget.mediaId : null,
-      title: widget.title ?? 'Untitled',
+      title: widget.title ?? currentAppLocalizations().playerUntitled,
       subtitle: null,
       imageUrl: null,
       positionMs: BigInt.from(position.inMilliseconds),
@@ -5297,7 +5306,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _nowPlaying.publish(
       this,
       NowPlaying(
-        title: widget.title ?? 'Untitled',
+        title: widget.title ?? currentAppLocalizations().playerUntitled,
         isPlaying: _player?.state.playing ?? false,
         hasNext: _upNext.hasNext,
       ),
@@ -5399,7 +5408,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     Widget body = _castSupported && isCasting && castSession != null
         ? CastPlaceholderView(
             session: castSession,
-            title: widget.title ?? 'Untitled',
+            title: widget.title ?? context.l10n.playerUntitled,
             segmentAt: _segmentSkipper.segmentAt,
             onSkip: (segment) => _castSeekToReal(segment.end),
           )
@@ -5593,7 +5602,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return _withCastAffordance(PlayerLoadingView(message: _loadingMessage));
+      final step = _loadingStep;
+      return _withCastAffordance(PlayerLoadingView(
+          message: step == null ? null : context.l10n.loadingStepText(step)));
     }
 
     if (_error != null) {
@@ -5814,8 +5825,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       audioTrack: player?.state.track.audio,
       linkLabel: status == null
           ? context.l10n.connectionLabel(summary)
-          : '${context.l10n.connectionLabel(summary)} - ${status.connectedPeersCount} peer'
-              '${status.connectedPeersCount == 1 ? '' : 's'}',
+          : context.l10n.statsLinkPeers(context.l10n.connectionLabel(summary),
+              status.connectedPeersCount),
       linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
@@ -5834,10 +5845,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // `onPressed` is fire-and-forget, so an uncaught failure here would
       // reach nothing the viewer can see.
       debugPrint('[PlayerScreen] Could not copy stats: $e');
-      _showToast('Could not copy stats', kind: ToastKind.error);
+      _showToast((l10n) => l10n.playerStatsCopyFailed, kind: ToastKind.error);
       return;
     }
-    _showToast('Stats copied', kind: ToastKind.success);
+    _showToast((l10n) => l10n.playerStatsCopied, kind: ToastKind.success);
   }
 
   /// What a cast of the current item plays. A third-party item carries no
@@ -5895,7 +5906,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           device: device,
           request: CastLaunchRequest.forContent(
             content: _castContent(widget.fileId),
-            title: widget.title ?? 'Untitled',
+            title: widget.title ?? currentAppLocalizations().playerUntitled,
             startPosition: startPosition,
             // The receiver cannot work this out for itself: Mydia's HLS
             // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
@@ -5913,7 +5924,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       if (mounted) {
-        showToast(context, 'Casting to ${device.name}');
+        showToast(context, context.l10n.castBarCastingStatus(device.name));
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
@@ -5926,7 +5937,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // failures would close the picker with no toast and no log.
       debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to start casting: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castStartFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -5946,7 +5958,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
 /// A picked subtitle track made loadable, or null with the line to show the
 /// viewer instead. See `_resolveMediaKitSubtitleTrack`.
-typedef _ResolvedSubtitle = ({SubtitleTrack? track, String failureMessage});
+typedef _ResolvedSubtitle = ({SubtitleTrack? track, SubtitleNotice? failure});
 
 /// A viewer pick waiting in [_PlayerScreenState._subtitlePreferenceWrite] to
 /// be written back, together with everything that identifies the choice it

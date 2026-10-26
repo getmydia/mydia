@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/widgets/downloaded_episode_card.dart';
 import 'package:player/presentation/screens/downloads/widgets/downloaded_episode_rail.dart';
 
@@ -37,6 +38,8 @@ Future<void> _pump(WidgetTester tester, int count) async {
               .overrideWith((ref) async => InMemoryPlaybackProgressStore()),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: DownloadedEpisodeRail(
               episodes: List.generate(count, (i) => _media(i + 1)),
