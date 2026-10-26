@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/locale_setting.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
+import 'package:player/l10n/l10n.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 
@@ -28,6 +29,10 @@ class _SlowFirstWriteStorage extends MockAuthStorage {
 }
 
 void main() {
+  // LocaleSetting mirrors its state into a process-global; clear it so the
+  // choice made here cannot leak into later tests in the same isolate.
+  tearDown(() => rememberInterfaceLocale(null));
+
   ProviderContainer containerWith(MockAuthStorage storage) {
     final c = ProviderContainer(overrides: [
       coreSettingsServiceProvider
