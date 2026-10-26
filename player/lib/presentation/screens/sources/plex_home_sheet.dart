@@ -10,6 +10,7 @@ import '../../../core/sources/plex/plex_tv_client.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'plex_pin_dialog.dart';
@@ -63,6 +64,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
   Future<void> _pick(PlexHomeUser user) async {
     if (_busy) return;
     final toaster = Toaster.of(context);
+    final l10n = context.l10n;
     final navigator = Navigator.of(context);
     final container = ProviderScope.containerOf(context, listen: false);
     final switcher = await ref.read(plexHomeSwitcherProvider.future);
@@ -106,7 +108,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
       toaster.show(
         error is SourceException
             ? error.viewerMessage
-            : 'Could not switch to ${user.title}.',
+            : l10n.sourcesSwitchUserFailed(user.title),
         kind: ToastKind.error,
       );
       if (mounted) setState(() => _busy = false);
@@ -145,16 +147,19 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: Text('Switch user', style: theme.textTheme.titleMedium),
+              child: Text(
+                context.l10n.sourcesSwitchUser,
+                style: theme.textTheme.titleMedium,
+              ),
             ),
             FutureBuilder<List<PlexHomeUser>>(
               future: _users,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return const Padding(
-                    key: Key('plex-home-error'),
-                    padding: EdgeInsets.all(24),
-                    child: Text("Could not load this account's users."),
+                  return Padding(
+                    key: const Key('plex-home-error'),
+                    padding: const EdgeInsets.all(24),
+                    child: Text(context.l10n.sourcesPlexUsersLoadFailed),
                   );
                 }
                 final users = snapshot.data;
@@ -165,10 +170,10 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
                   );
                 }
                 if (users.isEmpty) {
-                  return const Padding(
-                    key: Key('plex-home-empty'),
-                    padding: EdgeInsets.all(24),
-                    child: Text('This account has no other Plex Home users.'),
+                  return Padding(
+                    key: const Key('plex-home-empty'),
+                    padding: const EdgeInsets.all(24),
+                    child: Text(context.l10n.sourcesPlexNoHomeUsers),
                   );
                 }
                 return Column(

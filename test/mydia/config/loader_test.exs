@@ -40,6 +40,7 @@ defmodule Mydia.Config.LoaderTest do
         "POOL_SIZE",
         "LOCAL_AUTH_ENABLED",
         "OIDC_ENABLED",
+        "OIDC_LINK_BY_EMAIL",
         "OIDC_ISSUER",
         "OIDC_CLIENT_ID",
         "OIDC_CLIENT_SECRET",
@@ -243,6 +244,15 @@ defmodule Mydia.Config.LoaderTest do
 
       assert config.auth.local_enabled == false
       assert config.auth.oidc_enabled == true
+    end
+
+    test "OIDC_LINK_BY_EMAIL defaults to false and parses booleans" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.auth.oidc_link_by_email == false
+
+      System.put_env("OIDC_LINK_BY_EMAIL", "true")
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.auth.oidc_link_by_email == true
     end
 
     test "handles integer environment variables correctly" do

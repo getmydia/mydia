@@ -16,6 +16,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/source_artwork.dart';
@@ -40,7 +41,7 @@ List<Widget> sourceSearchActions(BuildContext context, SourceId sourceId) => [
             child: const Icon(Icons.search_rounded, size: 20),
           ),
           onPressed: () => context.push(sourceSearchLocation(sourceId)),
-          tooltip: 'Search',
+          tooltip: context.l10n.navSearch,
         ),
     ];
 
@@ -190,7 +191,7 @@ class _ErrorView extends StatelessWidget {
               key: const Key('source-listing-retry'),
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
+              label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),

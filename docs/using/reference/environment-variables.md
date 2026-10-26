@@ -105,6 +105,7 @@ name as `s3://<name>/<prefix>`.
 | `OIDC_CLIENT_SECRET` | OIDC client secret | - |
 | `OIDC_REDIRECT_URI` | OIDC callback URL | Auto-computed |
 | `OIDC_SCOPES` | Space-separated scope list | `openid profile email` |
+| `OIDC_LINK_BY_EMAIL` | On first SSO sign-in, attach the SSO identity to the existing local account with the same email, if your identity provider marks that email as verified | `false` |
 | `LIBRARY_API_KEY` | Admin key for the [Library API](library-api.md), sent as the `x-api-key` header. Optional; unset means only database API keys work. Minimum 32 characters. Generate with `openssl rand -hex 32`. Remove it and restart to revoke. | (unset) |
 
 !!! note "Legacy Variable"

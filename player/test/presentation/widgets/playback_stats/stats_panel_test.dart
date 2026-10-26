@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
@@ -37,7 +38,7 @@ const _context = StatsContext(
   mode: PlaybackMode.transcode,
   qualityLabel: 'Auto -> 1080p',
   duration: Duration(hours: 1, minutes: 52, seconds: 40),
-  why: 'Switched to transcoding for this device',
+  why: StatsWhyFallback(FailureReason.decodeTooSlow),
   whyDetail: 'decodeTooSlow: 47 drops in last 10s (limit 12)',
   sourceLabel: '2160p hevc - 14.2 Mb/s - mkv',
   videoLabel: '1920x1080 h264 - 23.976 fps',

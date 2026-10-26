@@ -10,6 +10,7 @@ import 'package:gql/ast.dart' show DocumentNode;
 
 import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/playback/candidates_from_graphql.dart';
+import '../../../../core/playback/loading_step.dart';
 import '../../../../core/playback/playback_controller.dart';
 import '../../../../core/playback/stream_urls.dart';
 import '../../../../core/player/progress_reporter.dart';
@@ -43,6 +44,7 @@ import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
 import '../../../../graphql/schema.graphql.dart';
 import '../../detail/detail_links.dart';
 import '../subtitle_preference.dart';
+import 'playback_problem.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
@@ -114,7 +116,7 @@ class MydiaPlaybackSession implements PlaybackSession {
   @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
-    required void Function(String message) onProgress,
+    required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
   }) async {
     final client = source.client;
@@ -122,7 +124,7 @@ class MydiaPlaybackSession implements PlaybackSession {
     try {
       credentials = await client.credentials();
     } on SourceException catch (e) {
-      return StreamingUnavailable(e.viewerMessage);
+      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
     }
     if (!isCurrent()) return const StreamingSuperseded();
 
@@ -130,20 +132,23 @@ class MydiaPlaybackSession implements PlaybackSession {
     final target = source.source.account.id;
     final StreamUrls urls;
     if (credentials.isP2p) {
-      onProgress('Connecting via P2P...');
+      onProgress(const LoadingStep(LoadingStepKind.connectingP2p));
       // Held against the screen's State, released at its dispose. A re-run
       // re-targets the proxy without stacking holds.
       try {
         await mydiaProxyBase(_proxy(), credentials,
             owner: owner, target: target);
       } on ArgumentError catch (e) {
-        return StreamingUnavailable(
-            '${e.message ?? 'This server cannot be played over p2p.'}');
+        final detail = e.message;
+        return StreamingUnavailable(detail == null
+            ? const PlaybackProblem(PlaybackIssue.p2pUnsupported)
+            : PlaybackProblem.fromText('$detail'));
       }
       if (!isCurrent()) return const StreamingSuperseded();
       urls = ProxyStreamUrls(_proxy(), target: target);
     } else if (serverUrl == null) {
-      return const StreamingUnavailable('Server URL not available');
+      return const StreamingUnavailable(
+          PlaybackProblem(PlaybackIssue.serverUrlMissing));
     } else {
       urls = HttpStreamUrls(
         serverUrl: serverUrl,
@@ -540,7 +545,7 @@ class MydiaPlaybackSession implements PlaybackSession {
       return const SubtitleSearchOutcome(
         results: [],
         providers: [],
-        error: 'Subtitle search needs a connection to your server.',
+        issue: SubtitleIssue.searchOffline,
       );
     }
 
@@ -561,17 +566,20 @@ class MydiaPlaybackSession implements PlaybackSession {
       );
     } on SourceException catch (e) {
       debugPrint('[PlayerScreen] Subtitle search failed: $e');
+      final message = e.message;
+      final hasMessage = message != null && message.isNotEmpty;
       return SubtitleSearchOutcome(
         results: const [],
         providers: const [],
-        error: _friendlyError(e, 'Could not reach the server. Try again.'),
+        error: hasMessage ? message : null,
+        issue: hasMessage ? null : SubtitleIssue.searchUnreachable,
       );
     } catch (e) {
       debugPrint('[PlayerScreen] Error searching subtitles: $e');
       return const SubtitleSearchOutcome(
         results: [],
         providers: [],
-        error: 'Subtitle search failed. Try again.',
+        issue: SubtitleIssue.searchFailed,
       );
     }
   }
@@ -590,9 +598,7 @@ class MydiaPlaybackSession implements PlaybackSession {
   @override
   Future<SubtitleTrack> downloadSubtitle(SubtitleCandidate candidate) async {
     if (fileId == 'offline') {
-      throw const SubtitleActionException(
-        'Downloading subtitles needs a connection to your server.',
-      );
+      throw const SubtitleActionException.issue(SubtitleIssue.downloadOffline);
     }
 
     final Map<String, dynamic> data;
@@ -606,9 +612,10 @@ class MydiaPlaybackSession implements PlaybackSession {
       );
     } on SourceException catch (e) {
       debugPrint('[PlayerScreen] Subtitle download failed: $e');
-      throw SubtitleActionException(
-        _friendlyError(e, 'Could not download that subtitle. Try again.'),
-      );
+      final message = e.message;
+      throw message != null && message.isNotEmpty
+          ? SubtitleActionException(message)
+          : const SubtitleActionException.issue(SubtitleIssue.downloadFailed);
     }
 
     return SubtitleTrack.fromDownload(
@@ -648,16 +655,9 @@ class MydiaPlaybackSession implements PlaybackSession {
     }
   }
 
-  /// The line to show a viewer for a failed GraphQL operation.
-  ///
-  /// A resolver's own message is written for one -- "These search results
-  /// expired. Search again.", "This file has no hash or metadata IDs to
-  /// search with" -- and is the only part of the failure worth reading. A
-  /// transport failure carries no such message, so those fall back to
-  /// [fallback].
-  static String _friendlyError(SourceException e, String fallback) {
-    final message = e.message;
-    if (message != null && message.isNotEmpty) return message;
-    return fallback;
-  }
+  // A resolver's own message is written for a viewer -- "These search
+  // results expired. Search again.", "This file has no hash or metadata IDs
+  // to search with" -- and is the only part of a failed GraphQL operation
+  // worth reading, so the two catches above show it as it is. A transport
+  // failure carries no such message and gets a [SubtitleIssue] instead.
 }

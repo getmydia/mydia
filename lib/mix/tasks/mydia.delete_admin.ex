@@ -57,8 +57,7 @@ defmodule Mix.Tasks.Mydia.DeleteAdmin do
 
         Enum.each(users, fn user ->
           display_name = user.email || user.username || "ID: #{user.id}"
-          auth_type = if user.oidc_sub, do: "OIDC", else: "Local"
-          Mix.shell().info("  - #{display_name} (#{auth_type})")
+          Mix.shell().info("  - #{display_name} (#{Accounts.auth_method_label(user)})")
         end)
 
         # Delete all admin users

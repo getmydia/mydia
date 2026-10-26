@@ -52,7 +52,11 @@ void main() {
         overrides: [
           hasMydiaProvider.overrideWithValue(mydia),
         ],
-        child: const MaterialApp(home: AddSourceScreen()),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: AddSourceScreen(),
+        ),
       ));
 
   testWidgets('the add screen offers Plex, Stash and Mydia', (tester) async {
@@ -78,7 +82,11 @@ void main() {
       overrides: [
         hasMydiaProvider.overrideWithValue(true),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ));
     await tester.pumpAndSettle();
 
@@ -98,7 +106,11 @@ void main() {
       overrides: [
         hasMydiaProvider.overrideWithValue(true),
       ],
-      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: true),
+      ),
     ));
     final tile =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
@@ -113,7 +125,11 @@ void main() {
       overrides: [
         hasMydiaProvider.overrideWithValue(false),
       ],
-      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: true),
+      ),
     ));
     final tile =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));

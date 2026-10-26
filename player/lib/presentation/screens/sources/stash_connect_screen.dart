@@ -13,8 +13,10 @@ import '../../../core/sources/stash/stash_client.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import 'server_url.dart';
+import 'sign_in_problem.dart';
 
 /// What the viewer typed, as a Stash server root.
 Uri? parseStashUrl(String text) => parseServerUrl(text);
@@ -86,7 +88,7 @@ class StashConnectScreen extends ConsumerStatefulWidget {
 class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
   final _url = TextEditingController();
   final _key = TextEditingController();
-  String? _error;
+  SignInProblem? _error;
   bool _busy = false;
 
   @override
@@ -113,15 +115,16 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
   Future<void> _connect() async {
     final uri = parseStashUrl(_url.text);
     if (uri == null) {
-      setState(() => _error =
-          'Enter the address of your Stash server, like http://192.168.1.20:9999');
+      setState(() => _error = const SignInProblem(
+            SignInIssue.stashAddressInvalid,
+          ));
       return;
     }
     final key = _key.text.trim();
     if (uri.scheme == 'http' && key.isNotEmpty && !isPrivateHost(uri.host)) {
-      setState(() => _error =
-          'Use https:// for a Stash server outside your network, so the API '
-              'key is not sent in the clear.');
+      setState(() => _error = const SignInProblem(
+            SignInIssue.stashHttpsRequired,
+          ));
       return;
     }
     setState(() {
@@ -145,13 +148,13 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
     } on SourceException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.kind == SourceErrorKind.unauthorized
-          ? 'Stash rejected that API key. Copy it from Stash under '
-              'Settings, Security.'
-          : e.viewerMessage);
+          ? const SignInProblem(SignInIssue.stashKeyRejected)
+          : SignInProblem.fromServer(e.viewerMessage));
     } catch (_) {
       // Secure storage or the record store failed after the server answered.
       if (!mounted) return;
-      setState(() => _error = 'Could not save this server on this device.');
+      setState(
+          () => _error = const SignInProblem(SignInIssue.saveServerFailed));
     } finally {
       connection.dispose();
       if (mounted) setState(() => _busy = false);
@@ -161,7 +164,7 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect Stash')),
+      appBar: AppBar(title: Text(context.l10n.sourcesStashConnectTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -174,9 +177,9 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
                 controller: _url,
                 autofocus: true,
                 keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Server address',
-                  hintText: 'http://192.168.1.20:9999',
+                decoration: InputDecoration(
+                  labelText: context.l10n.sourcesServerAddressLabel,
+                  hintText: 'http://192.168.1.20:9999', // l10n-ignore: example
                 ),
               ),
               const SizedBox(height: 16),
@@ -184,14 +187,14 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
                 key: const Key('stash-key-field'),
                 controller: _key,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'API key (if Stash asks for a login)',
+                decoration: InputDecoration(
+                  labelText: context.l10n.sourcesStashKeyLabel,
                 ),
                 onSubmitted: (_) => _connect(),
               ),
               if (_error case final error?) ...[
                 const SizedBox(height: 16),
-                Text(error,
+                Text(context.l10n.signInProblemText(error),
                     style:
                         TextStyle(color: Theme.of(context).colorScheme.error)),
               ],
@@ -203,7 +206,7 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Connect'),
+                    : Text(context.l10n.loginConnect),
               ),
             ],
           ),

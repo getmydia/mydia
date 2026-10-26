@@ -8,6 +8,7 @@ import '../../../../core/playback/playback_transport.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../subtitle_preference.dart';
+import 'playback_problem.dart';
 
 /// What the screen is playing, read from the route on every call.
 class PlaybackTarget {
@@ -176,10 +177,10 @@ final class StreamingReady extends StreamingPreparation {
   final StreamingSetup setup;
 }
 
-/// Streaming cannot start; [message] is shown as the screen's error.
+/// Streaming cannot start; [problem] is shown as the screen's error.
 final class StreamingUnavailable extends StreamingPreparation {
-  const StreamingUnavailable(this.message);
-  final String message;
+  const StreamingUnavailable(this.problem);
+  final PlaybackProblem problem;
 }
 
 /// The load moved on while this was preparing.

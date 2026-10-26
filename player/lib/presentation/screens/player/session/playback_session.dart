@@ -4,6 +4,7 @@
 /// not rewritten. The third-party sources implement the same members.
 library;
 
+import '../../../../core/playback/loading_step.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
@@ -78,7 +79,7 @@ abstract interface class PlaybackSession {
   /// shows the error.
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
-    required void Function(String message) onProgress,
+    required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
   });
 

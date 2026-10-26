@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/subtitle_track.dart' as app_models;
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/player/subtitle_delay_controller.dart';
+import 'package:player/presentation/screens/player/subtitle_track_builder.dart'
+    show SubtitleDelayNotice;
 import 'package:player/presentation/widgets/toast/toaster.dart';
 
 const _server = app_models.SubtitleTrack(id: 'track-1', language: 'en');
@@ -30,7 +32,7 @@ class _Harness {
   app_models.SubtitleTrack? selected = _server;
   final applied = <int>[];
   final saved = <(String, int)>[];
-  final toasts = <(String, ToastKind)>[];
+  final toasts = <(SubtitleDelayNotice, ToastKind)>[];
   var changes = 0;
 }
 

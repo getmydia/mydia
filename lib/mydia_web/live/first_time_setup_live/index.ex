@@ -25,16 +25,9 @@ defmodule MydiaWeb.FirstTimeSetupLive.Index do
        |> assign(:page_title, gettext("Welcome to Mydia"))
        |> assign(:password_mode, :custom)
        |> assign(:generated_password, nil)
-       |> assign(:oidc_configured, oidc_configured?())
+       |> assign(:oidc_configured, Accounts.oidc_configured?())
        |> assign(:local_auth_enabled, local_auth_enabled?())
        |> assign(:form, to_form(Accounts.change_user(%Accounts.User{})))}
-    end
-  end
-
-  defp oidc_configured? do
-    case Application.get_env(:ueberauth, Ueberauth) do
-      nil -> false
-      config -> Keyword.get(config, :providers, []) != []
     end
   end
 

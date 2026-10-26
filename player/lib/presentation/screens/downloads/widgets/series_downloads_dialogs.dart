@@ -6,12 +6,14 @@ import '../../../../core/sources/source.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 
 /// "Specials" for season 0, "Season N" otherwise. Season 0 is the conventional
 /// home for specials in both TVDB and TMDB data.
-String seasonLabel(int seasonNumber) =>
-    seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+String seasonLabel(AppLocalizations l10n, int seasonNumber) => seasonNumber == 0
+    ? l10n.downloadsSeasonSpecials
+    : l10n.downloadsSeasonNumber(seasonNumber);
 
 /// Confirms stopping an in-progress download.
 Future<void> showCancelDownloadDialog(
@@ -23,20 +25,20 @@ Future<void> showCancelDownloadDialog(
     context: context,
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
-      title: const Text('Cancel Download?'),
-      content: Text('Stop downloading ${task.episodeCode}?'),
+      title: Text(context.l10n.downloadsCancelDownloadTitle),
+      content: Text(context.l10n.downloadsCancelEpisodeBody(task.episodeCode)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
-            'Keep',
+            context.l10n.downloadsKeep,
             style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
           style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-          child: const Text('Cancel Download'),
+          child: Text(context.l10n.downloadsCancelDownloadAction),
         ),
       ],
     ),
@@ -59,17 +61,17 @@ Future<void> showDeleteEpisodeDialog(
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       destructive: true,
-      title: const Text('Delete Episode'),
-      content: Text('Delete ${media.episodeCode}?'),
+      title: Text(context.l10n.downloadsDeleteEpisodeTitle),
+      content: Text(context.l10n.downloadsDeleteEpisodeBody(media.episodeCode)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
           style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-          child: const Text('Delete'),
+          child: Text(context.l10n.commonDelete),
         ),
       ],
     ),
@@ -91,29 +93,28 @@ Future<void> showDeleteSeasonDialog(
   required int seasonNumber,
   required int episodeCount,
 }) async {
-  final label = seasonLabel(seasonNumber);
+  final label = seasonLabel(context.l10n, seasonNumber);
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       destructive: true,
-      title: Text('Delete $label?'),
+      title: Text(context.l10n.downloadsDeleteSeasonTitle(label)),
       content: Text(
-        'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} '
-        'from $label of "$showTitle"?',
+        context.l10n.downloadsDeleteSeasonBody(episodeCount, label, showTitle),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
-            'Cancel',
+            context.l10n.commonCancel,
             style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
           style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-          child: const Text('Delete'),
+          child: Text(context.l10n.commonDelete),
         ),
       ],
     ),
@@ -147,23 +148,22 @@ Future<bool> showDeleteAllDialog(
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       destructive: true,
-      title: const Text('Delete All Episodes'),
+      title: Text(context.l10n.downloadsDeleteAllEpisodesTitle),
       content: Text(
-        'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} '
-        'of "$showTitle"?',
+        context.l10n.downloadsDeleteAllEpisodesBody(totalCount, showTitle),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
-            'Cancel',
+            context.l10n.commonCancel,
             style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
           style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-          child: const Text('Delete All'),
+          child: Text(context.l10n.downloadsDeleteAllAction),
         ),
       ],
     ),

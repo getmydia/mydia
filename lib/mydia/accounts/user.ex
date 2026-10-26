@@ -103,6 +103,18 @@ defmodule Mydia.Accounts.User do
   end
 
   @doc """
+  Changeset that attaches or detaches an OIDC identity on an existing account.
+
+  Built with `change/2`, never `cast/3`: the values come from a verified
+  Ueberauth callback, not from user params. Unlinking passes `nil` for both.
+  """
+  def oidc_link_changeset(user, oidc_sub, oidc_issuer) do
+    user
+    |> change(oidc_sub: oidc_sub, oidc_issuer: oidc_issuer)
+    |> unique_constraint(:oidc_sub)
+  end
+
+  @doc """
   Changeset for updating last login timestamp.
   """
   def login_changeset(user) do

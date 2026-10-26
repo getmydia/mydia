@@ -12,6 +12,7 @@ import '../../../core/sources/lock/device_auth.dart';
 import '../../../core/sources/lock/pin_store.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
@@ -94,8 +95,8 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
           _showPin = true;
         });
       case DeviceAuthResult.failed:
-        Toaster.of(context).show('Could not unlock. Try again or use your PIN.',
-            kind: ToastKind.error);
+        Toaster.of(context)
+            .show(context.l10n.sourcesUnlockFailed, kind: ToastKind.error);
       case DeviceAuthResult.cancelled:
         break;
     }
@@ -110,10 +111,10 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
         _continue();
         return null;
       case PinRejected():
-        return 'Wrong PIN.';
+        return context.l10n.sourcesPinWrong;
       case PinBlocked(:final until):
         final seconds = until.difference(DateTime.now()).inSeconds + 1;
-        return 'Too many tries. Wait $seconds seconds.';
+        return context.l10n.sourcesPinBlocked(seconds);
     }
   }
 
@@ -121,30 +122,29 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => GlassDialog(
-        title: const Text('Forgot your PIN?'),
-        content: const Text('Every server you locked or hid is removed from '
-            'this device, and the PIN is deleted. Nothing changes on the '
-            'servers; add them again to use them.'),
+        title: Text(context.l10n.sourcesUnlockForgotTitle),
+        content: Text(context.l10n.sourcesUnlockForgotBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           TextButton(
             key: const Key('unlock-forgot-confirm'),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove them'),
+            child: Text(context.l10n.sourcesUnlockForgotConfirm),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
     final toaster = Toaster.of(context);
+    final removeFailed = context.l10n.sourcesUnlockRemoveFailed;
     try {
       await ref.read(sourceRecordsProvider.notifier).removeLockedAccounts();
       await ref.read(pinStoreProvider).clear();
     } catch (_) {
-      toaster.show('Could not remove them.', kind: ToastKind.error);
+      toaster.show(removeFailed, kind: ToastKind.error);
       return;
     }
     if (mounted) context.go('/');
@@ -162,12 +162,10 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
               children: [
                 const Icon(Icons.lock_rounded, size: 48),
                 const SizedBox(height: 16),
-                Text('Unlock',
+                Text(context.l10n.sourcesUnlock,
                     style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 8),
-                const Text(
-                    'Locked and hidden servers open until the app '
-                    'has been in the background for a minute.',
+                Text(context.l10n.sourcesUnlockBody,
                     textAlign: TextAlign.center),
                 const SizedBox(height: 24),
                 if (_showPin)
@@ -177,7 +175,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                     key: const Key('unlock-retry-device'),
                     onPressed: _prompting ? null : _tryDevice,
                     icon: const Icon(Icons.fingerprint_rounded),
-                    label: const Text('Unlock'),
+                    label: Text(context.l10n.sourcesUnlock),
                   ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -188,18 +186,18 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                       TextButton(
                         key: const Key('unlock-use-pin'),
                         onPressed: () => setState(() => _showPin = true),
-                        child: const Text('Use PIN'),
+                        child: Text(context.l10n.sourcesUnlockUsePin),
                       ),
                     if (_showPin)
                       TextButton(
                         key: const Key('unlock-forgot-pin'),
                         onPressed: _forgotPin,
-                        child: const Text('Forgot PIN'),
+                        child: Text(context.l10n.sourcesUnlockForgotPin),
                       ),
                     TextButton(
                       key: const Key('unlock-cancel'),
                       onPressed: _leave,
-                      child: const Text('Cancel'),
+                      child: Text(context.l10n.commonCancel),
                     ),
                   ],
                 ),

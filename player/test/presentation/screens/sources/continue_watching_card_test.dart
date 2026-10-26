@@ -5,6 +5,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/continue_watching_card.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import 'fake_media_source.dart';
@@ -32,6 +33,8 @@ Future<void> _pump(
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
     ],
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Center(
           child: ContinueWatchingCard(
@@ -118,6 +121,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Center(
             child: ContinueWatchingCard(
@@ -146,6 +151,8 @@ void main() {
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: TextScaler.linear(scale)),

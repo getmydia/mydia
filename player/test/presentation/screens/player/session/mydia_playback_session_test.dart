@@ -440,8 +440,7 @@ void main() {
       final server = _answering(<String, dynamic>{});
       final outcome =
           await _session(server, fileId: 'offline').searchSubtitles(['eng']);
-      expect(
-          outcome.error, 'Subtitle search needs a connection to your server.');
+      expect(outcome.issue, SubtitleIssue.searchOffline);
       expect(server.requests, isEmpty);
     });
 
@@ -454,7 +453,7 @@ void main() {
     test('falls back to generic copy when the server is unreachable', () async {
       final server = _answering(const SourceException.unreachable());
       final outcome = await _session(server).searchSubtitles(['eng']);
-      expect(outcome.error, 'Could not reach the server. Try again.');
+      expect(outcome.issue, SubtitleIssue.searchUnreachable);
     });
 
     test('sends the file and languages', () async {
@@ -572,7 +571,8 @@ void main() {
       final server = _answering(<String, dynamic>{});
       await expectLater(
         _session(server, fileId: 'offline').downloadSubtitle(_candidate()),
-        throwsA(isA<SubtitleActionException>()),
+        throwsA(isA<SubtitleActionException>()
+            .having((e) => e.issue, 'issue', SubtitleIssue.downloadOffline)),
       );
       expect(server.requests, isEmpty);
     });

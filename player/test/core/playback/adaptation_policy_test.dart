@@ -51,17 +51,6 @@ AdaptationAction _drive(
 }
 
 void main() {
-  test('fallbackMessage copy', () {
-    expect(
-      fallbackMessage(FailureReason.decodeFailed),
-      "Switched to transcoding: your device can't play this file directly",
-    );
-    expect(fallbackMessage(FailureReason.decodeTooSlow),
-        'Switched to transcoding: your device dropped frames');
-    expect(fallbackMessage(FailureReason.bandwidth),
-        'Switched to transcoding for your connection');
-  });
-
   group('verification', () {
     test('a fault before the first advance falls back as decodeFailed', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);

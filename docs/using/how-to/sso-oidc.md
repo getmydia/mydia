@@ -149,6 +149,24 @@ OIDC_ENABLED=true
 !!! warning
     Ensure OIDC is working before disabling local auth to avoid lockout.
 
+## Linking existing local accounts
+
+A user who already has a local account can attach SSO to it from
+**Profile → Security → Link SSO account**. They sign in at the identity
+provider once, and from then on either sign-in method opens the same account.
+They can unlink again from the same place, as long as the account still has a
+password or a passkey.
+
+To link accounts automatically instead, set `OIDC_LINK_BY_EMAIL=true`. On a
+user's first SSO sign-in, Mydia then attaches the SSO identity to the local
+account with the same email address, but only when the identity provider sends
+`email_verified: true`. Enable this only if you trust your identity provider
+to verify email addresses: anyone who can get an unverified address marked
+verified there can take over the matching Mydia account.
+
+Without either, an SSO sign-in whose email matches a local account is refused
+with a message pointing the user to the Profile page.
+
 ## Scopes
 
 Default scopes:

@@ -10,6 +10,7 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../player/player_screen.dart';
 import '../player/session/playback_session.dart';
@@ -144,9 +145,9 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
         child: Builder(
           builder: (context) => Scaffold(
             appBar: WindowTitleBar.back(context, showCast: false),
-            body: const Center(
-              key: Key('source-player-unavailable'),
-              child: Text('This server is not available to play from.'),
+            body: Center(
+              key: const Key('source-player-unavailable'),
+              child: Text(context.l10n.sourcesPlayerUnavailable),
             ),
           ),
         ),

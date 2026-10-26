@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/build_channel.dart';
+import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
+import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/l10n/l10n.dart';
 
@@ -18,7 +20,7 @@ const _context = StatsContext(
   mode: PlaybackMode.transcode,
   qualityLabel: 'Auto -> 1080p',
   duration: Duration(hours: 1, minutes: 52, seconds: 40),
-  why: 'Switched to transcoding for this device',
+  why: StatsWhyFallback(FailureReason.decodeTooSlow),
   whyDetail: 'decodeTooSlow: 47 drops in last 10s (limit 12)',
   sourceLabel: '2160p hevc - 14.2 Mb/s - mkv',
   videoLabel: '1920x1080 h264 - 23.976 fps',
@@ -65,6 +67,42 @@ void main() {
     expect(valueFor(rows, 'Frames'), '0 dropped - 0 total');
     expect(valueFor(rows, 'Decoder'), 'h264 (vaapi) hardware');
     expect(valueFor(rows, 'Position'), '24:11 / 1:52:40');
+  });
+
+  test('the Why row carries the reason and the panel words it', () {
+    final rows = statsRows(_sample, _context, StatsDensity.full);
+    final why = rows.firstWhere((row) => row.id == StatsRowId.why);
+
+    expect(why.value, isA<StatsWhyValue>());
+    expect(
+      valueFor(rows, 'Why'),
+      'Switched to transcoding: your device dropped frames',
+    );
+  });
+
+  test('the clipboard words the Why row in English', () {
+    final text = statsClipboardText(_sample, _context, appVersion: '1.4.2');
+
+    expect(
+      text,
+      contains('Why: Switched to transcoding: your device dropped frames'),
+    );
+  });
+
+  test('the Playing row words a typed quality and falls back to the label', () {
+    const typed = StatsContext(
+      mode: PlaybackMode.transcode,
+      qualityLabel: 'Auto -> 720p',
+      quality: StatsQuality(
+        selected: QualityRung.auto,
+        effective: QualityRung(label: '720p', height: 720),
+      ),
+      duration: Duration(minutes: 30),
+    );
+    expect(valueFor(statsRows(_sample, typed, StatsDensity.full), 'Playing'),
+        'Auto · 720p');
+    expect(valueFor(statsRows(_sample, _context, StatsDensity.full), 'Playing'),
+        'Auto -> 1080p');
   });
 
   // A dash beside a label reads as a fault in the player. A row with

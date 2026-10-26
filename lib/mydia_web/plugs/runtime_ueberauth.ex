@@ -42,12 +42,25 @@ defmodule MydiaWeb.Plugs.RuntimeUeberauth do
     :exit, reason ->
       Logger.error("Ueberauth request exited: #{inspect(reason)}")
 
+      # No callback follows an exit, so a pending SSO link would otherwise
+      # outlive the attempt that started it.
+      {linking?, conn} = drop_link_intent(conn)
+
       conn
       |> put_flash(
         :error,
         gettext("The identity provider did not respond in time. Please try again.")
       )
-      |> redirect(to: "/auth/login")
+      |> redirect(to: if(linking?, do: "/profile", else: "/auth/login"))
       |> Plug.Conn.halt()
   end
+
+  # The browser pipeline fetches the session before any /auth route, but a
+  # conn without one has no intent to drop and must not raise here.
+  defp drop_link_intent(%Plug.Conn{private: %{plug_session_fetch: :done}} = conn) do
+    linking? = Plug.Conn.get_session(conn, :oidc_link_intent) != nil
+    {linking?, Plug.Conn.delete_session(conn, :oidc_link_intent)}
+  end
+
+  defp drop_link_intent(conn), do: {false, conn}
 end

@@ -227,7 +227,10 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                           Text(widget.target.episodeCode,
                               style: glassText.copyWith(fontSize: 9.5)),
                           const SizedBox(height: 2),
-                          Text(widget.target.title,
+                          Text(
+                              widget.target.title ??
+                                  context.l10n.upNextEpisodeFallback(
+                                      widget.target.episodeNumber),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

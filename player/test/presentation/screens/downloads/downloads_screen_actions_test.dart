@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_recovery.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 
 void main() {
@@ -9,6 +11,8 @@ void main() {
     testWidgets('offers restart and cancel for a downloading task',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => activeDownloadSheetActions(
@@ -31,6 +35,8 @@ void main() {
 
     testWidgets('offers resume rather than pause when paused', (tester) async {
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => activeDownloadSheetActions(
@@ -52,6 +58,8 @@ void main() {
     testWidgets('offers resume for interrupted and stalled', (tester) async {
       for (final status in ['interrupted', 'stalled']) {
         await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Builder(
               builder: (context) => activeDownloadSheetActions(
@@ -73,6 +81,8 @@ void main() {
     testWidgets('restart invokes its callback', (tester) async {
       var restarted = false;
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => activeDownloadSheetActions(
@@ -106,24 +116,28 @@ void main() {
         );
 
     test('names the interrupted state', () {
-      expect(downloadStateLabel(task('interrupted')), 'Interrupted, resuming');
+      expect(downloadStateLabel(AppLocalizationsEn(), task('interrupted')),
+          'Interrupted, resuming');
     });
 
     test('counts stall retries', () {
       expect(
-        downloadStateLabel(task('stalled', attempts: 2)),
+        downloadStateLabel(AppLocalizationsEn(), task('stalled', attempts: 2)),
         'Stalled, retrying 2 of $maxRecoveryAttempts',
       );
     });
 
     test('returns an empty label for a healthy download', () {
-      expect(downloadStateLabel(task('downloading')), isEmpty);
+      expect(downloadStateLabel(AppLocalizationsEn(), task('downloading')),
+          isEmpty);
     });
   });
 
   testWidgets('an interrupted card offers inline resume', (tester) async {
     var resumed = false;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: DownloadRecoveryBanner(
           task: DownloadTask(

@@ -11,6 +11,9 @@
 /// text stays English on purpose, because it is pasted into bug reports.
 library;
 
+import 'package:flutter/widgets.dart' show Locale;
+
+import '../../../l10n/l10n.dart';
 import '../../build_channel.dart';
 import '../../format/bitrate.dart';
 import 'playback_stats.dart';
@@ -44,6 +47,18 @@ sealed class StatsValue {
 class StatsText extends StatsValue {
   const StatsText(this.text);
   final String text;
+}
+
+/// The Why row: a reason the panel words.
+class StatsWhyValue extends StatsValue {
+  const StatsWhyValue(this.why);
+  final StatsWhy why;
+}
+
+/// The Playing row's quality, which the panel words.
+class StatsQualityValue extends StatsValue {
+  const StatsQualityValue(this.quality);
+  final StatsQuality quality;
 }
 
 class StatsModeValue extends StatsValue {
@@ -111,13 +126,15 @@ List<StatsRow> statsRows(
       id: StatsRowId.playing,
       value: pill == null
           ? StatsModeValue(context.mode)
-          : StatsText(context.qualityLabel),
+          : context.quality == null
+              ? StatsText(context.qualityLabel)
+              : StatsQualityValue(context.quality!),
       pill: pill,
     ),
     if (context.why != null)
       StatsRow(
         id: StatsRowId.why,
-        value: StatsText(context.why!),
+        value: StatsWhyValue(context.why!),
         tone: StatsTone.warn,
       ),
     if (!compact && context.sourceLabel != null)
@@ -186,10 +203,11 @@ String statsClipboardText(
   StatsContext context, {
   required String appVersion,
 }) {
+  final english = lookupAppLocalizations(const Locale('en'));
   final lines = <String>[
     '${BuildChannel.current.appName} $appVersion',
     'Playing: ${_modeLabel(context.mode)} - ${context.qualityLabel}',
-    if (context.why != null) 'Why: ${context.why}',
+    if (context.why != null) 'Why: ${english.statsWhyText(context.why!)}',
     if (context.whyDetail != null) 'Detail: ${context.whyDetail}',
     if (context.sourceLabel != null) 'Source: ${context.sourceLabel}',
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',

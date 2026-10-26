@@ -10,6 +10,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
@@ -71,6 +72,7 @@ class _Body extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final summary = detail.summary;
     final watched =
         ref.watch(mediaSourceProvider(item.sourceId))?.as<WatchedState>();
@@ -81,7 +83,9 @@ class _Body extends ConsumerWidget {
       if (summary.subtitle != null) summary.subtitle!,
       if (summary.year != null) '${summary.year}',
       if (summary.durationSeconds != null)
-        '${(summary.durationSeconds! / 60).round()} min',
+        l10n.runtime(
+          Duration(minutes: (summary.durationSeconds! / 60).round()),
+        ),
       if (detail.rating != null) '★ ${detail.rating!.toStringAsFixed(1)}',
     ].join(' · ');
 
@@ -113,7 +117,7 @@ class _Body extends ConsumerWidget {
                   invalidateSourceItemWrites(ref, item);
                 },
                 icon: const Icon(Icons.play_arrow),
-                label: Text(resume ? 'Resume' : 'Play'),
+                label: Text(resume ? l10n.commonResume : l10n.commonPlay),
               ),
             if (watched != null)
               OutlinedButton.icon(
@@ -127,7 +131,7 @@ class _Body extends ConsumerWidget {
                     toaster.show(
                       e is SourceException
                           ? e.viewerMessage
-                          : 'Could not update watched state.',
+                          : l10n.commonWatchedUpdateFailed,
                       kind: ToastKind.error,
                     );
                     return;
@@ -138,8 +142,9 @@ class _Body extends ConsumerWidget {
                 icon: Icon(summary.userState.watched
                     ? Icons.check_circle
                     : Icons.check_circle_outline),
-                label: Text(
-                    summary.userState.watched ? 'Watched' : 'Mark watched'),
+                label: Text(summary.userState.watched
+                    ? l10n.commonWatched
+                    : l10n.commonMarkWatched),
               ),
           ],
         ),

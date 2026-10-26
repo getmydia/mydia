@@ -1,4 +1,5 @@
 import 'package:media_kit/media_kit.dart' show Player;
+import 'package:player/core/playback/loading_step.dart';
 import 'package:player/core/playback/playback_controller.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/playback_transport.dart';
@@ -30,7 +31,7 @@ class FakeTransport implements PlaybackTransport {
       {required String fileId,
       required Duration startAt,
       Duration? totalDuration,
-      void Function(String message)? onProgress}) async {
+      void Function(LoadingStep step)? onProgress}) async {
     opened.add(plan);
     return PlaybackSource(
       url: 'https://fake.test/v.mkv',
@@ -48,7 +49,7 @@ class FakeTransport implements PlaybackTransport {
           Duration? totalDuration,
           required Future<Stream<Duration>> Function(PlaybackSource source)
               attach,
-          void Function(String message)? onProgress}) =>
+          void Function(LoadingStep step)? onProgress}) =>
       throw UnimplementedError();
 
   @override
@@ -160,7 +161,7 @@ class FakePlaybackSession implements PlaybackSession {
   @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
-    required void Function(String message) onProgress,
+    required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
   }) async {
     prepared++;

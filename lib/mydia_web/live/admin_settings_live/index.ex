@@ -439,6 +439,17 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           type: :boolean,
           value: config.auth.oidc_enabled,
           source: Settings.config_source("OIDC_ENABLED", "auth.oidc_enabled", all_db_settings)
+        },
+        %{
+          key: "auth.oidc_link_by_email",
+          type: :boolean,
+          value: config.auth.oidc_link_by_email,
+          source:
+            Settings.config_source(
+              "OIDC_LINK_BY_EMAIL",
+              "auth.oidc_link_by_email",
+              all_db_settings
+            )
         }
       ],
       "Media" => [

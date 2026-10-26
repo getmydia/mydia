@@ -7,6 +7,7 @@ import '../../../core/playback/stats/playback_stats_collector.dart';
 import '../../../core/playback/stats/stats_metrics.dart';
 import '../../../domain/models/cast_device.dart' show CastSession;
 import '../../../domain/models/media_segment.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/playback_stats/stats_panel.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
@@ -76,7 +77,7 @@ class PlayerErrorView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Failed to load video',
+            context.l10n.playerLoadFailed,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: Colors.white,
                 ),
@@ -95,12 +96,12 @@ class PlayerErrorView extends StatelessWidget {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: onRetry,
-            child: const Text('Retry'),
+            child: Text(context.l10n.commonRetry),
           ),
           const SizedBox(height: 12),
           TextButton(
             onPressed: () => popOrGoHome(context),
-            child: const Text('Go Back'),
+            child: Text(context.l10n.routerGoBack),
           ),
         ],
       ),
@@ -185,8 +186,8 @@ class CastPlaceholderView extends StatelessWidget {
                 const SizedBox(height: 24),
                 Text(
                   isStale
-                      ? 'Lost connection to ${device.name}'
-                      : 'Playing on ${device.name}',
+                      ? context.l10n.castBarStaleStatus(device.name)
+                      : context.l10n.castBarAmbientStatus(device.name),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                       ),

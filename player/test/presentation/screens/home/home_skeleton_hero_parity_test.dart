@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -48,6 +49,8 @@ void main() {
           sourceArtworkProvider.overrideWith((ref, key) async => null),
         ],
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: SourceHomeHero(sourceId: fakeSourceId, item: _item),

@@ -4,6 +4,7 @@
 library;
 
 import '../../../../core/cast/receiver_profile.dart';
+import '../../../../core/playback/loading_step.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/device_profile.dart';
@@ -17,6 +18,8 @@ import '../../../../core/sources/transcode_codecs.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
+import '../../../../l10n/l10n.dart';
+import 'playback_problem.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
@@ -113,13 +116,13 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
   @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
-    required void Function(String message) onProgress,
+    required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
   }) async {
     try {
       await _playbackInfo();
     } on SourceException catch (e) {
-      return StreamingUnavailable(e.viewerMessage);
+      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
     }
     return super.prepareStreaming(
         owner: owner, onProgress: onProgress, isCurrent: isCurrent);
@@ -183,7 +186,9 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
                     '/Videos/${item.externalId}/${version.id}/Subtitles/${s.id}/Stream.vtt',
                     credential))
                 .toString(),
-            label: s.title ?? s.language ?? 'Subtitles',
+            label: s.title ??
+                s.language ??
+                currentAppLocalizations().commonSubtitles,
             language: s.language ?? 'und',
           ),
     ];

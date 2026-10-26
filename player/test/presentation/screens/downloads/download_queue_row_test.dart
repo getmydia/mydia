@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/widgets/download_queue_row.dart';
 
 DownloadTask _task({
@@ -47,6 +48,8 @@ Future<void> _pump(
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: DownloadQueueRow(task: task)),
       ),
     ),

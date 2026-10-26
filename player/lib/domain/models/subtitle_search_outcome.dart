@@ -4,18 +4,50 @@ library;
 
 import 'subtitle_candidate.dart';
 
+/// Why a subtitle search or download did not happen, when the app itself is
+/// the one saying so. The sheet words it in the viewer's language
+/// (`AppFormatters.subtitleIssueText`); text a server sent stays a `String`
+/// and is shown as it was written.
+enum SubtitleIssue {
+  /// Searching, on a server that is not Mydia.
+  searchMydiaOnly,
+
+  /// Downloading, from a server that is not Mydia.
+  downloadMydiaOnly,
+
+  /// Searching with only a downloaded file: there is no server to ask.
+  searchOffline,
+
+  /// Downloading with only a downloaded file.
+  downloadOffline,
+
+  /// The search request never reached the server.
+  searchUnreachable,
+
+  /// The search failed for a reason the viewer cannot act on.
+  searchFailed,
+
+  /// The download request failed.
+  downloadFailed,
+}
+
 /// What a subtitle search produced.
 class SubtitleSearchOutcome {
   final List<SubtitleCandidate> results;
   final List<SubtitleProviderStatus> providers;
 
-  /// Set when the search itself failed rather than returning nothing.
+  /// Set when the search itself failed with text the server wrote, shown as
+  /// is.
   final String? error;
+
+  /// Set when the search itself failed and the app names the reason.
+  final SubtitleIssue? issue;
 
   const SubtitleSearchOutcome({
     required this.results,
     required this.providers,
     this.error,
+    this.issue,
   });
 }
 
@@ -31,11 +63,17 @@ class SubtitleSearchOutcome {
 /// callback throws this to opt a specific message in; everything else it
 /// throws still lands on the generic copy.
 class SubtitleActionException implements Exception {
-  /// Shown to the viewer verbatim, so it must read as plain guidance.
-  final String message;
+  /// Shown to the viewer verbatim, so it must read as plain guidance. Null
+  /// when [issue] names the reason instead.
+  final String? message;
 
-  const SubtitleActionException(this.message);
+  /// The reason, when the app is the one explaining.
+  final SubtitleIssue? issue;
+
+  const SubtitleActionException(String this.message) : issue = null;
+  const SubtitleActionException.issue(SubtitleIssue this.issue)
+      : message = null;
 
   @override
-  String toString() => 'SubtitleActionException: $message';
+  String toString() => 'SubtitleActionException: ${message ?? issue}';
 }

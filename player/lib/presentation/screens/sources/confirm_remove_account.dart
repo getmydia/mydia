@@ -6,6 +6,7 @@ import '../../../core/downloads/download_service.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 
 /// The downloads removing [accountId] deletes. Best effort: a lookup that
@@ -31,30 +32,35 @@ Future<bool> confirmRemoveAccount(
   BuildContext context,
   WidgetRef ref,
   ProviderAccount account, {
-  String title = 'Remove this account?',
-  String confirmLabel = 'Remove',
+  String? title,
+  String? confirmLabel,
 }) async {
   final footprint = await accountDownloadFootprint(ref, account.id);
   if (!context.mounted) return false;
+  final l10n = context.l10n;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => GlassDialog(
       destructive: true,
-      title: Text(title),
-      content: Text('${account.displayName} and its servers are '
-          'removed from this device. Nothing changes on the server.'
-          '${footprint.count == 0 ? '' : '\n\nThis also deletes ${footprint.count} '
-              'download${footprint.count == 1 ? '' : 's'} '
-              '(${DownloadTask.formatBytes(footprint.bytes)}).'}'),
+      title: Text(title ?? l10n.sourcesRemoveAccountTitle),
+      content: Text(
+        footprint.count == 0
+            ? l10n.sourcesRemoveAccountBody(account.displayName)
+            : l10n.sourcesRemoveAccountBodyWithDownloads(
+                account.displayName,
+                footprint.count,
+                DownloadTask.formatBytes(footprint.bytes),
+              ),
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         TextButton(
           key: const Key('manage-remove-confirm'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text(confirmLabel),
+          child: Text(confirmLabel ?? l10n.commonRemove),
         ),
       ],
     ),
