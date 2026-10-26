@@ -1302,6 +1302,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#linking-existing-local-accounts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linking existing local accounts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#scopes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3760,6 +3771,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#linking-existing-local-accounts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linking existing local accounts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#scopes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3981,6 +4003,20 @@
 <p class="admonition-title">Warning</p>
 <p>Ensure OIDC is working before disabling local auth to avoid lockout.</p>
 </div>
+<h2 id="linking-existing-local-accounts">Linking existing local accounts</h2>
+<p>A user who already has a local account can attach SSO to it from
+<strong>Profile → Security → Link SSO account</strong>. They sign in at the identity
+provider once, and from then on either sign-in method opens the same account.
+They can unlink again from the same place, as long as the account still has a
+password or a passkey.</p>
+<p>To link accounts automatically instead, set <code>OIDC_LINK_BY_EMAIL=true</code>. On a
+user's first SSO sign-in, Mydia then attaches the SSO identity to the local
+account with the same email address, but only when the identity provider sends
+<code>email_verified: true</code>. Enable this only if you trust your identity provider
+to verify email addresses: anyone who can get an unverified address marked
+verified there can take over the matching Mydia account.</p>
+<p>Without either, an SSO sign-in whose email matches a local account is refused
+with a message pointing the user to the Profile page.</p>
 <h2 id="scopes">Scopes</h2>
 <p>Default scopes:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nv">OIDC_SCOPES</span><span class="o">=</span>openid<span class="w"> </span>profile<span class="w"> </span>email

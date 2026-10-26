@@ -4296,6 +4296,11 @@ name as <code>s3://&lt;name&gt;/&lt;prefix&gt;</code>.</p>
 <td><code>openid profile email</code></td>
 </tr>
 <tr>
+<td><code>OIDC_LINK_BY_EMAIL</code></td>
+<td>On first SSO sign-in, attach the SSO identity to the existing local account with the same email, if your identity provider marks that email as verified</td>
+<td><code>false</code></td>
+</tr>
+<tr>
 <td><code>LIBRARY_API_KEY</code></td>
 <td>Admin key for the <a href="../library-api/">Library API</a>, sent as the <code>x-api-key</code> header. Optional; unset means only database API keys work. Minimum 32 characters. Generate with <code>openssl rand -hex 32</code>. Remove it and restart to revoke.</td>
 <td>(unset)</td>
