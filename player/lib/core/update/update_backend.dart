@@ -1,4 +1,5 @@
 import '../../domain/models/available_update.dart';
+import 'update_problem.dart';
 import 'update_track.dart';
 
 /// What the settings "Check for updates" row should say and do.
@@ -36,20 +37,20 @@ final class AlreadyUpToDate extends UpdateOutcome {
 
 /// The platform refused in a way nothing in-app can resolve.
 final class UpdateUnsupported extends UpdateOutcome {
-  final String reason;
+  final UpdateProblem problem;
 
   /// The refusal is Android's "install unknown apps" permission, which the
   /// user can grant outside the app and then come back. Lets the notifier
-  /// retry on resume instead of matching on [reason]'s wording.
+  /// retry on resume instead of matching on [problem].
   final bool needsInstallPermission;
 
-  const UpdateUnsupported(this.reason, {this.needsInstallPermission = false});
+  const UpdateUnsupported(this.problem, {this.needsInstallPermission = false});
 }
 
 final class UpdateFailed extends UpdateOutcome {
-  final String message;
+  final UpdateProblem problem;
 
-  const UpdateFailed(this.message);
+  const UpdateFailed(this.problem);
 }
 
 /// The backend handed the user off somewhere else, such as Sparkle's dialog
@@ -89,11 +90,11 @@ final class TrackSwitchNotPublished extends TrackSwitchOutcome {
   const TrackSwitchNotPublished(this.track, {this.macos = false});
 }
 
-/// The backend cannot make this switch, and [reason] says why.
+/// The backend cannot make this switch, and [problem] says why.
 final class TrackSwitchUnsupported extends TrackSwitchOutcome {
-  final String reason;
+  final UpdateProblem problem;
 
-  const TrackSwitchUnsupported(this.reason);
+  const TrackSwitchUnsupported(this.problem);
 }
 
 /// How this installation learns about, and installs, its own updates.

@@ -12,12 +12,14 @@ import 'package:player/core/playback/stats/stats_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/router/push_route.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/theme/glass_material.dart';
 import 'package:player/core/theme/theme_preset.dart';
-import 'package:player/core/sources/source.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/audio_track.dart';
+import 'package:player/domain/models/download_failure.dart';
 import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/models/remote_device.dart';
@@ -28,8 +30,9 @@ import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/source_nav.dart';
 import 'package:player/domain/sources/library.dart';
-import 'package:player/l10n/formatters.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/formatters.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
 import 'package:player/presentation/screens/login/login_failure.dart';
@@ -214,7 +217,10 @@ void main() {
           trackNotPublished: TrackNotPublished(UpdateTrack.dev, macos: true))),
       'Dev builds are not published for macOS yet.',
     );
-    expect(en.updateErrorMessage(const UpdateState(error: 'boom')), 'boom');
+    expect(
+        en.updateErrorMessage(
+            const UpdateState(error: UpdateProblem.text('boom'))),
+        'boom');
     expect(en.updateErrorMessage(const UpdateState()), isNull);
   });
 
@@ -637,6 +643,210 @@ void main() {
           'This item has no playable file on the server.');
       expect(en.playbackProblemText(const PlaybackProblem.fromText('Nope')),
           'Nope');
+    });
+
+    test('a playback problem built from a source error is worded by kind',
+        () async {
+      final en = await l10n('en');
+      expect(
+          en.playbackProblemText(
+              const PlaybackProblem.fromError(SourceException.notFound())),
+          'This item is no longer on the server.');
+      expect(
+          en.playbackFailureText(
+              const PlaybackIssueException(PlaybackIssue.proxyMoved)),
+          'Playback failed: Media proxy moved to a new port');
+    });
+  });
+
+  group('sourceError', () {
+    const kinds = <SourceException, String>{
+      SourceException.unreachable():
+          'Could not reach this server. Check that it is running and on the '
+              'network.',
+      SourceException.unauthorized():
+          'This server no longer accepts the saved sign-in. Sign in again.',
+      SourceException.notFound(): 'This item is no longer on the server.',
+      SourceException.unsupported(): 'This server does not support that.',
+      SourceException(SourceErrorKind.server): 'The server reported an error.',
+      SourceException.wrongPin(): 'That PIN is not right. Try again.',
+    };
+
+    test('en words every kind exactly as the old viewerMessage did', () async {
+      final en = await l10n('en');
+      for (final entry in kinds.entries) {
+        expect(en.sourceError(entry.key), entry.value);
+      }
+      expect(kinds.length, SourceErrorKind.values.length);
+    });
+
+    test('es and pt_BR differ from en for every kind', () async {
+      final en = await l10n('en');
+      for (final tag in ['es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final error in kinds.keys) {
+          expect(loc.sourceError(error), isNot(en.sourceError(error)));
+          expect(loc.sourceError(error), isNotEmpty);
+        }
+      }
+    });
+
+    test('the server\'s own words are verbatim in every locale', () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        expect(loc.sourceError(const SourceException.server('Transcoder busy')),
+            'Transcoder busy');
+        expect(loc.sourceError(const SourceException.unsupported('No can do')),
+            'No can do');
+      }
+    });
+
+    test('anything else gets the generic sentence', () async {
+      final en = await l10n('en');
+      expect(en.sourceError(StateError('x')), 'Something went wrong.');
+    });
+
+    test('every fault has a sentence in every locale', () async {
+      final en = await l10n('en');
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final fault in SourceFault.values) {
+          final text = loc.sourceFaultText(fault, '502');
+          expect(text, isNotEmpty, reason: '$fault in $tag');
+          // A sentence naming a value carries it.
+          if (fault.logText.contains('{detail}')) {
+            expect(text, contains('502'), reason: '$fault in $tag');
+          }
+          if (tag != 'en') {
+            // Product-name-only sentences could match; none of these do.
+            expect(text, isNot(en.sourceFaultText(fault, '502')),
+                reason: '$fault in $tag');
+          }
+        }
+      }
+    });
+
+    test('en fault sentences match the log text they replaced', () async {
+      final en = await l10n('en');
+      for (final fault in SourceFault.values) {
+        expect(en.sourceFaultText(fault, '502'),
+            fault.logText.replaceAll('{detail}', '502'),
+            reason: '$fault');
+      }
+    });
+  });
+
+  group('download failures', () {
+    test('encode and decode round-trip every code', () {
+      for (final code in DownloadFailureCode.values) {
+        final failure = DownloadFailure(code,
+            count: 3, detail: 'a|b', sourceKind: SourceErrorKind.server);
+        final back = DownloadFailure.decode(failure.encode());
+        expect(back.code, code);
+        expect(back.count, 3);
+        expect(back.detail, 'a|b');
+        expect(back.sourceKind, SourceErrorKind.server);
+      }
+    });
+
+    test('a plain sentence from an older build decodes as unknown text',
+        () async {
+      final failure = DownloadFailure.decode('Network error: socket closed');
+      expect(failure.code, DownloadFailureCode.unknown);
+      expect(failure.detail, 'Network error: socket closed');
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        expect((await l10n(tag)).downloadFailureText(failure),
+            'Network error: socket closed');
+      }
+    });
+
+    test('a source failure keeps its fault and the server\'s words', () async {
+      final fault = DownloadFailure.decode(DownloadFailure.fromSource(
+              const SourceException.fault(SourceFault.serverHttp,
+                  detail: '502'))
+          .encode());
+      final server = DownloadFailure.decode(DownloadFailure.fromSource(
+              const SourceException.server('Disk on fire'))
+          .encode());
+      final en = await l10n('en');
+      expect(en.downloadFailureText(fault), 'The server answered HTTP 502.');
+      expect(en.downloadFailureText(server), 'Disk on fire');
+      final gone = DownloadFailure.decode(DownloadFailure.fromSource(
+              const SourceException.unsupportedFault(SourceFault.serverGone))
+          .encode());
+      expect(gone.sourceException().kind, SourceErrorKind.unsupported);
+    });
+
+    test('en matches the sentences the service used to store', () async {
+      final en = await l10n('en');
+      String text(DownloadFailure f) => en.downloadFailureText(f);
+      expect(text(const DownloadFailure(DownloadFailureCode.cancelled)),
+          'Cancelled by user');
+      expect(text(const DownloadFailure(DownloadFailureCode.stalled, count: 3)),
+          'Download stopped responding after 3 recovery attempts.');
+      expect(text(const DownloadFailure(DownloadFailureCode.startingUp)),
+          'Downloads are still starting.');
+      expect(
+          text(const DownloadFailure(DownloadFailureCode.transcodeFailed,
+              detail: 'no space')),
+          'Transcode failed: no space');
+      expect(
+          text(const DownloadFailure(DownloadFailureCode.networkRetries,
+              count: 3, detail: 'reset')),
+          'Network error after 3 attempts: reset');
+      expect(
+          text(const DownloadFailure(DownloadFailureCode.network,
+              detail: 'reset')),
+          'Network error: reset');
+      expect(
+          text(const DownloadFailure(DownloadFailureCode.networkKind,
+              detail: 'SocketException')),
+          'Network error (SocketException)');
+      expect(text(const DownloadFailure(DownloadFailureCode.jobGone)),
+          'The server no longer has this download job. Restart to try again.');
+      expect(text(const DownloadFailure(DownloadFailureCode.signInExpired)),
+          'This server no longer accepts the saved sign-in. Sign in again.');
+      expect(text(const DownloadFailure(DownloadFailureCode.itemGone)),
+          'This item is no longer on the server.');
+      expect(text(const DownloadFailure(DownloadFailureCode.unknown)),
+          'Download failed');
+    });
+
+    test('every code has text in every locale', () async {
+      for (final tag in ['es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final code in DownloadFailureCode.values) {
+          expect(
+              loc.downloadFailureText(DownloadFailure(code,
+                  count: 2, detail: 'x', sourceKind: SourceErrorKind.server)),
+              isNotEmpty);
+        }
+      }
+    });
+  });
+
+  group('update problems', () {
+    test('every issue has text in every locale; platform text is verbatim',
+        () async {
+      for (final tag in ['en', 'es', 'pt_BR']) {
+        final loc = await l10n(tag);
+        for (final issue in UpdateIssue.values) {
+          expect(loc.updateProblemText(UpdateProblem(issue, detail: 'boom')),
+              isNotEmpty);
+        }
+        expect(loc.updateProblemText(const UpdateProblem.text('raw text')),
+            'raw text');
+      }
+      final en = await l10n('en');
+      expect(
+          en.updateProblemText(
+              const UpdateProblem(UpdateIssue.checkFailed, detail: 'timeout')),
+          'Failed to check for updates: timeout');
+      expect(
+          en.updateProblemText(
+              const UpdateProblem(UpdateIssue.needsNewPermissions)),
+          'This update needs new permissions. Install it from your software '
+          'centre.');
     });
   });
 }

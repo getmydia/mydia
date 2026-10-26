@@ -1,5 +1,6 @@
 import '../../../domain/models/available_update.dart';
 import '../update_backend.dart';
+import '../update_problem.dart';
 import '../update_track.dart';
 import '../updaters/macos_updater.dart';
 
@@ -59,7 +60,7 @@ class SparkleUpdateBackend implements UpdateBackend {
     }
     if (!await _writeTrack(track)) {
       return const TrackSwitchUnsupported(
-        'macOS would not save that choice. Try again.',
+        UpdateProblem(UpdateIssue.saveChoiceFailedMacos),
       );
     }
     _track = track;

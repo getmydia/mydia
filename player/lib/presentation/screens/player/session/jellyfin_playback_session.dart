@@ -122,7 +122,7 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
     try {
       await _playbackInfo();
     } on SourceException catch (e) {
-      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
+      return StreamingUnavailable(PlaybackProblem.fromError(e));
     }
     return super.prepareStreaming(
         owner: owner, onProgress: onProgress, isCurrent: isCurrent);

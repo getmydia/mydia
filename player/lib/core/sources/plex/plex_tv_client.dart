@@ -158,7 +158,7 @@ class PlexTvClient {
       },
     );
     if (json is! Map) {
-      throw const SourceException.server('plex.tv sent an unexpected reply.');
+      throw const SourceException.fault(SourceFault.plexTvUnexpected);
     }
     return json.cast<String, dynamic>();
   }
@@ -203,8 +203,7 @@ class PlexTvClient {
     final List<dynamic> list = switch (json) {
       final List<dynamic> l => l,
       {'users': final List<dynamic> users} => users,
-      _ =>
-        throw const SourceException.server('plex.tv sent an unexpected reply.'),
+      _ => throw const SourceException.fault(SourceFault.plexTvUnexpected),
     };
     return [
       for (final entry in list.whereType<Map<dynamic, dynamic>>())
@@ -239,11 +238,11 @@ class PlexTvClient {
     try {
       json = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
-      throw const SourceException.server('plex.tv sent an unexpected reply.');
+      throw const SourceException.fault(SourceFault.plexTvUnexpected);
     }
     final token = json is Map ? json['authToken'] : null;
     if (token is! String || token.isEmpty) {
-      throw const SourceException.server('plex.tv sent an unexpected reply.');
+      throw const SourceException.fault(SourceFault.plexTvUnexpected);
     }
     return token;
   }
@@ -261,7 +260,7 @@ class PlexTvClient {
       headers: {..._identity.headers, 'X-Plex-Token': token},
     );
     if (json is! List) {
-      throw const SourceException.server('plex.tv sent an unexpected reply.');
+      throw const SourceException.fault(SourceFault.plexTvUnexpected);
     }
     return [
       for (final entry in json)

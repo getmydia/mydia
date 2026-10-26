@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../../../domain/models/available_update.dart';
 import '../flatpak_portal.dart';
 import '../update_backend.dart';
+import '../update_problem.dart';
 import '../update_track.dart';
 
 /// Updates through org.freedesktop.portal.Flatpak.
@@ -174,9 +175,7 @@ class FlatpakUpdateBackend implements UpdateBackend {
     void Function(double progress)? onProgress,
   }) async {
     if (!_monitoring) {
-      return const UpdateFailed(
-        'Could not reach the Flatpak portal. Update from your software centre.',
-      );
+      return const UpdateFailed(UpdateProblem(UpdateIssue.portalUnreachable));
     }
 
     // Already deployed underneath us, and nothing newer waiting on the
@@ -209,22 +208,23 @@ class FlatpakUpdateBackend implements UpdateBackend {
             if (progress.errorName ==
                 'org.freedesktop.DBus.Error.NotSupported') {
               return const UpdateUnsupported(
-                'This update needs new permissions. Install it from your '
-                'software centre.',
+                UpdateProblem(UpdateIssue.needsNewPermissions),
               );
             }
+            final message = progress.errorMessage;
             return UpdateFailed(
-              progress.errorMessage ?? 'The update failed.',
+              message == null
+                  ? const UpdateProblem(UpdateIssue.updateFailed)
+                  : UpdateProblem.text(message),
             );
         }
       }
       // The stream closed without a terminal status. Treating that as success
       // would send the user to restart into a build that may not exist.
-      return const UpdateFailed('The update ended without reporting a result.');
+      return const UpdateFailed(UpdateProblem(UpdateIssue.noResult));
     } on FlatpakUpdateNotPermitted {
       return const UpdateUnsupported(
-        'This update needs new permissions. Install it from your software '
-        'centre.',
+        UpdateProblem(UpdateIssue.needsNewPermissions),
       );
     } catch (e) {
       // The connection can drop mid-transaction, which leaves the monitor
@@ -232,7 +232,7 @@ class FlatpakUpdateBackend implements UpdateBackend {
       // this attempt as the failure it was.
       _monitoring = false;
       await start();
-      return UpdateFailed(e.toString());
+      return UpdateFailed(UpdateProblem.text(e.toString()));
     }
   }
 

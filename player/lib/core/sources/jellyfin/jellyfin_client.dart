@@ -78,7 +78,7 @@ Future<JellyfinServerInfo> jellyfinPublicInfo(
       'GET', jellyfinUnder(base, '/System/Info/Public'),
       timeout: timeout);
   if (json is! Map) {
-    throw const SourceException.server('This is not a Jellyfin server.');
+    throw const SourceException.fault(SourceFault.jellyfinNotJellyfin);
   }
   return JellyfinServerInfo.fromJson(json.cast<String, dynamic>());
 }
@@ -182,8 +182,7 @@ class JellyfinClient {
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
-      throw const SourceException.server(
-          'The Jellyfin server sent a response this app cannot read.');
+      throw const SourceException.fault(SourceFault.jellyfinUnreadable);
     }
   }
 

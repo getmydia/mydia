@@ -86,7 +86,9 @@ void main() {
             sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
-    expect(find.text(const SourceException.unreachable().viewerMessage),
+    expect(
+        find.text('Could not reach this server. Check that it is running and '
+            'on the network.'),
         findsOneWidget);
   });
 

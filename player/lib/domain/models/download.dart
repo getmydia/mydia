@@ -2,6 +2,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../core/sources/source.dart';
 import '../sources/item.dart';
+import 'download_failure.dart';
 
 part 'download.g.dart';
 
@@ -75,6 +76,8 @@ class DownloadTask {
   @HiveField(10)
   final String? posterUrl;
 
+  /// Persisted as `DownloadFailure.encode()`, or as a plain sentence by older
+  /// builds. Read it through [failure], never as text for the viewer.
   @HiveField(11)
   final String? error;
 
@@ -171,6 +174,14 @@ class DownloadTask {
 
   @HiveField(39)
   final String? thumbnailPath;
+
+  /// [error] decoded: why the task failed or stopped, null when it did not.
+  /// Rows from before failures were typed hold a plain sentence and decode as
+  /// [DownloadFailureCode.unknown] with that sentence as the detail.
+  DownloadFailure? get failure {
+    final stored = error;
+    return stored == null ? null : DownloadFailure.decode(stored);
+  }
 
   const DownloadTask({
     required this.id,

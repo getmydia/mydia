@@ -43,13 +43,11 @@ Future<SourceId> saveMydiaServer(
   final instanceId = match == null ? reported : match.id.substring(1);
 
   if (!isValidSourceIdComponent(instanceId)) {
-    throw const SourceException.server(
-        'This server reports an id this app cannot use.');
+    throw const SourceException.fault(SourceFault.mydiaBadServerId);
   }
   final accountId = 'm$instanceId';
   if (reauthAccountId != null && reauthAccountId != accountId) {
-    throw const SourceException.server(
-        'That code belongs to a different server.');
+    throw const SourceException.fault(SourceFault.mydiaWrongServerCode);
   }
 
   final stored = match == null
@@ -151,8 +149,7 @@ Future<String> _resolveInstanceId(
   if (partial.isP2p && nodeId != null) return nodeInstanceId(nodeId);
   final url = partial.serverUrl;
   if (url != null) return urlInstanceId(url);
-  throw const SourceException.server(
-      'This server did not say which server it is.');
+  throw const SourceException.fault(SourceFault.mydiaNoServerId);
 }
 
 /// The server's own id, or null when it cannot or will not say. Older

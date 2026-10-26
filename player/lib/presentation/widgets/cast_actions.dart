@@ -60,6 +60,16 @@ String castErrorMessage(
       return l10n.castErrorNotAuthorized;
     case CastFailureKind.notPlaying:
       return l10n.castErrorNotPlaying;
+    case CastFailureKind.airplayUnsupported:
+      return l10n.castErrorAirplayUnsupported;
+    case CastFailureKind.targetRefused:
+      return l10n.castErrorTargetRefused;
+    case CastFailureKind.mydiaItemsOnly:
+      return l10n.castErrorMydiaItemsOnly;
+    case CastFailureKind.serverNotCastable:
+      return l10n.castErrorServerNotCastable;
+    case CastFailureKind.noSessionToReconnect:
+      return l10n.castErrorNoSessionToReconnect;
     case CastFailureKind.unknown:
       return l10n.castErrorUnknown(e.message);
   }

@@ -53,7 +53,8 @@ Future<void> startItemDownload(
     }
   } catch (e) {
     if (context.mounted) {
-      showToast(context, context.l10n.detailDownloadFailed('$e'),
+      showToast(context,
+          context.l10n.detailDownloadFailed(context.l10n.failureDetail(e)),
           kind: ToastKind.error);
     }
   }

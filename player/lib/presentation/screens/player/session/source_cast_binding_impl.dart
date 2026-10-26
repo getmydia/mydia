@@ -93,7 +93,7 @@ class SessionSourceCastBinding implements SourceCastBinding {
       );
     } on SourceException catch (e) {
       throw CastBackendException(
-          e.viewerMessage,
+          e.logText,
           switch (e.kind) {
             SourceErrorKind.unreachable => CastFailureKind.unreachable,
             SourceErrorKind.unauthorized => CastFailureKind.notAuthorized,

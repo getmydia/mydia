@@ -28,6 +28,9 @@ Matcher _kind(LoginFailureKind kind) =>
 Matcher _fromServer(String message) =>
     isA<LoginFailureFromServer>().having((f) => f.message, 'message', message);
 
+Matcher _ofSource(SourceErrorKind kind) =>
+    isA<LoginFailureOfSource>().having((f) => f.error.kind, 'kind', kind);
+
 class _FakePairing extends PairingService {
   _FakePairing(this.credentials);
   final PairingCredentials credentials;
@@ -296,8 +299,9 @@ void main() {
         .pairWithClaimCode('ABC123', reauthAccountId: 'minst-9');
 
     final state = c.read(loginControllerProvider);
-    expect(
-        state.error, _fromServer('That code belongs to a different server.'));
+    expect(state.error, _ofSource(SourceErrorKind.server));
+    expect(((state.error) as LoginFailureOfSource).error.fault,
+        SourceFault.mydiaWrongServerCode);
     expect(state.success, isFalse);
     expect((await store.load()).accounts, isEmpty);
   });
@@ -328,8 +332,7 @@ void main() {
     expect(state.success, isFalse);
     expect(state.isLoading, isFalse);
     // The save's own wording, not the login mapping's "Cannot connect".
-    expect(state.error,
-        _fromServer(const SourceException.unreachable().viewerMessage));
+    expect(state.error, _ofSource(SourceErrorKind.unreachable));
   });
 
   test('an unexpected stored-session outcome ends loading with an error',

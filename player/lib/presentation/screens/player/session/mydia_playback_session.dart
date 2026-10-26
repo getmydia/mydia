@@ -124,7 +124,7 @@ class MydiaPlaybackSession implements PlaybackSession {
     try {
       credentials = await client.credentials();
     } on SourceException catch (e) {
-      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
+      return StreamingUnavailable(PlaybackProblem.fromError(e));
     }
     if (!isCurrent()) return const StreamingSuperseded();
 

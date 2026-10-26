@@ -222,7 +222,7 @@ dc.CastSession _createSession(dc.CastDevice device) {
     dc.CastProtocol.dlna => dc.DlnaSession.fromDevice(device),
     dc.CastProtocol.airplay => throw const CastBackendException(
         'AirPlay is not supported by this backend.',
-        CastFailureKind.unknown,
+        CastFailureKind.airplayUnsupported,
       ),
   };
 }

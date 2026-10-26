@@ -128,7 +128,9 @@ class _HomeContinueWatchingRowState
     } catch (e) {
       if (mounted) setState(() => _hidden.remove(key));
       toaster.show(
-        e is SourceException ? e.viewerMessage : l10n.continueRemoveTitleFailed,
+        e is SourceException
+            ? l10n.sourceError(e)
+            : l10n.continueRemoveTitleFailed,
         kind: ToastKind.error,
       );
       return;

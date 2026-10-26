@@ -78,7 +78,9 @@ void main() {
       ..itemError = const SourceException.unreachable();
     final pushed = await _pump(tester, fake, fakeEpisode(3).ref);
     expect(pushed, isEmpty);
-    expect(find.text(const SourceException.unreachable().viewerMessage),
+    expect(
+        find.text('Could not reach this server. Check that it is running and '
+            'on the network.'),
         findsOneWidget);
   });
 }

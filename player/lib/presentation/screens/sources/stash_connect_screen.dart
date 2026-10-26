@@ -149,7 +149,7 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
       if (!mounted) return;
       setState(() => _error = e.kind == SourceErrorKind.unauthorized
           ? const SignInProblem(SignInIssue.stashKeyRejected)
-          : SignInProblem.fromServer(e.viewerMessage));
+          : SignInProblem.fromError(e));
     } catch (_) {
       // Secure storage or the record store failed after the server answered.
       if (!mounted) return;

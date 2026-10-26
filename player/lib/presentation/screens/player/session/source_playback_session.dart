@@ -223,7 +223,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
         ),
       ));
     } on SourceException catch (e) {
-      return StreamingUnavailable(PlaybackProblem.fromText(e.viewerMessage));
+      return StreamingUnavailable(PlaybackProblem.fromError(e));
     }
   }
 

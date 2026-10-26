@@ -553,7 +553,7 @@ class CastSessionManager {
         device.protocol == CastProtocolKind.mydia) {
       throw const CastBackendException(
         'Mydia players can only play items from Mydia.',
-        CastFailureKind.unknown,
+        CastFailureKind.mydiaItemsOnly,
       );
     }
 
@@ -1247,7 +1247,7 @@ class CastSessionManager {
     final bind = _bindSource ??
         (throw const CastBackendException(
             'Casting is not available for this server.',
-            CastFailureKind.unknown));
+            CastFailureKind.serverNotCastable));
     final generation = _connectGeneration;
     // Bound before the old item is stopped: a failed bind must leave the
     // previous binding and its progress sink untouched.
@@ -1563,6 +1563,11 @@ class CastSessionManager {
       // with a different URL or encoding.
       case CastFailureKind.notAuthorized:
       case CastFailureKind.notPlaying:
+      case CastFailureKind.airplayUnsupported:
+      case CastFailureKind.targetRefused:
+      case CastFailureKind.mydiaItemsOnly:
+      case CastFailureKind.serverNotCastable:
+      case CastFailureKind.noSessionToReconnect:
       case CastFailureKind.unknown:
         return null;
     }
@@ -2042,7 +2047,7 @@ class CastSessionManager {
     if (stored == null) {
       throw const CastBackendException(
         'There is no cast session to reconnect to.',
-        CastFailureKind.unknown,
+        CastFailureKind.noSessionToReconnect,
       );
     }
 

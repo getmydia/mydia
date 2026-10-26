@@ -95,8 +95,8 @@ class PlexMediaSource extends MediaSource
         this,
         ref,
         url: (v) => client.url(v.streamPath ??
-            (throw const SourceException.unsupported(
-                'Plex offers no direct file for this item.'))),
+            (throw const SourceException.unsupportedFault(
+                SourceFault.plexNoDirectFile))),
         headers: client.headers,
       );
 

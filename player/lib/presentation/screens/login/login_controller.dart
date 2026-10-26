@@ -80,7 +80,7 @@ final loginDeviceInfoProvider =
 
 /// The viewer-facing failure of the save, or null for any other error.
 LoginFailure? _saveFailure(Object e) =>
-    e is SourceException ? LoginFailureFromServer(e.viewerMessage) : null;
+    e is SourceException ? LoginFailureOfSource(e) : null;
 
 const _cannotConnect = LoginFailureOfKind(LoginFailureKind.cannotConnect);
 const _invalidCode = LoginFailureOfKind(LoginFailureKind.invalidCode);
@@ -98,8 +98,8 @@ LoginFailure _loginFailure(Object e) {
       const LoginFailureOfKind(LoginFailureKind.serverNotFound),
     SourceErrorKind.unauthorized =>
       const LoginFailureOfKind(LoginFailureKind.invalidCredentials),
-    _ when e is MydiaGraphqlError => _loginFailureFromText(e.viewerMessage),
-    _ => LoginFailureFromServer(e.viewerMessage),
+    _ when e is MydiaGraphqlError => _loginFailureFromText(e.logText),
+    _ => LoginFailureOfSource(e),
   };
 }
 
@@ -125,7 +125,7 @@ LoginFailure _totpFailure(Object e) {
   if (e is SourceException) {
     if (e.kind == SourceErrorKind.unreachable) return _cannotConnect;
     if (e is MydiaGraphqlError) {
-      final text = e.viewerMessage;
+      final text = e.logText;
       if (text.contains('Sign-in expired')) return _signInExpired;
       if (text.contains('Too many')) return _tooManyAttempts;
     }

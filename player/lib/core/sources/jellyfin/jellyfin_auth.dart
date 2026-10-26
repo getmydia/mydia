@@ -24,8 +24,7 @@ class JellyfinSession {
     final token = json['AccessToken'] as String?;
     final id = user['Id'] as String?;
     if (token == null || token.isEmpty || id == null || id.isEmpty) {
-      throw const SourceException.server(
-          'Jellyfin signed you in but sent no session.');
+      throw const SourceException.fault(SourceFault.jellyfinNoSession);
     }
     return JellyfinSession(
       accessToken: token,
@@ -82,8 +81,7 @@ class JellyfinAuth {
     final code = json is Map ? json['Code'] as String? : null;
     final secret = json is Map ? json['Secret'] as String? : null;
     if (code == null || secret == null) {
-      throw const SourceException.server(
-          'Jellyfin did not hand out a Quick Connect code.');
+      throw const SourceException.fault(SourceFault.jellyfinNoQuickConnectCode);
     }
     return QuickConnectCode(code: code, secret: secret);
   }
@@ -106,6 +104,5 @@ class JellyfinAuth {
 
   JellyfinSession _session(Object? json) => json is Map
       ? JellyfinSession.fromJson(json.cast<String, dynamic>())
-      : throw const SourceException.server(
-          'Jellyfin sent an unexpected sign-in reply.');
+      : throw const SourceException.fault(SourceFault.jellyfinUnexpectedSignIn);
 }

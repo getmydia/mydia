@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/download_failure.dart';
 import 'package:player/domain/models/download_option.dart';
 import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/models/download_request.dart';
@@ -81,7 +82,8 @@ void main() {
     final task = await h.service.start(_request());
     await h.waitForStatus(task.id, 'failed');
     final stored = h.database.getTask(task.id)!;
-    expect(stored.error, 'This item is no longer on the server.');
+    expect(stored.failure?.code, DownloadFailureCode.source);
+    expect(stored.failure?.sourceKind, SourceErrorKind.notFound);
     expect(stored.recoveryAttempts, greaterThanOrEqualTo(3));
   });
 
@@ -96,7 +98,8 @@ void main() {
     final task = await h.service.start(_request());
     await h.waitForStatus(task.id, 'failed');
     expect(h.resolver.calls, 2);
-    expect(h.database.getTask(task.id)!.error, contains('Sign in again'));
+    expect(h.database.getTask(task.id)!.failure?.code,
+        DownloadFailureCode.signInExpired);
   });
 
   test('nothing recovers until a resolver is installed', () async {
@@ -330,6 +333,31 @@ void main() {
         expect(stored.error, isNot(contains('x.invalid')));
       });
     }
+
+    test('a refused sign-in while polling fails typed, not as English text',
+        () async {
+      final h = await seeded(const SourceException.unauthorized());
+      addTearDown(h.dispose);
+
+      await h.service.resumeDownload('job');
+      await h.waitForStatus('job', 'failed');
+
+      final failure = h.database.getTask('job')!.failure!;
+      expect(failure.code, DownloadFailureCode.source);
+      expect(failure.sourceKind, SourceErrorKind.unauthorized);
+    });
+
+    test('an unreadable reply while polling keeps its fault', () async {
+      final h = await seeded(
+          const SourceException.fault(SourceFault.serverUnreadable));
+      addTearDown(h.dispose);
+
+      await h.service.resumeDownload('job');
+      await h.waitForStatus('job', 'failed');
+
+      final failure = h.database.getTask('job')!.failure!;
+      expect(failure.sourceException().fault, SourceFault.serverUnreadable);
+    });
 
     test('an unreachable guest parks without using up an attempt', () async {
       final h = await seeded(const SourceException.unreachable());

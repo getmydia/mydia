@@ -719,7 +719,7 @@ class _SubtitleDelayRow extends StatelessWidget {
                 TextButton(
                   key: const ValueKey('subtitle-delay-save'),
                   onPressed: onSave,
-                  child: Text(context.l10n.loginSave),
+                  child: Text(context.l10n.commonSave),
                 ),
             ],
           ),

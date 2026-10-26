@@ -315,8 +315,10 @@ class PlaybackController implements PlaybackTransport {
       response = await _client.request(
           documentNodeMutationStartStreamingSession, variables);
     } on SourceException catch (e) {
-      throw Exception('Failed to start streaming session: '
-          '${e.message ?? e.viewerMessage}');
+      // Rethrown unchanged so the screen can word the failure by kind.
+      debugPrint(
+          '[PlaybackController] Failed to start streaming session: ${e.logText}');
+      rethrow;
     }
     final data =
         Mutation$StartStreamingSession.fromJson(rootMutation(response));

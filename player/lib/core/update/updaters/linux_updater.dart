@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
+import '../update_problem.dart';
 
 /// Linux updater: downloads tar.gz, extracts, and replaces the running binary.
 ///
@@ -96,7 +97,8 @@ class LinuxUpdater extends PlatformUpdater {
     final extractResult =
         await Process.run('tar', ['-xzf', archivePath, '-C', extractDir]);
     if (extractResult.exitCode != 0) {
-      throw Exception('Failed to extract update: ${extractResult.stderr}');
+      throw UpdateStepFailed(UpdateProblem(UpdateIssue.extractFailed,
+          detail: '${extractResult.stderr}'));
     }
 
     final execPath = Platform.resolvedExecutable;
@@ -108,7 +110,8 @@ class LinuxUpdater extends PlatformUpdater {
       ['-rf', '$extractDir/.', installDir],
     );
     if (copyResult.exitCode != 0) {
-      throw Exception('Failed to copy update files: ${copyResult.stderr}');
+      throw UpdateStepFailed(UpdateProblem(UpdateIssue.copyFailed,
+          detail: '${copyResult.stderr}'));
     }
 
     // Ensure binary is executable

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_job_service.dart';
 import 'package:player/core/downloads/download_recovery.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/download_failure.dart';
 import 'package:player/domain/models/download_option.dart';
 import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
@@ -408,8 +409,8 @@ void main() {
       await harness.service.resumeDownload('gone');
       await harness.waitForStatus('gone', 'failed');
 
-      expect(harness.database.getTask('gone')!.error,
-          contains('no longer has this download'));
+      expect(harness.database.getTask('gone')!.failure?.code,
+          DownloadFailureCode.jobGone);
     });
 
     test('gives up after the retry ceiling and leaves the task interrupted',

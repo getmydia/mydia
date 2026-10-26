@@ -75,8 +75,7 @@ class StashMediaSource extends MediaSource
   static void _requireResult(Map<String, dynamic> data, String key) {
     final result = data[key];
     if (result == null || result == false) {
-      throw const SourceException.server(
-          'Stash did not confirm the saved progress.');
+      throw const SourceException.fault(SourceFault.stashNotConfirmed);
     }
   }
 

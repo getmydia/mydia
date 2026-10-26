@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/backends/flatpak_update_backend.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/update_backend.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
@@ -143,7 +144,7 @@ void main() {
 
   group('install permission resume', () {
     const denied = UpdateUnsupported(
-      'not allowed',
+      UpdateProblem(UpdateIssue.installPermissionDenied),
       needsInstallPermission: true,
     );
 
@@ -155,7 +156,8 @@ void main() {
       container.read(updateProvider);
       await Future<void>.delayed(Duration.zero);
       await container.read(updateProvider.notifier).requestUpdate();
-      expect(container.read(updateProvider).error, 'not allowed');
+      expect(container.read(updateProvider).error,
+          const UpdateProblem(UpdateIssue.installPermissionDenied));
       return container;
     }
 
@@ -192,7 +194,7 @@ void main() {
 
       expect(backend.requests, 1);
       expect(container!.read(updateProvider).error,
-          contains('Install unknown apps'));
+          const UpdateProblem(UpdateIssue.installPermissionStillDenied));
 
       // The flag is cleared: a later resume does nothing more. The listener
       // ignores a same-state change, so leave the foreground first or this
@@ -304,7 +306,8 @@ void main() {
 
   test('an unsupported result surfaces its reason as an error', () async {
     final backend = _FakeBackend(
-      outcome: const UpdateUnsupported('This update needs new permissions.'),
+      outcome: const UpdateUnsupported(
+          UpdateProblem(UpdateIssue.needsNewPermissions)),
     );
     final container = _container(backend);
     container.read(updateProvider);
@@ -312,19 +315,20 @@ void main() {
 
     await container.read(updateProvider.notifier).requestUpdate();
 
-    expect(container.read(updateProvider).error, contains('permissions'));
+    expect(container.read(updateProvider).error,
+        const UpdateProblem(UpdateIssue.needsNewPermissions));
   });
 
   test('a failure surfaces its message', () async {
-    final backend =
-        _FakeBackend(outcome: const UpdateFailed('connection reset'));
+    final backend = _FakeBackend(
+        outcome: const UpdateFailed(UpdateProblem.text('connection reset')));
     final container = _container(backend);
     container.read(updateProvider);
     await Future<void>.delayed(Duration.zero);
 
     await container.read(updateProvider.notifier).requestUpdate();
 
-    expect(container.read(updateProvider).error, contains('connection reset'));
+    expect(container.read(updateProvider).error?.text, 'connection reset');
   });
 
   test('a restart that fails still says the update is installed', () async {
@@ -534,7 +538,8 @@ void main() {
 
   test('an unsupported track switch surfaces its reason as an error', () async {
     final backend = _FakeBackend(
-      trackSwitchOutcome: const TrackSwitchUnsupported('Could not save.'),
+      trackSwitchOutcome: const TrackSwitchUnsupported(
+          UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full')),
     );
     final container = _container(backend);
     container.read(updateProvider);
@@ -543,7 +548,8 @@ void main() {
     await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
 
     final state = container.read(updateProvider);
-    expect(state.error, 'Could not save.');
+    expect(state.error,
+        const UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full'));
     expect(state.trackNotPublished, isNull);
   });
 }

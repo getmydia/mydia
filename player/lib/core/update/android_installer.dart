@@ -20,6 +20,16 @@ class InstallerPermissionDenied implements Exception {
       'for Mydia in Android settings, then try again.';
 }
 
+/// Android's installer failed for a reason of its own; [detail] is its text.
+class InstallerFailed implements Exception {
+  InstallerFailed(this.detail);
+
+  final String detail;
+
+  @override
+  String toString() => 'Install failed: $detail'; // l10n-ignore log text
+}
+
 /// Installs an APK through Android's package installer.
 class AndroidInstaller {
   const AndroidInstaller({MethodChannel channel = kInstallerChannel})
@@ -62,7 +72,7 @@ class AndroidInstaller {
       await _channel.invokeMethod('install', {'path': path});
     } on PlatformException catch (e) {
       if (e.code == 'permission_denied') throw InstallerPermissionDenied();
-      throw Exception('Install failed: ${e.message ?? e.code}');
+      throw InstallerFailed(e.message ?? e.code);
     } on MissingPluginException {
       throw InstallerUnavailable();
     }

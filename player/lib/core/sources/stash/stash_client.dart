@@ -80,24 +80,25 @@ class StashClient {
       json = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
       throw ok
-          ? const SourceException.server(
-              'The server sent a response this app cannot read.')
-          : SourceException.server(
-              'Stash answered HTTP ${response.statusCode}.');
+          ? const SourceException.fault(SourceFault.stashUnreadable)
+          : SourceException.fault(SourceFault.stashHttp,
+              detail: '${response.statusCode}');
     }
     final errors = json is Map ? json['errors'] : null;
     if (!ok && !(errors is List && errors.isNotEmpty)) {
-      throw SourceException.server(
-          'Stash answered HTTP ${response.statusCode}.');
+      throw SourceException.fault(SourceFault.stashHttp,
+          detail: '${response.statusCode}');
     }
     if (json is! Map) {
-      throw const SourceException.server('Stash sent an unexpected reply.');
+      throw const SourceException.fault(SourceFault.stashUnexpectedReply);
     }
     if (errors is List && errors.isNotEmpty) {
       final message =
           (errors.first is Map ? (errors.first as Map)['message'] : null)
-                  ?.toString() ??
-              'Stash reported an error.';
+              ?.toString();
+      if (message == null) {
+        throw const SourceException.fault(SourceFault.stashReportedError);
+      }
       final unsupported = message.contains('Cannot query field') ||
           message.contains('Unknown argument') ||
           message.contains('Unknown type');
@@ -120,7 +121,7 @@ class StashClient {
     final data = await query(stashSystemStatus);
     final status = (data['systemStatus'] as Map?)?['status'];
     if (status != 'OK') {
-      throw SourceException.server('Stash reports status $status.');
+      throw SourceException.fault(SourceFault.stashStatus, detail: '$status');
     }
   }
 

@@ -69,12 +69,13 @@ abstract class TranscodeJob extends DownloadPlan {
 /// The server dropped the job. Not recoverable by resuming, only by
 /// restarting, which prepares a new one.
 class DeadJobException implements Exception {
-  const DeadJobException(this.message);
+  const DeadJobException();
 
-  final String message;
-
+  /// English, for logs only: the downloads screen words the failure from
+  /// `DownloadFailureCode.jobGone`.
   @override
-  String toString() => message;
+  String toString() =>
+      'The server no longer has this download job. Restart to try again.'; // l10n-ignore log text
 }
 
 final _safeExtension = RegExp(r'^[a-z0-9]{2,5}$');

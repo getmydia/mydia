@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_backend.dart';
+import 'package:player/core/update/update_problem.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
 import 'package:player/l10n/l10n.dart';
@@ -404,8 +405,7 @@ void main() {
       await _pump(
         tester,
         state: const UpdateState(
-          error: 'Could not reach the Flatpak portal. Update from your '
-              'software centre.',
+          error: UpdateProblem(UpdateIssue.portalUnreachable),
           manualCheck: ManualCheckBehaviour.checksAndInstalls,
         ),
       );
