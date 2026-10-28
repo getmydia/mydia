@@ -177,7 +177,9 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
 
   # -- local database ------------------------------------------------------------
 
-  defp prepare_row(definition) do
+  @doc false
+  # Shared with the parity oracle's runner.
+  def prepare_row(definition) do
     with {:ok, attrs} <- DefinitionSync.parse_definition(definition.yaml, definition.id),
          attrs = Map.put(attrs, :indexer_id, definition.id),
          {:ok, _action, row} <- DefinitionSync.upsert_definition(attrs) do
@@ -200,7 +202,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
     e -> {:error, {:exception, Exception.message(e)}}
   end
 
-  defp adapter_config(definition) do
+  @doc false
+  def adapter_config(definition) do
     %{
       type: :cardigann,
       name: definition.name,
