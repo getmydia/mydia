@@ -57,6 +57,33 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
     end
   end
 
+  @script ~r/<script\b[^>]*?(?:\/>|>.*?<\/script\s*>)/is
+  @remote_link ~r/<link\b(?=[^>]*\brel\s*=\s*["']?(?:stylesheet|preload|modulepreload))[^>]*>/i
+
+  @doc """
+  Drops `<script>` elements and stylesheet/preload `<link>` tags from an HTML
+  body. No selector reads them, and a fixture that loads a script from a CDN
+  with no integrity check is a supply-chain finding for nothing. Other bodies
+  (JSON, XML, failed responses with no markup) come back as they were.
+  """
+  @spec strip_scripts(Exchange.t(), String.t() | nil) :: Exchange.t()
+  def strip_scripts(%Exchange{body: body} = ex, _encoding) when body in [nil, ""], do: ex
+
+  def strip_scripts(%Exchange{body: body} = ex, encoding) do
+    text = Charset.decode(body, encoding)
+
+    if kind(ex, text) == :html and Regex.match?(~r/<(script|link)\b/i, text) do
+      stripped = text |> String.replace(@script, "") |> String.replace(@remote_link, "")
+
+      case encode(stripped, encoding) do
+        {:ok, bytes} -> %{ex | body: bytes}
+        _ -> ex
+      end
+    else
+      ex
+    end
+  end
+
   defp kind(%Exchange{headers: headers}, text) do
     type =
       Enum.find_value(headers, "", fn {k, v} ->

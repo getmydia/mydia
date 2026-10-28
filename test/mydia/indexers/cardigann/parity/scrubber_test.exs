@@ -467,6 +467,31 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
     end
   end
 
+  describe "strip_scripts" do
+    alias Mydia.Indexers.Cardigann.Parity.Scrubber.Trim
+
+    test "drops scripts and stylesheet or preload links from an HTML body" do
+      body = """
+      <html><head><link rel="stylesheet" href="https://cdn.invalid/a.css">
+      <link rel="icon" href="/f.ico">
+      <script src="https://cdn.invalid/a.js"></script></head><body>
+      <script>var x = "</div>";</script><p>kept</p></body></html>
+      """
+
+      %Exchange{body: out} = Trim.strip_scripts(exchange(body), "UTF-8")
+
+      refute out =~ "<script"
+      refute out =~ "stylesheet"
+      assert out =~ ~s(rel="icon")
+      assert out =~ "<p>kept</p>"
+    end
+
+    test "leaves a JSON body that mentions a script alone" do
+      ex = exchange(~s({"a":"<script>x</script>"}), type: "application/json")
+      assert Trim.strip_scripts(ex, "UTF-8") == ex
+    end
+  end
+
   describe "scrub_ids/1" do
     @hash "a3023d03c85bf18860ce17fad6f9ee3403d0633b"
     @upper String.upcase(@hash)
@@ -751,6 +776,60 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
                Scrubber.seed(Path.join(cache, "generic"), Path.join(tmp, "out"), trim: false)
 
       assert note =~ "exchange 1" and note =~ "--no-trim"
+    end
+  end
+
+  describe "seed/3 scripts and vocabulary" do
+    @describetag :cardigann_wasm
+    @describetag timeout: 300_000
+
+    setup do
+      :ok = Engine.ensure_started()
+
+      on_exit(fn ->
+        Supervisor.terminate_child(Mydia.Supervisor, Engine)
+        Supervisor.delete_child(Mydia.Supervisor, Engine)
+      end)
+
+      original = Application.get_env(:mydia, :features, [])
+      Application.put_env(:mydia, :features, cardigann_enabled: true)
+      on_exit(fn -> Application.put_env(:mydia, :features, original) end)
+      :ok
+    end
+
+    @tag :tmp_dir
+    test "seed drops scripts even from a body it keeps whole", %{tmp_dir: tmp} do
+      cache = Path.join([tmp, "cache", "harbor"])
+      File.mkdir_p!(cache)
+      File.write!(Path.join(cache, "definition.yml"), @yaml)
+
+      page =
+        String.replace(
+          @page,
+          "</head>",
+          ~s(<script src="https://cdn.invalid/a.js"></script></head>)
+        )
+
+      Capture.write!(capture([exchange(page)]), Path.join(cache, "generic"))
+
+      assert {:ok, _notes} =
+               Scrubber.seed(Path.join(cache, "generic"), Path.join(tmp, "out"), trim: false)
+
+      written = Capture.read!(Path.join([tmp, "out", "generic"]))
+      assert [%Exchange{body: body}] = written.exchanges
+      refute body =~ "<script"
+    end
+
+    @tag :tmp_dir
+    test "a work that is a parsed category name is kept", %{tmp_dir: tmp} do
+      yaml = String.replace(@yaml, "desc: Movies", "desc: Mellow Kiln")
+      cache = Path.join([tmp, "cache", "harbor"])
+      File.mkdir_p!(cache)
+      File.write!(Path.join(cache, "definition.yml"), yaml)
+      Capture.write!(capture([exchange(@page)]), Path.join(cache, "generic"))
+
+      assert {:ok, notes} = Scrubber.seed(Path.join(cache, "generic"), Path.join(tmp, "out"))
+      assert Enum.any?(notes, &(&1 =~ ~s(kept "Mellow Kiln")))
     end
   end
 

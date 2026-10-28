@@ -237,6 +237,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     with {:ok, titles} <- learned_titles(original),
          :ok <- renamable(titles, vocabulary),
          {:ok, trimmed, notes} <- maybe_trim(capture, parsed, original, opts),
+         trimmed = strip_scripts(trimmed, encoding),
          {renamed, works} = rename(trimmed, titles, encoding: encoding, keep: vocabulary),
          {scrubbed, ids} = scrub_ids(renamed),
          :ok <-
@@ -277,8 +278,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     for {%Exchange{body: body}, n} <- Enum.with_index(capture.exchanges, 1),
         is_binary(body) and body != "",
         not Names.text?(body, encoding),
-        do:
-          "exchange #{n}: body is not text in #{encoding || "UTF-8"}; only fixed forms were renamed"
+        do: "exchange #{n}: body is not text in #{encoding}; only fixed forms were renamed"
   end
 
   # A work that is also a category the definition maps by name ("SparkyLinux" on
@@ -286,7 +286,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
   # rename the category label so the row stops mapping, and the name is already
   # committed in definition.yml.
   defp vocabulary(%Parsed{capabilities: caps}) do
-    for %{"desc" => desc} <- Map.get(caps || %{}, :categorymappings, []),
+    for %{"desc" => desc} <- Map.get(caps, :categorymappings, []),
         is_binary(desc),
         do: desc
   end
@@ -315,6 +315,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
       "kept #{inspect(work)}: it is a category name in the definition"
     end
   end
+
+  defp strip_scripts(%Capture{} = capture, encoding),
+    do: %{capture | exchanges: Enum.map(capture.exchanges, &Trim.strip_scripts(&1, encoding))}
 
   defp maybe_trim(capture, parsed, original, opts) do
     if Keyword.get(opts, :trim, true) do
