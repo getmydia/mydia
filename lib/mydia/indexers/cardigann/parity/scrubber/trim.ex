@@ -1,0 +1,248 @@
+defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
+  @moduledoc """
+  Cuts a recorded results page down to the rows a definition reads.
+
+  Tracker pages carry sidebars, "popular this week" lists and footers full of
+  real titles that no field selector ever reaches, so the scrubber cannot rename
+  them (it only learns titles from parsed results). Trimming removes them
+  instead. See `Mydia.Indexers.Cardigann.Parity.Scrubber.trim/2` for the rules.
+
+  HTML goes through the native engine's own `Selector`, so a rows selector is
+  matched exactly as the native engine matches it, `:contains` included. Every
+  element there carries a `data-mydia-nid`, which is how a match is found again
+  in the tree; those attributes are stripped before serialising.
+
+  Bodies are decoded with the definition's `encoding` and encoded back into it,
+  so a windows-1251 fixture stays windows-1251 and both engines still exercise
+  their charset handling. A body whose trimmed text cannot be encoded back is
+  kept whole. XML is kept whole too: lexbor parses it as HTML (`<link>` is a
+  void element there), so a round trip would corrupt RSS feeds.
+  """
+
+  alias Mydia.Indexers.Cardigann.{Charset, Selector}
+  alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
+
+  @nid "data-mydia-nid"
+  @doctype ~r/\A\s*(<!doctype[^>]*>)/i
+  @simple_path ~r/\A[\w-]+(\.[\w-]+)*\z/u
+
+  @type outcome :: {:ok, binary()} | :skip | {:untrimmed, String.t()}
+
+  @doc "The trimmed body of a successful exchange, `:skip`, or why it stays whole."
+  @spec body(Exchange.t(), map(), String.t() | nil) :: outcome()
+  def body(%Exchange{error: nil, status: status, body: body} = ex, rows, encoding)
+      when status in 200..299 and is_binary(body) and body != "" do
+    text = Charset.decode(body, encoding)
+
+    result =
+      case kind(ex, text) do
+        :xml -> {:untrimmed, "XML bodies are kept whole"}
+        :json -> json(text, rows)
+        :html -> html(text, rows)
+      end
+
+    case result do
+      {:ok, trimmed} -> encode(trimmed, encoding)
+      other -> other
+    end
+  end
+
+  def body(_exchange, _rows, _encoding), do: :skip
+
+  defp kind(%Exchange{headers: headers}, text) do
+    type =
+      Enum.find_value(headers, "", fn {k, v} ->
+        if String.downcase(k) == "content-type", do: String.downcase(v)
+      end)
+
+    head = String.trim_leading(text)
+
+    cond do
+      type =~ "json" or String.starts_with?(head, ["{", "["]) -> :json
+      String.starts_with?(head, "<?xml") or (type =~ "xml" and not (type =~ "html")) -> :xml
+      true -> :html
+    end
+  end
+
+  defp encode(text, encoding) do
+    bytes = Charset.encode(text, encoding)
+
+    # Charset.encode/2 hands the UTF-8 back untouched when a character has no
+    # mapping, which would silently change the body's charset.
+    if bytes == text and not ascii?(text) and Charset.decode(text, encoding) != text,
+      do: {:untrimmed, "trimmed text does not fit #{encoding}"},
+      else: {:ok, bytes}
+  end
+
+  defp ascii?(text), do: text |> :binary.bin_to_list() |> Enum.all?(&(&1 < 128))
+
+  # -- HTML ---------------------------------------------------------------------
+
+  defp html(text, %{selector: selector} = rows) when is_binary(selector) and selector != "" do
+    doc = Selector.parse(text, [selector])
+
+    case Selector.find(doc, :root, selector) do
+      [] ->
+        :skip
+
+      matches ->
+        keep = matches |> Enum.flat_map(&LazyHTML.attribute(&1, @nid)) |> MapSet.new()
+        after_n = after_count(rows)
+        tree = doc.root |> LazyHTML.to_tree() |> prune(keep, after_n)
+        {:ok, doctype(text) <> LazyHTML.Tree.to_html(tree)}
+    end
+  rescue
+    e in ArgumentError ->
+      {:untrimmed,
+       "rows selector #{inspect(selector)} cannot be evaluated: #{Exception.message(e)}"}
+  end
+
+  defp html(_text, _rows), do: :skip
+
+  defp after_count(rows) do
+    case Map.get(rows, :after) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> 0
+    end
+  end
+
+  defp doctype(text) do
+    case Regex.run(@doctype, text) do
+      [_, doctype] -> doctype <> "\n"
+      nil -> ""
+    end
+  end
+
+  # Keeps the matched rows (and the `after:` siblings joined to them) whole,
+  # their ancestors with every other child dropped, and charset `<meta>` tags so
+  # a parser that sniffs the charset still finds it.
+  defp prune(nodes, keep, after_n) do
+    {kept, _extra} =
+      Enum.reduce(nodes, {[], 0}, fn
+        {tag, attrs, children}, {acc, extra} ->
+          cond do
+            nid(attrs) in keep ->
+              {[strip({tag, attrs, children}) | acc], after_n}
+
+            extra > 0 ->
+              {[strip({tag, attrs, children}) | acc], extra - 1}
+
+            charset_meta?(tag, attrs) ->
+              {[strip({tag, attrs, children}) | acc], extra}
+
+            true ->
+              case prune(children, keep, after_n) do
+                [] -> {acc, extra}
+                kids -> {[{tag, strip_attrs(attrs), kids} | acc], extra}
+              end
+          end
+
+        _text_or_comment, acc ->
+          acc
+      end)
+
+    Enum.reverse(kept)
+  end
+
+  defp nid(attrs) do
+    case List.keyfind(attrs, @nid, 0) do
+      {_, id} -> id
+      nil -> nil
+    end
+  end
+
+  defp charset_meta?("meta", attrs),
+    do: Enum.any?(attrs, fn {k, _} -> String.downcase(k) in ["charset", "http-equiv"] end)
+
+  defp charset_meta?(_tag, _attrs), do: false
+
+  defp strip({tag, attrs, children}),
+    do: {tag, strip_attrs(attrs), Enum.map(children, &strip/1)}
+
+  defp strip(other), do: other
+
+  defp strip_attrs(attrs),
+    do: Enum.reject(attrs, fn {k, _} -> String.starts_with?(k, "data-mydia-") end)
+
+  # -- JSON ---------------------------------------------------------------------
+
+  defp json(text, rows) do
+    with {:ok, decoded} <- Jason.decode(text, objects: :ordered_objects),
+         [_ | _] = paths <- json_paths(rows) do
+      case keep_paths(decoded, paths) do
+        {:ok, ^decoded} -> :skip
+        {:ok, kept} -> {:ok, Jason.encode!(kept)}
+        :missing -> :skip
+      end
+    else
+      {:error, _} -> {:untrimmed, "body looks like JSON but does not decode"}
+      [] -> :skip
+      {:untrimmed, _} = untrimmed -> untrimmed
+    end
+  end
+
+  # The rows path plus the `rows.count` path, when both are plain dotted keys.
+  defp json_paths(rows) do
+    case path(Map.get(rows, :selector)) do
+      :root ->
+        []
+
+      {:ok, rows_path} ->
+        count =
+          case path(count_selector(rows)) do
+            {:ok, count_path} -> [count_path]
+            _ -> []
+          end
+
+        [rows_path | count]
+
+      :complex ->
+        {:untrimmed, "JSON rows path #{inspect(rows[:selector])} is not a plain dotted path"}
+    end
+  end
+
+  defp count_selector(rows) do
+    case Map.get(rows, :count) do
+      %{} = count -> Map.get(count, "selector") || Map.get(count, :selector)
+      _ -> nil
+    end
+  end
+
+  defp path(nil), do: :root
+  defp path(selector) when not is_binary(selector), do: :complex
+
+  defp path(selector) do
+    case selector
+         |> String.trim()
+         |> String.replace_prefix("$", "")
+         |> String.trim_leading(".") do
+      "" ->
+        :root
+
+      rest ->
+        if Regex.match?(@simple_path, rest), do: {:ok, String.split(rest, ".")}, else: :complex
+    end
+  end
+
+  # Keeps only the keys on one of `paths`. A path that runs into a non-object
+  # keeps that value whole; the rows path itself must exist.
+  defp keep_paths(value, paths) do
+    cond do
+      [] in paths ->
+        {:ok, value}
+
+      match?(%Jason.OrderedObject{}, value) ->
+        kept =
+          for {key, inner} <- value.values,
+              sub = for([^key | rest] <- paths, do: rest),
+              sub != [],
+              {:ok, pruned} <- [keep_paths(inner, sub)],
+              do: {key, pruned}
+
+        if kept == [], do: :missing, else: {:ok, %Jason.OrderedObject{values: kept}}
+
+      true ->
+        {:ok, value}
+    end
+  end
+end

@@ -24,8 +24,18 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
       --write-ratchet   diff: rewrite test/fixtures/cardigann/parity/known_divergences.exs
                         from what was found, keeping existing reasons
 
+      --no-trim         seed: keep whole pages instead of cutting them down to
+                        the result rows
+      --out DIR         seed: write fixtures under DIR instead of
+                        test/fixtures/cardigann/parity
+
   `diff` writes `report.md` into the capture set (or prints it for `--seed`).
-  `seed <definition>` is implemented by a later task.
+
+  `seed <definition>` scrubs every cached capture of one definition (from the
+  newest capture set, or `--ref`) into a committable fixture: pages trimmed to
+  their rows, real work names replaced with invented ones, and the result
+  replayed through the wasm engine to prove nothing parses differently and no
+  real name is left. Nothing is written for a capture that fails that check.
 
   Like the benchmark, the task works on its own scratch SQLite database
   (`--database`, default under the cache root) and never touches the dev one.
@@ -34,7 +44,7 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
   use Mix.Task
 
   alias Mydia.Indexers.Cardigann.Bench.Corpus
-  alias Mydia.Indexers.Cardigann.Parity.{Capture, Ratchet, Report, Runner}
+  alias Mydia.Indexers.Cardigann.Parity.{Capture, Ratchet, Report, Runner, Scrubber}
   alias Mix.Tasks.Mydia.CardigannBench
 
   @shortdoc "Diffs the native and wasm Cardigann engines on recorded HTTP"
@@ -46,7 +56,9 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
     cache: :string,
     seed: :boolean,
     write_ratchet: :boolean,
-    database: :string
+    database: :string,
+    trim: :boolean,
+    out: :string
   ]
 
   @impl Mix.Task
@@ -56,14 +68,42 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
     case rest do
       ["record"] -> record(opts)
       ["diff"] -> diff(opts)
-      ["seed" | _] -> not_implemented("seed")
+      ["seed", definition] -> seed(definition, opts)
       _ -> Mix.raise("Usage: mix mydia.cardigann_parity record | diff | seed <definition>")
     end
   end
 
-  defp not_implemented(command) do
-    Mix.shell().error("mydia.cardigann_parity #{command}: not yet implemented")
-    exit({:shutdown, 1})
+  # -- seed ---------------------------------------------------------------------
+
+  defp seed(definition, opts) do
+    root = cache_root(opts)
+    start_app!(opts, root)
+
+    source = Path.join(capture_set(root, opts[:ref]), definition)
+    out = Path.join(Path.expand(opts[:out] || fixtures_dir()), definition)
+
+    dirs =
+      source |> Path.join("*/exchanges.json") |> Path.wildcard() |> Enum.map(&Path.dirname/1)
+
+    if dirs == [], do: Mix.raise("No captures for #{definition} in #{source}")
+
+    outcomes =
+      for dir <- dirs do
+        label = "#{definition}/#{Path.basename(dir)}"
+
+        case Scrubber.seed(dir, out, trim: Keyword.get(opts, :trim, true)) do
+          {:ok, notes} ->
+            Enum.each(notes, &Mix.shell().info("#{label}: #{&1}"))
+            Mix.shell().info("#{label}: wrote #{Path.join(out, Path.basename(dir))}")
+            :ok
+
+          {:error, errors} ->
+            Enum.each(errors, &Mix.shell().error("#{label}: #{&1}"))
+            :error
+        end
+      end
+
+    if :error in outcomes, do: exit({:shutdown, 1}), else: :ok
   end
 
   # -- record -------------------------------------------------------------------
