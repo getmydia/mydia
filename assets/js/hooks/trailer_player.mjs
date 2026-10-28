@@ -67,8 +67,8 @@ export function loadYouTubeApi(
     // rejected promise, which is a no-op.
     win.onYouTubeIframeAPIReady = () => {
       timers.clearTimeout(timer);
-      if (typeof previous === "function") previous();
       resolve(win.YT);
+      if (typeof previous === "function") previous();
     };
 
     const script = doc.createElement("script");

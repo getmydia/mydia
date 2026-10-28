@@ -137,6 +137,10 @@ test("a late script error from a timed-out attempt does not clear the retry", as
 
   assert.equal(loadYouTubeApi(win, doc, timers, 50), second);
   assert.equal(appended.length, 2);
+
+  win.YT = { Player: function () {} };
+  win.onYouTubeIframeAPIReady();
+  assert.equal(await second, win.YT);
 });
 
 test("a switcher click before the API loads survives the player creation", async () => {
