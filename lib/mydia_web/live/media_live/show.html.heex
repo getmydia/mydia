@@ -552,9 +552,9 @@
     />
   <% end %>
   <%= if @show_trailer_modal do %>
-    <% trailer_url = get_trailer_embed_url(@media_item) %>
-    <%= if trailer_url do %>
-      <Modals.trailer_modal trailer_url={trailer_url} title={@media_item.title} />
+    <% videos = trailer_videos(@media_item) %>
+    <%= if videos != [] do %>
+      <Modals.trailer_modal videos={videos} />
     <% end %>
   <% end %>
   <%= if @show_quality_profile_modal do %>

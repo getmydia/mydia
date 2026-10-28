@@ -280,22 +280,10 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     end
   end
 
-  def get_first_trailer(media_item) do
-    case media_item.metadata do
-      %MediaMetadata{videos: [%Video{} = video | _]} ->
-        video
+  def trailer_videos(%{metadata: %MediaMetadata{videos: videos}}),
+    do: Video.youtube_videos(videos)
 
-      _ ->
-        nil
-    end
-  end
-
-  def get_trailer_embed_url(media_item) do
-    case get_first_trailer(media_item) do
-      %Video{} = video -> Video.youtube_embed_url(video)
-      _ -> nil
-    end
-  end
+  def trailer_videos(_media_item), do: []
 
   def get_profile_image_url(nil), do: nil
 

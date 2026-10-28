@@ -66,6 +66,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.Video
 
+  import MydiaWeb.TrailerComponents
+
   @impl true
   def render(assigns) do
     assigns = assign(assigns, :item_ref, item_ref(assigns.item))
@@ -284,21 +286,17 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <% else %>
                 <div class="space-y-6">
                   <%!-- Trailer --%>
-                  <%= if first_trailer(@metadata) do %>
+                  <% trailers = trailer_videos(@metadata) %>
+                  <%= if trailers != [] do %>
                     <div>
                       <h3 class="text-lg font-semibold mb-3">{gettext("Trailer")}</h3>
-                      <div class="aspect-video rounded-lg overflow-hidden bg-base-300">
-                        <iframe
-                          src={
-                            Video.youtube_embed_url(first_trailer(@metadata)) <>
-                              "?rel=0&modestbranding=1"
-                          }
-                          title={gettext("Trailer")}
-                          class="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowfullscreen
-                        ></iframe>
-                      </div>
+                      <%!-- The id carries the first key: the player container is
+                            phx-update="ignore", so switching to another title
+                            must change the id to get a fresh player. --%>
+                      <.trailer_player
+                        id={"trending-detail-trailer-" <> hd(trailers).key}
+                        videos={trailers}
+                      />
                     </div>
                   <% end %>
 
@@ -426,14 +424,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   defp cast(nil), do: []
   defp cast(metadata), do: metadata.cast || []
 
-  defp first_trailer(nil), do: nil
-
-  defp first_trailer(metadata) do
-    case metadata.videos do
-      [video | _] -> video
-      _ -> nil
-    end
-  end
+  defp trailer_videos(nil), do: []
+  defp trailer_videos(metadata), do: Video.youtube_videos(metadata.videos)
 
   # The same rule that refuses the request on submit, so the button and the
   # server cannot disagree. Undecided until the detail metadata arrives, which

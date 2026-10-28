@@ -333,14 +333,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   def overview_section(assigns) do
     cast = get_cast(assigns.media_item)
     crew = get_crew(assigns.media_item)
-    trailer_url = get_trailer_embed_url(assigns.media_item)
+    has_trailer = trailer_videos(assigns.media_item) != []
     has_cast_crew = cast != [] or crew != []
 
     assigns =
       assigns
       |> assign(:cast, cast)
       |> assign(:crew, crew)
-      |> assign(:trailer_url, trailer_url)
+      |> assign(:has_trailer, has_trailer)
       |> assign(:has_cast_crew, has_cast_crew)
 
     ~H"""
@@ -355,7 +355,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             edge when the row wraps them onto their own line, so the Cast
             dropdown-end panel opens leftward and stays on screen. --%>
       <div class="flex items-center gap-2 flex-shrink-0 ml-auto">
-        <%= if @trailer_url do %>
+        <%= if @has_trailer do %>
           <button
             id="trailer-button"
             type="button"

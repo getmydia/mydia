@@ -411,21 +411,20 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
 
   defp parse_videos(nil), do: []
 
+  # Teasers are kept, after every trailer, so a region-locked or removed
+  # trailer has something to fall back to in the web UI's trailer player.
+  @video_type_rank %{"Trailer" => 0, "Teaser" => 1}
+
   defp parse_videos(%{"results" => videos}) when is_list(videos) do
-    # Filter to only YouTube trailers for initial implementation
     videos
     |> Enum.filter(fn video ->
-      video["site"] == "YouTube" && video["type"] == "Trailer"
+      video["site"] == "YouTube" && Map.has_key?(@video_type_rank, video["type"])
     end)
-    |> Enum.sort_by(
-      fn video ->
-        # Prioritize official trailers, then by most recent. `:desc` on a
-        # boolean puts `true` (official) ahead of `false`, matching Erlang
-        # term ordering (true > false).
-        {video["official"], video["published_at"]}
-      end,
-      :desc
-    )
+    # Official first, then most recent. `:desc` on a boolean puts `true`
+    # (official) ahead of `false`, matching Erlang term ordering.
+    |> Enum.sort_by(&{&1["official"], &1["published_at"]}, :desc)
+    # Stable, so official/newest order survives inside each type.
+    |> Enum.sort_by(&Map.fetch!(@video_type_rank, &1["type"]))
     |> Enum.take(5)
     |> Enum.map(&Video.from_api_response/1)
   end

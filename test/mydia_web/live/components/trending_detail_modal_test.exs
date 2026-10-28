@@ -13,6 +13,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.Metadata.Structs.Video
   alias MydiaWeb.Live.Components.TrendingDetailModal
 
   # A real %SearchResult{}, not a bare map: Ref.from_search_result/1 (called
@@ -295,6 +296,28 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
         |> LazyHTML.attribute("class")
 
       refute class =~ "btn-sm"
+    end
+  end
+
+  describe "trailer" do
+    test "renders the trailer player with every YouTube video" do
+      videos = [
+        %Video{key: "first", site: "YouTube", name: "Trailer", type: "Trailer"},
+        %Video{key: "second", site: "YouTube", name: "Teaser", type: "Teaser"}
+      ]
+
+      doc = render_modal(item(), metadata(%{videos: videos})) |> LazyHTML.from_fragment()
+      container = LazyHTML.query(doc, ~s([phx-hook="TrailerPlayer"]))
+
+      assert LazyHTML.attribute(container, "data-keys") == [~s(["first","second"])]
+      assert LazyHTML.attribute(container, "id") == ["trending-detail-trailer-first"]
+      assert LazyHTML.attribute(container, "data-autoplay") == ["false"]
+    end
+
+    test "renders no trailer section without videos" do
+      html = render_modal(item(), metadata(%{videos: []}))
+
+      refute html =~ "TrailerPlayer"
     end
   end
 end

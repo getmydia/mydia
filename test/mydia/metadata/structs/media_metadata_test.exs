@@ -179,6 +179,84 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
       assert hd(metadata.videos).official == true
       assert hd(metadata.videos).key == "official"
     end
+
+    test "keeps teasers, after every trailer" do
+      body =
+        video_body([
+          yt("teaser", "Teaser", %{"published_at" => "2024-01-01T00:00:00.000Z"}),
+          yt("trailer", "Trailer", %{"official" => false})
+        ])
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "9001")
+
+      assert Enum.map(metadata.videos, & &1.key) == ["trailer", "teaser"]
+    end
+
+    test "orders teasers official first, then newest" do
+      body =
+        video_body([
+          yt("old-official", "Teaser", %{"published_at" => "2019-01-01T00:00:00.000Z"}),
+          yt("new-unofficial", "Teaser", %{
+            "official" => false,
+            "published_at" => "2024-01-01T00:00:00.000Z"
+          }),
+          yt("new-official", "Teaser", %{"published_at" => "2023-01-01T00:00:00.000Z"})
+        ])
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "9001")
+
+      assert Enum.map(metadata.videos, & &1.key) == [
+               "new-official",
+               "old-official",
+               "new-unofficial"
+             ]
+    end
+
+    test "drops other video types and non-YouTube sites" do
+      body =
+        video_body([
+          yt("clip", "Clip"),
+          yt("featurette", "Featurette"),
+          yt("vimeo", "Trailer", %{"site" => "Vimeo"}),
+          yt("kept", "Trailer")
+        ])
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "9001")
+
+      assert Enum.map(metadata.videos, & &1.key) == ["kept"]
+    end
+
+    test "caps the list at five" do
+      results = for i <- 1..4, do: yt("trailer-#{i}", "Trailer")
+      teasers = for i <- 1..4, do: yt("teaser-#{i}", "Teaser")
+
+      metadata = MediaMetadata.from_api_response(video_body(results ++ teasers), :movie, "9001")
+
+      assert length(metadata.videos) == 5
+      assert Enum.count(metadata.videos, &(&1.type == "Trailer")) == 4
+    end
+  end
+
+  defp video_body(results) do
+    %{
+      "id" => 9001,
+      "title" => "The Lantern Coast",
+      "credits" => %{"cast" => [], "crew" => []},
+      "videos" => %{"results" => results}
+    }
+  end
+
+  defp yt(key, type, attrs \\ %{}) do
+    Map.merge(
+      %{
+        "site" => "YouTube",
+        "type" => type,
+        "key" => key,
+        "official" => true,
+        "published_at" => "2020-01-01T00:00:00.000Z"
+      },
+      attrs
+    )
   end
 
   describe "content_rating for TV shows" do

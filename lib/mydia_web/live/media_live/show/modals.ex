@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   use MydiaWeb, :verified_routes
   import MydiaWeb.CoreComponents
   import MydiaWeb.IndexerComponents
+  import MydiaWeb.TrailerComponents
   import MydiaWeb.DateTimeFormat, only: [format: 3]
 
   # Import the formatting and search helper functions
@@ -1339,15 +1340,17 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   end
 
   @doc """
-  Trailer modal for viewing embedded YouTube trailer.
+  Trailer modal for the item's YouTube trailers.
+
+  Takes the list of videos: the player plays the first and falls back to the
+  next when YouTube refuses it (see `MydiaWeb.TrailerComponents`).
   """
-  attr :trailer_url, :string, required: true
-  attr :title, :string, required: true
+  attr :videos, :list, required: true
 
   def trailer_modal(assigns) do
     ~H"""
     <div class="modal modal-open">
-      <div class="modal-box max-w-4xl p-0 overflow-hidden relative">
+      <div class="modal-box max-w-4xl p-0 overflow-hidden relative bg-black">
         <button
           type="button"
           phx-click="hide_trailer_modal"
@@ -1355,15 +1358,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         >
           <.icon name="hero-x-mark" class="w-5 h-5 text-white" />
         </button>
-        <div class="aspect-video bg-black">
-          <iframe
-            src={@trailer_url <> "?rel=0&modestbranding=1&autoplay=1"}
-            title={gettext("Trailer")}
-            class="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen
-          ></iframe>
-        </div>
+        <.trailer_player
+          id="media-trailer-player"
+          videos={@videos}
+          autoplay
+          button_class="[&.btn-ghost]:text-white/80 [&.btn-ghost]:hover:bg-white/10 [&.btn-ghost]:hover:text-white"
+        />
       </div>
       <div class="modal-backdrop bg-black/80" phx-click="hide_trailer_modal"></div>
     </div>
