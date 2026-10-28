@@ -55,12 +55,12 @@ export function loadYouTubeApi(
   if (win.YT && win.YT.Player) return Promise.resolve(win.YT);
   if (apiPromise) return apiPromise;
 
-  apiPromise = new Promise((resolve, reject) => {
+  const attempt = new Promise((resolve, reject) => {
     const previous = win.onYouTubeIframeAPIReady;
     // The script can load without ever calling the ready callback; give up
     // so the caller falls back to a plain iframe and a later mount retries.
     const timer = timers.setTimeout(() => {
-      apiPromise = null;
+      if (apiPromise === attempt) apiPromise = null;
       reject(new Error("YouTube IFrame API timed out"));
     }, timeoutMs);
     // A callback that fires after the timeout still resolves the already
@@ -76,13 +76,14 @@ export function loadYouTubeApi(
     script.async = true;
     script.onerror = () => {
       timers.clearTimeout(timer);
-      apiPromise = null;
+      if (apiPromise === attempt) apiPromise = null;
       reject(new Error("YouTube IFrame API failed to load"));
     };
     doc.head.appendChild(script);
   });
 
-  return apiPromise;
+  apiPromise = attempt;
+  return attempt;
 }
 
 const TrailerPlayer = {

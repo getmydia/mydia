@@ -120,6 +120,25 @@ test("loadYouTubeApi times out when the ready callback never fires, then retries
   assert.equal(appended.length, 2);
 });
 
+test("a late script error from a timed-out attempt does not clear the retry", async () => {
+  resetYouTubeApiForTest();
+  const win = {};
+  const { doc, appended } = fakeDom();
+  let fire;
+  const timers = { setTimeout: (fn) => (fire = fn), clearTimeout() {} };
+
+  const first = loadYouTubeApi(win, doc, timers, 50);
+  fire();
+  await assert.rejects(first);
+
+  const second = loadYouTubeApi(win, doc, timers, 50);
+  assert.equal(appended.length, 2);
+  appended[0].onerror();
+
+  assert.equal(loadYouTubeApi(win, doc, timers, 50), second);
+  assert.equal(appended.length, 2);
+});
+
 test("a switcher click before the API loads survives the player creation", async () => {
   resetYouTubeApiForTest();
   const created = [];
