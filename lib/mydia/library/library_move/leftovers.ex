@@ -16,6 +16,7 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
 
   alias Mydia.Jobs.MediaImport.Paths
   alias Mydia.Library.Dirs
+  alias Mydia.Library.FileMove
   alias Mydia.Library.FileOrganizer
   alias Mydia.Library.ItemFolders
   alias Mydia.Library.ItemFolders.Folder
@@ -92,6 +93,10 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
       MapSet.member?(keep, path) ->
         :ok
 
+      # An earlier attempt linked it but could not remove the source.
+      FileMove.same_file?(path, dest) ->
+        remove_linked_source(path)
+
       match?({:ok, _}, File.lstat(dest)) ->
         Logger.info("Library move left a file behind: destination exists", path: path)
 
@@ -100,6 +105,19 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
     end
 
     []
+  end
+
+  defp remove_linked_source(path) do
+    case File.rm(path) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Library move could not remove a carried file",
+          path: path,
+          reason: inspect(reason)
+        )
+    end
   end
 
   defp place(path, dest, target) do

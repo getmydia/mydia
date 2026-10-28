@@ -105,12 +105,22 @@ defmodule Mydia.Library.FileMove do
       identical_copy?(source_path, dest_path)
   end
 
-  defp row_claims?(dest_path, target) do
-    rel = Path.relative_to(dest_path, target.path)
+  defp row_claims?(dest_path, target),
+    do: claimed?(target.id, Path.relative_to(dest_path, target.path))
 
-    Repo.exists?(
-      from(f in MediaFile, where: f.library_path_id == ^target.id and f.relative_path == ^rel)
-    )
+  @doc """
+  True when a media file row, trashed or not, sits at `relative_path` in the
+  library `library_path_id`. `except_id` leaves one row out (the caller's own).
+  """
+  @spec claimed?(binary(), String.t(), binary() | nil) :: boolean()
+  def claimed?(library_path_id, relative_path, except_id \\ nil) do
+    query =
+      from(f in MediaFile,
+        where: f.library_path_id == ^library_path_id and f.relative_path == ^relative_path
+      )
+
+    query = if except_id, do: from(f in query, where: f.id != ^except_id), else: query
+    Repo.exists?(query)
   end
 
   @doc "True when both local paths are the same file (device and inode): a hardlink."

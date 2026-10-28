@@ -59,8 +59,18 @@ defmodule Mydia.Jobs.LibraryMove do
 
   # The target went away after enqueue: undo the retarget unless someone has
   # pointed the item elsewhere since. Scope.system/0 is the scope for jobs.
+  # Files an earlier attempt already moved stay in the target; the log line
+  # and the event's "moved" count say how many.
   defp cancel(item, target, args) do
-    if item.library_path_id == args["target_library_path_id"] do
+    target_id = args["target_library_path_id"]
+    in_target = Enum.count(LibraryMove.item_files(item.id), &(&1.library_path_id == target_id))
+
+    Logger.warning("Library move cancelled: target library unavailable",
+      media_item_id: item.id,
+      files_already_in_target: in_target
+    )
+
+    if item.library_path_id == target_id do
       Media.update_media_item(
         Scope.system(),
         item,
@@ -85,7 +95,7 @@ defmodule Mydia.Jobs.LibraryMove do
 
   defp run(job, item, target) do
     sources = Map.get(job.args, "sources", [])
-    Sources.sweep(sources, target)
+    swept_failures = Sources.sweep(sources, target)
 
     {:ok, moves} = LibraryMove.plan(item, target)
 
@@ -96,7 +106,7 @@ defmodule Mydia.Jobs.LibraryMove do
 
     Leftovers.carry(folders, item, target, left_behind)
     MediaServerNotifier.notify_all(path: target.path)
-    finish(job, item, target, Enum.count(results, &FileStep.transient?/1))
+    finish(job, item, target, swept_failures + Enum.count(results, &FileStep.transient?/1))
   end
 
   defp unzip(pairs) do

@@ -234,4 +234,84 @@ defmodule Mydia.Jobs.LibraryMoveTest do
 
     assert :ok = perform_job(Mydia.Jobs.LibraryMove, args)
   end
+
+  # The first attempt placed (hardlink) and relinked, then died before
+  # deleting the source.
+  defp committed_orphan(%{a: a, b: b, movie: movie}) do
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    source = Path.join(a.path, file.relative_path)
+    assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+    dest = Path.join(b.path, "Glass Harbor (2019)/glass.mkv")
+    File.mkdir_p!(Path.dirname(dest))
+    File.ln!(source, dest)
+    Repo.update!(Ecto.Changeset.change(file, library_path_id: b.id))
+    {job, source, dest}
+  end
+
+  test "a sweep that cannot delete the source retries", ctx do
+    {job, source, _dest} = committed_orphan(ctx)
+    dir = Path.dirname(source)
+    File.chmod!(dir, 0o555)
+    on_exit(fn -> File.chmod(dir, 0o755) end)
+
+    # Root ignores directory permissions; there is nothing to observe then.
+    if File.write(Path.join(dir, ".probe"), "") == :ok do
+      File.rm(Path.join(dir, ".probe"))
+    else
+      assert {:error, {:transient, 1}} =
+               perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+      assert File.exists?(source)
+
+      refute Repo.exists?(
+               from(e in Mydia.Events.Event,
+                 where: e.resource_id == ^ctx.movie.id and e.type == "media_item.library_moved"
+               )
+             )
+    end
+  end
+
+  test "the sweep keeps an old path a row claims again", ctx do
+    {job, source, dest} = committed_orphan(ctx)
+    # A scan re-registered the orphan during the backoff.
+    media_file_fixture(%{
+      library_path_id: ctx.a.id,
+      relative_path: "Glass Harbor (2019)/glass.mkv",
+      size: 3
+    })
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    assert File.exists?(source)
+    assert File.exists?(dest)
+  end
+
+  test "a leftover already linked into place loses its source", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    poster = write(Path.join(a.path, "Glass Harbor (2019)/poster.jpg"))
+    linked = Path.join(b.path, "Glass Harbor (2019)/poster.jpg")
+    File.mkdir_p!(Path.dirname(linked))
+    File.ln!(poster, linked)
+
+    assert :ok = run(movie, b)
+
+    refute File.exists?(poster)
+    assert File.exists?(linked)
+    refute File.exists?(Path.join(a.path, "Glass Harbor (2019)"))
+  end
+
+  test "a cancelled partial move reports the files already in the target", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    put_file(b, "Glass Harbor (2019)/glass.cd2.mkv", %{media_item_id: movie.id})
+    assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+    disabled = Repo.update!(Ecto.Changeset.change(Repo.get!(LibraryPath, b.id), disabled: true))
+
+    assert {:cancel, :target_unavailable} = perform_job(Mydia.Jobs.LibraryMove, job.args)
+
+    attrs = LibraryMove.event_attrs(movie, disabled, nil, failed: true)
+    assert attrs.type == "media_item.library_move_failed"
+    assert {attrs.metadata["moved"], attrs.metadata["skipped"]} == {1, 1}
+  end
 end

@@ -34,18 +34,31 @@ defmodule Mydia.Library.LibraryMove.Sources do
   path is still the same file as the new one (a hardlink or a byte-identical
   copy), then carries its sidecars. Local paths only: the predicates stat
   files, so an S3 source never matches and is left alone.
+
+  An old path that a row now claims (a scan re-registered the orphan during
+  a backoff) is someone's file and is kept.
+
+  Returns how many deletes failed in a way worth retrying.
   """
-  @spec sweep([map()], LibraryPath.t()) :: :ok
+  @spec sweep([map()], LibraryPath.t()) :: non_neg_integer()
   def sweep(sources, %LibraryPath{} = target) do
-    Enum.each(sources, fn %{"id" => id, "path" => old} ->
-      with %MediaFile{library_path_id: lp_id} = row when lp_id == target.id <-
-             Repo.get(MediaFile, id) |> Repo.preload(:library_path),
-           new when is_binary(new) and new != old <- MediaFile.storage_path(row),
-           true <- FileMove.exists?(new) and FileMove.exists?(old),
-           true <- FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new) do
-        FileStep.finish_source(old, new, id, target)
+    Enum.count(sources, fn source ->
+      case sweep_one(source, target) do
+        {result, _left_behind} -> FileStep.transient?(result)
+        _skipped -> false
       end
     end)
+  end
+
+  defp sweep_one(%{"id" => id, "path" => old} = source, target) do
+    with %MediaFile{library_path_id: lp_id} = row when lp_id == target.id <-
+           Repo.get(MediaFile, id) |> Repo.preload(:library_path),
+         new when is_binary(new) and new != old <- MediaFile.storage_path(row),
+         true <- FileMove.exists?(new) and FileMove.exists?(old),
+         false <- is_nil(source["lp"]) or FileMove.claimed?(source["lp"], source["rel"], id),
+         true <- FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new) do
+      FileStep.finish_source(old, new, id, target)
+    end
   end
 
   @doc """

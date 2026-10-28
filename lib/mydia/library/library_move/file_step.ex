@@ -15,7 +15,6 @@ defmodule Mydia.Library.LibraryMove.FileStep do
   alias Mydia.Library.FileOrganizer
   alias Mydia.Library.LibraryMove.Move
   alias Mydia.Library.LibraryMove.Sidecars
-  alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
   alias Mydia.Subtitles.Subtitle
@@ -138,12 +137,6 @@ defmodule Mydia.Library.LibraryMove.FileStep do
   defp discardable?(%Move{source_path: source, dest_path: dest} = move, target) do
     not Mydia.Storage.s3?(dest) and not Mydia.Storage.s3?(source) and source != dest and
       File.exists?(dest) and File.exists?(source) and not FileMove.same_file?(source, dest) and
-      not claimed?(target, move.dest_rel)
-  end
-
-  defp claimed?(target, rel) do
-    Repo.exists?(
-      from(f in MediaFile, where: f.library_path_id == ^target.id and f.relative_path == ^rel)
-    )
+      not FileMove.claimed?(target.id, move.dest_rel)
   end
 end
