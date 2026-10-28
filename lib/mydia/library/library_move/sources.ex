@@ -76,14 +76,17 @@ defmodule Mydia.Library.LibraryMove.Sources do
 
   defp old_file(_source, nil), do: nil
 
+  # struct/2, not a %MediaFile{} literal: the literal's nil defaults for
+  # fields MediaFile.t() types as non-nil (inserted_at, ...) make Dialyzer
+  # reject every call that takes it as a MediaFile.t().
   defp old_file(source, %LibraryPath{} = library) do
-    %MediaFile{
+    struct(MediaFile,
       id: source["id"],
       relative_path: source["rel"],
       library_path_id: library.id,
       library_path: library,
       extra_kind: if(source["extra"], do: :featurette)
-    }
+    )
   end
 
   defp library(nil), do: nil
