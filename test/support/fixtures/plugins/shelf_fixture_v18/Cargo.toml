@@ -1,0 +1,25 @@
+# Shelf test fixture (1.8). fill-shelf runs a catalog search for movies with
+# the shelf key as the query and returns one movie per hit, tmdb id taken from
+# the hit (0 when absent), with a reason of "<title>/<vote-count>" (vote-count
+# "none" when absent).
+#
+# Built to wasm32-wasip2 and checked in at ../shelf_fixture_v18.wasm:
+#   devenv shell -- cargo build --release --target wasm32-wasip2 \
+#     --manifest-path test/support/fixtures/plugins/shelf_fixture_v18/Cargo.toml
+[package]
+name = "shelf_fixture_v18"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

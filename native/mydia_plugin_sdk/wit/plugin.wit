@@ -56,7 +56,14 @@
 // `exclude`. New `shelf-rating`, `shelf-via` and `shelf-feedback` types. Every
 // other 1.6 type, function and export is byte-stable; a 1.6 guest is served
 // the 1.6 `shelf-request` without `feedback`.
-package mydia:plugin@1.7.0;
+//
+// 1.8.0 (additive over 1.7.0): `search-hit` gains `vote-count`, how many
+// ratings the catalog holds for the title, so a guest can tell a well-known
+// title from an obscure one with the same name. Set for TMDB catalog hits;
+// absent for library hits and for TVDB-keyed shows, which carry no count.
+// Every other 1.7 type, function and export is byte-stable; a 1.7 or older
+// guest is served the old `search-hit` without `vote-count`.
+package mydia:plugin@1.8.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -365,6 +372,8 @@ interface types {
     tvdb-id: option<s64>,
     poster-path: option<string>,
     overview: option<string>,
+    /// 1.8.0: the catalog's rating count. TMDB catalog hits only.
+    vote-count: option<u32>,
   }
 
   /// Target for `media-add`. The host routes by role: a request for guests, a
