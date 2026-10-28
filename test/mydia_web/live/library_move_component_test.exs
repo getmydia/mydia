@@ -44,6 +44,27 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
 
   defp option(id), do: "#library-move-form option[value='#{id}']"
 
+  defp open(view, button) do
+    view |> element(button) |> render_click()
+    render_async(view)
+  end
+
+  # Starting a move reloads the page at its own URL. Returns that URL and the
+  # flash it carries. The reload ends the view's process, which is linked to
+  # the test, and lands either inside render_async/1 or just after it.
+  defp confirm(view, target) do
+    Process.flag(:trap_exit, true)
+    view |> form("#library-move-form", %{"target" => target.id}) |> render_submit()
+
+    case render_async(view) do
+      {:error, {:live_redirect, %{to: to} = opts}} ->
+        {to, Phoenix.LiveView.Utils.verify_flash(MydiaWeb.Endpoint, opts[:flash])}
+
+      _html ->
+        assert_redirect(view)
+    end
+  end
+
   setup %{tmp_dir: tmp} do
     %{
       a: library(tmp, "alpha", "movies"),
@@ -61,7 +82,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
       refute has_element?(view, "#library-move-form")
 
-      view |> element("#move-library-button") |> render_click()
+      open(view, "#move-library-button")
 
       assert has_element?(view, "#library-move-form")
       assert has_element?(view, option(ctx.b.id))
@@ -71,19 +92,19 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       assert has_element?(view, "#library-move-examples li")
     end
 
-    test "confirming enqueues the move and sets a flash", ctx do
+    test "confirming enqueues the move and reloads the page with a flash", ctx do
       {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
-      view |> element("#move-library-button") |> render_click()
+      open(view, "#move-library-button")
 
-      view |> form("#library-move-form", %{"target" => ctx.b.id}) |> render_submit()
+      assert {path, flash} = confirm(view, ctx.b)
+      assert path == ~p"/movies/#{ctx.movie.id}"
+      assert flash["info"] =~ "bravo"
 
       assert_enqueued(
         worker: Mydia.Jobs.LibraryMove,
         args: %{"media_item_id" => ctx.movie.id, "target_library_path_id" => ctx.b.id}
       )
 
-      assert has_element?(view, "#flash-info")
-      refute has_element?(view, "#library-move-form")
       assert Repo.get!(MediaItem, ctx.movie.id).library_path_id == ctx.b.id
     end
 
@@ -99,8 +120,9 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       })
 
       {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
-      view |> element("#move-library-button") |> render_click()
+      open(view, "#move-library-button")
       view |> form("#library-move-form", %{"target" => ctx.b.id}) |> render_change()
+      render_async(view)
 
       assert has_element?(view, "#library-move-skipped")
     end
@@ -109,7 +131,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       Repo.delete!(ctx.b)
 
       {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
-      view |> element("#move-library-button") |> render_click()
+      open(view, "#move-library-button")
 
       assert has_element?(view, "#library-move-empty")
       assert has_element?(view, "#library-move-confirm[disabled]")
@@ -120,22 +142,40 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
     test "moves every selected item", %{conn: conn, a: a, b: b} do
       first = movie_in(a, "Glass Harbor")
       second = movie_in(a, "Copper Lantern")
+      conn = log_in_user(conn, admin_user_fixture())
 
-      {:ok, view, _html} = live(log_in_user(conn, admin_user_fixture()), ~p"/movies")
+      {:ok, view, _html} = live(conn, ~p"/movies")
       render_click(view, "start_selection", %{"id" => first.id})
       render_click(view, "start_selection", %{"id" => second.id})
 
-      view |> element("#batch-move-library-button") |> render_click()
+      open(view, "#batch-move-library-button")
       assert has_element?(view, option(b.id))
       refute has_element?(view, "#library-move-examples")
 
-      view |> form("#library-move-form", %{"target" => b.id}) |> render_submit()
+      assert {"/movies", flash} = confirm(view, b)
 
       for movie <- [first, second] do
         assert_enqueued(worker: Mydia.Jobs.LibraryMove, args: %{"media_item_id" => movie.id})
       end
 
-      assert has_element?(view, "#flash-info")
+      assert flash["info"] =~ "2 items"
+    end
+
+    test "a selection that changes while the dialog is open closes it", ctx do
+      %{conn: conn, a: a} = ctx
+      first = movie_in(a, "Glass Harbor")
+      second = movie_in(a, "Copper Lantern")
+
+      {:ok, view, _html} = live(log_in_user(conn, admin_user_fixture()), ~p"/movies")
+      render_click(view, "start_selection", %{"id" => first.id})
+      render_click(view, "start_selection", %{"id" => second.id})
+      open(view, "#batch-move-library-button")
+      assert has_element?(view, "#library-move-form")
+
+      render_click(view, "toggle_select", %{"id" => second.id})
+
+      refute has_element?(view, "#library-move-form")
+      refute_enqueued(worker: Mydia.Jobs.LibraryMove)
     end
   end
 
@@ -145,7 +185,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
 
       {:ok, view, _html} = live(conn, ~p"/movies/#{movie.id}")
-      view |> element("#move-library-button") |> render_click()
+      open(view, "#move-library-button")
       view |> form("#library-move-form", %{"target" => b.id}) |> render_submit()
 
       refute_enqueued(worker: Mydia.Jobs.LibraryMove)
