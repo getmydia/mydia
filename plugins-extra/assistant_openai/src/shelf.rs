@@ -511,10 +511,14 @@ fn resolve(
             year: want.year,
             media_type: other_type(&want.media_type).to_string(),
         };
-        if let Ok(hits) = search(&other) {
-            if let Some(i) = choose_other_type(&other, &hits) {
-                out[n] = remember(&other, &hits[i], excluded, seen);
+        // A failed retry is reported as the error it is, not left as "no match".
+        match search(&other) {
+            Ok(hits) => {
+                if let Some(i) = choose_other_type(&other, &hits) {
+                    out[n] = remember(&other, &hits[i], excluded, seen);
+                }
             }
+            Err(e) => out[n] = e,
         }
     }
     json!(out)
@@ -1003,6 +1007,28 @@ mod tests {
         );
         assert!(seen.contains(&("tv_show".to_string(), Catalog::Tvdb, 9)));
         assert_eq!(budget, 58);
+    }
+
+    #[test]
+    fn a_failed_retry_is_reported_as_an_error() {
+        let search = |w: &Wanted| {
+            if w.media_type == "movie" {
+                Ok(vec![])
+            } else {
+                Err(json!({"title": w.title, "error": "Catalog search is unavailable."}))
+            }
+        };
+        let out = resolve(
+            &[want("Night Warden", Some(2022), "movie")],
+            &Seen::new(),
+            &mut Seen::new(),
+            &mut 60,
+            search,
+        );
+        assert_eq!(
+            out,
+            json!([{"title": "Night Warden", "error": "Catalog search is unavailable."}])
+        );
     }
 
     #[test]
