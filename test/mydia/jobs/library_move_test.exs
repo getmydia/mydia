@@ -12,6 +12,7 @@ defmodule Mydia.Jobs.LibraryMoveTest do
   alias Mydia.Settings.LibraryPath
   alias Mydia.Subtitles.Subtitle
 
+  import Ecto.Query, only: [from: 2]
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -81,6 +82,22 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert moved.library_path_id == b.id
     assert moved.relative_path == "Glass Harbor (2019)/glass.mkv"
     assert Repo.get!(Subtitle, subtitle.id).file_path == Path.join(dest_dir, "glass.en.srt")
+  end
+
+  test "records a library_moved event with the moved count", %{a: a, b: b, movie: movie} do
+    put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+
+    assert :ok = run(movie, b)
+
+    event =
+      Repo.one!(
+        from e in Mydia.Events.Event,
+          where: e.type == "media_item.library_moved" and e.resource_id == ^movie.id
+      )
+
+    assert event.metadata["moved"] == 1
+    assert event.metadata["skipped"] == 0
+    assert event.metadata["title"] == "Glass Harbor"
   end
 
   test "keeps a source folder that holds another item's file", ctx do

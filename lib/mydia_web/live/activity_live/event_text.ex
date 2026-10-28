@@ -35,6 +35,8 @@ defmodule MydiaWeb.ActivityLive.EventText do
   def title("media_file.imported", _fallback), do: gettext("File imported")
   def title("media_file.upgraded", _fallback), do: gettext("File upgraded")
   def title("media_file.upgrade_rejected", _fallback), do: gettext("Upgrade rejected")
+  def title("media_item.library_moved", _fallback), do: gettext("Moved to library")
+  def title("media_item.library_move_failed", _fallback), do: gettext("Library move failed")
   def title("media_file.pruned", _fallback), do: gettext("Duplicate pruned")
   def title("media_file.returned_to_review", _fallback), do: gettext("Returned to review")
   def title("media_file.prune_undone", _fallback), do: gettext("Duplicate prune undone")

@@ -538,6 +538,54 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Unknown, 1 file trashed"
     end
 
+    test "library_moved reports the count, library and any skipped files" do
+      metadata = %{
+        "title" => "Glass Harbor",
+        "library" => "Films 4K",
+        "moved" => 3,
+        "skipped" => 0
+      }
+
+      assert Presentation.detail(event(type: "media_item.library_moved", metadata: metadata)) ==
+               "Glass Harbor, 3 files moved to Films 4K"
+
+      assert Presentation.detail(
+               event(
+                 type: "media_item.library_moved",
+                 metadata: %{metadata | "skipped" => 2}
+               )
+             ) == "Glass Harbor, 3 files moved to Films 4K, 2 skipped"
+    end
+
+    test "library_move_failed says nothing moved, with or without a target" do
+      metadata = %{
+        "title" => "Glass Harbor",
+        "library" => "Films 4K",
+        "moved" => 0,
+        "skipped" => 1
+      }
+
+      assert Presentation.detail(
+               event(type: "media_item.library_move_failed", metadata: metadata)
+             ) ==
+               "Glass Harbor, nothing moved to Films 4K"
+
+      assert Presentation.detail(
+               event(
+                 type: "media_item.library_move_failed",
+                 metadata: %{metadata | "library" => nil}
+               )
+             ) == "Glass Harbor, nothing moved"
+    end
+
+    test "library move types are registered with titles" do
+      assert Presentation.for_event(event(type: "media_item.library_moved")).title ==
+               "Moved to library"
+
+      assert Presentation.for_event(event(type: "media_item.library_move_failed")).title ==
+               "Library move failed"
+    end
+
     test "prune_undone reports how many files came back and the bytes restored" do
       assert Presentation.detail(
                event(
