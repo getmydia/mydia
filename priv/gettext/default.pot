@@ -20961,3 +20961,18 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Episode monitoring preset"
 msgstr ""
+
+#: lib/mydia_web/components/trailer_components.ex:43
+#, elixir-autogen, elixir-format
+msgid "No trailer is available in your region."
+msgstr ""
+
+#: lib/mydia_web/components/trailer_components.ex:51
+#, elixir-autogen, elixir-format
+msgid "Open on YouTube"
+msgstr ""
+
+#: lib/mydia_web/components/trailer_components.ex:71
+#, elixir-autogen, elixir-format
+msgid "Trailer %{number}"
+msgstr ""
