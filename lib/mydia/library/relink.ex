@@ -78,6 +78,10 @@ defmodule Mydia.Library.Relink do
   `library_path`. Clears any trash state, so a row trashed as missing comes
   back active. Returns `{:error, changeset}` if another active row already
   occupies the target path.
+
+  The update runs in a savepoint: inside a transaction, PostgreSQL aborts the
+  whole transaction on a constraint violation, and the remaining relinks in a
+  batch (`Relink.Scan`) must still run.
   """
   @spec relink(MediaFile.t(), file_info(), LibraryPath.t()) ::
           {:ok, MediaFile.t()} | {:error, term()}
@@ -96,7 +100,7 @@ defmodule Mydia.Library.Relink do
       metadata: Trash.drop_trash_state(row.metadata)
     )
     |> guard_unique_path()
-    |> Repo.update()
+    |> Repo.update(mode: :savepoint)
   end
 
   @doc """
@@ -150,9 +154,10 @@ defmodule Mydia.Library.Relink do
     )
   end
 
-  # S3 rows have no absolute path; fall back to the relative path, which is
-  # enough to compare directory and file name within one bucket prefix.
-  defp gone_path(%MediaFile{} = g), do: MediaFile.absolute_path(g) || g.relative_path
+  # The storage path is what a scan reports for a found file: the absolute
+  # path for a local library, `s3://...` for an S3 one. An unloaded library
+  # falls back to the relative path.
+  defp gone_path(%MediaFile{} = g), do: MediaFile.storage_path(g) || g.relative_path
 
   defp same_dir_or_name?(a, b),
     do: Path.dirname(a) == Path.dirname(b) or Path.basename(a) == Path.basename(b)

@@ -170,7 +170,9 @@ defmodule MydiaWeb.MediaLive.Show.RescanResults do
   end
 
   defp no_files_on_disk_message do
-    gettext("None of this item's files are on disk. Run a library scan to find them.")
+    gettext(
+      "None of this item's folders were found on disk. Run a library scan to find files that were moved or renamed."
+    )
   end
 
   defp rescan_flash_message(scope, scan_result, refreshed) do

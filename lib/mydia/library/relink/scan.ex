@@ -61,14 +61,39 @@ defmodule Mydia.Library.Relink.Scan do
   scope (one library, or one item's directory). `gone` rows need
   `:library_path` preloaded. Returns the gone rows and new files that remain,
   failures included.
+
+  Only rows confirmed `absent?/1` are paired: a row the caller called gone
+  whose file is still there, or whose library is offline, is never repointed
+  and is returned with the rest. The relinks commit together; if one raises,
+  none of them land and both lists come back unchanged.
   """
   @spec renamed([MediaFile.t()], [Relink.file_info()], [LibraryPath.t()]) ::
           {[MediaFile.t()], [Relink.file_info()]}
   def renamed(gone, new_files, library_paths) do
-    {pairs, gone_left, new_left} = Relink.pair(gone, new_files)
-    {_relinked, failed} = Relink.relink_all(pairs, library_paths)
+    {absent, unconfirmed} = Enum.split_with(gone, &absent?/1)
+    {pairs, gone_left, new_left} = Relink.pair(absent, new_files)
+    {_relinked, failed} = relink_atomically(pairs, library_paths)
 
-    {gone_left ++ Enum.map(failed, &elem(&1, 0)), new_left ++ Enum.map(failed, &elem(&1, 1))}
+    {unconfirmed ++ gone_left ++ Enum.map(failed, &elem(&1, 0)),
+     new_left ++ Enum.map(failed, &elem(&1, 1))}
+  rescue
+    error ->
+      Logger.warning("Relinking renamed files failed; handling them as deleted and new",
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      {gone, new_files}
+  end
+
+  # One transaction, so a raise part-way rolls back the relinks already made
+  # and the caller's fallback (both lists unchanged) stays consistent with the
+  # database. Relink.relink/3 uses a savepoint, so a constraint failure on one
+  # pair stays a per-pair failure on PostgreSQL too.
+  defp relink_atomically([], _library_paths), do: {[], []}
+
+  defp relink_atomically(pairs, library_paths) do
+    {:ok, result} = Repo.transaction(fn -> Relink.relink_all(pairs, library_paths) end)
+    result
   end
 
   @doc """
@@ -115,7 +140,7 @@ defmodule Mydia.Library.Relink.Scan do
       |> Enum.filter(&file_gone?/1)
 
     {pairs, _, unknown_left} = Relink.pair(candidates, unknown)
-    {relinked, failed} = Relink.relink_all(pairs, library_paths)
+    {relinked, failed} = relink_atomically(pairs, library_paths)
     relinked_paths = MapSet.new(relinked, fn {_row, info} -> info.path end)
 
     {unknown_left ++ Enum.map(failed, &elem(&1, 1)),
@@ -152,9 +177,12 @@ defmodule Mydia.Library.Relink.Scan do
     end
   end
 
-  # A trashed-missing row is gone by definition. An active row is gone only if
-  # its file is definitely not where it says (absent?/1), so a row is never
-  # taken from a library that is merely unreachable.
+  # A trashed-missing row was already found gone by a scan, so it stays gone
+  # even when its library is unreachable now, unless its file is back where
+  # the row says: then the next scan of its own library restores it. An
+  # active row is gone only if its file is definitely not where it says
+  # (absent?/1), so a row is never taken from a library that is merely
+  # unreachable.
   #
   # A row holding a copy of its bytes in the trash directory is never a
   # candidate: relinking it would orphan that copy. Relink.pair/2 refuses it
@@ -163,8 +191,27 @@ defmodule Mydia.Library.Relink.Scan do
     not Relink.holds_trash_copy?(media_file) and gone_from_disk?(media_file)
   end
 
-  defp gone_from_disk?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}}), do: true
+  defp gone_from_disk?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}} = mf),
+    do: not present?(mf)
+
   defp gone_from_disk?(%MediaFile{} = media_file), do: absent?(media_file)
+
+  defp present?(media_file) do
+    cond do
+      Storage.s3?(media_file) -> object_present?(media_file)
+      path = MediaFile.absolute_path(media_file) -> File.exists?(path)
+      true -> false
+    end
+  end
+
+  defp object_present?(media_file) do
+    with {:ok, source} <- Storage.source(media_file),
+         {:ok, _} <- Storage.stat(source) do
+      true
+    else
+      _ -> false
+    end
+  end
 
   defp object_absent?(media_file) do
     with {:ok, source} <- Storage.source(media_file),

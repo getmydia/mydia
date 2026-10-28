@@ -3,7 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.RescanResultsTest do
 
   alias MydiaWeb.MediaLive.Show.RescanResults
 
-  @message "None of this item's files are on disk. Run a library scan to find them."
+  @message "None of this item's folders were found on disk. Run a library scan to find files that were moved or renamed."
 
   defp socket do
     %Phoenix.LiveView.Socket{

@@ -1782,7 +1782,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/live/admin_settings_live/components.ex:171
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:239
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:241
 #, elixir-autogen, elixir-format
 msgid "%{count} error"
 msgid_plural "%{count} errors"
@@ -1813,7 +1813,7 @@ msgid_plural "All %{count} files already match"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:227
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:229
 #, elixir-autogen, elixir-format
 msgid "%{count} file could not be read"
 msgid_plural "%{count} files could not be read"
@@ -5346,7 +5346,7 @@ msgstr ""
 msgid "Foreign Language"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:180
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:182
 #, elixir-autogen, elixir-format
 msgid "Found %{count} new file"
 msgid_plural "Found %{count} new files"
@@ -7692,7 +7692,7 @@ msgstr ""
 msgid "Re-scan"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:251
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:253
 #, elixir-autogen, elixir-format
 msgid "Re-scan complete! %{details}"
 msgstr ""
@@ -8696,7 +8696,7 @@ msgstr ""
 msgid "Season %{number} queued for segment re-analysis"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:245
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:247
 #, elixir-autogen, elixir-format
 msgid "Season %{number} re-scan complete! %{details}"
 msgstr ""
@@ -10809,7 +10809,7 @@ msgstr ""
 msgid "mostly %{quality}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:191
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:193
 #, elixir-autogen, elixir-format
 msgid "moved %{count} file to trash"
 msgid_plural "moved %{count} files to trash"
@@ -10876,7 +10876,7 @@ msgstr ""
 msgid "private network"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:212
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:214
 #, elixir-autogen, elixir-format
 msgid "refreshed metadata for %{count} file"
 msgid_plural "refreshed metadata for %{count} files"
@@ -10888,7 +10888,7 @@ msgstr[1] ""
 msgid "searching..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:201
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:203
 #, elixir-autogen, elixir-format
 msgid "sent %{count} file to Import for review"
 msgid_plural "sent %{count} files to Import for review"
@@ -20927,5 +20927,5 @@ msgstr ""
 
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:173
 #, elixir-autogen, elixir-format
-msgid "None of this item's files are on disk. Run a library scan to find them."
+msgid "None of this item's folders were found on disk. Run a library scan to find files that were moved or renamed."
 msgstr ""

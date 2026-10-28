@@ -207,11 +207,24 @@ defmodule Mydia.Library.Trash do
   purge normally; a missing file is a reached goal state, not a failure.
   """
   @spec purge_old_trashed_media_files(integer()) :: {:ok, non_neg_integer()}
-  def purge_old_trashed_media_files(days \\ 30) do
+  def purge_old_trashed_media_files(days \\ 30), do: purge_trashed(MediaFile, days)
+
+  @doc """
+  Purges everything the trash page shows, now: the page's "Empty trash".
+
+  Rows trashed with reason `:missing` are hidden from the page
+  (`visible_trash/0`), so they are left for the retention purge. That keeps
+  the confirmation's count, which comes from `trashed_summary/0`, equal to
+  what this deletes, and keeps their restore-on-reappear marker.
+  """
+  @spec empty_trash() :: {:ok, non_neg_integer()}
+  def empty_trash, do: purge_trashed(visible_trash(), 0)
+
+  defp purge_trashed(query, days) do
     cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
 
     expired =
-      from(f in MediaFile,
+      from(f in query,
         where: not is_nil(f.trashed_at) and f.trashed_at <= ^cutoff,
         preload: :library_path
       )
@@ -376,11 +389,16 @@ defmodule Mydia.Library.Trash do
   Returns nil for an active row as well as a missing one: every caller is a
   trash page action, and acting on a row somebody restored in another tab is
   exactly the case this must refuse.
+
+  Also nil for a row trashed with reason `:missing`, which the trash page
+  never shows (`visible_trash/0`). An id held from before that row was hidden
+  must not restore a pointer to nothing; the scanner restores such a row
+  itself when its file reappears.
   """
   @spec get_trashed_media_file(binary(), keyword()) :: MediaFile.t() | nil
   def get_trashed_media_file(id, opts \\ []) do
-    MediaFile
-    |> where([f], f.id == ^id and not is_nil(f.trashed_at))
+    visible_trash()
+    |> where([f], f.id == ^id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
   end

@@ -262,6 +262,31 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     assert File.read!(path) == "quillbrook-bytes"
   end
 
+  test "a missing row whose file is back in its own library is never taken by another",
+       %{a: a, b: b, item: item} do
+    row = owned_file(a, item, "Film (2001)/f.mkv")
+    anchor_file(a)
+    path = Path.join(a.path, "Film (2001)/f.mkv")
+    File.rm!(path)
+
+    scan(a)
+    assert %{trashed_reason: :missing} = Repo.get!(MediaFile, row.id)
+
+    # The file returns to library a, and b gains an identical copy that is
+    # scanned before a is.
+    File.write!(path, "quillbrook-bytes")
+    File.mkdir_p!(Path.join(b.path, "Film (2001)"))
+    File.write!(Path.join(b.path, "Film (2001)/f.mkv"), "quillbrook-bytes")
+
+    scan(b)
+
+    assert %{library_path_id: a_id, trashed_reason: :missing} = Repo.get!(MediaFile, row.id)
+    assert a_id == a.id
+
+    scan(a)
+    assert %{library_path_id: ^a_id, trashed_at: nil} = Repo.get!(MediaFile, row.id)
+  end
+
   test "a missing row whose bytes are in the trash directory is never relinked",
        %{a: a, b: b, item: item} do
     row = owned_file(a, item, "Film (2001)/f.mkv")

@@ -206,7 +206,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   end
 
   def handle_event("empty_trash", _params, socket) do
-    {:ok, count} = Library.purge_old_trashed_media_files(0)
+    {:ok, count} = Library.empty_trash()
 
     {:noreply,
      socket

@@ -89,10 +89,58 @@ defmodule Mydia.Library.RelinkTest do
       assert {[], [^g], [^f]} = Relink.pair([g], [f])
     end
 
-    test "skips rows with no size or no resolvable path" do
+    test "skips rows with no size" do
       g = %MediaFile{id: "1", relative_path: "A/x.mkv", size: nil, library_path: @lp}
       f = found("/lib/A/y.mkv", 900)
       assert {[], [^g], [^f]} = Relink.pair([g], [f])
+    end
+
+    test "skips rows with no resolvable path" do
+      g = %MediaFile{id: "1", relative_path: nil, size: 900, library_path: nil}
+      f = found("/lib/A/y.mkv", 900)
+      assert {[], [^g], [^f]} = Relink.pair([g], [f])
+    end
+
+    test "pairs a rename within one folder of an S3 library" do
+      lp = %LibraryPath{id: "lp-s3", path: "s3://media/movies"}
+      g = %MediaFile{id: "1", relative_path: "A/old.mkv", size: 900, library_path: lp}
+      f = found("s3://media/movies/A/new.mkv", 900)
+      assert {[{^g, ^f}], [], []} = Relink.pair([g], [f])
+    end
+  end
+
+  describe "Relink.Scan.renamed/3" do
+    @describetag :tmp_dir
+
+    test "never repoints a row whose file is still on disk", %{tmp_dir: tmp_dir} do
+      lp = library_path_fixture(%{path: tmp_dir})
+      File.mkdir_p!(Path.join(tmp_dir, "A"))
+      File.write!(Path.join(tmp_dir, "A/old.mkv"), "bytes")
+      File.write!(Path.join(tmp_dir, "A/new.mkv"), "bytes")
+
+      file =
+        media_file_fixture(%{library_path_id: lp.id, relative_path: "A/old.mkv", size: 5})
+        |> Repo.preload(:library_path)
+
+      info = %{path: Path.join(tmp_dir, "A/new.mkv"), size: 5}
+
+      assert {[^file], [^info]} = Relink.Scan.renamed([file], [info], [lp])
+      assert Repo.get!(MediaFile, file.id).relative_path == "A/old.mkv"
+    end
+
+    test "relinks a row whose file is gone", %{tmp_dir: tmp_dir} do
+      lp = library_path_fixture(%{path: tmp_dir})
+      File.mkdir_p!(Path.join(tmp_dir, "A"))
+      File.write!(Path.join(tmp_dir, "A/new.mkv"), "bytes")
+
+      file =
+        media_file_fixture(%{library_path_id: lp.id, relative_path: "A/old.mkv", size: 5})
+        |> Repo.preload(:library_path)
+
+      info = %{path: Path.join(tmp_dir, "A/new.mkv"), size: 5}
+
+      assert {[], []} = Relink.Scan.renamed([file], [info], [lp])
+      assert Repo.get!(MediaFile, file.id).relative_path == "A/new.mkv"
     end
   end
 

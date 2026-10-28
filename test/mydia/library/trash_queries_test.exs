@@ -68,6 +68,29 @@ defmodule Mydia.Library.TrashQueriesTest do
       refute Map.has_key?(Library.count_trashed_media_files(), :missing)
       assert %{count: 1, bytes: 100} = Library.trashed_summary()
     end
+
+    @tag :tmp_dir
+    test "cannot be fetched by id for a trash page action", %{root: root, library_path: lp} do
+      missing = trashed_missing(lp, "Gone Film (2001).mkv", 500)
+      kept = trashed(root, lp, "Kept Film (2002).mkv", :manual, 100)
+
+      assert Library.get_trashed_media_file(missing.id) == nil
+      assert %{id: id} = Library.get_trashed_media_file(kept.id)
+      assert id == kept.id
+    end
+
+    @tag :tmp_dir
+    test "are left by Empty trash, so its count matches the summary", %{
+      root: root,
+      library_path: lp
+    } do
+      missing = trashed_missing(lp, "Gone Film (2001).mkv", 500)
+      _kept = trashed(root, lp, "Kept Film (2002).mkv", :manual, 100)
+
+      assert %{count: 1} = Library.trashed_summary()
+      assert {:ok, 1} = Library.empty_trash()
+      assert %{trashed_reason: :missing} = Repo.get!(Mydia.Library.MediaFile, missing.id)
+    end
   end
 
   @tag :tmp_dir
