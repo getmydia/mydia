@@ -535,6 +535,17 @@ iteration runs, and what it was:
   allocate more per search. Idle RSS was read 20 s (engine) and 75 s (default engine)
   after start, so the idle comparison favours the default engine slightly.
 
+The bench needs live trackers, so its numbers move between runs and it cannot run
+in CI. The parity oracle (`mix mydia.cardigann_parity`, described in
+`lib/mydia/indexers/README.md`, "Cardigann parity oracle") is its offline
+complement: it records the trackers' HTTP once, replays the same bytes through the
+wasm and the built-in engine, and diffs the results field by field. A scrubbed seed
+of those captures is committed, and `test/mydia/indexers/cardigann/parity_test.exs`
+holds the built-in engine to the wasm engine on it through a ratchet of known
+divergences that can only shrink. Use the bench for latency, memory and agreement
+with a running Prowlarr; use the oracle to find and pin down why the built-in engine
+reads a page differently.
+
 Command: `PROWLARR_API_KEY=<key> ./dev mix mydia.cardigann_bench --concurrency 1 --prowlarr-url http://127.0.0.1:19696 --ref d34bddc56cfd6a55f75a9f69dcc2df9eb591662c --database <scratch>.db --out <dir>` at `10d19901f`, against `bench/cardigann/docker-compose.yml` with the port changed to 19696 and an empty data directory, torn down afterwards.
 
 ## Harness report (`mix mydia.cardigann_bench`), second run
