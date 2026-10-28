@@ -135,19 +135,30 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
              run([a], [%{a | download_url: "magnet:?dn=%zz"}]).divergences
   end
 
-  test "info hash is derived from the magnet when metadata has none, and drives pairing" do
-    mk = fn title, hash, trs ->
+  test "magnets pair by their btih hash even when dn and tr differ and order is swapped" do
+    mk = fn title, hash, dn, trs ->
       result(title, hash,
         metadata: nil,
-        download_url: "magnet:?xt=urn:btih:#{hash}" <> Enum.map_join(trs, &"&tr=#{&1}")
+        download_url: "magnet:?xt=URN:BTIH:#{hash}&dn=#{dn}" <> Enum.map_join(trs, &"&tr=#{&1}")
       )
     end
 
-    a = mk.("Lantern Harbor", @hash_a, ["x.test", "y.test"])
-    b = mk.("Quiet Orchard", @hash_b, ["x.test", "y.test"])
-    a2 = mk.("Lantern Harbor", String.upcase(@hash_a), ["y.test", "x.test"])
-    b2 = mk.("Quiet Orchard", @hash_b, ["y.test", "x.test"])
+    a = mk.("Lantern Harbor", @hash_a, "alpha", ["x.test"])
+    b = mk.("Quiet Orchard", @hash_b, "beta", ["x.test"])
+    a2 = mk.("Lantern Harbor", String.upcase(@hash_a), "alpha-2", ["y.test"])
+    b2 = mk.("Quiet Orchard", @hash_b, "beta", ["x.test"])
 
-    assert %{divergences: [], paired: 2, agreeing: 2} = run([a, b], [b2, a2])
+    out = run([a, b], [b2, a2])
+
+    assert out.paired == 2
+    assert out.agreeing == 1
+    assert [%{kind: :field, field: :download_url}] = out.divergences
+    assert [] = Enum.filter(out.divergences, &(&1.field == :title))
+  end
+
+  test "a magnet paired with a non-magnet reports only the url difference" do
+    a = result("Lantern Harbor", @hash_a, metadata: nil)
+    b = %{a | download_url: "https://t.test/dl?id=1"}
+    assert [%{kind: :field, field: :download_url}] = run([a], [b]).divergences
   end
 end

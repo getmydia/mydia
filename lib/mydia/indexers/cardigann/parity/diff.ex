@@ -76,11 +76,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
 
   defp differs?(field, a, b), do: not equal?(field, value(a, field), value(b, field))
 
-  # Neither engine fills metadata today, so the hash falls back to the one in a
-  # magnet link.
-  defp value(%SearchResult{} = r, :info_hash),
-    do: metadata_value(r.metadata, :info_hash) || hash_from_magnet(r.download_url)
-
   defp value(%SearchResult{} = r, field) when field in @metadata_fields,
     do: metadata_value(r.metadata, field)
 
@@ -100,6 +95,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   defp equal?(:info_hash, a, b), do: normalise_hash(a) == normalise_hash(b)
   defp equal?(_field, a, b), do: a == b
 
+  # Pairing only: neither engine fills metadata today, so the hash falls back to
+  # the one in a magnet link. The compared info_hash field stays metadata-only,
+  # otherwise a magnet paired with a non-magnet would report the same difference
+  # twice. Base32 btih spellings are not decoded, so they pair by URL or position.
   defp hash_from_magnet("magnet:" <> _ = url) do
     case Regex.run(~r/[?&]xt=urn:btih:([^&]+)/i, url) do
       [_, hash] -> hash
@@ -127,10 +126,20 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
 
   defp normalise_url(other), do: other
 
+  defp btih(xt) do
+    case String.split(xt, ":", parts: 3) do
+      [urn, btih, h] ->
+        if String.downcase(urn <> ":" <> btih) == "urn:btih", do: String.downcase(h)
+
+      _ ->
+        nil
+    end
+  end
+
   defp magnet_key(params) do
     hash =
       Enum.find_value(params, fn
-        {"xt", "urn:btih:" <> h} -> String.downcase(h)
+        {"xt", xt} -> btih(xt)
         _ -> nil
       end)
 
@@ -166,6 +175,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
     {pairs, Enum.reverse(native_left), wasm_left}
   end
 
-  defp hash_of(r), do: r |> value(:info_hash) |> normalise_hash()
+  defp hash_of(r) do
+    (value(r, :info_hash) || hash_from_magnet(r.download_url)) |> normalise_hash()
+  end
+
   defp url_of(r), do: r |> Map.get(:download_url) |> normalise_url()
 end
