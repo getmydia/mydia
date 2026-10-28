@@ -288,13 +288,18 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       end)
     end
 
-    test "offers JSON and CSV library export links", %{view: view} do
+    test "offers JSON, CSV and per-file CSV library export links", %{view: view} do
       assert has_element?(
                view,
                ~s|#library-export-json[href="/api/v1/library/export?format=json"]|
              )
 
       assert has_element?(view, ~s|#library-export-csv[href="/api/v1/library/export?format=csv"]|)
+
+      assert has_element?(
+               view,
+               ~s|#library-export-files-csv[href="/api/v1/library/export?format=files_csv"]|
+             )
     end
   end
 

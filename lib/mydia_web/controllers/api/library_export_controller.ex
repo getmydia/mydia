@@ -1,6 +1,8 @@
 defmodule MydiaWeb.Api.LibraryExportController do
   @moduledoc """
-  Downloads the library catalog as JSON or CSV. Admin only; accepts a browser
+  Downloads the library catalog as JSON (`format=json`, items with nested
+  files), a per-item CSV (`format=csv`) or a per-file CSV (`format=files_csv`).
+  Admin only; accepts a browser
   session or an API key, so it backs both the Library Paths "Export" button and
   scripted backups.
   """
@@ -18,12 +20,13 @@ defmodule MydiaWeb.Api.LibraryExportController do
       :error ->
         conn
         |> put_status(:bad_request)
-        |> json(%{error: "Bad Request", message: "format must be json or csv"})
+        |> json(%{error: "Bad Request", message: "format must be json, csv or files_csv"})
     end
   end
 
   defp parse_format("json"), do: {:ok, :json}
   defp parse_format("csv"), do: {:ok, :csv}
+  defp parse_format("files_csv"), do: {:ok, :files_csv}
   defp parse_format(_), do: :error
 
   defp send_export(conn, format, rows) do
@@ -31,6 +34,7 @@ defmodule MydiaWeb.Api.LibraryExportController do
       case format do
         :json -> {"application/json", Export.to_json(rows)}
         :csv -> {"text/csv", Export.to_csv(rows)}
+        :files_csv -> {"text/csv", Export.to_files_csv(rows)}
       end
 
     conn
