@@ -60,6 +60,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
+  alias Mydia.Indexers.Cardigann.Parity.Replay
+  alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.Cardigann.SearchRequest
@@ -811,9 +813,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
+  # Parity replay serves recorded responses, so there is no tracker to be polite
+  # to and requestDelay must not make the harness sleep. Only the parity harness
+  # sets the seam.
+  defp apply_rate_limit(parsed, request_params) do
+    case Seam.current() do
+      %{replay: _} -> :ok
+      _ -> throttle_request(parsed, request_params)
+    end
+  end
 
-  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}, request_params)
+  defp throttle_request(%Parsed{request_delay: nil}, _request_params), do: :ok
+
+  defp throttle_request(%Parsed{id: definition_id, request_delay: delay}, request_params)
        when is_number(delay) do
     # Convert delay to milliseconds if needed (some definitions use seconds).
     # It is a minimum interval between requests to one definition, so the first
@@ -863,6 +875,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     base_opts =
       case Map.get(request_params, :decode_body) do
         false -> Keyword.put(base_opts, :decode_body, false)
+        _ -> base_opts
+      end
+
+    # Parity replay (Mydia.Indexers.Cardigann.Parity): serve this request from a
+    # recorded capture instead of the network. Only set by the parity harness.
+    base_opts =
+      case Seam.current() do
+        %{replay: replay} -> Keyword.put(base_opts, :plug, Replay.req_plug(replay))
         _ -> base_opts
       end
 
