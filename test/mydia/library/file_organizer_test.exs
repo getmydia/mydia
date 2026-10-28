@@ -419,6 +419,35 @@ defmodule Mydia.Library.FileOrganizerTest do
       assert File.read!(dest) == "complete-data"
     end
 
+    # The temporary sibling of a copy must not be longer than the name itself.
+    test "a copy to a 250-byte basename succeeds", %{tmp_dir: tmp} do
+      source = write_file(Path.join(tmp, "src/movie.mkv"), "data")
+      name = String.duplicate("a", 246) <> ".mkv"
+      dest = Path.join(tmp, "lib/" <> name)
+      File.mkdir_p!(Path.dirname(dest))
+
+      # Skip on a filesystem whose NAME_MAX is below 250 bytes.
+      if File.write(Path.join(tmp, "lib/" <> String.duplicate("p", 250)), "") == :ok do
+        assert {:ok, :copy} =
+                 FileOrganizer.place_file(source, dest, use_hardlinks: false, fallback: :copy)
+
+        assert File.read!(dest) == "data"
+        refute File.exists?(FileOrganizer.partial_path(dest))
+      end
+    end
+
+    test "a stale partial from a crashed copy does not block the next copy", %{tmp_dir: tmp} do
+      source = write_file(Path.join(tmp, "src/movie.mkv"), "data")
+      dest = Path.join(tmp, "lib/movie.mkv")
+      write_file(FileOrganizer.partial_path(dest), "da")
+
+      assert {:ok, :copy} =
+               FileOrganizer.place_file(source, dest, use_hardlinks: false, fallback: :copy)
+
+      assert File.read!(dest) == "data"
+      refute File.exists?(FileOrganizer.partial_path(dest))
+    end
+
     test "confine_to rejects a destination outside the library root", %{tmp_dir: tmp} do
       source = write_file(Path.join(tmp, "src/movie.mkv"), "data")
       root = Path.join(tmp, "lib")

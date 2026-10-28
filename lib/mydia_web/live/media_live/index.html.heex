@@ -988,6 +988,18 @@
                     </li>
                     <li>
                       <button
+                        id="batch-move-library-button"
+                        type="button"
+                        phx-click={JS.push("open", target: "#library-move")}
+                        class="gap-2"
+                      >
+                        <.icon name="hero-arrows-right-left" class="w-4 h-4" /> {gettext(
+                          "Move to library"
+                        )}
+                      </button>
+                    </li>
+                    <li>
+                      <button
                         type="button"
                         phx-click="show_delete_confirmation"
                         class="gap-2 text-error"
@@ -1022,6 +1034,14 @@
       show={@show_delete_modal}
       selected_count={MapSet.size(@selected_ids)}
       delete_files={@delete_files}
+    />
+
+    <.live_component
+      module={MydiaWeb.Live.LibraryMoveComponent}
+      id="library-move"
+      media_item_ids={MapSet.to_list(@selected_ids)}
+      current_user={@current_user}
+      current_scope={@current_scope}
     />
 
     <%!-- Batch Edit Modal --%>

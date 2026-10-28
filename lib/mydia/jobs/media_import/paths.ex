@@ -58,28 +58,15 @@ defmodule Mydia.Jobs.MediaImport.Paths do
 
   @doc false
   def build_destination_path(download, library_path) when is_struct(library_path, LibraryPath) do
-    cond do
-      download.media_item && download.media_item.type == "movie" ->
-        existing_or(
-          download.media_item,
-          library_path,
-          [prefer_file_id: upgrade_target_id(download)],
-          fn ->
-            generated_movie_dir(download.media_item, library_path)
-          end
-        )
+    item = download.media_item
 
-      # TV episode - always use show folder + season subfolder
-      download.episode && download.media_item ->
-        base = build_series_base_path(download.media_item, library_path, download.episode)
-        season_dir(base, download.media_item, library_path, download.episode.season_number)
-
-      download.media_item && download.media_item.type == "tv_show" ->
-        build_series_base_path(download.media_item, library_path)
-
+    if item && (item.type in ["movie", "tv_show"] || download.episode) do
+      item_destination_dir(item, download.episode, library_path,
+        prefer_file_id: upgrade_target_id(download)
+      )
+    else
       # Unknown - use download title
-      true ->
-        Path.join(library_path.path, sanitize_filename(download.title))
+      Path.join(library_path.path, sanitize_filename(download.title))
     end
   end
 
@@ -114,6 +101,27 @@ defmodule Mydia.Jobs.MediaImport.Paths do
         title = sanitize_filename(download.title)
         Path.join([library_root, title])
     end
+  end
+
+  @doc """
+  Where `media_item`'s file (for `episode`, when given) goes in `library_path`:
+  the folder the item already uses there, else the generated one. A movie
+  ignores `episode`.
+  """
+  def item_destination_dir(media_item, episode, library_path, opts \\ [])
+
+  def item_destination_dir(%{type: "movie"} = media_item, _episode, library_path, opts) do
+    existing_or(media_item, library_path, opts, fn ->
+      generated_movie_dir(media_item, library_path)
+    end)
+  end
+
+  def item_destination_dir(media_item, nil, library_path, _opts),
+    do: build_series_base_path(media_item, library_path)
+
+  def item_destination_dir(media_item, episode, library_path, _opts) do
+    base = build_series_base_path(media_item, library_path, episode)
+    season_dir(base, media_item, library_path, episode.season_number)
   end
 
   # Helper to build the base path for TV series: the folder the show already
@@ -188,39 +196,28 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   @doc false
   def generate_filename(download, episode, original_filename, rename_files?)
       when is_boolean(rename_files?) do
-    # Only rename if explicitly enabled (default: false for safety)
-    if rename_files? do
-      # Parse quality information from download title or original filename
-      quality_info =
-        QualityParser.parse(download.title || original_filename)
+    item_filename(download.media_item, episode, original_filename, rename_files?, download.title)
+  end
 
-      media_item = download.media_item
+  @doc """
+  The file name for `original_filename` in a library with renaming set to
+  `rename?`. Quality is parsed from `quality_source`, else the original name.
+  """
+  def item_filename(_media_item, _episode, original_filename, false, _quality_source),
+    do: original_filename
 
-      cond do
-        # TV episode with episode info
-        media_item.type == "tv_show" && not is_nil(episode) ->
-          FileNamer.generate_episode_filename(
-            media_item,
-            episode,
-            quality_info,
-            original_filename
-          )
+  def item_filename(media_item, episode, original_filename, true, quality_source) do
+    quality_info = QualityParser.parse(quality_source || original_filename)
 
-        # Movie
-        media_item.type == "movie" ->
-          FileNamer.generate_movie_filename(
-            media_item,
-            quality_info,
-            original_filename
-          )
+    cond do
+      media_item.type == "tv_show" && not is_nil(episode) ->
+        FileNamer.generate_episode_filename(media_item, episode, quality_info, original_filename)
 
-        # Fallback to original filename
-        true ->
-          original_filename
-      end
-    else
-      # Renaming disabled - use original filename
-      original_filename
+      media_item.type == "movie" ->
+        FileNamer.generate_movie_filename(media_item, quality_info, original_filename)
+
+      true ->
+        original_filename
     end
   end
 end
