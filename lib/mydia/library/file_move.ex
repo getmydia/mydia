@@ -226,6 +226,9 @@ defmodule Mydia.Library.FileMove do
   # (delete the duplicate) so we do not leave two rows for one file. Only a
   # row that can describe nothing but our bytes is deleted: one registered
   # after this attempt created the file, or one with our own parent.
+  # LibraryMove.plan/2 already skips a destination any other row claims, so
+  # for a library move this only meets a row a scan created mid-move;
+  # MediaRematch keeps its historical adopt-any rule for fresh placements.
   defp adopt_destination_duplicate(library_path_id, relative_path, current, attrs, placed) do
     case Library.get_media_file_by_relative_path(library_path_id, relative_path,
            include_trashed: true

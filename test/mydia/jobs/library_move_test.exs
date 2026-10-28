@@ -251,6 +251,34 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert Enum.sort(contents) == ["first", "second, longer"]
   end
 
+  for {name, own?} <- [{"another item's row", false}, {"the item's own trashed row", true}] do
+    test "skips a destination #{name} claims with no file on disk", ctx do
+      %{a: a, b: b, movie: movie} = ctx
+      rel = "Glass Harbor (2019)/glass.mkv"
+      file = put_file(a, rel, %{media_item_id: movie.id})
+
+      owner =
+        if unquote(own?),
+          do: movie.id,
+          else: media_item_fixture(%{type: "movie", title: "Copper Lantern"}).id
+
+      claimant =
+        media_file_fixture(%{media_item_id: owner, library_path_id: b.id, relative_path: rel})
+
+      if unquote(own?) do
+        trashed_at = DateTime.utc_now() |> DateTime.truncate(:second)
+        Repo.update!(Ecto.Changeset.change(claimant, trashed_at: trashed_at))
+      end
+
+      assert :ok = run(movie, b)
+
+      assert Repo.get!(MediaFile, claimant.id).relative_path == rel
+      assert Repo.get!(MediaFile, file.id).library_path_id == a.id
+      assert File.exists?(Path.join(a.path, rel))
+      refute File.exists?(Path.join(b.path, rel))
+    end
+  end
+
   test "leaves the sidecars of a sibling video with a longer name", ctx do
     %{a: a, b: b, movie: movie} = ctx
     glass = put_file(a, "Shared/Glass.mkv", %{media_item_id: movie.id})

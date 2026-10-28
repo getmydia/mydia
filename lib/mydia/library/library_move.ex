@@ -16,6 +16,7 @@ defmodule Mydia.Library.LibraryMove do
   alias Mydia.Accounts.Scope
   alias Mydia.Jobs.MediaImport.Paths
   alias Mydia.Library.Dirs
+  alias Mydia.Library.FileMove
   alias Mydia.Library.ItemFolders
   alias Mydia.Library.LibraryMove.Enqueue
   alias Mydia.Library.LibraryMove.Move
@@ -141,24 +142,29 @@ defmodule Mydia.Library.LibraryMove do
   def plan(%MediaItem{} = media_item, %LibraryPath{} = target) do
     files = item_files(media_item.id)
     folders = ItemFolders.folders_for(files)
-    {in_target, elsewhere} = Enum.split_with(files, &(&1.library_path_id == target.id))
 
     moves =
-      elsewhere
+      files
+      |> Enum.reject(&(&1.library_path_id == target.id))
       |> Enum.map(&plan_file(&1, media_item, target, folders))
       |> Enum.reject(&is_nil/1)
-      |> mark_conflicts(MapSet.new(in_target, & &1.relative_path))
+      |> mark_conflicts(target)
 
     {:ok, moves}
   end
 
-  # A destination already held by one of the item's files in the target, or
-  # planned for an earlier file, would make one file overwrite another.
-  defp mark_conflicts(moves, taken) do
+  # A destination claimed by any other row, live or trashed (a trashed row
+  # keeps its relative_path while its bytes sit in the trash), or planned for
+  # an earlier file is skipped: relink would otherwise delete that row. The
+  # job re-plans on every attempt, so this holds at perform time too.
+  defp mark_conflicts(moves, target) do
     {marked, _taken} =
-      Enum.map_reduce(moves, taken, fn move, taken ->
-        {%{move | conflict: MapSet.member?(taken, move.dest_rel)},
-         MapSet.put(taken, move.dest_rel)}
+      Enum.map_reduce(moves, MapSet.new(), fn move, taken ->
+        conflict =
+          MapSet.member?(taken, move.dest_rel) or
+            FileMove.claimed?(target.id, move.dest_rel, move.media_file.id)
+
+        {%{move | conflict: conflict}, MapSet.put(taken, move.dest_rel)}
       end)
 
     marked
