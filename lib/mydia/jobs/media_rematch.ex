@@ -36,9 +36,9 @@ defmodule Mydia.Jobs.MediaRematch do
 
   require Logger
 
-  alias Mydia.{Downloads, Library, Repo}
+  alias Mydia.{Downloads, Library}
   alias Mydia.Jobs.MediaImport
-  alias Mydia.Library.{FileOrganizer, MediaFile}
+  alias Mydia.Library.{FileMove, MediaFile}
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
 
   @impl Oban.Worker
@@ -67,7 +67,7 @@ defmodule Mydia.Jobs.MediaRematch do
          {:ok, media_file} <- locate_file(download),
          {:ok, library_path} <- resolve_destination(download),
          {dest_path, new_rel} <- compute_destination(download, media_file, library_path),
-         {:ok, _action} <- place(media_file, library_path, dest_path, new_rel),
+         {:ok, _action} <- FileMove.place(media_file, dest_path, library_path),
          {:ok, _updated} <- relink(download, media_file, library_path, new_rel) do
       # Commit succeeded — now it is safe to remove the source path.
       cleanup_source(download, media_file, dest_path)
@@ -117,97 +117,40 @@ defmodule Mydia.Jobs.MediaRematch do
     {dest_path, new_rel}
   end
 
-  defp place(media_file, library_path, dest_path, _new_rel) do
-    source_path = MediaFile.storage_path(media_file)
-
-    cond do
-      is_nil(source_path) ->
-        {:error, :no_source_path}
-
-      not exists?(source_path) and not exists?(dest_path) ->
-        {:error, :source_missing}
-
-      true ->
-        # fallback: :copy (never rename) keeps the source until after the commit.
-        FileOrganizer.place_file(source_path, dest_path,
-          use_hardlinks: true,
-          fallback: :copy,
-          confine_to: library_path.path,
-          expected_size: media_file.size
-        )
-    end
-  end
-
   defp relink(download, media_file, library_path, new_rel) do
-    Repo.transaction(fn ->
-      current = Repo.get(MediaFile, media_file.id)
-
-      cond do
-        is_nil(current) -> Repo.rollback(:media_file_gone)
-        not is_nil(current.trashed_at) -> Repo.rollback(:media_file_trashed)
-        path_drifted?(current, media_file) -> Repo.rollback(:media_file_moved)
-        true -> apply_relink(download, current, media_file, library_path, new_rel)
-      end
+    FileMove.relink(media_file, library_path, new_rel, parent_attrs(download), fn _updated ->
+      stamp_provenance_or_skip(download, media_file)
     end)
   end
 
-  defp path_drifted?(current, snapshot) do
-    current.relative_path != snapshot.relative_path or
-      current.library_path_id != snapshot.library_path_id
-  end
+  defp parent_attrs(%{episode_id: nil} = download),
+    do: %{media_item_id: download.media_item_id, episode_id: nil}
 
-  defp apply_relink(download, current, old_media_file, library_path, new_rel) do
-    # A racing scan may have created a row at the destination path; adopt it
-    # (delete the duplicate) so we do not leave two rows for one file.
-    adopt_destination_duplicate(library_path.id, new_rel, current.id)
+  defp parent_attrs(download), do: %{episode_id: download.episode_id, media_item_id: nil}
 
-    parent =
-      if download.episode_id do
-        %{episode_id: download.episode_id, media_item_id: nil}
-      else
-        %{media_item_id: download.media_item_id, episode_id: nil}
-      end
-
-    attrs = Map.merge(%{relative_path: new_rel, library_path_id: library_path.id}, parent)
-
-    case Library.update_media_file(current, attrs) do
-      {:ok, updated} ->
-        # Provenance is part of the re-match contract; a failed stamp must roll
-        # back the relink so callers can retry rather than half-update.
-        #
-        # One exception: the download row being gone. The stamp is an audit
-        # trail, and there is nothing left to attach it to. Rolling back would
-        # discard a correct, disk-verified relink over bookkeeping, and since the
-        # row stays gone every retry fails identically until the job is
-        # discarded — leaving the media file permanently mis-linked (issue #285).
-        case stamp_provenance(download, old_media_file) do
-          {:ok, _} ->
-            updated
-
-          {:error, changeset} ->
-            if Downloads.stale_changeset?(changeset) do
-              Logger.info("Download row removed before provenance stamp; keeping the relink",
-                download_id: download.id
-              )
-
-              updated
-            else
-              Repo.rollback({:provenance_failed, changeset})
-            end
-        end
+  # Provenance is part of the re-match contract; a failed stamp rolls back the
+  # relink so callers can retry rather than half-update.
+  #
+  # One exception: the download row being gone. The stamp is an audit trail,
+  # and there is nothing left to attach it to. Rolling back would discard a
+  # correct, disk-verified relink over bookkeeping, and since the row stays
+  # gone every retry fails identically until the job is discarded, leaving the
+  # media file permanently mis-linked (issue #285).
+  defp stamp_provenance_or_skip(download, old_media_file) do
+    case stamp_provenance(download, old_media_file) do
+      {:ok, _} = ok ->
+        ok
 
       {:error, changeset} ->
-        Repo.rollback({:relink_failed, changeset})
-    end
-  end
+        if Downloads.stale_changeset?(changeset) do
+          Logger.info("Download row removed before provenance stamp; keeping the relink",
+            download_id: download.id
+          )
 
-  defp adopt_destination_duplicate(library_path_id, relative_path, keep_id) do
-    case Library.get_media_file_by_relative_path(library_path_id, relative_path,
-           include_trashed: true
-         ) do
-      %MediaFile{id: ^keep_id} -> :ok
-      %MediaFile{} = duplicate -> Repo.delete(duplicate)
-      nil -> :ok
+          {:ok, :skipped}
+        else
+          {:error, {:provenance_failed, changeset}}
+        end
     end
   end
 
@@ -226,35 +169,21 @@ defmodule Mydia.Jobs.MediaRematch do
   defp cleanup_source(download, media_file, dest_path) do
     source_path = MediaFile.storage_path(media_file)
 
-    # On S3 the delete is idempotent (a missing object is :ok), so it is never
-    # gated on an existence check: an outage there would skip the delete
-    # without recording a pending one.
-    if source_path && source_path != dest_path &&
-         (Mydia.Storage.s3?(source_path) or File.exists?(source_path)) do
-      case remove_source(source_path) do
-        :ok ->
-          :ok
+    case FileMove.cleanup_source(source_path, dest_path) do
+      :ok ->
+        :ok
 
-        {:error, reason} ->
-          Logger.warning("Re-match source delete failed; recording for cleanup sweep",
-            source: source_path,
-            reason: inspect(reason)
-          )
+      {:error, reason} ->
+        Logger.warning("Re-match source delete failed; recording for cleanup sweep",
+          source: source_path,
+          reason: inspect(reason)
+        )
 
-          # Record the pending path so a retry's idempotent short-circuit doesn't
-          # strand the orphan (a later sweep removes it). Best-effort.
-          record_pending_source_delete(download.id, source_path)
-      end
-    else
-      :ok
+        # Record the pending path so a retry's idempotent short-circuit doesn't
+        # strand the orphan (a later sweep removes it). Best-effort.
+        record_pending_source_delete(download.id, source_path)
     end
   end
-
-  defp exists?("s3://" <> _ = path), do: Mydia.Storage.path_exists?(path)
-  defp exists?(path), do: File.exists?(path)
-
-  defp remove_source("s3://" <> _ = path), do: Mydia.Storage.delete_path(path)
-  defp remove_source(path), do: File.rm(path)
 
   defp record_pending_source_delete(download_id, source_path) do
     case Downloads.get_download(download_id) do
