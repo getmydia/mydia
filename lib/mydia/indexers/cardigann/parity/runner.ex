@@ -18,6 +18,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Runner do
   alias Mydia.Indexers.Cardigann.Bench.Runner, as: Bench
   alias Mydia.Indexers.Cardigann.Parity.{Capture, Diff, Recorder, Replay, RequestKey, Seam}
   alias Mydia.Indexers.Cardigann.Wasm.Adapter, as: WasmAdapter
+  alias Mydia.Indexers.{CardigannDefinition, CardigannParser}
+  alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Repo
 
   @result_limit 1000
   @timeout_ms 130_000
@@ -33,10 +36,36 @@ defmodule Mydia.Indexers.Cardigann.Parity.Runner do
           wasm_misses: [RequestKey.t()]
         }
 
-  @doc "Upserts the definition row (enabled, in library) both engines read."
-  @spec prepare_definition(String.t(), String.t()) :: :ok | {:error, term()}
+  @doc """
+  Upserts the definition row (enabled, in library) both engines read.
+
+  Refuses a definition with a `login:` block, or whose row is marked
+  `flaresolverr_required`: native replay only seams the search request itself,
+  so a login POST or a FlareSolverr solve would leave the harness for the
+  network (or fail) instead of replaying, and the diff would compare nothing
+  meaningful.
+  """
+  @spec prepare_definition(String.t(), String.t()) ::
+          :ok | {:error, {:unsupported, :login | :flaresolverr} | term()}
   def prepare_definition(id, yaml) do
-    Bench.prepare_row(%{id: id, yaml: yaml, settings: %{}})
+    with :ok <- refuse_login(yaml),
+         :ok <- Bench.prepare_row(%{id: id, yaml: yaml, settings: %{}}) do
+      refuse_flaresolverr(id)
+    end
+  end
+
+  defp refuse_login(yaml) do
+    case CardigannParser.parse_definition(yaml) do
+      {:ok, %Parsed{login: login}} when is_map(login) -> {:error, {:unsupported, :login}}
+      _ -> :ok
+    end
+  end
+
+  defp refuse_flaresolverr(id) do
+    case Repo.get_by(CardigannDefinition, indexer_id: id) do
+      %CardigannDefinition{flaresolverr_required: true} -> {:error, {:unsupported, :flaresolverr}}
+      _ -> :ok
+    end
   end
 
   @doc "Replays `capture` through the wasm engine, then the native one."

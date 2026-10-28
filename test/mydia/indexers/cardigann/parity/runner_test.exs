@@ -5,6 +5,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
   alias Mydia.Indexers.Cardigann.Parity.{Capture, RequestKey, Runner}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
   alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Engine}
+  alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Repo
 
   @moduletag :cardigann_wasm
   @moduletag timeout: 120_000
@@ -102,6 +104,30 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
       query: %{kind: :generic, term: "lantern"},
       exchanges: exchanges
     }
+
+  describe "prepare_definition/2" do
+    test "refuses a definition with a login block, which native replay does not seam" do
+      yaml =
+        String.replace(@yaml, "settings: []\n", """
+        settings: []
+        login:
+          path: login.php
+          method: post
+          inputs:
+            username: "{{ .Config.username }}"
+        """)
+
+      assert {:error, {:unsupported, :login}} = Runner.prepare_definition("harbor", yaml)
+    end
+
+    test "refuses a definition whose row needs FlareSolverr" do
+      Repo.get_by!(CardigannDefinition, indexer_id: "harbor")
+      |> Ecto.Changeset.change(flaresolverr_required: true)
+      |> Repo.update!()
+
+      assert {:error, {:unsupported, :flaresolverr}} = Runner.prepare_definition("harbor", @yaml)
+    end
+  end
 
   test "replays a capture through both engines with only the known field divergences" do
     result =
