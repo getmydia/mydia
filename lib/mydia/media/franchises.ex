@@ -56,7 +56,7 @@ defmodule Mydia.Media.Franchises do
   defp resolve_collection_id(%MediaItem{tmdb_id: tmdb_id} = item, config) do
     case Metadata.fetch_by_ref_cached(config, {:tmdb, tmdb_id}, media_type: :movie) do
       {:ok, %{collection_id: id} = fresh} when is_integer(id) ->
-        persist_pointer(item, fresh)
+        persist_pointer(item, fresh.collection_id, fresh.collection_name)
         {:ok, id}
 
       {:ok, _no_franchise} ->
@@ -76,17 +76,18 @@ defmodule Mydia.Media.Franchises do
     end
   end
 
-  # Writes the pointer back with a bare changeset rather than
-  # Media.update_media_item/3, which emits a timeline event on every call. This
-  # runs on page views; it must stay silent.
-  defp persist_pointer(%MediaItem{metadata: nil}, _fresh), do: :ok
+  @doc """
+  Writes a franchise pointer onto a movie's metadata.
 
-  defp persist_pointer(%MediaItem{} = item, fresh) do
-    updated = %{
-      item.metadata
-      | collection_id: fresh.collection_id,
-        collection_name: fresh.collection_name
-    }
+  Uses a bare changeset rather than `Media.update_media_item/3`, which emits a
+  timeline event on every call. This runs on page views and during adds; it
+  must stay silent. A failed write is logged and ignored.
+  """
+  @spec persist_pointer(MediaItem.t(), integer(), String.t() | nil) :: :ok
+  def persist_pointer(%MediaItem{metadata: nil}, _collection_id, _collection_name), do: :ok
+
+  def persist_pointer(%MediaItem{} = item, collection_id, collection_name) do
+    updated = %{item.metadata | collection_id: collection_id, collection_name: collection_name}
 
     item
     |> MediaItem.changeset(%{metadata: updated})
