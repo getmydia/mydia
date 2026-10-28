@@ -237,6 +237,43 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     assert is_nil(restored.trashed_at)
   end
 
+  test "a file the scan called missing but that is on disk is never moved into the trash",
+       %{a: a, item: item} do
+    # The scan only lists video extensions, so this row's file is reported
+    # missing while it sits right there: the same shape as a file that
+    # reappears between the listing and the trashing.
+    row = owned_file(a, item, "Film (2001)/notes.txt")
+    path = Path.join(a.path, "Film (2001)/notes.txt")
+
+    scan(a)
+
+    assert %{trashed_at: nil, trashed_reason: nil} = Repo.get!(MediaFile, row.id)
+    assert File.read!(path) == "quillbrook-bytes"
+  end
+
+  test "a missing row whose bytes are in the trash directory is never relinked",
+       %{a: a, b: b, item: item} do
+    row = owned_file(a, item, "Film (2001)/f.mkv")
+
+    # How such a row was written before the scanner passed move: false.
+    {:ok, trashed} =
+      Library.trash_media_file(Repo.preload(row, :library_path), reason: :missing)
+
+    trash_copy = trashed.metadata.extra["trashed_path"]
+    assert is_binary(trash_copy) and File.exists?(trash_copy)
+
+    File.mkdir_p!(Path.join(b.path, "Film (2001)"))
+    File.write!(Path.join(b.path, "Film (2001)/f.mkv"), "quillbrook-bytes")
+
+    scan(b)
+
+    reloaded = Repo.get!(MediaFile, row.id)
+    assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = reloaded
+    assert reloaded.library_path_id == a.id
+    assert reloaded.metadata.extra["trashed_path"] == trash_copy
+    assert File.exists?(trash_copy)
+  end
+
   test "a rename is relinked even when auto_import is off", %{item: item, tmp_dir: tmp_dir} do
     dir = Path.join(tmp_dir, "manual")
     File.mkdir_p!(dir)

@@ -5,6 +5,7 @@ defmodule Mydia.Library.RelinkTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Library.{MediaFile, Relink}
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
   alias Mydia.Subtitles.Subtitle
@@ -51,6 +52,41 @@ defmodule Mydia.Library.RelinkTest do
       f2 = found("/lib/A/w.mkv", 900)
       assert {[], [^g1], found_left} = Relink.pair([g1], [f, f2])
       assert length(found_left) == 2
+    end
+
+    test "refuses a rename that changes the episode number" do
+      g = gone("1", "Tidewater Hollow/Season 01/Tidewater.Hollow.S01E01.mkv", 900)
+      f = found("/lib/Tidewater Hollow/Season 01/Tidewater.Hollow.S01E02.mkv", 900)
+      assert {[], [^g], [^f]} = Relink.pair([g], [f])
+    end
+
+    test "refuses a rename that changes the season" do
+      g = gone("1", "Tidewater Hollow/Tidewater.Hollow.S01E03.mkv", 900)
+      f = found("/lib/Tidewater Hollow/Tidewater.Hollow.S02E03.mkv", 900)
+      assert {[], [^g], [^f]} = Relink.pair([g], [f])
+    end
+
+    test "pairs a rename that keeps the same episode" do
+      g = gone("1", "Tidewater Hollow/Season 01/Tidewater.Hollow.S01E01.720p.mkv", 900)
+      f = found("/lib/Tidewater Hollow/Season 01/Tidewater Hollow - S01E01 - Pilot.mkv", 900)
+      assert {[{^g, ^f}], [], []} = Relink.pair([g], [f])
+    end
+
+    test "pairs when only one side names an episode" do
+      g = gone("1", "Tidewater Hollow/Season 01/episode one.mkv", 900)
+      f = found("/lib/Tidewater Hollow/Season 01/Tidewater.Hollow.S01E01.mkv", 900)
+      assert {[{^g, ^f}], [], []} = Relink.pair([g], [f])
+    end
+
+    test "never pairs a row whose bytes are in the trash directory" do
+      g = %{
+        gone("1", "A/x.mkv", 900)
+        | trashed_reason: :missing,
+          metadata: %FileMetadata{extra: %{"trashed_path" => "/lib/.mydia-trash/1/x.mkv"}}
+      }
+
+      f = found("/lib/A/y.mkv", 900)
+      assert {[], [^g], [^f]} = Relink.pair([g], [f])
     end
 
     test "skips rows with no size or no resolvable path" do

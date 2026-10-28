@@ -43,6 +43,25 @@ defmodule Mydia.Jobs.TrashActionTest do
     t
   end
 
+  # What a scan leaves behind: the file is gone, the row is trashed :missing.
+  defp trashed_missing(ctx, name) do
+    {:ok, media_file} =
+      Library.create_scanned_media_file(%{
+        relative_path: name,
+        library_path_id: ctx.library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
+        size: 1
+      })
+
+    {:ok, t} =
+      Library.trash_media_file(Repo.preload(media_file, :library_path),
+        reason: :missing,
+        move: false
+      )
+
+    t
+  end
+
   @tag :tmp_dir
   test "restores an explicit id list", ctx do
     a = trashed(ctx, "a.mkv", :manual)
@@ -76,6 +95,7 @@ defmodule Mydia.Jobs.TrashActionTest do
   @tag :tmp_dir
   test "an all-matching purge for the retired missing reason purges nothing", ctx do
     kept = trashed(ctx, "kept.mkv", :manual)
+    missing = trashed_missing(ctx, "gone.mkv")
 
     assert :ok =
              perform_job(TrashAction, %{
@@ -84,6 +104,7 @@ defmodule Mydia.Jobs.TrashActionTest do
              })
 
     refute is_nil(Repo.reload(kept).trashed_at)
+    assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = Repo.reload(missing)
   end
 
   @tag :tmp_dir

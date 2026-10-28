@@ -33,7 +33,6 @@ defmodule Mydia.Library.Rescan do
   # A row with no resolvable path is kept in the list. There is nothing to
   # check, and TrashStore.store/2 has nothing to move for it either.
   @spec reject_files_still_on_disk([MediaFile.t()]) :: [MediaFile.t()]
-
   defp reject_files_still_on_disk(candidates) do
     Enum.reject(candidates, fn media_file ->
       case MediaFile.absolute_path(media_file) do

@@ -59,12 +59,15 @@ defmodule Mydia.Library.RescanRelinkTest do
     test "a vanished directory does not stop the scan of one that exists", ctx do
       movie = media_item_fixture(%{type: "movie"})
 
-      movie_row(ctx.lib_a, movie, "Quiet Meridian (2001)/f.mkv")
+      stale = movie_row(ctx.lib_a, movie, "Quiet Meridian (2001)/f.mkv")
       write(ctx.dir_b, "Quiet Meridian (2001)/f2.mkv")
       movie_row(ctx.lib_b, movie, "Quiet Meridian (2001)/f2.mkv")
 
       assert {:ok, result} = Library.rescan_movie(movie.id)
       assert result.new_files == 0
+
+      assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = Repo.reload!(stale)
+      assert active_count(movie) == 1
     end
 
     test "returns :no_files_on_disk and leaves rows alone when no directory exists", ctx do

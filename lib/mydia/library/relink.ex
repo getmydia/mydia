@@ -12,11 +12,22 @@ defmodule Mydia.Library.Relink do
   either a parent directory (a rename) or a file name (a move). Only
   one-to-one matches pair; anything ambiguous is left for the caller's
   existing handling.
+
+  Two kinds of match are refused outright:
+
+    * A row whose bytes sit in the trash directory (`trashed_path` recorded).
+      Relinking clears that key, which would orphan the trashed copy where
+      nothing tracks or purges it.
+    * A pair whose file names both parse to an episode and name different
+      episodes. Renaming `S01E01.mkv` to `S01E02.mkv` is how an operator
+      fixes a misnumbered file, so the new name has to be matched afresh
+      rather than keep the old episode link.
   """
 
   require Logger
 
-  alias Mydia.Library.{MediaFile, MediaFiles, Trash}
+  alias Mydia.Library.{MediaFile, MediaFiles, ReleaseParser, Trash}
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
 
@@ -40,9 +51,11 @@ defmodule Mydia.Library.Relink do
           g_path = gone_path(g),
           g_path != nil,
           is_integer(g.size),
+          not holds_trash_copy?(g),
           f <- found,
           f.size == g.size,
           same_dir_or_name?(g_path, f.path),
+          same_episode?(g_path, f.path),
           do: {g, f}
 
     gone_degree = Enum.frequencies_by(edges, fn {g, _} -> g.id end)
@@ -143,4 +156,32 @@ defmodule Mydia.Library.Relink do
 
   defp same_dir_or_name?(a, b),
     do: Path.dirname(a) == Path.dirname(b) or Path.basename(a) == Path.basename(b)
+
+  @doc """
+  True when `row` records a copy of its bytes in the trash directory. Such a
+  row must never be relinked: relinking drops `trashed_path`, and the copy
+  would sit under `.mydia-trash/` with nothing left to restore or purge it.
+  """
+  @spec holds_trash_copy?(MediaFile.t()) :: boolean()
+  def holds_trash_copy?(%MediaFile{metadata: %FileMetadata{extra: %{"trashed_path" => path}}})
+      when is_binary(path) and path != "",
+      do: true
+
+  def holds_trash_copy?(%MediaFile{}), do: false
+
+  # Only refuses when both names parse to an episode and the episodes differ.
+  # A name with no episode marker on either side says nothing either way.
+  defp same_episode?(a, b) do
+    case {episode_identity(a), episode_identity(b)} do
+      {{_, _} = x, {_, _} = y} -> x == y
+      _ -> true
+    end
+  end
+
+  defp episode_identity(path) do
+    case ReleaseParser.parse(Path.basename(path)) do
+      %{episodes: [_ | _] = episodes, season: season} -> {season, Enum.sort(episodes)}
+      _ -> nil
+    end
+  end
 end

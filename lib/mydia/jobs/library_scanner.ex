@@ -490,16 +490,25 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Known-file maintenance, like the rest of this file's pre-discovery work:
   # runs in both auto_import modes. Rows that fail to relink fall back to the
-  # usual handling (trashed as missing, new path treated as unknown).
+  # usual handling (trashed as missing, new path treated as unknown). Never
+  # fails the scan: if pairing or a relink raises, both lists are handed back
+  # unchanged, which is what happened before relinking existed.
   defp relink_within([], new_files, _library_paths), do: {[], new_files}
   defp relink_within(deleted, [], _library_paths), do: {deleted, []}
 
   defp relink_within(deleted, new_files, library_paths) do
-    deleted = Repo.preload(deleted, :library_path)
-    {pairs, deleted_left, new_left} = Relink.pair(deleted, new_files)
+    preloaded = Repo.preload(deleted, :library_path)
+    {pairs, deleted_left, new_left} = Relink.pair(preloaded, new_files)
     {_relinked, failed} = Relink.relink_all(pairs, library_paths)
 
     {deleted_left ++ Enum.map(failed, &elem(&1, 0)), new_left ++ Enum.map(failed, &elem(&1, 1))}
+  rescue
+    error ->
+      Logger.warning("Relinking renamed files failed; handling them as deleted and new",
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      {deleted, new_files}
   end
 
   # Returns `{unknown_left, relinked_paths}`. Never fails the scan: if the
@@ -534,8 +543,16 @@ defmodule Mydia.Jobs.LibraryScanner do
   # its file is definitely not where it says; TrashStore.absent?/1 answers
   # false whenever it cannot tell (an offline library root, an S3 outage), so
   # a row is never taken from a library that is merely unreachable.
-  defp file_gone?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}}), do: true
-  defp file_gone?(%MediaFile{} = media_file), do: TrashStore.absent?(media_file)
+  #
+  # A row holding a copy of its bytes in the trash directory is never a
+  # candidate: relinking it would orphan that copy. Relink.pair/2 refuses it
+  # too; filtering here keeps it out of the pairing's ambiguity counts.
+  defp file_gone?(%MediaFile{} = media_file) do
+    not Relink.holds_trash_copy?(media_file) and gone_from_disk?(media_file)
+  end
+
+  defp gone_from_disk?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}}), do: true
+  defp gone_from_disk?(%MediaFile{} = media_file), do: TrashStore.absent?(media_file)
 
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,
@@ -576,13 +593,22 @@ defmodule Mydia.Jobs.LibraryScanner do
       media_file = Repo.preload(media_file, :library_path)
       absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
 
-      # These files are missing from disk, which is the one case
-      # Library.trash_media_file/1 has nothing to move, so a failure here is
-      # a database problem. Log it and keep going rather than crashing the
-      # whole scan over one row.
-      case Library.trash_media_file(media_file, reason: :missing) do
+      # `move: false`: the scan listed this file as gone, but it can reappear
+      # before we get here (a reconnecting mount, a concurrent import). A
+      # moved file would land in the trash on a row stamped :missing, which
+      # the trash page hides and a later reappearance can never restore, so
+      # TrashStore refuses to move a present file and the row stays active.
+      # Any other failure is a database problem: log it and keep going rather
+      # than crashing the whole scan over one row.
+      case Library.trash_media_file(media_file, reason: :missing, move: false) do
         {:ok, _} ->
           Logger.debug("Trashed media file record", path: absolute_path)
+
+        {:error, {:trash_move_failed, :file_present}} ->
+          Logger.info("A file the scan called missing is back on disk; leaving it in place",
+            path: absolute_path,
+            media_file_id: media_file.id
+          )
 
         {:error, reason} ->
           Logger.error("Failed to trash a media file missing from disk",
