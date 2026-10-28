@@ -8,6 +8,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
   the recorder's job (see `redact_headers/1`); `write!/2` stores what it is given.
   """
 
+  alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
   alias Mydia.Indexers.Cardigann.Parity.RequestKey
 
   @format_version 1
@@ -24,20 +25,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
     "other" => :other
   }
   @error_atoms Map.values(@errors)
-
-  defmodule Exchange do
-    @moduledoc "One recorded request and its response (or transport error)."
-    @enforce_keys [:request]
-    defstruct [:request, :status, :body, :error, headers: []]
-
-    @type t :: %__MODULE__{
-            request: RequestKey.t(),
-            status: non_neg_integer() | nil,
-            headers: [{String.t(), String.t()}],
-            body: binary() | nil,
-            error: atom() | nil
-          }
-  end
 
   @enforce_keys [:definition, :ref, :query]
   defstruct [:definition, :ref, :query, format_version: 1, exchanges: []]
