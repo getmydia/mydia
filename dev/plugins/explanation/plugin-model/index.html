@@ -3552,7 +3552,7 @@ plain typed handler function onto the component's exported interface, so plugin
 authors never hand-write the generated binding boilerplate.</p>
 <h2 id="exports-imports-and-the-contract-version">Exports, imports, and the contract version</h2>
 <p>A plugin is a Wasm <strong>component</strong> built for <code>wasm32-wasip2</code> against the
-canonical WIT contract <code>mydia:plugin@1.7.0</code>, living at
+canonical WIT contract <code>mydia:plugin@1.8.0</code>, living at
 <code>native/mydia_plugin_sdk/wit/plugin.wit</code>.</p>
 <p>It <strong>exports</strong> handlers the host calls (events, schedules, the setup wizard,
 health checks, pages, shelves) and <strong>imports</strong> the host's capabilities (HTTP,
@@ -3564,7 +3564,7 @@ Which function arrived in which contract version is listed in
 <p>The package version in the WIT file <strong>is</strong> the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against <code>1.0</code> keep running unmodified against a <code>1.7</code> host: the host
+built against <code>1.0</code> keep running unmodified against a <code>1.8</code> host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.</p>

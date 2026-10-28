@@ -4217,7 +4217,7 @@
 <h1 id="host-functions">Host functions</h1>
 <p>The functions a plugin imports from the host, as defined in the <code>host</code>
 interface of the WIT contract (<code>native/mydia_plugin_sdk/wit/plugin.wit</code>, package
-<code>mydia:plugin@1.7.0</code>). The functions a plugin exports for the host to call are
+<code>mydia:plugin@1.8.0</code>). The functions a plugin exports for the host to call are
 in <a href="../guest-exports/">Guest exports</a>.</p>
 <p>In the Rust SDK each function is <code>mydia_plugin_sdk::host::&lt;name&gt;</code> with dashes
 turned into underscores (<code>set-watch-state</code> is <code>host::set_watch_state</code>), and the
@@ -5036,6 +5036,11 @@ event or schedule handler it returns <code>denied</code>.</p>
 <td><code>option&lt;string&gt;</code></td>
 <td></td>
 </tr>
+<tr>
+<td><code>vote-count</code></td>
+<td><code>option&lt;u32&gt;</code></td>
+<td>Contract 1.8. TMDB's rating count, for telling a well-known title from an obscure namesake. Absent for library hits and for shows, which the catalog keys by TVDB.</td>
+</tr>
 </tbody>
 </table>
 <p>Catalog results stop after a bounded number of provider pages: see
@@ -5572,6 +5577,10 @@ against.</p>
 <tr>
 <td>1.7</td>
 <td>The shelf-feedback types (<code>shelf-rating</code>, <code>shelf-via</code>, <code>shelf-feedback</code>) and the <code>feedback</code> field on <code>shelf-request</code>. No new host functions.</td>
+</tr>
+<tr>
+<td>1.8</td>
+<td><code>vote-count</code> on <code>search-hit</code>. No new host functions.</td>
 </tr>
 </tbody>
 </table>
