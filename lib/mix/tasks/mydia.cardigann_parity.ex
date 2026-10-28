@@ -36,6 +36,8 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
   their rows, real work names replaced with invented ones, and the result
   replayed through the wasm engine to prove nothing parses differently and no
   real name is left. Nothing is written for a capture that fails that check.
+  `WARNING` lines name every body written untrimmed and every work left as it
+  was; read those before committing.
 
   Like the benchmark, the task works on its own scratch SQLite database
   (`--database`, default under the cache root) and never touches the dev one.
@@ -93,7 +95,9 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
 
         case Scrubber.seed(dir, out, trim: Keyword.get(opts, :trim, true)) do
           {:ok, notes} ->
-            Enum.each(notes, &Mix.shell().info("#{label}: #{&1}"))
+            # Every note is something to read before committing: a body written
+            # untrimmed, or a work left unrenamed.
+            Enum.each(notes, &Mix.shell().error("WARNING #{label}: #{&1}"))
             Mix.shell().info("#{label}: wrote #{Path.join(out, Path.basename(dir))}")
             :ok
 

@@ -27,22 +27,35 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
   @doc "See `Mydia.Indexers.Cardigann.Parity.Scrubber.split_title/1`."
   @spec split_title(String.t()) :: {String.t(), String.t()}
   def split_title(title) do
-    cut =
+    tokens =
       @token
       |> Regex.scan(title, return: :index)
-      |> Enum.find_value(fn [{start, len}] ->
-        token = title |> binary_part(start, len) |> String.replace(@brackets, "")
-        if Regex.match?(@marker, token), do: start
+      |> Enum.map(fn [{start, len}] ->
+        {start, title |> binary_part(start, len) |> String.replace(@brackets, "")}
       end)
 
-    case cut do
-      nil ->
+    markers = for {start, token} <- tokens, Regex.match?(@marker, token), do: {start, token}
+
+    case {tokens, markers} do
+      {_, []} ->
         {title, ""}
 
-      at ->
-        work = title |> binary_part(0, at) |> String.replace(~r/[ ._-]+\z/, "") |> String.trim()
-        {work, binary_part(title, at, byte_size(title) - at)}
+      # A title that opens with a number ("1984 2031 1080p") names its work with
+      # it, so the cut moves to the next marker.
+      {[{first, _} | _], [{first, token}, {next, _} | _]} ->
+        if Regex.match?(~r/\A\d+\z/, token), do: cut(title, next), else: cut(title, first)
+
+      {[{first, _} | _], [{first, token}]} ->
+        if Regex.match?(~r/\A\d+\z/, token), do: {String.trim(title), ""}, else: cut(title, first)
+
+      {_, [{at, _} | _]} ->
+        cut(title, at)
     end
+  end
+
+  defp cut(title, at) do
+    work = title |> binary_part(0, at) |> String.replace(~r/[ ._-]+\z/, "") |> String.trim()
+    {work, binary_part(title, at, byte_size(title) - at)}
   end
 
   @doc """
@@ -52,11 +65,19 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
   @spec works([String.t()]) :: [String.t()]
   def works(titles) do
     titles
-    |> Enum.map(fn title -> title |> split_title() |> elem(0) |> String.trim() end)
-    |> Enum.filter(&(String.length(&1) >= @min_work_length))
+    |> Enum.map(&work/1)
+    |> Enum.filter(&renamable?/1)
     |> Enum.uniq()
     |> Enum.sort_by(&{-byte_size(&1), &1})
   end
+
+  @doc "The work name of one title."
+  @spec work(String.t()) :: String.t()
+  def work(title), do: title |> split_title() |> elem(0) |> String.trim()
+
+  @doc "Whether a work is long enough to rename without hitting markup."
+  @spec renamable?(String.t()) :: boolean()
+  def renamable?(work), do: String.length(work) >= @min_work_length
 
   @spec matcher([String.t()], String.t() | nil) :: matcher()
   def matcher(works, encoding) do
@@ -122,7 +143,18 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
       end
 
     fake = Enum.join(fake_words, sep)
-    slug_words = String.split(work, @slug_words, trim: true)
+    # Slugs either split at an apostrophe ("kiln-s-harbor") or drop it
+    # ("kilns-harbor"); trackers do both.
+    slugs =
+      for text <- [work, String.replace(work, ~r/['’]/u, "")],
+          words = String.split(text, @slug_words, trim: true),
+          s <- ["-", ".", "_"],
+          do: {Enum.join(words, s), Enum.join(fake_words, s)}
+
+    # Phoenix writes an apostrophe as &#39;; other encoders use these.
+    apostrophes =
+      for spelling <- ["&#039;", "&apos;", "&#x27;"],
+          do: {String.replace(escape(work), "&#39;", spelling), escape(fake)}
 
     base =
       [
@@ -130,7 +162,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
         {escape(work), escape(fake)},
         {URI.encode_www_form(work), URI.encode_www_form(fake)},
         {percent(work), percent(fake)}
-      ] ++ for(s <- ["-", ".", "_"], do: {Enum.join(slug_words, s), Enum.join(fake_words, s)})
+      ] ++ apostrophes ++ slugs
 
     # Lowercase forms only matter for non-ASCII letters, which fold/1 leaves alone.
     utf8 = base ++ Enum.map(base, fn {p, r} -> {String.downcase(p), String.downcase(r)} end)

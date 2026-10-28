@@ -47,6 +47,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.FictionalTest do
                {"pebble-os-39-20240301.img.gz", ""}
     end
 
+    test "a leading number is the work, cut at the next marker" do
+      assert Scrubber.split_title("1984 2031 1080p") == {"1984", "2031 1080p"}
+      assert Scrubber.split_title("1984") == {"1984", ""}
+    end
+
+    test "a leading non-number marker leaves no work" do
+      assert Scrubber.split_title("S01E02 720p HDTV") == {"", "S01E02 720p HDTV"}
+    end
+
     test "markers only count as whole tokens" do
       assert Scrubber.split_title("Harbor2031 Webcast") == {"Harbor2031 Webcast", ""}
     end

@@ -14,13 +14,18 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
 
   Works come from the titles the wasm engine parsed. Text no field selector
   reaches (a sidebar on a page with no rows, a login page) is never learned, so
-  trimming is what keeps it out; a page that is kept untrimmed is reported by
-  `seed/3` so the person seeding can look at it.
+  trimming is what keeps it out. `seed/3` returns a note for every body it
+  writes untrimmed, whatever the reason (`trim: false`, an error status, a page
+  with no rows, a body that cannot be trimmed safely), so the person seeding
+  can read those bodies before committing them.
+
+  A title whose work cannot be renamed (too short, or nothing before its first
+  marker) fails the seed: the real name would otherwise be committed.
   """
 
   alias Mydia.Indexers.Cardigann.Parity.{Capture, RequestKey, Runner}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
-  alias Mydia.Indexers.Cardigann.Parity.Scrubber.{Names, Trim}
+  alias Mydia.Indexers.Cardigann.Parity.Scrubber.{LeakCheck, Names, Trim}
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannParser
 
@@ -67,12 +72,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
             {ex, notes}
 
           {:untrimmed, why} ->
-            {ex, ["exchange #{n} (#{ex.request.url}) untrimmed: #{why}" | notes]}
+            {ex, [whole_note(n, ex, why) | notes]}
         end
       end)
 
     {%{capture | exchanges: exchanges}, Enum.reverse(notes)}
   end
+
+  defp whole_note(n, %Exchange{} = ex, why),
+    do: "exchange #{n} (#{ex.request.url}) written untrimmed: #{why}"
 
   @doc """
   Replaces the work name of every title, in every form it is written in, with
@@ -180,22 +188,33 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
 
   defp equal?(_field, a, b), do: a == b
 
+  # Two searches: the renamer's own forms, and LeakCheck's normalised text,
+  # which shares none of the renamer's assumptions about how a name is written.
   defp leftover_errors(capture, works, encoding) do
     texts =
       capture.exchanges
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {ex, n} ->
-        [{"request #{n} URL", ex.request.url}, {"body #{n}", ex.body || ""}]
+        [{"request #{n} URL", ex.request.url}, {"body #{n}", ex.body || ""}] ++
+          for({k, v} <- ex.headers, do: {"response #{n} header #{k}", v})
       end)
-      |> Enum.map(fn {label, text} -> {label, Names.fold(text)} end)
+      |> Enum.map(fn {label, text} ->
+        {label, Names.fold(text), LeakCheck.normalise(text, encoding)}
+      end)
 
-    for work <- works,
-        String.length(work) >= @min_work_length,
-        needles = Names.needles(work, encoding),
-        {label, text} <- texts,
-        Enum.any?(needles, &String.contains?(text, &1)) do
-      "#{label} still contains #{inspect(work)}"
-    end
+    errors =
+      for work <- works,
+          String.length(work) >= @min_work_length,
+          needles = Names.needles(work, encoding),
+          reduced = LeakCheck.normalise_work(work),
+          {label, folded, normalised} <- texts,
+          Enum.any?(needles, &String.contains?(folded, &1)) or
+            (String.length(reduced) >= @min_work_length and
+               String.contains?(normalised, reduced)) do
+        "#{label} still contains #{inspect(work)}"
+      end
+
+    Enum.uniq(errors)
   end
 
   defp size_errors(capture) do
@@ -220,7 +239,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
 
     with {:ok, yaml} <- read(yaml_path),
          {:ok, parsed} <- parse(yaml),
-         capture = Capture.read!(capture_dir),
+         {:ok, capture} <- read_capture(capture_dir),
          :ok <- prepare(capture.definition, yaml) do
       scrub(capture, parsed, yaml, Path.join(out_dir, Path.basename(capture_dir)), opts)
     end
@@ -232,6 +251,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     vocabulary = vocabulary(parsed)
 
     with {:ok, titles} <- titles(original),
+         :ok <- renamable(titles, vocabulary),
          {:ok, trimmed, notes} <- maybe_trim(capture, parsed, original, opts),
          {renamed, works} = rename(trimmed, titles, encoding: encoding, keep: vocabulary),
          :ok <- verify(original, Runner.replay(renamed), works, renamed, encoding: encoding) do
@@ -253,6 +273,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
         do: desc
   end
 
+  # A short work ("Up") cannot be renamed without wrecking markup, and an empty
+  # one cannot be found at all, so either would leave a real name in the fixture.
+  defp renamable(titles, vocabulary) do
+    keep = MapSet.new(vocabulary, &Names.fold/1)
+
+    errors =
+      for title <- Enum.uniq(titles),
+          work = Names.work(title),
+          Names.fold(work) not in keep,
+          not Names.renamable?(work) do
+        "title #{inspect(title)} has no renamable work name (got #{inspect(work)}); " <>
+          "leave this definition out of the seed set"
+      end
+
+    if errors == [], do: :ok, else: {:error, errors}
+  end
+
   defp kept_notes(titles, vocabulary) do
     keep = MapSet.new(vocabulary, &Names.fold/1)
 
@@ -270,7 +307,12 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
         errors -> {:error, Enum.map(errors, &("after trim: " <> &1))}
       end
     else
-      {:ok, capture, []}
+      notes =
+        for {%Exchange{body: body} = ex, n} <- Enum.with_index(capture.exchanges, 1),
+            body not in [nil, ""],
+            do: whole_note(n, ex, "--no-trim")
+
+      {:ok, capture, notes}
     end
   end
 
@@ -278,6 +320,12 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
 
   defp titles(%{wasm: other}),
     do: {:error, ["wasm failed on the original capture: #{inspect(other, limit: 5)}"]}
+
+  defp read_capture(dir) do
+    {:ok, Capture.read!(dir)}
+  rescue
+    e -> {:error, ["cannot read the capture in #{dir}: #{Exception.message(e)}"]}
+  end
 
   defp read(path) do
     case File.read(path) do

@@ -28,10 +28,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
 
   @type outcome :: {:ok, binary()} | :skip | {:untrimmed, String.t()}
 
-  @doc "The trimmed body of a successful exchange, `:skip`, or why it stays whole."
+  @doc """
+  The trimmed body of an exchange, or why it stays whole. `:skip` only for an
+  exchange with no body to write (a transport error or an empty body).
+  """
   @spec body(Exchange.t(), map(), String.t() | nil) :: outcome()
-  def body(%Exchange{error: nil, status: status, body: body} = ex, rows, encoding)
-      when status in 200..299 and is_binary(body) and body != "" do
+  def body(%Exchange{body: body}, _rows, _encoding) when body in [nil, ""], do: :skip
+
+  def body(%Exchange{status: status}, _rows, _encoding) when status not in 200..299,
+    do: {:untrimmed, "HTTP #{status} bodies are kept whole"}
+
+  def body(%Exchange{body: body} = ex, rows, encoding) do
     text = Charset.decode(body, encoding)
 
     result =
@@ -46,8 +53,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
       other -> other
     end
   end
-
-  def body(_exchange, _rows, _encoding), do: :skip
 
   defp kind(%Exchange{headers: headers}, text) do
     type =
@@ -83,7 +88,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
 
     case Selector.find(doc, :root, selector) do
       [] ->
-        :skip
+        {:untrimmed, "the rows selector matches nothing (not a results page, or no results)"}
 
       matches ->
         keep = matches |> Enum.flat_map(&LazyHTML.attribute(&1, @nid)) |> MapSet.new()
@@ -97,7 +102,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
        "rows selector #{inspect(selector)} cannot be evaluated: #{Exception.message(e)}"}
   end
 
-  defp html(_text, _rows), do: :skip
+  defp html(_text, _rows), do: {:untrimmed, "the definition has no rows selector"}
 
   defp after_count(rows) do
     case Map.get(rows, :after) do
@@ -170,13 +175,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
     with {:ok, decoded} <- Jason.decode(text, objects: :ordered_objects),
          [_ | _] = paths <- json_paths(rows) do
       case keep_paths(decoded, paths) do
-        {:ok, ^decoded} -> :skip
+        {:ok, ^decoded} -> {:untrimmed, "the JSON holds nothing besides the rows path"}
         {:ok, kept} -> {:ok, Jason.encode!(kept)}
-        :missing -> :skip
+        :missing -> {:untrimmed, "the JSON rows path is not in the body"}
       end
     else
       {:error, _} -> {:untrimmed, "body looks like JSON but does not decode"}
-      [] -> :skip
+      [] -> {:untrimmed, "the JSON rows are the whole body"}
       {:untrimmed, _} = untrimmed -> untrimmed
     end
   end

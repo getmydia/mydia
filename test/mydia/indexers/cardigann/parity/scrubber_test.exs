@@ -138,6 +138,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
                )
     end
 
+    test "renames other apostrophe entities and the apostrophe-dropped slug" do
+      body = "Pim&#039;s Fennel | Pim&apos;s Fennel | Pim&#x27;s Fennel | /t/pims-fennel/"
+
+      {%Capture{exchanges: [ex]}, ["Pim's Fennel"]} =
+        Scrubber.rename(capture([exchange(body)]), ["Pim's Fennel 2031 1080p"])
+
+      refute ex.body =~ ~r/pim|fennel/i
+    end
+
     test "renames the longest work first" do
       body = "Old Mellow Kiln and Mellow Kiln"
 
@@ -227,8 +236,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
         error: :timeout
       }
 
-      assert Scrubber.trim(capture([failed, login, error]), parsed()).exchanges ==
-               [failed, login, error]
+      assert {%Capture{exchanges: [^failed, ^login, ^error]}, notes} =
+               Scrubber.trim_with_notes(capture([failed, login, error]), parsed())
+
+      # Every body written whole is reported; the transport error has none.
+      assert [http, rows] = notes
+      assert http =~ "exchange 1" and http =~ "HTTP 500"
+      assert rows =~ "exchange 2" and rows =~ "matches nothing"
+    end
+
+    test "reports a JSON body whose rows are the whole document" do
+      yaml = String.replace(@yaml, "    selector: tr.row\n", "    selector: $\n")
+      json = exchange(Jason.encode!([%{"name" => "a"}]), type: "application/json")
+
+      assert {%Capture{exchanges: [^json]}, [note]} =
+               Scrubber.trim_with_notes(capture([json]), parsed(yaml))
+
+      assert note =~ "written untrimmed"
     end
 
     test "keeps the body when the selector cannot be evaluated, and says so" do
@@ -250,6 +274,75 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       [ex] = Scrubber.trim(capture([exchange(cp1251)]), parsed(yaml)).exchanges
       refute ex.body =~ "popular"
       assert ex.body =~ Mydia.Indexers.Cardigann.Charset.encode("Тихая Гавань", "windows-1251")
+    end
+  end
+
+  describe "verify/5 leak checks" do
+    # No parsing to compare, so these need no engine.
+    @empty %{wasm: {:ok, []}, wasm_misses: []}
+
+    defp leaks(body, works, opts \\ []) do
+      cap = capture([exchange(body, opts)])
+      Scrubber.verify(@empty, @empty, works, cap, Keyword.take(opts, [:encoding]))
+    end
+
+    test "finds a work behind a padded apostrophe entity" do
+      assert {:error, [msg]} = leaks("<a>Kiln&#039;s Harbor</a>", ["Kiln's Harbor"])
+      assert msg =~ "body 1"
+    end
+
+    test "finds a work in a slug that drops the apostrophe" do
+      assert {:error, [_]} = leaks(~s(<a href="/t/kilns-harbor/">x</a>), ["Kiln's Harbor"])
+    end
+
+    test "finds a work percent-encoded twice" do
+      assert {:error, [_]} = leaks("/search?q=Mellow%2520Kiln", ["Mellow Kiln"])
+    end
+
+    test "finds a work in JSON escapes and named entities" do
+      assert {:error, [_]} = leaks(~S({"t":"Café Mellow"}), ["Café Mellow"])
+      assert {:error, [_]} = leaks("Caf&eacute; Mellow", ["CAFÉ MELLOW"])
+    end
+
+    test "finds a work in a response header" do
+      ex = exchange("clean")
+      ex = %{ex | headers: [{"content-disposition", "attachment; filename=Mellow.Kiln.torrent"}]}
+
+      assert {:error, [msg]} = Scrubber.verify(@empty, @empty, ["Mellow Kiln"], capture([ex]))
+      assert msg =~ "header content-disposition"
+    end
+
+    test "passes clean text" do
+      assert leaks("<a>Lantern Quay</a>", ["Mellow Kiln"]) == :ok
+    end
+
+    test "renames and verifies a windows-1251 work, including its percent-encoded link" do
+      work = "Тихая Гавань"
+      cp = &Mydia.Indexers.Cardigann.Charset.encode(&1, "windows-1251")
+      link = URI.encode_www_form(cp.(work))
+      body = cp.("<a href=\"/search?q=") <> link <> cp.("\">#{work} 2031</a>")
+
+      assert {:error, _} = leaks(body, [work], encoding: "windows-1251")
+
+      {renamed, [^work]} =
+        Scrubber.rename(capture([exchange(body)]), ["#{work} 2031 1080p"],
+          encoding: "windows-1251"
+        )
+
+      assert Scrubber.verify(@empty, @empty, [work], renamed, encoding: "windows-1251") == :ok
+      [ex] = renamed.exchanges
+      assert ex.body =~ URI.encode_www_form(Fictional.name(work))
+    end
+
+    @tag :tmp_dir
+    test "seed reports a malformed capture instead of crashing", %{tmp_dir: tmp} do
+      dir = Path.join([tmp, "harbor", "generic"])
+      File.mkdir_p!(dir)
+      File.write!(Path.join(tmp, "harbor/definition.yml"), @yaml)
+      File.write!(Path.join(dir, "exchanges.json"), ~s({"format_version": 99}))
+
+      assert {:error, [msg]} = Scrubber.seed(dir, Path.join(tmp, "out"))
+      assert msg =~ "cannot read the capture" and msg =~ dir
     end
   end
 
@@ -360,6 +453,36 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       assert {:error, errors} = Scrubber.seed(Path.join(cache, "generic"), out)
       assert Enum.any?(errors, &(&1 =~ ~r/"Search"|unrecorded/))
       refute File.exists?(out)
+    end
+
+    @tag :tmp_dir
+    test "seed refuses titles with no renamable work", %{tmp_dir: tmp} do
+      for {title, work} <- [{"Mellow Kiln 2031", "Up 2031"}, {"Drowsy Weir S01E02", "S01E02"}] do
+        cache = Path.join([tmp, "cache", "harbor"])
+        File.rm_rf!(cache)
+        File.mkdir_p!(cache)
+        File.write!(Path.join(cache, "definition.yml"), @yaml)
+        page = String.replace(@page, title, work)
+        Capture.write!(capture([exchange(page)]), Path.join(cache, "generic"))
+        out = Path.join(tmp, "out")
+
+        assert {:error, errors} = Scrubber.seed(Path.join(cache, "generic"), out)
+        assert Enum.any?(errors, &(&1 =~ "no renamable work"))
+        refute File.exists?(out)
+      end
+    end
+
+    @tag :tmp_dir
+    test "seed with trim: false notes every body it writes whole", %{tmp_dir: tmp} do
+      cache = Path.join([tmp, "cache", "harbor"])
+      File.mkdir_p!(cache)
+      File.write!(Path.join(cache, "definition.yml"), @yaml)
+      Capture.write!(capture([exchange(@page)]), Path.join(cache, "generic"))
+
+      assert {:ok, [note]} =
+               Scrubber.seed(Path.join(cache, "generic"), Path.join(tmp, "out"), trim: false)
+
+      assert note =~ "exchange 1" and note =~ "--no-trim"
     end
   end
 
