@@ -17,8 +17,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
     "timeout" => :timeout,
     "closed" => :closed,
     "econnrefused" => :econnrefused,
-    "nxdomain" => :nxdomain
+    "nxdomain" => :nxdomain,
+    # The wasm host's own kinds (HostHttp.error_kind/0).
+    "connect" => :connect,
+    "blocked" => :blocked,
+    "other" => :other
   }
+  @error_atoms Map.values(@errors)
 
   defmodule Exchange do
     @moduledoc "One recorded request and its response (or transport error)."
@@ -102,8 +107,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
     Map.merge(%{"method" => key.method, "url" => key.url}, body)
   end
 
-  defp encode_response(%Exchange{error: error}, _n, _dir) when not is_nil(error),
+  defp encode_response(%Exchange{error: error}, _n, _dir) when error in @error_atoms,
     do: %{"error" => Atom.to_string(error)}
+
+  defp encode_response(%Exchange{error: error}, _n, _dir) when not is_nil(error),
+    do: raise(ArgumentError, "unknown capture error kind: #{inspect(error)}")
 
   defp encode_response(%Exchange{} = ex, n, dir) do
     file = body_file_name(n, ex.headers)
@@ -152,7 +160,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
 
     case resp do
       %{"error" => error} ->
-        %{exchange | error: Map.get(@errors, error, :unknown)}
+        %{exchange | error: decode_error(error)}
 
       %{"status" => status, "headers" => headers, "body_file" => file} ->
         %{
@@ -166,4 +174,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
 
   defp decode_body(%{"body_base64" => b64}), do: Base.decode64!(b64)
   defp decode_body(req), do: req["body"]
+
+  defp decode_error(error) do
+    case Map.fetch(@errors, error) do
+      {:ok, kind} -> kind
+      :error -> raise ArgumentError, "unknown capture error kind: #{inspect(error)}"
+    end
+  end
 end

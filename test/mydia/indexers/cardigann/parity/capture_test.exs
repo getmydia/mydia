@@ -75,4 +75,26 @@ defmodule Mydia.Indexers.Cardigann.Parity.CaptureTest do
 
     assert_raise ArgumentError, ~r/format_version/, fn -> Capture.read!(dir) end
   end
+
+  @tag :tmp_dir
+  test "an error kind outside the closed set raises on write and on read", %{tmp_dir: dir} do
+    capture = %Capture{
+      definition: "example",
+      ref: "abc",
+      query: %{kind: :rss, term: ""},
+      exchanges: [
+        %Exchange{request: RequestKey.new(:get, "https://t.example/", nil), error: :bogus}
+      ]
+    }
+
+    assert_raise ArgumentError, ~r/error kind/, fn -> Capture.write!(capture, dir) end
+
+    File.write!(
+      Path.join(dir, "exchanges.json"),
+      ~s({"format_version": 1, "definition": "e", "ref": "a", "query": {"kind": "rss", "term": ""},) <>
+        ~s("exchanges": [{"request": {"method": "GET", "url": "https://t.example/", "body": null}, "response": {"error": "bogus"}}]})
+    )
+
+    assert_raise ArgumentError, ~r/error kind/, fn -> Capture.read!(dir) end
+  end
 end

@@ -148,7 +148,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   def default_timeout_ms, do: @default_timeout_ms
 
   @doc """
-  Performs one gated HTTP exchange for the guest.
+  Performs one gated HTTP exchange for the guest. When the ctx carries
+  `:replay`, the exchange is answered from the recorded capture instead, with
+  no throttle, gate or FlareSolverr.
   """
   @spec exchange(ctx(), request()) :: {:ok, response()} | {:error, {error_kind(), String.t()}}
   def exchange(%{replay: replay}, req) when is_pid(replay) do

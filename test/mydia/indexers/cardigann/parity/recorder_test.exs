@@ -2,7 +2,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.RecorderTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
-  alias Mydia.Indexers.Cardigann.Parity.{Recorder, RequestKey}
+  alias Mydia.Indexers.Cardigann.Parity.{Capture, Recorder, RequestKey}
 
   defp key(path), do: RequestKey.new("GET", "https://harbor.invalid/#{path}", nil)
 
@@ -36,5 +36,22 @@ defmodule Mydia.Indexers.Cardigann.Parity.RecorderTest do
 
     assert [%Exchange{error: :timeout, status: nil}, %Exchange{error: :connect}] =
              Recorder.exchanges(rec)
+  end
+
+  @tag :tmp_dir
+  test "every host error kind survives write! and read!", %{tmp_dir: dir} do
+    {:ok, rec} = Recorder.start_link()
+    kinds = [:timeout, :connect, :blocked, :other]
+    for k <- kinds, do: Recorder.record(rec, key("#{k}"), {:error, {k, "x"}})
+
+    capture = %Capture{
+      definition: "harbor",
+      ref: "t",
+      query: %{kind: :generic, term: "x"},
+      exchanges: Recorder.exchanges(rec)
+    }
+
+    Capture.write!(capture, dir)
+    assert dir |> Capture.read!() |> Map.fetch!(:exchanges) |> Enum.map(& &1.error) == kinds
   end
 end

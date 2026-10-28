@@ -153,6 +153,30 @@ defmodule Mydia.Indexers.Cardigann.Parity.WasmReplayTest do
     assert Replay.misses(replay) == []
   end
 
+  test "a recorded timeout replays as an error result without raising" do
+    definition = insert_definition("https://harbor.invalid/")
+
+    capture = %Capture{
+      definition: "harbor",
+      ref: "test",
+      query: %{kind: :generic, term: "lantern"},
+      exchanges: [
+        %Exchange{
+          request: RequestKey.new("GET", "https://harbor.invalid/search?q=lantern", nil),
+          error: :timeout
+        }
+      ]
+    }
+
+    {:ok, replay} = Replay.start_link(capture)
+
+    result =
+      Seam.with(%{replay: replay}, fn -> Adapter.search(config(definition), "lantern", []) end)
+
+    assert match?({:error, _}, result) or result == {:ok, []}
+    assert Replay.misses(replay) == []
+  end
+
   test "records the exchange a live search makes, without cookie values" do
     bypass = Bypass.open()
     definition = insert_definition("http://localhost:#{bypass.port}/")
