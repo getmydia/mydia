@@ -241,6 +241,69 @@ defmodule Mydia.Library.ExportTest do
       assert file_row.episode == "4-5"
     end
 
+    test "non-consecutive linked episodes are listed, not ranged" do
+      show = media_item_fixture(%{type: "tv_show", title: "Tin Lantern Coast"})
+      e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      _e2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+      e3 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 3})
+
+      file = media_file_fixture(%{episode_id: e1.id})
+      Library.link_file_to_episodes(file, [e3, e1])
+
+      assert [%{files: [file_row]}] = Export.rows()
+      assert file_row.season == 1
+      assert file_row.episode == "1,3"
+    end
+
+    test "links to another season do not widen the reported episodes" do
+      show = media_item_fixture(%{type: "tv_show", title: "Mossgate Tales"})
+      e4 = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 4})
+      e5 = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 5})
+      other = episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 9})
+
+      file = media_file_fixture(%{episode_id: e4.id})
+      Library.link_file_to_episodes(file, [e4, e5, other])
+
+      assert [%{files: [file_row]}] = Export.rows()
+      assert file_row.season == 2
+      assert file_row.episode == "4-5"
+    end
+  end
+
+  describe "rows/1 include_files: false" do
+    test "skips files but reports the same totals as the file-listing rows" do
+      movie = media_item_fixture(%{type: "movie", title: "Driftwood Signal"})
+      media_file_fixture(%{media_item_id: movie.id, size: 1_000})
+      media_file_fixture(%{media_item_id: movie.id, size: 2_500})
+      media_file_fixture(%{media_item_id: movie.id, size: 40, extra_kind: :trailer})
+      trashed = media_file_fixture(%{media_item_id: movie.id, size: 9_999})
+      {:ok, _} = Library.update_media_file(trashed, %{trashed_at: DateTime.utc_now()})
+
+      show = media_item_fixture(%{type: "tv_show", title: "Hollow Pier"})
+      e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      e2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+      multi = media_file_fixture(%{episode_id: e1.id, size: 700})
+      Library.link_file_to_episodes(multi, [e1, e2])
+      media_file_fixture(%{episode_id: e2.id, size: 300})
+
+      media_item_fixture(%{type: "movie", title: "Empty Quarry"})
+
+      totals = fn rows -> Enum.map(rows, &{&1.title, &1.file_count, &1.size_bytes}) end
+
+      json_rows = Export.rows()
+      csv_rows = Export.rows(include_files: false)
+
+      assert totals.(csv_rows) == totals.(json_rows)
+
+      assert totals.(csv_rows) == [
+               {"Driftwood Signal", 2, 3_500},
+               {"Empty Quarry", 0, 0},
+               {"Hollow Pier", 2, 1_000}
+             ]
+
+      assert Enum.all?(csv_rows, &(&1.files == []))
+    end
+
     test "an item without files has an empty list" do
       media_item_fixture(%{type: "movie", title: "Fable of Dust"})
       assert [%{files: []}] = Export.rows()
@@ -252,12 +315,20 @@ defmodule Mydia.Library.ExportTest do
       movie = media_item_fixture(%{type: "movie", title: "Copperline"})
       media_file_fixture(%{media_item_id: movie.id, relative_path: "Copperline.mp4", size: 77})
 
-      decoded = Export.rows() |> Export.to_json() |> IO.iodata_to_binary() |> Jason.decode!()
+      json = Export.rows() |> Export.to_json() |> IO.iodata_to_binary()
+      decoded = Jason.decode!(json)
 
       assert [%{"files" => [file]}] = decoded["items"]
 
       assert Map.keys(file) |> Enum.sort() ==
                FileRow.fields() |> Enum.map(&Atom.to_string/1) |> Enum.sort()
+
+      ordered = Jason.decode!(json, objects: :ordered_objects)
+
+      for item <- ordered["items"], entry <- item["files"] do
+        assert Enum.map(entry.values, &elem(&1, 0)) ==
+                 Enum.map(FileRow.fields(), &Atom.to_string/1)
+      end
 
       assert file["size_bytes"] == 77
       assert file["container"] == "mp4"

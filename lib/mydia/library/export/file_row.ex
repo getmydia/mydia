@@ -8,7 +8,8 @@ defmodule Mydia.Library.Export.FileRow do
   from its item's assigned library. `video_profile`, `bit_depth` and
   `audio_channels` come from `metadata.streams` (see
   `lib/mydia/streaming/README.md`). `episode` is a string so a multi-episode
-  file can report its range (`"4-5"`).
+  file can report its episodes within its season: a consecutive run as a range
+  (`"4-5"`), anything else as a list (`"1,3"`).
   """
 
   @fields [

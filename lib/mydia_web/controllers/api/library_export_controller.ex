@@ -14,7 +14,8 @@ defmodule MydiaWeb.Api.LibraryExportController do
   def show(conn, params) do
     case parse_format(Map.get(params, "format", "json")) do
       {:ok, format} ->
-        rows = Export.rows()
+        # The per-item CSV prints no files, so skip loading them.
+        rows = Export.rows(include_files: format != :csv)
         send_export(conn, format, rows)
 
       :error ->

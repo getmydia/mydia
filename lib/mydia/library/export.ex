@@ -11,7 +11,8 @@ defmodule Mydia.Library.Export do
 
   Each row also carries its files as `Mydia.Library.Export.FileRow`s (see
   `file_rows/0`): nested under `files` in the JSON, flattened by
-  `to_files_csv/1`, and left out of the per-item CSV.
+  `to_files_csv/1`, and left out of the per-item CSV, which builds its rows with
+  `rows(include_files: false)` so it never loads them.
 
   The JSON envelope uses the `items` key that
   `Mydia.ImportLists.Provider.CustomURL` reads, so a hosted export is a valid
@@ -32,27 +33,61 @@ defmodule Mydia.Library.Export do
   @version 2
   @identity_fields [:type, :title, :year, :tmdb_id, :tvdb_id, :imdb_id]
 
-  @doc "Every media item as an export row with its files, sorted by type, title, year."
-  @spec rows() :: [Row.t()]
-  def rows do
+  @doc """
+  Every media item as an export row, sorted by type, title, year.
+
+  With `include_files: true` (the default) each row carries its `FileRow`s and
+  `file_count`/`size_bytes` are derived from them. With `include_files: false`
+  (the per-item CSV, which never prints files) `files` is `[]` and the two
+  totals come from a SQL aggregate over the same files, so no file row or
+  `metadata` column is loaded.
+  """
+  @spec rows(keyword()) :: [Row.t()]
+  def rows(opts \\ []) do
     episodes = episode_totals()
     covered = covered_episode_totals()
-    file_rows = file_rows()
+
+    files =
+      if Keyword.get(opts, :include_files, true),
+        do: {:files, file_rows()},
+        else: {:totals, file_totals()}
 
     items_query()
     |> Repo.all()
-    |> Enum.map(&to_row(&1, episodes, covered, file_rows))
+    |> Enum.map(&to_row(&1, episodes, covered, files))
     |> Enum.sort_by(&{&1.type, String.downcase(&1.title), &1.year})
   end
 
   @doc """
   Every version file (untrashed, not an extra) as a `FileRow`, grouped by its
-  owning media item and ordered by season, episode, path. Two queries in total:
-  the files, and the `media_file_episodes` links that give multi-episode files
-  their range.
+  owning media item and ordered by season, episode, path. Two queries in total,
+  the files and the `media_file_episodes` links that give multi-episode files
+  their range, read in one transaction so both describe the same snapshot
+  (repeatable read on PostgreSQL; a SQLite transaction already is one).
   """
   @spec file_rows() :: %{optional(term()) => [FileRow.t()]}
   def file_rows do
+    isolate? = repeatable_read_available?()
+
+    {:ok, rows} =
+      Repo.transaction(fn ->
+        if isolate?, do: Repo.query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        read_file_rows()
+      end)
+
+    rows
+  end
+
+  # SET TRANSACTION must be the first statement of a real top-level transaction.
+  # PostgreSQL rejects it inside an enclosing transaction or under the SQL
+  # Sandbox (where `transaction` opens a savepoint); the enclosing transaction
+  # already fixes the snapshot in both cases.
+  defp repeatable_read_available? do
+    Mydia.DB.postgres?() and not Repo.in_transaction?() and
+      Repo.config()[:pool] != Ecto.Adapters.SQL.Sandbox
+  end
+
+  defp read_file_rows do
     links = episode_links()
 
     from(mf in MediaFile.versions(),
@@ -165,6 +200,26 @@ defmodule Mydia.Library.Export do
     )
   end
 
+  # %{media_item_id => {file_count, size_bytes}} over the same files
+  # file_rows/0 reads, summed in SQL for exports that do not list files.
+  defp file_totals do
+    from(mf in MediaFile.versions(),
+      left_join: e in Episode,
+      on: e.id == mf.episode_id,
+      where: not is_nil(coalesce(mf.media_item_id, e.media_item_id)),
+      group_by: coalesce(mf.media_item_id, e.media_item_id),
+      select:
+        {coalesce(mf.media_item_id, e.media_item_id), count(mf.id), sum(coalesce(mf.size, 0))}
+    )
+    |> Repo.all()
+    |> Map.new(fn {id, count, size} -> {id, {count, to_int(size)}} end)
+  end
+
+  # PostgreSQL returns sum/1 as Decimal, SQLite as integer.
+  defp to_int(nil), do: 0
+  defp to_int(%Decimal{} = d), do: Decimal.to_integer(d)
+  defp to_int(n) when is_integer(n), do: n
+
   # %{media_item_id => episode_count}
   defp episode_totals do
     from(e in Episode, group_by: e.media_item_id, select: {e.media_item_id, count(e.id)})
@@ -231,17 +286,37 @@ defmodule Mydia.Library.Export do
 
   defp file_path(%{relative_path: rel, legacy_path: legacy}), do: legacy || rel
 
-  # A multi-episode file's links give its range; a single-episode file may only
-  # have episode_id (see lib/mydia/media/README.md), so fall back to that.
-  defp episode_span(_f, [_, _ | _] = links) do
-    [{season, first} | _] = sorted = Enum.sort(links)
-    {_, last} = List.last(sorted)
-    {season, if(first == last, do: to_string(first), else: "#{first}-#{last}")}
+  # A multi-episode file's links give its episodes; a single-episode file may
+  # only have episode_id (see lib/mydia/media/README.md), so fall back to that.
+  # Only links in the reported season (episode_id's, else the earliest linked)
+  # count, so a stray cross-season link cannot stretch the label.
+  defp episode_span(f, [_ | _] = links) do
+    season = f.season || links |> Enum.min() |> elem(0)
+
+    numbers =
+      for {^season, n} <- links, is_integer(n), uniq: true do
+        n
+      end
+
+    case Enum.sort(numbers) do
+      [] -> episode_span(f, nil)
+      sorted -> {season, episode_label(sorted)}
+    end
   end
 
-  defp episode_span(_f, [{season, episode}]), do: {season, to_string(episode)}
   defp episode_span(%{season: season, episode: nil}, _), do: {season, nil}
   defp episode_span(%{season: season, episode: episode}, _), do: {season, to_string(episode)}
+
+  # "3" for one episode, "4-5" for a consecutive run, "1,3" otherwise.
+  defp episode_label([n]), do: to_string(n)
+
+  defp episode_label([first | _] = sorted) do
+    last = List.last(sorted)
+
+    if sorted == Enum.to_list(first..last),
+      do: "#{first}-#{last}",
+      else: Enum.join(sorted, ",")
+  end
 
   defp streams(%FileMetadata{streams: streams}) when is_list(streams), do: streams
   defp streams(_), do: []
@@ -277,8 +352,8 @@ defmodule Mydia.Library.Export do
     end
   end
 
-  defp to_row(%{item: m} = r, episodes, covered, file_rows) do
-    files = Map.get(file_rows, m.id, [])
+  defp to_row(%{item: m} = r, episodes, covered, files_or_totals) do
+    {files, {file_count, size_bytes}} = item_files(files_or_totals, m.id)
     tv? = m.type == "tv_show"
 
     %Row{
@@ -294,12 +369,19 @@ defmodule Mydia.Library.Export do
       monitored: m.monitored,
       quality_profile: r.quality_profile,
       library_path: r.library_path,
-      file_count: length(files),
-      size_bytes: files |> Enum.map(&(&1.size_bytes || 0)) |> Enum.sum(),
+      file_count: file_count,
+      size_bytes: size_bytes,
       episode_count: if(tv?, do: Map.get(episodes, m.id, 0)),
       episodes_with_files: if(tv?, do: Map.get(covered, m.id, 0)),
       added_at: m.inserted_at,
       files: files
     }
   end
+
+  defp item_files({:files, file_rows}, id) do
+    files = Map.get(file_rows, id, [])
+    {files, {length(files), files |> Enum.map(&(&1.size_bytes || 0)) |> Enum.sum()}}
+  end
+
+  defp item_files({:totals, totals}, id), do: {[], Map.get(totals, id, {0, 0})}
 end
