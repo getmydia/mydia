@@ -152,45 +152,6 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
-  @doc """
-  True only when `media_file`'s file is definitely not where its row says.
-
-  Anything that cannot be decided reads as `false`: a row with no resolvable
-  path, a local library whose root directory is missing or empty (an
-  unmounted share looks exactly like either), or an S3 error other than
-  not-found. Used
-  to decide whether an active row may be repointed at a file found elsewhere,
-  where guessing wrong would steal a row from a library that is merely
-  offline. `media_file` needs `:library_path` preloaded.
-  """
-  @spec absent?(MediaFile.t()) :: boolean()
-  def absent?(%MediaFile{} = media_file) do
-    if Storage.s3?(media_file) do
-      object_absent?(media_file)
-    else
-      case MediaFile.absolute_path(media_file) do
-        nil -> false
-        path -> library_root_present?(media_file) and not File.exists?(path)
-      end
-    end
-  end
-
-  defp object_absent?(media_file) do
-    with {:ok, source} <- Storage.source(media_file),
-         {:error, %Storage.Error{kind: :not_found}} <- Storage.stat(source) do
-      true
-    else
-      _ -> false
-    end
-  end
-
-  # An unmounted share often leaves its mount point behind as an empty
-  # directory, so an empty root is as undecidable as a missing one.
-  defp library_root_present?(%MediaFile{library_path: %{path: root}}) when is_binary(root),
-    do: match?({:ok, [_ | _]}, File.ls(root))
-
-  defp library_root_present?(_), do: false
-
   # S3: the trash is `<library prefix>.mydia-trash/<id>/<basename>` in the same
   # bucket, which Storage.list and the scanner skip. MYDIA_TRASH_DIR is a local
   # directory and does not apply. Only a definite not-found is :missing; any

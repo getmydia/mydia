@@ -34,7 +34,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     ]
 
   require Logger
-  alias Mydia.{Library, Settings, Repo, Metadata}
+  alias Mydia.{Library, Settings, Metadata}
   alias Mydia.ImportCandidates
   alias Mydia.Subtitles.Sidecars
 
@@ -50,12 +50,10 @@ defmodule Mydia.Jobs.LibraryScanner do
     FileIngest,
     ImportCandidate,
     MediaFile,
-    MediaFiles,
     MetadataMatcher,
     PathAnchor,
     Relink,
-    ScanSummary,
-    TrashStore
+    ScanSummary
   }
 
   alias Mydia.Settings.LibraryPath
@@ -399,29 +397,22 @@ defmodule Mydia.Jobs.LibraryScanner do
 
     process_modified_files(changes.modified_files, library_path, active_by_path)
 
-    # A rename inside this library shows up as one deleted row and one new
-    # path. Repoint the row before either side is handled, so the row keeps
-    # its id and everything keyed to it. See Mydia.Library.Relink.
+    # Known-file maintenance, in both auto_import modes. A rename or move
+    # shows up as a deleted row and a new path; relinking keeps the row's id
+    # and everything keyed to it. What stays deleted is trashed as missing,
+    # and restored by partition_and_restore/3 if the file reappears.
     library_paths = Settings.list_library_paths()
 
     {deleted_files, new_files} =
-      relink_within(changes.deleted_files, changes.new_files, library_paths)
+      Relink.Scan.within(changes.deleted_files, changes.new_files, library_paths)
 
-    process_deleted_files(deleted_files)
+    Relink.Scan.trash_missing(deleted_files)
 
     {restored_count, unknown} = partition_and_restore(new_files, library_path, trashed_by_path)
-
-    # A move between libraries spans two scans, so the old row is either
-    # already trashed as missing or, when this library is scanned first,
-    # still active in another library with its file gone.
-    {unknown, relinked_across} = relink_across(unknown, library_path, library_paths)
+    {unknown, new_files} = Relink.Scan.across(unknown, new_files, library_path, library_paths)
 
     # Relinked paths were neither deleted nor new; count only what was.
-    changes = %{
-      changes
-      | deleted_files: deleted_files,
-        new_files: Enum.reject(new_files, &MapSet.member?(relinked_across, &1.path))
-    }
+    changes = %{changes | deleted_files: deleted_files, new_files: new_files}
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
 
@@ -488,72 +479,6 @@ defmodule Mydia.Jobs.LibraryScanner do
       handle_scan_error(library_path, error_message)
   end
 
-  # Known-file maintenance, like the rest of this file's pre-discovery work:
-  # runs in both auto_import modes. Rows that fail to relink fall back to the
-  # usual handling (trashed as missing, new path treated as unknown). Never
-  # fails the scan: if pairing or a relink raises, both lists are handed back
-  # unchanged, which is what happened before relinking existed.
-  defp relink_within([], new_files, _library_paths), do: {[], new_files}
-  defp relink_within(deleted, [], _library_paths), do: {deleted, []}
-
-  defp relink_within(deleted, new_files, library_paths) do
-    preloaded = Repo.preload(deleted, :library_path)
-    {pairs, deleted_left, new_left} = Relink.pair(preloaded, new_files)
-    {_relinked, failed} = Relink.relink_all(pairs, library_paths)
-
-    {deleted_left ++ Enum.map(failed, &elem(&1, 0)), new_left ++ Enum.map(failed, &elem(&1, 1))}
-  rescue
-    error ->
-      Logger.warning("Relinking renamed files failed; handling them as deleted and new",
-        error: Exception.format(:error, error, __STACKTRACE__)
-      )
-
-      {deleted, new_files}
-  end
-
-  # Returns `{unknown_left, relinked_paths}`. Never fails the scan: if the
-  # lookup or a relink raises, every unknown path is handed back unchanged
-  # and discovery treats them as new, which is what happened before relinking
-  # existed.
-  defp relink_across([], _library_path, _library_paths), do: {[], MapSet.new()}
-
-  defp relink_across(unknown, library_path, library_paths) do
-    candidates =
-      unknown
-      |> Enum.map(& &1.size)
-      |> MediaFiles.list_relink_candidates(library_path.id)
-      |> Enum.filter(&file_gone?/1)
-
-    {pairs, _, unknown_left} = Relink.pair(candidates, unknown)
-    {relinked, failed} = Relink.relink_all(pairs, library_paths)
-
-    {unknown_left ++ Enum.map(failed, &elem(&1, 1)),
-     MapSet.new(relinked, fn {_row, info} -> info.path end)}
-  rescue
-    error ->
-      Logger.warning("Cross-library relink failed; treating found files as new",
-        library_path_id: library_path.id,
-        error: Exception.format(:error, error, __STACKTRACE__)
-      )
-
-      {unknown, MapSet.new()}
-  end
-
-  # A trashed-missing row is gone by definition. An active row is gone only if
-  # its file is definitely not where it says; TrashStore.absent?/1 answers
-  # false whenever it cannot tell (an offline library root, an S3 outage), so
-  # a row is never taken from a library that is merely unreachable.
-  #
-  # A row holding a copy of its bytes in the trash directory is never a
-  # candidate: relinking it would orphan that copy. Relink.pair/2 refuses it
-  # too; filtering here keeps it out of the pairing's ambiguity counts.
-  defp file_gone?(%MediaFile{} = media_file) do
-    not Relink.holds_trash_copy?(media_file) and gone_from_disk?(media_file)
-  end
-
-  defp gone_from_disk?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}}), do: true
-  defp gone_from_disk?(%MediaFile{} = media_file), do: TrashStore.absent?(media_file)
-
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,
   # in both auto_import modes. `active_by_path` is the caller's already-fetched
@@ -578,44 +503,6 @@ defmodule Mydia.Jobs.LibraryScanner do
             })
 
           Logger.debug("Updated media file", path: file_info.path)
-      end
-    end)
-
-    :ok
-  end
-
-  # Known-file maintenance: an owned file no longer found on disk is trashed,
-  # not deleted -- `Library.trash_media_file/1` moves the record into the
-  # trashed state so it can be restored if the file reappears (see
-  # partition_and_restore/3). Runs unconditionally, in both auto_import modes.
-  defp process_deleted_files(deleted_media_files) do
-    Enum.each(deleted_media_files, fn media_file ->
-      media_file = Repo.preload(media_file, :library_path)
-      absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      # `move: false`: the scan listed this file as gone, but it can reappear
-      # before we get here (a reconnecting mount, a concurrent import). A
-      # moved file would land in the trash on a row stamped :missing, which
-      # the trash page hides and a later reappearance can never restore, so
-      # TrashStore refuses to move a present file and the row stays active.
-      # Any other failure is a database problem: log it and keep going rather
-      # than crashing the whole scan over one row.
-      case Library.trash_media_file(media_file, reason: :missing, move: false) do
-        {:ok, _} ->
-          Logger.debug("Trashed media file record", path: absolute_path)
-
-        {:error, {:trash_move_failed, :file_present}} ->
-          Logger.info("A file the scan called missing is back on disk; leaving it in place",
-            path: absolute_path,
-            media_file_id: media_file.id
-          )
-
-        {:error, reason} ->
-          Logger.error("Failed to trash a media file missing from disk",
-            path: absolute_path,
-            media_file_id: media_file.id,
-            reason: inspect(reason)
-          )
       end
     end)
 
