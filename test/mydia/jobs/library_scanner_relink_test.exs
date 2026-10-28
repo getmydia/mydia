@@ -52,6 +52,13 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     media_file
   end
 
+  # The scanner marks nothing missing on a scan that finds no files, so a
+  # test that removes a library's only file keeps an unrelated one beside it.
+  defp anchor_file(library_path) do
+    other = media_item_fixture(%{type: "movie", title: "Tidewater Vale"})
+    owned_file(library_path, other, "Tidewater Vale (1999)/anchor.mkv", "anchor-bytes")
+  end
+
   defp move!(from_lp, from_rel, to_lp, to_rel) do
     to = Path.join(to_lp.path, to_rel)
     File.mkdir_p!(Path.dirname(to))
@@ -90,6 +97,7 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
   test "a move between libraries relinks when the old library is scanned first",
        %{a: a, b: b, item: item} do
     row = owned_file(a, item, "Film (2001)/f.mkv")
+    anchor_file(a)
     move!(a, "Film (2001)/f.mkv", b, "Film (2001)/f.mkv")
 
     scan(a)
@@ -213,6 +221,7 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
 
   test "a plain delete trashes the row as missing, off the trash page", %{a: a, item: item} do
     row = owned_file(a, item, "Film (2001)/a.mkv")
+    anchor_file(a)
     File.rm!(Path.join(a.path, "Film (2001)/a.mkv"))
 
     scan(a)
@@ -223,6 +232,7 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
 
   test "a file that reappears at the same path is restored", %{a: a, item: item} do
     row = owned_file(a, item, "Film (2001)/a.mkv")
+    anchor_file(a)
     path = Path.join(a.path, "Film (2001)/a.mkv")
     File.rm!(path)
 
@@ -243,6 +253,7 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     # missing while it sits right there: the same shape as a file that
     # reappears between the listing and the trashing.
     row = owned_file(a, item, "Film (2001)/notes.txt")
+    anchor_file(a)
     path = Path.join(a.path, "Film (2001)/notes.txt")
 
     scan(a)
@@ -287,5 +298,39 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     assert relinked.id == row.id
     assert relinked.relative_path == "Film (2001)/b.mkv"
     assert is_nil(relinked.trashed_at)
+  end
+
+  describe "a scan that finds no files" do
+    # An unmounted share leaves an empty mount point behind. Missing rows are
+    # hidden from Trash, so marking them all missing would empty the library
+    # without a trace.
+    test "keeps every row active", %{a: a, item: item} do
+      first = owned_file(a, item, "Film (2001)/a.mkv")
+      second = owned_file(a, item, "Other (2002)/b.mkv", "other-bytes")
+      File.rm_rf!(a.path)
+      File.mkdir_p!(a.path)
+
+      log = ExUnit.CaptureLog.capture_log(fn -> scan(a) end)
+
+      assert log =~ "Scan found no files; marking none missing"
+      assert log =~ a.path
+
+      for row <- [first, second] do
+        reloaded = Repo.get!(MediaFile, row.id)
+        assert is_nil(reloaded.trashed_at)
+        assert reloaded.relative_path == row.relative_path
+      end
+    end
+
+    test "does not stop a partial disappearance from marking rows missing", %{a: a, item: item} do
+      kept = owned_file(a, item, "Film (2001)/a.mkv")
+      gone = owned_file(a, item, "Other (2002)/b.mkv", "other-bytes")
+      File.rm!(Path.join(a.path, "Other (2002)/b.mkv"))
+
+      scan(a)
+
+      assert is_nil(Repo.get!(MediaFile, kept.id).trashed_at)
+      assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = Repo.get!(MediaFile, gone.id)
+    end
   end
 end

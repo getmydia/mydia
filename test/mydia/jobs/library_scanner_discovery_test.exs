@@ -71,6 +71,8 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
     test "still trashes a known file that disappeared from disk", %{tmp_dir: tmp_dir} do
       lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: false})
       owned = owned_file_on_disk(lp)
+      # A scan that finds no files marks nothing missing; keep one on disk.
+      owned_file_on_disk(lp)
       File.rm!(owned.absolute_path)
 
       assert :ok = scan(lp, matcher: RaisingMatcher)

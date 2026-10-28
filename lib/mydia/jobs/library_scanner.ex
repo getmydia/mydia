@@ -404,7 +404,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     library_paths = Settings.list_library_paths()
 
     {deleted_files, new_files} =
-      Relink.Scan.within(changes.deleted_files, changes.new_files, library_paths)
+      changes.deleted_files
+      |> refuse_empty_scan(scan_result, library_path)
+      |> Relink.Scan.within(changes.new_files, library_paths)
 
     Relink.Scan.trash_missing(deleted_files)
 
@@ -478,6 +480,16 @@ defmodule Mydia.Jobs.LibraryScanner do
       Logger.error("Library scan raised exception", error: error_message)
       handle_scan_error(library_path, error_message)
   end
+
+  # An empty scan of a library with active rows is an unmounted share far more
+  # often than a deleted library, and missing rows are hidden from Trash.
+  # Mark none missing; the next scan that sees files decides.
+  defp refuse_empty_scan([_ | _], %{files: []}, library_path) do
+    Logger.warning("Scan found no files; marking none missing", library_path: library_path.path)
+    []
+  end
+
+  defp refuse_empty_scan(deleted, _scan_result, _library_path), do: deleted
 
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,
