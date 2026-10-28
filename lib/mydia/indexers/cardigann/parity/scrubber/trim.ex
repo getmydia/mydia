@@ -125,31 +125,27 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
   # their ancestors with every other child dropped, and charset `<meta>` tags so
   # a parser that sniffs the charset still finds it.
   defp prune(nodes, keep, after_n) do
-    {kept, _extra} =
-      Enum.reduce(nodes, {[], 0}, fn
-        {tag, attrs, children}, {acc, extra} ->
-          cond do
-            nid(attrs) in keep ->
-              {[strip({tag, attrs, children}) | acc], after_n}
-
-            extra > 0 ->
-              {[strip({tag, attrs, children}) | acc], extra - 1}
-
-            charset_meta?(tag, attrs) ->
-              {[strip({tag, attrs, children}) | acc], extra}
-
-            true ->
-              case prune(children, keep, after_n) do
-                [] -> {acc, extra}
-                kids -> {[{tag, strip_attrs(attrs), kids} | acc], extra}
-              end
-          end
-
-        _text_or_comment, acc ->
-          acc
-      end)
-
+    {kept, _extra} = Enum.reduce(nodes, {[], 0}, &prune_node(&1, &2, keep, after_n))
     Enum.reverse(kept)
+  end
+
+  defp prune_node({tag, attrs, children} = node, {acc, extra}, keep, after_n) do
+    cond do
+      nid(attrs) in keep -> {[strip(node) | acc], after_n}
+      extra > 0 -> {[strip(node) | acc], extra - 1}
+      charset_meta?(tag, attrs) -> {[strip(node) | acc], extra}
+      true -> {prune_children(tag, attrs, children, keep, after_n, acc), extra}
+    end
+  end
+
+  # Text and comments outside a kept row are dropped.
+  defp prune_node(_text_or_comment, acc, _keep, _after_n), do: acc
+
+  defp prune_children(tag, attrs, children, keep, after_n, acc) do
+    case prune(children, keep, after_n) do
+      [] -> acc
+      kids -> [{tag, strip_attrs(attrs), kids} | acc]
+    end
   end
 
   defp nid(attrs) do
@@ -279,21 +275,20 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
   # keeps that value whole; the rows path itself must exist.
   defp keep_paths(value, paths) do
     cond do
-      [] in paths ->
-        {:ok, value}
-
-      match?(%Jason.OrderedObject{}, value) ->
-        kept =
-          for {key, inner} <- value.values,
-              sub = for([^key | rest] <- paths, do: rest),
-              sub != [],
-              {:ok, pruned} <- [keep_paths(inner, sub)],
-              do: {key, pruned}
-
-        if kept == [], do: :missing, else: {:ok, %Jason.OrderedObject{values: kept}}
-
-      true ->
-        {:ok, value}
+      [] in paths -> {:ok, value}
+      match?(%Jason.OrderedObject{}, value) -> keep_object_paths(value, paths)
+      true -> {:ok, value}
     end
+  end
+
+  defp keep_object_paths(%Jason.OrderedObject{values: values}, paths) do
+    kept =
+      for {key, inner} <- values,
+          sub = for([^key | rest] <- paths, do: rest),
+          sub != [],
+          {:ok, pruned} <- [keep_paths(inner, sub)],
+          do: {key, pruned}
+
+    if kept == [], do: :missing, else: {:ok, %Jason.OrderedObject{values: kept}}
   end
 end
