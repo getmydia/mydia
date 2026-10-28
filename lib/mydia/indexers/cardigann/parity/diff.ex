@@ -76,6 +76,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
 
   defp differs?(field, a, b), do: not equal?(field, value(a, field), value(b, field))
 
+  # Neither engine fills metadata today, so the hash falls back to the one in a
+  # magnet link.
+  defp value(%SearchResult{} = r, :info_hash),
+    do: metadata_value(r.metadata, :info_hash) || hash_from_magnet(r.download_url)
+
   defp value(%SearchResult{} = r, field) when field in @metadata_fields,
     do: metadata_value(r.metadata, field)
 
@@ -95,20 +100,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   defp equal?(:info_hash, a, b), do: normalise_hash(a) == normalise_hash(b)
   defp equal?(_field, a, b), do: a == b
 
+  defp hash_from_magnet("magnet:" <> _ = url) do
+    case Regex.run(~r/[?&]xt=urn:btih:([^&]+)/i, url) do
+      [_, hash] -> hash
+      _ -> nil
+    end
+  end
+
+  defp hash_from_magnet(_), do: nil
+
   defp normalise_hash(h) when is_binary(h), do: String.downcase(h)
   defp normalise_hash(h), do: h
 
-  defp normalise_url("magnet:" <> rest) do
-    params = rest |> String.trim_leading("?") |> URI.query_decoder() |> Enum.to_list()
-
-    hash =
-      Enum.find_value(params, fn
-        {"xt", "urn:btih:" <> h} -> String.downcase(h)
-        _ -> nil
-      end)
-
-    {:magnet, hash, for({"dn", v} <- params, do: v),
-     params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort()}
+  defp normalise_url("magnet:" <> rest = url) do
+    rest |> String.trim_leading("?") |> URI.query_decoder() |> Enum.to_list() |> magnet_key()
+  rescue
+    # Malformed percent-encoding: compare the raw string.
+    ArgumentError -> url
   end
 
   defp normalise_url(url) when is_binary(url) do
@@ -118,6 +126,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   end
 
   defp normalise_url(other), do: other
+
+  defp magnet_key(params) do
+    hash =
+      Enum.find_value(params, fn
+        {"xt", "urn:btih:" <> h} -> String.downcase(h)
+        _ -> nil
+      end)
+
+    {:magnet, hash, for({"dn", v} <- params, do: v),
+     params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort()}
+  end
 
   # Pairing: info hash, then normalised download URL, then position.
   defp pair(native, wasm) do

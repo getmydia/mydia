@@ -126,4 +126,28 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     assert [%{field: :download_volume_factor, native: +0.0, wasm: nil}] =
              run([a], [b]).divergences
   end
+
+  test "a malformed magnet does not crash the diff" do
+    a = result("Lantern Harbor", @hash_a, download_url: "magnet:?xt=urn:btih:#{@hash_a}&dn=%zz")
+    assert %{divergences: []} = run([a], [a])
+
+    assert [%{field: :download_url}] =
+             run([a], [%{a | download_url: "magnet:?dn=%zz"}]).divergences
+  end
+
+  test "info hash is derived from the magnet when metadata has none, and drives pairing" do
+    mk = fn title, hash, trs ->
+      result(title, hash,
+        metadata: nil,
+        download_url: "magnet:?xt=urn:btih:#{hash}" <> Enum.map_join(trs, &"&tr=#{&1}")
+      )
+    end
+
+    a = mk.("Lantern Harbor", @hash_a, ["x.test", "y.test"])
+    b = mk.("Quiet Orchard", @hash_b, ["x.test", "y.test"])
+    a2 = mk.("Lantern Harbor", String.upcase(@hash_a), ["y.test", "x.test"])
+    b2 = mk.("Quiet Orchard", @hash_b, ["y.test", "x.test"])
+
+    assert %{divergences: [], paired: 2, agreeing: 2} = run([a, b], [b2, a2])
+  end
 end

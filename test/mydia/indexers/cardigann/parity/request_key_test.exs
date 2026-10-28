@@ -27,4 +27,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.RequestKeyTest do
     key = RequestKey.new(:get, "http://t.example:8080/s?c=2&c=1", nil)
     assert key.url == "http://t.example:8080/s?c=1&c=2"
   end
+
+  test "a malformed query does not raise" do
+    key = RequestKey.new(:get, "https://Example.test/a?q=%zz&b=1", nil)
+    # Elixir 1.20 decodes leniently; the rescue in RequestKey is for versions that raise.
+    assert key == RequestKey.new(:get, "https://example.test/a?b=1&q=%zz", nil)
+  end
 end

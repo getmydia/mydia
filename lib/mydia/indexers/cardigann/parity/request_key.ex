@@ -34,10 +34,18 @@ defmodule Mydia.Indexers.Cardigann.Parity.RequestKey do
       case uri.query do
         nil -> ""
         "" -> ""
-        q -> "?" <> encode_sorted(decode_pairs(q))
+        q -> "?" <> normalise_query(q)
       end
 
     "#{scheme}://#{host}#{port}#{uri.path || ""}#{query}"
+  end
+
+  # Malformed percent-encoding cannot be sorted; keep the query as sent so one
+  # bad recording does not crash the replay lookup.
+  defp normalise_query(q) do
+    q |> decode_pairs() |> encode_sorted()
+  rescue
+    ArgumentError -> q
   end
 
   defp decode_pairs(query), do: query |> URI.query_decoder(:www_form) |> Enum.to_list()
