@@ -55,16 +55,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
 
   alias Mydia.Indexers.Cardigann.BlockPage
-  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
-  alias Mydia.Indexers.Cardigann.Parity.Replay
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.Cardigann.SearchRequest
+  alias Mydia.Indexers.Cardigann.SessionCookies
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
@@ -500,7 +499,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   Redirects are therefore followed one hop at a time with `redirect: false`.
   Each hop rebuilds its options through `build_request_options/5`, so
-  `session_cookie_pairs/4` re-runs `cookie_disposition/2` against the new URL. That
+  `Mydia.Indexers.Cardigann.SessionCookies.pairs/4` re-checks the new URL. That
   is the per-hop origin check left out of the branch that first enabled
   redirect following: a session cookie is re-authorised for every hop instead
   of being carried across one blindly.
@@ -813,20 +812,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  # Parity replay serves recorded responses, so there is no tracker to be polite
-  # to and requestDelay must not make the harness sleep. Only the parity harness
-  # sets the seam.
-  defp apply_rate_limit(parsed, request_params) do
-    case Seam.current() do
-      %{replay: _} -> :ok
-      _ -> throttle_request(parsed, request_params)
-    end
+  defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
+
+  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}, request_params)
+       when is_number(delay) do
+    # Parity replay answers from a recording; there is no tracker to wait for.
+    if Seam.replaying?(), do: :ok, else: throttle(definition_id, delay, request_params)
   end
 
-  defp throttle_request(%Parsed{request_delay: nil}, _request_params), do: :ok
-
-  defp throttle_request(%Parsed{id: definition_id, request_delay: delay}, request_params)
-       when is_number(delay) do
+  defp throttle(definition_id, delay, request_params) do
     # Convert delay to milliseconds if needed (some definitions use seconds).
     # It is a minimum interval between requests to one definition, so the first
     # request goes straight out.
@@ -847,7 +841,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   defp build_request_options(definition, url, request_params, user_config, config) do
     {session_pairs, session_attached?} =
-      session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
+      SessionCookies.pairs(Map.get(user_config, :cookies), url, definition, config)
 
     LoggedOut.note_session_sent(session_attached?)
 
@@ -878,13 +872,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         _ -> base_opts
       end
 
-    # Parity replay (Mydia.Indexers.Cardigann.Parity): serve this request from a
-    # recorded capture instead of the network. Only set by the parity harness.
-    base_opts =
-      case Seam.current() do
-        %{replay: replay} -> Keyword.put(base_opts, :plug, Replay.req_plug(replay))
-        _ -> base_opts
-      end
+    base_opts = Seam.put_req_plug(base_opts)
 
     # Add query params for GET, body for POST
     case request_params.method do
@@ -895,81 +883,4 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         Keyword.put(base_opts, :form, request_params.query_params)
     end
   end
-
-  # A session cookie is a bearer credential for the tracker account. Base URL
-  # candidates come straight from the definition's `links`, and a few of them are
-  # cleartext (torrentlt ships `http://www.torrent.ai/`), so the header is
-  # withheld rather than handed to anyone on the path. The request still goes
-  # out: an anonymous result is a better outcome than a leaked login, and the
-  # search reports whatever the tracker returns for a logged-out visitor.
-  #
-  # A cookie-bearing request also stops following redirects, because Req carries
-  # a manually supplied Cookie header along a redirect even to a different host
-  # (checked against the pinned Req, not assumed). Following one would hand the
-  # session to whatever host the Location names, which is a leak an attacker can
-  # trigger from a hijacked mirror rather than an accident. Unfollowed 3xx keeps
-  # the honest handling this branch already added: validate_response/1 names the
-  # Location, and failover moves on to the next candidate. Redirect following is
-  # unaffected for every request without cookies.
-  #
-  # A session cookie is scoped to the origins the definition names as its own:
-  # its links, plus any absolute search or login path it renders. A mirror
-  # failover onto a stale legacylinks domain, or a download link parsed out
-  # of a result row, can both name an origin the operator never trusted, and a
-  # download link is remote content rather than shipped YAML. Withhold and
-  # continue, because an anonymous result beats a leaked login.
-  defp session_cookie_pairs(cookies, url, definition, config)
-       when is_list(cookies) and cookies != [] do
-    case cookie_disposition(url, CredentialScope.trusted_origins(definition, config)) do
-      {:withhold, reason} ->
-        Logger.warning("Cardigann: withholding session cookies from #{reason}")
-        {[], false}
-
-      :ok ->
-        pairs = cookies |> Enum.map(&normalize_cookie/1) |> Enum.reject(&is_nil/1)
-        {pairs, pairs != []}
-    end
-  end
-
-  defp session_cookie_pairs(_cookies, _url, _definition, _config), do: {[], false}
-
-  # The one place that decides whether a URL may receive the definition's
-  # session. FlareSolverr no longer receives session cookies at all, so
-  # session_cookie_pairs/4 is the only caller.
-  defp cookie_disposition(url, trusted_origins) do
-    cond do
-      CredentialScope.cleartext?(url) ->
-        {:withhold,
-         "cleartext URL #{inspect(url)}. Configure an https base URL for this indexer to " <>
-           "send credentials."}
-
-      not CredentialScope.allows?(trusted_origins, url) ->
-        {:withhold,
-         "#{inspect(url)}, which is not one of this definition's own hosts. Searching " <>
-           "anonymously."}
-
-      true ->
-        :ok
-    end
-  end
-
-  # A stored session row holds either plain "name=value" strings or cookie maps
-  # (older versions wrote FlareSolverr's cookies there), and
-  # SessionManager.user_config/2 hands back whatever is in the row without
-  # looking. Joining a map raises Protocol.UndefinedError before the request is
-  # even sent, so a leftover row would crash the next search. Entries are
-  # normalized here and anything unusable is dropped.
-  defp normalize_cookie(cookie) when is_binary(cookie), do: cookie
-
-  defp normalize_cookie(cookie) when is_map(cookie) do
-    name = cookie["name"] || Map.get(cookie, :name)
-    value = cookie["value"] || Map.get(cookie, :value)
-
-    # Both halves have to be strings. These rows are decoded JSON, so a nested
-    # object or array can land in either field, and interpolating one raises the
-    # same Protocol.UndefinedError this function exists to prevent.
-    if is_binary(name) and is_binary(value), do: name <> "=" <> value, else: nil
-  end
-
-  defp normalize_cookie(_cookie), do: nil
 end
