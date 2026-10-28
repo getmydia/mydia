@@ -214,8 +214,8 @@ const zincDark = {
   "--suc": "240 10% 4%", // #09090b
   "--wa": "38 92% 50%", // #f59e0b (Amber-500)
   "--wac": "240 10% 4%", // #09090b
-  "--er": "0 72% 51%", // #dc2626 (Red-600)
-  "--erc": "0 0% 100%", // #ffffff
+  "--er": "0 84% 60%", // #ef4444 (Red-500)
+  "--erc": "240 10% 4%", // #09090b
 
   // Tailwind v4 OKLCH variables
   "--color-base-100": "oklch(14.08% 0.0044 285.82)", // #09090b (Zinc-950)
@@ -244,8 +244,8 @@ const zincDark = {
   "--color-warning": "oklch(76.86% 0.1647 70.08)", // #f59e0b (Amber-500)
   "--color-warning-content": "oklch(14.08% 0.0044 285.82)", // #09090b
 
-  "--color-error": "oklch(57.71% 0.2152 27.33)", // #dc2626 (Red-600)
-  "--color-error-content": "oklch(100% 0 0)", // #ffffff
+  "--color-error": "oklch(63.68% 0.2078 25.33)", // #ef4444 (Red-500)
+  "--color-error-content": "oklch(14.08% 0.0044 285.82)", // #09090b
 
   ...zincShape,
 };
