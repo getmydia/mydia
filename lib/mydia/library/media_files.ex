@@ -355,6 +355,27 @@ defmodule Mydia.Library.MediaFiles do
   defp reject_extras(files, true), do: files
   defp reject_extras(files, false), do: Enum.filter(files, &is_nil(&1.extra_kind))
 
+  @doc """
+  Rows that could be the old record of a file that turned up somewhere new:
+  any row already trashed because its file went missing, plus active rows in
+  other library paths. Callers must still confirm an active row's file is gone
+  before relinking it. Filtered by size, so the result is small.
+  """
+  @spec list_relink_candidates([non_neg_integer()], binary()) :: [MediaFile.t()]
+  def list_relink_candidates([], _library_path_id), do: []
+
+  def list_relink_candidates(sizes, library_path_id) do
+    MediaFile
+    |> where([f], f.size in ^sizes)
+    |> where(
+      [f],
+      (not is_nil(f.trashed_at) and f.trashed_reason == :missing) or
+        (is_nil(f.trashed_at) and f.library_path_id != ^library_path_id)
+    )
+    |> preload(:library_path)
+    |> Repo.all()
+  end
+
   # Calculates the relative path and library_path_id for an absolute file path
   # Returns {library_path_id, relative_path}
   @doc false

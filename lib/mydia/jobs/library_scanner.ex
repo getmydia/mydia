@@ -50,9 +50,12 @@ defmodule Mydia.Jobs.LibraryScanner do
     FileIngest,
     ImportCandidate,
     MediaFile,
+    MediaFiles,
     MetadataMatcher,
     PathAnchor,
-    ScanSummary
+    Relink,
+    ScanSummary,
+    TrashStore
   }
 
   alias Mydia.Settings.LibraryPath
@@ -395,10 +398,23 @@ defmodule Mydia.Jobs.LibraryScanner do
     changes = Library.Scanner.detect_changes(scan_result, active_files, library_path)
 
     process_modified_files(changes.modified_files, library_path, active_by_path)
-    process_deleted_files(changes.deleted_files)
 
-    {restored_count, unknown} =
-      partition_and_restore(changes.new_files, library_path, trashed_by_path)
+    # A rename inside this library shows up as one deleted row and one new
+    # path. Repoint the row before either side is handled, so the row keeps
+    # its id and everything keyed to it. See Mydia.Library.Relink.
+    library_paths = Settings.list_library_paths()
+
+    {deleted_files, new_files} =
+      relink_within(changes.deleted_files, changes.new_files, library_paths)
+
+    process_deleted_files(deleted_files)
+
+    {restored_count, unknown} = partition_and_restore(new_files, library_path, trashed_by_path)
+
+    # A move between libraries spans two scans, so the old row is either
+    # already trashed as missing or, when this library is scanned first,
+    # still active in another library with its file gone.
+    unknown = relink_across(unknown, library_path, library_paths)
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
 
@@ -445,14 +461,15 @@ defmodule Mydia.Jobs.LibraryScanner do
          type: library_path.type,
          new_files: length(changes.new_files),
          modified_files: length(changes.modified_files),
-         deleted_files: length(changes.deleted_files),
+         deleted_files: length(deleted_files),
          auto_linked: discovery.auto_promoted
        }}
     )
 
     {:ok,
      %{
-       changes: changes,
+       # Relinked rows were neither deleted nor new; report what was.
+       changes: %{changes | deleted_files: deleted_files},
        discovery: discovery,
        auto_promoted: discovery.auto_promoted,
        restored: restored_count,
@@ -464,6 +481,42 @@ defmodule Mydia.Jobs.LibraryScanner do
       Logger.error("Library scan raised exception", error: error_message)
       handle_scan_error(library_path, error_message)
   end
+
+  # Known-file maintenance, like the rest of this file's pre-discovery work:
+  # runs in both auto_import modes. Rows that fail to relink fall back to the
+  # usual handling (trashed as missing, new path treated as unknown).
+  defp relink_within([], new_files, _library_paths), do: {[], new_files}
+  defp relink_within(deleted, [], _library_paths), do: {deleted, []}
+
+  defp relink_within(deleted, new_files, library_paths) do
+    deleted = Repo.preload(deleted, :library_path)
+    {pairs, deleted_left, new_left} = Relink.pair(deleted, new_files)
+    {_relinked, failed} = Relink.relink_all(pairs, library_paths)
+
+    {deleted_left ++ Enum.map(failed, &elem(&1, 0)), new_left ++ Enum.map(failed, &elem(&1, 1))}
+  end
+
+  defp relink_across([], _library_path, _library_paths), do: []
+
+  defp relink_across(unknown, library_path, library_paths) do
+    candidates =
+      unknown
+      |> Enum.map(& &1.size)
+      |> Enum.uniq()
+      |> MediaFiles.list_relink_candidates(library_path.id)
+      |> Enum.filter(&file_gone?/1)
+
+    {pairs, _, unknown_left} = Relink.pair(candidates, unknown)
+    {_relinked, failed} = Relink.relink_all(pairs, library_paths)
+    unknown_left ++ Enum.map(failed, &elem(&1, 1))
+  end
+
+  # A trashed-missing row is gone by definition. An active row is gone only if
+  # its file is definitely not where it says; TrashStore.absent?/1 answers
+  # false whenever it cannot tell (an offline library root, an S3 outage), so
+  # a row is never taken from a library that is merely unreachable.
+  defp file_gone?(%MediaFile{trashed_reason: :missing, trashed_at: %DateTime{}}), do: true
+  defp file_gone?(%MediaFile{} = media_file), do: TrashStore.absent?(media_file)
 
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,

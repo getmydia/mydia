@@ -68,4 +68,10 @@ defmodule Mydia.Library.TrashStoreS3Test do
     :ok = Storage.delete(object(ctx.loc, @rel))
     assert {:ok, :missing} = TrashStore.store(ctx.mf, move: false)
   end
+
+  test "absent? is false while the object is there and true once it is gone", ctx do
+    refute TrashStore.absent?(ctx.mf)
+    :ok = Storage.delete(object(ctx.loc, @rel))
+    assert TrashStore.absent?(ctx.mf)
+  end
 end
