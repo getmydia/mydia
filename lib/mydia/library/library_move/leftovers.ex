@@ -93,8 +93,10 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
       MapSet.member?(keep, path) ->
         :ok
 
-      # An earlier attempt linked it but could not remove the source.
+      # An earlier attempt linked it but could not remove the source, so it
+      # never repointed the rows. The link holds the same bytes.
       FileMove.same_file?(path, dest) ->
+        repoint_subtitles(path, dest)
         remove_linked_source(path)
 
       match?({:ok, _}, File.lstat(dest)) ->
@@ -128,11 +130,15 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
            confine_to: target.path
          ) do
       {:ok, _} ->
-        from(s in Subtitle, where: s.file_path == ^path)
-        |> Repo.update_all(set: [file_path: dest])
+        repoint_subtitles(path, dest)
 
       {:error, reason} ->
         Logger.warning("Library move could not carry a file", path: path, reason: inspect(reason))
     end
+  end
+
+  defp repoint_subtitles(path, dest) do
+    from(s in Subtitle, where: s.file_path == ^path)
+    |> Repo.update_all(set: [file_path: dest])
   end
 end

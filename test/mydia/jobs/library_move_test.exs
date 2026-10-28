@@ -416,4 +416,102 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert attrs.type == "media_item.library_move_failed"
     assert {attrs.metadata["moved"], attrs.metadata["skipped"]} == {1, 1}
   end
+
+  # The first attempt relinked the video to a renamed destination and deleted
+  # its source, then died before its sidecars followed.
+  defp deleted_source(%{a: a, b: b, movie: movie}) do
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    srt = write(Path.join(a.path, "Glass Harbor (2019)/glass.en.srt"))
+    subtitle = insert_subtitle(file, srt)
+    assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+
+    rel = "Glass Harbor (2019)/Glass Harbor (2019).mkv"
+    dest = Path.join(b.path, rel)
+    File.mkdir_p!(Path.dirname(dest))
+    File.rename!(Path.join(a.path, file.relative_path), dest)
+    Repo.update!(Ecto.Changeset.change(file, library_path_id: b.id, relative_path: rel))
+    %{job: job, srt: srt, subtitle: subtitle}
+  end
+
+  test "a retry carries the sidecars of a deleted source under the new name", ctx do
+    %{job: job, srt: srt, subtitle: subtitle} = deleted_source(ctx)
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    moved = Path.join(ctx.b.path, "Glass Harbor (2019)/Glass Harbor (2019).en.srt")
+    refute File.exists?(srt)
+    assert File.exists?(moved)
+    assert Repo.get!(Subtitle, subtitle.id).file_path == moved
+  end
+
+  test "a retry repoints a subtitle row whose sidecar moved before the crash", ctx do
+    %{job: job, srt: srt, subtitle: subtitle} = deleted_source(ctx)
+    moved = Path.join(ctx.b.path, "Glass Harbor (2019)/Glass Harbor (2019).en.srt")
+    File.rename!(srt, moved)
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    assert Repo.get!(Subtitle, subtitle.id).file_path == moved
+  end
+
+  test "a leftover subtitle already linked into place takes its row along", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    leftover = write(Path.join(a.path, "Glass Harbor (2019)/Subs/English.srt"))
+    subtitle = insert_subtitle(file, leftover)
+    linked = Path.join(b.path, "Glass Harbor (2019)/Subs/English.srt")
+    File.mkdir_p!(Path.dirname(linked))
+    File.ln!(leftover, linked)
+
+    assert :ok = run(movie, b)
+
+    refute File.exists?(leftover)
+    assert Repo.get!(Subtitle, subtitle.id).file_path == linked
+  end
+
+  test "a source folder that cannot be listed retries before anything moves", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    dir = Path.join(a.path, "Glass Harbor (2019)")
+    File.chmod!(dir, 0o311)
+    on_exit(fn -> File.chmod(dir, 0o755) end)
+
+    # Root ignores directory permissions; there is nothing to observe then.
+    if match?({:ok, _}, File.ls(dir)) do
+      :ok
+    else
+      assert {:error, {:transient, 1}} = run(movie, b)
+      assert Repo.get!(MediaFile, file.id).library_path_id == a.id
+      refute File.exists?(Path.join(b.path, file.relative_path))
+    end
+  end
+
+  describe "with an S3 source" do
+    @describetag :s3
+
+    test "a retry deletes an object whose relink already committed", ctx do
+      %{b: b, movie: movie} = ctx
+      {lp, loc} = Mydia.S3Helpers.library_path!("movies")
+      on_exit(fn -> Mydia.S3Helpers.delete_prefix!(loc) end)
+      rel = "Glass Harbor (2019)/glass.mkv"
+      Mydia.S3Helpers.put_object!(loc, rel, "xyz")
+
+      file =
+        media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: rel,
+          size: 3,
+          media_item_id: movie.id
+        })
+
+      assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+      write(Path.join(b.path, rel))
+      Repo.update!(Ecto.Changeset.change(file, library_path_id: b.id))
+
+      assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+      refute Mydia.Storage.path_exists?(lp.path <> "/" <> rel)
+      assert File.exists?(Path.join(b.path, rel))
+    end
+  end
 end

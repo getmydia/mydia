@@ -15,12 +15,14 @@ defmodule Mydia.Library.LibraryMove.Sidecars do
   owned by it under `Mydia.Subtitles.Sidecars.owned_by/2`, so `Glass.mkv`
   never takes `Glass.Harbor.en.srt` from `Glass.Harbor.mkv` beside it.
   Compute this before the row moves: afterwards the file is no longer among
-  the folder's siblings. `[]` when the folder cannot be listed.
+  the folder's siblings. A folder that does not exist has none; any other
+  listing failure is an error, so a move retries instead of leaving the
+  sidecars behind.
   """
-  @spec for(MediaFile.t()) :: [String.t()]
+  @spec for(MediaFile.t()) :: {:ok, [String.t()]} | {:error, Mydia.Storage.Error.t()}
   def for(%MediaFile{} = media_file) do
     case MediaFile.storage_path(media_file) do
-      nil -> []
+      nil -> {:ok, []}
       video -> list(media_file, video)
     end
   end
@@ -34,12 +36,16 @@ defmodule Mydia.Library.LibraryMove.Sidecars do
       {:ok, entries} ->
         candidates = Enum.filter(entries, &sidecar?(&1, name, prefix))
 
-        media_file
-        |> Mydia.Subtitles.Sidecars.owned_by(candidates)
-        |> Enum.map(&Path.join(dir, &1))
+        {:ok,
+         media_file
+         |> Mydia.Subtitles.Sidecars.owned_by(candidates)
+         |> Enum.map(&Path.join(dir, &1))}
 
-      {:error, _} ->
-        []
+      {:error, %Mydia.Storage.Error{kind: :not_found}} ->
+        {:ok, []}
+
+      {:error, _} = error ->
+        error
     end
   end
 

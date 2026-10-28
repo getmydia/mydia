@@ -11,7 +11,6 @@ defmodule Mydia.Library.LibraryMove.Sources do
   alias Mydia.Library.FileMove
   alias Mydia.Library.LibraryMove.FileStep
   alias Mydia.Library.LibraryMove.Move
-  alias Mydia.Library.LibraryMove.Sidecars
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
@@ -31,15 +30,16 @@ defmodule Mydia.Library.LibraryMove.Sources do
   end
 
   @doc """
-  Deletes each recorded source whose row now lives in `target` and whose old
-  path is still the same file as the new one (a hardlink or a byte-identical
-  copy), then carries its sidecars. Local paths only: the predicates stat
-  files, so an S3 source never matches and is left alone.
+  Finishes each recorded source whose row now lives in `target`: deletes the
+  old path when it is still the same file as the new one (a hardlink or a
+  byte-identical copy, on S3 too), then carries its sidecars. An old path
+  that is already gone had its delete done, and only its sidecars and their
+  `subtitles` rows are finished.
 
   An old path that a row now claims (a scan re-registered the orphan during
   a backoff) is someone's file and is kept.
 
-  Returns how many deletes failed in a way worth retrying.
+  Returns how many sources failed in a way worth retrying.
   """
   @spec sweep([map()], LibraryPath.t()) :: non_neg_integer()
   def sweep(sources, %LibraryPath{} = target) do
@@ -55,11 +55,21 @@ defmodule Mydia.Library.LibraryMove.Sources do
     with %MediaFile{library_path_id: lp_id} = row when lp_id == target.id <-
            Repo.get(MediaFile, id) |> Repo.preload(:library_path),
          new when is_binary(new) and new != old <- MediaFile.storage_path(row),
-         true <- FileMove.exists?(new) and FileMove.exists?(old),
+         true <- FileMove.exists?(new),
          false <- is_nil(source["lp"]) or FileMove.claimed?(source["lp"], source["rel"], id),
-         true <- FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new),
+         true <- gone?(old) or FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new),
          %MediaFile{} = old_file <- old_file(source, library(source["lp"])) do
-      FileStep.finish_source(old_file, new, target, Sidecars.for(old_file))
+      FileStep.finish_swept(old_file, new, target)
+    end
+  end
+
+  # Only a definite "not found": a storage outage is not proof of a delete.
+  defp gone?(path) do
+    with {:ok, source} <- Mydia.Storage.at(path),
+         {:error, %Mydia.Storage.Error{kind: :not_found}} <- Mydia.Storage.stat(source) do
+      true
+    else
+      _ -> false
     end
   end
 

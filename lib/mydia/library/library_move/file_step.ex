@@ -43,15 +43,23 @@ defmodule Mydia.Library.LibraryMove.FileStep do
 
   def run(%Move{} = move, %LibraryPath{} = target, final?) do
     # Ownership is decided among the source folder's rows, which this file
-    # leaves once relinked.
-    sidecars = Sidecars.for(move.media_file)
-
-    with {:ok, placed} <- FileMove.place(move.media_file, move.dest_path, target),
+    # leaves once relinked. A folder that cannot be listed stops the move
+    # before anything is placed, and the job retries.
+    with {:ok, sidecars} <- list_sidecars(move.media_file),
+         {:ok, placed} <- FileMove.place(move.media_file, move.dest_path, target),
          {:ok, _} <-
            FileMove.relink(move.media_file, target, move.dest_rel, %{}, &{:ok, &1}, placed) do
       finish_source(move.media_file, move.dest_path, target, sidecars)
     else
+      {:error, {:sidecars_unlisted, _}} = error -> {error, []}
       {:error, reason} -> {failed(move, target, reason, final?), []}
+    end
+  end
+
+  defp list_sidecars(media_file) do
+    case Sidecars.for(media_file) do
+      {:ok, _} = ok -> ok
+      {:error, reason} -> {:error, {:sidecars_unlisted, reason}}
     end
   end
 
@@ -89,6 +97,18 @@ defmodule Mydia.Library.LibraryMove.FileStep do
     end
   end
 
+  @doc """
+  `finish_source/4` for a retry's sweep, with the sidecars listed now. A
+  folder that cannot be listed is a transient error.
+  """
+  @spec finish_swept(MediaFile.t(), String.t(), LibraryPath.t()) :: {result(), [String.t()]}
+  def finish_swept(%MediaFile{} = old, dest, target) do
+    case list_sidecars(old) do
+      {:ok, sidecars} -> finish_source(old, dest, target, sidecars)
+      error -> {error, []}
+    end
+  end
+
   defp delete_source(source, dest, media_file_id, target, sidecars) do
     case FileMove.cleanup_source(source, dest) do
       :ok ->
@@ -108,6 +128,8 @@ defmodule Mydia.Library.LibraryMove.FileStep do
   # rewritten only once its file has moved, so a skipped or failed sidecar
   # keeps its row and file together at the source.
   defp move_sidecars(sidecars, source, dest, media_file_id, target) do
+    repoint_moved_rows(media_file_id, source, dest)
+
     Enum.reject(sidecars, fn sidecar ->
       to = Sidecars.dest_for(sidecar, source, dest)
       moved? = move_sidecar(sidecar, to, target) == :ok
@@ -135,6 +157,23 @@ defmodule Mydia.Library.LibraryMove.FileStep do
           :failed
       end
     end
+  end
+
+  # A crash between a sidecar's move and its row rewrite leaves the row at a
+  # source path that is gone. The retry's sweep comes back through here and
+  # points such a row at the sidecar's destination, once that exists.
+  defp repoint_moved_rows(media_file_id, source, dest) do
+    dir = Path.dirname(source)
+
+    from(s in Subtitle, where: s.media_file_id == ^media_file_id, select: s.file_path)
+    |> Repo.all()
+    |> Enum.filter(&(is_binary(&1) and Path.dirname(&1) == dir))
+    |> Enum.each(fn path ->
+      to = Sidecars.dest_for(path, source, dest)
+
+      if not FileMove.exists?(path) and FileMove.exists?(to),
+        do: rewrite_subtitle_rows(media_file_id, path, to)
+    end)
   end
 
   defp rewrite_subtitle_rows(media_file_id, from_path, to_path) do
