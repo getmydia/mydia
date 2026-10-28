@@ -270,4 +270,67 @@ defmodule Mydia.ImportLists.Provider.CustomURLTest do
       assert items |> Enum.map(& &1.tmdb_id) |> Enum.sort() == [502, 503]
     end
   end
+
+  describe "fetch_items/1 with a version 2 Mydia library export (guard relaxed via Bypass)" do
+    setup do
+      allow_private_destinations!()
+      bypass = Bypass.open()
+
+      file = %{
+        "path" => "/media/movies/Tin Lighthouse (2018)/Tin Lighthouse (2018).mkv",
+        "library_path" => "/media/movies",
+        "size_bytes" => 1_000,
+        "resolution" => "1080p",
+        "video_codec" => "hevc",
+        "video_profile" => "Main 10",
+        "bit_depth" => 10,
+        "hdr_format" => nil,
+        "audio_codec" => "eac3",
+        "audio_channels" => "5.1(side)",
+        "container" => "mkv",
+        "season" => nil,
+        "episode" => nil
+      }
+
+      body =
+        Jason.encode!(%{
+          "format" => "mydia-library",
+          "version" => 2,
+          "items" => [
+            %{
+              "type" => "movie",
+              "tmdb_id" => 601,
+              "title" => "Tin Lighthouse",
+              "year" => 2018,
+              "files" => [file]
+            },
+            %{
+              "type" => "tv_show",
+              "tmdb_id" => 602,
+              "title" => "Fern Hollow",
+              "files" => [%{file | "season" => 1, "episode" => "1-2"}]
+            },
+            %{"type" => "movie", "tmdb_id" => 603, "title" => "Hollow Bell", "files" => []}
+          ]
+        })
+
+      Bypass.stub(bypass, "GET", "/export.json", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      %{url: "http://localhost:#{bypass.port}/export.json"}
+    end
+
+    test "items with files parse like version 1 items", %{url: url} do
+      assert {:ok, movies} = CustomURL.fetch_items(import_list(url, "movie"))
+
+      assert movies |> Enum.map(&{&1.tmdb_id, &1.title}) |> Enum.sort() ==
+               [{601, "Tin Lighthouse"}, {603, "Hollow Bell"}]
+
+      assert {:ok, [show]} = CustomURL.fetch_items(import_list(url, "tv_show"))
+      assert show.tmdb_id == 602
+    end
+  end
 end

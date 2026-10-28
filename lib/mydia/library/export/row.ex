@@ -24,9 +24,12 @@ defmodule Mydia.Library.Export.Row do
     :added_at
   ]
 
-  defstruct @fields
+  # `files` is not a column: the per-item CSV leaves it out, the JSON nests it
+  # under each item, and the per-file CSV flattens it to one row per file.
+  defstruct @fields ++ [files: []]
 
   @type t :: %__MODULE__{
+          files: [Mydia.Library.Export.FileRow.t()],
           type: String.t(),
           title: String.t(),
           original_title: String.t() | nil,
@@ -46,7 +49,7 @@ defmodule Mydia.Library.Export.Row do
           added_at: DateTime.t()
         }
 
-  @doc "Field names in export column order."
+  @doc "Field names in export column order (excludes the nested `files`)."
   @spec fields() :: [atom()]
   def fields, do: @fields
 end

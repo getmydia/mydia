@@ -27,9 +27,10 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
 
   4. A Mydia library export (`GET /api/v1/library/export`):
      ```json
-     {"format": "mydia-library", "version": 1,
-      "items": [{"type": "movie", "tmdb_id": 123, "title": "..."}]}
+     {"format": "mydia-library", "version": 2,
+      "items": [{"type": "movie", "tmdb_id": 123, "title": "...", "files": [...]}]}
      ```
+     Version 1 exports (no `files`) parse the same way; `files` is ignored.
      Only for this envelope, items whose `"type"` differs from the list's
      `media_type` (`movie` or `tv_show`) are skipped, so one hosted export can
      feed a movie list and a TV list. This type filtering applies only to
