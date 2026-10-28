@@ -361,10 +361,21 @@ defmodule Mydia.Library.MediaFiles do
   other library paths. Callers must still confirm an active row's file is gone
   before relinking it. Filtered by size, so the result is small.
   """
+  @relink_candidate_chunk 1000
+
   @spec list_relink_candidates([non_neg_integer()], binary()) :: [MediaFile.t()]
   def list_relink_candidates([], _library_path_id), do: []
 
   def list_relink_candidates(sizes, library_path_id) do
+    # One bind parameter per size: a first scan of a large library can carry
+    # tens of thousands, past SQLite's 32766-variable limit. Chunk the lookup.
+    sizes
+    |> Enum.uniq()
+    |> Enum.chunk_every(@relink_candidate_chunk)
+    |> Enum.flat_map(&relink_candidates_chunk(&1, library_path_id))
+  end
+
+  defp relink_candidates_chunk(sizes, library_path_id) do
     MediaFile
     |> where([f], f.size in ^sizes)
     |> where(

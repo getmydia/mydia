@@ -414,7 +414,14 @@ defmodule Mydia.Jobs.LibraryScanner do
     # A move between libraries spans two scans, so the old row is either
     # already trashed as missing or, when this library is scanned first,
     # still active in another library with its file gone.
-    unknown = relink_across(unknown, library_path, library_paths)
+    {unknown, relinked_across} = relink_across(unknown, library_path, library_paths)
+
+    # Relinked paths were neither deleted nor new; count only what was.
+    changes = %{
+      changes
+      | deleted_files: deleted_files,
+        new_files: Enum.reject(new_files, &MapSet.member?(relinked_across, &1.path))
+    }
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
 
@@ -461,15 +468,14 @@ defmodule Mydia.Jobs.LibraryScanner do
          type: library_path.type,
          new_files: length(changes.new_files),
          modified_files: length(changes.modified_files),
-         deleted_files: length(deleted_files),
+         deleted_files: length(changes.deleted_files),
          auto_linked: discovery.auto_promoted
        }}
     )
 
     {:ok,
      %{
-       # Relinked rows were neither deleted nor new; report what was.
-       changes: %{changes | deleted_files: deleted_files},
+       changes: changes,
        discovery: discovery,
        auto_promoted: discovery.auto_promoted,
        restored: restored_count,
@@ -496,19 +502,32 @@ defmodule Mydia.Jobs.LibraryScanner do
     {deleted_left ++ Enum.map(failed, &elem(&1, 0)), new_left ++ Enum.map(failed, &elem(&1, 1))}
   end
 
-  defp relink_across([], _library_path, _library_paths), do: []
+  # Returns `{unknown_left, relinked_paths}`. Never fails the scan: if the
+  # lookup or a relink raises, every unknown path is handed back unchanged
+  # and discovery treats them as new, which is what happened before relinking
+  # existed.
+  defp relink_across([], _library_path, _library_paths), do: {[], MapSet.new()}
 
   defp relink_across(unknown, library_path, library_paths) do
     candidates =
       unknown
       |> Enum.map(& &1.size)
-      |> Enum.uniq()
       |> MediaFiles.list_relink_candidates(library_path.id)
       |> Enum.filter(&file_gone?/1)
 
     {pairs, _, unknown_left} = Relink.pair(candidates, unknown)
-    {_relinked, failed} = Relink.relink_all(pairs, library_paths)
-    unknown_left ++ Enum.map(failed, &elem(&1, 1))
+    {relinked, failed} = Relink.relink_all(pairs, library_paths)
+
+    {unknown_left ++ Enum.map(failed, &elem(&1, 1)),
+     MapSet.new(relinked, fn {_row, info} -> info.path end)}
+  rescue
+    error ->
+      Logger.warning("Cross-library relink failed; treating found files as new",
+        library_path_id: library_path.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      {unknown, MapSet.new()}
   end
 
   # A trashed-missing row is gone by definition. An active row is gone only if

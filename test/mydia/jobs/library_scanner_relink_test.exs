@@ -148,6 +148,69 @@ defmodule Mydia.Jobs.LibraryScannerRelinkTest do
     assert a_id == a.id
   end
 
+  test "an active row whose library root is an empty directory is never taken",
+       %{a: a, b: b, item: item} do
+    row = owned_file(a, item, "Film (2001)/f.mkv")
+    File.mkdir_p!(Path.join(b.path, "Film (2001)"))
+    File.cp!(Path.join(a.path, "Film (2001)/f.mkv"), Path.join(b.path, "Film (2001)/f.mkv"))
+    # What an unmounted share leaves behind: the mount point, empty.
+    File.rm_rf!(a.path)
+    File.mkdir_p!(a.path)
+
+    scan(b)
+
+    assert %{library_path_id: a_id, trashed_at: nil} = Repo.get!(MediaFile, row.id)
+    assert a_id == a.id
+  end
+
+  test "relinked files are counted as neither new nor deleted", %{a: a, item: item} do
+    owned_file(a, item, "Film (2001)/a.mkv")
+    move!(a, "Film (2001)/a.mkv", a, "Film (2001)/b.mkv")
+
+    assert {:ok, %Library.ScanSummary{new_files: 0, deleted_files: 0}} =
+             LibraryScanner.scan_library_path(a, matcher: FailingMatcher)
+  end
+
+  test "a move counted on the receiving side is not a new file", %{a: a, b: b, item: item} do
+    owned_file(a, item, "Film (2001)/f.mkv")
+    move!(a, "Film (2001)/f.mkv", b, "Film (2001)/f.mkv")
+
+    assert {:ok, %Library.ScanSummary{new_files: 0}} =
+             LibraryScanner.scan_library_path(b, matcher: FailingMatcher)
+  end
+
+  test "a relink whose target path is already owned falls back without failing the scan",
+       %{a: a, item: item} do
+    # A library nested inside A owns the rename's target path, so the relink
+    # (which resolves the file to the innermost library) hits the unique
+    # index and must fall back to the ordinary handling.
+    inner_dir = Path.join(a.path, "sub")
+    File.mkdir_p!(inner_dir)
+    inner = library_path_fixture(%{path: inner_dir, type: "movies", auto_import: true})
+
+    row = owned_file(a, item, "sub/Film (2001)/a.mkv")
+    other_item = media_item_fixture(%{type: "movie", title: "Velmora Crossing"})
+    occupant = owned_file(inner, other_item, "Film (2001)/b.mkv")
+    File.rm!(Path.join(a.path, "sub/Film (2001)/a.mkv"))
+
+    scan(a)
+
+    assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = Repo.get!(MediaFile, row.id)
+
+    assert %{trashed_at: nil, relative_path: "Film (2001)/b.mkv"} =
+             Repo.get!(MediaFile, occupant.id)
+  end
+
+  test "candidate lookup survives more sizes than SQLite allows bind variables",
+       %{a: a, b: b, item: item} do
+    row = owned_file(a, item, "Film (2001)/f.mkv")
+
+    sizes = Enum.to_list(100_000..140_000) ++ [row.size]
+
+    assert [%MediaFile{id: id}] = Library.MediaFiles.list_relink_candidates(sizes, b.id)
+    assert id == row.id
+  end
+
   test "a plain delete trashes the row as missing, off the trash page", %{a: a, item: item} do
     row = owned_file(a, item, "Film (2001)/a.mkv")
     File.rm!(Path.join(a.path, "Film (2001)/a.mkv"))

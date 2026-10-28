@@ -156,8 +156,9 @@ defmodule Mydia.Library.TrashStore do
   True only when `media_file`'s file is definitely not where its row says.
 
   Anything that cannot be decided reads as `false`: a row with no resolvable
-  path, a local library whose root directory is itself missing (an unmounted
-  share looks exactly like that), or an S3 error other than not-found. Used
+  path, a local library whose root directory is missing or empty (an
+  unmounted share looks exactly like either), or an S3 error other than
+  not-found. Used
   to decide whether an active row may be repointed at a file found elsewhere,
   where guessing wrong would steal a row from a library that is merely
   offline. `media_file` needs `:library_path` preloaded.
@@ -183,8 +184,10 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
+  # An unmounted share often leaves its mount point behind as an empty
+  # directory, so an empty root is as undecidable as a missing one.
   defp library_root_present?(%MediaFile{library_path: %{path: root}}) when is_binary(root),
-    do: File.dir?(root)
+    do: match?({:ok, [_ | _]}, File.ls(root))
 
   defp library_root_present?(_), do: false
 
