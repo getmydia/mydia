@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+import TrailerPlayer, {
   SKIPPABLE_ERRORS,
   createTrailerQueue,
   loadYouTubeApi,
@@ -41,11 +41,11 @@ test("returns null once every key has failed", () => {
 
 test("selecting a failed key by hand re-arms it", () => {
   const queue = createTrailerQueue(2);
-  queue.fail(150);
-  queue.fail(150);
+  assert.equal(queue.fail(150), 1);
   queue.select(0);
-  assert.equal(queue.current(), 0);
-  assert.equal(queue.fail(150), null);
+  queue.select(1);
+  // Key 0 is playable again; without the re-arm this would be null.
+  assert.equal(queue.fail(150), 0);
 });
 
 function fakeDom() {
@@ -95,4 +95,54 @@ test("loadYouTubeApi rejects on script error and allows a retry", async () => {
 
   loadYouTubeApi(win, doc);
   assert.equal(appended.length, 2);
+});
+
+test("a switcher click before the API loads survives the player creation", async () => {
+  resetYouTubeApiForTest();
+  const created = [];
+  const YT = {
+    Player: function (target, options) {
+      created.push(options);
+      this.destroy = () => {};
+    },
+  };
+  const savedWindow = globalThis.window;
+  const savedDocument = globalThis.document;
+  const appended = [];
+  globalThis.window = {};
+  globalThis.document = {
+    createElement: () => ({}),
+    head: { appendChild: (el) => appended.push(el) },
+  };
+
+  try {
+    let clickHandler;
+    const mountNode = { replaceChildren() {}, classList: { add() {}, remove() {} } };
+    const button = {
+      dataset: { index: "1" },
+      classList: { toggle() {} },
+    };
+    const el = {
+      dataset: { keys: JSON.stringify(["aaa", "bbb"]), autoplay: "false" },
+      querySelector: (sel) => (sel === '[data-role="player"]' ? mountNode : null),
+      querySelectorAll: () => [button],
+      addEventListener: (_type, handler) => (clickHandler = handler),
+      removeEventListener() {},
+      contains: () => true,
+    };
+    const hook = { ...TrailerPlayer, el };
+    hook.mounted();
+
+    clickHandler({ target: { closest: () => button } });
+    globalThis.window.YT = YT;
+    globalThis.window.onYouTubeIframeAPIReady();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].videoId, "bbb");
+    assert.equal(created[0].playerVars.autoplay, 1);
+  } finally {
+    globalThis.window = savedWindow;
+    globalThis.document = savedDocument;
+  }
 });

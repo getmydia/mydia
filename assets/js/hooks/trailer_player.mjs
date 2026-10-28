@@ -82,6 +82,7 @@ const TrailerPlayer = {
     this.onClick = (event) => {
       const button = event.target.closest("[data-index]");
       if (!button || !this.el.contains(button)) return;
+      this.userSelected = true;
       this.play(this.queue.select(Number(button.dataset.index)), true);
     };
     this.el.addEventListener("click", this.onClick);
@@ -96,8 +97,14 @@ const TrailerPlayer = {
         this.player = new YT.Player(target, {
           width: "100%",
           height: "100%",
-          videoId: this.keys[0],
-          playerVars: { rel: 0, modestbranding: 1, autoplay: this.autoplay ? 1 : 0 },
+          // Honor a switcher click made while the API was still loading, and
+          // start playback in that case since the user asked for it.
+          videoId: this.keys[this.queue.current()],
+          playerVars: {
+            rel: 0,
+            modestbranding: 1,
+            autoplay: this.autoplay || this.userSelected ? 1 : 0,
+          },
           events: { onError: (event) => this.handleError(event.data) },
         });
       })
