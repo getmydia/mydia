@@ -6,19 +6,121 @@ defmodule Mydia.Library.LibraryMove do
   library would put it (`Mydia.Jobs.MediaImport.Paths`), so a moved item
   looks like it was always there. Extras keep their place under the item's
   folder.
+
+  `enqueue/3` and `enqueue_many/3` start a move (see `LibraryMove.Enqueue`);
+  `Mydia.Jobs.LibraryMove` carries it out and calls `record_event/4`.
   """
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Jobs.MediaImport.Paths
   alias Mydia.Library.Dirs
   alias Mydia.Library.ItemFolders
+  alias Mydia.Library.LibraryMove.Enqueue
   alias Mydia.Library.LibraryMove.Move
   alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
+  alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Settings.RuntimeConfig
+
+  @preview_examples 5
+
+  @doc """
+  Points `media_item` at `target` and enqueues the job that moves its files.
+  Refuses with `:disabled_library`, `:incompatible_library`, `:already_there`,
+  `:import_in_progress` (an import or re-match of one of its downloads is
+  pending) or `:move_in_progress` (a move of this item is already queued).
+  The event's actor is `scope.user`, or the system when there is none.
+  """
+  @spec enqueue(MediaItem.t(), LibraryPath.t(), Scope.t()) ::
+          {:ok, Oban.Job.t()} | {:error, Enqueue.error()}
+  defdelegate enqueue(media_item, target, scope), to: Enqueue
+
+  @doc "`enqueue/3` for each item: the number enqueued and each refusal."
+  @spec enqueue_many([MediaItem.t()], LibraryPath.t(), Scope.t()) ::
+          {non_neg_integer(), [{MediaItem.t(), Enqueue.error()}]}
+  defdelegate enqueue_many(media_items, target, scope), to: Enqueue
+
+  @doc """
+  Enabled libraries that can hold every one of `media_items`, in the order of
+  `Settings.list_library_paths/0`. Libraries defined only by environment
+  variables have no row an item can point at, so they are left out.
+  """
+  @spec compatible_targets([MediaItem.t()]) :: [LibraryPath.t()]
+  def compatible_targets(media_items) do
+    Settings.list_library_paths()
+    |> Enum.reject(&(&1.disabled || RuntimeConfig.runtime_config?(&1)))
+    |> Enum.filter(fn target -> Enum.all?(media_items, &Enqueue.compatible?(&1, target)) end)
+  end
+
+  @doc "What a move of `media_item` into `target` would do, for a confirmation dialog."
+  @spec preview(MediaItem.t(), LibraryPath.t()) :: %{
+          files: non_neg_integer(),
+          bytes: non_neg_integer(),
+          hardlink: non_neg_integer(),
+          copy: non_neg_integer(),
+          examples: [{String.t(), String.t()}]
+        }
+  def preview(%MediaItem{} = media_item, %LibraryPath{} = target) do
+    {:ok, moves} = plan(media_item, target)
+
+    %{
+      files: length(moves),
+      bytes: moves |> Enum.map(&(&1.media_file.size || 0)) |> Enum.sum(),
+      hardlink: Enum.count(moves, &(&1.action == :hardlink)),
+      copy: Enum.count(moves, &(&1.action == :copy)),
+      examples:
+        moves
+        |> Enum.take(@preview_examples)
+        |> Enum.map(&{&1.media_file.relative_path, &1.dest_rel})
+    }
+  end
+
+  @doc """
+  Records how a move went. `results` holds one entry per planned file, `:moved`
+  or why it was not; `target` is nil when the library no longer exists.
+  """
+  @spec record_event(MediaItem.t(), LibraryPath.t() | nil, [term()], binary() | nil) :: :ok
+  def record_event(media_item, target, results, actor_id) do
+    media_item
+    |> event_attrs(target, results, actor_id)
+    |> Mydia.Events.create_event_async()
+  end
+
+  @doc false
+  def event_attrs(media_item, target, results, actor_id) do
+    moved = Enum.count(results, &(&1 == :moved))
+
+    %{
+      category: "media",
+      type: event_type(moved, results),
+      # Event requires an actor_id whenever actor_type is set.
+      actor_type: if(actor_id, do: :user, else: :system),
+      actor_id: actor_id || "library_move",
+      resource_type: "media_item",
+      resource_id: media_item.id,
+      severity: if(moved == length(results), do: :info, else: :warning),
+      metadata: %{
+        "title" => media_item.title,
+        "media_type" => media_item.type,
+        "library" => library_name(target),
+        "moved" => moved,
+        "skipped" => length(results) - moved
+      }
+    }
+  end
+
+  defp event_type(moved, results) when moved > 0 or results == [],
+    do: "media_item.library_moved"
+
+  defp event_type(_moved, _results), do: "media_item.library_move_failed"
+
+  defp library_name(%LibraryPath{} = target), do: LibraryPath.display_name(target)
+  defp library_name(nil), do: nil
 
   @spec plan(MediaItem.t(), LibraryPath.t()) :: {:ok, [Move.t()]}
   def plan(%MediaItem{} = media_item, %LibraryPath{} = target) do
