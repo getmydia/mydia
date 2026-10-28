@@ -103,10 +103,16 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       </:title>
 
       <:descriptor>
-        {gettext("Requested by %{email} on %{date}",
-          email: @request.requester.email,
-          date: format_date(@request.inserted_at, @display)
-        )}
+        <.user_sentence
+          id={"request-#{@request.id}-requester"}
+          user={@request.requester}
+          sentence={
+            gettext("Requested by %{name} on %{date}",
+              name: name_marker(),
+              date: format_date(@request.inserted_at, @display)
+            )
+          }
+        />
       </:descriptor>
 
       <:details>
@@ -175,10 +181,16 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <div>
         <div>
           <%= if @request.approved_by do %>
-            {gettext("Approved by %{email} on %{date}",
-              email: @request.approved_by.email,
-              date: format_date(@request.approved_at, @display)
-            )}
+            <.user_sentence
+              id={"request-#{@request.id}-approver"}
+              user={@request.approved_by}
+              sentence={
+                gettext("Approved by %{name} on %{date}",
+                  name: name_marker(),
+                  date: format_date(@request.approved_at, @display)
+                )
+              }
+            />
           <% else %>
             {gettext("Approved automatically on %{date}",
               date: format_date(@request.approved_at, @display)
@@ -194,10 +206,16 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
       <div>
         <div>
-          {gettext("Rejected by %{email} on %{date}",
-            email: @request.approved_by.email,
-            date: format_date(@request.rejected_at, @display)
-          )}
+          <.user_sentence
+            id={"request-#{@request.id}-rejecter"}
+            user={@request.approved_by}
+            sentence={
+              gettext("Rejected by %{name} on %{date}",
+                name: name_marker(),
+                date: format_date(@request.rejected_at, @display)
+              )
+            }
+          />
         </div>
         <div :if={@request.rejection_reason} class="text-xs mt-1">
           {gettext("Reason: %{reason}", reason: @request.rejection_reason)}
@@ -207,6 +225,38 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
         </div>
       </div>
     </div>
+    """
+  end
+
+  # Stands in for the user's name in a translated sentence, so the name can be
+  # wrapped in markup while the sentence stays one msgid. A private-use
+  # character: it never occurs in a translation or a date.
+  defp name_marker, do: "\u{E000}"
+
+  attr :id, :string, required: true
+  attr :user, Mydia.Accounts.User, required: true
+  attr :sentence, :string, required: true, doc: "translated, with name_marker/0 for the name"
+
+  # Renders a whole translated sentence with the user's display label in
+  # <strong> where the name binding went, and their email (when there is one)
+  # as a tooltip. Display label rather than email: SSO users may have none,
+  # which rendered "Requested by  on ...".
+  defp user_sentence(assigns) do
+    {lead, tail} =
+      case String.split(assigns.sentence, name_marker(), parts: 2) do
+        [lead, tail] -> {lead, tail}
+        [whole] -> {whole, ""}
+      end
+
+    assigns =
+      assign(assigns,
+        lead: lead,
+        tail: tail,
+        name: Mydia.Accounts.User.display_label(assigns.user)
+      )
+
+    ~H"""
+    {@lead}<strong id={@id} title={@user.email}>{@name}</strong>{@tail}
     """
   end
 

@@ -165,4 +165,29 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     assert has_element?(view, "#season-3-monitor-toggle[phx-click='monitor_season']")
     assert has_element?(view, "#season-3-monitor-toggle.text-base-content\\/40")
   end
+
+  test "a preset that would monitor nothing is disabled with a reason", %{conn: conn} do
+    # Every episode has aired, so :future would monitor nothing and read back
+    # as "No Episodes", which looked like the click was ignored.
+    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 1,
+      episode_number: 1,
+      air_date: ~D[2020-01-01]
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    assert has_element?(view, "#episode-monitoring-menu-preset-future[disabled]")
+    assert has_element?(view, "#episode-monitoring-menu-preset-future-reason")
+    assert has_element?(view, "#episode-monitoring-menu-preset-existing[disabled]")
+
+    # Enabled presets carry no reason; :none is never disabled.
+    refute has_element?(view, "#episode-monitoring-menu-preset-all[disabled]")
+    refute has_element?(view, "#episode-monitoring-menu-preset-missing[disabled]")
+    refute has_element?(view, "#episode-monitoring-menu-preset-missing-reason")
+    refute has_element?(view, "#episode-monitoring-menu-preset-none[disabled]")
+  end
 end

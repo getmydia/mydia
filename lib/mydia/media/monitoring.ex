@@ -83,6 +83,24 @@ defmodule Mydia.Media.Monitoring do
   end
 
   @doc """
+  Counts how many episodes each preset would monitor if it were applied now.
+
+  Runs the same partition `apply_episode_monitoring/2` uses, so the preview
+  and the write cannot disagree. The menu uses it to disable a preset that
+  would monitor nothing, such as `:future` on a show with no unaired episodes,
+  which otherwise reads back as `:none` and looks like the click was ignored.
+
+  Pure: takes episodes with `media_files` preloaded, issues no query.
+  """
+  @spec monitoring_preview([Episode.t()]) :: %{atom() => non_neg_integer()}
+  def monitoring_preview(episodes) do
+    Map.new(@monitoring_presets, fn preset ->
+      {to_monitor, _} = partition_episodes_by_preset(episodes, preset)
+      {preset, length(to_monitor)}
+    end)
+  end
+
+  @doc """
   Applies a monitoring preset to the episodes of a TV show.
 
   A one-shot bulk rewrite of `episodes.monitored`, and nothing else. The show

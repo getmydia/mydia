@@ -167,6 +167,14 @@ defmodule MydiaWeb.SidebarNavLiveTest do
       assert has_element?(view, ~s|a#sidebar-running-jobs[href="/admin/jobs"]|)
     end
 
+    test "the card starts collapsed to one line that toggles the list" do
+      view = mount_as("admin")
+      broadcast_running_job()
+
+      assert has_element?(view, ~s|#sidebar-running-jobs-toggle[aria-expanded="false"]|)
+      assert has_element?(view, "a#sidebar-running-jobs.hidden")
+    end
+
     test "non-admins do not see the card" do
       for role <- ~w(user readonly guest) do
         view = mount_as(role)
