@@ -214,6 +214,63 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert Repo.get!(MediaFile, file.id).library_path_id == a.id
   end
 
+  test "a file of the item already at the destination in the target is never replaced", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    rel = "Glass Harbor (2019)/glass.mkv"
+    hd = put_file(a, rel, %{media_item_id: movie.id})
+    write(Path.join(a.path, rel), "hd bytes")
+    uhd = put_file(b, rel, %{media_item_id: movie.id})
+    write(Path.join(b.path, rel), "the much larger 4K bytes")
+
+    assert LibraryMove.preview(movie, b).skipped == 1
+    assert :ok = run(movie, b)
+
+    assert File.read!(Path.join(a.path, rel)) == "hd bytes"
+    assert File.read!(Path.join(b.path, rel)) == "the much larger 4K bytes"
+    assert %{library_path_id: a_id, relative_path: ^rel} = Repo.get!(MediaFile, hd.id)
+    assert a_id == a.id
+    assert %{library_path_id: b_id, relative_path: ^rel} = Repo.get!(MediaFile, uhd.id)
+    assert b_id == b.id
+  end
+
+  test "two files planned for one destination both survive", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    one = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    write(Path.join(a.path, one.relative_path), "first")
+    two = put_file(a, "Older Rip/glass.mkv", %{media_item_id: movie.id})
+    write(Path.join(a.path, two.relative_path), "second, longer")
+
+    assert :ok = run(movie, b)
+
+    contents =
+      for id <- [one.id, two.id] do
+        row = Repo.get!(MediaFile, id) |> Repo.preload(:library_path, force: true)
+        File.read!(MediaFile.storage_path(row))
+      end
+
+    assert Enum.sort(contents) == ["first", "second, longer"]
+  end
+
+  test "leaves the sidecars of a sibling video with a longer name", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    glass = put_file(a, "Shared/Glass.mkv", %{media_item_id: movie.id})
+    other = media_item_fixture(%{type: "movie", title: "Glass Harbor Returns", year: 2021})
+    harbor = put_file(a, "Shared/Glass.Harbor.mkv", %{media_item_id: other.id})
+    own_srt = write(Path.join(a.path, "Shared/Glass.en.srt"))
+    their_srt = write(Path.join(a.path, "Shared/Glass.Harbor.en.srt"))
+    own_row = insert_subtitle(glass, own_srt)
+    their_row = insert_subtitle(harbor, their_srt)
+
+    assert :ok = run(movie, b)
+
+    dest_dir = Path.join(b.path, "Glass Harbor (2019)")
+    assert File.exists?(their_srt)
+    assert Repo.get!(Subtitle, their_row.id).file_path == their_srt
+    refute File.exists?(Path.join(dest_dir, "Glass.Harbor.en.srt"))
+    refute File.exists?(own_srt)
+    assert Repo.get!(Subtitle, own_row.id).file_path == Path.join(dest_dir, "Glass.en.srt")
+  end
+
   test "moves episodes into their season folders", %{tmp_dir: tmp} do
     a = library(tmp, "sa", "series")
     b = library(tmp, "sb", "series")

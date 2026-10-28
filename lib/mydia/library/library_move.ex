@@ -57,19 +57,26 @@ defmodule Mydia.Library.LibraryMove do
     |> Enum.filter(fn target -> Enum.all?(media_items, &Enqueue.compatible?(&1, target)) end)
   end
 
-  @doc "What a move of `media_item` into `target` would do, for a confirmation dialog."
+  @doc """
+  What a move of `media_item` into `target` would do, for a confirmation
+  dialog. `skipped` counts files that would collide with another file of the
+  item at the destination; they are left out of every other count.
+  """
   @spec preview(MediaItem.t(), LibraryPath.t()) :: %{
           files: non_neg_integer(),
           bytes: non_neg_integer(),
           hardlink: non_neg_integer(),
           copy: non_neg_integer(),
+          skipped: non_neg_integer(),
           examples: [{String.t(), String.t()}]
         }
   def preview(%MediaItem{} = media_item, %LibraryPath{} = target) do
-    {:ok, moves} = plan(media_item, target)
+    {:ok, planned} = plan(media_item, target)
+    {skipped, moves} = Enum.split_with(planned, & &1.conflict)
 
     %{
       files: length(moves),
+      skipped: length(skipped),
       bytes: moves |> Enum.map(&(&1.media_file.size || 0)) |> Enum.sum(),
       hardlink: Enum.count(moves, &(&1.action == :hardlink)),
       copy: Enum.count(moves, &(&1.action == :copy)),
@@ -134,14 +141,27 @@ defmodule Mydia.Library.LibraryMove do
   def plan(%MediaItem{} = media_item, %LibraryPath{} = target) do
     files = item_files(media_item.id)
     folders = ItemFolders.folders_for(files)
+    {in_target, elsewhere} = Enum.split_with(files, &(&1.library_path_id == target.id))
 
     moves =
-      files
-      |> Enum.reject(&(&1.library_path_id == target.id))
+      elsewhere
       |> Enum.map(&plan_file(&1, media_item, target, folders))
       |> Enum.reject(&is_nil/1)
+      |> mark_conflicts(MapSet.new(in_target, & &1.relative_path))
 
     {:ok, moves}
+  end
+
+  # A destination already held by one of the item's files in the target, or
+  # planned for an earlier file, would make one file overwrite another.
+  defp mark_conflicts(moves, taken) do
+    {marked, _taken} =
+      Enum.map_reduce(moves, taken, fn move, taken ->
+        {%{move | conflict: MapSet.member?(taken, move.dest_rel)},
+         MapSet.put(taken, move.dest_rel)}
+      end)
+
+    marked
   end
 
   @doc """

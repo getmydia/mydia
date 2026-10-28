@@ -67,8 +67,8 @@ defmodule Mydia.Jobs.MediaRematch do
          {:ok, media_file} <- locate_file(download),
          {:ok, library_path} <- resolve_destination(download),
          {dest_path, new_rel} <- compute_destination(download, media_file, library_path),
-         {:ok, _action} <- FileMove.place(media_file, dest_path, library_path),
-         {:ok, _updated} <- relink(download, media_file, library_path, new_rel) do
+         {:ok, placed} <- FileMove.place(media_file, dest_path, library_path),
+         {:ok, _updated} <- relink(download, media_file, library_path, new_rel, placed) do
       # Commit succeeded — now it is safe to remove the source path.
       cleanup_source(download, media_file, dest_path)
       MediaServerNotifier.notify_all(path: dest_path)
@@ -117,10 +117,9 @@ defmodule Mydia.Jobs.MediaRematch do
     {dest_path, new_rel}
   end
 
-  defp relink(download, media_file, library_path, new_rel) do
-    FileMove.relink(media_file, library_path, new_rel, parent_attrs(download), fn _updated ->
-      stamp_provenance_or_skip(download, media_file)
-    end)
+  defp relink(download, media_file, library_path, new_rel, placed) do
+    stamp = fn _updated -> stamp_provenance_or_skip(download, media_file) end
+    FileMove.relink(media_file, library_path, new_rel, parent_attrs(download), stamp, placed)
   end
 
   defp parent_attrs(%{episode_id: nil} = download),

@@ -8,7 +8,7 @@ defmodule Mydia.Library.FileMove do
 
     1. `place/3` copies or hardlinks the file to the destination (never
        renames it), so the source survives until the row has moved.
-    2. `relink/5` re-reads the row in a transaction, aborts if it was trashed
+    2. `relink/6` re-reads the row in a transaction, aborts if it was trashed
        or moved meanwhile, adopts any duplicate row a concurrent scan created
        at the destination, and points the row at the new place.
     3. `cleanup_source/2` deletes the source, only after that commit.
@@ -37,9 +37,10 @@ defmodule Mydia.Library.FileMove do
   `{:error, {:path_escape, dest_path}}` when `dest_path` is outside `target`,
   and `{:error, :conflict}` when `dest_path` holds a file that is not ours.
 
-  A copy left by an earlier failed attempt is adopted (see the ownership rules
-  below), so a retry after a failed `relink/5` succeeds. A file this function
-  did not place is never removed or overwritten.
+  `{:ok, :exists}` means the destination already held our bytes (a link or
+  copy left by an earlier failed attempt), so a retry after a failed
+  `relink/6` succeeds. A file this function did not place is never removed
+  or overwritten.
   """
   @spec place(MediaFile.t(), String.t(), LibraryPath.t(), keyword()) :: place_result()
   def place(%MediaFile{} = media_file, dest_path, %LibraryPath{} = target, opts \\ []) do
@@ -53,60 +54,61 @@ defmodule Mydia.Library.FileMove do
         {:error, :source_missing}
 
       true ->
-        with :ok <- FileOrganizer.confine(dest_path, target.path),
-             false <- foreign_destination?(source_path, dest_path, target) do
-          place_file(source_path, dest_path, target, media_file.size, opts)
-        else
-          true -> {:error, :conflict}
-          {:error, _} = error -> error
+        with :ok <- FileOrganizer.confine(dest_path, target.path) do
+          place_checked(source_path, dest_path, target, media_file.size, opts)
         end
     end
   end
 
-  # fallback: :copy (never rename) keeps the source until after the commit.
-  defp place_file(source_path, dest_path, target, size, opts) do
-    FileOrganizer.place_file(source_path, dest_path,
-      use_hardlinks: Keyword.get(opts, :use_hardlinks, true),
-      fallback: :copy,
-      confine_to: target.path,
-      expected_size: size
-    )
-  end
-
-  # Ownership rules. An existing destination is ours, and place_file may
-  # adopt or replace it, when any of these holds:
+  # Ownership rules. An existing local destination is ours only when it is
+  # the same file as the source (same device and inode: a hardlink we made in
+  # an attempt whose relink then failed) or a byte-identical copy of a source
+  # that still exists (a copy we finished before relink failed).
   #
-  #   * a row claims it (trashed or not): this file's own (a retry), or a
-  #     duplicate a scan created there, which relink/5 adopts;
-  #   * it is the same file as the source (same device and inode): a hardlink
-  #     we made in an attempt whose relink then failed;
-  #   * the source still exists and the destination is byte-identical to it:
-  #     a copy we finished before relink failed.
-  #
-  # Anything else belongs to someone, and is a conflict. A size match alone is
-  # never enough: that would adopt a foreign file and then delete the source.
-  # Local copies are published atomically (see FileOrganizer), so a truncated
-  # partial is never at the destination.
+  # Anything else belongs to someone, even when a row of this same item claims
+  # it (an item can hold two files at one relative path in two libraries), and
+  # is a conflict. A size match alone is never enough. Local copies are
+  # published atomically (see FileOrganizer), so a truncated partial is never
+  # at the destination, and FileOrganizer is never handed :expected_size for a
+  # local path: that option deletes a destination of another size.
   #
   # S3 is left to FileOrganizer.place_via_storage: an object only appears once
   # complete, and one of a different size is refused as :destination_exists.
   # A foreign same-size object there would be adopted; that is accepted.
-  defp foreign_destination?(source_path, dest_path, target) do
+  defp place_checked(source_path, dest_path, target, size, opts) do
     cond do
-      dest_path == source_path -> false
-      Mydia.Storage.s3?(dest_path) or Mydia.Storage.s3?(source_path) -> false
-      not File.exists?(dest_path) -> false
-      true -> not ours?(source_path, dest_path, target)
+      dest_path == source_path ->
+        {:ok, :skip}
+
+      Mydia.Storage.s3?(dest_path) or Mydia.Storage.s3?(source_path) ->
+        place_file(source_path, dest_path, target, [expected_size: size] ++ opts)
+
+      not File.exists?(dest_path) ->
+        place_file(source_path, dest_path, target, opts)
+
+      ours?(source_path, dest_path) ->
+        {:ok, :exists}
+
+      true ->
+        {:error, :conflict}
     end
   end
 
-  defp ours?(source_path, dest_path, target) do
-    row_claims?(dest_path, target) or same_file?(source_path, dest_path) or
-      identical_copy?(source_path, dest_path)
+  # fallback: :copy (never rename) keeps the source until after the commit.
+  defp place_file(source_path, dest_path, target, opts) do
+    FileOrganizer.place_file(
+      source_path,
+      dest_path,
+      [
+        use_hardlinks: Keyword.get(opts, :use_hardlinks, true),
+        fallback: :copy,
+        confine_to: target.path
+      ] ++ Keyword.take(opts, [:expected_size])
+    )
   end
 
-  defp row_claims?(dest_path, target),
-    do: claimed?(target.id, Path.relative_to(dest_path, target.path))
+  defp ours?(source_path, dest_path),
+    do: same_file?(source_path, dest_path) or identical_copy?(source_path, dest_path)
 
   @doc """
   True when a media file row, trashed or not, sits at `relative_path` in the
@@ -158,15 +160,30 @@ defmodule Mydia.Library.FileMove do
   when the row changed since `snapshot` was read. `extra_attrs` is merged into
   the update; `after_update` runs in the transaction and rolls it back on
   `{:error, reason}`.
+
+  Call it only after `place/4` succeeded, and pass what it returned as
+  `placed`. Another row at the destination is deleted as a duplicate of our
+  bytes when `placed` says this attempt created the file there (a scan that
+  raced the copy registered it). When the destination already held the bytes
+  (`:exists`, `:skip`, or `nil`), a row there belonging to another item or
+  episode is that item's record, and the relink aborts with `:conflict`.
   """
   @spec relink(
           MediaFile.t(),
           LibraryPath.t(),
           String.t(),
           map(),
-          (MediaFile.t() -> {:ok, term()} | {:error, term()})
+          (MediaFile.t() -> {:ok, term()} | {:error, term()}),
+          atom() | nil
         ) :: {:ok, MediaFile.t()} | {:error, term()}
-  def relink(%MediaFile{} = snapshot, %LibraryPath{} = target, new_rel, extra_attrs, after_update) do
+  def relink(
+        %MediaFile{} = snapshot,
+        %LibraryPath{} = target,
+        new_rel,
+        extra_attrs,
+        after_update,
+        placed \\ nil
+      ) do
     Repo.transaction(fn ->
       current = Repo.get(MediaFile, snapshot.id)
 
@@ -174,7 +191,7 @@ defmodule Mydia.Library.FileMove do
         is_nil(current) -> Repo.rollback(:media_file_gone)
         not is_nil(current.trashed_at) -> Repo.rollback(:media_file_trashed)
         drifted?(current, snapshot) -> Repo.rollback(:media_file_moved)
-        true -> apply_relink(current, target, new_rel, extra_attrs, after_update)
+        true -> apply_relink(current, target, new_rel, {extra_attrs, placed}, after_update)
       end
     end)
   end
@@ -184,13 +201,11 @@ defmodule Mydia.Library.FileMove do
       current.library_path_id != snapshot.library_path_id
   end
 
-  defp apply_relink(current, target, new_rel, extra_attrs, after_update) do
-    # A racing scan may have created a row at the destination path; adopt it
-    # (delete the duplicate) so we do not leave two rows for one file.
-    adopt_destination_duplicate(target.id, new_rel, current.id)
+  defp apply_relink(current, target, new_rel, {extra_attrs, placed}, after_update) do
     attrs = Map.merge(%{relative_path: new_rel, library_path_id: target.id}, extra_attrs)
 
-    with {:ok, updated} <- update_row(current, attrs),
+    with :ok <- adopt_destination_duplicate(target.id, new_rel, current, attrs, placed),
+         {:ok, updated} <- update_row(current, attrs),
          {:ok, _} <- after_update.(updated) do
       updated
     else
@@ -205,13 +220,42 @@ defmodule Mydia.Library.FileMove do
     end
   end
 
-  defp adopt_destination_duplicate(library_path_id, relative_path, keep_id) do
+  @fresh_placements [:hardlink, :copy, :move]
+
+  # A racing scan may have created a row at the destination path; adopt it
+  # (delete the duplicate) so we do not leave two rows for one file. Only a
+  # row that can describe nothing but our bytes is deleted: one registered
+  # after this attempt created the file, or one with our own parent.
+  defp adopt_destination_duplicate(library_path_id, relative_path, current, attrs, placed) do
     case Library.get_media_file_by_relative_path(library_path_id, relative_path,
            include_trashed: true
          ) do
-      %MediaFile{id: ^keep_id} -> :ok
-      %MediaFile{} = duplicate -> Repo.delete(duplicate)
-      nil -> :ok
+      nil ->
+        :ok
+
+      %MediaFile{id: id} when id == current.id ->
+        :ok
+
+      duplicate ->
+        if placed in @fresh_placements or same_parent?(duplicate, current, attrs),
+          do: delete_duplicate(duplicate),
+          else: {:error, :conflict}
+    end
+  end
+
+  defp same_parent?(duplicate, current, attrs) do
+    episode_id = Map.get(attrs, :episode_id, current.episode_id)
+    media_item_id = Map.get(attrs, :media_item_id, current.media_item_id)
+
+    if episode_id,
+      do: duplicate.episode_id == episode_id,
+      else: is_nil(duplicate.episode_id) and duplicate.media_item_id == media_item_id
+  end
+
+  defp delete_duplicate(duplicate) do
+    case Repo.delete(duplicate) do
+      {:ok, _} -> :ok
+      {:error, _} = error -> error
     end
   end
 

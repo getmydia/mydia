@@ -112,4 +112,73 @@ defmodule Mydia.Library.FileMoveTest do
   test "a destination outside the library is a path escape", %{dst: dst, mf: file, tmp_dir: tmp} do
     assert {:error, {:path_escape, _}} = FileMove.place(file, Path.join(tmp, "out.mkv"), dst)
   end
+
+  for {name, same_item?} <- [{"this item", true}, {"another item", false}] do
+    test "a file of another size that a row of #{name} claims is a conflict", ctx do
+      %{dst: dst, mf: file, abs: abs, rel: rel} = ctx
+      dest = Path.join(dst.path, rel)
+      File.mkdir_p!(Path.dirname(dest))
+      File.write!(dest, "the 4K version")
+
+      owner =
+        if unquote(same_item?),
+          do: file.media_item_id,
+          else: media_item_fixture(%{type: "movie", title: "Copper Lantern"}).id
+
+      other =
+        media_file_fixture(%{media_item_id: owner, library_path_id: dst.id, relative_path: rel})
+
+      assert {:error, :conflict} = FileMove.place(file, dest, dst)
+
+      assert File.read!(dest) == "the 4K version"
+      assert File.read!(abs) == "video"
+      assert Repo.get!(MediaFile, other.id).relative_path == rel
+      assert Repo.get!(MediaFile, file.id).library_path_id == file.library_path_id
+    end
+  end
+
+  describe "relink/6 and a row already at the destination" do
+    setup %{dst: dst, mf: file, rel: rel} do
+      dest = Path.join(dst.path, rel)
+      File.mkdir_p!(Path.dirname(dest))
+      File.cp!(MediaFile.storage_path(file), dest)
+      other = media_item_fixture(%{type: "movie", title: "Copper Lantern"})
+
+      row =
+        media_file_fixture(%{
+          media_item_id: other.id,
+          library_path_id: dst.id,
+          relative_path: rel
+        })
+
+      %{row: row, dest: dest}
+    end
+
+    test "keeps another item's row when the bytes were already there", ctx do
+      %{dst: dst, mf: file, rel: rel, row: row, dest: dest} = ctx
+      assert {:ok, :exists} = FileMove.place(file, dest, dst)
+
+      assert {:error, :conflict} = FileMove.relink(file, dst, rel, %{}, &{:ok, &1}, :exists)
+
+      assert Repo.get(MediaFile, row.id)
+      assert Repo.get!(MediaFile, file.id).library_path_id == file.library_path_id
+    end
+
+    test "adopts a row of the same item as a duplicate", ctx do
+      %{dst: dst, mf: file, rel: rel, row: row} = ctx
+      Repo.update!(Ecto.Changeset.change(row, media_item_id: file.media_item_id))
+
+      assert {:ok, moved} = FileMove.relink(file, dst, rel, %{}, &{:ok, &1}, :exists)
+
+      assert moved.library_path_id == dst.id
+      refute Repo.get(MediaFile, row.id)
+    end
+
+    test "adopts any row when this attempt created the file", ctx do
+      %{dst: dst, mf: file, rel: rel, row: row} = ctx
+
+      assert {:ok, _} = FileMove.relink(file, dst, rel, %{}, &{:ok, &1}, :hardlink)
+      refute Repo.get(MediaFile, row.id)
+    end
+  end
 end

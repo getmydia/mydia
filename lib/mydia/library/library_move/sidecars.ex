@@ -4,22 +4,38 @@ defmodule Mydia.Library.LibraryMove.Sidecars do
   `glass.en.srt` and `glass.nfo` next to `glass.mkv`.
   """
 
+  alias Mydia.Library.MediaFile
+
   @extensions Mydia.Subtitles.Sidecars.extensions() ++ [".nfo"]
 
   @doc """
-  Absolute paths of the sidecars beside `video`. `[]` when the folder cannot
-  be listed.
+  Absolute paths of the sidecars that belong to `media_file` where it sits
+  (or sat: an unsaved struct for an old location works too), with
+  `:library_path` loaded. A name that starts with the video's also has to be
+  owned by it under `Mydia.Subtitles.Sidecars.owned_by/2`, so `Glass.mkv`
+  never takes `Glass.Harbor.en.srt` from `Glass.Harbor.mkv` beside it.
+  Compute this before the row moves: afterwards the file is no longer among
+  the folder's siblings. `[]` when the folder cannot be listed.
   """
-  @spec for(String.t()) :: [String.t()]
-  def for(video) do
+  @spec for(MediaFile.t()) :: [String.t()]
+  def for(%MediaFile{} = media_file) do
+    case MediaFile.storage_path(media_file) do
+      nil -> []
+      video -> list(media_file, video)
+    end
+  end
+
+  defp list(media_file, video) do
     dir = Path.dirname(video)
     name = Path.basename(video)
     prefix = Path.rootname(name) <> "."
 
     case Mydia.Storage.ls(dir) do
       {:ok, entries} ->
-        entries
-        |> Enum.filter(&sidecar?(&1, name, prefix))
+        candidates = Enum.filter(entries, &sidecar?(&1, name, prefix))
+
+        media_file
+        |> Mydia.Subtitles.Sidecars.owned_by(candidates)
         |> Enum.map(&Path.join(dir, &1))
 
       {:error, _} ->

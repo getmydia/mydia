@@ -11,6 +11,7 @@ defmodule Mydia.Library.LibraryMove.Sources do
   alias Mydia.Library.FileMove
   alias Mydia.Library.LibraryMove.FileStep
   alias Mydia.Library.LibraryMove.Move
+  alias Mydia.Library.LibraryMove.Sidecars
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
@@ -56,8 +57,9 @@ defmodule Mydia.Library.LibraryMove.Sources do
          new when is_binary(new) and new != old <- MediaFile.storage_path(row),
          true <- FileMove.exists?(new) and FileMove.exists?(old),
          false <- is_nil(source["lp"]) or FileMove.claimed?(source["lp"], source["rel"], id),
-         true <- FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new) do
-      FileStep.finish_source(old, new, id, target)
+         true <- FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new),
+         %MediaFile{} = old_file <- old_file(source, library(source["lp"])) do
+      FileStep.finish_source(old_file, new, target, Sidecars.for(old_file))
     end
   end
 
@@ -69,15 +71,19 @@ defmodule Mydia.Library.LibraryMove.Sources do
   def old_files(sources) do
     libraries = sources |> Enum.map(& &1["lp"]) |> Enum.uniq() |> Map.new(&{&1, library(&1)})
 
-    for %{"rel" => rel, "lp" => lp} = source <- sources, libraries[lp] do
-      %MediaFile{
-        id: source["id"],
-        relative_path: rel,
-        library_path_id: lp,
-        library_path: libraries[lp],
-        extra_kind: if(source["extra"], do: :featurette)
-      }
-    end
+    for %{"lp" => lp} = source <- sources, libraries[lp], do: old_file(source, libraries[lp])
+  end
+
+  defp old_file(_source, nil), do: nil
+
+  defp old_file(source, %LibraryPath{} = library) do
+    %MediaFile{
+      id: source["id"],
+      relative_path: source["rel"],
+      library_path_id: library.id,
+      library_path: library,
+      extra_kind: if(source["extra"], do: :featurette)
+    }
   end
 
   defp library(nil), do: nil
