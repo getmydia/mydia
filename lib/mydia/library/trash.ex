@@ -249,6 +249,8 @@ defmodule Mydia.Library.Trash do
   Newest first, because the thing an operator wants to undo is almost always
   the thing that just happened.
 
+  Rows trashed with reason `:missing` are never included; see `visible_trash/0`.
+
   ## Options
 
     * `:reason` - restrict to one `trashed_reason`. `nil` (the default) returns
@@ -260,14 +262,25 @@ defmodule Mydia.Library.Trash do
   """
   @spec list_trashed_media_files(keyword()) :: [MediaFile.t()]
   def list_trashed_media_files(opts \\ []) do
-    MediaFile
-    |> where([f], not is_nil(f.trashed_at))
+    visible_trash()
     |> filter_by_trashed_reason(Keyword.get(opts, :reason))
     |> order_by([f], desc: f.trashed_at, desc: f.id)
     |> maybe_limit(Keyword.get(opts, :limit))
     |> maybe_offset(Keyword.get(opts, :offset))
     |> maybe_preload(opts[:preload])
     |> Repo.all()
+  end
+
+  # The trash an operator sees. A row trashed because its file was already gone
+  # is a restore-on-reappear marker for the scanner, not something to review:
+  # restoring it brings back a pointer to nothing and deleting it is what
+  # TrashCleanup does anyway. It stays trashed so partition_and_restore/3 in
+  # LibraryScanner can still bring it back if the file returns, and the
+  # retention purge still removes it.
+  defp visible_trash do
+    from f in MediaFile,
+      where: not is_nil(f.trashed_at),
+      where: is_nil(f.trashed_reason) or f.trashed_reason != :missing
   end
 
   defp filter_by_trashed_reason(query, nil), do: query
@@ -287,14 +300,15 @@ defmodule Mydia.Library.Trash do
   @doc """
   Counts trashed media files grouped by reason, for the filter chips.
 
+  Rows trashed with reason `:missing` are excluded.
+
   The map is keyed by the `trashed_reason` atom, with `nil` holding rows
   trashed before the column existed. A reason with no rows is absent from the
   map rather than present with a zero.
   """
   @spec count_trashed_media_files() :: %{optional(atom()) => non_neg_integer()}
   def count_trashed_media_files do
-    MediaFile
-    |> where([f], not is_nil(f.trashed_at))
+    visible_trash()
     |> group_by([f], f.trashed_reason)
     |> select([f], {f.trashed_reason, count(f.id)})
     |> Repo.all()
@@ -312,8 +326,7 @@ defmodule Mydia.Library.Trash do
   @spec trashed_summary() :: %{count: non_neg_integer(), bytes: non_neg_integer()}
   def trashed_summary do
     {count, bytes} =
-      MediaFile
-      |> where([f], not is_nil(f.trashed_at))
+      visible_trash()
       |> select([f], {count(f.id), sum(f.size)})
       |> Repo.one()
 
