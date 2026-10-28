@@ -117,6 +117,12 @@ docs/.venv/
 /priv/cardigann/*.cwasm.sha256
 /priv/cardigann/.unavailable-*
 
+# Runtime caches a dev server writes under priv/: the precompiled Cardigann
+# guest (Cardigann.Wasm.Artifact.cache_dir/0, `<data_dir>/cardigann`) and the
+# p2p relay list cached beside the dev keypair (P2p.RelayList).
+/priv/data/cardigann/
+/priv/relays.json
+
 # Cookie jars (from HTTP clients)
 cookie.jar
 
