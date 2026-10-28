@@ -44,13 +44,29 @@ export function resetYouTubeApiForTest() {
   apiPromise = null;
 }
 
-export function loadYouTubeApi(win = window, doc = document) {
+const API_TIMEOUT_MS = 10000;
+
+export function loadYouTubeApi(
+  win = window,
+  doc = document,
+  timers = { setTimeout, clearTimeout },
+  timeoutMs = API_TIMEOUT_MS,
+) {
   if (win.YT && win.YT.Player) return Promise.resolve(win.YT);
   if (apiPromise) return apiPromise;
 
   apiPromise = new Promise((resolve, reject) => {
     const previous = win.onYouTubeIframeAPIReady;
+    // The script can load without ever calling the ready callback; give up
+    // so the caller falls back to a plain iframe and a later mount retries.
+    const timer = timers.setTimeout(() => {
+      apiPromise = null;
+      reject(new Error("YouTube IFrame API timed out"));
+    }, timeoutMs);
+    // A callback that fires after the timeout still resolves the already
+    // rejected promise, which is a no-op.
     win.onYouTubeIframeAPIReady = () => {
+      timers.clearTimeout(timer);
       if (typeof previous === "function") previous();
       resolve(win.YT);
     };
@@ -59,6 +75,7 @@ export function loadYouTubeApi(win = window, doc = document) {
     script.src = API_SRC;
     script.async = true;
     script.onerror = () => {
+      timers.clearTimeout(timer);
       apiPromise = null;
       reject(new Error("YouTube IFrame API failed to load"));
     };
@@ -106,7 +123,10 @@ const TrailerPlayer = {
             modestbranding: 1,
             autoplay: this.autoplay || this.userSelected ? 1 : 0,
           },
-          events: { onError: (event) => this.handleError(event.data) },
+          events: {
+            onError: (event) => this.handleError(event.data),
+            onStateChange: (event) => this.handleStateChange(event.data),
+          },
         });
       })
       // Blocked by an extension or offline: embed the first trailer the way
@@ -116,13 +136,21 @@ const TrailerPlayer = {
       });
   },
 
+  // The viewer may start playback through YouTube's own play button, which
+  // neither autoplay nor a switcher click records.
+  handleStateChange(state) {
+    if (this.gone) return;
+    if (state === 1) this.started = true;
+  },
+
   handleError(code) {
+    if (this.gone) return;
     // Leave YouTube's own error screen up for codes another trailer would
     // not fix (e.g. 153), rather than reloading the same video.
     if (!SKIPPABLE_ERRORS.has(code)) return;
     const next = this.queue.fail(code);
     if (next === null) return this.showUnavailable();
-    this.play(next, this.autoplay || this.userSelected);
+    this.play(next, this.autoplay || this.userSelected || this.started);
   },
 
   play(index, start) {

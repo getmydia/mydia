@@ -161,7 +161,10 @@ defmodule Mydia.Metadata.Structs.Video do
   """
   @spec youtube_videos([t()] | nil) :: [t()]
   def youtube_videos(videos) when is_list(videos) do
-    Enum.filter(videos, &match?(%__MODULE__{site: "YouTube", key: key} when is_binary(key), &1))
+    Enum.filter(
+      videos,
+      &match?(%__MODULE__{site: "YouTube", key: key} when is_binary(key) and key != "", &1)
+    )
   end
 
   def youtube_videos(_), do: []

@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.ShowTrailerTest do
 
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Metadata.Structs.{MediaMetadata, Video}
 
@@ -12,11 +13,14 @@ defmodule MydiaWeb.MediaLive.ShowTrailerTest do
   end
 
   defp item_with_videos(videos) do
+    tmdb_id = unique_provider_id()
+    warm_movie_details_cache(tmdb_id)
+
     media_item_fixture(%{
       type: "movie",
       title: "The Lantern Coast",
       metadata: %MediaMetadata{
-        provider_id: "1",
+        provider_id: Integer.to_string(tmdb_id),
         provider: :tmdb,
         media_type: :movie,
         videos: videos

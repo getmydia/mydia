@@ -89,11 +89,34 @@ test("loadYouTubeApi rejects on script error and allows a retry", async () => {
   const win = {};
   const { doc, appended } = fakeDom();
 
-  const attempt = loadYouTubeApi(win, doc);
+  const timers = { setTimeout: () => 0, clearTimeout() {} };
+
+  const attempt = loadYouTubeApi(win, doc, timers);
   appended[0].onerror();
   await assert.rejects(attempt);
 
-  loadYouTubeApi(win, doc);
+  loadYouTubeApi(win, doc, timers);
+  assert.equal(appended.length, 2);
+});
+
+test("loadYouTubeApi times out when the ready callback never fires, then retries", async () => {
+  resetYouTubeApiForTest();
+  const win = {};
+  const { doc, appended } = fakeDom();
+  let fire;
+  const timers = { setTimeout: (fn) => (fire = fn), clearTimeout() {} };
+
+  const attempt = loadYouTubeApi(win, doc, timers, 50);
+  fire();
+  await assert.rejects(attempt);
+
+  // A late ready callback is harmless.
+  win.YT = { Player: function () {} };
+  win.onYouTubeIframeAPIReady();
+
+  // apiPromise was reset, but YT is now present, so reset it to prove retry injects again.
+  delete win.YT;
+  loadYouTubeApi(win, doc, timers, 50);
   assert.equal(appended.length, 2);
 });
 
@@ -152,9 +175,11 @@ function mountWithFakePlayer({ autoplay }) {
   resetYouTubeApiForTest();
   const calls = [];
   let onError;
+  let onStateChange;
   const YT = {
     Player: function (_target, options) {
       onError = options.events.onError;
+      onStateChange = options.events.onStateChange;
       this.loadVideoById = (key) => calls.push(["load", key]);
       this.cueVideoById = (key) => calls.push(["cue", key]);
       this.destroy = () => {};
@@ -201,6 +226,8 @@ function mountWithFakePlayer({ autoplay }) {
     hidden,
     buttons,
     fire: (code) => onError({ data: code }),
+    state: (data) => onStateChange({ data }),
+    destroy: () => hook.destroyed(),
     ready: () => new Promise((resolve) => setImmediate(resolve)),
     restore: () => Object.assign(globalThis, saved),
   };
@@ -229,6 +256,32 @@ test("hook cues instead of loading when autoplay is off", async () => {
     await t.ready();
     t.fire(150);
     assert.deepEqual(t.calls, [["cue", "bbb"]]);
+  } finally {
+    t.restore();
+  }
+});
+
+test("hook loads instead of cueing once the viewer started playback", async () => {
+  const t = mountWithFakePlayer({ autoplay: false });
+  try {
+    await t.ready();
+    t.state(1);
+    t.fire(150);
+    assert.deepEqual(t.calls, [["load", "bbb"]]);
+  } finally {
+    t.restore();
+  }
+});
+
+test("a queued error after destroy does nothing", async () => {
+  const t = mountWithFakePlayer({ autoplay: true });
+  try {
+    await t.ready();
+    t.destroy();
+    t.fire(150);
+    assert.deepEqual(t.calls, []);
+    assert.ok(t.hidden.has("hidden"));
+    assert.deepEqual(t.buttons.map((b) => b.attrs["aria-pressed"]), [undefined, undefined]);
   } finally {
     t.restore();
   }

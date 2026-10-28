@@ -15,6 +15,10 @@ defmodule Mydia.Metadata.Structs.VideoYoutubeVideosTest do
     assert Video.youtube_videos([%Video{key: nil, site: "YouTube"}]) == []
   end
 
+  test "drops entries with an empty key" do
+    assert Video.youtube_videos([%Video{key: "", site: "YouTube"}]) == []
+  end
+
   test "is empty for nil" do
     assert Video.youtube_videos(nil) == []
   end
