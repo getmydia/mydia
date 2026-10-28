@@ -1359,7 +1359,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         >
           <.icon name="hero-x-mark" class="w-5 h-5 text-white" />
         </button>
-        <.trailer_player id="media-trailer-player" videos={@videos} autoplay />
+        <.trailer_player
+          id="media-trailer-player"
+          videos={@videos}
+          autoplay
+          button_class="text-white/80 [&.btn-active]:bg-white/20 [&.btn-active]:text-white"
+        />
       </div>
       <div class="modal-backdrop bg-black/80" phx-click="hide_trailer_modal"></div>
     </div>

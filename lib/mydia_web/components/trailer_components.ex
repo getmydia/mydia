@@ -23,6 +23,10 @@ defmodule MydiaWeb.TrailerComponents do
   attr :videos, :list, required: true, doc: "`%Video{}` structs, preferred first"
   attr :autoplay, :boolean, default: false
 
+  attr :button_class, :any,
+    default: nil,
+    doc: "extra classes for the switcher buttons, e.g. a light text color on a dark modal"
+
   def trailer_player(assigns) do
     assigns = assign(assigns, :videos, Video.youtube_videos(assigns.videos))
 
@@ -58,7 +62,7 @@ defmodule MydiaWeb.TrailerComponents do
           :for={{video, index} <- Enum.with_index(@videos)}
           type="button"
           data-index={index}
-          class={["btn btn-xs btn-ghost max-w-48", index == 0 && "btn-active"]}
+          class={["btn btn-xs btn-ghost max-w-48", index == 0 && "btn-active", @button_class]}
         >
           <span class="truncate">{video_label(video, index)}</span>
         </button>

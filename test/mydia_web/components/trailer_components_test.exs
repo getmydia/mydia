@@ -12,7 +12,8 @@ defmodule MydiaWeb.TrailerComponentsTest do
     render_component(&TrailerComponents.trailer_player/1,
       id: "test-trailer",
       videos: videos,
-      autoplay: Keyword.get(opts, :autoplay, false)
+      autoplay: Keyword.get(opts, :autoplay, false),
+      button_class: Keyword.get(opts, :button_class)
     )
     |> LazyHTML.from_fragment()
   end
@@ -28,6 +29,14 @@ defmodule MydiaWeb.TrailerComponentsTest do
     assert LazyHTML.attribute(container, "phx-update") == ["ignore"]
     assert LazyHTML.attribute(container, "data-keys") == [~s(["a1","b2"])]
     assert LazyHTML.attribute(container, "data-autoplay") == ["false"]
+  end
+
+  test "applies button_class to every switcher button" do
+    doc =
+      render_player([video("a1", "Main"), video("b2", "Teaser")], button_class: "text-white/80")
+
+    buttons = LazyHTML.query(doc, ~s([data-role="switcher"] button[data-index].text-white\\/80))
+    assert Enum.count(buttons) == 2
   end
 
   test "renders one switcher button per video when there are two or more" do
