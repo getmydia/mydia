@@ -97,7 +97,12 @@ defmodule Mydia.Indexers.Cardigann.Parity.Ratchet do
           "field: #{inspect(f)}, reason: #{inspect(Map.get(reasons, key, @todo))}}"
       end)
 
-    "[\n" <> body <> if(body == "", do: "", else: "\n") <> "]\n"
+    # The file lives under test/, so the pre-commit `mix format` check reads it:
+    # write it the way the formatter would.
+    ("[\n" <> body <> if(body == "", do: "", else: "\n") <> "]\n")
+    |> Code.format_string!()
+    |> IO.iodata_to_binary()
+    |> Kernel.<>("\n")
   end
 
   @spec format_failure(%{new: [Divergence.t()], stale: [Entry.t()], todo: [Entry.t()]}) ::

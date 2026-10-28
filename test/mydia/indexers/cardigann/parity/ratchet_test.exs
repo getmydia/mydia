@@ -53,6 +53,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.RatchetTest do
     assert [%Entry{field: :size, kind: :field}, %Entry{field: :title}] = Ratchet.load!(path)
   end
 
+  test "render writes what mix format would, long reasons included" do
+    reason = String.duplicate("a reason long enough to wrap the line ", 4)
+    source = Ratchet.render([div(:title)], [entry(:title, reason)])
+
+    assert source == (source |> Code.format_string!() |> IO.iodata_to_binary()) <> "\n"
+  end
+
   test "load! raises on a blank reason" do
     path =
       tmp_file(~s|[%{definition: "x", query: :rss, kind: :outcome, field: nil, reason: "  "}]|)
