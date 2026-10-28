@@ -778,7 +778,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </button>
           </li>
         <% end %>
-        <li class="divider my-1"></li>
+        <li></li>
         <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
                 icon everywhere else in the app. --%>
         <li :if={@demotable?}>
@@ -811,7 +811,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
           </button>
         </li>
-        <li class="divider my-1"></li>
+        <li></li>
         <li>
           <button
             id={"file-delete-#{@file.id}"}
