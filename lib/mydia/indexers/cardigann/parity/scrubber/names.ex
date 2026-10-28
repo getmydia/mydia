@@ -9,106 +9,150 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
   because trackers repeat a name in another case (a lowercase file name next to
   a capitalised category badge), and works on raw bytes so non-UTF-8 bodies can
   be searched without decoding.
+
+  UTF-8 text then gets a second pass that finds each work as its sequence of
+  words with any punctuation, whitespace, percent-escape or entity between
+  them, for the spellings no fixed form anticipates.
   """
 
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.Parity.Fictional
+  alias Mydia.Indexers.Cardigann.Parity.Scrubber.Works
 
-  @min_work_length 3
   @separators ~r/[ ._-]/
-  @marker ~r/\A(?:(?:19|20)\d\d|S\d{1,2}E\d{1,3}|S\d{1,2}|\d{3,4}p|WEB|WEB-DL|WEBRip|BluRay|HDTV|DVDRip)\z/i
-  @token ~r/[^ ._-]+/
-  @brackets ~r/\A[(\[{]+|[)\]}]+\z/
   @slug_words ~r/[^\p{L}\p{N}]+/u
+  @letters_or_digits ~r/[\p{L}\p{N}]+/u
+  @ellipsis_end ~r/(…|\.\.\.)\s*\z/u
+  @min_segment 5
+  # Between two words of a work: any punctuation or whitespace, or the
+  # percent-encoding or HTML entity of one, but never a tag boundary.
+  @gap "(?:[^\\p{L}\\p{N}<>]|%[0-9A-Fa-f]{2}|&#?[A-Za-z0-9]+;){1,12}"
+  # A work starts after a non-word character or straight after a %XX escape
+  # (`%5BGroup%5D%20Name`), and ends before a non-word character.
+  @word_start "(?:(?<=%[0-9A-Fa-f]{2})|(?<![\\p{L}\\p{N}]))"
+  @word_end "(?![\\p{L}\\p{N}])"
 
-  @typedoc "Folded forms mapped to their replacements, and the compiled search pattern."
-  @type matcher :: {%{binary() => binary()}, :binary.cp() | nil}
+  @typedoc """
+  Per work, longest first: folded forms mapped to their replacements, the
+  compiled search pattern and the word-sequence regexes. Then the body charset.
+  """
+  @type matcher ::
+          {[{%{binary() => binary()}, :binary.cp() | nil, [{Regex.t(), String.t()}]}],
+           String.t() | nil}
 
-  @doc "See `Mydia.Indexers.Cardigann.Parity.Scrubber.split_title/1`."
-  @spec split_title(String.t()) :: {String.t(), String.t()}
-  def split_title(title) do
-    tokens =
-      @token
-      |> Regex.scan(title, return: :index)
-      |> Enum.map(fn [{start, len}] ->
-        {start, title |> binary_part(start, len) |> String.replace(@brackets, "")}
+  defdelegate split_title(title), to: Works
+  defdelegate works(titles), to: Works
+  defdelegate work(title), to: Works
+  defdelegate renamable?(work), to: Works
+
+  @doc """
+  One entry per work, longest first, each with its forms and word sequences.
+  Works are replaced one at a time in that order, forms then sequences, so a
+  shorter work ("Old Kiln") can never rename the start of a longer one ("Old
+  Kiln 2: The Return") and leave the rest of it behind.
+  """
+  @spec matcher([String.t()], String.t() | nil) :: matcher()
+  def matcher(works, encoding) do
+    entries =
+      works
+      |> Enum.uniq()
+      |> Enum.sort_by(&{-byte_size(&1), &1})
+      |> Enum.map(fn work ->
+        table = form_table(work, encoding)
+        pattern = if table == %{}, do: nil, else: :binary.compile_pattern(Map.keys(table))
+        {table, pattern, word_sequence(work)}
       end)
 
-    markers = for {start, token} <- tokens, Regex.match?(@marker, token), do: {start, token}
+    {entries, encoding}
+  end
 
-    case {tokens, markers} do
-      {_, []} ->
-        {title, ""}
+  # Earlier forms win when two share a folded spelling, hence the reverse.
+  defp form_table(work, encoding) do
+    work
+    |> forms(encoding)
+    |> Enum.map(fn {form, fake} -> {fold(form), fake} end)
+    |> Enum.reject(fn {form, _} -> form == "" end)
+    |> Enum.reverse()
+    |> Map.new()
+  end
 
-      # A title that opens with a number ("1984 2031 1080p") names its work with
-      # it, so the cut moves to the next marker.
-      {[{first, _} | _], [{first, token}, {next, _} | _]} ->
-        if Regex.match?(~r/\A\d+\z/, token), do: cut(title, next), else: cut(title, first)
+  # The work as its words with any gap between them, so a spelling the forms
+  # above miss is still found: `A%20Returner&apos;s%20Name` mixes two
+  # encodings, a title filter may have dropped a colon the page still shows.
+  # A work cut short with an ellipsis ("Some Na…") ends inside a word, so its
+  # last word matches as a prefix and takes the rest of that word with it.
+  defp word_sequence(work) do
+    tail = if String.match?(work, @ellipsis_end), do: "[\\p{L}\\p{N}]*", else: @word_end
+    fake = Fictional.name(work)
 
-      {[{first, _} | _], [{first, token}]} ->
-        if Regex.match?(~r/\A\d+\z/, token), do: {String.trim(title), ""}, else: cut(title, first)
-
-      {_, [{at, _} | _]} ->
-        cut(title, at)
+    for spelling <- spellings(work),
+        words = Regex.scan(@letters_or_digits, spelling),
+        words != [] do
+      source = @word_start <> Enum.map_join(words, @gap, &Regex.escape(hd(&1))) <> tail
+      {Regex.compile!(source, "iu"), fake}
     end
   end
 
-  defp cut(title, at) do
-    work = title |> binary_part(0, at) |> String.replace(~r/[ ._-]+\z/, "") |> String.trim()
-    {work, binary_part(title, at, byte_size(title) - at)}
+  # URL slugs strip accents ("Mō" becomes "Mo"), drop the letter outright
+  # ("M") or turn it into a separator ("Reiāsu" becomes "Rei_su"), so those
+  # spellings are searched too, while long enough to be safe. Only for a Latin
+  # name with a few accented letters: dropping a CJK name's characters would
+  # leave a fragment ("U-17 WORLD CUP") that renames part of another work.
+  defp spellings(work) do
+    if work |> String.replace(~r/[\x00-\x7F]/u, "") |> String.length() > 2,
+      do: [work],
+      else: latin_spellings(work)
   end
 
-  @doc """
-  The distinct work names of `titles` that are long enough to rename safely,
-  longest first. Shorter ones ("Up") would match inside markup.
-  """
-  @spec works([String.t()]) :: [String.t()]
-  def works(titles) do
-    titles
-    |> Enum.map(&work/1)
-    |> Enum.filter(&renamable?/1)
-    |> Enum.uniq()
-    |> Enum.sort_by(&{-byte_size(&1), &1})
-  end
+  defp latin_spellings(work) do
+    stripped = work |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
+    ascii = String.replace(work, ~r/[^\x00-\x7F]/u, "")
 
-  @doc "The work name of one title."
-  @spec work(String.t()) :: String.t()
-  def work(title), do: title |> split_title() |> elem(0) |> String.trim()
+    variants =
+      for v <- [
+            stripped,
+            ascii,
+            String.replace(work, ~r/[^\x00-\x7F]/u, " "),
+            # Slugs spell a multiplication sign as "x" ("name-x-name").
+            String.replace(work, "×", "x")
+          ],
+          v != work,
+          v |> String.replace(@slug_words, "") |> String.length() >= @min_segment,
+          # "2026年10月番" without its CJK is "2026 10", which is a date.
+          v =~ ~r/[A-Za-z]{3}/,
+          do: v
 
-  @doc "Whether a work is long enough to rename without hitting markup."
-  @spec renamable?(String.t()) :: boolean()
-  def renamable?(work), do: String.length(work) >= @min_work_length
-
-  @spec matcher([String.t()], String.t() | nil) :: matcher()
-  def matcher(works, encoding) do
-    # Earlier entries win when two works share a form, hence the reverse.
-    table =
-      works
-      |> Enum.flat_map(&forms(&1, encoding))
-      |> Enum.map(fn {form, fake} -> {fold(form), fake} end)
-      |> Enum.reject(fn {form, _} -> form == "" end)
-      |> Enum.reverse()
-      |> Map.new()
-
-    pattern = if table == %{}, do: nil, else: :binary.compile_pattern(Map.keys(table))
-    {table, pattern}
+    Enum.uniq([work | variants])
   end
 
   @doc "Every folded form of `work`, for searching folded text."
   @spec needles(String.t(), String.t() | nil) :: [binary()]
-  def needles(work, encoding), do: [work] |> matcher(encoding) |> elem(0) |> Map.keys()
+  def needles(work, encoding), do: work |> form_table(encoding) |> Map.keys()
 
   @doc """
-  Replaces every form in `bin`. :binary.matches/2 scans left to right and, where
-  several forms start at the same byte, takes the longest, so "Old Mellow Kiln"
-  beats "Mellow Kiln". It runs on the folded text, whose byte offsets match the
-  original's.
+  Replaces every work in `bin`, longest first: its forms (`:binary.matches/2`
+  on the folded text, whose byte offsets match the original's), then its word
+  sequences.
   """
   @spec replace(binary() | nil, matcher()) :: binary() | nil
   def replace(nil, _matcher), do: nil
-  def replace(bin, {_table, nil}), do: bin
 
-  def replace(bin, {table, pattern}) do
+  def replace(bin, {entries, encoding}) do
+    Enum.reduce(entries, bin, fn {table, pattern, sequences}, acc ->
+      acc |> replace_forms(table, pattern) |> words(sequences, encoding)
+    end)
+  end
+
+  @doc "Whether the word-sequence pass can read `bin` (UTF-8, or round-trips through `encoding`)."
+  @spec text?(binary(), String.t() | nil) :: boolean()
+  def text?(bin, encoding),
+    do:
+      String.valid?(bin) or
+        (encoding != nil and Charset.encode(Charset.decode(bin, encoding), encoding) == bin)
+
+  defp replace_forms(bin, _table, nil), do: bin
+
+  defp replace_forms(bin, table, pattern) do
     folded = fold(bin)
 
     {parts, last} =
@@ -121,6 +165,42 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
       end)
 
     IO.iodata_to_binary(Enum.reverse([binary_part(bin, last, byte_size(bin) - last) | parts]))
+  end
+
+  # The word-sequence pass needs text: a body in the definition's charset is
+  # decoded and encoded back, and one that does not survive that round trip
+  # relies on the charset forms above.
+  defp words(bin, [], _encoding), do: bin
+
+  defp words(bin, sequences, encoding) do
+    cond do
+      String.valid?(bin) ->
+        apply_sequences(bin, sequences)
+
+      text?(bin, encoding) ->
+        bin |> Charset.decode(encoding) |> apply_sequences(sequences) |> Charset.encode(encoding)
+
+      true ->
+        bin
+    end
+  end
+
+  defp apply_sequences(text, sequences) do
+    Enum.reduce(sequences, text, fn {regex, fake}, acc ->
+      Regex.replace(regex, acc, fn found -> shaped(found, joined(fake, found)) end)
+    end)
+  end
+
+  # The replacement's words joined the way the found text joins its first two.
+  # A one-word occurrence gets a one-word name (see forms/2).
+  defp joined(fake, found) do
+    sep =
+      case Regex.run(~r/%20|\+|[ ._-]/, found) do
+        [s] -> s
+        nil -> ""
+      end
+
+    fake |> String.split(" ") |> Enum.join(sep)
   end
 
   @doc "ASCII case folding on raw bytes; byte offsets are unchanged."
@@ -136,10 +216,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
   defp forms(work, encoding) do
     fake_words = work |> Fictional.name() |> String.split(" ")
 
+    # A one-word work gets a one-word name ("CopperKiln"): a space would land
+    # inside URLs and slugs, where the engines' escaping differs and would show
+    # up as a divergence the real page never had.
     sep =
       case Regex.run(@separators, work) do
         [s] -> s
-        nil -> " "
+        nil -> ""
       end
 
     fake = Enum.join(fake_words, sep)

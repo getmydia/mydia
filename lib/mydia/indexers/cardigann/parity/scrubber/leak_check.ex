@@ -13,6 +13,67 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
   """
 
   alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.Parity.Capture
+  alias Mydia.Indexers.Cardigann.Parity.Scrubber.{Ids, Names, Works}
+
+  @min_work_length 3
+
+  @doc """
+  Every leak in a scrubbed capture's request URLs, bodies and headers, as one
+  message each. Three searches per learned work: the renamer's own forms, this
+  module's normalised text, and the work's distinctive word pairs (a work
+  renamed only in part leaves one behind). Then every original id or hash in
+  `ids` that survived. Words of `keep` (category names left as they are) never
+  count toward a pair.
+  """
+  @spec errors(Capture.t(), [String.t()], String.t() | nil, Ids.t(), [String.t()]) ::
+          [String.t()]
+  def errors(%Capture{} = capture, works, encoding, ids, keep \\ []) do
+    texts =
+      capture.exchanges
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {ex, n} ->
+        [{"request #{n} URL", ex.request.url}, {"body #{n}", ex.body || ""}] ++
+          for({k, v} <- ex.headers, do: {"response #{n} header #{k}", v})
+      end)
+      |> Enum.map(fn {label, text} ->
+        {label, text, Names.fold(text), normalise(text, encoding)}
+      end)
+
+    work_errors =
+      for work <- works,
+          String.length(work) >= @min_work_length,
+          needles = Names.needles(work, encoding),
+          reduced = normalise_work(work),
+          pairs = work |> without(keep) |> Works.distinctive_pairs(),
+          {label, _text, folded, normalised} <- texts,
+          hit = leak(folded, normalised, needles, reduced, pairs),
+          hit != nil do
+        "#{label} still contains #{inspect(work)}#{hit}"
+      end
+
+    id_errors =
+      for {label, text, _folded, _normalised} <- texts,
+          original <- Ids.leftovers(text, ids),
+          do: "#{label} still contains the real id or hash #{original}"
+
+    Enum.uniq(work_errors ++ id_errors)
+  end
+
+  defp without(work, keep) do
+    Enum.reduce(keep, work, fn word, acc ->
+      String.replace(acc, ~r/#{Regex.escape(word)}/iu, " | ")
+    end)
+  end
+
+  defp leak(folded, normalised, needles, reduced, pairs) do
+    cond do
+      Enum.any?(needles, &String.contains?(folded, &1)) -> ""
+      String.length(reduced) >= @min_work_length and String.contains?(normalised, reduced) -> ""
+      pair = Enum.find(pairs, &String.contains?(normalised, &1)) -> " (in part: #{pair})"
+      true -> nil
+    end
+  end
 
   @percent ~r/%([0-9A-Fa-f]{2})/
   @json_escape ~r/\\u([0-9A-Fa-f]{4})(?:\\u([0-9A-Fa-f]{4}))?/

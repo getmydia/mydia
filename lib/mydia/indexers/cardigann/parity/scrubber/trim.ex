@@ -25,6 +25,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
   @nid "data-mydia-nid"
   @doctype ~r/\A\s*(<!doctype[^>]*>)/i
   @simple_path ~r/\A[\w-]+(\.[\w-]+)*\z/u
+  @json_selector ~r/\A\$?\.*[\w-]+(\.[\w-]+)*\z/u
 
   @type outcome :: {:ok, binary()} | :skip | {:untrimmed, String.t()}
 
@@ -32,19 +33,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
   The trimmed body of an exchange, or why it stays whole. `:skip` only for an
   exchange with no body to write (a transport error or an empty body).
   """
-  @spec body(Exchange.t(), map(), String.t() | nil) :: outcome()
-  def body(%Exchange{body: body}, _rows, _encoding) when body in [nil, ""], do: :skip
+  @spec body(Exchange.t(), map(), String.t() | nil, map()) :: outcome()
+  def body(ex, rows, encoding, fields \\ %{})
 
-  def body(%Exchange{status: status}, _rows, _encoding) when status not in 200..299,
+  def body(%Exchange{body: body}, _rows, _encoding, _fields) when body in [nil, ""], do: :skip
+
+  def body(%Exchange{status: status}, _rows, _encoding, _fields) when status not in 200..299,
     do: {:untrimmed, "HTTP #{status} bodies are kept whole"}
 
-  def body(%Exchange{body: body} = ex, rows, encoding) do
+  def body(%Exchange{body: body} = ex, rows, encoding, fields) do
     text = Charset.decode(body, encoding)
 
     result =
       case kind(ex, text) do
         :xml -> {:untrimmed, "XML bodies are kept whole"}
-        :json -> json(text, rows)
+        :json -> json(text, rows, fields)
         :html -> html(text, rows)
       end
 
@@ -171,11 +174,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
 
   # -- JSON ---------------------------------------------------------------------
 
-  defp json(text, rows) do
+  defp json(text, rows, fields) do
     with {:ok, decoded} <- Jason.decode(text, objects: :ordered_objects),
-         [_ | _] = paths <- json_paths(rows) do
-      case keep_paths(decoded, paths) do
-        {:ok, ^decoded} -> {:untrimmed, "the JSON holds nothing besides the rows path"}
+         [rows_path | _] = paths <- json_paths(rows) do
+      kept =
+        case keep_paths(decoded, paths) do
+          {:ok, kept} -> {:ok, prune_rows(kept, rows_path, read_keys(rows, fields))}
+          :missing -> :missing
+        end
+
+      case kept do
+        {:ok, ^decoded} -> {:untrimmed, "the JSON holds nothing besides the rows it reads"}
         {:ok, kept} -> {:ok, Jason.encode!(kept)}
         :missing -> {:untrimmed, "the JSON rows path is not in the body"}
       end
@@ -228,6 +237,43 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
         if Regex.match?(@simple_path, rest), do: {:ok, String.split(rest, ".")}, else: :complex
     end
   end
+
+  # The JSON keys the definition can read inside a row: every key named in a
+  # field selector (`..title` reads the parent's `title`) and the rows
+  # `attribute`. A row object also carries plot summaries and cast lists no
+  # field reads, full of real names, so everything else goes. `:all` when a
+  # selector is more than dotted keys, since its keys cannot be listed safely.
+  defp read_keys(rows, fields) do
+    selectors =
+      [Map.get(rows, :attribute) | Enum.map(fields, fn {_name, f} -> Map.get(f, :selector) end)]
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+
+    if Enum.all?(selectors, &Regex.match?(@json_selector, &1)),
+      do:
+        selectors |> Enum.flat_map(&Regex.scan(~r/[\w-]+/u, &1)) |> List.flatten() |> MapSet.new(),
+      else: :all
+  end
+
+  defp prune_rows(value, _path, :all), do: value
+
+  defp prune_rows(%Jason.OrderedObject{values: values} = object, [key | rest], keys) do
+    values =
+      for {k, v} <- values,
+          do: if(k == key, do: {k, prune_rows(v, rest, keys)}, else: {k, v})
+
+    %{object | values: values}
+  end
+
+  defp prune_rows(value, [], keys), do: prune_keys(value, keys)
+  defp prune_rows(value, _path, _keys), do: value
+
+  defp prune_keys(%Jason.OrderedObject{values: values}, keys),
+    do: %Jason.OrderedObject{
+      values: for({k, v} <- values, k in keys, do: {k, prune_keys(v, keys)})
+    }
+
+  defp prune_keys(list, keys) when is_list(list), do: Enum.map(list, &prune_keys(&1, keys))
+  defp prune_keys(value, _keys), do: value
 
   # Keeps only the keys on one of `paths`. A path that runs into a non-object
   # keeps that value whole; the rows path itself must exist.

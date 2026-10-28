@@ -12,7 +12,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
   The wasm engine is the reference here because it recorded the capture; the
   native engine has no bearing on whether scrubbing preserved parsing.
 
-  Works come from the titles the wasm engine parsed. Text no field selector
+  Works come from the titles either engine parsed: the wasm engine is the
+  reference, but a row only the native engine reads is still in the page and
+  still names a real work. Text no field selector
   reaches (a sidebar on a page with no rows, a login page) is never learned, so
   trimming is what keeps it out. `seed/3` returns a note for every body it
   writes untrimmed, whatever the reason (`trim: false`, an error status, a page
@@ -25,12 +27,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
 
   alias Mydia.Indexers.Cardigann.Parity.{Capture, RequestKey, Runner}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
-  alias Mydia.Indexers.Cardigann.Parity.Scrubber.{LeakCheck, Names, Trim}
+  alias Mydia.Indexers.Cardigann.Parity.Scrubber.{Ids, LeakCheck, Names, Trim}
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannParser
 
   @size_cap 512 * 1024
-  @min_work_length 3
   # Compared fields, minus the ones that carry the renamed title.
   @struct_fields ~w(size seeders leechers category published_at imdb_id tmdb_id tvdb_id)a
   @metadata_fields ~w(info_hash download_volume_factor upload_volume_factor)a
@@ -52,19 +53,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
   @doc """
   Keeps only the parts of each successful body the definition reads: for HTML,
   the `rows.selector` matches (with their `after:` siblings) and their
-  ancestors; for JSON, the rows path (and `rows.count` path). Failed exchanges,
+  ancestors; for JSON, the rows path (and `rows.count` path), each row cut to
+  the keys a field selector names. Failed exchanges,
   pages with no rows and bodies that cannot be trimmed safely are left whole;
   the last kind comes back as a note.
   """
   @spec trim_with_notes(Capture.t(), Parsed.t()) :: {Capture.t(), [String.t()]}
   def trim_with_notes(%Capture{} = capture, %Parsed{search: search, encoding: encoding}) do
     rows = Map.get(search, :rows, %{})
+    fields = Map.get(search, :fields, %{})
 
     {exchanges, notes} =
       capture.exchanges
       |> Enum.with_index(1)
       |> Enum.map_reduce([], fn {ex, n}, notes ->
-        case Trim.body(ex, rows, encoding) do
+        case Trim.body(ex, rows, encoding, fields) do
           {:ok, body} ->
             {put_body(ex, body), notes}
 
@@ -104,9 +107,12 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     {%{capture | exchanges: exchanges}, works}
   end
 
-  defp rename_exchange(%Exchange{} = ex, matcher) do
-    replace = &Names.replace(&1, matcher)
+  defp rename_exchange(%Exchange{} = ex, matcher),
+    do: map_exchange(ex, &Names.replace(&1, matcher))
 
+  # Applies `replace` to the request URL and body, every header but
+  # content-length, and the body (recomputing content-length).
+  defp map_exchange(%Exchange{} = ex, replace) do
     request =
       RequestKey.new(ex.request.method, replace.(ex.request.url), replace.(ex.request.body))
 
@@ -133,28 +139,34 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
   @doc """
   Checks a scrubbed replay against the original one: the wasm engine finds the
   same number of results, every compared field other than the title-bearing
-  ones (`title download_url info_url guid`) agrees pairwise, no work of three or
-  more characters is left in any body or request URL in any of its forms
-  (ignoring case), and the bodies total at most #{@size_cap} bytes.
+  ones (`title download_url info_url guid`) agrees pairwise (ids and hashes
+  through their stand-ins, given as `ids:`), no work of three or more
+  characters is left in any body, request URL or header (see
+  `LeakCheck.errors/5`), no original id or hash survived, and the bodies total
+  at most #{@size_cap} bytes. `keep:` names category words left as they are.
   """
   @spec verify(Runner.result(), Runner.result(), [String.t()], Capture.t(), keyword()) ::
           :ok | {:error, [String.t()]}
   def verify(original, scrubbed, works, %Capture{} = capture, opts \\ []) do
+    ids = Keyword.get(opts, :ids, %{})
+
     errors =
-      parsing_errors(original, scrubbed) ++
-        leftover_errors(capture, works, opts[:encoding]) ++ size_errors(capture)
+      parsing_errors(original, scrubbed, ids) ++
+        LeakCheck.errors(capture, works, opts[:encoding], ids, Keyword.get(opts, :keep, [])) ++
+        size_errors(capture)
 
     if errors == [], do: :ok, else: {:error, errors}
   end
 
-  defp parsing_errors(original, scrubbed) do
+  defp parsing_errors(original, scrubbed, ids \\ %{}) do
     misses =
       for %RequestKey{url: url} <- scrubbed.wasm_misses, do: "wasm requested unrecorded #{url}"
 
-    misses ++ result_errors(original, scrubbed)
+    misses ++ result_errors(original, scrubbed, ids)
   end
 
-  defp result_errors(%{wasm: {:ok, before}}, %{wasm: {:ok, now}}) do
+  # An id or hash the original yielded must come back as its stand-in.
+  defp result_errors(%{wasm: {:ok, before}}, %{wasm: {:ok, now}}, ids) do
     count =
       if length(before) == length(now),
         do: [],
@@ -163,14 +175,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     fields =
       for {{a, b}, i} <- before |> Enum.zip(now) |> Enum.with_index(1),
           field <- @struct_fields ++ @metadata_fields,
-          not equal?(field, value(a, field), value(b, field)) do
-        "result #{i} #{field}: #{inspect(value(a, field))} became #{inspect(value(b, field))}"
+          expected = Ids.translate(value(a, field), ids),
+          not equal?(field, expected, value(b, field)) do
+        "result #{i} #{field}: #{inspect(expected)} became #{inspect(value(b, field))}"
       end
 
     count ++ fields
   end
 
-  defp result_errors(%{wasm: before}, %{wasm: now}),
+  defp result_errors(%{wasm: before}, %{wasm: now}, _ids),
     do: [
       "wasm outcome changed or failed: #{inspect(before, limit: 5)} -> #{inspect(now, limit: 5)}"
     ]
@@ -187,35 +200,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     do: abs(DateTime.diff(a, b)) <= @date_tolerance_seconds
 
   defp equal?(_field, a, b), do: a == b
-
-  # Two searches: the renamer's own forms, and LeakCheck's normalised text,
-  # which shares none of the renamer's assumptions about how a name is written.
-  defp leftover_errors(capture, works, encoding) do
-    texts =
-      capture.exchanges
-      |> Enum.with_index(1)
-      |> Enum.flat_map(fn {ex, n} ->
-        [{"request #{n} URL", ex.request.url}, {"body #{n}", ex.body || ""}] ++
-          for({k, v} <- ex.headers, do: {"response #{n} header #{k}", v})
-      end)
-      |> Enum.map(fn {label, text} ->
-        {label, Names.fold(text), LeakCheck.normalise(text, encoding)}
-      end)
-
-    errors =
-      for work <- works,
-          String.length(work) >= @min_work_length,
-          needles = Names.needles(work, encoding),
-          reduced = LeakCheck.normalise_work(work),
-          {label, folded, normalised} <- texts,
-          Enum.any?(needles, &String.contains?(folded, &1)) or
-            (String.length(reduced) >= @min_work_length and
-               String.contains?(normalised, reduced)) do
-        "#{label} still contains #{inspect(work)}"
-      end
-
-    Enum.uniq(errors)
-  end
 
   defp size_errors(capture) do
     total = capture.exchanges |> Enum.map(&byte_size(&1.body || "")) |> Enum.sum()
@@ -250,17 +234,51 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     encoding = parsed.encoding
     vocabulary = vocabulary(parsed)
 
-    with {:ok, titles} <- titles(original),
+    with {:ok, titles} <- learned_titles(original),
          :ok <- renamable(titles, vocabulary),
          {:ok, trimmed, notes} <- maybe_trim(capture, parsed, original, opts),
          {renamed, works} = rename(trimmed, titles, encoding: encoding, keep: vocabulary),
-         :ok <- verify(original, Runner.replay(renamed), works, renamed, encoding: encoding) do
+         {scrubbed, ids} = scrub_ids(renamed),
+         :ok <-
+           verify(original, Runner.replay(scrubbed), works, scrubbed,
+             encoding: encoding,
+             ids: ids,
+             keep: vocabulary
+           ) do
       File.mkdir_p!(Path.dirname(kind_dir))
       File.write!(Path.join(Path.dirname(kind_dir), "definition.yml"), yaml)
       File.rm_rf!(kind_dir)
-      Capture.write!(renamed, kind_dir)
-      {:ok, notes ++ kept_notes(titles, vocabulary)}
+      Capture.write!(scrubbed, kind_dir)
+      {:ok, notes ++ binary_notes(scrubbed, encoding) ++ kept_notes(titles, vocabulary)}
     end
+  end
+
+  @doc """
+  Replaces every IMDb id, external id and info hash in the capture (bodies,
+  request URLs, headers) with its stand-in (see `Scrubber.Ids`). Returns the
+  scrubbed capture and the mapping, which `verify/5` takes as `ids:`.
+  """
+  @spec scrub_ids(Capture.t()) :: {Capture.t(), Ids.t()}
+  def scrub_ids(%Capture{} = capture) do
+    ids =
+      capture.exchanges
+      |> Enum.flat_map(fn ex ->
+        [ex.request.url, ex.request.body, ex.body | Enum.map(ex.headers, &elem(&1, 1))]
+      end)
+      |> Ids.collect()
+
+    replace = &Ids.replace(&1, ids)
+    {%{capture | exchanges: Enum.map(capture.exchanges, &map_exchange(&1, replace))}, ids}
+  end
+
+  # The word-sequence pass needs text; a body that is neither UTF-8 nor a clean
+  # round trip through its charset only had the fixed forms renamed.
+  defp binary_notes(capture, encoding) do
+    for {%Exchange{body: body}, n} <- Enum.with_index(capture.exchanges, 1),
+        is_binary(body) and body != "",
+        not Names.text?(body, encoding),
+        do:
+          "exchange #{n}: body is not text in #{encoding || "UTF-8"}; only fixed forms were renamed"
   end
 
   # A work that is also a category the definition maps by name ("SparkyLinux" on
@@ -316,9 +334,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     end
   end
 
-  defp titles(%{wasm: {:ok, results}}), do: {:ok, Enum.map(results, & &1.title)}
+  @doc """
+  The titles to learn work names from: both engines' results, since a row only
+  the native engine parses (the very divergence a fixture exists to keep) still
+  carries a real name. The wasm engine must have succeeded.
+  """
+  @spec learned_titles(Runner.result() | map()) :: {:ok, [String.t()]} | {:error, [String.t()]}
+  def learned_titles(%{wasm: {:ok, results}} = replay) do
+    native =
+      case replay.native do
+        {:ok, native} -> native
+        _ -> []
+      end
 
-  defp titles(%{wasm: other}),
+    {:ok, Enum.map(results ++ native, & &1.title)}
+  end
+
+  def learned_titles(%{wasm: other}),
     do: {:error, ["wasm failed on the original capture: #{inspect(other, limit: 5)}"]}
 
   defp read_capture(dir) do

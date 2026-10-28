@@ -4,6 +4,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.Cardigann.Parity.{Capture, Fictional, RequestKey, Runner, Scrubber}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
+  alias Mydia.Indexers.Cardigann.Parity.Scrubber.Ids
   alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Engine}
 
   @yaml """
@@ -123,7 +124,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       {%Capture{exchanges: [ex]}, ["pebbleos"]} =
         Scrubber.rename(capture([exchange(body)]), ["pebbleos-2031.12-x86_64.iso"])
 
-      fake = Fictional.name("pebbleos")
+      # A one-word work gets a one-word name, so no space lands in a slug.
+      fake = "pebbleos" |> Fictional.name() |> String.replace(" ", "")
       refute ex.body =~ ~r/pebbleos/i
       assert ex.body =~ "<a>#{String.downcase(fake)}-2031.12"
       assert ex.body =~ ~s(<span class="badge">#{fake}</span>)
@@ -157,6 +159,151 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
 
       assert ex.body ==
                "#{Fictional.name("Old Mellow Kiln")} and #{Fictional.name("Mellow Kiln")}"
+    end
+
+    test "renames a work however its words are joined" do
+      body = """
+      <title>Kiln: Pim's Fennel</title>
+      dn=%5BGrp%5D%20Kiln%20Pim&apos;s%20Fennel%20S01E02
+      dn=Kiln%20Pim's%20Fennel!
+      """
+
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange(body)]), ["Kiln Pim's Fennel S01E02 1080p"])
+
+      assert "Kiln Pim's Fennel" in works
+      refute ex.body =~ ~r/kiln|pim|fennel/i
+      [a, b] = "Kiln Pim's Fennel" |> Fictional.name() |> String.split(" ")
+      assert ex.body =~ "%5BGrp%5D%20#{a}%20#{b}%20S01E02"
+    end
+
+    test "renames bracketed, slashed, listed and composed names, and episode titles" do
+      titles = [
+        "[Grp] Quiet Sorrel S02 / Ruhige Sauerampfer - 04 [1080p][WEB-DL][AAC AVC][CHT]",
+        "[Grp][Lumen Vale][03][1080p]",
+        "Tarn Ferry S01E04 1080p CR WEB-DL AAC2.0 x264-Grp (VOSTFR, Tarn no Fune, Ferry Tarn)",
+        "Bosk Hollow S01E02 The Long Way Home 1080p WEB-DL",
+        "Gorse Engine - Nintendo Switch",
+        "[Grp][深井 鏡\\Fukai Kagami\\DEEP MIRROR][BDRip][1080P]"
+      ]
+
+      {_capture, works} = Scrubber.rename(capture([exchange("x")]), titles)
+
+      names = [
+        "Ruhige Sauerampfer",
+        "Lumen Vale",
+        "Tarn no Fune",
+        "Ferry Tarn",
+        "The Long Way Home",
+        "Gorse Engine",
+        "Nintendo Switch",
+        "Fukai Kagami",
+        "DEEP MIRROR"
+      ]
+
+      for name <- names, do: assert(name in works, "#{name} missing from #{inspect(works)}")
+
+      # Release vocabulary and short tags are not names.
+      for tag <- ["VOSTFR", "AAC AVC", "CHT", "Grp", "x264-Grp"],
+          do: refute(tag in works)
+    end
+
+    test "renames a work in a slug that strips or drops its accented letters" do
+      body =
+        "/view/1_Kiln_wa_Mosa_Shindo_04.html /view/2_Kiln_wa_Msa_Shindo_04.html " <>
+          "/view/3_Kiln_wa_M_sa_Shindo_04.html"
+
+      {%Capture{exchanges: [ex]}, _} =
+        Scrubber.rename(capture([exchange(body)]), ["Kiln wa Mōsa Shindo - 04 [1080p]"])
+
+      refute ex.body =~ ~r/kiln|shindo/i
+    end
+
+    test "learns the Latin part of a name written in two scripts, and slugged ×" do
+      body = "/view/1_Kiln_Spirits_4.html /g/drover-x-drover-tide"
+
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange(body)]), [
+          "[Grp] Kiln Spirits 港灣燈塔 [4] - Re [1080P]",
+          "Drover × Drover: Tide - Nintendo Switch"
+        ])
+
+      assert "Kiln Spirits" in works
+      refute ex.body =~ ~r/kiln|spirits|drover/i
+    end
+
+    test "never cuts a CJK work down to a fragment that renames part of another" do
+      body = "Kiln no Gavani: U-17 Harbor Cup"
+
+      {%Capture{exchanges: [ex]}, _} =
+        Scrubber.rename(capture([exchange(body)]), [
+          "新港灣燈塔 U-17 HARBOR CUP 燈塔杯決賽 - 05 [1080P]",
+          "Kiln no Gavani: U-17 Harbor Cup S05E05 1080p"
+        ])
+
+      refute ex.body =~ ~r/kiln|gavani|harbor/i
+      assert ex.body == "Kiln no Gavani: U-17 Harbor Cup" |> Fictional.name()
+    end
+
+    test "never turns a CJK tag into a digits-only spelling that would hit a date" do
+      body = "<span>2026/10/29 01:15</span>"
+
+      {%Capture{exchanges: [ex]}, _} =
+        Scrubber.rename(capture([exchange(body)]), ["[Grp] Kiln wa Mosa [03] [2026年10月番]"])
+
+      assert ex.body == body
+    end
+
+    test "renames a truncated work in a windows-1251 page, taking its whole last word" do
+      body = "Тихая Гавань / Я их настоящих (2031) WEB-DL"
+      cp1251 = Mydia.Indexers.Cardigann.Charset.encode(body, "windows-1251")
+
+      {%Capture{exchanges: [ex]}, _} =
+        Scrubber.rename(capture([exchange(cp1251)]), ["Тихая Гавань / Я их нас …"],
+          encoding: "windows-1251"
+        )
+
+      text = Mydia.Indexers.Cardigann.Charset.decode(ex.body, "windows-1251")
+      refute text =~ "настоящих"
+      refute text =~ "Тихая"
+      assert text =~ "(2031) WEB-DL"
+    end
+
+    test "renames a longer work before a shorter one that starts it" do
+      body = ~s({"title":"Kilnworth 2: Grumme Tide","other":"Kilnworth"})
+
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange(body, type: "application/json")]), [
+          "Kilnworth 2031 1080p",
+          "Kilnworth 2 Grumme Tide 2031 1080p"
+        ])
+
+      assert "Kilnworth" in works and "Kilnworth 2 Grumme Tide" in works
+      refute ex.body =~ ~r/kilnworth|grumme|tide/i
+    end
+
+    test "learns a segment without the numbered prefix a title filter rewrote" do
+      body = "Выпуск 695. Festa na Tihoj Gavani (23.10.2031)"
+
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange(body)]), [
+          "Grumme Club /E695. Festa na Tihoj Gavani (23.10.2031) WEB-DL 1080p"
+        ])
+
+      assert "Festa na Tihoj Gavani" in works
+      refute ex.body =~ ~r/festa|gavani/i
+      assert ex.body =~ "(23.10.2031)"
+    end
+
+    test "cuts a work before a bracketed date, so the date survives renaming" do
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange("Kiln Harbor (21.04.2031) WEB-DL")]), [
+          "Kiln Harbor (21.04.2031) WEB-DL 1080p"
+        ])
+
+      assert "Kiln Harbor" in works
+      refute Enum.any?(works, &String.contains?(&1, "("))
+      assert ex.body =~ ~r/ \(21\.04\.2031\) WEB-DL\z/
     end
 
     test "renames request URLs too, so a followed link still replays" do
@@ -227,6 +374,49 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
              }
     end
 
+    test "cuts JSON rows down to the keys a field selector reads" do
+      yaml =
+        @yaml
+        |> String.replace(
+          "    selector: tr.row\n",
+          "    selector: data.items\n    attribute: files\n"
+        )
+        |> String.replace(~r/  fields:\n.*\z/s, """
+          fields:
+            title:
+              selector: ..name
+            size:
+              selector: bytes
+            seeders:
+              selector: stats.seeds
+        """)
+
+      json =
+        Jason.encode!(%{
+          "data" => %{
+            "items" => [
+              %{
+                "name" => "a",
+                "summary" => "Thimble Gantry, the plot",
+                "stats" => %{"seeds" => 3, "cast" => ["Someone"]},
+                "files" => [%{"bytes" => 10, "note" => "Thimble Gantry"}]
+              }
+            ]
+          }
+        })
+
+      [ex] =
+        Scrubber.trim(capture([exchange(json, type: "application/json")]), parsed(yaml)).exchanges
+
+      assert Jason.decode!(ex.body) == %{
+               "data" => %{
+                 "items" => [
+                   %{"name" => "a", "stats" => %{"seeds" => 3}, "files" => [%{"bytes" => 10}]}
+                 ]
+               }
+             }
+    end
+
     test "does not touch failed exchanges or pages without rows" do
       failed = exchange(@page, status: 500)
       login = exchange("<html><body><form id=login></form></body></html>")
@@ -277,6 +467,79 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
     end
   end
 
+  describe "scrub_ids/1" do
+    @hash "a3023d03c85bf18860ce17fad6f9ee3403d0633b"
+    @upper String.upcase(@hash)
+
+    defp id_body,
+      do: """
+      <a href="magnet:?xt=urn:btih:#{@upper}&dn=x">m</a> /dl/#{@hash}.torrent
+      copy="magnet%3A%3Fxt%3Durn%3Abtih%3A#{@hash}"
+      magnet:?xt=urn:btih:HKIAFWHSKW5ZPADKF5KBWWGSHQHNBOIB&dn=
+      <torznab:attr name="tmdbid" value="2000104642" /><torznab:attr name="size" value="2000104642" />
+      {"imdb_code":"tt200012345","tvdb_id": 2000081189}
+      """
+
+    test "replaces ids and hashes with stable stand-ins, keeping a hash's case" do
+      {%Capture{exchanges: [ex]}, ids} = Scrubber.scrub_ids(capture([exchange(id_body())]))
+
+      standin = Map.fetch!(ids, @hash)
+      assert standin =~ ~r/\A[0-9a-f]{40}\z/ and standin != @hash
+      assert ex.body =~ "btih:#{String.upcase(standin)}&"
+      assert ex.body =~ "/dl/#{standin}.torrent"
+      assert ex.body =~ "btih%3A#{standin}"
+      assert ex.body =~ ~r/btih:[A-Z2-7]{32}&/
+      refute ex.body =~ "HKIAFWHSKW5ZPADKF5KBWWGSHQHNBOIB"
+      assert [_, imdb] = Regex.run(~r/"imdb_code":"(tt\d+)"/, ex.body)
+      assert imdb =~ ~r/\Att2\d{8}\z/
+      assert [_, tmdb] = Regex.run(~r/name="tmdbid" value="(\d+)"/, ex.body)
+      assert tmdb =~ ~r/\A20\d{8}\z/ and String.to_integer(tmdb) < 2_147_483_647
+      refute ex.body =~ ~s(name="tmdbid" value="2000104642")
+      # A size is not an id, even when the number matches.
+      assert ex.body =~ ~s(name="size" value="2000104642")
+      refute ex.body =~ "2000081189"
+      assert content_length(ex) == byte_size(ex.body)
+
+      # Deterministic, and nothing original is left.
+      assert {_, ^ids} = Scrubber.scrub_ids(capture([exchange(id_body())]))
+      assert Ids.leftovers(ex.body, ids) == []
+    end
+
+    test "translates what the original replay yielded" do
+      {_, ids} = Scrubber.scrub_ids(capture([exchange(id_body())]))
+
+      assert Ids.translate(2_000_104_642, ids) == String.to_integer(Map.fetch!(ids, "2000104642"))
+      assert Ids.translate("tt200012345", ids) == Map.fetch!(ids, "tt200012345")
+      assert Ids.translate(@upper, ids) == String.upcase(Map.fetch!(ids, @hash))
+      assert Ids.translate(7, ids) == 7
+    end
+
+    test "verify fails on an original id or hash that survived" do
+      {_, ids} = Scrubber.scrub_ids(capture([exchange(id_body())]))
+      empty = %{wasm: {:ok, []}, wasm_misses: []}
+      cap = capture([exchange("left: tt200012345 and #{@upper}")])
+
+      assert {:error, errors} = Scrubber.verify(empty, empty, [], cap, ids: ids)
+      assert Enum.any?(errors, &(&1 =~ "tt200012345"))
+      assert Enum.any?(errors, &(&1 =~ @hash))
+    end
+  end
+
+  describe "learned_titles/1" do
+    test "takes titles from both engines, so a row only native parses is renamed too" do
+      wasm = %{title: "Mellow Kiln 2031 1080p"}
+      native = %{title: "Drowsy Weir S01E02 720p"}
+
+      assert {:ok, ["Mellow Kiln 2031 1080p", "Drowsy Weir S01E02 720p"]} =
+               Scrubber.learned_titles(%{wasm: {:ok, [wasm]}, native: {:ok, [native]}})
+
+      assert {:ok, ["Mellow Kiln 2031 1080p"]} =
+               Scrubber.learned_titles(%{wasm: {:ok, [wasm]}, native: {:error, :boom}})
+
+      assert {:error, [_]} = Scrubber.learned_titles(%{wasm: {:error, :boom}, native: {:ok, []}})
+    end
+  end
+
   describe "verify/5 leak checks" do
     # No parsing to compare, so these need no engine.
     @empty %{wasm: {:ok, []}, wasm_misses: []}
@@ -302,6 +565,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
     test "finds a work in JSON escapes and named entities" do
       assert {:error, [_]} = leaks(~S({"t":"Café Mellow"}), ["Café Mellow"])
       assert {:error, [_]} = leaks("Caf&eacute; Mellow", ["CAFÉ MELLOW"])
+    end
+
+    test "finds what is left of a work renamed only in part" do
+      assert {:error, [msg]} = leaks("CopperKiln 2: Grumme Tide", ["Kilnworth 2 Grumme Tide"])
+      assert msg =~ "in part: grummetide"
     end
 
     test "finds a work in a response header" do
