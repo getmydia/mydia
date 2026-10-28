@@ -87,6 +87,24 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       assert Repo.get!(MediaItem, ctx.movie.id).library_path_id == ctx.b.id
     end
 
+    test "counts a file whose place in the target is taken as skipped", ctx do
+      rel = "Glass Harbor (2019)/Glass Harbor.mkv"
+      File.mkdir_p!(Path.join(ctx.b.path, "Glass Harbor (2019)"))
+      File.write!(Path.join(ctx.b.path, rel), "the 4K one")
+
+      media_file_fixture(%{
+        library_path_id: ctx.b.id,
+        relative_path: rel,
+        media_item_id: ctx.movie.id
+      })
+
+      {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
+      view |> element("#move-library-button") |> render_click()
+      view |> form("#library-move-form", %{"target" => ctx.b.id}) |> render_change()
+
+      assert has_element?(view, "#library-move-skipped")
+    end
+
     test "with no other library the Move button is disabled", ctx do
       Repo.delete!(ctx.b)
 
@@ -131,7 +149,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       view |> form("#library-move-form", %{"target" => b.id}) |> render_submit()
 
       refute_enqueued(worker: Mydia.Jobs.LibraryMove)
-      assert has_element?(view, "#flash-error")
+      assert has_element?(view, "#flash-error", "permission to move media items")
       assert Repo.get!(MediaItem, movie.id).library_path_id == nil
     end
   end

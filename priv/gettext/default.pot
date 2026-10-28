@@ -226,7 +226,7 @@ msgstr ""
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:128
 #: lib/mydia_web/live/integrations_live/index.html.heex:99
 #: lib/mydia_web/live/jobs_live/components.ex:314
-#: lib/mydia_web/live/library_move_component.ex:246
+#: lib/mydia_web/live/library_move_component.ex:248
 #: lib/mydia_web/live/media_live/index.html.heex:1098
 #: lib/mydia_web/live/media_live/index.html.heex:1128
 #: lib/mydia_web/live/media_live/index.html.heex:1246
@@ -390,7 +390,7 @@ msgstr ""
 #: lib/mydia_web/components/add_media_components.ex:53
 #: lib/mydia_web/components/layouts.ex:205
 #: lib/mydia_web/live/admin_settings_live/labels.ex:23
-#: lib/mydia_web/live/library_move_component.ex:238
+#: lib/mydia_web/live/library_move_component.ex:240
 #: lib/mydia_web/live/media_live/index.html.heex:201
 #, elixir-autogen, elixir-format
 msgid "Library"
@@ -20932,63 +20932,63 @@ msgstr ""
 msgid "Files (CSV)"
 msgstr ""
 
-#: lib/mydia_web/live/library_move_component.ex:269
+#: lib/mydia_web/live/library_move_component.ex:271
 #, elixir-autogen, elixir-format
 msgid "%{count} file, %{size}"
 msgid_plural "%{count} files, %{size}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:204
+#: lib/mydia_web/live/library_move_component.ex:206
 #, elixir-autogen, elixir-format
 msgid "%{count} item could not be moved."
 msgid_plural "%{count} items could not be moved."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:173
+#: lib/mydia_web/live/library_move_component.ex:175
 #, elixir-autogen, elixir-format
 msgid "%{count} item is already in that library."
 msgid_plural "%{count} items are already in that library."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:156
+#: lib/mydia_web/live/library_move_component.ex:158
 #, elixir-autogen, elixir-format
 msgid "%{count} item was not moved: %{library} is not a library for this kind of media."
 msgid_plural "%{count} items were not moved: %{library} is not a library for this kind of media."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:189
+#: lib/mydia_web/live/library_move_component.ex:191
 #, elixir-autogen, elixir-format
 msgid "%{count} item was not moved: a move is already running."
 msgid_plural "%{count} items were not moved: a move is already running."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:181
+#: lib/mydia_web/live/library_move_component.ex:183
 #, elixir-autogen, elixir-format
 msgid "%{count} item was not moved: an import is still running."
 msgid_plural "%{count} items were not moved: an import is still running."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:197
+#: lib/mydia_web/live/library_move_component.ex:199
 #, elixir-autogen, elixir-format
 msgid "%{count} item was not moved: it is outside what your account is allowed to access."
 msgid_plural "%{count} items were not moved: they are outside what your account is allowed to access."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:165
+#: lib/mydia_web/live/library_move_component.ex:167
 #, elixir-autogen, elixir-format
 msgid "%{count} item was not moved: that library is disabled."
 msgid_plural "%{count} items were not moved: that library is disabled."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:274
+#: lib/mydia_web/live/library_move_component.ex:276
 #, elixir-autogen, elixir-format
 msgid "%{hardlinked} hardlinked, %{copied} copied"
 msgstr ""
@@ -21003,12 +21003,12 @@ msgstr ""
 msgid "Library move failed"
 msgstr ""
 
-#: lib/mydia_web/live/library_move_component.ex:255
+#: lib/mydia_web/live/library_move_component.ex:257
 #, elixir-autogen, elixir-format
 msgid "Move"
 msgstr ""
 
-#: lib/mydia_web/live/library_move_component.ex:222
+#: lib/mydia_web/live/library_move_component.ex:224
 #: lib/mydia_web/live/media_live/index.html.heex:996
 #: lib/mydia_web/live/media_live/show.html.heex:167
 #: lib/mydia_web/live/media_live/show.html.heex:173
@@ -21021,14 +21021,26 @@ msgstr ""
 msgid "Moved to library"
 msgstr ""
 
-#: lib/mydia_web/live/library_move_component.ex:135
+#: lib/mydia_web/live/library_move_component.ex:137
 #, elixir-autogen, elixir-format
 msgid "Moving %{count} item to %{library}"
 msgid_plural "Moving %{count} items to %{library}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/library_move_component.ex:225
+#: lib/mydia_web/live/library_move_component.ex:227
 #, elixir-autogen, elixir-format
 msgid "No other library can hold this."
+msgstr ""
+
+#: lib/mydia_web/live/library_move_component.ex:282
+#, elixir-autogen, elixir-format
+msgid "%{count} file will be skipped: another file of this item already has its place there."
+msgid_plural "%{count} files will be skipped: other files of this item already have their places there."
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/live/library_move_component.ex:56
+#, elixir-autogen, elixir-format
+msgid "You do not have permission to move media items"
 msgstr ""

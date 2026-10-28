@@ -50,9 +50,10 @@ defmodule MydiaWeb.Live.LibraryMoveComponent do
       :ok ->
         {:noreply, move(socket)}
 
-      # The refusal flash lands on this component's socket; show it on the page.
+      # The refusal flash lands on this component's socket and speaks of
+      # deleting; show a move-specific one on the page instead.
       {:unauthorized, socket} ->
-        ComponentFlash.put(:error, Phoenix.Flash.get(socket.assigns.flash, :error))
+        ComponentFlash.put(:error, gettext("You do not have permission to move media items"))
         {:noreply, assign(socket, :open?, false)}
     end
   end
@@ -102,6 +103,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponent do
       bytes: sum.(:bytes),
       hardlink: sum.(:hardlink),
       copy: sum.(:copy),
+      skipped: sum.(:skipped),
       examples: []
     }
   end
@@ -274,6 +276,13 @@ defmodule MydiaWeb.Live.LibraryMoveComponent do
         {gettext("%{hardlinked} hardlinked, %{copied} copied",
           hardlinked: @preview.hardlink,
           copied: @preview.copy
+        )}
+      </p>
+      <p :if={@preview.skipped > 0} id="library-move-skipped" class="text-warning">
+        {ngettext(
+          "%{count} file will be skipped: another file of this item already has its place there.",
+          "%{count} files will be skipped: other files of this item already have their places there.",
+          @preview.skipped
         )}
       </p>
       <ul :if={@preview.examples != []} id="library-move-examples" class="space-y-1">
