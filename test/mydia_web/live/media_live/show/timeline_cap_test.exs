@@ -1,8 +1,7 @@
 defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
   @moduledoc """
-  The rail renders at most five events collapsed. That cap is not cosmetic:
-  it is what keeps the rail shorter than the viewport, which is the only
-  condition under which its `sticky` pins instead of sliding off the top.
+  The rail renders at most five events collapsed, and everything when
+  expanded, with a control that counts what is hidden.
   """
 
   # Connected LiveView tests cannot be async under the PostgreSQL sandbox.

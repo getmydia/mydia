@@ -176,7 +176,7 @@ defmodule MydiaWeb.Layouts do
 
           <%!-- Navigation menu --%>
           <nav class="flex-1 min-h-0 overflow-y-auto">
-            <ul class="menu w-full space-y-1 px-2 py-4">
+            <ul class="menu w-full space-y-1 px-2 pt-4 pb-6">
               <.nav_item
                 id="nav-home"
                 path="/"
@@ -312,6 +312,16 @@ defmodule MydiaWeb.Layouts do
                 />
               <% end %>
             </ul>
+            <%!-- Bottom fade, so a list cut off by the footer reads as one
+                  that continues. Sticky inside the scroller, it rides the
+                  bottom edge until the list's end scrolls up to meet it, where
+                  it covers only the list's pb-6. --%>
+            <div
+              id="sidebar-nav-fade"
+              aria-hidden="true"
+              class="pointer-events-none sticky bottom-0 -mt-6 h-6 bg-gradient-to-t from-base-300"
+            >
+            </div>
           </nav>
 
           <.running_jobs

@@ -13,6 +13,8 @@ defmodule MydiaWeb.SidebarComponents do
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
+  alias Phoenix.LiveView.JS
+
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
     router: MydiaWeb.Router,
@@ -78,21 +80,50 @@ defmodule MydiaWeb.SidebarComponents do
 
   attr :executing_jobs, :list, required: true, doc: "maps with a :worker_name"
 
-  @doc "The admin card listing jobs executing right now, linked to Background Jobs."
+  @doc """
+  The admin running-jobs line: one collapsed row ("N jobs running") that expands
+  on click into the job list, linked to Background Jobs.
+
+  Collapsed by default so the sidebar footer stops jumping by a whole card's
+  height as jobs start and finish, which pushed nav items out of view at 1080p.
+  The open state is client-only (`JS.toggle`); LiveView keeps a JS command's DOM
+  change across patches, so a job broadcast does not collapse it again.
+  """
   def running_jobs(assigns) do
     ~H"""
-    <div :if={@executing_jobs != []} class="px-4 py-2 border-t border-base-content/10">
+    <div
+      :if={@executing_jobs != []}
+      id="sidebar-running-jobs-panel"
+      class="px-4 py-1.5 border-t border-base-content/10"
+    >
+      <button
+        type="button"
+        id="sidebar-running-jobs-toggle"
+        aria-expanded="false"
+        aria-controls="sidebar-running-jobs"
+        phx-click={
+          JS.toggle(to: "#sidebar-running-jobs", display: "block")
+          |> JS.toggle_class("rotate-180", to: "#sidebar-running-jobs-chevron")
+          |> JS.toggle_attribute({"aria-expanded", "true", "false"})
+        }
+        class="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium hover:bg-base-200 transition-colors"
+      >
+        <span class="loading loading-spinner loading-xs text-primary"></span>
+        <span class="flex-1 text-left">
+          {ngettext("%{count} job running", "%{count} jobs running", length(@executing_jobs))}
+        </span>
+        <.icon
+          id="sidebar-running-jobs-chevron"
+          name="hero-chevron-up"
+          class="w-3 h-3 opacity-60 transition-transform"
+        />
+      </button>
       <.link
         id="sidebar-running-jobs"
         navigate={~p"/admin/jobs"}
-        class="block bg-base-200 rounded-lg p-2 hover:bg-base-100 transition-colors"
+        class="hidden mt-1 bg-base-200 rounded-lg p-2 hover:bg-base-100 transition-colors"
       >
-        <div class="flex items-center gap-2 text-sm font-medium mb-1">
-          <span class="loading loading-spinner loading-xs text-primary"></span>
-          <span>{gettext("Running Jobs")}</span>
-          <span class="badge badge-primary badge-xs">{length(@executing_jobs)}</span>
-        </div>
-        <ul class="text-xs opacity-70 space-y-0.5 pl-5">
+        <ul class="text-xs opacity-70 space-y-0.5">
           <li :for={job <- Enum.take(@executing_jobs, 3)} class="truncate">{job.worker_name}</li>
           <li :if={length(@executing_jobs) > 3} class="text-primary">
             {gettext("+%{count} more...", count: length(@executing_jobs) - 3)}

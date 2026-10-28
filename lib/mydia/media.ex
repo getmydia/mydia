@@ -83,6 +83,7 @@ defmodule Mydia.Media do
 
   defdelegate monitoring_presets(), to: Mydia.Media.Monitoring
   defdelegate derive_monitoring_preset(episodes), to: Mydia.Media.Monitoring
+  defdelegate monitoring_preview(episodes), to: Mydia.Media.Monitoring
   defdelegate apply_episode_monitoring(media_item, preset), to: Mydia.Media.Monitoring
   defdelegate set_monitor_new_seasons(media_item, mode), to: Mydia.Media.Monitoring
   defdelegate season_monitoring_state(episodes), to: Mydia.Media.Monitoring

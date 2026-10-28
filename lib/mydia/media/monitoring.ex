@@ -9,6 +9,7 @@ defmodule Mydia.Media.Monitoring do
   alias Mydia.Accounts.Scope
   alias Mydia.Media.{Episode, Episodes, Items, MediaItem}
   alias Mydia.Events
+  alias Mydia.Library.MediaFile
 
   @doc """
   Updates the monitored status for all episodes in a season.
@@ -83,6 +84,24 @@ defmodule Mydia.Media.Monitoring do
   end
 
   @doc """
+  Counts how many episodes each preset would monitor if it were applied now.
+
+  Runs the same partition `apply_episode_monitoring/2` uses, so the preview
+  and the write cannot disagree. The menu uses it to disable a preset that
+  would monitor nothing, such as `:future` on a show with no unaired episodes,
+  which otherwise reads back as `:none` and looks like the click was ignored.
+
+  Pure: takes episodes with `media_files` preloaded, issues no query.
+  """
+  @spec monitoring_preview([Episode.t()]) :: %{atom() => non_neg_integer()}
+  def monitoring_preview(episodes) do
+    Map.new(@monitoring_presets, fn preset ->
+      {to_monitor, _} = partition_episodes_by_preset(episodes, preset)
+      {preset, length(to_monitor)}
+    end)
+  end
+
+  @doc """
   Applies a monitoring preset to the episodes of a TV show.
 
   A one-shot bulk rewrite of `episodes.monitored`, and nothing else. The show
@@ -117,7 +136,14 @@ defmodule Mydia.Media.Monitoring do
   def apply_episode_monitoring(%MediaItem{type: "tv_show"} = media_item, preset)
       when preset in @monitoring_presets do
     Repo.transaction(fn ->
-      episodes = Episodes.list_episodes(Scope.system(), media_item.id, preload: [:media_files])
+      # Untrashed files only, extras included: the same set the show page
+      # preloads for the menu preview, so a trashed file can neither make an
+      # episode count as "existing" here nor disagree with the preview count.
+      episodes =
+        Episodes.list_episodes(Scope.system(), media_item.id,
+          preload: [media_files: MediaFile.active()]
+        )
+
       {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
 
       written =

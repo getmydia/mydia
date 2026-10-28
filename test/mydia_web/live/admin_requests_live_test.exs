@@ -265,4 +265,103 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       assert rendered =~ "Approved automatically on"
     end
   end
+
+  describe "who requested, approved and rejected" do
+    defp request_by(user, title) do
+      {:ok, request} =
+        MediaRequests.create_request(Scope.unrestricted(), %{
+          media_type: "movie",
+          title: title,
+          tmdb_id: System.unique_integer([:positive]),
+          requester_id: user.id
+        })
+
+      request
+    end
+
+    test "shows the requester's display name, with the email as a tooltip", %{conn: conn} do
+      user = create_test_user(%{role: "guest", display_name: "Wren Halloway"})
+      request = request_by(user, "The Lanternkeeper's Ledger")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(view, "strong#request-#{request.id}-requester", "Wren Halloway")
+      assert has_element?(view, ~s(strong#request-#{request.id}-requester[title="#{user.email}"]))
+    end
+
+    test "falls back to the username when there is no display name", %{conn: conn} do
+      user = create_test_user(%{role: "guest"})
+      request = request_by(user, "Saltmarsh Signals")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(view, "strong#request-#{request.id}-requester", user.username)
+    end
+
+    test "names an SSO requester who has no email", %{conn: conn} do
+      {:ok, user} =
+        Mydia.Accounts.upsert_user_from_oidc("sub-no-email", "https://sso.example.test", %{
+          display_name: "Osric Vane",
+          role: "guest"
+        })
+
+      assert user.email == nil
+      request = request_by(user, "Glasshouse Nocturne")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(view, "strong#request-#{request.id}-requester", "Osric Vane")
+      refute has_element?(view, "strong#request-#{request.id}-requester[title]")
+    end
+
+    test "names the admin who approved", %{conn: conn, request: request} do
+      # Not the logged-in admin, so the name can only come from approved_by.
+      approver = create_admin_user(%{display_name: "Corvin Ashdale"})
+      library_path_fixture(%{type: "movies"})
+
+      {:ok, _} =
+        MediaRequests.approve_request(Scope.unrestricted(), request, %{
+          approved_by_id: approver.id
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=approved")
+
+      assert has_element?(view, "strong#request-#{request.id}-approver", "Corvin Ashdale")
+    end
+
+    test "names the admin who rejected", %{conn: conn, request: request} do
+      admin = create_admin_user(%{display_name: "Thessaly Moor"})
+
+      {:ok, _} =
+        MediaRequests.reject_request(request, %{
+          approved_by_id: admin.id,
+          rejection_reason: "duplicate"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=rejected")
+
+      assert has_element?(view, "strong#request-#{request.id}-rejecter", "Thessaly Moor")
+    end
+
+    test "a translation naming the user twice shows two names, one id" do
+      alias MydiaWeb.AdminRequestsLive.Components
+
+      user = create_test_user(%{role: "guest", display_name: "Ilsabet Crane"})
+      marker = Components.name_marker()
+
+      html =
+        render_component(&Components.user_sentence/1,
+          id: "twice-requester",
+          user: user,
+          sentence: "#{marker} asked; #{marker} is waiting"
+        )
+
+      names = html |> LazyHTML.from_fragment() |> LazyHTML.query("strong")
+
+      assert Enum.count(names) == 2
+      assert Enum.map(names, &LazyHTML.text/1) == ["Ilsabet Crane", "Ilsabet Crane"]
+      assert names |> LazyHTML.attribute("id") == ["twice-requester"]
+      refute html =~ marker
+    end
+  end
 end

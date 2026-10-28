@@ -87,7 +87,9 @@ defmodule MydiaWeb.AddMediaComponents do
     </div>
     <%!-- Monitoring --%>
     <div class="form-control mb-4">
-      <label class="label cursor-pointer justify-start gap-4">
+      <%!-- whitespace-normal: daisyUI 5 .label is nowrap, which pushed the
+            helper line past the dialog's edge on a phone. --%>
+      <label class="label cursor-pointer justify-start gap-4 whitespace-normal">
         <input type="hidden" name="config[monitored]" value="false" />
         <input
           type="checkbox"
@@ -133,7 +135,7 @@ defmodule MydiaWeb.AddMediaComponents do
     <%= if @show_search_on_add do %>
       <%!-- Search on Add --%>
       <div class="form-control mb-6">
-        <label class="label cursor-pointer justify-start gap-4">
+        <label class="label cursor-pointer justify-start gap-4 whitespace-normal">
           <input type="hidden" name="config[search_on_add]" value="false" />
           <input
             type="checkbox"
@@ -185,7 +187,13 @@ defmodule MydiaWeb.AddMediaComponents do
       phx-window-keydown={@config && "close_add_config"}
       phx-key="Escape"
     >
-      <div :if={@config} class="modal-box max-w-2xl">
+      <%!-- Bounded to the dynamic viewport and scrollable, so Add to Library
+            stays reachable under a mobile browser's toolbars. --%>
+      <div
+        :if={@config}
+        id="add-config-modal-box"
+        class="modal-box max-w-2xl max-h-[90dvh] overflow-y-auto"
+      >
         <h3 class="font-bold text-lg mb-4">
           {gettext("Configure Before Adding")}
         </h3>
@@ -202,7 +210,10 @@ defmodule MydiaWeb.AddMediaComponents do
             <h4 class="font-bold text-base">{@config.preview.title}</h4>
             <p class="text-sm text-base-content/70">{format_year(@config.preview)}</p>
             <%= if @config.preview.overview do %>
-              <p class="text-xs text-base-content/60 mt-2 line-clamp-3">
+              <p
+                id="add-config-preview-overview"
+                class="max-sm:hidden text-xs text-base-content/60 mt-2 line-clamp-3"
+              >
                 {@config.preview.overview}
               </p>
             <% end %>

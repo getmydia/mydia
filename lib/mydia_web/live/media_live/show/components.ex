@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     only: [transcode_controls: 1, transcode_badge: 1, available_transcode_resolutions: 2]
 
   alias MydiaWeb.MediaLive.Show.LibraryComponents
+  alias MydiaWeb.MediaLive.Show.MonitoringMenu
   alias MydiaWeb.MediaLive.Show.SegmentComponents
   alias MydiaWeb.MediaLive.Show.SeasonComponents
   alias MydiaWeb.MediaLive.Show.SeasonOrderComponents
@@ -63,8 +64,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           genuinely covered while scrolled. So below lg the column pins
           beneath the header's 64px instead of at top-4, and max-h shrinks by
           the same amount so the bottom stays reachable inside the viewport;
-          at lg the header is gone and both revert to the plain top-4. --%>
-    <div class="md:sticky md:self-start md:overflow-y-auto md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          at lg the header is gone and both revert to the plain top-4.
+
+          overscroll-contain stops a wheel that reaches this column's end
+          from scrolling the page underneath. At @7xl none of the above
+          applies: show.html.heex binds the grid to the viewport and every
+          column scrolls on its own, so the column stretches to the row and
+          drops sticky and its max-height. --%>
+    <div class="md:sticky md:self-start md:overflow-y-auto md:overscroll-contain md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)] @7xl:static @7xl:self-stretch @7xl:max-h-none">
       <%!-- Poster - centered and smaller on mobile --%>
       <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full">
         <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-box">
@@ -344,8 +351,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         {get_overview(@media_item)}
       </p>
 
-      <%!-- Action buttons for trailer and cast --%>
-      <div class="flex items-center gap-2 flex-shrink-0">
+      <%!-- Action buttons for trailer and cast. ml-auto keeps them on the right
+            edge when the row wraps them onto their own line, so the Cast
+            dropdown-end panel opens leftward and stays on screen. --%>
+      <div class="flex items-center gap-2 flex-shrink-0 ml-auto">
         <%= if @trailer_url do %>
           <button
             id="trailer-button"
@@ -372,7 +381,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </div>
             <div
               tabindex="0"
-              class="dropdown-content z-50 card card-compact w-72 p-2 shadow-xl bg-base-100 border border-base-300"
+              class="dropdown-content z-50 card card-compact w-72 max-w-[calc(100vw-2rem)] p-2 shadow-xl bg-base-100 border border-base-300"
             >
               <div class="card-body p-3">
                 <%= if @crew != [] do %>
@@ -446,19 +455,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :can_update_media, :boolean, required: true
 
   def episodes_section(assigns) do
-    # The list of valid presets is Media.monitoring_presets/0; the labels are
-    # resolved here, at render time, so they follow the current locale.
-    assigns =
-      assign(
-        assigns,
-        :monitoring_presets,
-        Enum.map(Mydia.Media.monitoring_presets(), &{&1, monitoring_preset_label(&1)})
-      )
-
     ~H"""
     <%= if @media_item.type == "tv_show" && length(@media_item.episodes) > 0 do %>
-      <% grouped_seasons = group_episodes_by_season(@media_item.episodes)
-      derived_preset = Mydia.Media.derive_monitoring_preset(@media_item.episodes) %>
+      <% grouped_seasons = group_episodes_by_season(@media_item.episodes) %>
 
       <div id="seasons-episodes-section" class="card bg-base-200 shadow-lg">
         <%!-- Card header with stats --%>
@@ -506,36 +505,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <span>{gettext("New seasons")}</span>
               </label>
 
-              <%!-- One-shot bulk actions. The label reads the episode rows
-                    back rather than storing what was picked, so a manual
-                    season toggle shows as Custom instead of going stale. --%>
-              <div class="dropdown dropdown-end">
-                <div
-                  tabindex="0"
-                  role="button"
-                  id="episode-monitoring-menu"
-                  class="btn btn-sm btn-ghost gap-1"
-                >
-                  <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
-                  <span>{monitoring_preset_label(derived_preset)}</span>
-                  <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
-                </div>
-                <ul
-                  tabindex="0"
-                  class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56 border border-base-300"
-                >
-                  <li :for={{preset, label} <- @monitoring_presets}>
-                    <button
-                      type="button"
-                      id={"episode-monitoring-menu-preset-#{preset}"}
-                      phx-click="apply_episode_monitoring"
-                      phx-value-preset={preset}
-                    >
-                      {label}
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <%!-- One-shot bulk actions. --%>
+              <MonitoringMenu.episode_monitoring_menu episodes={@media_item.episodes} />
             </div>
           </div>
           <SegmentComponents.segment_unavailable_note :if={
@@ -755,90 +726,106 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       >
         <.icon name="hero-information-circle" class={@icon} />
       </button>
-      <div class="dropdown dropdown-end z-20">
-        <div
-          tabindex="0"
-          role="button"
-          class={@square}
-          aria-label={gettext("More file actions")}
-          title={gettext("More")}
-        >
-          <.icon name="hero-ellipsis-horizontal" class={@icon} />
-        </div>
-        <ul
-          id={"file-actions-menu-#{@file.id}"}
-          tabindex="0"
-          class="dropdown-content menu bg-base-100 rounded-box w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
-        >
-          <li>
+      <%!-- Native popover plus CSS anchor positioning, the pattern
+            #downloads-more uses. The menu renders in the top layer, so the
+            scrolling main column of the three-column layout cannot clip it
+            and no card badge can paint over it (#1107). flip-block opens it
+            upward when the row sits near the bottom of the viewport. --%>
+      <button
+        id={"file-actions-more-#{@file.id}"}
+        type="button"
+        class={@square}
+        popovertarget={"file-actions-menu-#{@file.id}"}
+        style={"anchor-name:--file-actions-#{@file.id}"}
+        aria-label={gettext("More file actions")}
+        title={gettext("More")}
+      >
+        <.icon name="hero-ellipsis-horizontal" class={@icon} />
+      </button>
+      <ul
+        id={"file-actions-menu-#{@file.id}"}
+        popover
+        class="dropdown dropdown-end menu bg-base-100 rounded-box w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
+        style={"position-anchor:--file-actions-#{@file.id};position-try-fallbacks:flip-block"}
+      >
+        <li>
+          <button
+            id={"mark-preferred-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="mark_file_preferred"
+            phx-value-file-id={@file.id}
+            class="gap-2"
+          >
+            <.icon name="hero-star" class="w-4 h-4" /> {gettext("Mark as preferred")}
+          </button>
+        </li>
+        <%= if @resolutions != [] do %>
+          <li class="menu-title">{gettext("Pre-transcode")}</li>
+          <li :for={res <- @resolutions}>
             <button
-              id={"mark-preferred-#{@file.id}"}
+              id={"pre-transcode-#{@file.id}-#{res}"}
               type="button"
-              phx-click={JS.push("mark_file_preferred") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
+              popovertarget={"file-actions-menu-#{@file.id}"}
+              popovertargetaction="hide"
+              phx-click="pre_transcode"
+              phx-value-media-file-id={@file.id}
+              phx-value-resolution={res}
               class="gap-2"
             >
-              <.icon name="hero-star" class="w-4 h-4" /> {gettext("Mark as preferred")}
+              <.icon name="hero-wrench" class="w-4 h-4" /> {res}
             </button>
           </li>
-          <%= if @resolutions != [] do %>
-            <li class="menu-title">{gettext("Pre-transcode")}</li>
-            <li :for={res <- @resolutions}>
-              <button
-                id={"pre-transcode-#{@file.id}-#{res}"}
-                type="button"
-                phx-click={JS.push("pre_transcode") |> JS.dispatch("mydia:blur")}
-                phx-value-media-file-id={@file.id}
-                phx-value-resolution={res}
-                class="gap-2"
-              >
-                <.icon name="hero-wrench" class="w-4 h-4" /> {res}
-              </button>
-            </li>
-          <% end %>
-          <li class="divider my-1"></li>
-          <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
+        <% end %>
+        <li class="divider my-1"></li>
+        <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
                 icon everywhere else in the app. --%>
-          <li :if={@demotable?}>
-            <button
-              id={"demote-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("demote_to_extra") |> JS.dispatch("mydia:blur")}
-              phx-value-id={@file.id}
-              class="gap-2"
-            >
-              <.icon name="hero-chevron-double-down" class="w-4 h-4" /> {gettext("Move to extras")}
-            </button>
-          </li>
-          <%!-- Recovery for a file the matcher attached to the wrong item.
+        <li :if={@demotable?}>
+          <button
+            id={"demote-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="demote_to_extra"
+            phx-value-id={@file.id}
+            class="gap-2"
+          >
+            <.icon name="hero-chevron-double-down" class="w-4 h-4" /> {gettext("Move to extras")}
+          </button>
+        </li>
+        <%!-- Recovery for a file the matcher attached to the wrong item.
                 The file is fine; it is filed against the wrong thing, so
                 Delete is the wrong answer. --%>
-          <li>
-            <button
-              id={"not-this-item-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("not_this_item") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
-              class="gap-2"
-              aria-label={not_this_item_aria_label(@item_label)}
-            >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
-            </button>
-          </li>
-          <li class="divider my-1"></li>
-          <li>
-            <button
-              id={"file-delete-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("show_file_delete_confirm") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
-              class="gap-2 text-error"
-            >
-              <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete file")}
-            </button>
-          </li>
-        </ul>
-      </div>
+        <li>
+          <button
+            id={"not-this-item-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="not_this_item"
+            phx-value-file-id={@file.id}
+            class="gap-2"
+            aria-label={not_this_item_aria_label(@item_label)}
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
+          </button>
+        </li>
+        <li class="divider my-1"></li>
+        <li>
+          <button
+            id={"file-delete-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="show_file_delete_confirm"
+            phx-value-file-id={@file.id}
+            class="gap-2 text-error"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete file")}
+          </button>
+        </li>
+      </ul>
     </div>
     """
   end
@@ -1113,17 +1100,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   It renders nothing at all on an item with no events, which is why the page
   grid picks its column template from `@timeline_events != []`.
 
-  Collapsed, it renders at most five events. That cap is load-bearing rather
-  than cosmetic: `position: sticky` only pins usefully on an element shorter
-  than the viewport, and the rail used to be `max-h-[calc(100vh-2rem)]` with
-  an inner `overflow-y-auto` over as many as 50 events. Measured on the
-  shipped layout, its top offset ran 64 at rest, 0 mid-scroll and -48 at the
-  page bottom, so the heading scrolled off the top and never held. Five dense
-  rows measure 506px, which fits a 768px-tall laptop.
-
-  Expanded, it renders everything it was given, and show.html.heex drops the
-  `sticky` classes, because a taller-than-viewport sticky element has a
-  permanently unreachable bottom.
+  Collapsed, it renders at most five events (five dense rows measure 506px).
+  Expanded, it renders everything it was given. At the three-column width the
+  rail scrolls inside its own column rather than being sticky, so either state
+  keeps its bottom reachable; see show.html.heex.
   """
   @timeline_visible_count 5
 
@@ -1153,8 +1133,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">{gettext("History")}</h2>
           <div class="relative">
             <%!-- The spine. Inset to the centre of the 32px icon nodes below
-                  (left-4 is 16px), so every node sits on it. --%>
-            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-base-300"></div>
+                  (left-4 is 16px), so every node sits on it. Spine and node
+                  ring derive from base-content, not base-300: dark themes
+                  disagree on whether base-300 is lighter or darker than the
+                  base-200 card, and on Catppuccin it vanished. --%>
+            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-base-content/15"></div>
 
             <div class="flex flex-col gap-3">
               <div
@@ -1162,7 +1145,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 class="relative flex items-start gap-3"
               >
                 <%!-- Icon node on the spine --%>
-                <div class="w-8 h-8 rounded-full bg-base-200 flex items-center justify-center border-2 border-base-300 shrink-0 z-10">
+                <div class="w-8 h-8 rounded-full bg-base-100 flex items-center justify-center border-2 border-base-content/20 shrink-0 z-10">
                   <.icon name={event.icon} class={"w-4 h-4 #{event.color}"} />
                 </div>
 
@@ -1237,10 +1220,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     <% end %>
     """
   end
-
-  # Helper functions for monitoring preset labels
-
-  # monitoring_preset_label/1 is provided by MydiaWeb.MediaLive.Show.Helpers (imported above)
 
   attr :id, :string, required: true
   attr :media_item, :map, required: true

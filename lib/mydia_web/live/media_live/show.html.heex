@@ -50,12 +50,23 @@
           Measured with container-type: inline-size on this element, both a
           plain z-50 element and a daisyUI dropdown-content z-50 still win
           elementFromPoint over the sidebar, identically to the uncontained
-          control. --%>
+          control.
+
+          At @7xl the grid is bound to the viewport and each column scrolls on
+          its own (overflow-y-auto, overscroll-contain), instead of the side
+          columns riding the page scroll until they pin. 9rem is the vertical
+          chrome around the grid at that width: main's lg:p-8 top and bottom,
+          this wrapper's lg:pt-8 and pb-8, and the outer mb-4 (32 * 4 + 16), so
+          the page itself has nothing left to scroll. A changelog banner above
+          adds its own height, which the page then scrolls by. Below @7xl
+          nothing changes: the hero pins from md and History is a full-width
+          row. --%>
     <div class="@container relative pt-5 sm:pt-4 md:pt-10 lg:pt-8 pb-8">
       <div
         id="page-grid"
         class={[
           "grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]",
+          "@7xl:h-[calc(100dvh-9rem)] @7xl:grid-rows-[minmax(0,1fr)]",
           if(@timeline_events == [],
             do: "@7xl:grid-cols-[20rem_minmax(0,1fr)]",
             else: "@7xl:grid-cols-[20rem_minmax(0,1fr)_20rem]"
@@ -79,8 +90,15 @@
           target_reason={@target_reason}
           target_library_candidates={@target_library_candidates}
         />
-        <%!-- Right Column: Main Content --%>
-        <div id="main-column" class="min-w-0">
+        <%!-- Right Column: Main Content. overflow-x-hidden at @7xl: a scroll
+              container clips every side anyway, and without it a hidden
+              tooltip at the right edge drew a permanent horizontal scrollbar.
+              Menus that can reach the column's edge use a top-layer popover
+              (see file_actions/1). --%>
+        <div
+          id="main-column"
+          class="min-w-0 @7xl:overflow-y-auto @7xl:overflow-x-hidden @7xl:overscroll-contain"
+        >
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
             <div class="flex items-start justify-between gap-2 md:gap-4 mb-2">
@@ -114,9 +132,9 @@
                   <button
                     type="button"
                     phx-click="refresh_metadata"
-                    class="btn btn-ghost btn-sm btn-square"
+                    class="btn btn-ghost btn-sm 2xl:btn-md btn-square"
                   >
-                    <.icon name="hero-arrow-path" class="w-4 h-4" />
+                    <.icon name="hero-arrow-path" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                   </button>
                 </div>
                 <div class="tooltip tooltip-bottom" data-tip={gettext("Fix match")}>
@@ -124,10 +142,10 @@
                     id="fix-match-button"
                     type="button"
                     phx-click="open_fix_match"
-                    class="btn btn-ghost btn-sm btn-square"
+                    class="btn btn-ghost btn-sm 2xl:btn-md btn-square"
                     aria-label={gettext("Fix match: this is the wrong title")}
                   >
-                    <.icon name="hero-pencil-square" class="w-4 h-4" />
+                    <.icon name="hero-magnifying-glass" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                   </button>
                 </div>
                 <%= if @media_item.type == "tv_show" && has_media_files?(@media_item) do %>
@@ -135,9 +153,9 @@
                     <button
                       type="button"
                       phx-click="rescan_series"
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-sm 2xl:btn-md btn-square"
                     >
-                      <.icon name="hero-folder-arrow-down" class="w-4 h-4" />
+                      <.icon name="hero-folder-arrow-down" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                     </button>
                   </div>
                 <% end %>
@@ -146,9 +164,9 @@
                     <button
                       type="button"
                       phx-click="rescan_movie"
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-sm 2xl:btn-md btn-square"
                     >
-                      <.icon name="hero-folder-arrow-down" class="w-4 h-4" />
+                      <.icon name="hero-folder-arrow-down" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                     </button>
                   </div>
                 <% end %>
@@ -158,21 +176,23 @@
                       id="rename-files-button"
                       type="button"
                       phx-click="show_rename_modal"
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-sm 2xl:btn-md btn-square"
                       aria-label={gettext("Rename files")}
                     >
-                      <.icon name="hero-pencil-square" class="w-4 h-4" />
+                      <.icon name="hero-document-text" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                     </button>
                   </div>
                 <% end %>
-                <div class="tooltip tooltip-bottom" data-tip={gettext("Delete")}>
+                <%!-- tooltip-left: the rightmost button, so a centred tooltip
+                      would run past the column's right edge. --%>
+                <div class="tooltip tooltip-left" data-tip={gettext("Delete")}>
                   <button
                     id="delete-media-button"
                     type="button"
                     phx-click="show_delete_confirm"
-                    class="btn btn-ghost btn-sm btn-square text-base-content/50 hover:text-error"
+                    class="btn btn-ghost btn-sm 2xl:btn-md btn-square text-base-content/50 hover:text-error"
                   >
-                    <.icon name="hero-trash" class="w-4 h-4" />
+                    <.icon name="hero-trash" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                   </button>
                 </div>
               </div>
@@ -381,19 +401,15 @@
               other columns. One DOM node serves both layouts, so there is no
               hidden/@7xl:block duplicate.
 
-              No max-height and no inner scroll. The rail used to be
-              max-h-[calc(100vh-2rem)] with overflow-y-auto over as many as 50
-              events, which put a third vertical scrollbar on screen next to
-              the poster column's and the page's, and its sticky still never
-              pinned: measured top offsets were 64 at rest, 0 mid-scroll and
-              -48 at the page bottom. Capping the collapsed render at five
-              dense rows makes the rail 506px, short enough that sticky pins
-              for the whole page instead.
-
-              The sticky classes come off when expanded. A sticky element
-              taller than the viewport has a permanently unreachable bottom,
-              so an expanded rail scrolls with the page like an ordinary
-              column.
+              Not sticky. It used to be a sticky max-h-[calc(100vh-2rem)]
+              overflow-y-auto box next to a sticky poster column and the page
+              scroll, and its sticky never pinned: measured top offsets were 64
+              at rest, 0 mid-scroll and -48 at the page bottom. At @7xl it now
+              scrolls inside its own column like the other two (see the grid
+              above), so nothing rides the page scroll and an expanded rail's
+              bottom stays reachable. The five-event collapsed cap stays: it
+              keeps the rail short enough to read at a glance. Below @7xl it is
+              an ordinary full-width row, collapsed or expanded.
 
               The :if here is load-bearing alongside the grid template's own
               @timeline_events == [] conditional above, and neither one makes
@@ -410,10 +426,7 @@
         <aside
           :if={@timeline_events != []}
           id="history-rail"
-          class={[
-            "md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1",
-            !@timeline_expanded && "@7xl:sticky @7xl:top-4 @7xl:self-start"
-          ]}
+          class="md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1 @7xl:overflow-y-auto @7xl:overscroll-contain"
         >
           <Components.timeline_section
             timeline_events={@timeline_events}

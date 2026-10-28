@@ -12,6 +12,10 @@ defmodule MydiaWeb.Features.HistoryRailTest do
 
   The rail's `sticky` also never pinned. Measured top offsets at 1300px were
   64 at rest, 0 mid-scroll and -48 at the page bottom, never the intended 16.
+  Past the threshold the grid is now bound to the viewport and every column
+  scrolls on its own, so the rail has nothing to pin against: the contract is
+  that the page does not scroll and the rail stays put while the main column
+  does.
 
   A class-presence assertion cannot see any of that: the class was always
   there. This asks the browser for real rectangles at two window sizes.
@@ -58,6 +62,28 @@ defmodule MydiaWeb.Features.HistoryRailTest do
   const r = rail.getBoundingClientRect();
   if (r.width < 1 || r.height < 1) { return 'rail has no size'; }
   return [Math.round(r.height), document.documentElement.clientHeight];
+  """
+
+  @rail_overflow """
+  const rail = document.querySelector('#history-rail');
+  if (!rail) { return 'no rail rendered'; }
+  return getComputedStyle(rail).overflowY;
+  """
+
+  # Document scroll height, viewport height.
+  @page_height """
+  const doc = document.documentElement;
+  return [doc.scrollHeight, doc.clientHeight];
+  """
+
+  # Scrolls the main column to its bottom and reports how far it moved, then
+  # the page's own scroll offset, which must stay 0.
+  @scroll_main_column """
+  const col = document.querySelector('#main-column');
+  if (!col) { return 'no main column rendered'; }
+  window.scrollTo(0, document.body.scrollHeight);
+  col.scrollTop = col.scrollHeight;
+  return [Math.round(col.scrollTop), Math.round(window.scrollY)];
   """
 
   # elementFromPoint down the sidebar's centre. Any answer outside the sidebar
@@ -115,7 +141,7 @@ defmodule MydiaWeb.Features.HistoryRailTest do
   end
 
   @tag :feature
-  test "past the threshold the rail is a third column that pins while scrolling",
+  test "past the threshold the rail is a third column that holds still while the main column scrolls",
        %{session: session} do
     show = seed_show_with_history()
 
@@ -137,18 +163,34 @@ defmodule MydiaWeb.Features.HistoryRailTest do
     assert main > poster,
            "main content column is #{main}px, narrower than the #{poster}px poster column"
 
+    # At this width the grid is bound to the viewport and each column scrolls
+    # on its own, so the rail never rides the page scroll in the first place.
     [height, viewport] = probe(session, @rail_height)
 
-    assert height <= viewport - 32,
-           "rail is #{height}px tall in a #{viewport}px viewport, so sticky cannot pin"
+    assert height <= viewport,
+           "rail is #{height}px tall in a #{viewport}px viewport, so it is not viewport-bound"
+
+    assert probe(session, @rail_overflow) == "auto",
+           "the rail is not its own scroll container"
+
+    [page, page_viewport] = probe(session, @page_height)
+
+    assert page <= page_viewport,
+           "page is #{page}px in a #{page_viewport}px viewport, so the document still scrolls"
 
     assert probe(session, @sidebar_probe) == []
     assert probe(session, @spill_probe) == []
 
-    scroll_to_bottom(session)
+    rail_top = probe(session, @rail_top)
+    [main_scrolled, page_scrolled] = probe(session, @scroll_main_column)
 
-    assert probe(session, @rail_top) == 16,
-           "the rail did not stay pinned at top-4 after scrolling"
+    # Without this the next assertion is vacuous: a main column with nothing
+    # to scroll leaves everything where it was under any layout.
+    assert main_scrolled > 0, "the main column has nothing to scroll"
+    assert page_scrolled == 0, "the page scrolled by #{page_scrolled}px"
+
+    assert probe(session, @rail_top) == rail_top,
+           "the rail moved from #{rail_top} when the main column scrolled"
 
     assert probe(session, @sidebar_probe) == []
   end
@@ -181,17 +223,6 @@ defmodule MydiaWeb.Features.HistoryRailTest do
     result
   end
 
-  defp scroll_to_bottom(session) do
-    execute_script(
-      session,
-      "window.scrollTo(0, document.body.scrollHeight); return 'ok';",
-      [],
-      fn _ -> :ok end
-    )
-
-    session
-  end
-
   defp seed_show_with_history do
     tmdb_id = unique_provider_id()
 
@@ -203,7 +234,11 @@ defmodule MydiaWeb.Features.HistoryRailTest do
         tmdb_id: tmdb_id
       })
 
-    episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    # Enough episodes that the main column overflows a 1000px window, so the
+    # wide test has something to scroll.
+    for n <- 1..12 do
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+    end
 
     # Unwarmed, the recommendations load leaves the VM for the production
     # metadata relay during tests.

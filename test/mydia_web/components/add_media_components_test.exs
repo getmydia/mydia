@@ -64,6 +64,35 @@ defmodule MydiaWeb.AddMediaComponentsTest do
       assert html =~ "A courier loses the package."
     end
 
+    test "bounds the dialog to the viewport and scrolls it, so Add stays reachable" do
+      html = render_modal(%{config: config(), quality_profiles: []})
+      doc = document(html)
+
+      refute doc
+             |> LazyHTML.query(~s(#add-config-modal-box.overflow-y-auto[class~="max-h-[90dvh]"]))
+             |> Enum.empty?()
+
+      # Add is inside the scrolling box, which is what keeps it reachable.
+      refute doc
+             |> LazyHTML.query(~s(#add-config-modal-box button[type="submit"]))
+             |> Enum.empty?()
+
+      # The overview is dropped below sm; poster and title carry the preview.
+      refute doc
+             |> LazyHTML.query(~s(#add-config-preview-overview[class~="max-sm:hidden"]))
+             |> Enum.empty?()
+    end
+
+    test "lets the toggle helper text wrap" do
+      html = render_modal(%{config: config(), quality_profiles: []})
+
+      labels =
+        document(html)
+        |> LazyHTML.query(~s(label.label.whitespace-normal input[type="checkbox"]))
+
+      assert Enum.count(labels) == 2
+    end
+
     test "renders a placeholder poster when the preview has none" do
       html =
         render_modal(%{

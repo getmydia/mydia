@@ -214,7 +214,14 @@ above the dock. A dropdown in the main content column that opens away from the
 sidebar only has to beat the card badges, and `z-20` on its `.dropdown`
 wrapper does that while staying under the header, sidebar and dock. Use that
 band. The Media Files card's file actions menu was `z-[1]` on the list, so the
-franchise rail's rating badges painted through it on phones (#1107).
+franchise rail's rating badges painted through it on phones (#1107). It is now
+a native popover with CSS anchor positioning (the `#downloads-more` pattern),
+because at the three-column width the show page's main column is its own
+scroll container and clipped the anchored menu of a file row near its bottom
+edge. The top layer escapes both the clip and every z-index, and
+`position-try-fallbacks: flip-block` opens it upward when there is no room
+below. The Seasons & Episodes monitoring menu (`monitoring_menu.ex`) sits in
+the same column and uses the same pattern for the same reason.
 `test/mydia_web/features/media_file_menu_stacking_test.exs` guards it, and
 shows the probe trap too: `refute_covered/2`'s 3x3 grid fell between the
 25px-tall badges and passed with the bug present, so the test hit-tests the
