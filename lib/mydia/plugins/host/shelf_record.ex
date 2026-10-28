@@ -9,7 +9,7 @@ defmodule Mydia.Plugins.Host.ShelfRecord do
   field: a 1.6 guest's record has no such field, so it is dropped for them.
   `now` is the already-resolved unix time, so the caller owns the clock.
   """
-  @spec build(map(), :v16 | :v17, integer()) :: map()
+  @spec build(map(), :v16 | :v17 | :v18, integer()) :: map()
   def build(payload, version, now) do
     base = %{
       shelf: to_string(Map.get(payload, "shelf") || ""),

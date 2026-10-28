@@ -35,6 +35,8 @@ defmodule Mydia.Plugins.HostFunctions do
   `report-sync-run`, plus `origin` on `playback-progress`.
   Versions 1.6 and 1.7 add no host function: 1.6 adds the `fill-shelf` export
   (the read functions act as the shelf's user), 1.7 adds `feedback` to `shelf-request`.
+  Version 1.8 adds no host function either; `search-hit` gains `vote-count`,
+  so the 1.8 key serves its own `search` and older keys keep the old record.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -82,13 +84,13 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.7 superset to any older guest (which imports the
+  # wasmtime serves this 1.8 superset to any older guest (which imports the
   # correspondingly older `host@x.y.z`) via component semver matching, so older
   # guests keep working. wasmex still needs exact namespace keys in the imports
   # map (see `Mydia.Plugins.Host`), so every supported version is also
   # published under its own key, each narrowed to the functions that version
   # defined.
-  @namespace "mydia:plugin/host@1.7.0"
+  @namespace "mydia:plugin/host@1.8.0"
   @v15_namespace "mydia:plugin/host@1.5.0"
   @v14_namespace "mydia:plugin/host@1.4.0"
   @v13_namespace "mydia:plugin/host@1.3.0"
@@ -169,8 +171,13 @@ defmodule Mydia.Plugins.HostFunctions do
       # imported package name, so an older guest still links against this host.
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
+      # 1.8 hits carry `vote-count`; an older guest's `search-hit` has no such
+      # field, so only this key's `search` adds it.
+      v18 = Map.put(v15, "search", {:fn, page_import(slug, ctx, &PageReads.search_with_votes/3)})
+
       %{
-        @namespace => v15,
+        @namespace => v18,
+        "mydia:plugin/host@1.7.0" => v15,
         "mydia:plugin/host@1.6.0" => v15,
         @v15_namespace => v15,
         @v14_namespace => v14,

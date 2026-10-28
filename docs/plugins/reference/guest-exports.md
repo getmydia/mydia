@@ -2,7 +2,7 @@
 
 The functions a plugin exports for the host to call, as defined in the
 `handler` and `page` interfaces of the WIT contract
-(`native/mydia_plugin_sdk/wit/plugin.wit`, package `mydia:plugin@1.7.0`). The
+(`native/mydia_plugin_sdk/wit/plugin.wit`, package `mydia:plugin@1.8.0`). The
 functions a plugin may call are in [Host functions](host-functions.md).
 
 A guest implements `on-event` and any of the others it needs. The
