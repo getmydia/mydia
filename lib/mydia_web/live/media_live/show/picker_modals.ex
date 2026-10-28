@@ -137,7 +137,7 @@ defmodule MydiaWeb.MediaLive.Show.PickerModals do
         </ul>
         <p class="text-xs text-base-content/60 mt-3">
           {gettext(
-            "Changing this affects future downloads. Files already on disk stay where they are."
+            "Changing this affects future downloads. Files already on disk stay where they are. Use Move to library to move them."
           )}
         </p>
         <div class="modal-action">
