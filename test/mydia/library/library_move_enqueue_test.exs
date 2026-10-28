@@ -117,19 +117,36 @@ defmodule Mydia.Library.LibraryMoveEnqueueTest do
     assert dest == "Glass Harbor (2019)/glass.mkv"
   end
 
-  test "event_attrs describe a partial move", %{a: a, b: b} do
+  test "event_attrs count where the item's files are now", %{a: a, b: b} do
     movie = movie_in(a)
-    attrs = LibraryMove.event_attrs(movie, b, [:moved, :skipped_conflict], "user-1")
+    put_file(b, "Glass Harbor (2019)/glass.cd2.mkv", %{media_item_id: movie.id})
+    attrs = LibraryMove.event_attrs(movie, b, "user-1")
 
     assert attrs.type == "media_item.library_moved"
     assert attrs.severity == :warning
-    assert attrs.actor_type == :user
+    assert {attrs.actor_type, attrs.actor_id} == {:job, "library_move"}
+    assert attrs.metadata["requested_by"] == "user-1"
     assert attrs.metadata["moved"] == 1
     assert attrs.metadata["skipped"] == 1
 
-    none = LibraryMove.event_attrs(movie, b, [:skipped_conflict], nil)
+    other = media_item_fixture(%{type: "movie", title: "Copper Lantern", year: 2020})
+    put_file(a, "Copper Lantern (2020)/copper.mkv", %{media_item_id: other.id})
+    none = LibraryMove.event_attrs(other, b, nil)
     assert none.type == "media_item.library_move_failed"
-    assert none.actor_type == :system
-    assert none.actor_id
+    refute Map.has_key?(none.metadata, "requested_by")
+  end
+
+  test "the job records the plan's sources and the previous library", %{a: a, b: b} do
+    movie = movie_in(a)
+    {:ok, movie} = Mydia.Media.update_media_item(Scope.system(), movie, %{library_path_id: a.id})
+
+    assert {:ok, %Oban.Job{args: args}} = LibraryMove.enqueue(movie, b, Scope.system())
+    assert args["from_library_path_id"] == a.id
+
+    assert [%{"path" => path, "rel" => "Glass Harbor (2019)/glass.mkv", "lp" => lp}] =
+             args["sources"]
+
+    assert lp == a.id
+    assert path == Path.join(a.path, "Glass Harbor (2019)/glass.mkv")
   end
 end

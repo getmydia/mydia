@@ -81,43 +81,51 @@ defmodule Mydia.Library.LibraryMove do
   end
 
   @doc """
-  Records how a move went. `results` holds one entry per planned file, `:moved`
-  or why it was not; `target` is nil when the library no longer exists.
+  Records how the move of `media_item` into `target` stands. The counts come
+  from the item's files now, not from one attempt: `moved` is how many are in
+  `target`, `skipped` how many are not. `target` is nil when the library no
+  longer exists; `failed: true` marks a move that was called off.
+  `requested_by` is the user who asked, kept in the metadata.
   """
-  @spec record_event(MediaItem.t(), LibraryPath.t() | nil, [term()], binary() | nil) :: :ok
-  def record_event(media_item, target, results, actor_id) do
+  @spec record_event(MediaItem.t(), LibraryPath.t() | nil, binary() | nil, keyword()) :: :ok
+  def record_event(media_item, target, requested_by, opts \\ []) do
     media_item
-    |> event_attrs(target, results, actor_id)
+    |> event_attrs(target, requested_by, opts)
     |> Mydia.Events.create_event_async()
   end
 
   @doc false
-  def event_attrs(media_item, target, results, actor_id) do
-    moved = Enum.count(results, &(&1 == :moved))
+  def event_attrs(media_item, target, requested_by, opts \\ []) do
+    files = item_files(media_item.id)
+    moved = Enum.count(files, &(target && &1.library_path_id == target.id))
+    skipped = length(files) - moved
+    failed? = Keyword.get(opts, :failed, false) or (moved == 0 and skipped > 0)
 
     %{
       category: "media",
-      type: event_type(moved, results),
-      # Event requires an actor_id whenever actor_type is set.
-      actor_type: if(actor_id, do: :user, else: :system),
-      actor_id: actor_id || "library_move",
+      type: if(failed?, do: "media_item.library_move_failed", else: "media_item.library_moved"),
+      actor_type: :job,
+      actor_id: "library_move",
       resource_type: "media_item",
       resource_id: media_item.id,
-      severity: if(moved == length(results), do: :info, else: :warning),
-      metadata: %{
-        "title" => media_item.title,
-        "media_type" => media_item.type,
-        "library" => library_name(target),
-        "moved" => moved,
-        "skipped" => length(results) - moved
-      }
+      severity: if(failed? or skipped > 0, do: :warning, else: :info),
+      metadata:
+        maybe_put(
+          %{
+            "title" => media_item.title,
+            "media_type" => media_item.type,
+            "library" => library_name(target),
+            "moved" => moved,
+            "skipped" => skipped
+          },
+          "requested_by",
+          requested_by
+        )
     }
   end
 
-  defp event_type(moved, results) when moved > 0 or results == [],
-    do: "media_item.library_moved"
-
-  defp event_type(_moved, _results), do: "media_item.library_move_failed"
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp library_name(%LibraryPath{} = target), do: LibraryPath.display_name(target)
   defp library_name(nil), do: nil

@@ -113,7 +113,9 @@ defmodule Mydia.Library.FileMove do
     )
   end
 
-  defp same_file?(source_path, dest_path) do
+  @doc "True when both local paths are the same file (device and inode): a hardlink."
+  @spec same_file?(String.t(), String.t()) :: boolean()
+  def same_file?(source_path, dest_path) do
     with {:ok, a} <- File.stat(source_path),
          {:ok, b} <- File.stat(dest_path) do
       a.inode == b.inode and a.major_device == b.major_device and
@@ -123,8 +125,12 @@ defmodule Mydia.Library.FileMove do
     end
   end
 
-  # Streamed in chunks; only runs on the rare retry path.
-  defp identical_copy?(source_path, dest_path) do
+  @doc """
+  True when both local paths exist with the same size and bytes. Streamed in
+  chunks; meant for rare retry and cleanup paths.
+  """
+  @spec identical_copy?(String.t(), String.t()) :: boolean()
+  def identical_copy?(source_path, dest_path) do
     with {:ok, a} <- File.stat(source_path),
          {:ok, b} <- File.stat(dest_path) do
       a.size == b.size and

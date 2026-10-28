@@ -10,6 +10,7 @@ defmodule Mydia.Library.LibraryMove.Enqueue do
   alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Download
   alias Mydia.Library.LibraryMove
+  alias Mydia.Library.LibraryMove.Sources
   alias Mydia.Library.TargetResolver
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -30,8 +31,8 @@ defmodule Mydia.Library.LibraryMove.Enqueue do
   @spec enqueue(MediaItem.t(), LibraryPath.t(), Scope.t()) ::
           {:ok, Oban.Job.t()} | {:error, error()}
   def enqueue(%MediaItem{} = item, %LibraryPath{} = target, %Scope{} = scope) do
-    with :ok <- validate(item, target) do
-      Repo.transaction(fn -> retarget_and_insert(item, target, scope) end)
+    with {:ok, moves} <- validate(item, target) do
+      Repo.transaction(fn -> retarget_and_insert(item, target, scope, moves) end)
     end
   end
 
@@ -53,24 +54,28 @@ defmodule Mydia.Library.LibraryMove.Enqueue do
   def actor_id(%Scope{user: %{id: id}}), do: id
   def actor_id(%Scope{}), do: nil
 
+  # Returns the plan, which the job records as its sources.
   defp validate(item, target) do
     cond do
       target.disabled -> {:error, :disabled_library}
       not compatible?(item, target) -> {:error, :incompatible_library}
-      nothing_to_move?(item, target) -> {:error, :already_there}
-      import_pending?(item) -> {:error, :import_in_progress}
-      true -> :ok
+      true -> validate_plan(item, target)
+    end
+  end
+
+  defp validate_plan(item, target) do
+    case LibraryMove.plan(item, target) do
+      {:ok, []} ->
+        {:error, :already_there}
+
+      {:ok, moves} ->
+        if import_pending?(item), do: {:error, :import_in_progress}, else: {:ok, moves}
     end
   end
 
   @doc false
   def compatible?(item, target),
     do: target.type in TargetResolver.allowed_types(TargetResolver.kind_for(item))
-
-  defp nothing_to_move?(item, target) do
-    {:ok, moves} = LibraryMove.plan(item, target)
-    moves == []
-  end
 
   # JSON operators differ between SQLite and Postgres, so args are filtered
   # here rather than in the query.
@@ -89,13 +94,17 @@ defmodule Mydia.Library.LibraryMove.Enqueue do
       |> Enum.any?(&MapSet.member?(download_ids, &1["download_id"]))
   end
 
-  defp retarget_and_insert(item, target, scope) do
+  defp retarget_and_insert(item, target, scope, moves) do
     actor_id = actor_id(scope)
 
+    # from_library_path_id lets a cancelled job undo the retarget; sources
+    # let a retry finish files whose rows already moved.
     args = %{
       "media_item_id" => item.id,
       "target_library_path_id" => target.id,
-      "actor_id" => actor_id
+      "actor_id" => actor_id,
+      "from_library_path_id" => item.library_path_id,
+      "sources" => Sources.encode(moves)
     }
 
     with {:ok, _} <- retarget(scope, item, target, actor_id),

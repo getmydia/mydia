@@ -7,6 +7,7 @@ defmodule Mydia.Jobs.LibraryMoveTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Library.LibraryMove
   alias Mydia.Library.MediaFile
+  alias Mydia.Media.MediaItem
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
   alias Mydia.Subtitles.Subtitle
@@ -34,6 +35,19 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     )
   end
 
+  defp insert_subtitle(file, path) do
+    %Subtitle{}
+    |> Subtitle.changeset(%{
+      media_file_id: file.id,
+      language: "en",
+      provider: "test",
+      subtitle_hash: "h1",
+      file_path: path,
+      format: "srt"
+    })
+    |> Repo.insert!()
+  end
+
   defp run(item, target) do
     assert {:ok, job} = LibraryMove.enqueue(item, target, Scope.system())
     perform_job(Mydia.Jobs.LibraryMove, job.args)
@@ -51,17 +65,7 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     srt = write(Path.join(a.path, "Glass Harbor (2019)/glass.en.srt"))
     nfo = write(Path.join(a.path, "Glass Harbor (2019)/glass.nfo"))
 
-    subtitle =
-      %Subtitle{}
-      |> Subtitle.changeset(%{
-        media_file_id: file.id,
-        language: "en",
-        provider: "test",
-        subtitle_hash: "h1",
-        file_path: srt,
-        format: "srt"
-      })
-      |> Repo.insert!()
+    subtitle = insert_subtitle(file, srt)
 
     assert :ok = run(movie, b)
 
@@ -84,11 +88,84 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     put_file(a, "Shared/glass.mkv", %{media_item_id: movie.id})
     other = media_item_fixture(%{type: "movie", title: "Copper Lantern", year: 2020})
     put_file(a, "Shared/copper.mkv", %{media_item_id: other.id})
+    poster = write(Path.join(a.path, "Shared/poster.jpg"))
 
     assert :ok = run(movie, b)
 
     assert File.exists?(Path.join(a.path, "Shared/copper.mkv"))
+    assert File.exists?(poster)
     refute File.exists?(Path.join(a.path, "Shared/glass.mkv"))
+  end
+
+  test "carries artwork and Subs/ along and removes the emptied folder", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    write(Path.join(a.path, "Glass Harbor (2019)/poster.jpg"))
+    write(Path.join(a.path, "Glass Harbor (2019)/Subs/eng.srt"))
+
+    assert :ok = run(movie, b)
+
+    dest_dir = Path.join(b.path, "Glass Harbor (2019)")
+    assert File.exists?(Path.join(dest_dir, "poster.jpg"))
+    assert File.exists?(Path.join(dest_dir, "Subs/eng.srt"))
+    refute File.exists?(Path.join(a.path, "Glass Harbor (2019)"))
+    assert File.dir?(a.path)
+  end
+
+  test "a sidecar that cannot move stays at the source with its row", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    srt = write(Path.join(a.path, "Glass Harbor (2019)/glass.en.srt"))
+    write(Path.join(b.path, "Glass Harbor (2019)/glass.en.srt"), "someone else's")
+    subtitle = insert_subtitle(file, srt)
+
+    assert :ok = run(movie, b)
+
+    assert File.exists?(srt)
+    assert Repo.get!(Subtitle, subtitle.id).file_path == srt
+    assert File.read!(Path.join(b.path, "Glass Harbor (2019)/glass.en.srt")) == "someone else's"
+    assert File.dir?(Path.join(a.path, "Glass Harbor (2019)"))
+  end
+
+  test "a retry deletes a source whose relink already committed", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    source = Path.join(a.path, file.relative_path)
+    assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+
+    # The first attempt placed and relinked, then died before deleting.
+    dest = Path.join(b.path, "Glass Harbor (2019)/glass.mkv")
+    File.mkdir_p!(Path.dirname(dest))
+    File.ln!(source, dest)
+    Repo.update!(Ecto.Changeset.change(file, library_path_id: b.id))
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    refute File.exists?(source)
+    assert File.exists?(dest)
+    refute File.exists?(Path.join(a.path, "Glass Harbor (2019)"))
+  end
+
+  test "the last attempt's event counts every file, not just its own", %{tmp_dir: tmp} do
+    a = library(tmp, "sa", "series")
+    b = library(tmp, "sb", "series")
+    show = media_item_fixture(%{type: "tv_show", title: "The Quiet Meridian"})
+    e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    e2 = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 4})
+    # Moved by an earlier attempt.
+    put_file(b, "The Quiet Meridian/Season 01/qm.s01e01.mkv", %{episode_id: e1.id})
+    put_file(a, "Meridian/qm.s02e04.mkv", %{episode_id: e2.id})
+    assert {:ok, job} = LibraryMove.enqueue(show, b, Scope.system())
+    # A file where the season folder should be: placing fails, not a conflict.
+    write(Path.join(b.path, "The Quiet Meridian/Season 02"))
+
+    assert {:error, {:transient, 1}} =
+             perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 5)
+
+    attrs = LibraryMove.event_attrs(show, b, nil)
+    assert attrs.type == "media_item.library_moved"
+    assert {attrs.metadata["moved"], attrs.metadata["skipped"]} == {1, 1}
+    assert File.exists?(Path.join(a.path, "Meridian/qm.s02e04.mkv"))
   end
 
   # A crash between place and relink leaves the copy and the source. The
@@ -137,12 +214,15 @@ defmodule Mydia.Jobs.LibraryMoveTest do
 
   test "cancels when the target was disabled after enqueue", %{a: a, b: b, movie: movie} do
     file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    movie = Repo.update!(Ecto.Changeset.change(movie, library_path_id: a.id))
     assert {:ok, job} = LibraryMove.enqueue(movie, b, Scope.system())
+    assert Repo.get!(MediaItem, movie.id).library_path_id == b.id
     Repo.update!(Ecto.Changeset.change(Repo.get!(LibraryPath, b.id), disabled: true))
 
     assert {:cancel, :target_unavailable} = perform_job(Mydia.Jobs.LibraryMove, job.args)
     assert File.exists?(Path.join(a.path, file.relative_path))
     refute File.exists?(Path.join(b.path, "Glass Harbor (2019)"))
+    assert Repo.get!(MediaItem, movie.id).library_path_id == a.id
   end
 
   test "a missing item is a no-op", %{b: b} do
