@@ -303,7 +303,8 @@ What the scanner does with rows it does find missing:
    `partition_and_restore/3` restores a row whose file returns at the same path,
    and `Mydia.Library.Relink.Scan` repoints one whose file returns renamed or
    moved.
-3. `Mydia.Jobs.TrashCleanup` still purges them after the 30-day retention.
+3. `Mydia.Jobs.TrashCleanup` still purges them after the trash retention
+   (`media.trash_retention_days`, default 30).
 
 That hiding is why the guard matters. Without it an unmounted share would mark
 the whole library missing with nothing on the Trash page to show for it, and the
@@ -311,7 +312,9 @@ purge would drop every row a month later.
 
 The guard is all-or-nothing. A scan that still sees some files marks the rest
 missing as usual, so a share that loses one subdirectory still marks those rows
-missing.
+missing. The cost runs the other way too: an operator who deletes every file in
+a library on purpose keeps those rows active until a later scan sees at least one
+file, and then they are all marked missing at once.
 
 ## library_paths.disabled is one-way
 
