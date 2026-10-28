@@ -22,6 +22,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
   # engine sets a guid and leaves tmdb_id nil where the native one does the reverse.
   @known_fields [:guid, :tmdb_id]
 
+  @wasm_shaped "search?q=lantern%3Fq%3Dlantern"
+
   @yaml """
   id: harbor
   name: Harbor
@@ -113,7 +115,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
     assert {:ok, [_, _]} = result.wasm
     assert result.wasm_misses == []
     assert %{divergences: divs, paired: 2} = Runner.compare(result)
-    assert Enum.all?(divs, &(&1.kind == :field and &1.field in @known_fields))
+    assert {:ok, _} = result.native
+    assert MapSet.new(divs, & &1.field) == MapSet.new(@known_fields)
+    assert Enum.all?(divs, &(&1.kind == :field))
   end
 
   test "a changed body that both engines read the same way adds no divergence" do
@@ -130,21 +134,22 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
     assert {:ok, results} = result.native
     assert "Lantern Quay 2031 1080p WEB" in Enum.map(results, & &1.title)
     assert %{divergences: divs, paired: 2} = Runner.compare(result)
-    assert Enum.all?(divs, &(&1.kind == :field and &1.field in @known_fields))
+    assert {:ok, _} = result.native
+    assert MapSet.new(divs, & &1.field) == MapSet.new(@known_fields)
+    assert Enum.all?(divs, &(&1.kind == :field))
   end
 
-  test "a request the native engine makes that was not recorded is a :request divergence" do
-    # The native engine's request set differs from what the wasm engine recorded.
-    result =
-      Runner.replay(
-        capture([
-          %Exchange{request: request("search?q=lantern"), error: :timeout},
-          ok("search?q=lantern", @page, "mirror")
-        ])
-      )
+  test "a request only the native engine makes is a real :request divergence" do
+    # With the inputs already in the path's query, the guest appends them again
+    # while the native engine does not, so the two build different URLs.
+    yaml = String.replace(@yaml, "- path: search\n", "- path: search?q={{ .Keywords }}\n")
+    assert :ok = Runner.prepare_definition("harbor", yaml)
 
-    result = %{result | wasm_misses: [], misses: [request("other?q=lantern")]}
+    result = Runner.replay(capture([ok(@wasm_shaped, @page, "harbor")]))
 
+    assert result.wasm_misses == []
+    assert {:ok, [_, _]} = result.wasm
+    assert result.misses != []
     assert %{divergences: divs} = Runner.compare(result)
     assert Enum.any?(divs, &(&1.kind == :request))
   end

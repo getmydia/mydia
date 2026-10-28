@@ -29,7 +29,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.ReportTest do
         row("orchard", :generic, [], 2, 2)
       ])
 
-    assert md =~ "3 captures, 1 divergences. Overall fidelity: 0.90."
+    assert md =~ "3 captures, 1 divergence. Overall fidelity: 0.90."
     assert md =~ "| harbor | 8 | 7 | 0.88 | 1 |"
     assert md =~ "| orchard | 2 | 2 | 1.00 | 0 |"
     assert md =~ "| harbor | generic | field | seeders | 4 | \"a\\|b\" |"
@@ -39,5 +39,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.ReportTest do
     md = Report.render([row("harbor", :rss, [], 0, 0)])
     assert md =~ "Overall fidelity: n/a"
     assert md =~ "None."
+  end
+
+  test "a long value is shown whole in a details list, not truncated" do
+    tail = String.duplicate("x", 150) <> "&tr=END"
+
+    div = %Divergence{
+      definition: "harbor",
+      query: :rss,
+      kind: :field,
+      field: :download_url,
+      native: "magnet:?xt=urn:btih:a&dn=" <> tail,
+      wasm: "magnet:?xt=urn:btih:a&dn=" <> tail <> "&tr=more"
+    }
+
+    md = Report.render([row("harbor", :rss, [div], 1, 0)])
+    assert md =~ "| see 1 | see 1 |"
+    assert md =~ "## Long values"
+    assert md =~ tail <> "&tr=more"
   end
 end

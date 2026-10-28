@@ -68,6 +68,20 @@ defmodule Mydia.Indexers.Cardigann.Parity.Ratchet do
       else: {:error, %{new: new, stale: stale, todo: todo}}
   end
 
+  @doc """
+  Adds a placeholder divergence for every existing entry whose definition is not
+  in `ran`, so rendering a partial run keeps the entries it did not look at.
+  """
+  @spec keep_unrun([Divergence.t()], [Entry.t()], [String.t()]) :: [Divergence.t()]
+  def keep_unrun(divergences, existing, ran) do
+    kept =
+      for e <- existing, e.definition not in ran do
+        %Divergence{definition: e.definition, query: e.query, kind: e.kind, field: e.field}
+      end
+
+    divergences ++ kept
+  end
+
   @doc "Source for a ratchet file covering `divergences`, keeping reasons from `existing`."
   @spec render([Divergence.t()], [Entry.t()]) :: String.t()
   def render(divergences, existing) do

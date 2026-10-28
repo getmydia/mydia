@@ -20,7 +20,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Report do
 
     [
       "# Cardigann parity report\n",
-      "#{length(rows)} captures, #{length(divergences)} divergences. " <>
+      "#{length(rows)} captures, #{plural(length(divergences), "divergence")}. " <>
         "Overall fidelity: #{fidelity(rows)}.\n",
       definitions_section(rows),
       divergences_section(divergences)
@@ -53,13 +53,31 @@ defmodule Mydia.Indexers.Cardigann.Parity.Report do
 
   defp divergences_section([]), do: "## Divergences\n\nNone.\n"
 
+  @max_cell 80
+
   defp divergences_section(divergences) do
-    lines =
-      divergences
-      |> Enum.sort_by(fn d -> {d.definition, to_string(d.query), to_string(d.kind)} end)
-      |> Enum.map(fn d ->
-        "| #{d.definition} | #{d.query} | #{d.kind} | #{d.field || ""} | " <>
-          "#{cell(d.native)} | #{cell(d.wasm)} |"
+    sorted =
+      Enum.sort_by(divergences, fn d -> {d.definition, to_string(d.query), to_string(d.kind)} end)
+
+    # Long values go whole into a details list, so the part that differs (the end
+    # of a magnet link, say) is never cut off.
+    {lines, details} =
+      sorted
+      |> Enum.with_index(1)
+      |> Enum.map_reduce([], fn {d, n}, details ->
+        native = inspect(d.native, limit: :infinity, printable_limit: :infinity)
+        wasm = inspect(d.wasm, limit: :infinity, printable_limit: :infinity)
+        long? = String.length(native) > @max_cell or String.length(wasm) > @max_cell
+
+        {native_cell, wasm_cell, details} =
+          if long? do
+            {"see #{n}", "see #{n}", [{n, d, native, wasm} | details]}
+          else
+            {cell(native), cell(wasm), details}
+          end
+
+        {"| #{d.definition} | #{d.query} | #{d.kind} | #{d.field || ""} | #{native_cell} | #{wasm_cell} |",
+         details}
       end)
 
     Enum.join(
@@ -70,8 +88,23 @@ defmodule Mydia.Indexers.Cardigann.Parity.Report do
         | lines
       ],
       "\n"
-    ) <> "\n"
+    ) <> "\n" <> details_section(Enum.reverse(details))
   end
+
+  defp details_section([]), do: ""
+
+  defp details_section(details) do
+    items =
+      Enum.map_join(details, "\n", fn {n, d, native, wasm} ->
+        "#{n}. #{d.definition}/#{d.query} #{d.kind} #{d.field}\n" <>
+          "   - native: `#{native}`\n   - wasm: `#{wasm}`"
+      end)
+
+    "\n## Long values\n\n" <> items <> "\n"
+  end
+
+  defp plural(1, word), do: "1 #{word}"
+  defp plural(n, word), do: "#{n} #{word}s"
 
   defp fidelity(rows) do
     ratio(Enum.sum_by(rows, & &1.agreeing), Enum.sum_by(rows, & &1.paired))
@@ -80,12 +113,5 @@ defmodule Mydia.Indexers.Cardigann.Parity.Report do
   defp ratio(_agreeing, 0), do: "n/a"
   defp ratio(agreeing, paired), do: :erlang.float_to_binary(agreeing / paired, decimals: 2)
 
-  # Table cells: one short line, with pipes escaped.
-  defp cell(value) do
-    value
-    |> inspect(limit: 5, printable_limit: 80)
-    |> String.slice(0, 120)
-    |> String.replace("|", "\\|")
-    |> String.replace("\n", " ")
-  end
+  defp cell(text), do: text |> String.replace("|", "\\|") |> String.replace("\n", " ")
 end

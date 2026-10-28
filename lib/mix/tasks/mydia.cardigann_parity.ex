@@ -39,8 +39,7 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
 
   @shortdoc "Diffs the native and wasm Cardigann engines on recorded HTTP"
 
-  @seed_dir "test/fixtures/cardigann/parity/seed"
-  @ratchet_file "test/fixtures/cardigann/parity/known_divergences.exs"
+  @fixtures "test/fixtures/cardigann/parity"
   @switches [
     ref: :string,
     only: :string,
@@ -87,21 +86,25 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
 
     Mix.shell().info("Recording #{length(definitions)} definitions into #{meta.cache_dir}")
 
-    for definition <- definitions, query <- definition.queries do
-      File.rm_rf!(Path.join([meta.cache_dir, definition.id, query.label]))
+    outcomes =
+      for definition <- definitions, query <- definition.queries do
+        File.rm_rf!(Path.join([meta.cache_dir, definition.id, query.label]))
 
-      case Runner.record(definition, query, meta.cache_dir, ref: meta.ref) do
-        {:ok, capture} ->
-          Mix.shell().info(
-            "#{definition.id}/#{query.label}: #{length(capture.exchanges)} exchanges"
-          )
+        case Runner.record(definition, query, meta.cache_dir, ref: meta.ref) do
+          {:ok, capture} ->
+            Mix.shell().info(
+              "#{definition.id}/#{query.label}: #{length(capture.exchanges)} exchanges"
+            )
 
-        {:error, reason} ->
-          Mix.shell().error("#{definition.id}/#{query.label}: #{inspect(reason, limit: 5)}")
+            :ok
+
+          {:error, reason} ->
+            Mix.shell().error("#{definition.id}/#{query.label}: #{inspect(reason, limit: 5)}")
+            :error
+        end
       end
-    end
 
-    :ok
+    if :error in outcomes, do: exit({:shutdown, 1}), else: :ok
   end
 
   # -- diff ---------------------------------------------------------------------
@@ -110,7 +113,7 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
     root = cache_root(opts)
     start_app!(opts, root)
 
-    dir = if opts[:seed], do: @seed_dir, else: capture_set(root, opts[:ref])
+    dir = if opts[:seed], do: fixtures_dir(), else: capture_set(root, opts[:ref])
     rows = dir |> captures(only(opts)) |> Enum.map(&compare/1)
 
     if rows == [], do: Mix.raise("No captures found in #{dir}")
@@ -153,14 +156,22 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
     end
   end
 
+  # A partial run (--only) only replaces the entries of the definitions it ran.
   defp write_ratchet(rows) do
-    existing = if File.exists?(@ratchet_file), do: Ratchet.load!(@ratchet_file), else: []
-    File.mkdir_p!(Path.dirname(@ratchet_file))
-    File.write!(@ratchet_file, Ratchet.render(Enum.flat_map(rows, & &1.divergences), existing))
-    Mix.shell().info("Wrote #{@ratchet_file}")
+    file = Path.join(fixtures_dir(), "known_divergences.exs")
+    existing = if File.exists?(file), do: Ratchet.load!(file), else: []
+    ran = rows |> Enum.map(& &1.definition) |> Enum.uniq()
+    divergences = rows |> Enum.flat_map(& &1.divergences) |> Ratchet.keep_unrun(existing, ran)
+
+    File.mkdir_p!(Path.dirname(file))
+    File.write!(file, Ratchet.render(divergences, existing))
+    Mix.shell().info("Wrote #{file}")
   end
 
   # -- shared -------------------------------------------------------------------
+
+  # Mix runs from the project root.
+  defp fixtures_dir, do: Path.expand(@fixtures, File.cwd!())
 
   defp cache_root(opts),
     do: Path.expand(opts[:cache] || "~/.cache/mydia-cardigann-parity")

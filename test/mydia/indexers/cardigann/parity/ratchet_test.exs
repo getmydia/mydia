@@ -72,4 +72,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.RatchetTest do
     assert msg =~ "fixed, delete this entry: lantern/rss field title"
     assert msg =~ "annotate: lantern/rss field seeders"
   end
+
+  test "keep_unrun keeps entries of definitions that were not part of the run" do
+    other = %Entry{definition: "orchard", query: :rss, kind: :count, field: nil, reason: "kept"}
+    existing = [entry(:size, "rounding"), other]
+
+    merged = Ratchet.keep_unrun([div(:seeders)], existing, ["lantern"])
+    source = Ratchet.render(merged, existing)
+
+    assert source =~ ~s(definition: "orchard")
+    assert source =~ ~s(reason: "kept")
+    assert source =~ "field: :seeders"
+    refute source =~ "field: :size"
+  end
 end
