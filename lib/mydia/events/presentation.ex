@@ -438,13 +438,13 @@ defmodule Mydia.Events.Presentation do
     if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
   end
 
-  def detail(%Event{type: "media_item.library_moved", metadata: m}) do
-    base = "#{title_of(m)}, #{pluralize_unit(m["moved"] || 0, "file")} moved to #{m["library"]}"
-    if (m["skipped"] || 0) > 0, do: "#{base}, #{m["skipped"]} skipped", else: base
+  def detail(%Event{type: type, metadata: m})
+      when type in ["media_item.library_moved", "media_item.library_move_failed"] do
+    moved = if (m["moved"] || 0) > 0, do: pluralize_unit(m["moved"], "file"), else: "nothing"
+    to = if m["library"], do: " to #{m["library"]}", else: ""
+    skipped = if (m["skipped"] || 0) > 0, do: ", #{m["skipped"]} skipped", else: ""
+    "#{title_of(m)}, #{moved} moved#{to}#{skipped}"
   end
-
-  def detail(%Event{type: "media_item.library_move_failed", metadata: m}),
-    do: "#{title_of(m)}, nothing moved" <> if(m["library"], do: " to #{m["library"]}", else: "")
 
   def detail(%Event{type: "media_file.pruned", metadata: metadata}) do
     trashed = metadata["trashed"] || []

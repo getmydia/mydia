@@ -572,14 +572,27 @@ defmodule Mydia.Events.PresentationTest do
       assert Presentation.detail(
                event(type: "media_item.library_move_failed", metadata: metadata)
              ) ==
-               "Glass Harbor, nothing moved to Films 4K"
+               "Glass Harbor, nothing moved to Films 4K, 1 skipped"
 
       assert Presentation.detail(
                event(
                  type: "media_item.library_move_failed",
-                 metadata: %{metadata | "library" => nil}
+                 metadata: %{metadata | "library" => nil, "skipped" => 0}
                )
              ) == "Glass Harbor, nothing moved"
+    end
+
+    test "library_move_failed names the files a cancelled move already moved" do
+      metadata = %{
+        "title" => "Glass Harbor",
+        "library" => "Films 4K",
+        "moved" => 2,
+        "skipped" => 1
+      }
+
+      assert Presentation.detail(
+               event(type: "media_item.library_move_failed", metadata: metadata)
+             ) == "Glass Harbor, 2 files moved to Films 4K, 1 skipped"
     end
 
     test "library move types are registered with titles" do
