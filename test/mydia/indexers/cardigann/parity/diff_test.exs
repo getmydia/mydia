@@ -146,14 +146,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     a = mk.("Lantern Harbor", @hash_a, "alpha", ["x.test"])
     b = mk.("Quiet Orchard", @hash_b, "beta", ["x.test"])
     a2 = mk.("Lantern Harbor", String.upcase(@hash_a), "alpha-2", ["y.test"])
-    b2 = mk.("Quiet Orchard", @hash_b, "beta", ["x.test"])
+    b2 = mk.("Quiet Orchard", @hash_b, "beta-2", ["y.test"])
 
     out = run([a, b], [b2, a2])
 
     assert out.paired == 2
-    assert out.agreeing == 1
+    assert out.agreeing == 0
     assert [%{kind: :field, field: :download_url}] = out.divergences
-    assert [] = Enum.filter(out.divergences, &(&1.field == :title))
   end
 
   test "a magnet paired with a non-magnet reports only the url difference" do
