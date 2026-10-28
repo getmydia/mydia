@@ -69,4 +69,46 @@ defmodule Mydia.Library.FileMoveTest do
     assert {:error, :boom} = FileMove.relink(file, dst, rel, %{}, fn _ -> {:error, :boom} end)
     assert Repo.get!(MediaFile, file.id).library_path_id == file.library_path_id
   end
+
+  for {name, opts} <- [hardlink: [], copy: [use_hardlinks: false]] do
+    test "a retry after a failed relink adopts the earlier #{name}", %{
+      dst: dst,
+      mf: file,
+      rel: rel
+    } do
+      opts = unquote(opts)
+      dest = Path.join(dst.path, rel)
+
+      assert {:ok, _} = FileMove.place(file, dest, dst, opts)
+      assert {:error, :boom} = FileMove.relink(file, dst, rel, %{}, fn _ -> {:error, :boom} end)
+
+      assert {:ok, _} = FileMove.place(file, dest, dst, opts)
+      assert {:ok, _} = FileMove.relink(file, dst, rel, %{}, &{:ok, &1})
+      assert File.read!(dest) == "video"
+    end
+  end
+
+  test "a stale partial sibling does not block a copy", %{dst: dst, mf: file, rel: rel} do
+    dest = Path.join(dst.path, rel)
+    partial = Path.join(Path.dirname(dest), ".#{Path.basename(dest)}.mydia-partial")
+    File.mkdir_p!(Path.dirname(dest))
+    File.write!(partial, "tru")
+
+    assert {:ok, :copy} = FileMove.place(file, dest, dst, use_hardlinks: false)
+    assert File.read!(dest) == "video"
+    refute File.exists?(partial)
+  end
+
+  test "a same-size file with different content is a conflict", %{dst: dst, mf: file, rel: rel} do
+    dest = Path.join(dst.path, rel)
+    File.mkdir_p!(Path.dirname(dest))
+    File.write!(dest, "other")
+
+    assert {:error, :conflict} = FileMove.place(file, dest, dst)
+    assert File.read!(dest) == "other"
+  end
+
+  test "a destination outside the library is a path escape", %{dst: dst, mf: file, tmp_dir: tmp} do
+    assert {:error, {:path_escape, _}} = FileMove.place(file, Path.join(tmp, "out.mkv"), dst)
+  end
 end

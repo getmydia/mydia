@@ -412,15 +412,55 @@ defmodule Mydia.Library.FileOrganizer do
   defp do_fallback(source, dest, :move), do: do_move_file(source, dest)
 
   defp do_fallback(source, dest, :copy) do
-    case Storage.Local.copy_file(source, dest) do
+    case atomic_copy(source, dest) do
       :ok -> {:ok, :copy}
       {:error, reason} -> {:error, {:copy_failed, reason}}
     end
   end
 
-  defp confine(_dest, nil), do: :ok
+  # Copies to a hidden sibling and publishes it only once complete, so an error
+  # or a killed VM midway never leaves a truncated file at `dest`. The suffix
+  # is not a video extension, so scans and folder blockers ignore the sibling.
+  defp atomic_copy(source, dest) do
+    tmp = Path.join(Path.dirname(dest), ".#{Path.basename(dest)}.mydia-partial")
+    _ = File.rm(tmp)
 
-  defp confine(dest, root) do
+    with :ok <- Storage.Local.copy_file(source, tmp),
+         :ok <- verify_copy_size(source, tmp),
+         :ok <- publish_copy(tmp, dest) do
+      :ok
+    else
+      {:error, _} = error ->
+        _ = File.rm(tmp)
+        error
+    end
+  end
+
+  defp verify_copy_size(source, tmp) do
+    if file_size(source) == file_size(tmp), do: :ok, else: {:error, :copy_size_mismatch}
+  end
+
+  # Publish with ln, which never clobbers, so a missing dest is claimed
+  # atomically. When dest already exists (or the filesystem has no hardlinks),
+  # rename replaces it atomically: callers that place without an ownership
+  # check (no :expected_size) have always overwritten, and still do.
+  # FileMove checks ownership before it ever gets here.
+  defp publish_copy(tmp, dest) do
+    case File.ln(tmp, dest) do
+      :ok ->
+        _ = File.rm(tmp)
+        :ok
+
+      {:error, _eexist_or_no_hardlinks} ->
+        File.rename(tmp, dest)
+    end
+  end
+
+  @doc false
+  @spec confine(String.t(), String.t() | nil) :: :ok | {:error, {:path_escape, String.t()}}
+  def confine(_dest, nil), do: :ok
+
+  def confine(dest, root) do
     expanded = Dirs.normalize(dest)
     root_expanded = Dirs.normalize(root)
 

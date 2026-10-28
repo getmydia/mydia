@@ -16,56 +16,123 @@ defmodule Mydia.Library.FileMove do
   Used by `Mydia.Jobs.MediaRematch` and `Mydia.Jobs.LibraryMove`.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Library
   alias Mydia.Library.FileOrganizer
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
 
+  @chunk 65_536
+
   @type place_result :: {:ok, :hardlink | :move | :copy | :skip | :exists} | {:error, term()}
 
   @doc """
   Places the file at `dest_path` inside `target`. `media_file` needs its
-  `:library_path` preloaded.
+  `:library_path` preloaded. `opts` may carry `use_hardlinks: false` to force
+  a copy.
 
-  Returns `{:error, :source_missing}` when neither path exists and
-  `{:error, :conflict}` when `dest_path` exists but no row claims it. A file
-  this function did not place is never removed or overwritten.
+  Returns `{:error, :source_missing}` when neither path exists,
+  `{:error, {:path_escape, dest_path}}` when `dest_path` is outside `target`,
+  and `{:error, :conflict}` when `dest_path` holds a file that is not ours.
+
+  A copy left by an earlier failed attempt is adopted (see the ownership rules
+  below), so a retry after a failed `relink/5` succeeds. A file this function
+  did not place is never removed or overwritten.
   """
-  @spec place(MediaFile.t(), String.t(), LibraryPath.t()) :: place_result()
-  def place(%MediaFile{} = media_file, dest_path, %LibraryPath{} = target) do
+  @spec place(MediaFile.t(), String.t(), LibraryPath.t(), keyword()) :: place_result()
+  def place(%MediaFile{} = media_file, dest_path, %LibraryPath{} = target, opts \\ []) do
     source_path = MediaFile.storage_path(media_file)
 
     cond do
-      is_nil(source_path) -> {:error, :no_source_path}
-      not exists?(source_path) and not exists?(dest_path) -> {:error, :source_missing}
-      untracked_destination?(source_path, dest_path, target) -> {:error, :conflict}
-      true -> place_file(source_path, dest_path, target, media_file.size)
+      is_nil(source_path) ->
+        {:error, :no_source_path}
+
+      not exists?(source_path) and not exists?(dest_path) ->
+        {:error, :source_missing}
+
+      true ->
+        with :ok <- FileOrganizer.confine(dest_path, target.path),
+             false <- foreign_destination?(source_path, dest_path, target) do
+          place_file(source_path, dest_path, target, media_file.size, opts)
+        else
+          true -> {:error, :conflict}
+          {:error, _} = error -> error
+        end
     end
   end
 
   # fallback: :copy (never rename) keeps the source until after the commit.
-  defp place_file(source_path, dest_path, target, size) do
+  defp place_file(source_path, dest_path, target, size, opts) do
     FileOrganizer.place_file(source_path, dest_path,
-      use_hardlinks: true,
+      use_hardlinks: Keyword.get(opts, :use_hardlinks, true),
       fallback: :copy,
       confine_to: target.path,
       expected_size: size
     )
   end
 
-  # A destination that exists is ours to replace only when a row claims it:
-  # this file's own (a retry), or a duplicate a scan created there, which
-  # relink/5 adopts. Anything else belongs to someone, and is never touched.
-  defp untracked_destination?(source_path, dest_path, target) do
-    dest_path != source_path and exists?(dest_path) and
-      is_nil(
-        Library.get_media_file_by_relative_path(
-          target.id,
-          Path.relative_to(dest_path, target.path),
-          include_trashed: true
-        )
-      )
+  # Ownership rules. An existing destination is ours, and place_file may
+  # adopt or replace it, when any of these holds:
+  #
+  #   * a row claims it (trashed or not): this file's own (a retry), or a
+  #     duplicate a scan created there, which relink/5 adopts;
+  #   * it is the same file as the source (same device and inode): a hardlink
+  #     we made in an attempt whose relink then failed;
+  #   * the source still exists and the destination is byte-identical to it:
+  #     a copy we finished before relink failed.
+  #
+  # Anything else belongs to someone, and is a conflict. A size match alone is
+  # never enough: that would adopt a foreign file and then delete the source.
+  # Local copies are published atomically (see FileOrganizer), so a truncated
+  # partial is never at the destination.
+  #
+  # S3 is left to FileOrganizer.place_via_storage: an object only appears once
+  # complete, and one of a different size is refused as :destination_exists.
+  # A foreign same-size object there would be adopted; that is accepted.
+  defp foreign_destination?(source_path, dest_path, target) do
+    cond do
+      dest_path == source_path -> false
+      Mydia.Storage.s3?(dest_path) or Mydia.Storage.s3?(source_path) -> false
+      not File.exists?(dest_path) -> false
+      true -> not ours?(source_path, dest_path, target)
+    end
+  end
+
+  defp ours?(source_path, dest_path, target) do
+    row_claims?(dest_path, target) or same_file?(source_path, dest_path) or
+      identical_copy?(source_path, dest_path)
+  end
+
+  defp row_claims?(dest_path, target) do
+    rel = Path.relative_to(dest_path, target.path)
+
+    Repo.exists?(
+      from(f in MediaFile, where: f.library_path_id == ^target.id and f.relative_path == ^rel)
+    )
+  end
+
+  defp same_file?(source_path, dest_path) do
+    with {:ok, a} <- File.stat(source_path),
+         {:ok, b} <- File.stat(dest_path) do
+      a.inode == b.inode and a.major_device == b.major_device and
+        a.minor_device == b.minor_device
+    else
+      _ -> false
+    end
+  end
+
+  # Streamed in chunks; only runs on the rare retry path.
+  defp identical_copy?(source_path, dest_path) do
+    with {:ok, a} <- File.stat(source_path),
+         {:ok, b} <- File.stat(dest_path) do
+      a.size == b.size and
+        Enum.zip(File.stream!(source_path, @chunk), File.stream!(dest_path, @chunk))
+        |> Enum.all?(fn {x, y} -> x == y end)
+    else
+      _ -> false
+    end
   end
 
   @doc """
