@@ -517,8 +517,7 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  # Re-key the full imports map to the 1.0 namespace, keeping only the three
-  # functions a 1.0 guest imports.
+  # Re-key the full imports map to the 1.0 namespace and its three functions.
   defp to_legacy_imports(full_imports) do
     funcs = Map.get(full_imports, host_namespace(:v18), %{})
     %{host_namespace(:v10) => Map.take(funcs, @legacy_host_funcs)}
