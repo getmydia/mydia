@@ -25,6 +25,8 @@ defmodule Mydia.Library.FileMove do
   alias Mydia.Settings.LibraryPath
 
   @chunk 65_536
+  # One ranged GET per chunk on S3.
+  @stored_chunk 8 * 1024 * 1024
 
   @type place_result :: {:ok, :hardlink | :move | :copy | :skip | :exists} | {:error, term()}
 
@@ -74,14 +76,14 @@ defmodule Mydia.Library.FileMove do
   #
   # S3 is left to FileOrganizer.place_via_storage: an object only appears once
   # complete, and one of a different size is refused as :destination_exists.
-  # A foreign same-size object there would be adopted; that is accepted.
+  # One of the same size is ours only when its bytes match the source's.
   defp place_checked(source_path, dest_path, target, size, opts) do
     cond do
       dest_path == source_path ->
         {:ok, :skip}
 
       Mydia.Storage.s3?(dest_path) or Mydia.Storage.s3?(source_path) ->
-        place_file(source_path, dest_path, target, [expected_size: size] ++ opts)
+        place_stored(source_path, dest_path, target, [expected_size: size] ++ opts)
 
       not File.exists?(dest_path) ->
         place_file(source_path, dest_path, target, opts)
@@ -105,6 +107,16 @@ defmodule Mydia.Library.FileMove do
         confine_to: target.path
       ] ++ Keyword.take(opts, [:expected_size])
     )
+  end
+
+  defp place_stored(source_path, dest_path, target, opts) do
+    case place_file(source_path, dest_path, target, opts) do
+      {:ok, :exists} ->
+        if identical_copy?(source_path, dest_path), do: {:ok, :exists}, else: {:error, :conflict}
+
+      other ->
+        other
+    end
   end
 
   defp ours?(source_path, dest_path),
@@ -138,17 +150,48 @@ defmodule Mydia.Library.FileMove do
   end
 
   @doc """
-  True when both local paths exist with the same size and bytes. Streamed in
-  chunks; meant for rare retry and cleanup paths.
+  True when both paths exist with the same size and bytes. Read in chunks;
+  meant for rare retry and cleanup paths. An `s3://` path is read through
+  `Mydia.Storage`, so this downloads the object: never call it per file on a
+  hot path.
   """
   @spec identical_copy?(String.t(), String.t()) :: boolean()
   def identical_copy?(source_path, dest_path) do
+    if Mydia.Storage.s3?(source_path) or Mydia.Storage.s3?(dest_path),
+      do: identical_stored?(source_path, dest_path),
+      else: identical_local?(source_path, dest_path)
+  end
+
+  defp identical_local?(source_path, dest_path) do
     with {:ok, a} <- File.stat(source_path),
          {:ok, b} <- File.stat(dest_path) do
       a.size == b.size and
         Enum.zip(File.stream!(source_path, @chunk), File.stream!(dest_path, @chunk))
         |> Enum.all?(fn {x, y} -> x == y end)
     else
+      _ -> false
+    end
+  end
+
+  defp identical_stored?(source_path, dest_path) do
+    with {:ok, a} <- Mydia.Storage.at(source_path),
+         {:ok, b} <- Mydia.Storage.at(dest_path),
+         {:ok, %{size: size}} <- Mydia.Storage.stat(a),
+         {:ok, %{size: ^size}} <- Mydia.Storage.stat(b) do
+      same_ranges?(a, b, 0, size)
+    else
+      _ -> false
+    end
+  end
+
+  defp same_ranges?(_a, _b, offset, size) when offset >= size, do: true
+
+  defp same_ranges?(a, b, offset, size) do
+    length = min(@stored_chunk, size - offset)
+
+    case {Mydia.Storage.read_range(a, offset, length),
+          Mydia.Storage.read_range(b, offset, length)} do
+      {{:ok, same}, {:ok, same}} -> same_ranges?(a, b, offset + length, size)
       _ -> false
     end
   end

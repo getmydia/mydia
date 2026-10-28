@@ -153,5 +153,27 @@ defmodule Mydia.Library.LibraryMoveFileStepTest do
       assert File.exists?(ctx.source)
       assert Repo.get!(MediaFile, ctx.mf.id).library_path_id == ctx.a.id
     end
+
+    test "an object of the same size with other bytes is a conflict", ctx do
+      {lp, loc} = Mydia.S3Helpers.library_path!("movies")
+      on_exit(fn -> Mydia.S3Helpers.delete_prefix!(loc) end)
+      Mydia.S3Helpers.put_object!(loc, @rel, "VIDEO")
+      move = %{ctx.move | dest_path: lp.path <> "/" <> @rel}
+
+      assert {:skipped_conflict, []} = FileStep.run(move, lp, false)
+      assert File.exists?(ctx.source)
+      assert Repo.get!(MediaFile, ctx.mf.id).library_path_id == ctx.a.id
+    end
+
+    test "an earlier attempt's copy of the same bytes is adopted", ctx do
+      {lp, loc} = Mydia.S3Helpers.library_path!("movies")
+      on_exit(fn -> Mydia.S3Helpers.delete_prefix!(loc) end)
+      Mydia.S3Helpers.put_object!(loc, @rel, "video")
+      move = %{ctx.move | dest_path: lp.path <> "/" <> @rel}
+
+      assert {:moved, []} = FileStep.run(move, lp, false)
+      refute File.exists?(ctx.source)
+      assert Repo.get!(MediaFile, ctx.mf.id).library_path_id == lp.id
+    end
   end
 end
