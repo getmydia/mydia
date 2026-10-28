@@ -439,7 +439,7 @@ defmodule Mydia.Events.Presentation do
   end
 
   def detail(%Event{type: "media_item.library_moved", metadata: m}) do
-    base = "#{title_of(m)}, #{m["moved"]} files moved to #{m["library"]}"
+    base = "#{title_of(m)}, #{pluralize_unit(m["moved"] || 0, "file")} moved to #{m["library"]}"
     if (m["skipped"] || 0) > 0, do: "#{base}, #{m["skipped"]} skipped", else: base
   end
 

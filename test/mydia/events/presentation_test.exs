@@ -555,6 +555,10 @@ defmodule Mydia.Events.PresentationTest do
                  metadata: %{metadata | "skipped" => 2}
                )
              ) == "Glass Harbor, 3 files moved to Films 4K, 2 skipped"
+
+      assert Presentation.detail(
+               event(type: "media_item.library_moved", metadata: %{metadata | "moved" => 1})
+             ) == "Glass Harbor, 1 file moved to Films 4K"
     end
 
     test "library_move_failed says nothing moved, with or without a target" do
