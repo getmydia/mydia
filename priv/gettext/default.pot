@@ -10007,6 +10007,7 @@ msgstr ""
 msgid "Track upcoming and past media releases"
 msgstr ""
 
+#: lib/mydia_web/components/trailer_components.ex:41
 #: lib/mydia_web/live/components/trending_detail_modal.ex:292
 #: lib/mydia_web/live/media_live/show/components.ex:366
 #, elixir-autogen, elixir-format
@@ -20960,17 +20961,22 @@ msgstr ""
 msgid "Episode monitoring preset"
 msgstr ""
 
-#: lib/mydia_web/components/trailer_components.ex:43
+#: lib/mydia_web/components/trailer_components.ex:48
 #, elixir-autogen, elixir-format
 msgid "No trailer is available in your region."
 msgstr ""
 
-#: lib/mydia_web/components/trailer_components.ex:51
+#: lib/mydia_web/components/trailer_components.ex:56
 #, elixir-autogen, elixir-format
 msgid "Open on YouTube"
 msgstr ""
 
-#: lib/mydia_web/components/trailer_components.ex:71
+#: lib/mydia_web/components/trailer_components.ex:88
 #, elixir-autogen, elixir-format
 msgid "Trailer %{number}"
+msgstr ""
+
+#: lib/mydia_web/components/trailer_components.ex:65
+#, elixir-autogen, elixir-format
+msgid "Trailers"
 msgstr ""

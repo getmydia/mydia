@@ -75,6 +75,7 @@ const TrailerPlayer = {
 
     this.autoplay = this.el.dataset.autoplay === "true";
     this.mountNode = this.el.querySelector('[data-role="player"]');
+    this.title = this.el.dataset.title || "";
     this.unavailable = this.el.querySelector('[data-role="unavailable"]');
     this.buttons = Array.from(this.el.querySelectorAll('[data-role="switcher"] [data-index]'));
     this.queue = createTrailerQueue(this.keys.length);
@@ -111,14 +112,17 @@ const TrailerPlayer = {
       // Blocked by an extension or offline: embed the first trailer the way
       // the page did before this hook existed, without the fallback.
       .catch(() => {
-        if (!this.gone) this.plainIframe(this.keys[0]);
+        if (!this.gone) this.plainIframe(this.keys[this.queue.current()], this.autoplay || this.userSelected);
       });
   },
 
   handleError(code) {
+    // Leave YouTube's own error screen up for codes another trailer would
+    // not fix (e.g. 153), rather than reloading the same video.
+    if (!SKIPPABLE_ERRORS.has(code)) return;
     const next = this.queue.fail(code);
     if (next === null) return this.showUnavailable();
-    this.play(next, this.autoplay);
+    this.play(next, this.autoplay || this.userSelected);
   },
 
   play(index, start) {
@@ -126,15 +130,18 @@ const TrailerPlayer = {
     this.unavailable?.classList.add("hidden");
     this.mountNode?.classList.remove("hidden");
     const key = this.keys[index];
-    if (!this.player) return this.plainIframe(key);
+    if (!this.player) return this.plainIframe(key, start);
     if (start) this.player.loadVideoById(key);
     else this.player.cueVideoById(key);
   },
 
   markActive(index) {
-    this.buttons.forEach((button) =>
-      button.classList.toggle("btn-active", Number(button.dataset.index) === index),
-    );
+    this.buttons.forEach((button) => {
+      const active = Number(button.dataset.index) === index;
+      button.setAttribute("aria-pressed", String(active));
+      button.classList.toggle("btn-primary", active);
+      button.classList.toggle("btn-ghost", !active);
+    });
   },
 
   showUnavailable() {
@@ -142,9 +149,10 @@ const TrailerPlayer = {
     this.unavailable?.classList.remove("hidden");
   },
 
-  plainIframe(key) {
+  plainIframe(key, start) {
     const iframe = document.createElement("iframe");
-    iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(key)}?rel=0&modestbranding=1${this.autoplay ? "&autoplay=1" : ""}`;
+    iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(key)}?rel=0&modestbranding=1${start ? "&autoplay=1" : ""}`;
+    iframe.title = this.title;
     iframe.className = "w-full h-full";
     iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
     iframe.allowFullscreen = true;

@@ -121,6 +121,7 @@ test("a switcher click before the API loads survives the player creation", async
     const button = {
       dataset: { index: "1" },
       classList: { toggle() {} },
+      setAttribute() {},
     };
     const el = {
       dataset: { keys: JSON.stringify(["aaa", "bbb"]), autoplay: "false" },
@@ -144,5 +145,103 @@ test("a switcher click before the API loads survives the player creation", async
   } finally {
     globalThis.window = savedWindow;
     globalThis.document = savedDocument;
+  }
+});
+
+function mountWithFakePlayer({ autoplay }) {
+  resetYouTubeApiForTest();
+  const calls = [];
+  let onError;
+  const YT = {
+    Player: function (_target, options) {
+      onError = options.events.onError;
+      this.loadVideoById = (key) => calls.push(["load", key]);
+      this.cueVideoById = (key) => calls.push(["cue", key]);
+      this.destroy = () => {};
+    },
+  };
+  const hidden = new Set(["hidden"]);
+  const unavailable = {
+    classList: {
+      add: (c) => hidden.add(c),
+      remove: (c) => hidden.delete(c),
+    },
+  };
+  const mountNode = { replaceChildren() {}, classList: { add() {}, remove() {} } };
+  const buttons = ["0", "1"].map((index) => {
+    const classes = new Set(index === "0" ? ["btn-primary"] : ["btn-ghost"]);
+    return {
+      dataset: { index },
+      attrs: {},
+      classes,
+      setAttribute(name, value) {
+        this.attrs[name] = value;
+      },
+      classList: {
+        toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
+      },
+    };
+  });
+  const el = {
+    dataset: { keys: JSON.stringify(["aaa", "bbb"]), autoplay: String(autoplay) },
+    querySelector: (sel) =>
+      sel === '[data-role="player"]' ? mountNode : sel === '[data-role="unavailable"]' ? unavailable : null,
+    querySelectorAll: () => buttons,
+    addEventListener() {},
+    removeEventListener() {},
+    contains: () => true,
+  };
+  const saved = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = { YT };
+  globalThis.document = { createElement: () => ({}), head: { appendChild() {} } };
+  const hook = { ...TrailerPlayer, el };
+  hook.mounted();
+  return {
+    calls,
+    hidden,
+    buttons,
+    fire: (code) => onError({ data: code }),
+    ready: () => new Promise((resolve) => setImmediate(resolve)),
+    restore: () => Object.assign(globalThis, saved),
+  };
+}
+
+test("hook falls back on a skippable error, shows unavailable once all failed", async () => {
+  const t = mountWithFakePlayer({ autoplay: true });
+  try {
+    await t.ready();
+    t.fire(150);
+    assert.deepEqual(t.calls, [["load", "bbb"]]);
+    assert.deepEqual(t.buttons.map((b) => b.attrs["aria-pressed"]), ["false", "true"]);
+    assert.ok(t.buttons[1].classes.has("btn-primary") && !t.buttons[1].classes.has("btn-ghost"));
+    assert.ok(t.buttons[0].classes.has("btn-ghost") && !t.buttons[0].classes.has("btn-primary"));
+    assert.ok(t.hidden.has("hidden"));
+    t.fire(150);
+    assert.ok(!t.hidden.has("hidden"));
+  } finally {
+    t.restore();
+  }
+});
+
+test("hook cues instead of loading when autoplay is off", async () => {
+  const t = mountWithFakePlayer({ autoplay: false });
+  try {
+    await t.ready();
+    t.fire(150);
+    assert.deepEqual(t.calls, [["cue", "bbb"]]);
+  } finally {
+    t.restore();
+  }
+});
+
+test("hook leaves YouTube's error screen alone for an unknown code", async () => {
+  const t = mountWithFakePlayer({ autoplay: true });
+  try {
+    await t.ready();
+    t.fire(999);
+    assert.deepEqual(t.calls, []);
+    assert.ok(t.hidden.has("hidden"));
+  } finally {
+    t.restore();
   }
 });

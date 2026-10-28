@@ -38,6 +38,7 @@ defmodule MydiaWeb.TrailerComponents do
       phx-update="ignore"
       data-keys={Jason.encode!(Enum.map(@videos, & &1.key))}
       data-autoplay={to_string(@autoplay)}
+      data-title={gettext("Trailer")}
       class="space-y-2"
     >
       <div class="relative aspect-video overflow-hidden rounded-lg bg-black">
@@ -57,12 +58,24 @@ defmodule MydiaWeb.TrailerComponents do
           </div>
         </div>
       </div>
-      <div :if={length(@videos) > 1} data-role="switcher" class="flex flex-wrap gap-1 px-2 pb-2">
+      <div
+        :if={length(@videos) > 1}
+        data-role="switcher"
+        role="group"
+        aria-label={gettext("Trailers")}
+        class="flex flex-wrap gap-1 px-2 pb-2"
+      >
         <button
           :for={{video, index} <- Enum.with_index(@videos)}
           type="button"
           data-index={index}
-          class={["btn btn-xs btn-ghost max-w-48", index == 0 && "btn-active", @button_class]}
+          title={video_label(video, index)}
+          aria-pressed={to_string(index == 0)}
+          class={[
+            "btn btn-xs max-w-48",
+            if(index == 0, do: "btn-primary", else: "btn-ghost"),
+            @button_class
+          ]}
         >
           <span class="truncate">{video_label(video, index)}</span>
         </button>

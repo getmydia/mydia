@@ -1346,7 +1346,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   next when YouTube refuses it (see `MydiaWeb.TrailerComponents`).
   """
   attr :videos, :list, required: true
-  attr :title, :string, default: nil
 
   def trailer_modal(assigns) do
     ~H"""
@@ -1363,7 +1362,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           id="media-trailer-player"
           videos={@videos}
           autoplay
-          button_class="text-white/80 [&.btn-active]:bg-white/20 [&.btn-active]:text-white"
+          button_class="[&.btn-ghost]:text-white/80 [&.btn-ghost]:hover:bg-white/10 [&.btn-ghost]:hover:text-white"
         />
       </div>
       <div class="modal-backdrop bg-black/80" phx-click="hide_trailer_modal"></div>

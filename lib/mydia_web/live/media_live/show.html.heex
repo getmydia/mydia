@@ -554,7 +554,7 @@
   <%= if @show_trailer_modal do %>
     <% videos = trailer_videos(@media_item) %>
     <%= if videos != [] do %>
-      <Modals.trailer_modal videos={videos} title={@media_item.title} />
+      <Modals.trailer_modal videos={videos} />
     <% end %>
   <% end %>
   <%= if @show_quality_profile_modal do %>

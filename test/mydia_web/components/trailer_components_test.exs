@@ -48,6 +48,19 @@ defmodule MydiaWeb.TrailerComponentsTest do
     assert LazyHTML.text(buttons) =~ "Trailer 2"
   end
 
+  test "marks the first button selected like SegmentedControl, with a11y attributes" do
+    doc = render_player([video("a1", "Main Trailer"), video("b2", nil)])
+
+    buttons = LazyHTML.query(doc, ~s([data-role="switcher"] button[data-index]))
+    assert LazyHTML.attribute(buttons, "aria-pressed") == ["true", "false"]
+    assert LazyHTML.attribute(buttons, "title") == ["Main Trailer", "Trailer 2"]
+    assert count(doc, ~s([data-role="switcher"] button.btn-primary)) == 1
+    assert count(doc, ~s([data-role="switcher"] button.btn-ghost)) == 1
+    assert count(doc, ~s([data-role="switcher"] .btn-active)) == 0
+    assert count(doc, ~s([data-role="switcher"][role="group"][aria-label])) == 1
+    assert LazyHTML.attribute(LazyHTML.query(doc, "#test-trailer"), "data-title") == ["Trailer"]
+  end
+
   test "renders no switcher for a single video" do
     doc = render_player([video("a1", "Main")])
 
