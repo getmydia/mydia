@@ -148,6 +148,25 @@ defmodule Mydia.Metadata.Structs.Video do
   def youtube_watch_url(_), do: nil
 
   @doc """
+  Keeps only the videos the web trailer player can embed: YouTube-hosted,
+  with a key. Order is preserved, so the first entry is the preferred one.
+
+  ## Examples
+
+      iex> youtube_videos([%Video{key: "a", site: "YouTube"}, %Video{key: "b", site: "Vimeo"}])
+      [%Video{key: "a", site: "YouTube"}]
+
+      iex> youtube_videos(nil)
+      []
+  """
+  @spec youtube_videos([t()] | nil) :: [t()]
+  def youtube_videos(videos) when is_list(videos) do
+    Enum.filter(videos, &match?(%__MODULE__{site: "YouTube", key: key} when is_binary(key), &1))
+  end
+
+  def youtube_videos(_), do: []
+
+  @doc """
   Builds a Video struct from a raw TVDB trailer map.
 
   TVDB trailer entries from `/series/{id}/extended` look like:
