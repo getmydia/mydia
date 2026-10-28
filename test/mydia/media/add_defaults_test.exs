@@ -208,4 +208,93 @@ defmodule Mydia.Media.AddDefaultsTest do
       refute Keyword.has_key?(opts, :search_on_add)
     end
   end
+
+  describe "franchise layer" do
+    defp movie_pref_user(library) do
+      user = user_fixture()
+      pref = Accounts.get_user_preference!(user)
+
+      {:ok, _} =
+        Accounts.update_preference(pref, %{
+          "preferences" => %{"add_movie_library_path_id" => library.id}
+        })
+
+      Accounts.get_user!(user.id)
+    end
+
+    test "the franchise library beats the user preference and instance default" do
+      instance = library_path_fixture(%{type: :movies})
+      Mydia.Settings.set_default_library(instance, :movies)
+      preferred = library_path_fixture(%{type: :movies})
+      franchise = library_path_fixture(%{type: :movies})
+      user = movie_pref_user(preferred)
+
+      defaults =
+        AddDefaults.resolve(user, :movie,
+          tmdb_id: 4242,
+          franchise_lookup: fn 4242 -> franchise.id end,
+          config: config(%{})
+        )
+
+      assert defaults.library_path_id == franchise.id
+    end
+
+    test "an explicit library beats the franchise and skips the lookup" do
+      explicit = library_path_fixture(%{type: :movies})
+
+      defaults =
+        AddDefaults.resolve(nil, :movie,
+          library_path_id: explicit.id,
+          tmdb_id: 4242,
+          franchise_lookup: fn _ -> flunk("franchise lookup ran despite an explicit library") end,
+          config: config(%{})
+        )
+
+      assert defaults.library_path_id == explicit.id
+    end
+
+    test "no franchise answer falls through to the user preference" do
+      preferred = library_path_fixture(%{type: :movies})
+      user = movie_pref_user(preferred)
+
+      defaults =
+        AddDefaults.resolve(user, :movie,
+          tmdb_id: 4242,
+          franchise_lookup: fn _ -> nil end,
+          config: config(%{})
+        )
+
+      assert defaults.library_path_id == preferred.id
+    end
+
+    test "a tv show never runs the lookup" do
+      AddDefaults.resolve(nil, :tv_show,
+        tmdb_id: 4242,
+        franchise_lookup: fn _ -> flunk("franchise lookup ran for a tv show") end,
+        config: config(%{})
+      )
+    end
+
+    test "no tmdb id never runs the lookup" do
+      AddDefaults.resolve(nil, :movie,
+        franchise_lookup: fn _ -> flunk("franchise lookup ran without a tmdb id") end,
+        config: config(%{})
+      )
+    end
+
+    test "a franchise library of the wrong type falls through" do
+      instance = library_path_fixture(%{type: :movies})
+      Mydia.Settings.set_default_library(instance, :movies)
+      series = library_path_fixture(%{type: :series})
+
+      defaults =
+        AddDefaults.resolve(nil, :movie,
+          tmdb_id: 4242,
+          franchise_lookup: fn _ -> series.id end,
+          config: config(%{})
+        )
+
+      assert defaults.library_path_id == instance.id
+    end
+  end
 end

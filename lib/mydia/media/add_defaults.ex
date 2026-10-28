@@ -10,9 +10,14 @@ defmodule Mydia.Media.AddDefaults do
   Per field, the first non-nil value wins:
 
     1. an explicit value in `opts`, from the config modal or library caret
-    2. the user's preference, where nil means inherit
-    3. the instance setting
-    4. a hard fallback
+    2. for a movie's library only: the library most of its franchise lives
+       in, from `Mydia.Media.FranchiseLibrary` (#1293)
+    3. the user's preference, where nil means inherit
+    4. the instance setting
+    5. a hard fallback
+
+  The library layers are evaluated lazily, so the franchise lookup, which can
+  reach the relay, never runs when an explicit library was given.
 
   A user preference pointing at a deleted quality profile or library path is
   ignored rather than fatal: the add proceeds on the instance default.
@@ -21,6 +26,7 @@ defmodule Mydia.Media.AddDefaults do
   alias Mydia.Accounts
   alias Mydia.Accounts.User
   alias Mydia.Accounts.UserPreference
+  alias Mydia.Media.FranchiseLibrary
   alias Mydia.Settings
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
@@ -46,25 +52,17 @@ defmodule Mydia.Media.AddDefaults do
   `user` may be nil for callers outside a LiveView session. `opts` accepts
   `:library_path_id`, `:quality_profile_id`, `:monitored`,
   `:season_monitoring` and `:search_on_add` as explicit overrides, plus
-  `:config` to inject a `Mydia.Config.Schema` struct in tests.
+  `:tmdb_id` (the movie being added, which enables the franchise layer),
+  `:franchise_lookup` (injects the lookup in tests) and `:config` to inject a
+  `Mydia.Config.Schema` struct in tests.
   """
   @spec resolve(User.t() | nil, :movie | :tv_show, keyword()) :: t()
   def resolve(user, media_type, opts \\ []) when media_type in [:movie, :tv_show] do
     config = Keyword.get_lazy(opts, :config, &Mydia.Config.get/0)
     pref = preference_for(user)
-    kind = kind_for(media_type)
 
     %__MODULE__{
-      library_path_id:
-        first_present(
-          [
-            opts[:library_path_id],
-            pref && UserPreference.add_library_path_id(pref, media_type),
-            default_library_id(kind),
-            fallback_library_id(media_type)
-          ],
-          &library_path_valid?(&1, media_type)
-        ),
+      library_path_id: resolve_library(opts, pref, media_type),
       quality_profile_id:
         first_present(
           [
@@ -144,6 +142,36 @@ defmodule Mydia.Media.AddDefaults do
       value -> exists?.(value)
     end)
   end
+
+  # Each layer is a thunk so later ones, the franchise lookup above all, only
+  # run when every earlier one came up empty or invalid.
+  defp resolve_library(opts, pref, media_type) do
+    [
+      fn -> opts[:library_path_id] end,
+      fn -> franchise_library(opts, media_type) end,
+      fn -> pref && UserPreference.add_library_path_id(pref, media_type) end,
+      fn -> default_library_id(kind_for(media_type)) end,
+      fn -> fallback_library_id(media_type) end
+    ]
+    |> Enum.find_value(fn layer ->
+      case layer.() do
+        nil -> nil
+        id -> if library_path_valid?(id, media_type), do: id
+      end
+    end)
+  end
+
+  defp franchise_library(opts, :movie) do
+    case opts[:tmdb_id] do
+      id when is_integer(id) ->
+        Keyword.get(opts, :franchise_lookup, &FranchiseLibrary.library_for/1).(id)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp franchise_library(_opts, :tv_show), do: nil
 
   defp default_library_id(kind) do
     case Settings.default_library_for(kind) do
