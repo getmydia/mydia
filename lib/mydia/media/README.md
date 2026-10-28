@@ -275,39 +275,46 @@ already exists. It never lists files attached to another item. The scan button
 next to it starts review-mode import runs only, so nothing is promoted without
 an explicit choice.
 
-## An empty scan trashes the whole library
+## An empty scan marks nothing missing
 
-A library scan returning zero files classifies every existing `media_file` under
-that path as deleted and physically moves the bytes to the trash store. There is
-no empty-scan guard.
+A library scan that finds zero files, in a library that still has active
+`media_files` rows, marks none of them missing. `refuse_empty_scan/3` in
+`lib/mydia/jobs/library_scanner.ex` empties the deleted list before relinking and
+trashing, and logs a warning naming the library path. The rest of the scan runs
+as usual: the scan is recorded as a success, and the import-candidate reap beside
+it has its own guard for the same case.
 
-The chain, verified 2026-08-15:
+The guard exists because `Scanner.detect_changes/3` (`lib/mydia/library/scanner.ex`)
+computes `deleted_files` as every active row whose path is absent from the scan,
+so an empty scan calls the whole library deleted. `validate_directory/1` only
+catches a missing or unreadable directory. The usual trigger is an unmounted
+network share, which tends to leave its mount point behind as an empty, readable
+directory.
 
-1. `Scanner.detect_changes/3` (`lib/mydia/library/scanner.ex:128-139`) computes
-   `deleted_files` as every existing `media_file` whose absolute path is absent
-   from the scan result, so an empty scan means all deleted.
-2. `lib/mydia/jobs/library_scanner.ex:529-545` calls `Library.trash_media_file/1`
-   on each. Its comment claims these files are missing from disk, "the one case
-   `trash_media_file/1` has nothing to move". That assumption is what breaks.
-3. `TrashStore.store/1` (`trash_store.ex:105`) checks `File.exists?(source)`,
-   finds it true, and moves the bytes into `.mydia-trash/<id>/`. That is the
-   local branch. For an S3 library `store` asks the storage seam instead and
-   moves the object to `<library prefix>.mydia-trash/<id>/` inside the bucket,
-   and a storage error other than `:not_found` leaves the file in place.
-4. `Mydia.Jobs.TrashCleanup` runs daily at 05:00 and permanently deletes the row
-   and the bytes after `@default_retention_days 30`.
+What the scanner does with rows it does find missing:
 
-`validate_directory/1` (`scanner.ex:172-188`) only catches a missing or
-unreadable directory, not a readable one with zero matching files.
+1. It trashes them with `reason: :missing, move: false`
+   (`Mydia.Library.Relink.Scan.trash_missing/1`). No bytes move. If the file is
+   back on disk by the time `TrashStore` acts, `move: false` refuses and the row
+   stays active. Before this the scanner moved any file it found present into
+   `.mydia-trash/`, which is how an empty scan used to empty a library on disk.
+2. Missing rows are hidden from the Trash page and its counts (`visible_trash/0`
+   in `lib/mydia/library/trash.ex`). They are markers, not something to review:
+   `partition_and_restore/3` restores a row whose file returns at the same path,
+   and `Mydia.Library.Relink.Scan` repoints one whose file returns renamed or
+   moved.
+3. `Mydia.Jobs.TrashCleanup` still purges them after the trash retention
+   (`media.trash_retention_days`, default 30).
 
-Two real triggers: an unmounted network share, and a library whose type does not
-match its contents. `extensions_for_library_type/1` returns video extensions only
-for `:movies`, `:series` and `:mixed`, so pointing a `:mixed` library at a music
-or image directory scans to zero.
+That hiding is why the guard matters. Without it an unmounted share would mark
+the whole library missing with nothing on the Trash page to show for it, and the
+purge would drop every row a month later.
 
-The durable fix is for `process_scan_result/2` to refuse the deletion pass when
-`scan_result.files == []` and `existing_files != []`. Not yet implemented; it was
-left out of the MBA removal branch as scope expansion.
+The guard is all-or-nothing. A scan that still sees some files marks the rest
+missing as usual, so a share that loses one subdirectory still marks those rows
+missing. The cost runs the other way too: an operator who deletes every file in
+a library on purpose keeps those rows active until a later scan sees at least one
+file, and then they are all marked missing at once.
 
 ## library_paths.disabled is one-way
 

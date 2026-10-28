@@ -43,10 +43,29 @@ defmodule Mydia.Jobs.TrashActionTest do
     t
   end
 
+  # What a scan leaves behind: the file is gone, the row is trashed :missing.
+  defp trashed_missing(ctx, name) do
+    {:ok, media_file} =
+      Library.create_scanned_media_file(%{
+        relative_path: name,
+        library_path_id: ctx.library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
+        size: 1
+      })
+
+    {:ok, t} =
+      Library.trash_media_file(Repo.preload(media_file, :library_path),
+        reason: :missing,
+        move: false
+      )
+
+    t
+  end
+
   @tag :tmp_dir
   test "restores an explicit id list", ctx do
-    a = trashed(ctx, "a.mkv", :missing)
-    b = trashed(ctx, "b.mkv", :missing)
+    a = trashed(ctx, "a.mkv", :manual)
+    b = trashed(ctx, "b.mkv", :manual)
 
     assert :ok =
              perform_job(TrashAction, %{
@@ -60,17 +79,32 @@ defmodule Mydia.Jobs.TrashActionTest do
 
   @tag :tmp_dir
   test "restores everything matching a reason, past the page size", ctx do
-    files = for n <- 1..60, do: trashed(ctx, "f#{n}.mkv", :missing)
+    files = for n <- 1..60, do: trashed(ctx, "f#{n}.mkv", :manual)
     other = trashed(ctx, "other.mkv", :pruned)
 
     assert :ok =
              perform_job(TrashAction, %{
                "action" => "restore",
-               "selection" => %{"type" => "all_matching", "reason" => "missing"}
+               "selection" => %{"type" => "all_matching", "reason" => "manual"}
              })
 
     for f <- files, do: assert(is_nil(Repo.reload(f).trashed_at))
     refute is_nil(Repo.reload(other).trashed_at)
+  end
+
+  @tag :tmp_dir
+  test "an all-matching purge for the retired missing reason purges nothing", ctx do
+    kept = trashed(ctx, "kept.mkv", :manual)
+    missing = trashed_missing(ctx, "gone.mkv")
+
+    assert :ok =
+             perform_job(TrashAction, %{
+               "action" => "purge",
+               "selection" => %{"type" => "all_matching", "reason" => "missing"}
+             })
+
+    refute is_nil(Repo.reload(kept).trashed_at)
+    assert %{trashed_reason: :missing, trashed_at: %DateTime{}} = Repo.reload(missing)
   end
 
   @tag :tmp_dir
@@ -88,8 +122,8 @@ defmodule Mydia.Jobs.TrashActionTest do
 
   @tag :tmp_dir
   test "a retained copy still processes the rest", ctx do
-    a = trashed(ctx, "a.mkv", :missing)
-    b = trashed(ctx, "b.mkv", :missing)
+    a = trashed(ctx, "a.mkv", :manual)
+    b = trashed(ctx, "b.mkv", :manual)
 
     # b's library path is taken, so its restore returns :trash_copy_retained
     # rather than a clean success. Both rows must still come back.
@@ -110,8 +144,8 @@ defmodule Mydia.Jobs.TrashActionTest do
     nested = Path.join(ctx.root, "nested")
     File.mkdir_p!(nested)
 
-    a = trashed(ctx, "nested/a.mkv", :missing)
-    b = trashed(ctx, "b.mkv", :missing)
+    a = trashed(ctx, "nested/a.mkv", :manual)
+    b = trashed(ctx, "b.mkv", :manual)
 
     # a's directory emptied out when its file moved into the trash. Replacing
     # it with a plain file means restoring a means mkdir_p-ing over a file: a

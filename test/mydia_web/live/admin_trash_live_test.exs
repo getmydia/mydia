@@ -91,9 +91,36 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     trashed
   end
 
+  defp trashed_missing(ctx, name) do
+    {:ok, media_file} =
+      Library.create_scanned_media_file(%{
+        relative_path: name,
+        library_path_id: ctx.library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie", title: "The Vermilion Hour"}).id,
+        size: 10
+      })
+
+    {:ok, trashed} =
+      Library.trash_media_file(Repo.preload(media_file, :library_path), reason: :missing)
+
+    trashed
+  end
+
+  @tag :tmp_dir
+  test "rows trashed as missing are not listed and get no filter chip", %{conn: conn} = ctx do
+    gone = trashed_missing(ctx, "gone.mkv")
+    manual = trashed(ctx, "kept.mkv", :manual, 10)
+
+    {:ok, view, _html} = live(conn, ~p"/admin/trash")
+
+    assert has_element?(view, "#trash-row-#{manual.id}")
+    refute has_element?(view, "#trash-row-#{gone.id}")
+    refute has_element?(view, "#trash-filter-missing")
+  end
+
   @tag :tmp_dir
   test "renders the trash page with a summary", %{conn: conn} = ctx do
-    _a = trashed(ctx, "a.mkv", :missing, 10)
+    _a = trashed(ctx, "a.mkv", :manual, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
@@ -103,7 +130,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
   @tag :tmp_dir
   test "uses the shared admin page content hierarchy", %{conn: conn} = ctx do
-    _a = trashed(ctx, "a.mkv", :missing, 10)
+    _a = trashed(ctx, "a.mkv", :manual, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
@@ -124,7 +151,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
   @tag :tmp_dir
   test "filters by reason", %{conn: conn} = ctx do
-    missing = trashed(ctx, "a.mkv", :missing, 10)
+    manual = trashed(ctx, "a.mkv", :manual, 10)
     pruned = trashed(ctx, "b.mkv", :pruned, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
@@ -132,7 +159,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     view |> element("#trash-filter-pruned") |> render_click()
 
     assert has_element?(view, "#trash-row-#{pruned.id}")
-    refute has_element?(view, "#trash-row-#{missing.id}")
+    refute has_element?(view, "#trash-row-#{manual.id}")
   end
 
   @tag :tmp_dir
@@ -179,7 +206,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
   @tag :tmp_dir
   test "restores a file", %{conn: conn} = ctx do
-    file = trashed(ctx, "a.mkv", :missing, 10)
+    file = trashed(ctx, "a.mkv", :manual, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
@@ -220,7 +247,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
   @tag :tmp_dir
   test "the reason filter is a segmented control and the empty modal is error toned",
        %{conn: conn} = ctx do
-    _file = trashed(ctx, "a.mkv", :missing, 10)
+    _file = trashed(ctx, "a.mkv", :manual, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
@@ -241,7 +268,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
   describe "bulk actions" do
     @tag :tmp_dir
     test "selecting a row shows the bulk bar", %{conn: conn} = ctx do
-      file = trashed(ctx, "a.mkv", :missing, 10)
+      file = trashed(ctx, "a.mkv", :manual, 10)
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
@@ -252,7 +279,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
     @tag :tmp_dir
     test "select-all-matching only appears past one page", %{conn: conn} = ctx do
-      file = trashed(ctx, "a.mkv", :missing, 10)
+      file = trashed(ctx, "a.mkv", :manual, 10)
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
       view |> element("#trash-select-#{file.id}") |> render_click()
@@ -263,7 +290,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
     @tag :tmp_dir
     test "bulk restore enqueues a job", %{conn: conn} = ctx do
-      file = trashed(ctx, "a.mkv", :missing, 10)
+      file = trashed(ctx, "a.mkv", :manual, 10)
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
       view |> element("#trash-select-#{file.id}") |> render_click()
@@ -275,12 +302,12 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     @tag :tmp_dir
     test "switching the reason filter clears a select-all-matching selection",
          %{conn: conn} = ctx do
-      for n <- 1..60, do: trashed(ctx, "m#{n}.mkv", :missing, 10)
+      for n <- 1..60, do: trashed(ctx, "m#{n}.mkv", :manual, 10)
       pruned = trashed(ctx, "p.mkv", :pruned, 10)
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-      html = view |> element("#trash-filter-missing") |> render_click()
+      html = view |> element("#trash-filter-manual") |> render_click()
 
       # The bulk bar, and the "select all matching" button inside it, only
       # render once something is selected; tick one visible row first so the
@@ -290,7 +317,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
       view |> element("#trash-select-all-matching") |> render_click()
       assert has_element?(view, "#trash-bulk-bar")
 
-      # {:all_matching, :missing} must not survive a switch to Pruned: the
+      # {:all_matching, :manual} must not survive a switch to Pruned: the
       # tuple carries the reason it was made under, and enqueuing it after
       # the filter moved on would purge or restore the wrong 60 files while
       # the bar shows a small, unrelated Pruned count instead.
@@ -304,7 +331,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
   describe "pagination" do
     @tag :tmp_dir
     test "a second page is reachable and shows different rows", %{conn: conn} = ctx do
-      for n <- 1..60, do: trashed(ctx, "f#{n}.mkv", :missing, 10)
+      for n <- 1..60, do: trashed(ctx, "f#{n}.mkv", :manual, 10)
 
       {:ok, view, html} = live(conn, ~p"/admin/trash")
 
@@ -327,7 +354,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     # empty page and "Showing 51-50 of 50".
     @tag :tmp_dir
     test "emptying the last page falls back to the page before it", %{conn: conn} = ctx do
-      for n <- 1..51, do: trashed(ctx, "f#{n}.mkv", :missing, 10)
+      for n <- 1..51, do: trashed(ctx, "f#{n}.mkv", :manual, 10)
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 

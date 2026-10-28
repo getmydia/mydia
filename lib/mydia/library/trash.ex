@@ -207,11 +207,24 @@ defmodule Mydia.Library.Trash do
   purge normally; a missing file is a reached goal state, not a failure.
   """
   @spec purge_old_trashed_media_files(integer()) :: {:ok, non_neg_integer()}
-  def purge_old_trashed_media_files(days \\ 30) do
+  def purge_old_trashed_media_files(days \\ 30), do: purge_trashed(MediaFile, days)
+
+  @doc """
+  Purges everything the trash page shows, now: the page's "Empty trash".
+
+  Rows trashed with reason `:missing` are hidden from the page
+  (`visible_trash/0`), so they are left for the retention purge. That keeps
+  the confirmation's count, which comes from `trashed_summary/0`, equal to
+  what this deletes, and keeps their restore-on-reappear marker.
+  """
+  @spec empty_trash() :: {:ok, non_neg_integer()}
+  def empty_trash, do: purge_trashed(visible_trash(), 0)
+
+  defp purge_trashed(query, days) do
     cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
 
     expired =
-      from(f in MediaFile,
+      from(f in query,
         where: not is_nil(f.trashed_at) and f.trashed_at <= ^cutoff,
         preload: :library_path
       )
@@ -249,6 +262,8 @@ defmodule Mydia.Library.Trash do
   Newest first, because the thing an operator wants to undo is almost always
   the thing that just happened.
 
+  Rows trashed with reason `:missing` are never included; see `visible_trash/0`.
+
   ## Options
 
     * `:reason` - restrict to one `trashed_reason`. `nil` (the default) returns
@@ -260,14 +275,25 @@ defmodule Mydia.Library.Trash do
   """
   @spec list_trashed_media_files(keyword()) :: [MediaFile.t()]
   def list_trashed_media_files(opts \\ []) do
-    MediaFile
-    |> where([f], not is_nil(f.trashed_at))
+    visible_trash()
     |> filter_by_trashed_reason(Keyword.get(opts, :reason))
     |> order_by([f], desc: f.trashed_at, desc: f.id)
     |> maybe_limit(Keyword.get(opts, :limit))
     |> maybe_offset(Keyword.get(opts, :offset))
     |> maybe_preload(opts[:preload])
     |> Repo.all()
+  end
+
+  # The trash an operator sees. A row trashed because its file was already gone
+  # is a restore-on-reappear marker for the scanner, not something to review:
+  # restoring it brings back a pointer to nothing and deleting it is what
+  # TrashCleanup does anyway. It stays trashed so partition_and_restore/3 in
+  # LibraryScanner can still bring it back if the file returns, and the
+  # retention purge still removes it.
+  defp visible_trash do
+    from f in MediaFile,
+      where: not is_nil(f.trashed_at),
+      where: is_nil(f.trashed_reason) or f.trashed_reason != :missing
   end
 
   defp filter_by_trashed_reason(query, nil), do: query
@@ -287,14 +313,15 @@ defmodule Mydia.Library.Trash do
   @doc """
   Counts trashed media files grouped by reason, for the filter chips.
 
+  Rows trashed with reason `:missing` are excluded.
+
   The map is keyed by the `trashed_reason` atom, with `nil` holding rows
   trashed before the column existed. A reason with no rows is absent from the
   map rather than present with a zero.
   """
   @spec count_trashed_media_files() :: %{optional(atom()) => non_neg_integer()}
   def count_trashed_media_files do
-    MediaFile
-    |> where([f], not is_nil(f.trashed_at))
+    visible_trash()
     |> group_by([f], f.trashed_reason)
     |> select([f], {f.trashed_reason, count(f.id)})
     |> Repo.all()
@@ -312,8 +339,7 @@ defmodule Mydia.Library.Trash do
   @spec trashed_summary() :: %{count: non_neg_integer(), bytes: non_neg_integer()}
   def trashed_summary do
     {count, bytes} =
-      MediaFile
-      |> where([f], not is_nil(f.trashed_at))
+      visible_trash()
       |> select([f], {count(f.id), sum(f.size)})
       |> Repo.one()
 
@@ -363,11 +389,16 @@ defmodule Mydia.Library.Trash do
   Returns nil for an active row as well as a missing one: every caller is a
   trash page action, and acting on a row somebody restored in another tab is
   exactly the case this must refuse.
+
+  Also nil for a row trashed with reason `:missing`, which the trash page
+  never shows (`visible_trash/0`). An id held from before that row was hidden
+  must not restore a pointer to nothing; the scanner restores such a row
+  itself when its file reappears.
   """
   @spec get_trashed_media_file(binary(), keyword()) :: MediaFile.t() | nil
   def get_trashed_media_file(id, opts \\ []) do
-    MediaFile
-    |> where([f], f.id == ^id and not is_nil(f.trashed_at))
+    visible_trash()
+    |> where([f], f.id == ^id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
   end
@@ -422,9 +453,10 @@ defmodule Mydia.Library.Trash do
     |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_missing", true)})
   end
 
-  defp drop_trash_state(nil), do: FileMetadata.empty()
+  @doc false
+  def drop_trash_state(nil), do: FileMetadata.empty()
 
-  defp drop_trash_state(%FileMetadata{} = metadata) do
+  def drop_trash_state(%FileMetadata{} = metadata) do
     extra =
       metadata.extra
       |> Map.delete("trashed_path")
