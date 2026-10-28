@@ -90,7 +90,7 @@ defmodule Mydia.Plugins.ContractV18Test do
     assert new."vote-count" == {:some, 2785}
   end
 
-  test "a 1.7 guest still fills through the old search shape", %{user: user} do
+  test "a 1.7 guest still fills against the 1.8 host", %{user: user} do
     start("v17-still", "shelf_fixture_v17.wasm")
 
     assert Host.contract_version("v17-still") == :v17

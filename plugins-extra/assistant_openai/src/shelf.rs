@@ -39,8 +39,10 @@ const MEDIA_TYPES: [&str; 2] = ["movie", "tv_show"];
 const MAX_STEPS: usize = 5;
 /// How much history a fill reads; the host's cap for the namespace.
 const HISTORY_ROWS: i64 = 50;
-/// Hits fetched per title: enough to find the right year among remakes.
-const HITS_PER_TITLE: u32 = 5;
+/// Hits fetched per title: enough to find the right year among remakes, and a
+/// well-known title behind obscure namesakes. The relay fetches a whole page
+/// either way, so more hits cost no extra request.
+const HITS_PER_TITLE: u32 = 10;
 /// Fewest catalog ratings a hit needs to count as the title the model meant.
 /// A model only recalls titles people have heard of, while a search for a
 /// famous name also returns obscure namesakes: a short film sharing a show's
@@ -468,8 +470,14 @@ pub fn over_budget(want: &Wanted) -> Value {
 ///
 /// Models mislabel shows as movies and back, so a title that found no match
 /// as the type named is searched once more as the other type, with whatever
-/// budget the first pass left.
-fn resolve(wanted: &[Wanted], excluded: &Seen, seen: &mut Seen, budget: &mut usize) -> Value {
+/// budget the first pass left. `search` is `catalog_search` outside tests.
+fn resolve(
+    wanted: &[Wanted],
+    excluded: &Seen,
+    seen: &mut Seen,
+    budget: &mut usize,
+    search: impl Fn(&Wanted) -> Result<Vec<Candidate>, Value>,
+) -> Value {
     let allowed = searchable(*budget, wanted.len());
     *budget -= allowed;
     let mut out: Vec<Value> = vec![];
@@ -514,7 +522,7 @@ fn resolve(wanted: &[Wanted], excluded: &Seen, seen: &mut Seen, budget: &mut usi
 
 /// One catalog search for `want`, as candidates, or the entry reporting why
 /// it failed.
-fn search(want: &Wanted) -> Result<Vec<Candidate>, Value> {
+fn catalog_search(want: &Wanted) -> Result<Vec<Candidate>, Value> {
     let hits = host::search(&SearchRequest {
         kind: SearchKind::Catalog,
         query: want.title.clone(),
@@ -624,7 +632,13 @@ pub fn fill(req: ShelfRequest) -> Result<Vec<ShelfItem>, String> {
                     let content = match (call.name.as_str(), &call.arguments) {
                         (_, Err(m)) => json!({"error": m}),
                         ("resolve_titles", Ok(args)) => match wanted(args) {
-                            Ok(titles) => resolve(&titles, &excluded, &mut seen, &mut searches),
+                            Ok(titles) => resolve(
+                                &titles,
+                                &excluded,
+                                &mut seen,
+                                &mut searches,
+                                catalog_search,
+                            ),
                             Err(m) => json!({"error": m}),
                         },
                         ("submit_picks", Ok(args)) => match accept(args, &seen, limit as usize) {
@@ -953,6 +967,61 @@ mod tests {
         assert!(same_title("Glass Harbor: Part 2", "glass harbor part 2"));
         assert!(!same_title("Glass Harbor", "Glass Harbor 2"));
         assert!(!same_title("", ""));
+    }
+
+    #[test]
+    fn resolve_retries_a_mislabelled_title_as_the_other_type() {
+        let calls = std::cell::RefCell::new(vec![]);
+        let search = |w: &Wanted| {
+            calls.borrow_mut().push(w.media_type.clone());
+            Ok(if w.media_type == "movie" {
+                vec![rated("Night Warden", Some(2022), 2, 4)]
+            } else {
+                vec![Candidate {
+                    title: "Night Warden".into(),
+                    year: Some(2022),
+                    id: Some((Catalog::Tvdb, 9)),
+                    votes: None,
+                }]
+            })
+        };
+        let mut seen = Seen::new();
+        let mut budget = 60;
+
+        let out = resolve(
+            &[want("Night Warden", Some(2022), "movie")],
+            &Seen::new(),
+            &mut seen,
+            &mut budget,
+            search,
+        );
+
+        assert_eq!(*calls.borrow(), ["movie", "tv_show"]);
+        assert_eq!(
+            out,
+            json!([{"title": "Night Warden", "year": 2022, "media_type": "tv_show", "tvdb_id": 9}])
+        );
+        assert!(seen.contains(&("tv_show".to_string(), Catalog::Tvdb, 9)));
+        assert_eq!(budget, 58);
+    }
+
+    #[test]
+    fn resolve_does_not_retry_a_title_that_matched() {
+        let calls = std::cell::RefCell::new(0);
+        let search = |_: &Wanted| {
+            *calls.borrow_mut() += 1;
+            Ok(vec![cand("Ember Tide", Some(2024), Some(7))])
+        };
+        let mut budget = 60;
+        resolve(
+            &[want("Ember Tide", Some(2024), "movie")],
+            &Seen::new(),
+            &mut Seen::new(),
+            &mut budget,
+            search,
+        );
+        assert_eq!(*calls.borrow(), 1);
+        assert_eq!(budget, 59);
     }
 
     #[test]
