@@ -419,10 +419,11 @@ defmodule Mydia.Library.FileOrganizer do
   end
 
   # Copies to a hidden sibling and publishes it only once complete, so an error
-  # or a killed VM midway never leaves a truncated file at `dest`. The suffix
-  # is not a video extension, so scans and folder blockers ignore the sibling.
+  # or a killed VM midway never leaves a truncated file at `dest`. The name
+  # has no video extension, so scans and folder blockers ignore the sibling,
+  # and a fixed length, so a basename at the filesystem's limit still copies.
   defp atomic_copy(source, dest) do
-    tmp = Path.join(Path.dirname(dest), ".#{Path.basename(dest)}.mydia-partial")
+    tmp = partial_path(dest)
     _ = File.rm(tmp)
 
     with :ok <- Storage.Local.copy_file(source, tmp),
@@ -435,6 +436,11 @@ defmodule Mydia.Library.FileOrganizer do
         error
     end
   end
+
+  @doc false
+  @spec partial_path(String.t()) :: String.t()
+  def partial_path(dest),
+    do: Path.join(Path.dirname(dest), ".mydia-partial-#{:erlang.phash2(dest)}")
 
   defp verify_copy_size(source, tmp) do
     if file_size(source) == file_size(tmp), do: :ok, else: {:error, :copy_size_mismatch}

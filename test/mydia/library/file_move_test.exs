@@ -4,6 +4,7 @@ defmodule Mydia.Library.FileMoveTest do
   @moduletag :tmp_dir
 
   alias Mydia.Library.FileMove
+  alias Mydia.Library.FileOrganizer
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
 
@@ -90,7 +91,7 @@ defmodule Mydia.Library.FileMoveTest do
 
   test "a stale partial sibling does not block a copy", %{dst: dst, mf: file, rel: rel} do
     dest = Path.join(dst.path, rel)
-    partial = Path.join(Path.dirname(dest), ".#{Path.basename(dest)}.mydia-partial")
+    partial = FileOrganizer.partial_path(dest)
     File.mkdir_p!(Path.dirname(dest))
     File.write!(partial, "tru")
 
