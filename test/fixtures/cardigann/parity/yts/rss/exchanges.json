@@ -1,0 +1,132 @@
+{
+  "definition": "yts",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://movies-api.accel.li/api/v2/list_movies.json?limit=50&order_by=desc&sort_by=date_added"
+      },
+      "response": {
+        "body_file": "001.json",
+        "headers": [
+          [
+            "access-control-allow-origin",
+            "*"
+          ],
+          [
+            "age",
+            "0"
+          ],
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cache-control",
+            "no-store, no-cache, must-revalidate"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2d853ee63430-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "application/json; charset=utf-8"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:59:28 GMT"
+          ],
+          [
+            "expect-ct",
+            "max-age=86400, enforce"
+          ],
+          [
+            "expires",
+            "Thu, 19 Nov 1981 08:52:00 GMT"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "pragma",
+            "no-cache"
+          ],
+          [
+            "referrer-policy",
+            "same-origin"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=Ll%2Bw8qNOMOgEIeLorpW1HIQMY9sW32D5CkwnVMFm2y9eV6MjZbzUw9Fv0XFCfznAOitmtjRLSpuFxm3J6K47vFU0VEfc0qiyrCCoXU8PaAsmPh3zrrzk03PZrv706zdYFI%2FJcq4W\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=3,cfOrigin;dur=320"
+          ],
+          [
+            "set-cookie",
+            "<redacted>"
+          ],
+          [
+            "speculation-rules",
+            "\"/cdn-cgi/speculation\""
+          ],
+          [
+            "strict-transport-security",
+            "max-age=63072000; preload"
+          ],
+          [
+            "strict-transport-security",
+            "max-age=15638400"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "Accept-Encoding"
+          ],
+          [
+            "x-content-type-options",
+            "nosniff"
+          ],
+          [
+            "x-frame-options",
+            "SAMEORIGIN"
+          ],
+          [
+            "x-xss-protection",
+            "1; mode=block"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "rss",
+    "term": ""
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

@@ -1,0 +1,104 @@
+{
+  "definition": "nekobt",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://nekobt.to/api/torznab/api?limit=100&q=1080p&t=search"
+      },
+      "response": {
+        "body_file": "001.xml",
+        "headers": [
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2ad50f6c8480-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "application/xml"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:38 GMT"
+          ],
+          [
+            "expect-ct",
+            "max-age=86400, enforce"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "referrer-policy",
+            "same-origin"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=qMnJIHKq7XiSVrwSzCGJpHofG0NHfcq%2FCqlRQYuBKoH2nBKh0UjXBP%2B1j3m67sFMGBXR7KukJKcYXXcK4Fv98tr%2BO2hTrU8npMUHlzksPb8nHT9h6CBpxCJCTlU%3D\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=3,cfOrigin;dur=341"
+          ],
+          [
+            "speculation-rules",
+            "\"/cdn-cgi/speculation\""
+          ],
+          [
+            "strict-transport-security",
+            "max-age=31536000; includeSubDomains; preload"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "Accept-Encoding"
+          ],
+          [
+            "x-content-type-options",
+            "nosniff"
+          ],
+          [
+            "x-frame-options",
+            "SAMEORIGIN"
+          ],
+          [
+            "x-xss-protection",
+            "1; mode=block"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "movie",
+    "term": "1080p"
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

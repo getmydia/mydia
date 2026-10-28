@@ -1,0 +1,104 @@
+{
+  "definition": "dmhy",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://share.dmhy.org/topics/list?keyword=1080p&order=date-desc&sort_id=0&team_id=0"
+      },
+      "response": {
+        "body_file": "001.html",
+        "headers": [
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cache-control",
+            "public, max-age=60"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2a97c9f0ab72-YYZ"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "text/html; charset=utf-8"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:28 GMT"
+          ],
+          [
+            "expires",
+            "Wed, 28 Oct 2026 18:58:28 GMT"
+          ],
+          [
+            "last-modified",
+            "Wed, 28 Oct 2026 18:57:28 GMT"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "pragma",
+            "cache"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=zr5app3wv5h8ZsY%2FtoDgwTa1h9BRRDoiSZ8D5d2sPToAHJtVtx2VLyLnaOTPYzB2d%2FAx8j6acDI9%2FLZbahS54mTW3B2%2BSSEdwWjeRabbuuehHEl6HgbKBXjv1C44qNyW\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=8,cfOrigin;dur=183"
+          ],
+          [
+            "strict-transport-security",
+            "max-age=15552000; includeSubDomains"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "accept-encoding"
+          ],
+          [
+            "x-content-type-options",
+            "nosniff"
+          ],
+          [
+            "x-dmhy-origin",
+            "sharenew-legacy-production"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "movie",
+    "term": "1080p"
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

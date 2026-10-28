@@ -1,0 +1,96 @@
+{
+  "definition": "linuxtracker",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://linuxtracker.org/torrents/?q=2024"
+      },
+      "response": {
+        "body_file": "001.html",
+        "headers": [
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2aaccef41275-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "text/html; charset=utf-8"
+          ],
+          [
+            "cross-origin-opener-policy",
+            "same-origin"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:32 GMT"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "referrer-policy",
+            "same-origin"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=lp9QAHs7OrBsG9hqNkAmiJpHZ2v3ycPBuCrviKhDewpnb5Cw6nzQtka%2BAbDd27fH2bQ13pl6%2BvcU3RUnl4Epd8LnUEp4p53BLSHVbcYIb1W5%2B3YCf1oEAWnQRdKiIzf5Qu2n\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=16,cfOrigin;dur=591"
+          ],
+          [
+            "speculation-rules",
+            "\"/cdn-cgi/speculation\""
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "Cookie,Accept-Encoding"
+          ],
+          [
+            "x-content-type-options",
+            "nosniff"
+          ],
+          [
+            "x-frame-options",
+            "DENY"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "generic",
+    "term": "2024"
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

@@ -1,0 +1,106 @@
+{
+  "definition": "bigfangroup",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://bigfangroup.org/browse.php?ajax=1&cat=0&d=desc&format=0&incldead=1&s=added&search=1080p&year=0"
+      },
+      "response": {
+        "error": "connect"
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://www.freebfg.org/browse.php?ajax=1&cat=0&d=desc&format=0&incldead=1&s=added&search=1080p&year=0"
+      },
+      "response": {
+        "body_file": "002.html",
+        "headers": [
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cache-control",
+            "no-cache, must-revalidate, max-age=0"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2a794cf4c208-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "text/html; charset=windows-1251"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:23 GMT"
+          ],
+          [
+            "expires",
+            "0"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "pragma",
+            "no-cache"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=RBV82zocuk8kkRK1w8MfIKijrm7k8z1kMGpwWL%2Fwn0HQJaY2WqEmMvs9X8BXsZQcrFcLyMpfmgvK5f%2BBCu0A6hfTFdjpyDGJaDU7yqUdNEVIdl32V4nabr1%2Bx68rSQmU93U%3D\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=19,cfOrigin;dur=372"
+          ],
+          [
+            "set-cookie",
+            "<redacted>"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "Accept-Encoding"
+          ],
+          [
+            "x-powered-by",
+            "Kinokpk.com releaser 2.70"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "movie",
+    "term": "1080p"
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

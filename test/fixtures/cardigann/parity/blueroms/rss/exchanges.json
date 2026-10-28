@@ -1,0 +1,88 @@
+{
+  "definition": "blueroms",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://www.blueroms.ws/search?at=date&g=0&ord=desc&p=0&page=1&q="
+      },
+      "response": {
+        "body_file": "001.html",
+        "headers": [
+          [
+            "accept-ranges",
+            "bytes"
+          ],
+          [
+            "age",
+            "2685"
+          ],
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2a841a0e188c-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "text/html; charset=utf-8"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:25 GMT"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=RDHtEGcCThL8C6toz%2FsWy%2B3IwX0HouMSpA%2FV7R3As7OzhS2rFMFYQgdnmEh9LlIot%2BhMKrLofrKrLcNFK1R%2F8IY0omqKzChQoLiKbjpOQF2b%2F80dh%2BQTQ38TthvSp2POrJ0%3D\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=17,cfOrigin;dur=245"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "via",
+            "1.1 varnish (Varnish/6.0)"
+          ],
+          [
+            "x-varnish",
+            "161417813 147159437"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "rss",
+    "term": ""
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}
