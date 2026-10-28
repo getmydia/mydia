@@ -435,9 +435,10 @@ defmodule Mydia.Library.Trash do
     |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_missing", true)})
   end
 
-  defp drop_trash_state(nil), do: FileMetadata.empty()
+  @doc false
+  def drop_trash_state(nil), do: FileMetadata.empty()
 
-  defp drop_trash_state(%FileMetadata{} = metadata) do
+  def drop_trash_state(%FileMetadata{} = metadata) do
     extra =
       metadata.extra
       |> Map.delete("trashed_path")
