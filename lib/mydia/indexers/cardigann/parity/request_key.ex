@@ -52,7 +52,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.RequestKey do
 
   defp encode_sorted(pairs), do: pairs |> Enum.sort() |> URI.encode_query(:www_form)
 
+  # Req's plug sees an absent body as "", while the wasm host can hand over an
+  # empty `some` body; both mean "no body" and must key the same way.
   defp normalise_body(nil), do: nil
+  defp normalise_body(""), do: nil
 
   defp normalise_body(body) when is_binary(body) do
     if form?(body), do: body |> decode_pairs() |> encode_sorted(), else: body

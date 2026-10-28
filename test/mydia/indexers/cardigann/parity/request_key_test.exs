@@ -18,6 +18,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.RequestKeyTest do
     assert RequestKey.new(:post, "https://t.example/s", ~s({"b":2})).body == ~s({"b":2})
   end
 
+  test "an empty body keys the same as no body" do
+    # The native engine's Req plug reads an absent body as "", and the wasm host
+    # can pass an empty body; both sides must find the same recording.
+    assert RequestKey.new(:get, "https://t.example/s", "") ==
+             RequestKey.new(:get, "https://t.example/s", nil)
+
+    assert RequestKey.new(:get, "https://t.example/s", "").body == nil
+  end
+
   test "different values make different keys" do
     refute RequestKey.new(:get, "https://t.example/s?page=1", nil) ==
              RequestKey.new(:get, "https://t.example/s?page=2", nil)

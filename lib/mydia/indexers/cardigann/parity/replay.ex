@@ -51,28 +51,26 @@ defmodule Mydia.Indexers.Cardigann.Parity.Replay do
 
   @doc "A closure for Req's `plug:` option."
   @spec req_plug(pid()) :: (Plug.Conn.t() -> Plug.Conn.t())
-  def req_plug(pid) do
-    fn conn ->
-      {:ok, body, conn} = Plug.Conn.read_body(conn)
-      body = if body == "", do: nil, else: body
-      key = RequestKey.new(conn.method, Plug.Conn.request_url(conn), body)
+  def req_plug(pid), do: &serve(pid, &1)
 
-      case fetch(pid, key) do
-        {:ok, %Exchange{error: error}} when not is_nil(error) ->
-          # Req 0.7 does not rescue a raise from a plug. It does honour the
-          # private key Req.Test.transport_error/2 sets, which turns the conn
-          # into {:error, exception} for the caller.
-          Plug.Conn.put_private(conn, :req_test_exception, %Req.TransportError{reason: error})
+  defp serve(pid, conn) do
+    {:ok, body, conn} = Plug.Conn.read_body(conn)
+    key = RequestKey.new(conn.method, Plug.Conn.request_url(conn), body)
 
-        {:ok, %Exchange{} = ex} ->
-          conn =
-            Enum.reduce(ex.headers, conn, fn {k, v}, c -> Plug.Conn.put_resp_header(c, k, v) end)
+    case fetch(pid, key) do
+      {:ok, %Exchange{error: error}} when not is_nil(error) ->
+        # Req 0.7 does not rescue a raise from a plug. It does honour the
+        # private key Req.Test.transport_error/2 sets, which turns the conn
+        # into {:error, exception} for the caller.
+        Plug.Conn.put_private(conn, :req_test_exception, %Req.TransportError{reason: error})
 
-          Plug.Conn.send_resp(conn, ex.status, ex.body || "")
+      {:ok, %Exchange{} = ex} ->
+        ex.headers
+        |> Enum.reduce(conn, fn {k, v}, c -> Plug.Conn.put_resp_header(c, k, v) end)
+        |> Plug.Conn.send_resp(ex.status, ex.body || "")
 
-        :miss ->
-          Plug.Conn.send_resp(conn, 404, "parity replay miss")
-      end
+      :miss ->
+        Plug.Conn.send_resp(conn, 404, "parity replay miss")
     end
   end
 end
