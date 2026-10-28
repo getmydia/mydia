@@ -50,6 +50,8 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
         type="button"
         id="episode-monitoring-menu"
         popovertarget="episode-monitoring-menu-panel"
+        aria-haspopup="true"
+        aria-controls="episode-monitoring-menu-panel"
         style="anchor-name:--episode-monitoring-menu"
         class="btn btn-sm btn-ghost gap-1"
       >
@@ -60,6 +62,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
       <ul
         id="episode-monitoring-menu-panel"
         popover
+        aria-label={gettext("Episode monitoring preset")}
         class="dropdown dropdown-end menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300 ms-0 whitespace-normal before:hidden"
         style="position-anchor:--episode-monitoring-menu;position-try-fallbacks:flip-block"
       >

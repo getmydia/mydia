@@ -20927,22 +20927,22 @@ msgstr[1] ""
 msgid "Approved by %{name} on %{date}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:95
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:98
 #, elixir-autogen, elixir-format
 msgid "No episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:97
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:100
 #, elixir-autogen, elixir-format
 msgid "No episodes with files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:96
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:99
 #, elixir-autogen, elixir-format
 msgid "No missing episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:98
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:101
 #, elixir-autogen, elixir-format
 msgid "No upcoming episodes"
 msgstr ""
@@ -20955,4 +20955,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_requests_live/components.ex:110
 #, elixir-autogen, elixir-format
 msgid "Requested by %{name} on %{date}"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:65
+#, elixir-autogen, elixir-format
+msgid "Episode monitoring preset"
 msgstr ""
