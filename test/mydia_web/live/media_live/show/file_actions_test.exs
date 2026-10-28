@@ -118,7 +118,11 @@ defmodule MydiaWeb.MediaLive.Show.FileActionsTest do
 
       assert attr(html, "#file-actions-menu-file-1", "class") =~ "before:hidden"
       refute present?(html, "#file-actions-menu-file-1 > div")
-      assert present?(html, "#file-actions-menu-file-1 > li.divider")
+      # Separators are daisyUI's empty `<li>`. Adding `.divider` to one gives
+      # it the divider's 1rem height under the menu's 10%-opacity fill, which
+      # renders as a thick grey bar.
+      assert present?(html, "#file-actions-menu-file-1 > li:empty")
+      refute present?(html, "#file-actions-menu-file-1 > li.divider")
     end
   end
 
