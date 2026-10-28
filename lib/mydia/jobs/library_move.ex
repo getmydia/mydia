@@ -95,7 +95,7 @@ defmodule Mydia.Jobs.LibraryMove do
 
   defp run(job, item, target) do
     sources = Map.get(job.args, "sources", [])
-    swept_failures = Sources.sweep(sources, target)
+    {swept_failures, swept_left} = Sources.sweep(sources, target)
 
     {:ok, moves} = LibraryMove.plan(item, target)
 
@@ -104,7 +104,7 @@ defmodule Mydia.Jobs.LibraryMove do
 
     {results, left_behind} = moves |> Enum.map(&FileStep.run(&1, target, final?(job))) |> unzip()
 
-    Leftovers.carry(folders, item, target, left_behind)
+    Leftovers.carry(folders, item, target, swept_left ++ left_behind)
     MediaServerNotifier.notify_all(path: target.path)
     finish(job, item, target, swept_failures + Enum.count(results, &FileStep.transient?/1))
   end

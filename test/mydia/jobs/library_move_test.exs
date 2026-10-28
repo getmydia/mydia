@@ -444,14 +444,66 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert Repo.get!(Subtitle, subtitle.id).file_path == moved
   end
 
-  test "a retry repoints a subtitle row whose sidecar moved before the crash", ctx do
+  test "a retry moves a sidecar whose row was rewritten before the crash", ctx do
     %{job: job, srt: srt, subtitle: subtitle} = deleted_source(ctx)
     moved = Path.join(ctx.b.path, "Glass Harbor (2019)/Glass Harbor (2019).en.srt")
-    File.rename!(srt, moved)
+    Repo.update!(Ecto.Changeset.change(subtitle, file_path: moved))
 
     assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
 
+    refute File.exists?(srt)
+    assert File.exists?(moved)
     assert Repo.get!(Subtitle, subtitle.id).file_path == moved
+  end
+
+  test "a row is never pointed at a subtitle the move did not place", ctx do
+    %{job: job, srt: srt, subtitle: subtitle} = deleted_source(ctx)
+    File.rm!(srt)
+    write(Path.join(ctx.b.path, "Glass Harbor (2019)/Glass Harbor (2019).en.srt"), "foreign")
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    assert Repo.get!(Subtitle, subtitle.id).file_path == srt
+  end
+
+  test "a sidecar the sweep left behind stays out of the leftover carry", ctx do
+    %{job: job, srt: srt, subtitle: subtitle} = deleted_source(ctx)
+    write(Path.join(ctx.b.path, "Glass Harbor (2019)/Glass Harbor (2019).en.srt"), "foreign")
+
+    assert :ok = perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+
+    assert File.exists?(srt)
+    refute File.exists?(Path.join(ctx.b.path, "Glass Harbor (2019)/glass.en.srt"))
+    assert Repo.get!(Subtitle, subtitle.id).file_path == srt
+  end
+
+  test "a leftover whose row was rewritten before the crash is carried to it", ctx do
+    %{a: a, b: b, movie: movie} = ctx
+    file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
+    leftover = write(Path.join(a.path, "Glass Harbor (2019)/Subs/English.srt"))
+    carried = Path.join(b.path, "Glass Harbor (2019)/Subs/English.srt")
+    subtitle = insert_subtitle(file, carried)
+
+    assert :ok = run(movie, b)
+
+    refute File.exists?(leftover)
+    assert File.exists?(carried)
+    assert Repo.get!(Subtitle, subtitle.id).file_path == carried
+  end
+
+  test "a sweep that cannot read the old source retries", ctx do
+    {job, source, _dest} = committed_orphan(ctx)
+    dir = Path.dirname(source)
+    File.chmod!(dir, 0o000)
+    on_exit(fn -> File.chmod(dir, 0o755) end)
+
+    # Root ignores directory permissions; there is nothing to observe then.
+    if match?({:ok, _}, File.stat(source)) do
+      :ok
+    else
+      assert {:error, {:transient, 1}} =
+               perform_job(Mydia.Jobs.LibraryMove, job.args, attempt: 2)
+    end
   end
 
   test "a leftover subtitle already linked into place takes its row along", ctx do

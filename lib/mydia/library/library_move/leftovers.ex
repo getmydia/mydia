@@ -122,7 +122,13 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
     end
   end
 
+  # Rows move first and come back if the file stays: a crash in between
+  # leaves a row ahead of a file still in the old folder, which the retry's
+  # walk carries to where the row points. A row whose file moved first would
+  # have nothing left here to find it by.
   defp place(path, dest, target) do
+    repoint_subtitles(path, dest)
+
     case FileOrganizer.place_file(path, dest,
            use_hardlinks: true,
            remove_source_after_hardlink: true,
@@ -130,9 +136,10 @@ defmodule Mydia.Library.LibraryMove.Leftovers do
            confine_to: target.path
          ) do
       {:ok, _} ->
-        repoint_subtitles(path, dest)
+        :ok
 
       {:error, reason} ->
+        repoint_subtitles(dest, path)
         Logger.warning("Library move could not carry a file", path: path, reason: inspect(reason))
     end
   end

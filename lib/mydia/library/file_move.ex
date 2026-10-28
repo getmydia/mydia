@@ -156,43 +156,59 @@ defmodule Mydia.Library.FileMove do
   hot path.
   """
   @spec identical_copy?(String.t(), String.t()) :: boolean()
-  def identical_copy?(source_path, dest_path) do
+  def identical_copy?(source_path, dest_path),
+    do: compare_copy(source_path, dest_path) == :same
+
+  @doc """
+  `identical_copy?/2` that tells a difference from a failure: `:same`,
+  `:different` (a size or byte mismatch, or a path that is not there), or
+  `{:error, reason}` when storage could not be read, so a caller can retry
+  instead of deciding.
+  """
+  @spec compare_copy(String.t(), String.t()) :: :same | :different | {:error, term()}
+  def compare_copy(source_path, dest_path) do
     if Mydia.Storage.s3?(source_path) or Mydia.Storage.s3?(dest_path),
-      do: identical_stored?(source_path, dest_path),
-      else: identical_local?(source_path, dest_path)
+      do: compare_stored(source_path, dest_path),
+      else: compare_local(source_path, dest_path)
   end
 
-  defp identical_local?(source_path, dest_path) do
+  defp compare_local(source_path, dest_path) do
     with {:ok, a} <- File.stat(source_path),
-         {:ok, b} <- File.stat(dest_path) do
-      a.size == b.size and
-        Enum.zip(File.stream!(source_path, @chunk), File.stream!(dest_path, @chunk))
-        |> Enum.all?(fn {x, y} -> x == y end)
+         {:ok, b} <- File.stat(dest_path),
+         true <- a.size == b.size,
+         true <-
+           Enum.zip(File.stream!(source_path, @chunk), File.stream!(dest_path, @chunk))
+           |> Enum.all?(fn {x, y} -> x == y end) do
+      :same
     else
-      _ -> false
+      _ -> :different
     end
   end
 
-  defp identical_stored?(source_path, dest_path) do
+  defp compare_stored(source_path, dest_path) do
     with {:ok, a} <- Mydia.Storage.at(source_path),
          {:ok, b} <- Mydia.Storage.at(dest_path),
          {:ok, %{size: size}} <- Mydia.Storage.stat(a),
          {:ok, %{size: ^size}} <- Mydia.Storage.stat(b) do
-      same_ranges?(a, b, 0, size)
+      same_ranges(a, b, 0, size)
     else
-      _ -> false
+      {:ok, %{size: _other}} -> :different
+      {:error, %Mydia.Storage.Error{kind: :not_found}} -> :different
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp same_ranges?(_a, _b, offset, size) when offset >= size, do: true
+  defp same_ranges(_a, _b, offset, size) when offset >= size, do: :same
 
-  defp same_ranges?(a, b, offset, size) do
+  defp same_ranges(a, b, offset, size) do
     length = min(@stored_chunk, size - offset)
 
     case {Mydia.Storage.read_range(a, offset, length),
           Mydia.Storage.read_range(b, offset, length)} do
-      {{:ok, same}, {:ok, same}} -> same_ranges?(a, b, offset + length, size)
-      _ -> false
+      {{:ok, same}, {:ok, same}} -> same_ranges(a, b, offset + length, size)
+      {{:ok, _}, {:ok, _}} -> :different
+      {{:error, reason}, _} -> {:error, reason}
+      {_, {:error, reason}} -> {:error, reason}
     end
   end
 

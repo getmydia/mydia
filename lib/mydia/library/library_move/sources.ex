@@ -39,14 +39,21 @@ defmodule Mydia.Library.LibraryMove.Sources do
   An old path that a row now claims (a scan re-registered the orphan during
   a backoff) is someone's file and is kept.
 
-  Returns how many sources failed in a way worth retrying.
+  A path whose storage cannot be read (an S3 outage) proves nothing either
+  way and counts as a failure worth retrying, never as a skip.
+
+  Returns how many sources failed in a way worth retrying, and the sidecars
+  left at the sources, which the leftover carry must leave alone.
   """
-  @spec sweep([map()], LibraryPath.t()) :: non_neg_integer()
+  @spec sweep([map()], LibraryPath.t()) :: {non_neg_integer(), [String.t()]}
   def sweep(sources, %LibraryPath{} = target) do
-    Enum.count(sources, fn source ->
+    Enum.reduce(sources, {0, []}, fn source, {failures, left} ->
       case sweep_one(source, target) do
-        {result, _left_behind} -> FileStep.transient?(result)
-        _skipped -> false
+        {result, left_behind} ->
+          {failures + if(FileStep.transient?(result), do: 1, else: 0), left ++ left_behind}
+
+        :skipped ->
+          {failures, left}
       end
     end)
   end
@@ -55,21 +62,43 @@ defmodule Mydia.Library.LibraryMove.Sources do
     with %MediaFile{library_path_id: lp_id} = row when lp_id == target.id <-
            Repo.get(MediaFile, id) |> Repo.preload(:library_path),
          new when is_binary(new) and new != old <- MediaFile.storage_path(row),
-         true <- FileMove.exists?(new),
          false <- is_nil(source["lp"]) or FileMove.claimed?(source["lp"], source["rel"], id),
-         true <- gone?(old) or FileMove.same_file?(old, new) or FileMove.identical_copy?(old, new),
+         :ours <- old_is_ours(old, new),
          %MediaFile{} = old_file <- old_file(source, library(source["lp"])) do
       FileStep.finish_swept(old_file, new, target)
+    else
+      {:error, reason} -> {{:error, {:sweep_unverified, reason}}, []}
+      _ -> :skipped
     end
   end
 
-  # Only a definite "not found": a storage outage is not proof of a delete.
-  defp gone?(path) do
+  # The old path is ours to finish when the new one is there and the old one
+  # is gone (its delete ran) or still holds the same bytes.
+  defp old_is_ours(old, new) do
+    with {:ok, :present} <- presence(new), do: old_state(old, new, presence(old))
+  end
+
+  defp old_state(_old, _new, {:ok, :gone}), do: :ours
+  defp old_state(old, new, {:ok, :present}), do: same_bytes(old, new)
+  defp old_state(_old, _new, error), do: error
+
+  defp same_bytes(old, new) do
+    if FileMove.same_file?(old, new),
+      do: :ours,
+      else: ours_if_same(FileMove.compare_copy(old, new))
+  end
+
+  defp ours_if_same(:same), do: :ours
+  defp ours_if_same(other), do: other
+
+  # Only a definite "not found" is :gone: an outage is not proof of a delete.
+  defp presence(path) do
     with {:ok, source} <- Mydia.Storage.at(path),
-         {:error, %Mydia.Storage.Error{kind: :not_found}} <- Mydia.Storage.stat(source) do
-      true
+         {:ok, _} <- Mydia.Storage.stat(source) do
+      {:ok, :present}
     else
-      _ -> false
+      {:error, %Mydia.Storage.Error{kind: :not_found}} -> {:ok, :gone}
+      {:error, _} = error -> error
     end
   end
 
