@@ -7,6 +7,7 @@ defmodule Mydia.Media.MonitoringPreviewTest do
   alias Mydia.Media
   alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
+  alias MydiaWeb.MediaLive.Show.Loaders
 
   defp ep(season, opts) do
     %Episode{
@@ -85,20 +86,45 @@ defmodule Mydia.Media.MonitoringPreviewTest do
         air_date: future()
       )
 
+      # Aired, and its only file is in the trash: it has no file as far as
+      # both the menu and the apply are concerned, so it counts as missing,
+      # never as existing.
+      trashed_only =
+        episode_fixture(
+          media_item_id: media_item.id,
+          season_number: 1,
+          episode_number: 3,
+          air_date: ~D[2020-01-15]
+        )
+
+      media_file_fixture(
+        episode_id: trashed_only.id,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
       episode_fixture(media_item_id: media_item.id, season_number: 0, episode_number: 1)
 
+      # The episodes exactly as the show page loads them for the menu.
       load = fn ->
-        Media.list_episodes(Scope.unrestricted(), media_item.id, preload: [:media_files])
+        Loaders.load_media_item(Scope.unrestricted(), media_item.id).episodes
       end
 
       preview = Media.monitoring_preview(load.())
 
+      assert preview.existing == 1, "the trashed file counted as existing in the preview"
+      assert preview.missing == 3
+
       for preset <- Media.monitoring_presets() do
         {:ok, _} = Media.apply_episode_monitoring(media_item, preset)
-        monitored = Enum.count(load.(), & &1.monitored)
+        monitored = Enum.filter(load.(), & &1.monitored)
 
-        assert preview[preset] == monitored,
-               "#{preset}: preview #{preview[preset]}, applied #{monitored}"
+        assert preview[preset] == length(monitored),
+               "#{preset}: preview #{preview[preset]}, applied #{length(monitored)}"
+
+        if preset == :existing do
+          refute trashed_only.id in Enum.map(monitored, & &1.id),
+                 "apply counted the trashed file as existing"
+        end
       end
     end
   end

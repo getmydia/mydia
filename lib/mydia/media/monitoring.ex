@@ -9,6 +9,7 @@ defmodule Mydia.Media.Monitoring do
   alias Mydia.Accounts.Scope
   alias Mydia.Media.{Episode, Episodes, Items, MediaItem}
   alias Mydia.Events
+  alias Mydia.Library.MediaFile
 
   @doc """
   Updates the monitored status for all episodes in a season.
@@ -135,7 +136,14 @@ defmodule Mydia.Media.Monitoring do
   def apply_episode_monitoring(%MediaItem{type: "tv_show"} = media_item, preset)
       when preset in @monitoring_presets do
     Repo.transaction(fn ->
-      episodes = Episodes.list_episodes(Scope.system(), media_item.id, preload: [:media_files])
+      # Untrashed files only, extras included: the same set the show page
+      # preloads for the menu preview, so a trashed file can neither make an
+      # episode count as "existing" here nor disagree with the preview count.
+      episodes =
+        Episodes.list_episodes(Scope.system(), media_item.id,
+          preload: [media_files: MediaFile.active()]
+        )
+
       {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
 
       written =

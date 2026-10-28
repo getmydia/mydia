@@ -72,6 +72,11 @@ defmodule MydiaWeb.AddMediaComponentsTest do
              |> LazyHTML.query(~s(#add-config-modal-box.overflow-y-auto[class~="max-h-[90dvh]"]))
              |> Enum.empty?()
 
+      # Add is inside the scrolling box, which is what keeps it reachable.
+      refute doc
+             |> LazyHTML.query(~s(#add-config-modal-box button[type="submit"]))
+             |> Enum.empty?()
+
       # The overview is dropped below sm; poster and title carry the preview.
       refute doc
              |> LazyHTML.query(~s(#add-config-preview-overview[class~="max-sm:hidden"]))

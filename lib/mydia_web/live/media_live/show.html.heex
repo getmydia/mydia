@@ -90,8 +90,15 @@
           target_reason={@target_reason}
           target_library_candidates={@target_library_candidates}
         />
-        <%!-- Right Column: Main Content --%>
-        <div id="main-column" class="min-w-0 @7xl:overflow-y-auto @7xl:overscroll-contain">
+        <%!-- Right Column: Main Content. overflow-x-hidden at @7xl: a scroll
+              container clips every side anyway, and without it a hidden
+              tooltip at the right edge drew a permanent horizontal scrollbar.
+              Menus that can reach the column's edge use a top-layer popover
+              (see file_actions/1). --%>
+        <div
+          id="main-column"
+          class="min-w-0 @7xl:overflow-y-auto @7xl:overflow-x-hidden @7xl:overscroll-contain"
+        >
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
             <div class="flex items-start justify-between gap-2 md:gap-4 mb-2">
@@ -176,7 +183,9 @@
                     </button>
                   </div>
                 <% end %>
-                <div class="tooltip tooltip-bottom" data-tip={gettext("Delete")}>
+                <%!-- tooltip-left: the rightmost button, so a centred tooltip
+                      would run past the column's right edge. --%>
+                <div class="tooltip tooltip-left" data-tip={gettext("Delete")}>
                   <button
                     id="delete-media-button"
                     type="button"

@@ -182,6 +182,10 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
 
     assert has_element?(view, "#episode-monitoring-menu-preset-future[disabled]")
     assert has_element?(view, "#episode-monitoring-menu-preset-future-reason")
+
+    assert view |> element("#episode-monitoring-menu-preset-future-reason") |> render() =~
+             "No upcoming episodes"
+
     assert has_element?(view, "#episode-monitoring-menu-preset-existing[disabled]")
 
     # Enabled presets carry no reason; :none is never disabled.

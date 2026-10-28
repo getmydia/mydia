@@ -241,22 +241,25 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   # <strong> where the name binding went, and their email (when there is one)
   # as a tooltip. Display label rather than email: SSO users may have none,
   # which rendered "Requested by  on ...".
+  #
+  # Splits on every marker, so a translation that names the user twice shows
+  # the name twice rather than a raw marker glyph. Only the first name carries
+  # the DOM id, which must stay unique.
   defp user_sentence(assigns) do
-    {lead, tail} =
-      case String.split(assigns.sentence, name_marker(), parts: 2) do
-        [lead, tail] -> {lead, tail}
-        [whole] -> {whole, ""}
-      end
+    [lead | rest] = String.split(assigns.sentence, name_marker())
 
     assigns =
       assign(assigns,
         lead: lead,
-        tail: tail,
+        rest: Enum.with_index(rest),
         name: Mydia.Accounts.User.display_label(assigns.user)
       )
 
     ~H"""
-    {@lead}<strong id={@id} title={@user.email}>{@name}</strong>{@tail}
+    {@lead}<span :for={{segment, index} <- @rest}><strong
+      id={if(index == 0, do: @id)}
+      title={@user.email}
+    >{@name}</strong>{segment}</span>
     """
   end
 

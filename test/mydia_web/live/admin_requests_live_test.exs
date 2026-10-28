@@ -314,6 +314,21 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       refute has_element?(view, "strong#request-#{request.id}-requester[title]")
     end
 
+    test "names the admin who approved", %{conn: conn, request: request} do
+      # Not the logged-in admin, so the name can only come from approved_by.
+      approver = create_admin_user(%{display_name: "Corvin Ashdale"})
+      library_path_fixture(%{type: "movies"})
+
+      {:ok, _} =
+        MediaRequests.approve_request(Scope.unrestricted(), request, %{
+          approved_by_id: approver.id
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=approved")
+
+      assert has_element?(view, "strong#request-#{request.id}-approver", "Corvin Ashdale")
+    end
+
     test "names the admin who rejected", %{conn: conn, request: request} do
       admin = create_admin_user(%{display_name: "Thessaly Moor"})
 

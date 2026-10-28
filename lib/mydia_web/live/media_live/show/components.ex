@@ -726,90 +726,106 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       >
         <.icon name="hero-information-circle" class={@icon} />
       </button>
-      <div class="dropdown dropdown-end z-20">
-        <div
-          tabindex="0"
-          role="button"
-          class={@square}
-          aria-label={gettext("More file actions")}
-          title={gettext("More")}
-        >
-          <.icon name="hero-ellipsis-horizontal" class={@icon} />
-        </div>
-        <ul
-          id={"file-actions-menu-#{@file.id}"}
-          tabindex="0"
-          class="dropdown-content menu bg-base-100 rounded-box w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
-        >
-          <li>
+      <%!-- Native popover plus CSS anchor positioning, the pattern
+            #downloads-more uses. The menu renders in the top layer, so the
+            scrolling main column of the three-column layout cannot clip it
+            and no card badge can paint over it (#1107). flip-block opens it
+            upward when the row sits near the bottom of the viewport. --%>
+      <button
+        id={"file-actions-more-#{@file.id}"}
+        type="button"
+        class={@square}
+        popovertarget={"file-actions-menu-#{@file.id}"}
+        style={"anchor-name:--file-actions-#{@file.id}"}
+        aria-label={gettext("More file actions")}
+        title={gettext("More")}
+      >
+        <.icon name="hero-ellipsis-horizontal" class={@icon} />
+      </button>
+      <ul
+        id={"file-actions-menu-#{@file.id}"}
+        popover
+        class="dropdown dropdown-end menu bg-base-100 rounded-box w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
+        style={"position-anchor:--file-actions-#{@file.id};position-try-fallbacks:flip-block"}
+      >
+        <li>
+          <button
+            id={"mark-preferred-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="mark_file_preferred"
+            phx-value-file-id={@file.id}
+            class="gap-2"
+          >
+            <.icon name="hero-star" class="w-4 h-4" /> {gettext("Mark as preferred")}
+          </button>
+        </li>
+        <%= if @resolutions != [] do %>
+          <li class="menu-title">{gettext("Pre-transcode")}</li>
+          <li :for={res <- @resolutions}>
             <button
-              id={"mark-preferred-#{@file.id}"}
+              id={"pre-transcode-#{@file.id}-#{res}"}
               type="button"
-              phx-click={JS.push("mark_file_preferred") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
+              popovertarget={"file-actions-menu-#{@file.id}"}
+              popovertargetaction="hide"
+              phx-click="pre_transcode"
+              phx-value-media-file-id={@file.id}
+              phx-value-resolution={res}
               class="gap-2"
             >
-              <.icon name="hero-star" class="w-4 h-4" /> {gettext("Mark as preferred")}
+              <.icon name="hero-wrench" class="w-4 h-4" /> {res}
             </button>
           </li>
-          <%= if @resolutions != [] do %>
-            <li class="menu-title">{gettext("Pre-transcode")}</li>
-            <li :for={res <- @resolutions}>
-              <button
-                id={"pre-transcode-#{@file.id}-#{res}"}
-                type="button"
-                phx-click={JS.push("pre_transcode") |> JS.dispatch("mydia:blur")}
-                phx-value-media-file-id={@file.id}
-                phx-value-resolution={res}
-                class="gap-2"
-              >
-                <.icon name="hero-wrench" class="w-4 h-4" /> {res}
-              </button>
-            </li>
-          <% end %>
-          <li class="divider my-1"></li>
-          <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
+        <% end %>
+        <li class="divider my-1"></li>
+        <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
                 icon everywhere else in the app. --%>
-          <li :if={@demotable?}>
-            <button
-              id={"demote-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("demote_to_extra") |> JS.dispatch("mydia:blur")}
-              phx-value-id={@file.id}
-              class="gap-2"
-            >
-              <.icon name="hero-chevron-double-down" class="w-4 h-4" /> {gettext("Move to extras")}
-            </button>
-          </li>
-          <%!-- Recovery for a file the matcher attached to the wrong item.
+        <li :if={@demotable?}>
+          <button
+            id={"demote-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="demote_to_extra"
+            phx-value-id={@file.id}
+            class="gap-2"
+          >
+            <.icon name="hero-chevron-double-down" class="w-4 h-4" /> {gettext("Move to extras")}
+          </button>
+        </li>
+        <%!-- Recovery for a file the matcher attached to the wrong item.
                 The file is fine; it is filed against the wrong thing, so
                 Delete is the wrong answer. --%>
-          <li>
-            <button
-              id={"not-this-item-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("not_this_item") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
-              class="gap-2"
-              aria-label={not_this_item_aria_label(@item_label)}
-            >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
-            </button>
-          </li>
-          <li class="divider my-1"></li>
-          <li>
-            <button
-              id={"file-delete-#{@file.id}"}
-              type="button"
-              phx-click={JS.push("show_file_delete_confirm") |> JS.dispatch("mydia:blur")}
-              phx-value-file-id={@file.id}
-              class="gap-2 text-error"
-            >
-              <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete file")}
-            </button>
-          </li>
-        </ul>
-      </div>
+        <li>
+          <button
+            id={"not-this-item-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="not_this_item"
+            phx-value-file-id={@file.id}
+            class="gap-2"
+            aria-label={not_this_item_aria_label(@item_label)}
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
+          </button>
+        </li>
+        <li class="divider my-1"></li>
+        <li>
+          <button
+            id={"file-delete-#{@file.id}"}
+            type="button"
+            popovertarget={"file-actions-menu-#{@file.id}"}
+            popovertargetaction="hide"
+            phx-click="show_file_delete_confirm"
+            phx-value-file-id={@file.id}
+            class="gap-2 text-error"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete file")}
+          </button>
+        </li>
+      </ul>
     </div>
     """
   end

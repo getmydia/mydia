@@ -105,19 +105,19 @@ defmodule MydiaWeb.Features.MediaFileMenuStackingTest do
 
   # Scrolls the trigger to just under the sticky header, so the menu opens
   # into the visible part of the viewport, then opens it the way a tap does:
-  # by focusing the tabindex trigger, which is all daisyUI's dropdown keys on.
+  # by clicking the popovertarget trigger.
   defp open_file_menu(session, file) do
     eval_js(
       session,
       """
       var menu = document.getElementById(arguments[0]);
-      if (!menu) { return '__missing__'; }
-      var trigger = menu.parentElement.querySelector('[role="button"]');
+      var trigger = document.getElementById(arguments[1]);
+      if (!menu || !trigger) { return '__missing__'; }
       window.scrollTo(0, window.scrollY + trigger.getBoundingClientRect().top - 120);
-      trigger.focus();
-      return 'ok';
+      trigger.click();
+      return menu.matches(':popover-open') ? 'ok' : '__closed__';
       """,
-      ["file-actions-menu-#{file.id}"]
+      ["file-actions-menu-#{file.id}", "file-actions-more-#{file.id}"]
     )
   end
 

@@ -96,9 +96,13 @@ defmodule MydiaWeb.Features.MediaBackdropTest do
        %{session: session} do
     show = seed_show_with_backdrop()
 
+    # 1300px keeps the sidebar open (lg) but stays below the @7xl three-column
+    # layout, where the grid is viewport-bound and the document has nothing
+    # to scroll. Only a scrolling document can tell a viewport-sized layer
+    # from a page-sized one; the three-column test below covers that layout.
     session
     |> login_as_admin()
-    |> resize_window(1700, 800)
+    |> resize_window(1300, 800)
     |> visit_liveview("/media/#{show.id}")
 
     assert eval_js(session, @backdrop_position) == "fixed"
@@ -135,6 +139,46 @@ defmodule MydiaWeb.Features.MediaBackdropTest do
            "backdrop is #{scrolled_height}px tall at the page bottom"
 
     assert eval_js(session, @sidebar_probe) == []
+  end
+
+  @tag :feature
+  test "in the three-column layout the backdrop fills the viewport while the main column scrolls",
+       %{session: session} do
+    show = seed_show_with_backdrop()
+
+    session
+    |> login_as_admin()
+    |> resize_window(1700, 800)
+    |> visit_liveview("/media/#{show.id}")
+
+    assert eval_js(session, @backdrop_position) == "fixed"
+
+    [top, left, height, viewport, _page] = eval_js(session, @backdrop_metrics)
+
+    assert top == 0, "backdrop top is #{top}, expected 0"
+    assert left == 256, "backdrop left is #{left}, expected 256 to clear the w-64 sidebar"
+    assert abs(height - viewport) <= 2, "backdrop is #{height}px tall in a #{viewport}px viewport"
+
+    assert eval_js(session, @sidebar_probe) == []
+    assert eval_js(session, @backdrop_not_clickable) == "ok"
+
+    scrolled =
+      eval_js(session, """
+      const col = document.querySelector('#main-column');
+      if (!col) { return 'no main column rendered'; }
+      col.scrollTop = col.scrollHeight;
+      return Math.round(col.scrollTop);
+      """)
+
+    # Otherwise the assertions after it measure an unscrolled page.
+    assert scrolled > 0, "the main column has nothing to scroll"
+
+    [scrolled_top, _, scrolled_height, _, _] = eval_js(session, @backdrop_metrics)
+
+    assert scrolled_top == 0, "backdrop top is #{scrolled_top} after the main column scrolled"
+    assert abs(scrolled_height - viewport) <= 2
+
+    assert eval_js(session, @backdrop_not_clickable) == "ok"
   end
 
   @tag :feature
