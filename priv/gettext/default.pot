@@ -14,7 +14,7 @@ msgstr ""
 
 #: lib/mydia_web/components/admin_list_components.ex:233
 #: lib/mydia_web/components/core_components.ex:332
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:187
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:196
 #: lib/mydia_web/live/admin_settings_live/components.ex:186
 #: lib/mydia_web/live/search_live/index.html.heex:260
 #, elixir-autogen, elixir-format
@@ -439,7 +439,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:189
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:626
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:126
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:253
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:262
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:83
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:447
 #: lib/mydia_web/live/calendar_live/index.html.heex:28
@@ -469,7 +469,7 @@ msgstr ""
 #: lib/mydia_web/components/sidebar_components.ex:216
 #: lib/mydia_web/live/admin_custom_formats_live/components.ex:25
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:124
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:56
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:65
 #: lib/mydia_web/live/admin_plugins_live/components.ex:447
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:167
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:125
@@ -4225,7 +4225,7 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:629
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:623
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:146
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:115
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:124
 #: lib/mydia_web/live/admin_settings_live/components.ex:140
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:48
 #, elixir-autogen, elixir-format
@@ -4250,7 +4250,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:107
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:176
 #: lib/mydia_web/live/admin_indexers_live/components.ex:225
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:146
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:155
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:197
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:74
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:105
@@ -4672,7 +4672,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:169
 #: lib/mydia_web/live/admin_indexers_live/components.ex:218
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:83
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:137
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:146
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:189
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:63
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:91
@@ -8907,7 +8907,7 @@ msgstr ""
 msgid "Sent back from the duplicates page. Never imported automatically."
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:252
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:261
 #: lib/mydia_web/live/collection_live/preset_components.ex:123
 #, elixir-autogen, elixir-format
 msgid "Series"
@@ -11389,7 +11389,7 @@ msgid "Monitor"
 msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:471
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:122
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:131
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:28
 #: lib/mydia_web/live/collection_live/components.ex:128
 #: lib/mydia_web/live/media_live/index.html.heex:240
@@ -11400,7 +11400,7 @@ msgctxt "monitoring"
 msgid "Monitored"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:123
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:132
 #: lib/mydia_web/live/media_live/show/components.ex:1267
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
@@ -13508,7 +13508,7 @@ msgstr ""
 msgid "Cannot delete a built-in or runtime provider"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:149
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:158
 #, elixir-autogen, elixir-format
 msgid "Cannot delete environment-configured libraries"
 msgstr ""
@@ -13558,7 +13558,7 @@ msgstr ""
 msgid "Cannot edit a runtime-configured provider. Configure it in the database instead."
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:139
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:148
 #, elixir-autogen, elixir-format
 msgid "Cannot edit environment-configured libraries"
 msgstr ""
@@ -14345,7 +14345,7 @@ msgstr ""
 msgid "Delete key"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:153
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:162
 #, elixir-autogen, elixir-format
 msgid "Delete library %{name}?"
 msgstr ""
@@ -14751,7 +14751,7 @@ msgstr ""
 msgid "Enable Cloudflare bypass via FlareSolverr"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:231
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:240
 #, elixir-autogen, elixir-format
 msgid "Enable auto-organize to move files"
 msgstr ""
@@ -15260,8 +15260,8 @@ msgstr ""
 msgid "Feedback"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:205
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:227
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:214
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:236
 #, elixir-autogen, elixir-format
 msgid "File Organization"
 msgstr ""
@@ -15853,7 +15853,7 @@ msgstr ""
 msgid "Last Run"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:93
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:102
 #, elixir-autogen, elixir-format
 msgid "Last scan: %{time}"
 msgstr ""
@@ -16186,7 +16186,7 @@ msgstr ""
 msgid "Metadata language"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:102
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:111
 #, elixir-autogen, elixir-format
 msgid "Metadata source"
 msgstr ""
@@ -16248,7 +16248,7 @@ msgstr ""
 msgid "Misfiled"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:254
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:263
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:85
 #, elixir-autogen, elixir-format
 msgid "Mixed"
@@ -17269,7 +17269,7 @@ msgstr ""
 msgid "Prev"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:213
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:222
 #, elixir-autogen, elixir-format
 msgid "Preview Organization"
 msgstr ""
@@ -17429,7 +17429,7 @@ msgstr ""
 msgid "Re-approve %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:200
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:209
 #, elixir-autogen, elixir-format
 msgid "Re-classify All"
 msgstr ""
@@ -17509,7 +17509,7 @@ msgid_plural "Reclassification complete: No changes (%{count} items have overrid
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:181
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:190
 #, elixir-autogen, elixir-format
 msgid "Reclassifying..."
 msgstr ""
@@ -17738,12 +17738,12 @@ msgstr ""
 msgid "Reorganization complete: No files to reorganize"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:222
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:231
 #, elixir-autogen, elixir-format
 msgid "Reorganize Files"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/components.ex:176
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:185
 #, elixir-autogen, elixir-format
 msgid "Reorganizing..."
 msgstr ""
@@ -20928,4 +20928,9 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:173
 #, elixir-autogen, elixir-format
 msgid "None of this item's folders were found on disk. Run a library scan to find files that were moved or renamed."
+msgstr ""
+
+#: lib/mydia_web/live/admin_library_paths_live/components.ex:59
+#, elixir-autogen, elixir-format
+msgid "Files (CSV)"
 msgstr ""

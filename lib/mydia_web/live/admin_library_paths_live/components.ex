@@ -50,6 +50,15 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
               CSV
             </a>
           </li>
+          <li>
+            <a
+              id="library-export-files-csv"
+              href={~p"/api/v1/library/export?format=files_csv"}
+              download
+            >
+              {gettext("Files (CSV)")}
+            </a>
+          </li>
         </ul>
       </div>
       <button id="new-library-path" class="btn btn-sm btn-primary" phx-click="new_library_path">

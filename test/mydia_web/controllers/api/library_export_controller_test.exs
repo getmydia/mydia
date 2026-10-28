@@ -9,9 +9,9 @@ defmodule MydiaWeb.Api.LibraryExportControllerTest do
   @browser_accept "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
   setup do
-    media_item_fixture(%{type: "movie", title: "Copper Sky", tmdb_id: 900_020})
+    item = media_item_fixture(%{type: "movie", title: "Copper Sky", tmdb_id: 900_020})
     {admin, token} = MydiaWeb.AuthHelpers.create_user_and_token(%{role: "admin"})
-    %{admin: admin, token: token}
+    %{admin: admin, token: token, item: item}
   end
 
   defp authed(conn, token) do
@@ -44,9 +44,25 @@ defmodule MydiaWeb.Api.LibraryExportControllerTest do
     assert conn.resp_body =~ "Copper Sky"
   end
 
+  test "serves the per-file CSV when asked", %{conn: conn, token: token, item: item} do
+    media_file_fixture(%{media_item_id: item.id, relative_path: "Copper Sky.mkv"})
+
+    conn = conn |> authed(token) |> get(~p"/api/v1/library/export?format=files_csv")
+
+    assert conn.status == 200
+    assert [ct] = get_resp_header(conn, "content-type")
+    assert ct =~ "text/csv"
+    assert [cd] = get_resp_header(conn, "content-disposition")
+    assert cd =~ ~r/filename="mydia-library-files-\d{4}-\d{2}-\d{2}\.csv"$/
+    assert [_header, row] = NimbleCSV.RFC4180.parse_string(conn.resp_body, skip_headers: false)
+    assert "Copper Sky" in row
+    assert Enum.any?(row, &String.ends_with?(&1, "/Copper Sky.mkv"))
+  end
+
   test "rejects an unknown format with 400", %{conn: conn, token: token} do
     conn = conn |> authed(token) |> get(~p"/api/v1/library/export?format=xml")
-    assert %{"error" => _} = json_response(conn, 400)
+    assert %{"error" => _, "message" => message} = json_response(conn, 400)
+    assert message =~ "files_csv"
   end
 
   test "accepts an admin API key", %{conn: conn, admin: admin} do
