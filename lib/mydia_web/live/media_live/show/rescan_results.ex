@@ -37,6 +37,10 @@ defmodule MydiaWeb.MediaLive.Show.RescanResults do
      )}
   end
 
+  def handle_rescan_series_async({:ok, {{:error, :no_files_on_disk}, _}}, socket) do
+    {:noreply, put_flash(socket, :error, no_files_on_disk_message())}
+  end
+
   def handle_rescan_series_async({:ok, {{:error, reason}, _}}, socket) do
     Logger.error("Series re-scan failed: #{inspect(reason)}")
 
@@ -76,6 +80,10 @@ defmodule MydiaWeb.MediaLive.Show.RescanResults do
        :error,
        gettext("No existing media files found. Please import at least one file first.")
      )}
+  end
+
+  def handle_rescan_movie_async({:ok, {{:error, :no_files_on_disk}, _}}, socket) do
+    {:noreply, put_flash(socket, :error, no_files_on_disk_message())}
   end
 
   def handle_rescan_movie_async({:ok, {{:error, reason}, _}}, socket) do
@@ -130,6 +138,13 @@ defmodule MydiaWeb.MediaLive.Show.RescanResults do
      )}
   end
 
+  def handle_rescan_season_async({:ok, {_season_num, {:error, :no_files_on_disk}, _}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, no_files_on_disk_message())}
+  end
+
   def handle_rescan_season_async({:ok, {season_num, {:error, reason}, _}}, socket) do
     Logger.error("Season #{season_num} re-scan failed: #{inspect(reason)}")
 
@@ -152,6 +167,10 @@ defmodule MydiaWeb.MediaLive.Show.RescanResults do
      socket
      |> assign(:rescanning_season, nil)
      |> put_flash(:error, gettext("Season re-scan failed unexpectedly"))}
+  end
+
+  defp no_files_on_disk_message do
+    gettext("None of this item's files are on disk. Run a library scan to find them.")
   end
 
   defp rescan_flash_message(scope, scan_result, refreshed) do

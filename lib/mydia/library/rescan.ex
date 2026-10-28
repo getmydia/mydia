@@ -5,7 +5,7 @@ defmodule Mydia.Library.Rescan do
 
   require Logger
   alias Mydia.Accounts.Scope
-  alias Mydia.Library.{EpisodeLinks, MediaFile, MediaFiles, Trash}
+  alias Mydia.Library.{EpisodeLinks, MediaFile, MediaFiles, Relink, Trash}
   alias Mydia.Library.ReleaseParser, as: FileParser
 
   # The directory diff in the three re-scan paths proposes files as missing by
@@ -33,6 +33,7 @@ defmodule Mydia.Library.Rescan do
   # A row with no resolvable path is kept in the list. There is nothing to
   # check, and TrashStore.store/2 has nothing to move for it either.
   @spec reject_files_still_on_disk([MediaFile.t()]) :: [MediaFile.t()]
+
   defp reject_files_still_on_disk(candidates) do
     Enum.reject(candidates, fn media_file ->
       case MediaFile.absolute_path(media_file) do
@@ -53,6 +54,21 @@ defmodule Mydia.Library.Rescan do
           present?
       end
     end)
+  end
+
+  # A file renamed in place shows up as one missing row and one new file.
+  # Relink those before trashing anything or creating rows. Returns the
+  # missing rows and new files that remain.
+  defp relink_renamed(missing_files, new_files, library_paths) do
+    gone = reject_files_still_on_disk(missing_files)
+    {pairs, _gone_left, _new_left} = Relink.pair(gone, new_files)
+    {relinked, _failed} = Relink.relink_all(pairs, library_paths)
+
+    relinked_ids = MapSet.new(relinked, fn {row, _} -> row.id end)
+    relinked_paths = MapSet.new(relinked, fn {_, info} -> info.path end)
+
+    {Enum.reject(missing_files, &MapSet.member?(relinked_ids, &1.id)),
+     Enum.reject(new_files, &MapSet.member?(relinked_paths, &1.path))}
   end
 
   @doc """
@@ -133,6 +149,9 @@ defmodule Mydia.Library.Rescan do
                     path -> MapSet.member?(scanned_paths, path)
                   end
                 end)
+
+              {missing_files, new_files} =
+                relink_renamed(missing_files, new_files, library_paths)
 
               trashed_count =
                 missing_files
@@ -307,6 +326,9 @@ defmodule Mydia.Library.Rescan do
                     end
                 end)
 
+              {missing_files, new_files} =
+                relink_renamed(missing_files, new_files, library_paths)
+
               trashed_count =
                 missing_files
                 |> reject_files_still_on_disk()
@@ -463,6 +485,9 @@ defmodule Mydia.Library.Rescan do
                   end
                 end)
 
+              {missing_files, new_files} =
+                relink_renamed(missing_files, new_files, library_paths)
+
               trashed_count =
                 missing_files
                 |> reject_files_still_on_disk()
@@ -584,23 +609,28 @@ defmodule Mydia.Library.Rescan do
           end)
           |> Enum.reject(&is_nil/1)
 
-        case series_dirs do
-          [] ->
+        case {series_dirs, Enum.filter(series_dirs, &File.dir?/1)} do
+          {[], _} ->
             Logger.error("Could not determine series base directory - no valid paths",
               media_item_id: media_item_id
             )
 
             {:error, :no_valid_paths}
 
-          dirs ->
-            # Use the most common series directory
-            series_dir =
-              dirs
-              |> Enum.frequencies()
-              |> Enum.max_by(fn {_dir, count} -> count end)
-              |> elem(0)
+          {_, []} ->
+            Logger.warning("None of the series' directories exist on disk",
+              media_item_id: media_item_id
+            )
 
-            guard_not_library_root(series_dir, media_item_id, library_paths)
+            {:error, :no_files_on_disk}
+
+          {_, existing} ->
+            # Use the most common series directory that still exists
+            existing
+            |> Enum.frequencies()
+            |> Enum.max_by(fn {_dir, count} -> count end)
+            |> elem(0)
+            |> guard_not_library_root(media_item_id, library_paths)
         end
     end
   end
@@ -697,7 +727,7 @@ defmodule Mydia.Library.Rescan do
 
       files ->
         # Get the most common directory (movies are typically in a single directory)
-        movie_dir =
+        dirs =
           files
           |> Enum.map(fn file ->
             case MediaFile.absolute_path(file) do
@@ -706,20 +736,30 @@ defmodule Mydia.Library.Rescan do
             end
           end)
           |> Enum.reject(&is_nil/1)
-          |> Enum.frequencies()
-          |> Enum.max_by(fn {_dir, count} -> count end, fn -> {nil, 0} end)
-          |> elem(0)
 
-        case movie_dir do
-          nil ->
+        # Only directories that still exist can vote: a deleted folder must not
+        # outvote the one that holds the files.
+        case {dirs, Enum.filter(dirs, &File.dir?/1)} do
+          {[], _} ->
             Logger.error("Could not determine movie base directory - no valid paths",
               media_item_id: media_item_id
             )
 
             {:error, :no_valid_paths}
 
-          dir ->
-            guard_not_library_root(dir, media_item_id, library_paths)
+          {_, []} ->
+            Logger.warning("None of the movie's directories exist on disk",
+              media_item_id: media_item_id
+            )
+
+            {:error, :no_files_on_disk}
+
+          {_, existing} ->
+            existing
+            |> Enum.frequencies()
+            |> Enum.max_by(fn {_dir, count} -> count end)
+            |> elem(0)
+            |> guard_not_library_root(media_item_id, library_paths)
         end
     end
   end

@@ -58,7 +58,8 @@ defmodule Mydia.Library.RescanScanFailureTest do
 
     File.rename!(Path.join(tmp, "Harrow Bay (2011)"), Path.join(tmp, "Harrow Bay (2011) renamed"))
 
-    assert {:error, :scan_failed} = Library.rescan_movie(movie.id)
+    # The directory is gone, so no candidate directory exists to scan.
+    assert {:error, :no_files_on_disk} = Library.rescan_movie(movie.id)
 
     assert active_count(movie) == 2
 
