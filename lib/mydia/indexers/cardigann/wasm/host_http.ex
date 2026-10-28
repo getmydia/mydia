@@ -184,7 +184,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   end
 
   # Captures use the Elixir engine's transport reasons; the guest only knows
-  # the four host error kinds.
+  # the four host error kinds. A capture recorded through the native engine
+  # stores Req's raw reasons (:closed, :econnrefused, :nxdomain), and replaying
+  # it through wasm must fail the way a live wasm exchange would, which
+  # map_error/1 reports as :connect for all three.
   defp replay_error_kind(kind) when kind in [:timeout, :connect, :blocked], do: kind
   defp replay_error_kind(kind) when kind in [:closed, :econnrefused, :nxdomain], do: :connect
   defp replay_error_kind(_kind), do: :other

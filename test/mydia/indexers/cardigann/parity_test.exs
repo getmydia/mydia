@@ -69,6 +69,15 @@ defmodule Mydia.Indexers.Cardigann.ParityTest do
     assert Enum.sort(@captures) == @expected
   end
 
+  # yts is movie-capable, so the corpus records it with the movie term "1080p",
+  # which matches no YTS title. The capture still checks that both engines
+  # agree on an empty answer, but it covers none of yts's row parsing; rss does.
+  # If a re-record ever returns rows, update this and the README table.
+  test "yts/movie is known to be an empty answer" do
+    body = File.read!(Path.join(@root, "yts/movie/001.json"))
+    assert Jason.decode!(body) == %{"data" => %{"movie_count" => 0}}
+  end
+
   test "every ratchet entry names a committed capture" do
     captures = MapSet.new(@captures)
 

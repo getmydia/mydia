@@ -338,7 +338,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
 
       doc = LazyHTML.from_document(ex.body)
       assert Enum.count(LazyHTML.query(doc, "table.results tr.row")) == 2
-      assert Enum.count(LazyHTML.query(doc, "tr.head")) == 0
+      assert Enum.empty?(LazyHTML.query(doc, "tr.head"))
       assert content_length(ex) == byte_size(ex.body)
     end
 

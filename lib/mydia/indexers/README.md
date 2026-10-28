@@ -453,7 +453,7 @@ the scrubber to catch.
 | nekobt | movie, rss | XML (Torznab feed), kept whole |
 | nyaasi | movie, rss | a multi-page search: the keywordless `rss` query reads two pages from two search paths |
 | pctorrent | generic, rss | windows-1251 HTML; `rows.filters: andmatch` (24 rows against 0) |
-| yts | movie, rss | JSON; the `case` block (one of three public definitions with one) |
+| yts | movie, rss | JSON; the `case` block (one of three public definitions with one), exercised by `rss` only: `movie` is an empty answer (`movie_count: 0`), because the corpus's movie term `1080p` matches no YTS title |
 
 byrutor and crackingpatching were seeded once and dropped: their pages repeat
 real names outside the titles (a developer that shares words with a title,

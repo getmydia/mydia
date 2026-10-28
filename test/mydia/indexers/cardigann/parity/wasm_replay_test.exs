@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.WasmReplayTest do
   # Drives the wasm engine from a recorded capture, and records a live exchange.
   use Mydia.DataCase, async: false
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.Parity.{Capture, Recorder, Replay, RequestKey, Seam}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
   alias Mydia.Indexers.Cardigann.Wasm.{Adapter, Artifact, Engine}
@@ -173,7 +174,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.WasmReplayTest do
     result =
       Seam.with(%{replay: replay}, fn -> Adapter.search(config(definition), "lantern", []) end)
 
-    assert match?({:error, _}, result) or result == {:ok, []}
+    # The guest's `timeout` host error is a failed request, which the adapter
+    # reports as a connection failure rather than an empty result.
+    assert {:error, %Error{type: :connection_failed}} = result
     assert Replay.misses(replay) == []
   end
 
