@@ -198,8 +198,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:141
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:192
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:297
-#: lib/mydia_web/live/admin_requests_live/components.ex:339
-#: lib/mydia_web/live/admin_requests_live/components.ex:409
+#: lib/mydia_web/live/admin_requests_live/components.ex:343
+#: lib/mydia_web/live/admin_requests_live/components.ex:413
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:163
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:241
 #: lib/mydia_web/live/admin_trash_live/components.ex:383
@@ -3542,7 +3542,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:88
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:293
 #: lib/mydia_web/live/admin_quality_profiles_live/presets_components.ex:104
-#: lib/mydia_web/live/admin_requests_live/components.ex:272
+#: lib/mydia_web/live/admin_requests_live/components.ex:276
 #: lib/mydia_web/live/components/trending_detail_modal.ex:109
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:241
 #: lib/mydia_web/live/jobs_live/components.ex:291
@@ -10319,7 +10319,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_requests_live/components.ex:148
 #: lib/mydia_web/live/admin_requests_live/components.ex:149
-#: lib/mydia_web/live/admin_requests_live/components.ex:279
+#: lib/mydia_web/live/admin_requests_live/components.ex:283
 #: lib/mydia_web/live/my_requests_live/index.html.heex:136
 #: lib/mydia_web/live/my_requests_live/index.html.heex:165
 #, elixir-autogen, elixir-format
@@ -12809,12 +12809,12 @@ msgstr ""
 msgid "Add a plugin source"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:404
+#: lib/mydia_web/live/admin_requests_live/components.ex:408
 #, elixir-autogen, elixir-format
 msgid "Add any additional notes..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:334
+#: lib/mydia_web/live/admin_requests_live/components.ex:338
 #, elixir-autogen, elixir-format
 msgid "Add any notes about this approval..."
 msgstr ""
@@ -12904,8 +12904,8 @@ msgstr ""
 msgid "Adds to Mydia"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:329
-#: lib/mydia_web/live/admin_requests_live/components.ex:399
+#: lib/mydia_web/live/admin_requests_live/components.ex:333
+#: lib/mydia_web/live/admin_requests_live/components.ex:403
 #, elixir-autogen, elixir-format
 msgid "Admin Notes (Optional)"
 msgstr ""
@@ -13064,7 +13064,7 @@ msgid "Anything using this key stops working immediately. It stays listed as rev
 msgstr ""
 
 #: lib/mydia_web/live/admin_requests_live/components.ex:156
-#: lib/mydia_web/live/admin_requests_live/components.ex:290
+#: lib/mydia_web/live/admin_requests_live/components.ex:294
 #, elixir-autogen, elixir-format
 msgid "Approve"
 msgstr ""
@@ -13074,7 +13074,7 @@ msgstr ""
 msgid "Approve %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:346
+#: lib/mydia_web/live/admin_requests_live/components.ex:350
 #, elixir-autogen, elixir-format
 msgid "Approve & Add to Library"
 msgstr ""
@@ -13084,7 +13084,7 @@ msgstr ""
 msgid "Approve & activate"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:306
+#: lib/mydia_web/live/admin_requests_live/components.ex:310
 #, elixir-autogen, elixir-format
 msgid "Approve Request"
 msgstr ""
@@ -14950,7 +14950,7 @@ msgstr ""
 msgid "Expires"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:386
+#: lib/mydia_web/live/admin_requests_live/components.ex:390
 #, elixir-autogen, elixir-format
 msgid "Explain why this request is being rejected..."
 msgstr ""
@@ -17146,7 +17146,7 @@ msgstr ""
 msgid "Please fix the validation errors"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:369
+#: lib/mydia_web/live/admin_requests_live/components.ex:373
 #, elixir-autogen, elixir-format
 msgid "Please provide a reason for rejecting this request."
 msgstr ""
@@ -17526,18 +17526,18 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:82
 #: lib/mydia_web/live/admin_requests_live/components.ex:163
-#: lib/mydia_web/live/admin_requests_live/components.ex:283
+#: lib/mydia_web/live/admin_requests_live/components.ex:287
 #, elixir-autogen, elixir-format
 msgid "Reject"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:362
-#: lib/mydia_web/live/admin_requests_live/components.ex:412
+#: lib/mydia_web/live/admin_requests_live/components.ex:366
+#: lib/mydia_web/live/admin_requests_live/components.ex:416
 #, elixir-autogen, elixir-format
 msgid "Reject Request"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:380
+#: lib/mydia_web/live/admin_requests_live/components.ex:384
 #, elixir-autogen, elixir-format
 msgid "Rejection Reason"
 msgstr ""
@@ -19037,7 +19037,7 @@ msgstr ""
 msgid "This version's manifest asks for these. Calls into them are denied until you re-approve the plugin from its row."
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:313
+#: lib/mydia_web/live/admin_requests_live/components.ex:317
 #, elixir-autogen, elixir-format
 msgid "This will create the media item in your library."
 msgstr ""
@@ -20927,22 +20927,22 @@ msgstr[1] ""
 msgid "Approved by %{name} on %{date}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:80
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:95
 #, elixir-autogen, elixir-format
 msgid "No episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:82
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:97
 #, elixir-autogen, elixir-format
 msgid "No episodes with files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:81
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:96
 #, elixir-autogen, elixir-format
 msgid "No missing episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:83
+#: lib/mydia_web/live/media_live/show/monitoring_menu.ex:98
 #, elixir-autogen, elixir-format
 msgid "No upcoming episodes"
 msgstr ""

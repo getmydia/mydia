@@ -342,5 +342,26 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
 
       assert has_element?(view, "strong#request-#{request.id}-rejecter", "Thessaly Moor")
     end
+
+    test "a translation naming the user twice shows two names, one id" do
+      alias MydiaWeb.AdminRequestsLive.Components
+
+      user = create_test_user(%{role: "guest", display_name: "Ilsabet Crane"})
+      marker = Components.name_marker()
+
+      html =
+        render_component(&Components.user_sentence/1,
+          id: "twice-requester",
+          user: user,
+          sentence: "#{marker} asked; #{marker} is waiting"
+        )
+
+      names = html |> LazyHTML.from_fragment() |> LazyHTML.query("strong")
+
+      assert Enum.count(names) == 2
+      assert Enum.map(names, &LazyHTML.text/1) == ["Ilsabet Crane", "Ilsabet Crane"]
+      assert names |> LazyHTML.attribute("id") == ["twice-requester"]
+      refute html =~ marker
+    end
   end
 end

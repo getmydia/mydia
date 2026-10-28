@@ -40,20 +40,35 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
       )
 
     ~H"""
-    <div class="dropdown dropdown-end">
-      <div tabindex="0" role="button" id="episode-monitoring-menu" class="btn btn-sm btn-ghost gap-1">
+    <%!-- Native popover plus CSS anchor positioning, as file_actions/1 does.
+          At the three-column width #main-column is its own scroll container,
+          and a .dropdown-content panel was clipped by it when the header sat
+          near the column's bottom edge. The top layer escapes the clip, and
+          flip-block opens the panel upward when there is no room below. --%>
+    <div>
+      <button
+        type="button"
+        id="episode-monitoring-menu"
+        popovertarget="episode-monitoring-menu-panel"
+        style="anchor-name:--episode-monitoring-menu"
+        class="btn btn-sm btn-ghost gap-1"
+      >
         <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
         <span>{monitoring_preset_label(@derived_preset)}</span>
         <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
-      </div>
+      </button>
       <ul
-        tabindex="0"
-        class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
+        id="episode-monitoring-menu-panel"
+        popover
+        class="dropdown dropdown-end menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300 ms-0 whitespace-normal before:hidden"
+        style="position-anchor:--episode-monitoring-menu;position-try-fallbacks:flip-block"
       >
         <li :for={{preset, label, count, disabled?} <- @options} class={disabled? && "menu-disabled"}>
           <button
             type="button"
             id={"episode-monitoring-menu-preset-#{preset}"}
+            popovertarget="episode-monitoring-menu-panel"
+            popovertargetaction="hide"
             phx-click="apply_episode_monitoring"
             phx-value-preset={preset}
             disabled={disabled?}

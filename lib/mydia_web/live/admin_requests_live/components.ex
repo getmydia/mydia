@@ -231,7 +231,9 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   # Stands in for the user's name in a translated sentence, so the name can be
   # wrapped in markup while the sentence stays one msgid. A private-use
   # character: it never occurs in a translation or a date.
-  defp name_marker, do: "\u{E000}"
+  # Public only so the test can build a sentence with it.
+  @doc false
+  def name_marker, do: "\u{E000}"
 
   attr :id, :string, required: true
   attr :user, Mydia.Accounts.User, required: true
@@ -244,8 +246,10 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   #
   # Splits on every marker, so a translation that names the user twice shows
   # the name twice rather than a raw marker glyph. Only the first name carries
-  # the DOM id, which must stay unique.
-  defp user_sentence(assigns) do
+  # the DOM id, which must stay unique. Public only so a test can render a
+  # translation that names the user twice; no msgid in the catalog does.
+  @doc false
+  def user_sentence(assigns) do
     [lead | rest] = String.split(assigns.sentence, name_marker())
 
     assigns =

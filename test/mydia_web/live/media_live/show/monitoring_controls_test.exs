@@ -194,4 +194,28 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     refute has_element?(view, "#episode-monitoring-menu-preset-missing-reason")
     refute has_element?(view, "#episode-monitoring-menu-preset-none[disabled]")
   end
+
+  test "the existing preset monitors an unmonitored episode that has a file", %{conn: conn} do
+    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+    episode =
+      episode_fixture(
+        media_item_id: media_item.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2020-01-01],
+        monitored: false
+      )
+
+    media_file_fixture(%{episode_id: episode.id})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    refute has_element?(view, "#episode-monitoring-menu-preset-existing[disabled]")
+    refute has_element?(view, "#episode-monitoring-menu-preset-existing-reason")
+
+    view |> element("#episode-monitoring-menu-preset-existing") |> render_click()
+
+    assert Mydia.Media.get_episode_by_number(Scope.unrestricted(), media_item.id, 1, 1).monitored
+  end
 end
