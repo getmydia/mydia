@@ -34,7 +34,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     ]
 
   require Logger
-  alias Mydia.{Library, Settings, Repo, Metadata}
+  alias Mydia.{Library, Settings, Metadata}
   alias Mydia.ImportCandidates
   alias Mydia.Subtitles.Sidecars
 
@@ -52,6 +52,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     MediaFile,
     MetadataMatcher,
     PathAnchor,
+    Relink,
     ScanSummary
   }
 
@@ -395,10 +396,25 @@ defmodule Mydia.Jobs.LibraryScanner do
     changes = Library.Scanner.detect_changes(scan_result, active_files, library_path)
 
     process_modified_files(changes.modified_files, library_path, active_by_path)
-    process_deleted_files(changes.deleted_files)
 
-    {restored_count, unknown} =
-      partition_and_restore(changes.new_files, library_path, trashed_by_path)
+    # Known-file maintenance, in both auto_import modes. A rename or move
+    # shows up as a deleted row and a new path; relinking keeps the row's id
+    # and everything keyed to it. What stays deleted is trashed as missing,
+    # and restored by partition_and_restore/3 if the file reappears.
+    library_paths = Settings.list_library_paths()
+
+    {deleted_files, new_files} =
+      changes.deleted_files
+      |> refuse_empty_scan(scan_result, library_path)
+      |> Relink.Scan.within(changes.new_files, library_paths)
+
+    Relink.Scan.trash_missing(deleted_files)
+
+    {restored_count, unknown} = partition_and_restore(new_files, library_path, trashed_by_path)
+    {unknown, new_files} = Relink.Scan.across(unknown, new_files, library_path, library_paths)
+
+    # Relinked paths were neither deleted nor new; count only what was.
+    changes = %{changes | deleted_files: deleted_files, new_files: new_files}
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
 
@@ -465,6 +481,16 @@ defmodule Mydia.Jobs.LibraryScanner do
       handle_scan_error(library_path, error_message)
   end
 
+  # An empty scan of a library with active rows is an unmounted share far more
+  # often than a deleted library, and missing rows are hidden from Trash.
+  # Mark none missing; the next scan that sees files decides.
+  defp refuse_empty_scan([_ | _], %{files: []}, library_path) do
+    Logger.warning("Scan found no files; marking none missing", library_path: library_path.path)
+    []
+  end
+
+  defp refuse_empty_scan(deleted, _scan_result, _library_path), do: deleted
+
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,
   # in both auto_import modes. `active_by_path` is the caller's already-fetched
@@ -489,35 +515,6 @@ defmodule Mydia.Jobs.LibraryScanner do
             })
 
           Logger.debug("Updated media file", path: file_info.path)
-      end
-    end)
-
-    :ok
-  end
-
-  # Known-file maintenance: an owned file no longer found on disk is trashed,
-  # not deleted -- `Library.trash_media_file/1` moves the record into the
-  # trashed state so it can be restored if the file reappears (see
-  # partition_and_restore/3). Runs unconditionally, in both auto_import modes.
-  defp process_deleted_files(deleted_media_files) do
-    Enum.each(deleted_media_files, fn media_file ->
-      media_file = Repo.preload(media_file, :library_path)
-      absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      # These files are missing from disk, which is the one case
-      # Library.trash_media_file/1 has nothing to move, so a failure here is
-      # a database problem. Log it and keep going rather than crashing the
-      # whole scan over one row.
-      case Library.trash_media_file(media_file, reason: :missing) do
-        {:ok, _} ->
-          Logger.debug("Trashed media file record", path: absolute_path)
-
-        {:error, reason} ->
-          Logger.error("Failed to trash a media file missing from disk",
-            path: absolute_path,
-            media_file_id: media_file.id,
-            reason: inspect(reason)
-          )
       end
     end)
 

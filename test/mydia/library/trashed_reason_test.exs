@@ -67,6 +67,17 @@ defmodule Mydia.Library.TrashedReasonTest do
     @tag :tmp_dir
     test "a scan trashes a vanished file as :missing", %{tmp_dir: tmp_dir} do
       file = library_with_file(tmp_dir, "vanishing.mkv")
+      # A scan that finds no files marks nothing missing; keep one on disk.
+      File.write!(Path.join(file.library_path.path, "staying.mkv"), "video bytes")
+
+      {:ok, _} =
+        Library.create_scanned_media_file(%{
+          relative_path: "staying.mkv",
+          library_path_id: file.library_path_id,
+          media_item_id: media_item_fixture(%{type: "movie"}).id,
+          size: byte_size("video bytes")
+        })
+
       File.rm!(Mydia.Library.MediaFile.absolute_path(file))
 
       {:ok, _} = Mydia.Jobs.LibraryScanner.scan_library_path(file.library_path)

@@ -355,6 +355,38 @@ defmodule Mydia.Library.MediaFiles do
   defp reject_extras(files, true), do: files
   defp reject_extras(files, false), do: Enum.filter(files, &is_nil(&1.extra_kind))
 
+  @doc """
+  Rows that could be the old record of a file that turned up somewhere new:
+  any row already trashed because its file went missing, plus active rows in
+  other library paths. Callers must still confirm an active row's file is gone
+  before relinking it. Filtered by size, so the result is small.
+  """
+  @relink_candidate_chunk 1000
+
+  @spec list_relink_candidates([non_neg_integer()], binary()) :: [MediaFile.t()]
+  def list_relink_candidates([], _library_path_id), do: []
+
+  def list_relink_candidates(sizes, library_path_id) do
+    # One bind parameter per size: a first scan of a large library can carry
+    # tens of thousands, past SQLite's 32766-variable limit. Chunk the lookup.
+    sizes
+    |> Enum.uniq()
+    |> Enum.chunk_every(@relink_candidate_chunk)
+    |> Enum.flat_map(&relink_candidates_chunk(&1, library_path_id))
+  end
+
+  defp relink_candidates_chunk(sizes, library_path_id) do
+    MediaFile
+    |> where([f], f.size in ^sizes)
+    |> where(
+      [f],
+      (not is_nil(f.trashed_at) and f.trashed_reason == :missing) or
+        (is_nil(f.trashed_at) and f.library_path_id != ^library_path_id)
+    )
+    |> preload(:library_path)
+    |> Repo.all()
+  end
+
   # Calculates the relative path and library_path_id for an absolute file path
   # Returns {library_path_id, relative_path}
   @doc false

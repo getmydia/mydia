@@ -38,6 +38,61 @@ defmodule Mydia.Library.TrashQueriesTest do
     trashed
   end
 
+  defp trashed_missing(library_path, name, size) do
+    {:ok, media_file} =
+      Library.create_scanned_media_file(%{
+        relative_path: name,
+        library_path_id: library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
+        size: size
+      })
+
+    {:ok, trashed} =
+      Library.trash_media_file(Repo.preload(media_file, :library_path), reason: :missing)
+
+    trashed
+  end
+
+  describe "rows trashed because their file was missing" do
+    @tag :tmp_dir
+    test "are excluded from the list, the counts and the summary", %{
+      root: root,
+      library_path: lp
+    } do
+      _missing = trashed_missing(lp, "Gone Film (2001).mkv", 500)
+      kept = trashed(root, lp, "Kept Film (2002).mkv", :manual, 100)
+
+      assert [%{id: id}] = Library.list_trashed_media_files()
+      assert id == kept.id
+      assert Library.list_trashed_media_files(reason: :missing) == []
+      refute Map.has_key?(Library.count_trashed_media_files(), :missing)
+      assert %{count: 1, bytes: 100} = Library.trashed_summary()
+    end
+
+    @tag :tmp_dir
+    test "cannot be fetched by id for a trash page action", %{root: root, library_path: lp} do
+      missing = trashed_missing(lp, "Gone Film (2001).mkv", 500)
+      kept = trashed(root, lp, "Kept Film (2002).mkv", :manual, 100)
+
+      assert Library.get_trashed_media_file(missing.id) == nil
+      assert %{id: id} = Library.get_trashed_media_file(kept.id)
+      assert id == kept.id
+    end
+
+    @tag :tmp_dir
+    test "are left by Empty trash, so its count matches the summary", %{
+      root: root,
+      library_path: lp
+    } do
+      missing = trashed_missing(lp, "Gone Film (2001).mkv", 500)
+      _kept = trashed(root, lp, "Kept Film (2002).mkv", :manual, 100)
+
+      assert %{count: 1} = Library.trashed_summary()
+      assert {:ok, 1} = Library.empty_trash()
+      assert %{trashed_reason: :missing} = Repo.get!(Mydia.Library.MediaFile, missing.id)
+    end
+  end
+
   @tag :tmp_dir
   test "lists only trashed files, newest first", ctx do
     live_name = "still-here.mkv"
@@ -51,7 +106,7 @@ defmodule Mydia.Library.TrashQueriesTest do
         size: 1
       })
 
-    a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
+    a = trashed(ctx.root, ctx.library_path, "a.mkv", :manual, 10)
     b = trashed(ctx.root, ctx.library_path, "b.mkv", :pruned, 20)
 
     ids = Library.list_trashed_media_files([]) |> Enum.map(& &1.id)
@@ -63,7 +118,7 @@ defmodule Mydia.Library.TrashQueriesTest do
 
   @tag :tmp_dir
   test "filters by reason", ctx do
-    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
+    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :manual, 10)
     b = trashed(ctx.root, ctx.library_path, "b.mkv", :pruned, 20)
 
     assert [only] = Library.list_trashed_media_files(reason: :pruned)
@@ -72,7 +127,7 @@ defmodule Mydia.Library.TrashQueriesTest do
 
   @tag :tmp_dir
   test "paginates", ctx do
-    for n <- 1..5, do: trashed(ctx.root, ctx.library_path, "f#{n}.mkv", :missing, n)
+    for n <- 1..5, do: trashed(ctx.root, ctx.library_path, "f#{n}.mkv", :manual, n)
 
     assert length(Library.list_trashed_media_files(limit: 2)) == 2
     assert length(Library.list_trashed_media_files(limit: 2, offset: 4)) == 1
@@ -80,21 +135,21 @@ defmodule Mydia.Library.TrashQueriesTest do
 
   @tag :tmp_dir
   test "counts per reason, including unknown", ctx do
-    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
-    _b = trashed(ctx.root, ctx.library_path, "b.mkv", :missing, 10)
+    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :manual, 10)
+    _b = trashed(ctx.root, ctx.library_path, "b.mkv", :manual, 10)
     _c = trashed(ctx.root, ctx.library_path, "c.mkv", :pruned, 10)
     _d = trashed(ctx.root, ctx.library_path, "d.mkv", nil, 10)
 
     counts = Library.count_trashed_media_files()
 
-    assert counts[:missing] == 2
+    assert counts[:manual] == 2
     assert counts[:pruned] == 1
     assert counts[nil] == 1
   end
 
   @tag :tmp_dir
   test "summary sums count and bytes of trashed rows only", ctx do
-    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
+    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :manual, 10)
     _b = trashed(ctx.root, ctx.library_path, "b.mkv", :pruned, 32)
 
     assert %{count: 2, bytes: 42} = Library.trashed_summary()
@@ -106,7 +161,7 @@ defmodule Mydia.Library.TrashQueriesTest do
   # above only catches it on the one CI job that runs Postgres.
   @tag :tmp_dir
   test "summary bytes are an integer on either adapter", ctx do
-    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
+    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :manual, 10)
 
     assert is_integer(Library.trashed_summary().bytes)
   end

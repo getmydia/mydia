@@ -19,8 +19,6 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   """
   def reasons do
     [
-      {:missing, pgettext("trash reason", "Missing"),
-       gettext("The file was gone from disk when a scan looked for it")},
       {:upgraded, pgettext("trash reason", "Upgraded"),
        gettext("A better release replaced this file")},
       {:upgrade_rejected, pgettext("trash reason", "Rejected"),
@@ -449,7 +447,6 @@ defmodule MydiaWeb.AdminTrashLive.Components do
     end
   end
 
-  defp badge_class(:missing), do: "badge-warning"
   defp badge_class(:upgraded), do: "badge-success"
   defp badge_class(:upgrade_rejected), do: "badge-error"
   defp badge_class(:pruned), do: "badge-info"

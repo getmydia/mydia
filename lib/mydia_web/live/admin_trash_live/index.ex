@@ -103,8 +103,8 @@ defmodule MydiaWeb.AdminTrashLive.Index do
       end)
 
     # A selection, explicit or "all matching", is scoped to the filter that
-    # was active when it was made. `{:all_matching, :missing}` means every
-    # Missing row, not whatever the next filter happens to show, so changing
+    # was active when it was made. `{:all_matching, :pruned}` means every
+    # Pruned row, not whatever the next filter happens to show, so changing
     # the filter must drop it rather than let it silently retarget a
     # destructive bulk action at the wrong rows.
     {:noreply, socket |> assign(reason: parsed, page: 0, selection: MapSet.new()) |> load()}
@@ -206,7 +206,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   end
 
   def handle_event("empty_trash", _params, socket) do
-    {:ok, count} = Library.purge_old_trashed_media_files(0)
+    {:ok, count} = Library.empty_trash()
 
     {:noreply,
      socket

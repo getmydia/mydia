@@ -93,6 +93,8 @@ defmodule Mydia.Jobs.TrashAction do
   # Fixed set, never String.to_atom/1 on job args.
   defp parse_reason(nil), do: nil
   defp parse_reason(""), do: nil
+  # Kept although the trash page no longer offers it: dropping it would fall
+  # through to nil ("every row") for an "all missing" job queued before upgrade.
   defp parse_reason("missing"), do: :missing
   defp parse_reason("upgraded"), do: :upgraded
   defp parse_reason("upgrade_rejected"), do: :upgrade_rejected

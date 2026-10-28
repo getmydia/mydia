@@ -202,7 +202,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_requests_live/components.ex:356
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:163
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:241
-#: lib/mydia_web/live/admin_trash_live/components.ex:385
+#: lib/mydia_web/live/admin_trash_live/components.ex:383
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:103
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:142
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:216
@@ -1744,7 +1744,7 @@ msgstr[1] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:356
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:513
-#: lib/mydia_web/live/admin_trash_live/components.ex:491
+#: lib/mydia_web/live/admin_trash_live/components.ex:488
 #: lib/mydia_web/live/devices_live/components.ex:355
 #: lib/mydia_web/relative_time.ex:44
 #, elixir-autogen, elixir-format
@@ -1782,7 +1782,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/live/admin_settings_live/components.ex:171
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:220
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:241
 #, elixir-autogen, elixir-format
 msgid "%{count} error"
 msgid_plural "%{count} errors"
@@ -1813,7 +1813,7 @@ msgid_plural "All %{count} files already match"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:208
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:229
 #, elixir-autogen, elixir-format
 msgid "%{count} file could not be read"
 msgid_plural "%{count} files could not be read"
@@ -2047,7 +2047,7 @@ msgid_plural "%{count} seeders"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:246
+#: lib/mydia_web/live/admin_trash_live/components.ex:244
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:69
 #, elixir-autogen, elixir-format
 msgid "%{count} selected"
@@ -4331,8 +4331,8 @@ msgstr ""
 msgid "Delete from disk"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:214
-#: lib/mydia_web/live/admin_trash_live/components.ex:268
+#: lib/mydia_web/live/admin_trash_live/components.ex:212
+#: lib/mydia_web/live/admin_trash_live/components.ex:266
 #: lib/mydia_web/live/media_live/show/modals.ex:361
 #: lib/mydia_web/live/media_live/show/modals.ex:395
 #, elixir-autogen, elixir-format
@@ -5023,17 +5023,17 @@ msgstr ""
 msgid "Failed to queue the import."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:88
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:96
 #, elixir-autogen, elixir-format
 msgid "Failed to re-scan movie: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:141
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:156
 #, elixir-autogen, elixir-format
 msgid "Failed to re-scan season %{number}: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:47
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:51
 #, elixir-autogen, elixir-format
 msgid "Failed to re-scan series: %{reason}"
 msgstr ""
@@ -5346,7 +5346,7 @@ msgstr ""
 msgid "Foreign Language"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:161
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:182
 #, elixir-autogen, elixir-format
 msgid "Found %{count} new file"
 msgid_plural "Found %{count} new files"
@@ -6338,7 +6338,7 @@ msgstr ""
 msgid "Movie Search"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:94
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:102
 #, elixir-autogen, elixir-format
 msgid "Movie re-scan failed unexpectedly"
 msgstr ""
@@ -6473,7 +6473,7 @@ msgid "Newest first"
 msgstr ""
 
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:148
-#: lib/mydia_web/live/admin_trash_live/components.ex:342
+#: lib/mydia_web/live/admin_trash_live/components.ex:340
 #: lib/mydia_web/live/calendar_live/index.html.heex:62
 #: lib/mydia_web/live/import_media_live/index.html.heex:142
 #, elixir-autogen, elixir-format
@@ -6595,13 +6595,13 @@ msgstr ""
 msgid "No events found"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:126
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:134
 #, elixir-autogen, elixir-format
 msgid "No existing media files found for season %{number}. Please import at least one file first."
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:36
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:77
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:81
 #, elixir-autogen, elixir-format
 msgid "No existing media files found. Please import at least one file first."
 msgstr ""
@@ -7692,7 +7692,7 @@ msgstr ""
 msgid "Re-scan"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:232
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:253
 #, elixir-autogen, elixir-format
 msgid "Re-scan complete! %{details}"
 msgstr ""
@@ -7706,13 +7706,13 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/file_events.ex:279
 #: lib/mydia_web/live/media_live/show/file_events.ex:315
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:28
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:117
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:125
 #, elixir-autogen, elixir-format
 msgid "Re-scan is only available for TV shows"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/file_events.ex:354
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:69
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:73
 #, elixir-autogen, elixir-format
 msgid "Re-scan is only available for movies"
 msgstr ""
@@ -8174,8 +8174,8 @@ msgstr ""
 msgid "Resolution"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:207
-#: lib/mydia_web/live/admin_trash_live/components.ex:259
+#: lib/mydia_web/live/admin_trash_live/components.ex:205
+#: lib/mydia_web/live/admin_trash_live/components.ex:257
 #: lib/mydia_web/live/import_media_live/components.ex:640
 #, elixir-autogen, elixir-format
 msgid "Restore"
@@ -8696,7 +8696,7 @@ msgstr ""
 msgid "Season %{number} queued for segment re-analysis"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:226
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:247
 #, elixir-autogen, elixir-format
 msgid "Season %{number} re-scan complete! %{details}"
 msgstr ""
@@ -8721,7 +8721,7 @@ msgstr ""
 msgid "Season metadata refresh failed unexpectedly"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:154
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:169
 #, elixir-autogen, elixir-format
 msgid "Season re-scan failed unexpectedly"
 msgstr ""
@@ -8913,7 +8913,7 @@ msgstr ""
 msgid "Series"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:53
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:57
 #, elixir-autogen, elixir-format
 msgid "Series re-scan failed unexpectedly"
 msgstr ""
@@ -10809,7 +10809,7 @@ msgstr ""
 msgid "mostly %{quality}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:172
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:193
 #, elixir-autogen, elixir-format
 msgid "moved %{count} file to trash"
 msgid_plural "moved %{count} files to trash"
@@ -10876,7 +10876,7 @@ msgstr ""
 msgid "private network"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:193
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:214
 #, elixir-autogen, elixir-format
 msgid "refreshed metadata for %{count} file"
 msgid_plural "refreshed metadata for %{count} files"
@@ -10888,7 +10888,7 @@ msgstr[1] ""
 msgid "searching..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/rescan_results.ex:182
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:203
 #, elixir-autogen, elixir-format
 msgid "sent %{count} file to Import for review"
 msgid_plural "sent %{count} files to Import for review"
@@ -11746,7 +11746,7 @@ msgctxt "segment detection"
 msgid "Pending"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:277
+#: lib/mydia_web/live/admin_trash_live/components.ex:275
 #: lib/mydia_web/live/downloads_live/index.html.heex:188
 #: lib/mydia_web/live/import_media_live/components.ex:263
 #: lib/mydia_web/live/import_media_live/components.ex:278
@@ -12100,7 +12100,7 @@ msgid_plural "%{count} files have no duration, so they cannot be compared. Run a
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:409
+#: lib/mydia_web/live/admin_trash_live/components.ex:407
 #, elixir-autogen, elixir-format
 msgid "%{count} file in the trash directory that nothing will purge"
 msgid_plural "%{count} files in the trash directory that nothing will purge"
@@ -12121,14 +12121,14 @@ msgid_plural "%{count} files of %{total} flagged"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:123
+#: lib/mydia_web/live/admin_trash_live/components.ex:121
 #, elixir-autogen, elixir-format
 msgid "%{count} file tracked, using %{size}."
 msgid_plural "%{count} files tracked, using %{size}."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:360
+#: lib/mydia_web/live/admin_trash_live/components.ex:358
 #, elixir-autogen, elixir-format
 msgid "%{count} file, reclaiming %{size}."
 msgid_plural "%{count} files, reclaiming %{size}."
@@ -12293,7 +12293,7 @@ msgstr ""
 msgid "%{hub} pages"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:158
+#: lib/mydia_web/live/admin_trash_live/components.ex:156
 #, elixir-autogen, elixir-format
 msgid "%{label} (%{count})"
 msgstr ""
@@ -12427,7 +12427,7 @@ msgstr ""
 msgid "%{rate} ok of %{attempts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:416
+#: lib/mydia_web/live/admin_trash_live/components.ex:414
 #, elixir-autogen, elixir-format
 msgid "%{retained} kept by a restore that found the library path occupied, %{orphaned} with no record behind them."
 msgstr ""
@@ -12442,7 +12442,7 @@ msgstr ""
 msgid "%{selected}/%{total} selected"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:188
+#: lib/mydia_web/live/admin_trash_live/components.ex:186
 #, elixir-autogen, elixir-format
 msgid "%{size} · Trashed %{age} · Purges %{due}"
 msgstr ""
@@ -12542,7 +12542,7 @@ msgstr ""
 msgid "7d"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:25
+#: lib/mydia_web/live/admin_trash_live/components.ex:23
 #, elixir-autogen, elixir-format
 msgid "A better release replaced this file"
 msgstr ""
@@ -12567,7 +12567,7 @@ msgstr ""
 msgid "A random password will be generated and displayed after creation."
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:29
+#: lib/mydia_web/live/admin_trash_live/components.ex:27
 #, elixir-autogen, elixir-format
 msgid "A redundant copy, removed in favour of a keeper"
 msgstr ""
@@ -14707,18 +14707,18 @@ msgstr ""
 msgid "Edited"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:358
+#: lib/mydia_web/live/admin_trash_live/components.ex:356
 #, elixir-autogen, elixir-format
 msgid "Empty the trash?"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:111
-#: lib/mydia_web/live/admin_trash_live/components.ex:394
+#: lib/mydia_web/live/admin_trash_live/components.ex:109
+#: lib/mydia_web/live/admin_trash_live/components.ex:392
 #, elixir-autogen, elixir-format
 msgid "Empty trash"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:392
+#: lib/mydia_web/live/admin_trash_live/components.ex:390
 #, elixir-autogen, elixir-format
 msgid "Emptying..."
 msgstr ""
@@ -15281,7 +15281,7 @@ msgstr ""
 msgid "File upgraded"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:129
+#: lib/mydia_web/live/admin_trash_live/components.ex:127
 #, elixir-autogen, elixir-format
 msgid "Files are permanently deleted after %{count} day."
 msgid_plural "Files are permanently deleted after %{count} days."
@@ -15313,7 +15313,7 @@ msgstr ""
 msgid "Filter by Status"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:152
+#: lib/mydia_web/live/admin_trash_live/components.ex:150
 #, elixir-autogen, elixir-format
 msgid "Filter by reason"
 msgstr ""
@@ -16795,7 +16795,7 @@ msgstr ""
 msgid "Nothing has happened yet."
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:173
+#: lib/mydia_web/live/admin_trash_live/components.ex:171
 #, elixir-autogen, elixir-format
 msgid "Nothing in the trash."
 msgstr ""
@@ -17063,12 +17063,12 @@ msgstr ""
 msgid "Pending = Waiting to add"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:266
+#: lib/mydia_web/live/admin_trash_live/components.ex:264
 #, elixir-autogen, elixir-format
 msgid "Permanently delete every selected file? This cannot be undone."
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:218
+#: lib/mydia_web/live/admin_trash_live/components.ex:216
 #, elixir-autogen, elixir-format
 msgid "Permanently delete this file? This cannot be undone."
 msgstr ""
@@ -17264,7 +17264,7 @@ msgstr ""
 msgid "Presets"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:332
+#: lib/mydia_web/live/admin_trash_live/components.ex:330
 #, elixir-autogen, elixir-format
 msgid "Prev"
 msgstr ""
@@ -17455,7 +17455,7 @@ msgstr ""
 msgid "Read Only"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:56
+#: lib/mydia_web/live/admin_trash_live/components.ex:54
 #, elixir-autogen, elixir-format
 msgid "Reading the trash directory..."
 msgstr ""
@@ -17902,7 +17902,7 @@ msgstr ""
 msgid "Revoke key"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:373
+#: lib/mydia_web/live/admin_trash_live/components.ex:371
 #, elixir-autogen, elixir-format
 msgid "Rows trashed because their file had already vanished from disk only lose the row; nothing on your library path is touched."
 msgstr ""
@@ -18038,7 +18038,7 @@ msgstr ""
 msgid "Scan again"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:102
+#: lib/mydia_web/live/admin_trash_live/components.ex:100
 #, elixir-autogen, elixir-format
 msgid "Scan directory"
 msgstr ""
@@ -18148,7 +18148,7 @@ msgstr ""
 msgid "Seedbox"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:292
+#: lib/mydia_web/live/admin_trash_live/components.ex:290
 #, elixir-autogen, elixir-format
 msgid "Select all %{count} matching"
 msgid_plural "Select all %{count} matching"
@@ -18326,7 +18326,7 @@ msgstr ""
 msgid "Show recent failures"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:316
+#: lib/mydia_web/live/admin_trash_live/components.ex:314
 #, elixir-autogen, elixir-format
 msgid "Showing %{from}-%{to} of %{total}"
 msgstr ""
@@ -18370,7 +18370,7 @@ msgstr ""
 msgid "Some saved settings are not being applied"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:30
+#: lib/mydia_web/live/admin_trash_live/components.ex:28
 #, elixir-autogen, elixir-format
 msgid "Someone deleted this file by hand"
 msgstr ""
@@ -18508,12 +18508,12 @@ msgstr[1] ""
 msgid "Suggestions on each person's Home page"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:425
+#: lib/mydia_web/live/admin_trash_live/components.ex:423
 #, elixir-autogen, elixir-format
 msgid "Sweep them"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:61
+#: lib/mydia_web/live/admin_trash_live/components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Sweeping the trash directory..."
 msgstr ""
@@ -18832,11 +18832,6 @@ msgstr ""
 msgid "The engine is set by CARDIGANN_ENGINE"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:23
-#, elixir-autogen, elixir-format
-msgid "The file was gone from disk when a scan looked for it"
-msgstr ""
-
 #: lib/mydia_web/plugs/runtime_ueberauth.ex:52
 #, elixir-autogen, elixir-format
 msgid "The identity provider did not respond in time. Please try again."
@@ -19002,7 +18997,7 @@ msgstr ""
 msgid "This provider needs no credentials. Leave these fields blank."
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:370
+#: lib/mydia_web/live/admin_trash_live/components.ex:368
 #, elixir-autogen, elixir-format
 msgid "This purges everything in the trash now, including files trashed moments ago, rather than waiting out the retention period."
 msgstr ""
@@ -19012,7 +19007,7 @@ msgstr ""
 msgid "This quality profile is assigned to one or more media items. Please reassign those items first"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:27
+#: lib/mydia_web/live/admin_trash_live/components.ex:25
 #, elixir-autogen, elixir-format
 msgid "This release did not deliver the quality it claimed"
 msgstr ""
@@ -19103,7 +19098,7 @@ msgstr ""
 msgid "Torrent, Usenet and debrid download clients"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:421
+#: lib/mydia_web/live/admin_trash_live/components.ex:419
 #, elixir-autogen, elixir-format
 msgid "Total %{size}."
 msgstr ""
@@ -19173,7 +19168,7 @@ msgid_plural "Trashed %{count} files from %{name} (%{size})"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:32
+#: lib/mydia_web/live/admin_trash_live/components.ex:30
 #, elixir-autogen, elixir-format
 msgid "Trashed before Mydia recorded a reason"
 msgstr ""
@@ -19289,7 +19284,7 @@ msgstr ""
 msgid "Unknown error"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:480
+#: lib/mydia_web/live/admin_trash_live/components.ex:477
 #, elixir-autogen, elixir-format
 msgid "Unknown file"
 msgstr ""
@@ -19735,7 +19730,7 @@ msgstr ""
 msgid "approved"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:485
+#: lib/mydia_web/live/admin_trash_live/components.ex:482
 #, elixir-autogen, elixir-format
 msgid "at an unknown time"
 msgstr ""
@@ -19915,7 +19910,7 @@ msgstr ""
 msgid "https://minio.local:9000 (blank for AWS)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:501
+#: lib/mydia_web/live/admin_trash_live/components.ex:498
 #: lib/mydia_web/relative_time.ex:62
 #, elixir-autogen, elixir-format
 msgid "in %{count} day"
@@ -20009,12 +20004,12 @@ msgstr ""
 msgid "no limit"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:495
+#: lib/mydia_web/live/admin_trash_live/components.ex:492
 #, elixir-autogen, elixir-format
 msgid "on an unknown date"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:499
+#: lib/mydia_web/live/admin_trash_live/components.ex:496
 #, elixir-autogen, elixir-format
 msgid "on the next cleanup run"
 msgstr ""
@@ -20135,12 +20130,12 @@ msgstr ""
 msgid "title updates"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:489
+#: lib/mydia_web/live/admin_trash_live/components.ex:486
 #, elixir-autogen, elixir-format
 msgid "today"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:500
+#: lib/mydia_web/live/admin_trash_live/components.ex:497
 #, elixir-autogen, elixir-format
 msgid "tomorrow"
 msgstr ""
@@ -20177,7 +20172,7 @@ msgid_plural "v%{version} asks for %{count} things you haven't approved. It keep
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:490
+#: lib/mydia_web/live/admin_trash_live/components.ex:487
 #, elixir-autogen, elixir-format
 msgid "yesterday"
 msgstr ""
@@ -20604,7 +20599,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:277
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:37
 #: lib/mydia_web/live/admin_requests_live/components.ex:32
-#: lib/mydia_web/live/admin_trash_live/components.ex:154
+#: lib/mydia_web/live/admin_trash_live/components.ex:152
 #, elixir-autogen, elixir-format
 msgctxt "selection"
 msgid "All"
@@ -20697,39 +20692,33 @@ msgctxt "transcode type"
 msgid "Stream"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:30
+#: lib/mydia_web/live/admin_trash_live/components.ex:28
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Manual"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:22
-#, elixir-autogen, elixir-format
-msgctxt "trash reason"
-msgid "Missing"
-msgstr ""
-
-#: lib/mydia_web/live/admin_trash_live/components.ex:28
+#: lib/mydia_web/live/admin_trash_live/components.ex:26
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Pruned"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:26
+#: lib/mydia_web/live/admin_trash_live/components.ex:24
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Rejected"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:31
-#: lib/mydia_web/live/admin_trash_live/components.ex:443
-#: lib/mydia_web/live/admin_trash_live/components.ex:448
+#: lib/mydia_web/live/admin_trash_live/components.ex:29
+#: lib/mydia_web/live/admin_trash_live/components.ex:441
+#: lib/mydia_web/live/admin_trash_live/components.ex:446
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Unknown"
 msgstr ""
 
-#: lib/mydia_web/live/admin_trash_live/components.ex:24
+#: lib/mydia_web/live/admin_trash_live/components.ex:22
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Upgraded"
@@ -20934,4 +20923,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_settings_live/labels.ex:37
 #, elixir-autogen, elixir-format
 msgid "Link SSO Accounts by Email"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/rescan_results.ex:173
+#, elixir-autogen, elixir-format
+msgid "None of this item's folders were found on disk. Run a library scan to find files that were moved or renamed."
 msgstr ""

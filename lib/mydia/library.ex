@@ -48,6 +48,7 @@ defmodule Mydia.Library do
   defdelegate trash_media_file(media_file, opts \\ []), to: Mydia.Library.Trash
   defdelegate restore_media_file(media_file), to: Mydia.Library.Trash
   defdelegate purge_old_trashed_media_files(days \\ 30), to: Mydia.Library.Trash
+  defdelegate empty_trash(), to: Mydia.Library.Trash
   defdelegate list_trashed_media_files(opts \\ []), to: Mydia.Library.Trash
   defdelegate count_trashed_media_files(), to: Mydia.Library.Trash
   defdelegate trashed_summary(), to: Mydia.Library.Trash
