@@ -198,8 +198,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:141
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:192
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:297
-#: lib/mydia_web/live/admin_requests_live/components.ex:336
-#: lib/mydia_web/live/admin_requests_live/components.ex:406
+#: lib/mydia_web/live/admin_requests_live/components.ex:339
+#: lib/mydia_web/live/admin_requests_live/components.ex:409
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:163
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:241
 #: lib/mydia_web/live/admin_trash_live/components.ex:383
@@ -318,7 +318,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/issue_components.ex:307
 #: lib/mydia_web/live/downloads_live/issue_components.ex:385
 #: lib/mydia_web/live/import_media_live/components.ex:307
-#: lib/mydia_web/live/media_live/show.html.heex:295
+#: lib/mydia_web/live/media_live/show.html.heex:304
 #, elixir-autogen, elixir-format
 msgid "Dismiss"
 msgstr ""
@@ -422,7 +422,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/components.ex:257
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:143
 #: lib/mydia_web/live/media_live/index.html.heex:398
-#: lib/mydia_web/live/media_live/show.html.heex:242
+#: lib/mydia_web/live/media_live/show.html.heex:251
 #: lib/mydia_web/live/media_live/show/category_events.ex:171
 #: lib/mydia_web/live/media_live/show/components.ex:282
 #: lib/mydia_web/live/media_live/show/helpers.ex:619
@@ -666,9 +666,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_system_live/index.ex:96
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:144
 #: lib/mydia_web/live/media_live/show/audio_track_components.ex:59
-#: lib/mydia_web/live/media_live/show/components.ex:979
-#: lib/mydia_web/live/media_live/show/components.ex:984
-#: lib/mydia_web/live/media_live/show/components.ex:992
+#: lib/mydia_web/live/media_live/show/components.ex:995
+#: lib/mydia_web/live/media_live/show/components.ex:1000
+#: lib/mydia_web/live/media_live/show/components.ex:1008
 #: lib/mydia_web/live/media_live/show/formatters.ex:29
 #: lib/mydia_web/live/media_live/show/formatters.ex:55
 #: lib/mydia_web/live/media_live/show/formatters.ex:68
@@ -2247,7 +2247,7 @@ msgstr ""
 msgid "%{picked} of %{total} selected"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:113
+#: lib/mydia_web/live/media_live/show.html.heex:120
 #, elixir-autogen, elixir-format
 msgid "%{provider} (pinned)"
 msgstr ""
@@ -3499,7 +3499,7 @@ msgid_plural "Clearing %{count} completed downloads and deleting their files fro
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:231
+#: lib/mydia_web/live/media_live/show.html.heex:240
 #: lib/mydia_web/live/media_live/show/components.ex:266
 #, elixir-autogen, elixir-format
 msgid "Click to change category"
@@ -3542,7 +3542,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:88
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:293
 #: lib/mydia_web/live/admin_quality_profiles_live/presets_components.ex:104
-#: lib/mydia_web/live/admin_requests_live/components.ex:269
+#: lib/mydia_web/live/admin_requests_live/components.ex:272
 #: lib/mydia_web/live/components/trending_detail_modal.ex:109
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:241
 #: lib/mydia_web/live/jobs_live/components.ex:291
@@ -4253,7 +4253,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:100
 #: lib/mydia_web/live/downloads_live/index.html.heex:184
 #: lib/mydia_web/live/media_live/index.html.heex:995
-#: lib/mydia_web/live/media_live/show.html.heex:179
+#: lib/mydia_web/live/media_live/show.html.heex:188
 #, elixir-autogen, elixir-format
 msgid "Delete"
 msgstr ""
@@ -4302,7 +4302,7 @@ msgstr ""
 msgid "Delete Media File?"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:808
+#: lib/mydia_web/live/media_live/show/components.ex:825
 #, elixir-autogen, elixir-format
 msgid "Delete file"
 msgstr ""
@@ -4570,7 +4570,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/event_text.ex:44
 #: lib/mydia_web/live/downloads_live/issue_list.ex:30
-#: lib/mydia_web/live/media_live/show.html.heex:281
+#: lib/mydia_web/live/media_live/show.html.heex:290
 #, elixir-autogen, elixir-format
 msgid "Download failed"
 msgstr ""
@@ -4637,7 +4637,7 @@ msgstr ""
 msgid "Download to library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:310
+#: lib/mydia_web/live/media_live/show.html.heex:319
 #, elixir-autogen, elixir-format
 msgid "Downloading"
 msgstr ""
@@ -4892,7 +4892,7 @@ msgstr ""
 msgid "External"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:1028
+#: lib/mydia_web/live/media_live/show/components.ex:1044
 #, elixir-autogen, elixir-format
 msgid "Extras (%{count})"
 msgstr ""
@@ -5295,13 +5295,13 @@ msgstr ""
 msgid "Finished"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:133
+#: lib/mydia_web/live/media_live/show.html.heex:140
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:29
 #, elixir-autogen, elixir-format
 msgid "Fix match"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:139
+#: lib/mydia_web/live/media_live/show.html.heex:146
 #, elixir-autogen, elixir-format
 msgid "Fix match: this is the wrong title"
 msgstr ""
@@ -5536,7 +5536,7 @@ msgstr ""
 msgid "Highly Rated"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:1117
+#: lib/mydia_web/live/media_live/show/components.ex:1133
 #, elixir-autogen, elixir-format
 msgid "History"
 msgstr ""
@@ -6020,7 +6020,7 @@ msgid_plural "Mapping added. Retrying %{count} affected downloads."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:752
+#: lib/mydia_web/live/media_live/show/components.ex:761
 #, elixir-autogen, elixir-format
 msgid "Mark as preferred"
 msgstr ""
@@ -6098,7 +6098,7 @@ msgstr ""
 msgid "Media File Details"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:913
+#: lib/mydia_web/live/media_live/show/components.ex:929
 #, elixir-autogen, elixir-format
 msgid "Media Files"
 msgstr ""
@@ -6277,7 +6277,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/live/admin_plugins_live/components.ex:55
-#: lib/mydia_web/live/media_live/show/components.ex:735
+#: lib/mydia_web/live/media_live/show/components.ex:741
 #, elixir-autogen, elixir-format
 msgid "More"
 msgstr ""
@@ -6291,7 +6291,7 @@ msgstr ""
 msgid "More actions"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:734
+#: lib/mydia_web/live/media_live/show/components.ex:740
 #, elixir-autogen, elixir-format
 msgid "More file actions"
 msgstr ""
@@ -6311,7 +6311,7 @@ msgstr ""
 msgid "Most Seeds"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:781
+#: lib/mydia_web/live/media_live/show/components.ex:794
 #, elixir-autogen, elixir-format
 msgid "Move to extras"
 msgstr ""
@@ -6873,17 +6873,17 @@ msgstr ""
 msgid "Not set up"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:818
+#: lib/mydia_web/live/media_live/show/components.ex:834
 #, elixir-autogen, elixir-format
 msgid "Not this episode"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:819
+#: lib/mydia_web/live/media_live/show/components.ex:835
 #, elixir-autogen, elixir-format
 msgid "Not this movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:820
+#: lib/mydia_web/live/media_live/show/components.ex:836
 #, elixir-autogen, elixir-format
 msgid "Not this show"
 msgstr ""
@@ -7389,7 +7389,7 @@ msgstr ""
 msgid "Poster fields"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:756
+#: lib/mydia_web/live/media_live/show/components.ex:765
 #, elixir-autogen, elixir-format
 msgid "Pre-transcode"
 msgstr ""
@@ -7692,8 +7692,8 @@ msgstr ""
 msgid "Re-scan complete! %{details}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:145
-#: lib/mydia_web/live/media_live/show.html.heex:156
+#: lib/mydia_web/live/media_live/show.html.heex:152
+#: lib/mydia_web/live/media_live/show.html.heex:163
 #, elixir-autogen, elixir-format
 msgid "Re-scan files"
 msgstr ""
@@ -7850,12 +7850,12 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:108
+#: lib/mydia_web/live/media_live/show.html.heex:115
 #, elixir-autogen, elixir-format
 msgid "Refresh keeps this show on this provider. Use Fix match to move it."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:124
+#: lib/mydia_web/live/media_live/show.html.heex:131
 #, elixir-autogen, elixir-format
 msgid "Refresh metadata"
 msgstr ""
@@ -8065,8 +8065,8 @@ msgstr ""
 msgid "Rename Files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:167
-#: lib/mydia_web/live/media_live/show.html.heex:173
+#: lib/mydia_web/live/media_live/show.html.heex:174
+#: lib/mydia_web/live/media_live/show.html.heex:180
 #, elixir-autogen, elixir-format
 msgid "Rename files"
 msgstr ""
@@ -8892,7 +8892,7 @@ msgstr ""
 msgid "Selected Release"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:302
+#: lib/mydia_web/live/media_live/show.html.heex:311
 #, elixir-autogen, elixir-format
 msgid "Sending to download client"
 msgstr ""
@@ -8974,7 +8974,7 @@ msgstr ""
 msgid "Shortcuts to add, import, or request media"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:1200
+#: lib/mydia_web/live/media_live/show/components.ex:1216
 #, elixir-autogen, elixir-format
 msgid "Show %{count} more"
 msgstr ""
@@ -8992,7 +8992,7 @@ msgid "Show fewer"
 msgstr ""
 
 #: lib/mydia_web/live/devices_live/components.ex:153
-#: lib/mydia_web/live/media_live/show/components.ex:1199
+#: lib/mydia_web/live/media_live/show/components.ex:1215
 #, elixir-autogen, elixir-format
 msgid "Show less"
 msgstr ""
@@ -9451,7 +9451,7 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/show.ex:565
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:117
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:142
-#: lib/mydia_web/live/media_live/show.html.heex:243
+#: lib/mydia_web/live/media_live/show.html.heex:252
 #: lib/mydia_web/live/media_live/show/category_events.ex:174
 #: lib/mydia_web/live/media_live/show/components.ex:283
 #: lib/mydia_web/live/media_live/show/helpers.ex:627
@@ -9775,17 +9775,17 @@ msgstr ""
 msgid "This file has no hash or metadata IDs to search with."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:822
+#: lib/mydia_web/live/media_live/show/components.ex:838
 #, elixir-autogen, elixir-format
 msgid "This file is not this episode"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:823
+#: lib/mydia_web/live/media_live/show/components.ex:839
 #, elixir-autogen, elixir-format
 msgid "This file is not this movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:824
+#: lib/mydia_web/live/media_live/show/components.ex:840
 #, elixir-autogen, elixir-format
 msgid "This file is not this show"
 msgstr ""
@@ -9800,7 +9800,7 @@ msgstr ""
 msgid "This instance no longer exists."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:1060
+#: lib/mydia_web/live/media_live/show/components.ex:1076
 #, elixir-autogen, elixir-format
 msgid "This is a version, not an extra"
 msgstr ""
@@ -10278,7 +10278,7 @@ msgid "Verified on %{date}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_system_live/components.ex:50
-#: lib/mydia_web/live/media_live/show/components.ex:1064
+#: lib/mydia_web/live/media_live/show/components.ex:1080
 #, elixir-autogen, elixir-format
 msgid "Version"
 msgstr ""
@@ -10319,7 +10319,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_requests_live/components.ex:148
 #: lib/mydia_web/live/admin_requests_live/components.ex:149
-#: lib/mydia_web/live/admin_requests_live/components.ex:276
+#: lib/mydia_web/live/admin_requests_live/components.ex:279
 #: lib/mydia_web/live/my_requests_live/index.html.heex:136
 #: lib/mydia_web/live/my_requests_live/index.html.heex:165
 #, elixir-autogen, elixir-format
@@ -10661,7 +10661,7 @@ msgstr ""
 msgid "contains any of"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/components.ex:1051
+#: lib/mydia_web/live/media_live/show/components.ex:1067
 #, elixir-autogen, elixir-format
 msgid "detected by %{source}"
 msgstr ""
@@ -11389,14 +11389,14 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/components.ex:128
 #: lib/mydia_web/live/media_live/index.html.heex:240
 #: lib/mydia_web/live/media_live/index.html.heex:1069
-#: lib/mydia_web/live/media_live/show/components.ex:1229
+#: lib/mydia_web/live/media_live/show/components.ex:1245
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Monitored"
 msgstr ""
 
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:123
-#: lib/mydia_web/live/media_live/show/components.ex:1230
+#: lib/mydia_web/live/media_live/show/components.ex:1246
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Not Monitored"
@@ -12809,12 +12809,12 @@ msgstr ""
 msgid "Add a plugin source"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:401
+#: lib/mydia_web/live/admin_requests_live/components.ex:404
 #, elixir-autogen, elixir-format
 msgid "Add any additional notes..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:331
+#: lib/mydia_web/live/admin_requests_live/components.ex:334
 #, elixir-autogen, elixir-format
 msgid "Add any notes about this approval..."
 msgstr ""
@@ -12904,8 +12904,8 @@ msgstr ""
 msgid "Adds to Mydia"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:326
-#: lib/mydia_web/live/admin_requests_live/components.ex:396
+#: lib/mydia_web/live/admin_requests_live/components.ex:329
+#: lib/mydia_web/live/admin_requests_live/components.ex:399
 #, elixir-autogen, elixir-format
 msgid "Admin Notes (Optional)"
 msgstr ""
@@ -13064,7 +13064,7 @@ msgid "Anything using this key stops working immediately. It stays listed as rev
 msgstr ""
 
 #: lib/mydia_web/live/admin_requests_live/components.ex:156
-#: lib/mydia_web/live/admin_requests_live/components.ex:287
+#: lib/mydia_web/live/admin_requests_live/components.ex:290
 #, elixir-autogen, elixir-format
 msgid "Approve"
 msgstr ""
@@ -13074,7 +13074,7 @@ msgstr ""
 msgid "Approve %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:343
+#: lib/mydia_web/live/admin_requests_live/components.ex:346
 #, elixir-autogen, elixir-format
 msgid "Approve & Add to Library"
 msgstr ""
@@ -13084,7 +13084,7 @@ msgstr ""
 msgid "Approve & activate"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:303
+#: lib/mydia_web/live/admin_requests_live/components.ex:306
 #, elixir-autogen, elixir-format
 msgid "Approve Request"
 msgstr ""
@@ -14950,7 +14950,7 @@ msgstr ""
 msgid "Expires"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:383
+#: lib/mydia_web/live/admin_requests_live/components.ex:386
 #, elixir-autogen, elixir-format
 msgid "Explain why this request is being rejected..."
 msgstr ""
@@ -17146,7 +17146,7 @@ msgstr ""
 msgid "Please fix the validation errors"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:366
+#: lib/mydia_web/live/admin_requests_live/components.ex:369
 #, elixir-autogen, elixir-format
 msgid "Please provide a reason for rejecting this request."
 msgstr ""
@@ -17526,18 +17526,18 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_quality_profiles_live/custom_format_section.ex:82
 #: lib/mydia_web/live/admin_requests_live/components.ex:163
-#: lib/mydia_web/live/admin_requests_live/components.ex:280
+#: lib/mydia_web/live/admin_requests_live/components.ex:283
 #, elixir-autogen, elixir-format
 msgid "Reject"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:359
-#: lib/mydia_web/live/admin_requests_live/components.ex:409
+#: lib/mydia_web/live/admin_requests_live/components.ex:362
+#: lib/mydia_web/live/admin_requests_live/components.ex:412
 #, elixir-autogen, elixir-format
 msgid "Reject Request"
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:377
+#: lib/mydia_web/live/admin_requests_live/components.ex:380
 #, elixir-autogen, elixir-format
 msgid "Rejection Reason"
 msgstr ""
@@ -19037,7 +19037,7 @@ msgstr ""
 msgid "This version's manifest asks for these. Calls into them are denied until you re-approve the plugin from its row."
 msgstr ""
 
-#: lib/mydia_web/live/admin_requests_live/components.ex:310
+#: lib/mydia_web/live/admin_requests_live/components.ex:313
 #, elixir-autogen, elixir-format
 msgid "This will create the media item in your library."
 msgstr ""
