@@ -148,16 +148,25 @@ defmodule Mydia.Indexers.Cardigann.Parity.NativeReplayTest do
         yaml(["search?q={{ .Keywords }}", "find?q={{ .Keywords }}"], "requestDelay: 5")
       )
 
-    {:ok, replay} =
-      Replay.start_link(capture([html("search?q=lantern", @page), html("find?q=lantern", @page)]))
+    # Its own links too: the engine merges rows that share a download link.
+    later =
+      @page
+      |> String.replace("Quiet Orchard S01E02 720p HDTV", "Velvet Weir S02E05 1080p WEB")
+      |> String.replace(["/t/2", "/dl/2.torrent"], &String.replace(&1, "2", "3"))
 
-    {elapsed_us, _} =
+    {:ok, replay} =
+      Replay.start_link(capture([html("search?q=lantern", @page), html("find?q=lantern", later)]))
+
+    {elapsed_us, result} =
       :timer.tc(fn ->
         Seam.with(%{replay: replay}, fn ->
           ElixirAdapter.search(config(definition), "lantern", [])
         end)
       end)
 
+    # The second path was searched, not skipped, so its delay was really owed.
+    assert {:ok, results} = result
+    assert Enum.any?(results, &(&1.title == "Velvet Weir S02E05 1080p WEB"))
     assert Replay.misses(replay) == []
     assert elapsed_us < 2_000_000
   end

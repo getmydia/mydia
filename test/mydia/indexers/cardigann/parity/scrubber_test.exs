@@ -732,8 +732,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       cap = capture([exchange(@page)])
       original = Runner.replay(cap)
       {renamed, works} = Scrubber.rename(Scrubber.trim(cap, parsed()), titles(original))
+      scrubbed = Runner.replay(renamed)
 
-      assert Scrubber.verify(original, Runner.replay(renamed), works, renamed) == :ok
+      assert Scrubber.verify(original, scrubbed, works, renamed) == :ok
+
+      # verify/5 leaves the links alone (renaming changes them), so check here
+      # that only the work's slug changed.
+      slug = fn work -> work |> Fictional.name() |> String.replace(" ", "-") end
+      {:ok, results} = scrubbed.wasm
+
+      assert Enum.map(results, &{&1.info_url, &1.download_url}) == [
+               {"https://harbor.invalid/t/1/#{slug.("Mellow Kiln")}",
+                "https://harbor.invalid/dl/1.torrent"},
+               {"https://harbor.invalid/t/2/#{slug.("Drowsy Weir")}",
+                "https://harbor.invalid/dl/2.torrent"}
+             ]
     end
 
     test "a scrub that drops a row's size cell fails" do
