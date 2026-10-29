@@ -27,6 +27,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
         options: %{
           timeout: 30_000,  # request timeout in ms
           connect_timeout: 5_000,  # connection timeout in ms
+          max_retries: 3,  # retries on transient errors; 0 disables them
           cache: true,  # enable response caching
           cache_ttl: 3600  # cache time-to-live in seconds
         }
@@ -63,6 +64,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
 
   @default_timeout 30_000
   @default_connect_timeout 5_000
+  @default_max_retries 3
 
   @doc """
   Builds the User-Agent string with version and architecture info.
@@ -91,6 +93,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
     base_url = config[:base_url] || raise "base_url is required"
     timeout = get_in(config, [:options, :timeout]) || @default_timeout
     connect_timeout = get_in(config, [:options, :connect_timeout]) || @default_connect_timeout
+    max_retries = get_in(config, [:options, :max_retries]) || @default_max_retries
 
     req =
       Req.new(
@@ -98,7 +101,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
         receive_timeout: timeout,
         connect_options: [timeout: connect_timeout],
         retry: :transient,
-        max_retries: 3
+        max_retries: max_retries
       )
 
     # Add authentication if API key provided

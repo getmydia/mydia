@@ -12,6 +12,10 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     warm_trending_cache(:movie, [])
     warm_trending_cache(:tv_show, [])
 
+    # Opening Configure and adding both ask whether the title belongs to a
+    # franchise (#1293).
+    warm_movie_details_cache(551)
+
     user = user_fixture(%{role: "admin"})
     library = library_path_fixture(%{type: :movies, monitored: true})
     %{conn: log_in_user(conn, user), user: user, library: library}

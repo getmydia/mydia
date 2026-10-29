@@ -67,7 +67,7 @@ defmodule Mydia.Plugins.PageWrites do
   def prepare("media_add", args, user) do
     type = media_type_atom(args["media_type"])
     ref = {provider_atom(args["provider"]), args["provider_id"]}
-    defaults = Media.AddDefaults.resolve(user, type)
+    defaults = Media.AddDefaults.resolve(user, type, tmdb_id: Mydia.Metadata.Ref.tmdb_id(ref))
 
     case Media.Add.resolve_attrs(ref, type, nil, Media.AddDefaults.to_add_opts(defaults)) do
       {:ok, attrs} -> {:ok, %{attrs: attrs, defaults: defaults}}

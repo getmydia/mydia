@@ -354,7 +354,7 @@ msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:184
 #: lib/mydia_web/components/layouts.ex:546
-#: lib/mydia_web/live/dashboard_live/index.ex:315
+#: lib/mydia_web/live/dashboard_live/index.ex:314
 #, elixir-autogen, elixir-format
 msgid "Home"
 msgstr ""
@@ -2332,14 +2332,14 @@ msgstr ""
 msgid "%{title} deleted from disk."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:782
-#: lib/mydia_web/live/discover_live/index.ex:765
+#: lib/mydia_web/live/dashboard_live/index.ex:781
+#: lib/mydia_web/live/discover_live/index.ex:761
 #, elixir-autogen, elixir-format
 msgid "%{title} has been added to your library"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:815
-#: lib/mydia_web/live/discover_live/index.ex:797
+#: lib/mydia_web/live/dashboard_live/index.ex:814
+#: lib/mydia_web/live/discover_live/index.ex:793
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:215
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:316
 #, elixir-autogen, elixir-format
@@ -2366,8 +2366,8 @@ msgstr ""
 msgid "%{title} removed, but %{files} could not be deleted from disk. Check permissions and remove them manually."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:891
-#: lib/mydia_web/live/discover_live/index.ex:860
+#: lib/mydia_web/live/dashboard_live/index.ex:890
+#: lib/mydia_web/live/discover_live/index.ex:856
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:309
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:244
 #, elixir-autogen, elixir-format
@@ -3779,7 +3779,7 @@ msgstr ""
 msgid "Copy stream link"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:383
+#: lib/mydia_web/live/dashboard_live/index.ex:382
 #: lib/mydia_web/live/discover_live/index.ex:458
 #, elixir-autogen, elixir-format
 msgid "Could not add that item"
@@ -3850,7 +3850,7 @@ msgstr ""
 msgid "Could not create the show: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:329
+#: lib/mydia_web/live/dashboard_live/index.ex:328
 #, elixir-autogen, elixir-format
 msgid "Could not dismiss that. Please try again."
 msgstr ""
@@ -3912,7 +3912,7 @@ msgstr ""
 msgid "Could not remove the section"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:400
+#: lib/mydia_web/live/dashboard_live/index.ex:399
 #: lib/mydia_web/live/discover_live/index.ex:475
 #, elixir-autogen, elixir-format
 msgid "Could not request that item"
@@ -3965,8 +3965,8 @@ msgid "Could not save the download audio"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/home_order.ex:54
-#: lib/mydia_web/live/dashboard_live/index.ex:457
-#: lib/mydia_web/live/dashboard_live/index.ex:488
+#: lib/mydia_web/live/dashboard_live/index.ex:456
+#: lib/mydia_web/live/dashboard_live/index.ex:487
 #, elixir-autogen, elixir-format
 msgid "Could not save your Home layout."
 msgstr ""
@@ -4923,13 +4923,13 @@ msgstr ""
 msgid "Failed to add to library: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:812
+#: lib/mydia_web/live/discover_live/index.ex:808
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{errors}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:417
-#: lib/mydia_web/live/dashboard_live/index.ex:830
+#: lib/mydia_web/live/dashboard_live/index.ex:829
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{reason}"
 msgstr ""
@@ -4984,8 +4984,8 @@ msgstr ""
 msgid "Failed to dismiss download"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:841
-#: lib/mydia_web/live/discover_live/index.ex:823
+#: lib/mydia_web/live/dashboard_live/index.ex:840
+#: lib/mydia_web/live/discover_live/index.ex:819
 #, elixir-autogen, elixir-format
 msgid "Failed to fetch metadata: %{reason}"
 msgstr ""
@@ -9576,7 +9576,7 @@ msgstr ""
 msgid "That library is already being imported."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:628
+#: lib/mydia_web/live/dashboard_live/index.ex:627
 #: lib/mydia_web/live/helpers/media_add_helpers.ex:27
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:89
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:115
@@ -9584,7 +9584,7 @@ msgstr ""
 msgid "That library is no longer available. Nothing was added."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:379
+#: lib/mydia_web/live/dashboard_live/index.ex:378
 #: lib/mydia_web/live/discover_live/index.ex:454
 #, elixir-autogen, elixir-format
 msgid "That media type is not supported."

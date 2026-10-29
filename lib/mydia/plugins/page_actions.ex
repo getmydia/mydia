@@ -445,9 +445,10 @@ defmodule Mydia.Plugins.PageActions do
     type_atom = String.to_existing_atom(type)
 
     case Metadata.fetch_by_ref_cached(Metadata.default_relay_config(), ref, media_type: type_atom) do
+      # Only title and year: from_metadata/3 would also resolve add defaults,
+      # franchise library lookup included, for a value never used.
       {:ok, meta} ->
-        attrs = Mydia.Media.AttrsFromMetadata.from_metadata(meta, type_atom)
-        {:ok, %{title: attrs.title, year: attrs[:year]}}
+        {:ok, %{title: meta.title, year: Mydia.Media.AttrsFromMetadata.year_from(meta)}}
 
       {:error, _} ->
         {:error, Error.new(:not_found, "no catalog entry for that id")}

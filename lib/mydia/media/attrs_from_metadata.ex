@@ -17,12 +17,13 @@ defmodule Mydia.Media.AttrsFromMetadata do
   Builds attrs from a parsed release name plus its resolved metadata.
 
   `opts` accepts `:user`, the acting user whose add preferences the resolver
-  should consult, and `:defaults` to inject an `%AddDefaults{}` in tests.
+  should consult, `:defaults` to inject an `%AddDefaults{}` in tests, and
+  `:franchise_lookup` to inject the franchise library lookup in tests.
   """
   @spec from_parsed(map(), map(), keyword()) :: map()
   def from_parsed(parsed, metadata, opts \\ []) do
     media_type = parsed_media_type(parsed)
-    defaults = defaults_for(media_type, opts)
+    defaults = defaults_for(media_type, metadata, opts)
 
     base = %{
       type: type_string(media_type),
@@ -42,11 +43,12 @@ defmodule Mydia.Media.AttrsFromMetadata do
   Builds attrs from metadata alone, for a title with no parsed release.
 
   `opts` accepts `:user`, the acting user whose add preferences the resolver
-  should consult, and `:defaults` to inject an `%AddDefaults{}` in tests.
+  should consult, `:defaults` to inject an `%AddDefaults{}` in tests, and
+  `:franchise_lookup` to inject the franchise library lookup in tests.
   """
   @spec from_metadata(map(), :movie | :tv_show, keyword()) :: map()
   def from_metadata(metadata, media_type, opts \\ []) do
-    defaults = defaults_for(media_type, opts)
+    defaults = defaults_for(media_type, metadata, opts)
 
     base = %{
       type: type_string(media_type),
@@ -62,11 +64,25 @@ defmodule Mydia.Media.AttrsFromMetadata do
     put_provider_id(base, media_type, metadata)
   end
 
-  defp defaults_for(media_type, opts) do
+  defp defaults_for(media_type, metadata, opts) do
     Keyword.get_lazy(opts, :defaults, fn ->
-      AddDefaults.resolve(opts[:user], media_type)
+      resolve_opts =
+        [tmdb_id: movie_tmdb_id(media_type, metadata)] ++
+          Keyword.take(opts, [:franchise_lookup])
+
+      AddDefaults.resolve(opts[:user], media_type, resolve_opts)
     end)
   end
+
+  # The franchise layer only applies to movies, whose provider_id is a TMDB id.
+  defp movie_tmdb_id(:movie, metadata) do
+    case Integer.parse(to_string(Map.get(metadata, :provider_id) || "")) do
+      {id, ""} -> id
+      _ -> nil
+    end
+  end
+
+  defp movie_tmdb_id(_media_type, _metadata), do: nil
 
   defp parsed_media_type(%{type: :tv_show}), do: :tv_show
   defp parsed_media_type(_), do: :movie
@@ -82,7 +98,13 @@ defmodule Mydia.Media.AttrsFromMetadata do
   defp put_provider_id(base, _media_type, metadata),
     do: Map.put(base, :tmdb_id, metadata.provider_id)
 
-  defp year_from(metadata) do
+  @doc """
+  The release year of `metadata`: its `year`, else the year of its release or
+  first air date. For callers that need only the title and year, which
+  `from_metadata/3` would cost a full add-defaults resolution.
+  """
+  @spec year_from(map()) :: integer() | nil
+  def year_from(metadata) do
     Map.get(metadata, :year) ||
       extract_year(Map.get(metadata, :release_date)) ||
       extract_year(Map.get(metadata, :first_air_date))

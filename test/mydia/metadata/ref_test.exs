@@ -4,6 +4,22 @@ defmodule Mydia.Metadata.RefTest do
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
 
+  describe "tmdb_id/1" do
+    test "returns the id of a tmdb ref" do
+      assert Ref.tmdb_id({:tmdb, 4242}) == 4242
+    end
+
+    test "returns nil for anything else" do
+      assert Ref.tmdb_id({:tvdb, 4242}) == nil
+      assert Ref.tmdb_id(nil) == nil
+    end
+
+    test "returns nil for a non-positive tmdb id" do
+      assert Ref.tmdb_id({:tmdb, 0}) == nil
+      assert Ref.tmdb_id({:tmdb, -5}) == nil
+    end
+  end
+
   describe "parse/1" do
     test "parses both allowlisted tags" do
       assert Ref.parse("tmdb:63639") == {:ok, {:tmdb, 63_639}}

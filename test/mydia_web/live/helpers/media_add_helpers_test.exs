@@ -2,6 +2,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   use Mydia.DataCase, async: false
 
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
   import Mydia.SettingsFixtures
 
   alias Mydia.Accounts.Scope
@@ -625,6 +626,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   end
 
   describe "put_add_config/4 library freshness" do
+    # Opening the dialog asks whether the title belongs to a franchise (#1293).
+    setup do
+      warm_movie_details_cache(551)
+    end
+
     # candidate_libraries/1 is called from inside put_add_config/4 itself, at
     # OPEN time, rather than being threaded in from an earlier assign a host
     # captured at mount. `stale_snapshot` below stands in for that earlier
@@ -681,6 +687,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   # the popup shows is in none of the host's candidate lists. The selected
   # item itself has to be a candidate or the dialog loses its poster.
   describe "put_add_config/4 preview from the popup's selected item" do
+    setup do
+      warm_movie_details_cache(8812)
+    end
+
     defp selected_socket(selected_item) do
       %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, selected_item: selected_item}}
     end

@@ -14,6 +14,9 @@ defmodule MydiaWeb.DiscoverLive.NoLibrariesTest do
 
     provider_id = unique_provider_id()
 
+    # Opening Configure also asks whether the title belongs to a franchise (#1293).
+    warm_movie_details_cache(provider_id)
+
     warm_movie_search_cache("quiet harbour", [], [
       %{"id" => provider_id, "title" => "Quiet Harbour", "release_date" => "2024-05-01"}
     ])

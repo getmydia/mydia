@@ -472,7 +472,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     Phoenix.Component.assign(socket, :add_config, %{
       ref: ref,
       media_type: media_type,
-      defaults: AddDefaults.resolve(user, media_type),
+      defaults: AddDefaults.resolve(user, media_type, tmdb_id: Ref.tmdb_id(ref)),
       preview:
         preview_for(
           [selected_item_list(socket, media_type) | candidate_lists],

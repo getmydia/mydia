@@ -40,6 +40,19 @@ defmodule Mydia.Metadata.Ref do
   def parse("tvdb:" <> id), do: tagged(:tvdb, id)
   def parse(_other), do: :error
 
+  @doc """
+  The TMDB id of a ref, or nil when it is not a TMDB ref.
+
+      iex> Mydia.Metadata.Ref.tmdb_id({:tmdb, 63639})
+      63639
+
+      iex> Mydia.Metadata.Ref.tmdb_id({:tvdb, 280619})
+      nil
+  """
+  @spec tmdb_id(term()) :: pos_integer() | nil
+  def tmdb_id({:tmdb, id}) when is_integer(id) and id > 0, do: id
+  def tmdb_id(_ref), do: nil
+
   defp tagged(provider, id) do
     case Integer.parse(id) do
       {n, ""} when n > 0 -> {:ok, {provider, n}}

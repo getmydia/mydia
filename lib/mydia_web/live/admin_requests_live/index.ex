@@ -415,7 +415,8 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
     assign(socket, :approve_config, %{
       media_type: media_type,
-      defaults: AddDefaults.resolve(socket.assigns.current_user, media_type),
+      defaults:
+        AddDefaults.resolve(socket.assigns.current_user, media_type, tmdb_id: request.tmdb_id),
       libraries: MediaAddHelpers.candidate_libraries(media_type)
     })
   end
