@@ -4,7 +4,7 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   `Mydia.Indexers.Adapter.Cardigann` (the Elixir engine) and
   `Mydia.Indexers.Cardigann.Wasm.Adapter` (Prowlarr's engine under Wasmex):
   definition lookup, the string-or-atom `setting/2` read, search-option
-  filters, and FlareSolverr options and marking.
+  filters, release validity, and FlareSolverr options and marking.
   """
 
   require Logger
@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.{CardigannDefinition, CardigannHealthCheck}
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.SearchResult
   alias Mydia.Repo
 
   # How many mirrors one search tries before giving up.
@@ -90,6 +91,24 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
 
   defp limit_results(results, nil), do: results
   defp limit_results(results, limit), do: Enum.take(results, limit)
+
+  @doc """
+  Prowlarr's `HttpIndexerBase.IsValidRelease`: outside an interactive search
+  (`interactive: true`, which the manual search UI passes), a release with no
+  category or no size is dropped. Prowlarr checks for a null size; the
+  built-in engine has 0 for an absent or unreadable one. A category of 0 is
+  the engine's unmapped value, not a Torznab id. The wasm engine's guest
+  already applies the rule, so only the built-in adapter calls this.
+  """
+  @spec drop_invalid_releases([SearchResult.t()], keyword()) :: [SearchResult.t()]
+  def drop_invalid_releases(results, opts) do
+    if Keyword.get(opts, :interactive, false),
+      do: results,
+      else: Enum.filter(results, &valid_release?/1)
+  end
+
+  defp valid_release?(%{size: size, category: category}),
+    do: is_integer(size) and size > 0 and is_integer(category) and category > 0
 
   @doc "FlareSolverr options for a definition."
   def build_flaresolverr_opts(%CardigannDefinition{} = definition) do

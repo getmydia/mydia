@@ -65,6 +65,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     only: [
       apply_search_filters: 2,
       build_flaresolverr_opts: 1,
+      drop_invalid_releases: 2,
       fetch_definition: 1,
       handle_flaresolverr_result: 2
     ]
@@ -91,6 +92,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
+  # opts[:interactive]: a user's manual search; see AdapterSupport.drop_invalid_releases/2.
   @impl true
   def search(config, query, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
@@ -125,7 +127,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
               parse
             )
 
-          {:ok, apply_search_filters(rows, opts)}
+          {:ok, rows |> drop_invalid_releases(opts) |> apply_search_filters(opts)}
         end
       end
     else

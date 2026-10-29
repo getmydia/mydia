@@ -135,6 +135,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   passes `[indexer_id]` so retrying one failed chip does not re-run (and
   re-set to `:pending`) every other indexer. `Indexers.search_all/2` treats a
   `nil` value the same as the option being absent.
+
+  It is `interactive`: the built-in Cardigann engine keeps releases Prowlarr's
+  validity rule would drop, as Prowlarr's interactive search does.
   """
   def perform_search(query, min_seeders, lv, search_id, indexer_ids \\ nil) do
     opts = [
@@ -142,6 +145,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       deduplicate: true,
       indexer_ids: indexer_ids,
       report_paused: true,
+      interactive: true,
       on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
       on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]

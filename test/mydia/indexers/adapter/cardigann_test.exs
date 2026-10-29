@@ -918,7 +918,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         <tr><td class="title"><a href="/t/1">Some Title</a></td>
         <td class="download"><a href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567">d</a></td>
         <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-        <td class="category">Movies</td></tr></table></body></html>
+        <td class="category">2000</td></tr></table></body></html>
         """)
       end)
 
@@ -987,7 +987,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
           <td class="download"><a href="magnet:?xt=urn:btih:#{hash(n)}">d</a></td>
           <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-          <td class="category">Movies</td></tr>
+          <td class="category">2000</td></tr>
           """
         end
 
@@ -1087,7 +1087,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
         <td class="download"><a href="/dl/#{n}.torrent">d</a></td>
         <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-        <td class="category">Movies</td></tr></table></body></html>
+        <td class="category">2000</td></tr></table></body></html>
         """
       end
 

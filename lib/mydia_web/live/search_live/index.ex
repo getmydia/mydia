@@ -1108,20 +1108,15 @@ defmodule MydiaWeb.SearchLive.Index do
     end)
   end
 
-  defp perform_search(query, min_seeders, indexer_ids, lv, search_id) do
-    opts = [
-      min_seeders: min_seeders,
-      deduplicate: true,
-      indexer_ids: indexer_ids,
-      report_paused: true,
-      on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
-      on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
-    ]
-
-    {:ok, %{results: results, indexer_errors: indexer_errors}} = Indexers.search_all(query, opts)
-
-    {:ok, results, indexer_errors}
-  end
+  defp perform_search(query, min_seeders, indexer_ids, lv, search_id),
+    do:
+      MydiaWeb.MediaLive.Show.SearchHelpers.perform_search(
+        query,
+        min_seeders,
+        lv,
+        search_id,
+        indexer_ids
+      )
 
   defp apply_filters(socket) do
     # Re-filter the current results without re-searching
