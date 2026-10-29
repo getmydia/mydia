@@ -13,7 +13,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Works do
   @slug_words ~r/[^\p{L}\p{N}]+/u
   @letters ~r/\p{L}+/u
   @letters_or_digits ~r/[\p{L}\p{N}]+/u
-  @segment_split ~r/[\[\]【】()（）{}「」\/\\|,，~★]| - | \+ /u
+  @segment_split ~r/[\[\]【】()（）{}「」\/\\|,，~★]| - | \+ |: /u
+  # Single letters joined by dots: "S.K.Y." or "U.S.A".
+  @acronym ~r/(?<![\p{L}\p{N}])(?:\p{L}\.){2,}(?:\p{L}(?![\p{L}\p{N}]))?/u
   @min_segment 5
   @min_segment_cjk 3
   @min_pair 8
@@ -80,11 +82,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Works do
 
   Besides the work before a title's first marker, every segment of the title
   that reads as a name counts: segments are cut at brackets, slashes, bars,
-  commas, `~` and a spaced dash. Fansub titles put the name inside brackets
-  (`[Group][Some Name][04][1080p]`) and list alternate names after a slash or
-  in a trailing `(VOSTFR, Other Name)`, and a composed title joins the name to
-  a platform with ` - `; each of those is a real name too. So is an episode
-  title after a marker (`S01E04 The Long Way Home 1080p`).
+  commas, `~`, a spaced dash and a colon before a subtitle. Fansub titles put
+  the name inside brackets (`[Group][Some Name][04][1080p]`) and list
+  alternate names after a slash or in a trailing `(VOSTFR, Other Name)`, a
+  composed title joins the name to a platform with ` - `, and a slug often
+  keeps only the name before a subtitle's colon; each of those is a real name
+  too. So is an episode title of two or more words after a marker
+  (`S01E04 The Long Way Home 1080p`); a single word there reads as a tag.
   """
   @spec works([String.t()]) :: [String.t()]
   def works(titles) do
@@ -159,13 +163,14 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Works do
   # and has a word that is not release vocabulary ("1080p", "WEB-DL", "Dual
   # Audio", "CHT"). Renaming a tag would be harmless, but a short one would be
   # found inside unrelated words by the leak check and fail every seed.
+  # An acronym ("S.K.Y.") reads as one word, not as letters too short to count.
   defp name?(work) do
     reduced = work |> String.downcase() |> String.replace(@slug_words, "")
     min = if reduced =~ ~r/[^\x00-\x7F]/u, do: @min_segment_cjk, else: @min_segment
 
     String.length(reduced) >= min and
       @letters
-      |> Regex.scan(String.downcase(work))
+      |> Regex.scan(work |> collapse_acronyms() |> String.downcase())
       |> List.flatten()
       |> Enum.any?(&(not release_word?(&1)))
   end
@@ -183,6 +188,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Works do
   @doc "The work name of one title."
   @spec work(String.t()) :: String.t()
   def work(title), do: title |> split_title() |> elem(0) |> String.trim()
+
+  @doc ~S|`text` with the dots of every acronym taken out ("S.K.Y. 2" becomes "SKY 2").|
+  @spec collapse_acronyms(String.t()) :: String.t()
+  def collapse_acronyms(text), do: Regex.replace(@acronym, text, &String.replace(&1, ".", ""))
 
   @doc "Whether a work is long enough to rename without hitting markup."
   @spec renamable?(String.t()) :: boolean()

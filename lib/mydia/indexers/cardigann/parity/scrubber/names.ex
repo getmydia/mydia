@@ -96,12 +96,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
   # URL slugs strip accents ("Mō" becomes "Mo"), drop the letter outright
   # ("M") or turn it into a separator ("Reiāsu" becomes "Rei_su"), so those
   # spellings are searched too, while long enough to be safe. Only for a Latin
-  # name with a few accented letters: dropping a CJK name's characters would
-  # leave a fragment ("U-17 WORLD CUP") that renames part of another work.
+  # name, however many accents it has (a stray symbol or two such as "×"
+  # aside): dropping a CJK name's characters would leave a fragment ("U-17
+  # WORLD CUP") that renames part of another work. An acronym's dots vanish
+  # from a slug too ("S.K.Y. 2" becomes "sky-2").
   defp spellings(work) do
-    if work |> String.replace(~r/[\x00-\x7F]/u, "") |> String.length() > 2,
-      do: [work],
-      else: latin_spellings(work)
+    latin =
+      if work |> String.replace(~r/[\x00-\x7F]|\p{Latin}/u, "") |> String.length() > 2,
+        do: [work],
+        else: latin_spellings(work)
+
+    Enum.uniq(latin ++ [Works.collapse_acronyms(work)])
   end
 
   defp latin_spellings(work) do
@@ -229,7 +234,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Names do
     # Slugs either split at an apostrophe ("kiln-s-harbor") or drop it
     # ("kilns-harbor"); trackers do both.
     slugs =
-      for text <- [work, String.replace(work, ~r/['’]/u, "")],
+      for text <-
+            Enum.uniq([work, String.replace(work, ~r/['’]/u, ""), Works.collapse_acronyms(work)]),
           words = String.split(text, @slug_words, trim: true),
           s <- ["-", ".", "_"],
           do: {Enum.join(words, s), Enum.join(fake_words, s)}

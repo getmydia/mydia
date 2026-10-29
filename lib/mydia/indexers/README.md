@@ -483,15 +483,18 @@ To refresh the seed: `record`, then `seed` each definition, then
 
 ### What scrubbing guarantees, and what it does not
 
-Release titles in the seed are invented (`Mellow Kiln`), never real. The
-scrubber learns real names from the titles both engines parse: the text before
-the first release marker, each bracketed, slashed, comma-listed or `+`-joined
-segment, the same without numbered or version tokens at its edges, the Latin
-part of a name written in two scripts, and an episode title between two
+Work names in the seed's release titles are invented (`Mellow Kiln`). The one
+exception is a work that equals a category name in the definition, which is
+kept as the limits below describe. The scrubber learns real names from the
+titles both engines parse: the text before the first release marker, each
+bracketed, slashed, comma-listed, `+`-joined or colon-split segment, the same
+without numbered or version tokens at its edges, the Latin part of a name
+written in two scripts, and an episode title of two or more words between two
 markers. It replaces them one work at a time, longest first, in every spelling
 a tracker uses (escaped, percent-encoded, as a slug, in the page's charset,
-with any punctuation between its words, with accents stripped or dropped), so
-a shorter name never renames the start of a longer one and leaves the rest.
+with any punctuation between its words, with accents stripped or dropped, with
+an acronym's dots taken out), so a shorter name never renames the start of a
+longer one and leaves the rest.
 
 Real identifiers are replaced too: IMDb ids, TMDB, TVDB, TVMaze, AniList and
 similar ids in Torznab attributes and JSON keys, and BitTorrent info hashes
@@ -512,6 +515,11 @@ nothing else:
 
 - a name too short to rename safely (under three characters, or a segment
   under five, or three for CJK) is left as it is;
+- a one-word episode title (`S01E04 Lantern 1080p`) is not learned, because
+  between two markers a single word reads as a release tag as often as a name;
+- a work that equals a category name in the definition (`SparkyLinux` on a
+  distro tracker) is tracker vocabulary and stays, since renaming it would also
+  rename the category label;
 - text no title contains passes through: uploader and fansub group names,
   descriptions, category labels, and an alternate name that only appears
   elsewhere in a row or in an untrimmed body (XML feeds, pages with no rows,

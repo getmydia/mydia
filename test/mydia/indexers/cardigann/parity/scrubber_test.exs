@@ -219,6 +219,27 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       refute ex.body =~ ~r/kiln|shindo/i
     end
 
+    test "renames a Latin work with many accents in a slug that strips them" do
+      body = "/movies/kilna-sorrel-dawn-2031 /img/kilna_sorrel_dawn_2031/cover.jpg"
+
+      {%Capture{exchanges: [ex]}, _} =
+        Scrubber.rename(capture([exchange(body)]), ["Kilnâ Sorrêl Dâwn 2031 1080p"])
+
+      refute ex.body =~ ~r/kilna|sorrel|dawn/i
+    end
+
+    test "learns the name before a subtitle colon, and its acronym slugged without dots" do
+      body = ~s(<a href="/2702-kiln-2-2031.html">x</a>)
+
+      {%Capture{exchanges: [ex]}, works} =
+        Scrubber.rename(capture([exchange(body)]), [
+          "K.I.L.N. 2: Heart of Tarn - Ultimate Edition"
+        ])
+
+      assert "K.I.L.N. 2" in works
+      refute ex.body =~ ~r/kiln/i
+    end
+
     test "learns the Latin part of a name written in two scripts, and slugged ×" do
       body = "/view/1_Kiln_Spirits_4.html /g/drover-x-drover-tide"
 
