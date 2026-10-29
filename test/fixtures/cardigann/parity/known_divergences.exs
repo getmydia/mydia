@@ -3,14 +3,6 @@
     definition: "linuxtracker",
     query: :generic,
     kind: :field,
-    field: :category,
-    reason:
-      "the definition maps by `categorydesc`, which native does not implement (nil); wasm maps the badge to 4020 (PC/ISO)"
-  },
-  %{
-    definition: "linuxtracker",
-    query: :generic,
-    kind: :field,
     field: :download_url,
     reason:
       "both build a magnet from infohash; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
@@ -30,14 +22,6 @@
     field: nil,
     reason:
       "wasm leaves out the two rows whose category badge (AnduinOS) has no categorymappings entry; native keeps them with category nil (25 vs 23)"
-  },
-  %{
-    definition: "linuxtracker",
-    query: :rss,
-    kind: :field,
-    field: :category,
-    reason:
-      "the definition maps by `categorydesc`, which native does not implement (nil); wasm maps the badge to 4020 (PC/ISO)"
   },
   %{
     definition: "linuxtracker",

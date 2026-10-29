@@ -462,6 +462,32 @@ defmodule Mydia.Indexers.CategoryMapping do
     end
   end
 
+  @doc """
+  Maps a tracker's category description (a `categorydesc` field) to a Torznab
+  id through the mappings' `desc`, compared case-insensitively, as Prowlarr's
+  `MapTrackerCatDescToNewznab` does.
+  """
+  @spec map_site_category_desc_to_torznab(String.t() | nil, list()) :: integer() | nil
+  def map_site_category_desc_to_torznab(desc, mappings)
+      when is_binary(desc) and is_list(mappings) do
+    needle = desc |> String.trim() |> String.downcase()
+
+    if needle == "" do
+      nil
+    else
+      Enum.find_value(mappings, &category_for_desc(&1, needle))
+    end
+  end
+
+  def map_site_category_desc_to_torznab(_desc, _mappings), do: nil
+
+  defp category_for_desc(mapping, needle) do
+    mapping_desc = Map.get(mapping, "desc") || Map.get(mapping, :desc)
+
+    if is_binary(mapping_desc) and String.downcase(String.trim(mapping_desc)) == needle,
+      do: category_id_from_name(Map.get(mapping, "cat") || Map.get(mapping, :cat))
+  end
+
   defp parse_category_id(id) when is_integer(id), do: id
 
   defp parse_category_id(id) when is_binary(id) do

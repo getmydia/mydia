@@ -316,4 +316,22 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       assert CategoryMapping.map_site_category_to_torznab("23", mappings) == 3040
     end
   end
+
+  describe "map_site_category_desc_to_torznab/2" do
+    @desc_mappings [
+      %{"id" => 2311, "cat" => "PC/ISO", "desc" => "Lantern Linux"},
+      %{"id" => 0, "cat" => "Other", "desc" => "Other"}
+    ]
+
+    test "matches desc case-insensitively" do
+      assert CategoryMapping.map_site_category_desc_to_torznab("lantern linux", @desc_mappings) ==
+               4020
+    end
+
+    test "is nil for an unknown, blank or missing desc" do
+      assert CategoryMapping.map_site_category_desc_to_torznab("Harbor OS", @desc_mappings) == nil
+      assert CategoryMapping.map_site_category_desc_to_torznab("  ", @desc_mappings) == nil
+      assert CategoryMapping.map_site_category_desc_to_torznab(nil, @desc_mappings) == nil
+    end
+  end
 end

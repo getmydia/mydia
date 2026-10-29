@@ -35,7 +35,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         download_url: resolved_download_url,
         info_url: resolved_info_url,
         indexer: ctx.indexer_name,
-        category: map_category(get_field(row, "category"), ctx.category_mappings),
+        category: category(row, ctx),
         published_at: parse_date(get_field(row, "date")),
         quality: QualityParser.parse(title),
         tmdb_id: parse_optional_integer(get_field(row, "tmdbid")),
@@ -58,6 +58,16 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
       {:ok, url} -> LinkResolver.resolve(url, ctx.base_url)
       {:error, _} -> download_url
     end
+  end
+
+  # `category` first, then `categorydesc`: Prowlarr unions them in field order
+  # and the first category is the one a release reports.
+  defp category(row, ctx) do
+    map_category(get_field(row, "category"), ctx.category_mappings) ||
+      CategoryMapping.map_site_category_desc_to_torznab(
+        get_field(row, "categorydesc"),
+        ctx.category_mappings
+      )
   end
 
   # Maps a site-specific category to a Torznab category ID; a value with no
