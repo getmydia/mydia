@@ -13,6 +13,11 @@ defmodule Mydia.Metadata.RefTest do
       assert Ref.tmdb_id({:tvdb, 4242}) == nil
       assert Ref.tmdb_id(nil) == nil
     end
+
+    test "returns nil for a non-positive tmdb id" do
+      assert Ref.tmdb_id({:tmdb, 0}) == nil
+      assert Ref.tmdb_id({:tmdb, -5}) == nil
+    end
   end
 
   describe "parse/1" do

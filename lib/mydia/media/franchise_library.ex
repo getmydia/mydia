@@ -59,10 +59,30 @@ defmodule Mydia.Media.FranchiseLibrary do
   def library_for(tmdb_id, config) when is_integer(tmdb_id) do
     config = bounded(config || Metadata.default_relay_config())
 
-    # Unlinked, so nothing inside the task can crash the caller. Task.Supervisor
-    # records the caller in $callers, which keeps Ecto sandbox access in tests.
-    task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> lookup(tmdb_id, config) end)
+    case start_lookup(tmdb_id, config) do
+      nil -> nil
+      task -> await_lookup(task, tmdb_id)
+    end
+  end
 
+  def library_for(_tmdb_id, _config), do: nil
+
+  # Unlinked, so nothing inside the task can crash the caller. Task.Supervisor
+  # records the caller in $callers, which keeps Ecto sandbox access in tests.
+  # Starting it exits when the supervisor is down; that is a nil like any other
+  # failure here.
+  defp start_lookup(tmdb_id, config) do
+    Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> lookup(tmdb_id, config) end)
+  catch
+    :exit, reason ->
+      Logger.warning(
+        "Franchise library lookup could not start for tmdb #{tmdb_id}: #{inspect(reason)}"
+      )
+
+      nil
+  end
+
+  defp await_lookup(task, tmdb_id) do
     case Task.yield(task, @lookup_deadline) || Task.shutdown(task, :brutal_kill) do
       {:ok, library_id} ->
         library_id
@@ -80,8 +100,6 @@ defmodule Mydia.Media.FranchiseLibrary do
         nil
     end
   end
-
-  def library_for(_tmdb_id, _config), do: nil
 
   @doc """
   Puts the franchise's library into add `opts` when they name no library.

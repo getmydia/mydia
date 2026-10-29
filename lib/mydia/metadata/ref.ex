@@ -50,7 +50,7 @@ defmodule Mydia.Metadata.Ref do
       nil
   """
   @spec tmdb_id(term()) :: pos_integer() | nil
-  def tmdb_id({:tmdb, id}) when is_integer(id), do: id
+  def tmdb_id({:tmdb, id}) when is_integer(id) and id > 0, do: id
   def tmdb_id(_ref), do: nil
 
   defp tagged(provider, id) do
