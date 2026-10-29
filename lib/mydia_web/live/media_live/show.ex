@@ -121,9 +121,8 @@ defmodule MydiaWeb.MediaLive.Show do
      )
      |> assign(:download_error, nil)
      |> assign(:min_seeders, 0)
-     |> assign(:quality_filter, nil)
-     |> assign(:source_filter, nil)
-     |> assign(:codec_filter, nil)
+     |> assign(quality_filters: [], source_filters: [], codec_filters: [], indexer_filters: [])
+     |> assign(:result_count, 0)
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
@@ -445,6 +444,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("sort_search", params, socket),
     do: SearchEvents.sort_search(params, socket)
+
+  def handle_event("remove_search_filter", params, socket),
+    do: SearchEvents.remove_search_filter(params, socket)
+
+  def handle_event("clear_search_filters", params, socket),
+    do: SearchEvents.clear_search_filters(params, socket)
 
   def handle_event("toggle_close_after_grab", params, socket),
     do: SearchEvents.toggle_close_after_grab(params, socket)

@@ -825,10 +825,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :indexer_progress, :map, default: %{}
   attr :cardigann_summary, Mydia.Indexers.CardigannSummary, default: nil
   attr :streams, :map, required: true
-  attr :quality_filter, :string, default: nil
-  attr :source_filter, :string, default: nil
-  attr :codec_filter, :string, default: nil
-  attr :filter_options, :map, default: %{sources: [], codecs: []}
+  attr :quality_filters, :list, default: []
+  attr :source_filters, :list, default: []
+  attr :codec_filters, :list, default: []
+  attr :indexer_filters, :list, default: []
+  attr :filter_options, :map, default: %{sources: [], codecs: [], indexers: []}
+  attr :result_count, :integer, default: 0
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
 
@@ -850,10 +852,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       assigns
       |> assign(:media_type, media_type)
       |> assign(:manual_ranking_opts, manual_ranking_opts)
+      # See the comment above the filter controls in the template.
+      |> assign(:filters_visible?, !assigns.raw_results_empty? or !assigns.searching)
 
     ~H"""
     <div class="modal modal-open" id="manual-search-modal">
-      <div class="modal-box max-w-4xl h-[90vh] flex flex-col p-0">
+      <div class="modal-box relative max-w-4xl h-[90vh] flex flex-col p-0">
         <%!-- Modal Header --%>
         <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-center justify-between mb-3">
@@ -881,13 +885,16 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <% end %>
               <% end %>
             </h3>
-            <button
-              type="button"
-              phx-click="close_manual_search_modal"
-              class="btn btn-ghost btn-sm btn-circle"
-            >
-              <.icon name="hero-x-mark" class="w-6 h-6" />
-            </button>
+            <div class="flex items-center gap-1">
+              <ManualSearchFilters.sort_menu sort_by={@sort_by} />
+              <button
+                type="button"
+                phx-click="close_manual_search_modal"
+                class="btn btn-ghost btn-sm btn-circle"
+              >
+                <.icon name="hero-x-mark" class="w-6 h-6" />
+              </button>
+            </div>
           </div>
           <%!-- Search Query Display --%>
           <div class="flex items-center gap-2 text-sm">
@@ -933,8 +940,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
         </div>
-        <%!-- Filters Bar (compact) --%>
-        <%!-- Additive to the old `!@searching` gate. Results now stream in
+        <%!-- Filter controls: chip bar and filter panel --%>
+        <%!-- `@filters_visible?` is `!@raw_results_empty? or !@searching`.
+             Additive to the old `!@searching` gate. Results now stream in
              indexer by indexer, so gating only on the search being over left
              the user staring at rows they could not filter or re-sort for up
              to the full 120s deadline. Adding "or the accumulated pool is not
@@ -946,15 +954,24 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
              nothing would hide the very controls needed to undo it. Keeping
              `!@searching` as a floor also keeps the "Close after grabbing"
              preference reachable after a search that found nothing. --%>
-        <%= if !@raw_results_empty? or !@searching do %>
-          <ManualSearchFilters.filters_bar
-            quality_filter={@quality_filter}
-            source_filter={@source_filter}
-            codec_filter={@codec_filter}
+        <%= if @filters_visible? do %>
+          <ManualSearchFilters.chip_bar
+            quality_filters={@quality_filters}
+            source_filters={@source_filters}
+            codec_filters={@codec_filters}
+            indexer_filters={@indexer_filters}
+            min_seeders={@min_seeders}
+          />
+          <ManualSearchFilters.filter_panel
+            quality_filters={@quality_filters}
+            source_filters={@source_filters}
+            codec_filters={@codec_filters}
+            indexer_filters={@indexer_filters}
             filter_options={@filter_options}
+            quality_options={quality_options()}
             min_seeders={@min_seeders}
             close_after_grab={@close_after_grab}
-            sort_by={@sort_by}
+            result_count={@result_count}
           />
         <% end %>
         <%!-- Modal Body --%>

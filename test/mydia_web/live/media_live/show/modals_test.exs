@@ -312,7 +312,11 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
             results_empty?: false,
             indexer_errors: [],
             streams: %{search_results: [{"search-result-00000-1", result}]},
-            quality_filter: nil,
+            quality_filters: [],
+            source_filters: [],
+            codec_filters: [],
+            indexer_filters: [],
+            result_count: 1,
             min_seeders: 0,
             sort_by: :seeders,
             close_after_grab: false

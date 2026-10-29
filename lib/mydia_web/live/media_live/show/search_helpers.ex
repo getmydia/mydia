@@ -208,6 +208,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     |> Phoenix.Component.assign(:indexer_raw_results, raw_pool)
     |> Phoenix.Component.assign(:raw_search_results, ranked)
     |> Phoenix.Component.assign(:results_empty?, sorted == [])
+    |> Phoenix.Component.assign(:result_count, length(sorted))
     |> track_prior_attempts(progress.results)
     |> stream_prepared_results(sorted)
   end
@@ -223,6 +224,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
     socket
     |> Phoenix.Component.assign(:results_empty?, sorted_results == [])
+    |> Phoenix.Component.assign(:result_count, length(sorted_results))
     |> stream_prepared_results(sorted_results)
   end
 

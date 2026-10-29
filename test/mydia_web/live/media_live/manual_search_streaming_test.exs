@@ -960,7 +960,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
            "precondition failed: the search already ended, so this proves nothing"
 
     assert has_element?(view, ~s(#manual-search-modal form[phx-change="filter_search"]))
-    assert has_element?(view, ~s(#manual-search-modal form[phx-change="sort_search"]))
+    assert has_element?(view, ~s(#manual-search-sort [phx-click="sort_search"]))
     assert has_element?(view, "#close-after-grab-toggle")
   end
 
@@ -1001,7 +1001,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     view
     |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
-    |> render_change(%{"quality" => "2160p", "min_seeders" => "0"})
+    |> render_change(%{"quality" => ["2160p"], "min_seeders" => "0"})
 
     refute has_element?(view, "##{positioned_result_dom_id(dune)}")
 
@@ -1010,12 +1010,12 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     view
     |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
-    |> render_change(%{"quality" => "", "min_seeders" => "0"})
+    |> render_change(%{"quality" => [], "min_seeders" => "0"})
 
     assert has_element?(view, "##{positioned_result_dom_id(dune)}")
   end
 
-  test "source and codec dropdowns narrow results and offer only what arrived", %{conn: conn} do
+  test "source and codec chips narrow results and offer only what arrived", %{conn: conn} do
     media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
     indexer = pending_indexer_fixture("slow-indexer")
 
@@ -1058,18 +1058,33 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     render(view)
 
-    assert has_element?(view, ~s(#manual-search-source-filter option[value="REMUX"]))
-    assert has_element?(view, ~s(#manual-search-source-filter option[value="WEB-DL"]))
-    refute has_element?(view, ~s(#manual-search-source-filter option[value="HDTV"]))
-    assert has_element?(view, ~s(#manual-search-codec-filter option[value="HEVC"]))
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="source[]"][value="REMUX"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="source[]"][value="WEB-DL"])
+           )
+
+    refute has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="source[]"][value="HDTV"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="codec[]"][value="HEVC"])
+           )
 
     view
     |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
     |> render_change(%{
-      "quality" => "",
+      "quality" => [],
       "min_seeders" => "0",
-      "source" => "REMUX",
-      "codec" => "HEVC"
+      "source" => ["REMUX"],
+      "codec" => ["HEVC"]
     })
 
     rows = :sys.get_state(view.pid).socket.assigns.raw_search_results
@@ -1078,16 +1093,81 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     assert has_element?(view, "#manual-search-modal [id^='search-result-']", "REMUX")
     refute has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
 
-    view
-    |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
-    |> render_change(%{
-      "quality" => "",
-      "min_seeders" => "0",
-      "source" => "BOGUS",
-      "codec" => ""
+    render_change(view, "filter_search", %{
+      "source" => ["BOGUS"],
+      "codec" => [],
+      "min_seeders" => "abc"
     })
 
-    assert :sys.get_state(view.pid).socket.assigns.source_filter == nil
+    assigns = :sys.get_state(view.pid).socket.assigns
+    assert assigns.source_filters == []
+    assert assigns.min_seeders == 0
+  end
+
+  test "the indexer filter narrows rows, shows a removable chip and survives forged values",
+       %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    nyaa = %{search_result("Glass.Harbor.2019.1080p.WEB-DL.x264") | indexer: "Nyaa"}
+    eztv = %{search_result("Glass.Harbor.2019.720p.HDTV.x264") | indexer: "EZTV", seeders: 50}
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [nyaa, eztv],
+         result_count: 2,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="indexer[]"][value="Nyaa"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="indexer[]"][value="EZTV"])
+           )
+
+    refute has_element?(view, "#manual-search-chip-indexer")
+
+    view
+    |> element("#manual-search-filter-form")
+    |> render_change(%{"indexer" => ["Nyaa"], "min_seeders" => "0"})
+
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
+    refute has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+    assert has_element?(view, "#manual-search-chip-indexer", "Nyaa")
+
+    view |> element("#manual-search-chip-indexer button") |> render_click()
+
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+    refute has_element?(view, "#manual-search-chip-indexer")
+
+    render_change(view, "filter_search", %{"indexer" => ["NotATracker"], "min_seeders" => "0"})
+    assert :sys.get_state(view.pid).socket.assigns.indexer_filters == []
+
+    render_change(view, "filter_search", %{"indexer" => ["EZTV"], "min_seeders" => "0"})
+    view |> element("#manual-search-clear-filters") |> render_click()
+    assert :sys.get_state(view.pid).socket.assigns.indexer_filters == []
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
+
+    render_click(view, "sort_search", %{"sort_by" => "not_a_sort"})
+    assert :sys.get_state(view.pid).socket.assigns.sort_by == :quality
   end
 
   # Every test above injects %IndexerProgress{} directly and never runs the
