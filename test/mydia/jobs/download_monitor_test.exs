@@ -1077,6 +1077,42 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert Mydia.Downloads.Blacklists.blacklisted?("nzbhydra2", "stable-guid-123")
     end
 
+    # A Cardigann guid is the download URL, so it can carry a tracker passkey.
+    test "logs a URL guid with its passkey redacted" do
+      {bypass, client_config} = start_sabnzbd_bypass()
+
+      mock_sabnzbd_queue(bypass, [],
+        history: [sabnzbd_history_item("nzo-passkey-1", "Quiet.Orchard.S01E01.nzb", "Failed")]
+      )
+
+      guid = "https://tracker.example/download.php?id=9&passkey=QUIETORCHARDSECRET"
+
+      download_fixture(%{
+        media_item_id: media_item_fixture().id,
+        title: "Quiet.Orchard.S01E01",
+        indexer: "lanterntracker",
+        download_client: client_config.name,
+        download_client_id: "nzo-passkey-1",
+        metadata: %{size: 1_000_000_000, indexer: "lanterntracker", guid: guid}
+      })
+
+      # The capture handler cannot see below the primary level, so raise it;
+      # this module is async: false (see test/README.md).
+      original_level = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: original_level) end)
+
+      log =
+        ExUnit.CaptureLog.capture_log([level: :info, metadata: [:guid]], fn ->
+          assert :ok = perform_job(DownloadMonitor, %{})
+        end)
+
+      assert log =~ "Release blacklisted after failure"
+      assert log =~ "download.php?id=9"
+      refute log =~ "QUIETORCHARDSECRET"
+      assert Blacklists.blacklisted?("lanterntracker", guid)
+    end
+
     test "indexer name is normalized to lowercase in the blacklist row" do
       {bypass, client_config} = start_sabnzbd_bypass()
 

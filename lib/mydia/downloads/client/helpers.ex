@@ -17,8 +17,10 @@ defmodule Mydia.Downloads.Client.Helpers do
   @bytes_per_mib 1_048_576
 
   # Query-param keys that *may* carry an operator credential. Lowercased
-  # comparison is used so `Token=` and `TOKEN=` are caught too.
-  @sensitive_url_params ~w(token auth apikey api_key agent _apikey password)
+  # comparison is used so `Token=` and `TOKEN=` are caught too. The tracker
+  # spellings matter because a Cardigann guid is the release's download URL.
+  @sensitive_url_params ~w(token auth apikey api_key agent _apikey password
+                           passkey authkey rsskey torrent_pass api_token)
 
   # Upper bound on a `DownloadStatus.failure_detail`. Provider detail is a
   # short native token; anything longer is a payload dump that has no

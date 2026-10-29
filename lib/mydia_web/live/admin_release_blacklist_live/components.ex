@@ -2,6 +2,8 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  import Mydia.Downloads.Client.Helpers, only: [redact_url: 1]
+
   attr :display, Mydia.TimeDisplay, required: true
   attr :rows, :list, required: true
   attr :total_count, :integer, required: true
@@ -77,7 +79,8 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
         label="GUID"
         class="font-mono text-xs break-all sm:break-normal sm:max-w-xs sm:truncate"
       >
-        <span title={row.guid}>{row.guid}</span>
+        <%!-- A Cardigann guid is the download URL and can carry a passkey. --%>
+        <span title={redact_url(row.guid)}>{redact_url(row.guid)}</span>
       </:col>
       <:col :let={row} label={gettext("Reason")}>
         <span

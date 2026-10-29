@@ -36,6 +36,7 @@ defmodule Mydia.Downloads.Blacklists do
   import Ecto.Query
 
   alias Ecto.Changeset
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Downloads.TorrentHash
   alias Mydia.Repo
@@ -330,7 +331,7 @@ defmodule Mydia.Downloads.Blacklists do
             "Rejected blacklisted release",
             [
               indexer: Map.get(result, :indexer),
-              guid: primary_guid(keys),
+              guid: keys |> primary_guid() |> Helpers.redact_url(),
               title: Map.get(result, :title),
               matched_by: matched_by
             ] ++ log_context

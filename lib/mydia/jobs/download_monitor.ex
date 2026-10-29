@@ -716,7 +716,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
               Logger.info("Release blacklisted after failure",
                 download_id: download.id,
                 indexer: indexer,
-                guid: guid,
+                guid: Client.Helpers.redact_url(guid),
                 failure_reason: failure_reason
               )
 
@@ -726,7 +726,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
               Logger.warning("Failed to blacklist release",
                 download_id: download.id,
                 indexer: indexer,
-                guid: guid,
+                guid: Client.Helpers.redact_url(guid),
                 reason: inspect(reason)
               )
 

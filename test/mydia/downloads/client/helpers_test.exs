@@ -11,6 +11,16 @@ defmodule Mydia.Downloads.Client.HelpersTest do
       assert redacted =~ "safe=keep"
     end
 
+    test "strips tracker passkeys, authkeys and rsskeys" do
+      redacted =
+        Helpers.redact_url(
+          "https://tracker.example/dl.php?id=4&passkey=PK1&authkey=AK1&rsskey=RK1&torrent_pass=TP1"
+        )
+
+      for secret <- ~w(PK1 AK1 RK1 TP1), do: refute(redacted =~ secret)
+      assert redacted =~ "id=4"
+    end
+
     test "returns nil for nil" do
       assert Helpers.redact_url(nil) == nil
     end
