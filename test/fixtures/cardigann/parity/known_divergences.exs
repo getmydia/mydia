@@ -1,43 +1,11 @@
 [
   %{
     definition: "linuxtracker",
-    query: :generic,
-    kind: :field,
-    field: :download_url,
-    reason:
-      "both build a magnet from infohash; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
-  },
-  %{
-    definition: "linuxtracker",
-    query: :generic,
-    kind: :field,
-    field: :guid,
-    reason:
-      "both set guid from the magnet the infohash builds; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
-  },
-  %{
-    definition: "linuxtracker",
     query: :rss,
     kind: :count,
     field: nil,
     reason:
       "wasm leaves out the two rows whose category badge (AnduinOS) has no categorymappings entry; native keeps them with category nil (25 vs 23)"
-  },
-  %{
-    definition: "linuxtracker",
-    query: :rss,
-    kind: :field,
-    field: :download_url,
-    reason:
-      "both build a magnet from infohash; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
-  },
-  %{
-    definition: "linuxtracker",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "both set guid from the magnet the infohash builds; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
   },
   %{
     definition: "yts",

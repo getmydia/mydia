@@ -122,6 +122,31 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     assert %{divergences: []} = run([a], [b])
   end
 
+  test "magnets differing only in tr are equal, as download_url and as guid" do
+    base = "magnet:?xt=urn:btih:#{@hash_a}&dn=Lantern%20Harbor"
+    upper = "magnet:?xt=urn:btih:#{String.upcase(@hash_a)}&dn=Lantern%20Harbor"
+
+    a =
+      result("Lantern Harbor", @hash_a,
+        download_url: base <> "&tr=udp%3A%2F%2Fa.test",
+        guid: base <> "&tr=udp%3A%2F%2Fa.test"
+      )
+
+    b = %{
+      a
+      | download_url: upper <> "&tr=udp%3A%2F%2Fb.test",
+        guid: upper <> "&tr=udp%3A%2F%2Fc.test&tr=udp%3A%2F%2Fd.test"
+    }
+
+    assert %{divergences: []} = run([a], [b])
+  end
+
+  test "a guid magnet differing in dn still diverges" do
+    a = result("Lantern Harbor", @hash_a, guid: "magnet:?xt=urn:btih:#{@hash_a}&dn=one")
+    b = %{a | guid: "magnet:?xt=urn:btih:#{@hash_a}&dn=two"}
+    assert [%{field: :guid}] = run([a], [b]).divergences
+  end
+
   test "a size difference is a field divergence with both values" do
     a = result("Lantern Harbor", @hash_a, size: 1234)
 
