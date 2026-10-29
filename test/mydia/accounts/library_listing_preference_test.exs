@@ -4,42 +4,43 @@ defmodule Mydia.Accounts.LibraryListingPreferenceTest do
   import Mydia.AccountsFixtures
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.LibraryListingState
 
   test "nothing stored reads as an empty state" do
-    assert Accounts.library_listing_state(user_fixture(), "movies") == %{}
+    assert LibraryListingState.get(user_fixture(), "movies") == %{}
   end
 
   test "round-trips one page's state" do
     user = user_fixture()
 
     assert :ok =
-             Accounts.put_library_listing_state(user, "movies", %{
+             LibraryListingState.put(user, "movies", %{
                "sort" => "added_desc",
                "progress" => "missing"
              })
 
-    assert Accounts.library_listing_state(user, "movies") ==
+    assert LibraryListingState.get(user, "movies") ==
              %{"sort" => "added_desc", "progress" => "missing"}
   end
 
   test "pages are independent" do
     user = user_fixture()
 
-    :ok = Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
-    :ok = Accounts.put_library_listing_state(user, "tv_shows", %{"quality" => "2160p"})
-    :ok = Accounts.put_library_listing_state(user, "movies", %{"sort" => "added_desc"})
+    :ok = LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+    :ok = LibraryListingState.put(user, "tv_shows", %{"quality" => "2160p"})
+    :ok = LibraryListingState.put(user, "movies", %{"sort" => "added_desc"})
 
-    assert Accounts.library_listing_state(user, "movies") == %{"sort" => "added_desc"}
-    assert Accounts.library_listing_state(user, "tv_shows") == %{"quality" => "2160p"}
+    assert LibraryListingState.get(user, "movies") == %{"sort" => "added_desc"}
+    assert LibraryListingState.get(user, "tv_shows") == %{"quality" => "2160p"}
   end
 
   test "an empty state is stored and read back as empty" do
     user = user_fixture()
 
-    :ok = Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
-    :ok = Accounts.put_library_listing_state(user, "movies", %{})
+    :ok = LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+    :ok = LibraryListingState.put(user, "movies", %{})
 
-    assert Accounts.library_listing_state(user, "movies") == %{}
+    assert LibraryListingState.get(user, "movies") == %{}
   end
 
   test "other preferences survive" do
@@ -47,7 +48,7 @@ defmodule Mydia.Accounts.LibraryListingPreferenceTest do
     pref = Accounts.get_user_preference!(user)
     {:ok, _} = Accounts.update_preference(pref, %{"theme" => "dark"})
 
-    :ok = Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
+    :ok = LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
 
     assert Accounts.get_user_preference!(user).preferences["theme"] == "dark"
   end
@@ -60,7 +61,7 @@ defmodule Mydia.Accounts.LibraryListingPreferenceTest do
     |> Ecto.Changeset.change(preferences: Map.put(pref.preferences, "library_listing", "junk"))
     |> Mydia.Repo.update!()
 
-    assert Accounts.library_listing_state(user, "movies") == %{}
+    assert LibraryListingState.get(user, "movies") == %{}
 
     pref = Accounts.get_user_preference!(user)
 
@@ -70,7 +71,7 @@ defmodule Mydia.Accounts.LibraryListingPreferenceTest do
     )
     |> Mydia.Repo.update!()
 
-    assert Accounts.library_listing_state(user, "movies") == %{}
+    assert LibraryListingState.get(user, "movies") == %{}
   end
 
   test "rejects a malformed library_listing write" do

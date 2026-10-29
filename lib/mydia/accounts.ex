@@ -1097,47 +1097,6 @@ defmodule Mydia.Accounts do
     |> Repo.update()
   end
 
-  @doc """
-  The sort and filters a library page last used, as URL query pairs, or `%{}`.
-
-  `page` is `"movies"`, `"tv_shows"` or `"section:<collection id>"`. Anything
-  malformed reads as `%{}`; the caller re-validates every value.
-  """
-  @spec library_listing_state(User.t(), String.t()) :: %{optional(String.t()) => String.t()}
-  def library_listing_state(%User{} = user, page) when is_binary(page) do
-    listing = get_user_preference!(user).preferences["library_listing"]
-
-    with true <- UserPreference.valid_library_listing?(listing),
-         pairs when is_map(pairs) <- Map.get(listing, page) do
-      pairs
-    else
-      _ -> %{}
-    end
-  end
-
-  @doc """
-  Saves a library page's sort and filters. Other pages' entries are kept:
-  `update_preference/2` merges only the top level, so the nested map is merged
-  here.
-  """
-  @spec put_library_listing_state(User.t(), String.t(), %{optional(String.t()) => String.t()}) ::
-          :ok | {:error, Ecto.Changeset.t()}
-  def put_library_listing_state(%User{} = user, page, pairs)
-      when is_binary(page) and is_map(pairs) do
-    pref = get_user_preference!(user)
-
-    listing =
-      case pref.preferences["library_listing"] do
-        current when is_map(current) -> current
-        _ -> %{}
-      end
-
-    case update_preference(pref, %{"library_listing" => Map.put(listing, page, pairs)}) do
-      {:ok, _pref} -> :ok
-      {:error, changeset} -> {:error, changeset}
-    end
-  end
-
   # The two ID-valued add preferences point at rows, which the schema module
   # cannot check without pulling Repo into it. A stale value already stored is
   # tolerated at read time by `Mydia.Media.AddDefaults`; this only stops a user

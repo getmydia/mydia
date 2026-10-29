@@ -21,7 +21,9 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
+  alias MydiaWeb.MediaLive.Index.Messages
   alias MydiaWeb.MediaLive.Index.ReclassifyFlash
+  alias MydiaWeb.MediaLive.Index.RememberedListing
   alias MydiaWeb.MediaLive.Index.Window
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
@@ -116,11 +118,12 @@ defmodule MydiaWeb.MediaLive.Index do
           |> assign(:page_key, page_key)
           |> apply_action(socket.assigns.live_action, params)
 
-        {socket, params, restored_path} = restore_listing(socket, params)
+        {socket, params, restored_path} =
+          RememberedListing.restore(socket, params, library_choices(socket))
 
         socket
         |> apply_listing_params(params, true)
-        |> patch_restored(restored_path)
+        |> RememberedListing.patch_restored(restored_path)
       end
 
     {:noreply, socket}
@@ -689,7 +692,7 @@ defmodule MydiaWeb.MediaLive.Index do
     socket =
       if should_process do
         message =
-          scan_completed_message(%{
+          Messages.scan_completed_message(%{
             new_files: new_files,
             modified_files: modified_files,
             deleted_files: deleted_files,
@@ -953,77 +956,11 @@ defmodule MydiaWeb.MediaLive.Index do
     params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
     socket
-    |> remember_listing(params, forget?)
+    |> RememberedListing.remember(params, forget?)
     |> push_patch(
       to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
     )
-  end
-
-  # The key a page's sort and filters are saved under.
-  defp remembered_page(%{assigns: %{page_key: {:movies, _id}}}), do: "movies"
-  defp remembered_page(%{assigns: %{page_key: {:tv_shows, _id}}}), do: "tv_shows"
-  defp remembered_page(%{assigns: %{page_key: {:section, id}}}), do: "section:" <> id
-
-  # Entering a page whose URL sets no sort or filter starts from the ones the
-  # user last chose there. The saved pairs go through the same parse as the
-  # URL, so a deleted library or a retired sort key falls back to its default.
-  # Returns the merged params and, when it restored anything, the path the URL
-  # is patched to once they are applied (patch_restored/2); that patch then
-  # sees the same listing and reloads nothing. Patching before applying would
-  # mark the socket redirected and skip the load. A URL that sets any of them
-  # wins outright.
-  defp restore_listing(%{redirected: redirected} = socket, params)
-       when not is_nil(redirected),
-       do: {socket, params, nil}
-
-  defp restore_listing(socket, params) do
-    saved = Accounts.library_listing_state(socket.assigns.current_user, remembered_page(socket))
-    socket = assign(socket, :remembered_listing, saved)
-
-    if saved == %{} or ListingParams.listing_in_url?(params) do
-      {socket, params, nil}
-    else
-      params = Map.merge(saved, params)
-      restored = ListingParams.parse(params, library_choices(socket))
-      {socket, params, ListingParams.path(socket.assigns.listing_base_path, restored)}
-    end
-  end
-
-  defp patch_restored(socket, nil), do: socket
-
-  defp patch_restored(%{redirected: redirected} = socket, _path) when not is_nil(redirected),
-    do: socket
-
-  defp patch_restored(socket, path) do
-    if connected?(socket), do: push_patch(socket, to: path, replace: true), else: socket
-  end
-
-  # Saves the page's sort and filters when the change alters the listing on
-  # screen, so a search, or a URL that overrides the saved state, writes
-  # nothing until the user picks a sort or filter. Clear filters (`forget?`)
-  # also drops a saved state the screen was not showing. A failed write only
-  # costs the memory of this choice, so it never blocks the patch.
-  defp remember_listing(socket, %ListingParams{} = params, forget?) do
-    pairs = ListingParams.to_remembered(params)
-    shown = ListingParams.to_remembered(Window.listing_params(socket.assigns))
-
-    if pairs == socket.assigns.remembered_listing or (pairs == shown and not forget?) do
-      socket
-    else
-      case Accounts.put_library_listing_state(
-             socket.assigns.current_user,
-             remembered_page(socket),
-             pairs
-           ) do
-        :ok ->
-          assign(socket, :remembered_listing, pairs)
-
-        {:error, reason} ->
-          Logger.warning("Could not save library listing state: #{inspect(reason)}")
-          socket
-      end
-    end
   end
 
   # Records how much of the listing is loaded, in place, so Back and reloads
@@ -1083,47 +1020,5 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp media_status_label(status), do: MydiaWeb.StatusLabels.availability(status)
 
-  @doc false
-  # Public so the copy can be unit-tested without mounting the LiveView.
-  #
-  # `auto_linked` is a subset of the files a scan touched, so it is appended as
-  # detail and kept out of the change total. It is also counted on its own,
-  # because the orphan branch links existing files: a scan can auto-import
-  # without any on-disk change at all, and reporting "No changes detected"
-  # there would hide the exact work the flag was turned on for.
-  @spec scan_completed_message(map()) :: String.t()
-  def scan_completed_message(%{
-        new_files: new_files,
-        modified_files: modified_files,
-        deleted_files: deleted_files,
-        auto_linked: auto_linked
-      }) do
-    parts = []
-
-    parts =
-      if new_files > 0,
-        do: [gettext("%{count} new", count: new_files) | parts],
-        else: parts
-
-    parts =
-      if modified_files > 0,
-        do: [gettext("%{count} modified", count: modified_files) | parts],
-        else: parts
-
-    parts =
-      if deleted_files > 0,
-        do: [gettext("%{count} removed", count: deleted_files) | parts],
-        else: parts
-
-    parts =
-      if auto_linked > 0,
-        do: parts ++ [gettext("%{count} imported automatically", count: auto_linked)],
-        else: parts
-
-    if parts == [] do
-      gettext("Library scan completed: No changes detected")
-    else
-      gettext("Library scan completed: %{changes}", changes: Enum.join(parts, ", "))
-    end
-  end
+  defdelegate scan_completed_message(summary), to: MydiaWeb.MediaLive.Index.Messages
 end
