@@ -93,6 +93,7 @@ defmodule Mydia.Indexers.SearchResult do
           download_url: String.t(),
           info_url: String.t() | nil,
           indexer: String.t(),
+          indexers: [String.t()],
           category: integer() | nil,
           published_at: DateTime.t() | nil,
           quality: Quality.t() | nil,
@@ -133,6 +134,10 @@ defmodule Mydia.Indexers.SearchResult do
     :nzb_completion,
     :nzb_grabs,
     :guid,
+    # Every tracker that returned this release, filled in by ResultDedup when
+    # it merges copies from several trackers. Empty until then; read it
+    # through indexers/1, which falls back to `indexer`.
+    indexers: [],
     # Per-row display state; see the moduledoc section above. Never enforced
     # (they are not part of a result's identity) and never set by `new/1` or
     # an indexer adapter, only by SearchEvents.mark_result/3 (and
@@ -165,6 +170,17 @@ defmodule Mydia.Indexers.SearchResult do
   def new(attrs) do
     struct!(__MODULE__, attrs)
   end
+
+  @doc """
+  Every tracker that returned this release.
+
+  Dedup merges copies of one release from several trackers into the best one
+  and records all of them in `:indexers`. A result that was never merged
+  reports just its own indexer.
+  """
+  @spec indexers(t()) :: [String.t()]
+  def indexers(%__MODULE__{indexers: [_ | _] = indexers}), do: indexers
+  def indexers(%__MODULE__{indexer: indexer}), do: [indexer]
 
   @doc """
   Calculates the health score of a torrent based on seeders and leechers.
