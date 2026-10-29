@@ -105,7 +105,8 @@ defmodule Mydia.Indexers.Cardigann.Result.PlanTest do
       )
 
     assert plan.rows.selector == "tr.3"
-    [raw, title] = plan.selector_fields
+    # `raw` reads `.Result.title`, so it follows title despite sorting first.
+    [title, raw] = plan.selector_fields
     assert title.selector == "td:nth-child(3)"
     assert title.case == [{"td.3", "yes"}]
     assert title.remove == ["span.3"]

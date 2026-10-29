@@ -75,14 +75,6 @@
     definition: "blueroms",
     query: :rss,
     kind: :field,
-    field: :title,
-    reason:
-      "the append filter's \" - {{ .Result.title_platform }}\" renders in native without the row's fields in scope, so the platform is empty; wasm appends \" - Nintendo Switch\""
-  },
-  %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"

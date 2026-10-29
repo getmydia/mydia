@@ -36,11 +36,36 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
          format: ResponseType.declared(definition, opts),
          encoding: definition.encoding,
          rows: rows,
-         selector_fields: Enum.sort_by(selector_fields, & &1.name),
-         text_fields:
-           text_fields |> Enum.map(&{&1.name, &1}) |> TextFields.order() |> Enum.map(&elem(&1, 1))
+         selector_fields: order(selector_fields, &selector_templates/1),
+         text_fields: order(text_fields, &(&1.text || ""))
        }}
     end
+  end
+
+  # Prowlarr extracts fields in definition order, each seeing the ones before
+  # it as `.Result`. The parsed map has lost that order, so fields are taken in
+  # name order except that a field follows every field its templates read.
+  defp order(fields, templates) do
+    fields
+    |> Enum.map(&{&1.name, &1})
+    |> TextFields.order(templates)
+    |> Enum.map(&elem(&1, 1))
+  end
+
+  # Everything per-row rendering may evaluate with `.Result` for a selector
+  # field: its selector, case keys, remove selectors and filter arguments.
+  defp selector_templates(%Field{} = field) do
+    filter_args =
+      Enum.flat_map(field.filters, fn
+        %{} = filter -> List.wrap(fetch(filter, :args))
+        _ -> []
+      end)
+
+    [field.selector | Enum.map(field.case || [], &elem(&1, 0))]
+    |> Enum.concat(field.remove || [])
+    |> Enum.concat(filter_args)
+    |> Enum.filter(&is_binary/1)
+    |> Enum.join(" ")
   end
 
   defp compile_rows(rows, context) when is_binary(rows),

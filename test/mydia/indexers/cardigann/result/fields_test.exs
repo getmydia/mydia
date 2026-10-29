@@ -51,6 +51,19 @@ defmodule Mydia.Indexers.Cardigann.Result.FieldsTest do
       assert {:ok, %{"title" => "Lantern Harbor - Quiet Orchard Console"}} = extract_html(fields)
     end
 
+    test "a field a filter references is extracted first, even when it sorts later" do
+      fields =
+        Map.merge(@download, %{
+          "title" => %{
+            selector: "td.name",
+            filters: [%{name: "append", args: " - {{ .Result.title_platform }}"}]
+          },
+          "title_platform" => %{selector: "td.platform"}
+        })
+
+      assert {:ok, %{"title" => "Lantern Harbor - Quiet Orchard Console"}} = extract_html(fields)
+    end
+
     test "filters run on the case result" do
       fields =
         Map.merge(@download, %{
