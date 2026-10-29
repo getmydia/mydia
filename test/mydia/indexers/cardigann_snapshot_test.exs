@@ -421,6 +421,22 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       assert {:ok, []} = result
     end
 
+    @tag :snapshot
+    test "crackingpatching: rows.filters andmatch keeps rows whose titles hold every keyword" do
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          load_and_parse("crackingpatching", keywords: "orchard desktop")
+        end)
+
+      assert {:ok, results} = result
+      assert length(results) >= 2
+
+      assert Enum.all?(results, fn r ->
+               title = String.downcase(r.title)
+               String.contains?(title, "orchard") and String.contains?(title, "desktop")
+             end)
+    end
+
     # The magnet in download_response.html is synthetic. This only proves that the
     # magnet selector resolves on a details page shaped like the site's. The live
     # crackingpatching page currently carries no magnet (known site drift, its
