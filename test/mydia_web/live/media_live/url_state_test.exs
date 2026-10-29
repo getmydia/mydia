@@ -154,4 +154,81 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
 
     assert has_element?(view, "select[name=progress] option[value=''][selected]")
   end
+
+  describe "remembered sort and filters" do
+    defp choose(view, sort_by, progress) do
+      view
+      |> element("#library-filter-form")
+      |> render_change(%{
+        "progress" => progress,
+        "monitored" => "all",
+        "quality" => "",
+        "sort_by" => sort_by
+      })
+    end
+
+    test "a bare visit restores the page's last sort and filters", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+      assert_patch(view, "/movies?progress=missing&sort=year_desc")
+
+      # The restore also patches the URL, but that patch rides in the join
+      # reply, which the test client drops, so assert_patch cannot see it.
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "each page remembers its own state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "sort and filters in the URL win over the saved state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=added_desc]"
+             )
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=progress] option[selected][value=missing]"
+             )
+    end
+
+    test "Clear filters forgets the saved state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+      view |> element("#library-reset-filters") |> render_click()
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "searching does not save anything", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      view |> element("#library-search-form") |> render_change(%{"search" => "fern"})
+
+      assert Mydia.Accounts.library_listing_state(user, "movies") == %{}
+    end
+  end
 end

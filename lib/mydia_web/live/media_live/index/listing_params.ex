@@ -8,6 +8,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   was. Default values are left out of the URL, so an untouched page keeps a
   bare path. Anything unrecognised parses to its default. Back restores at
   most `max_shown/0` rows.
+
+  The sort and filters are also saved per user and page, and a visit whose URL
+  sets none of them starts from the saved ones.
   """
 
   alias Mydia.Media.LibraryListing
@@ -22,6 +25,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
     "upcoming" => :upcoming
   }
   @qualities ~w(720p 1080p 2160p)
+  @remembered_keys ~w(library progress monitored quality sort)
 
   defstruct search: "",
             library: nil,
@@ -86,6 +90,26 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
     ]
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
   end
+
+  @doc "The URL keys a library page remembers between visits."
+  @spec remembered_keys() :: [String.t()]
+  def remembered_keys, do: @remembered_keys
+
+  @doc """
+  The sort and filters as query pairs, the part of the state a page
+  remembers. Search, the jump letter and the window are not remembered.
+  """
+  @spec to_remembered(t()) :: %{optional(String.t()) => String.t()}
+  def to_remembered(%__MODULE__{} = p) do
+    p
+    |> to_query()
+    |> Enum.filter(fn {key, _value} -> key in @remembered_keys end)
+    |> Map.new()
+  end
+
+  @doc "Whether raw URL params set any remembered key, which then wins over the saved state."
+  @spec listing_in_url?(map()) :: boolean()
+  def listing_in_url?(params), do: Enum.any?(@remembered_keys, &Map.has_key?(params, &1))
 
   @spec path(String.t(), t()) :: String.t()
   def path(base, %__MODULE__{} = p) do

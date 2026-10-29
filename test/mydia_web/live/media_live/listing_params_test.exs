@@ -139,4 +139,45 @@ defmodule MydiaWeb.MediaLive.Index.ListingParamsTest do
              )
     end
   end
+
+  describe "to_remembered/1" do
+    test "keeps sort and filters, drops search, letter and window" do
+      params = %ListingParams{
+        search: "fern",
+        library: "lib-1",
+        progress: :missing,
+        monitored: false,
+        quality: "2160p",
+        sort: "year_desc",
+        letter: "m",
+        shown: 150,
+        above: 50
+      }
+
+      assert ListingParams.to_remembered(params) == %{
+               "library" => "lib-1",
+               "progress" => "missing",
+               "monitored" => "false",
+               "quality" => "2160p",
+               "sort" => "year_desc"
+             }
+    end
+
+    test "defaults remember nothing" do
+      assert ListingParams.to_remembered(%ListingParams{}) == %{}
+    end
+  end
+
+  describe "listing_in_url?/1" do
+    test "true when any remembered key is present" do
+      for key <- ListingParams.remembered_keys() do
+        assert ListingParams.listing_in_url?(%{key => "x"})
+      end
+    end
+
+    test "false for search, letter and window params only" do
+      refute ListingParams.listing_in_url?(%{"q" => "fern", "letter" => "m", "shown" => "100"})
+      refute ListingParams.listing_in_url?(%{})
+    end
+  end
 end

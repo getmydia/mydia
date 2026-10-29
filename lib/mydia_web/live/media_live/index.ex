@@ -66,6 +66,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
      |> assign(:page_key, nil)
+     |> assign(:remembered_listing, %{})
      |> assign(:library_options, [])
      |> assign(:loading?, true)
      |> assign(:media_items_empty?, false)
@@ -110,10 +111,13 @@ defmodule MydiaWeb.MediaLive.Index do
       if page_key == socket.assigns.page_key do
         apply_listing_params(socket, params, false)
       else
-        socket
-        |> assign(:page_key, page_key)
-        |> apply_action(socket.assigns.live_action, params)
-        |> apply_listing_params(params, true)
+        socket =
+          socket
+          |> assign(:page_key, page_key)
+          |> apply_action(socket.assigns.live_action, params)
+
+        {socket, params} = restore_listing(socket, params)
+        apply_listing_params(socket, params, true)
       end
 
     {:noreply, socket}
@@ -941,13 +945,76 @@ defmodule MydiaWeb.MediaLive.Index do
   # Filter, search and sort changes replace the history entry rather than
   # adding one, so Back from a title lands on the list in its latest state.
   # They also drop the A-Z jump letter, so the new listing starts at the top.
+  # They also save the page's sort and filters for the next visit.
   defp patch_listing(socket, %ListingParams{} = params) do
     params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
-    push_patch(socket,
+    socket
+    |> remember_listing(params)
+    |> push_patch(
       to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
     )
+  end
+
+  # The key a page's sort and filters are saved under.
+  defp remembered_page(%{assigns: %{page_key: {:movies, _id}}}), do: "movies"
+  defp remembered_page(%{assigns: %{page_key: {:tv_shows, _id}}}), do: "tv_shows"
+  defp remembered_page(%{assigns: %{page_key: {:section, id}}}), do: "section:" <> id
+
+  # Entering a page whose URL sets no sort or filter starts from the ones the
+  # user last chose there. The saved pairs go through the same parse as the
+  # URL, so a deleted library or a retired sort key falls back to its default.
+  # The URL is patched to match once connected; that patch sees the same
+  # listing and reloads nothing. A URL that sets any of them wins outright.
+  defp restore_listing(%{redirected: redirected} = socket, params)
+       when not is_nil(redirected),
+       do: {socket, params}
+
+  defp restore_listing(socket, params) do
+    saved = Accounts.library_listing_state(socket.assigns.current_user, remembered_page(socket))
+    socket = assign(socket, :remembered_listing, saved)
+
+    if saved == %{} or ListingParams.listing_in_url?(params) do
+      {socket, params}
+    else
+      params = Map.merge(saved, params)
+      restored = ListingParams.parse(params, library_choices(socket))
+
+      socket =
+        if connected?(socket),
+          do:
+            push_patch(socket,
+              to: ListingParams.path(socket.assigns.listing_base_path, restored),
+              replace: true
+            ),
+          else: socket
+
+      {socket, params}
+    end
+  end
+
+  # Saves the page's sort and filters when they changed. A failed write only
+  # costs the memory of this choice, so it never blocks the patch.
+  defp remember_listing(socket, %ListingParams{} = params) do
+    pairs = ListingParams.to_remembered(params)
+
+    if pairs == socket.assigns.remembered_listing do
+      socket
+    else
+      case Accounts.put_library_listing_state(
+             socket.assigns.current_user,
+             remembered_page(socket),
+             pairs
+           ) do
+        :ok ->
+          assign(socket, :remembered_listing, pairs)
+
+        {:error, reason} ->
+          Logger.warning("Could not save library listing state: #{inspect(reason)}")
+          socket
+      end
+    end
   end
 
   # Records how much of the listing is loaded, in place, so Back and reloads
