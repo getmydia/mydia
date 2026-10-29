@@ -1,15 +1,394 @@
 defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   @moduledoc """
-  Manual search dialog pieces for prior attempts and blocking downloads.
+  Manual search dialog pieces: the result row and its column header, prior
+  attempts and blocking downloads.
 
   Used by `MydiaWeb.MediaLive.Show.Modals.manual_search_modal/1`.
   """
   use Phoenix.Component
   use Gettext, backend: MydiaWeb.Gettext
   import MydiaWeb.CoreComponents
-  import MydiaWeb.MediaLive.Show.SearchHelpers, only: [get_search_quality_badge: 1]
+
+  import MydiaWeb.MediaLive.Show.SearchHelpers,
+    only: [get_search_quality_badge: 1, profile_score_breakdown: 2]
+
+  import MydiaWeb.MediaLive.Show.Formatters,
+    only: [format_search_size: 1, format_relative_time_short: 1]
+
+  import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Indexers.SearchResult
+
+  # One grid template for the header row and every result row from `lg`, so
+  # the columns line up. Below `lg` rows use daisyUI's default list-row flow
+  # and the column cells are hidden.
+  @row_grid "lg:grid-cols-[3rem_minmax(0,1fr)_5rem_4.5rem_3.5rem_9rem_2.5rem]"
+
+  @doc "The `lg` grid template shared by the header and the result rows."
+  def row_grid, do: @row_grid
+
+  @doc """
+  The indexer a row names: the tracker whose copy won the dedup merge, plus
+  how many other trackers returned the same release.
+  """
+  def indexer_label(result) do
+    case SearchResult.indexers(result) do
+      [_one] -> result.indexer
+      all -> gettext("%{indexer} +%{count}", indexer: result.indexer, count: length(all) - 1)
+    end
+  end
+
+  attr :sort_by, :atom, required: true
+
+  @doc "Column labels above the results from `lg`; the sortable ones sort."
+  def results_header(assigns) do
+    assigns = assign(assigns, :grid, @row_grid)
+
+    ~H"""
+    <div
+      id="manual-search-columns"
+      class={[
+        "sticky top-0 z-10 hidden gap-3 border-b border-base-300 bg-base-100 px-4 py-2 text-xs font-semibold text-base-content/60 lg:grid",
+        @grid
+      ]}
+    >
+      <.sort_header value={:quality} sort_by={@sort_by} label={gettext("Score")} />
+      <span>{gettext("Release")}</span>
+      <.sort_header value={:size} sort_by={@sort_by} label={gettext("Size")} />
+      <.sort_header value={:seeders} sort_by={@sort_by} label={gettext("Seeds")} />
+      <.sort_header value={:date} sort_by={@sort_by} label={gettext("Age")} />
+      <span>{gettext("Indexer")}</span>
+      <span class="sr-only">{gettext("Action")}</span>
+    </div>
+    """
+  end
+
+  attr :value, :atom, required: true
+  attr :sort_by, :atom, required: true
+  attr :label, :string, required: true
+
+  defp sort_header(assigns) do
+    ~H"""
+    <button
+      type="button"
+      phx-click="sort_search"
+      phx-value-sort_by={@value}
+      class={[
+        "flex cursor-pointer items-center gap-0.5 text-left hover:text-base-content",
+        @sort_by == @value && "text-primary"
+      ]}
+      aria-pressed={to_string(@sort_by == @value)}
+    >
+      {@label}
+      <.icon :if={@sort_by == @value} name="hero-chevron-down-mini" class="w-3 h-3" />
+    </button>
+    """
+  end
+
+  # One manual search result. The template has several root nodes on purpose:
+  # they render as direct children of the caller's `<li class="list-row">`,
+  # so they are the grid items that line up under `results_header/1` from
+  # `lg`. Do not wrap them in an element.
+  attr :id, :string, required: true
+  attr :result, SearchResult, required: true
+  attr :manual_ranking_opts, :list, required: true
+
+  def release_row(assigns) do
+    result = assigns.result
+    profile? = Keyword.get(assigns.manual_ranking_opts, :quality_profile) != nil
+    # One scorer call per row: the audio badge needs the breakdown with or
+    # without a profile; the score ring only with one.
+    score_data = profile_score_breakdown(result, assigns.manual_ranking_opts)
+    breakdown = score_data.breakdown
+    score = score_data.score
+
+    has_penalty =
+      profile? &&
+        (breakdown.seeder_penalty < 0.0 or breakdown.identity_penalty < 0.0 or
+           not is_nil(breakdown.limit_violation))
+
+    assigns =
+      assign(assigns,
+        profile?: profile?,
+        score_data: score_data,
+        breakdown: breakdown,
+        audio: breakdown,
+        score: score,
+        ring_value: max(0, trunc(score)),
+        has_penalty: has_penalty
+      )
+
+    ~H"""
+    <%!-- Score display --%>
+    <%= if @profile? do %>
+      <.score_trigger
+        id={"#{@id}-score-badge"}
+        panel_id={"#{@id}-score-breakdown"}
+        class={[
+          "radial-progress text-sm font-bold cursor-pointer",
+          @score >= 80 && "text-success",
+          @score >= 50 && @score < 80 && "text-warning",
+          @score < 50 && "text-error"
+        ]}
+        style={"--value:#{@ring_value}; --size:3rem; --thickness:4px;"}
+        title={gettext("Show score breakdown")}
+      >
+        {trunc(@score)}
+      </.score_trigger>
+    <% else %>
+      <%!-- No profile - just show seeders count (sorted by most seeders) --%>
+      <div
+        class={[
+          "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
+          @result.seeders >= 50 && "bg-success/20 text-success",
+          @result.seeders >= 10 && @result.seeders < 50 && "bg-warning/20 text-warning",
+          @result.seeders < 10 && "bg-base-300 text-base-content/70"
+        ]}
+        title={ngettext("%{count} seeder", "%{count} seeders", @result.seeders || 0)}
+      >
+        <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
+        {@result.seeders}
+      </div>
+    <% end %>
+    <%!-- Main content (title + badges) --%>
+    <div class="list-col-grow flex-1 min-w-0">
+      <%!-- Release Title --%>
+      <div
+        class="font-medium text-sm leading-tight mb-2 line-clamp-2 lg:line-clamp-1"
+        title={@result.title}
+      >
+        {@result.title}
+      </div>
+      <%!-- Quality badges row --%>
+      <div class="flex flex-wrap gap-1.5">
+        <%!-- Resolution/Quality badge --%>
+        <span class="badge badge-primary badge-sm">
+          {get_search_quality_badge(@result)}
+        </span>
+        <%!-- Size badge (its own column from lg) --%>
+        <span class="badge badge-ghost badge-sm font-mono lg:hidden">
+          {format_search_size(@result)}
+        </span>
+        <%!-- Audio languages the release title claims --%>
+        <MydiaWeb.AudioLanguageComponents.audio_badge
+          id={"#{@id}-audio"}
+          languages={@audio.audio_languages}
+          assumed={@audio.audio_assumed}
+          rank={@audio.language_rank}
+        />
+        <%!-- Seeders badge (its own column from lg) --%>
+        <span class={[
+          "badge badge-sm lg:hidden",
+          @result.seeders >= 50 && "badge-success",
+          @result.seeders >= 10 && @result.seeders < 50 && "badge-warning",
+          @result.seeders < 10 && "badge-error badge-outline"
+        ]}>
+          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
+          {@result.seeders}
+        </span>
+        <%!-- Indexer badge (its own column from lg) --%>
+        <span class="lg:hidden">
+          <.indexer_badge result={@result} />
+        </span>
+        <%!-- Tried before: failed for this target or blacklisted --%>
+        <%= if attempt = visible_prior_attempt(@result) do %>
+          <span
+            id={"#{@id}-prior-attempt"}
+            class="badge badge-error badge-outline badge-sm"
+          >
+            <%= if attempt.kind == :blacklisted do %>
+              {gettext("Blacklisted")}
+            <% else %>
+              {failed_ago_text(format_relative_time_short(attempt.at))}
+            <% end %>
+          </span>
+        <% end %>
+      </div>
+      <%!-- A live failure from this dialog wins over the recorded one --%>
+      <%= if reason = Map.get(@result, :grab_failed) || visible_prior_reason(@result) do %>
+        <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
+      <% end %>
+      <.score_panel :if={@profile?} id={"#{@id}-score-breakdown"}>
+        <.score_row
+          label={gettext("Resolution")}
+          value={@score_data.detected[:resolution]}
+          score={@breakdown.quality}
+          weight={60}
+        />
+        <.score_row
+          label={gettext("Title match")}
+          value={nil}
+          score={@breakdown.title_match}
+          weight={10}
+        />
+        <.score_row
+          label={gettext("File Size")}
+          value={
+            if(@score_data.detected[:size_mb],
+              do: "#{@score_data.detected[:size_mb]} MB",
+              else: nil
+            )
+          }
+          score={@breakdown.size}
+          weight={5}
+        />
+        <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
+        <.score_row
+          label={gettext("Seeders")}
+          value={ngettext("%{count} peer", "%{count} peers", @result.seeders || 0)}
+          score={@breakdown.seeders}
+          weight={30}
+        />
+        <%= if @has_penalty do %>
+          <div class="divider my-1 text-xs opacity-50">{gettext("Penalties")}</div>
+          <%= if @breakdown.limit_violation do %>
+            <div id={"#{@id}-limit-violation"} class="text-xs text-warning py-1">
+              {gettext("Outside profile limits: %{violation}",
+                violation: @breakdown.limit_violation
+              )}
+            </div>
+          <% end %>
+          <.penalty_row
+            label={gettext("Seeder penalty")}
+            score={@breakdown.seeder_penalty}
+          />
+          <.penalty_row
+            label={gettext("Identity mismatch")}
+            score={@breakdown.identity_penalty}
+          />
+        <% end %>
+      </.score_panel>
+    </div>
+    <%!-- Columns from lg; below lg the badges above carry the same facts --%>
+    <div id={"#{@id}-size"} class="hidden self-center font-mono text-sm lg:block">
+      {format_search_size(@result)}
+    </div>
+    <div id={"#{@id}-seeds"} class="hidden self-center lg:block">
+      <span class={[
+        "badge badge-sm",
+        (@result.seeders || 0) >= 50 && "badge-success",
+        (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 && "badge-warning",
+        (@result.seeders || 0) < 10 && "badge-error badge-outline"
+      ]}>
+        <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />{@result.seeders || 0}
+      </span>
+    </div>
+    <div id={"#{@id}-age"} class="hidden self-center text-sm text-base-content/70 lg:block">
+      {published_age(@result.published_at)}
+    </div>
+    <div id={"#{@id}-indexer"} class="hidden min-w-0 self-center truncate text-sm lg:block">
+      <.indexer_badge result={@result} />
+    </div>
+    <%!-- Download Action: icon-only on xs and in the lg column, where the
+         title attribute is the label --%>
+    <div class="flex items-center">
+      <%= cond do %>
+        <% Map.get(@result, :downloaded) -> %>
+          <button
+            class="btn btn-success max-sm:btn-square sm:btn-sm lg:btn-square btn-disabled"
+            title={gettext("Grabbed")}
+            disabled
+          >
+            <.icon name="hero-check" class="w-4 h-4" />
+            <span class="hidden sm:inline lg:hidden">{gettext("Grabbed")}</span>
+          </button>
+        <% Map.get(@result, :duplicate) -> %>
+          <button
+            class="btn btn-ghost max-sm:btn-square sm:btn-sm lg:btn-square btn-disabled"
+            title={gettext("Already downloading")}
+            disabled
+          >
+            <.icon name="hero-check-circle" class="w-4 h-4" />
+            <span class="hidden sm:inline lg:hidden">{gettext("Already downloading")}</span>
+          </button>
+        <% Map.get(@result, :downloading) -> %>
+          <button
+            class="btn btn-primary max-sm:btn-square sm:btn-sm lg:btn-square btn-disabled"
+            title={gettext("Grabbing…")}
+            disabled
+          >
+            <span class="loading loading-spinner loading-xs"></span>
+            <span class="hidden sm:inline lg:hidden">{gettext("Grabbing…")}</span>
+          </button>
+        <% Map.get(@result, :grab_failed) -> %>
+          <.retry_button result={@result} reason={Map.get(@result, :grab_failed)} />
+        <% Map.get(@result, :prior_attempt) -> %>
+          <.retry_button
+            result={@result}
+            reason={prior_attempt_reason(@result)}
+            blacklisted={@result.prior_attempt.kind == :blacklisted}
+          />
+        <% true -> %>
+          <button
+            class="btn btn-primary max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
+            phx-click="download_from_search"
+            phx-value-download-url={@result.download_url}
+            phx-value-title={@result.title}
+            phx-value-indexer={@result.indexer}
+            phx-value-size={@result.size}
+            phx-value-seeders={@result.seeders || 0}
+            phx-value-leechers={@result.leechers || 0}
+            phx-value-quality={get_search_quality_badge(@result)}
+            title={gettext("Download this release")}
+          >
+            <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>
+            <.icon
+              name="hero-arrow-down-tray"
+              class="w-4 h-4 group-[.phx-click-loading]/dl:hidden"
+            />
+            <span class="hidden sm:inline lg:hidden">{gettext("Download")}</span>
+          </button>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Only a DateTime has a relative age here; a missing or naive timestamp
+  # renders nothing rather than a guess.
+  defp published_age(%DateTime{} = published_at), do: format_relative_time_short(published_at)
+  defp published_age(_published_at), do: nil
+
+  # Indexer badge, linking to the release's tracker page when usable. Names
+  # the winning tracker and counts the others; the title lists them all.
+  attr :result, SearchResult, required: true
+
+  defp indexer_badge(assigns) do
+    indexers = SearchResult.indexers(assigns.result)
+
+    assigns =
+      assign(assigns,
+        info_page_url: SearchResult.info_page_url(assigns.result),
+        single?: match?([_], indexers),
+        all_indexers: Enum.join(indexers, ", ")
+      )
+
+    ~H"""
+    <%= if @info_page_url do %>
+      <a
+        href={@info_page_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
+        title={
+          if(@single?,
+            do: gettext("View this release on %{indexer}", indexer: @result.indexer),
+            else: @all_indexers
+          )
+        }
+      >
+        {indexer_label(@result)}
+        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
+      </a>
+    <% else %>
+      <%!-- No usable URL: a plain badge. It used to hide on xs screens, since a
+           non-actionable badge earned no room in a dense mobile row; it now
+           always shows because it is the only place a row names its trackers. --%>
+      <span class="badge badge-outline badge-sm" title={@all_indexers}>
+        {indexer_label(@result)}
+      </span>
+    <% end %>
+    """
+  end
 
   # The manual search dialog's "already downloading" banner: names the first
   # download that blocks every grab for this target, which opens the existing
@@ -89,7 +468,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   def retry_button(assigns) do
     ~H"""
     <button
-      class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
+      class="btn btn-error max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
       phx-click="download_from_search"
       phx-value-download-url={@result.download_url}
       phx-value-title={@result.title}
@@ -101,7 +480,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       title={retry_title(@blacklisted, @reason)}
     >
       <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-      <span class="hidden sm:inline">{retry_label(@blacklisted)}</span>
+      <span class="hidden sm:inline lg:hidden">{retry_label(@blacklisted)}</span>
     </button>
     """
   end

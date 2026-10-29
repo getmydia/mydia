@@ -461,6 +461,29 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       assert html =~ ~s(id="search-result-00000-1")
     end
+
+    test "a release returned by several trackers names the winner and counts the rest" do
+      html = modal_html(%{indexer: "TorrentDay", indexers: ["EZTV", "Nyaa", "TorrentDay"]}, %{})
+      doc = LazyHTML.from_fragment(html)
+
+      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
+      assert html =~ ~s(title="EZTV, Nyaa, TorrentDay")
+    end
+
+    test "the desktop column header sorts by the clicked column" do
+      html = modal_html(%{}, %{sort_by: :seeders})
+      doc = LazyHTML.from_fragment(html)
+
+      assert doc
+             |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="size"]))
+             |> Enum.count() == 1
+
+      assert doc
+             |> LazyHTML.query(
+               ~s(#manual-search-columns .text-primary[phx-value-sort_by="seeders"])
+             )
+             |> Enum.count() == 1
+    end
   end
 
   describe "quality_profile_modal/1" do

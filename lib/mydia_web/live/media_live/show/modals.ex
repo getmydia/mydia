@@ -14,10 +14,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.Formatters, only: [format_progress: 1, format_file_size: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
-  import MydiaWeb.MediaLive.Show.ScoreBreakdown
   import MydiaWeb.MediaLive.Show.ManualSearchComponents
 
-  alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
   alias Mydia.Media.DiskRemoval.Preview
   alias MydiaWeb.MediaLive.Show.ManualSearchFilters
@@ -1033,228 +1031,17 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <% end %>
           <%!-- Results List --%>
           <%= if !@results_empty? do %>
+            <.results_header sort_by={@sort_by} />
             <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
               <li
                 :for={{id, result} <- @streams.search_results}
                 id={id}
-                class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
+                class={[
+                  "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
+                  row_grid()
+                ]}
               >
-                <% profile? = Keyword.get(@manual_ranking_opts, :quality_profile) != nil %>
-                <%!-- One scorer call per row: the audio badge needs the breakdown
-                     with or without a profile; the score ring only with one. --%>
-                <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
-                <% breakdown = score_data.breakdown %>
-                <% audio = breakdown %>
-                <% score = score_data.score %>
-                <% ring_value = max(0, trunc(score)) %>
-                <% has_penalty =
-                  profile? &&
-                    (breakdown.seeder_penalty < 0.0 or breakdown.identity_penalty < 0.0 or
-                       not is_nil(breakdown.limit_violation)) %>
-                <%!-- Score display --%>
-                <%= if profile? do %>
-                  <.score_trigger
-                    id={"#{id}-score-badge"}
-                    panel_id={"#{id}-score-breakdown"}
-                    class={[
-                      "radial-progress text-sm font-bold cursor-pointer",
-                      score >= 80 && "text-success",
-                      score >= 50 && score < 80 && "text-warning",
-                      score < 50 && "text-error"
-                    ]}
-                    style={"--value:#{ring_value}; --size:3rem; --thickness:4px;"}
-                    title={gettext("Show score breakdown")}
-                  >
-                    {trunc(score)}
-                  </.score_trigger>
-                <% else %>
-                  <%!-- No profile - just show seeders count (sorted by most seeders) --%>
-                  <div
-                    class={[
-                      "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
-                      result.seeders >= 50 && "bg-success/20 text-success",
-                      result.seeders >= 10 && result.seeders < 50 && "bg-warning/20 text-warning",
-                      result.seeders < 10 && "bg-base-300 text-base-content/70"
-                    ]}
-                    title={ngettext("%{count} seeder", "%{count} seeders", result.seeders || 0)}
-                  >
-                    <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-                    {result.seeders}
-                  </div>
-                <% end %>
-                <%!-- Main content (title + badges) --%>
-                <div class="flex-1 min-w-0">
-                  <%!-- Release Title --%>
-                  <div
-                    class="font-medium text-sm leading-tight mb-2 line-clamp-2"
-                    title={result.title}
-                  >
-                    {result.title}
-                  </div>
-                  <%!-- Quality badges row --%>
-                  <div class="flex flex-wrap gap-1.5">
-                    <%!-- Resolution/Quality badge --%>
-                    <span class="badge badge-primary badge-sm">
-                      {get_search_quality_badge(result)}
-                    </span>
-                    <%!-- Size badge --%>
-                    <span class="badge badge-ghost badge-sm font-mono">
-                      {format_search_size(result)}
-                    </span>
-                    <%!-- Audio languages the release title claims --%>
-                    <MydiaWeb.AudioLanguageComponents.audio_badge
-                      id={"#{id}-audio"}
-                      languages={audio.audio_languages}
-                      assumed={audio.audio_assumed}
-                      rank={audio.language_rank}
-                    />
-                    <%!-- Seeders badge --%>
-                    <span class={[
-                      "badge badge-sm",
-                      result.seeders >= 50 && "badge-success",
-                      result.seeders >= 10 && result.seeders < 50 && "badge-warning",
-                      result.seeders < 10 && "badge-error badge-outline"
-                    ]}>
-                      <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-                      {result.seeders}
-                    </span>
-                    <%!-- Indexer badge, linking to the release's tracker page when usable --%>
-                    <% info_page_url = SearchResult.info_page_url(result) %>
-                    <%= if info_page_url do %>
-                      <a
-                        href={info_page_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
-                        title={gettext("View this release on %{indexer}", indexer: result.indexer)}
-                      >
-                        {result.indexer}
-                        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
-                      </a>
-                    <% else %>
-                      <%!-- No usable URL: keep the pre-existing xs-screen hiding, since a
-                           non-actionable badge earns no room in a dense mobile row. --%>
-                      <span class="badge badge-outline badge-sm hidden sm:inline-flex">
-                        {result.indexer}
-                      </span>
-                    <% end %>
-                    <%!-- Tried before: failed for this target or blacklisted --%>
-                    <%= if attempt = visible_prior_attempt(result) do %>
-                      <span
-                        id={"#{id}-prior-attempt"}
-                        class="badge badge-error badge-outline badge-sm"
-                      >
-                        <%= if attempt.kind == :blacklisted do %>
-                          {gettext("Blacklisted")}
-                        <% else %>
-                          {failed_ago_text(format_relative_time_short(attempt.at))}
-                        <% end %>
-                      </span>
-                    <% end %>
-                  </div>
-                  <%!-- A live failure from this dialog wins over the recorded one --%>
-                  <%= if reason = Map.get(result, :grab_failed) || visible_prior_reason(result) do %>
-                    <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
-                  <% end %>
-                  <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
-                    <.score_row
-                      label={gettext("Resolution")}
-                      value={score_data.detected[:resolution]}
-                      score={breakdown.quality}
-                      weight={60}
-                    />
-                    <.score_row
-                      label={gettext("Title match")}
-                      value={nil}
-                      score={breakdown.title_match}
-                      weight={10}
-                    />
-                    <.score_row
-                      label={gettext("File Size")}
-                      value={
-                        if(score_data.detected[:size_mb],
-                          do: "#{score_data.detected[:size_mb]} MB",
-                          else: nil
-                        )
-                      }
-                      score={breakdown.size}
-                      weight={5}
-                    />
-                    <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
-                    <.score_row
-                      label={gettext("Seeders")}
-                      value={ngettext("%{count} peer", "%{count} peers", result.seeders || 0)}
-                      score={breakdown.seeders}
-                      weight={30}
-                    />
-                    <%= if has_penalty do %>
-                      <div class="divider my-1 text-xs opacity-50">{gettext("Penalties")}</div>
-                      <%= if breakdown.limit_violation do %>
-                        <div id={"#{id}-limit-violation"} class="text-xs text-warning py-1">
-                          {gettext("Outside profile limits: %{violation}",
-                            violation: breakdown.limit_violation
-                          )}
-                        </div>
-                      <% end %>
-                      <.penalty_row
-                        label={gettext("Seeder penalty")}
-                        score={breakdown.seeder_penalty}
-                      />
-                      <.penalty_row
-                        label={gettext("Identity mismatch")}
-                        score={breakdown.identity_penalty}
-                      />
-                    <% end %>
-                  </.score_panel>
-                </div>
-                <%!-- Download Action --%>
-                <div class="flex items-center">
-                  <%= cond do %>
-                    <% Map.get(result, :downloaded) -> %>
-                      <button class="btn btn-success btn-sm btn-disabled" disabled>
-                        <.icon name="hero-check" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Grabbed")}</span>
-                      </button>
-                    <% Map.get(result, :duplicate) -> %>
-                      <button class="btn btn-ghost btn-sm btn-disabled" disabled>
-                        <.icon name="hero-check-circle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Already downloading")}</span>
-                      </button>
-                    <% Map.get(result, :downloading) -> %>
-                      <button class="btn btn-primary btn-sm btn-disabled" disabled>
-                        <span class="loading loading-spinner loading-xs"></span>
-                        <span class="hidden sm:inline">{gettext("Grabbing…")}</span>
-                      </button>
-                    <% Map.get(result, :grab_failed) -> %>
-                      <.retry_button result={result} reason={Map.get(result, :grab_failed)} />
-                    <% Map.get(result, :prior_attempt) -> %>
-                      <.retry_button
-                        result={result}
-                        reason={prior_attempt_reason(result)}
-                        blacklisted={result.prior_attempt.kind == :blacklisted}
-                      />
-                    <% true -> %>
-                      <button
-                        class="btn btn-primary btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
-                        phx-click="download_from_search"
-                        phx-value-download-url={result.download_url}
-                        phx-value-title={result.title}
-                        phx-value-indexer={result.indexer}
-                        phx-value-size={result.size}
-                        phx-value-seeders={result.seeders || 0}
-                        phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result)}
-                        title={gettext("Download this release")}
-                      >
-                        <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>
-                        <.icon
-                          name="hero-arrow-down-tray"
-                          class="w-4 h-4 group-[.phx-click-loading]/dl:hidden"
-                        />
-                        <span class="hidden sm:inline">{gettext("Download")}</span>
-                      </button>
-                  <% end %>
-                </div>
+                <.release_row id={id} result={result} manual_ranking_opts={@manual_ranking_opts} />
               </li>
             </ul>
           <% end %>
