@@ -41,7 +41,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         tmdb_id: parse_optional_integer(get_field(row, "tmdbid")),
         imdb_id: get_field(row, "imdbid"),
         download_protocol: detect_download_protocol(resolved_download_url),
-        guid: release_guid(row, resolved_download_url, resolved_info_url, ctx)
+        guid: release_guid(row, resolved_download_url, ctx)
       }
     else
       _ -> nil
@@ -49,12 +49,14 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   end
 
   # Prowlarr's CleanupReleases fills an unset guid from the release's download
-  # URL, then a torrent's magnet, then its details URL. The download field wins
-  # even when the infohash supplies the download URL, as on YTS.
-  defp release_guid(row, download_url, info_url, ctx) do
+  # URL, then a torrent's magnet, then its details URL. A row without a
+  # download field or an infohash never gets here, so its details URL cannot
+  # supply the guid; the download field wins even when the infohash supplies
+  # the download URL, as on YTS.
+  defp release_guid(row, download_url, ctx) do
     case get_required_field(row, "download") do
       {:ok, url} -> LinkResolver.resolve(url, ctx.base_url)
-      {:error, _} -> download_url || info_url
+      {:error, _} -> download_url
     end
   end
 
