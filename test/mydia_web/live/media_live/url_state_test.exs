@@ -154,4 +154,177 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
 
     assert has_element?(view, "select[name=progress] option[value=''][selected]")
   end
+
+  describe "remembered sort and filters" do
+    defp choose(view, sort_by, progress) do
+      view
+      |> element("#library-filter-form")
+      |> render_change(%{
+        "progress" => progress,
+        "monitored" => "all",
+        "quality" => "",
+        "sort_by" => sort_by
+      })
+    end
+
+    test "a bare visit restores the page's last sort and filters", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+      assert_patch(view, "/movies?progress=missing&sort=year_desc")
+
+      # The restore also patches the URL, but that patch rides in the join
+      # reply, which the test client drops, so assert_patch cannot see it.
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "a saved library that no longer exists is dropped and a bare visit shows defaults",
+         %{conn: conn, user: user} do
+      :ok =
+        Mydia.Accounts.LibraryListingState.put(user, "movies", %{"library" => "does-not-exist"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=title_asc]"
+             )
+
+      refute has_element?(view, "#library-filter-form option[selected][value=does-not-exist]")
+    end
+
+    test "each page remembers its own state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "sort and filters in the URL win over the saved state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=added_desc]"
+             )
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=progress] option[selected][value=missing]"
+             )
+    end
+
+    test "Clear filters forgets the saved state", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      choose(view, "year_desc", "missing")
+      view |> element("#library-reset-filters") |> render_click()
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "searching does not save anything", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      view |> element("#library-search-form") |> render_change(%{"search" => "fern"})
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
+    end
+
+    test "searching a page whose URL overrides the saved state keeps the saved state",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+      view |> element("#library-search-form") |> render_change(%{"search" => "fern"})
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{"sort" => "year_desc"}
+    end
+
+    test "Clear filters on a page whose URL overrides the saved state forgets it",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
+    end
+
+    test "Clear filters forgets the saved state even when the URL shows the defaults",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=title_asc&q=fern")
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
+    end
+
+    test "Clear filters forgets the saved state even when another tab saved since mount",
+         %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies?progress=missing")
+
+      # Another tab saves after this page mounted with nothing saved.
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
+    end
+
+    test "only remembered keys are restored from the saved state", %{conn: conn, user: user} do
+      movie = media_item_fixture(%{type: "movie", title: "Quillmere Drift"})
+
+      :ok =
+        Mydia.Accounts.LibraryListingState.put(user, "movies", %{
+          "q" => "zzz-no-match",
+          "sort" => "year_desc"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(view, "#media_items-#{movie.id}")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
+    test "a live patch to a page with the same restored listing loads that page's rows",
+         %{conn: conn, user: user} do
+      movie = media_item_fixture(%{type: "movie", title: "Quillmere Drift"})
+      show = media_item_fixture(%{type: "tv_show", title: "Harrowfen Lanterns"})
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "tv_shows", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=year_desc")
+      assert has_element?(view, "#media_items-#{movie.id}")
+
+      render_patch(view, ~p"/tv")
+
+      assert has_element?(view, "#media_items-#{show.id}")
+      refute has_element?(view, "#media_items-#{movie.id}")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+  end
 end

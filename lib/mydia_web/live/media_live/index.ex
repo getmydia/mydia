@@ -21,7 +21,9 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
+  alias MydiaWeb.MediaLive.Index.Messages
   alias MydiaWeb.MediaLive.Index.ReclassifyFlash
+  alias MydiaWeb.MediaLive.Index.RememberedListing
   alias MydiaWeb.MediaLive.Index.Window
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
@@ -66,6 +68,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
      |> assign(:page_key, nil)
+     |> assign(:remembered_listing, %{})
      |> assign(:library_options, [])
      |> assign(:loading?, true)
      |> assign(:media_items_empty?, false)
@@ -110,10 +113,17 @@ defmodule MydiaWeb.MediaLive.Index do
       if page_key == socket.assigns.page_key do
         apply_listing_params(socket, params, false)
       else
+        socket =
+          socket
+          |> assign(:page_key, page_key)
+          |> apply_action(socket.assigns.live_action, params)
+
+        {socket, params, restored_path} =
+          RememberedListing.restore(socket, params, library_choices(socket))
+
         socket
-        |> assign(:page_key, page_key)
-        |> apply_action(socket.assigns.live_action, params)
         |> apply_listing_params(params, true)
+        |> RememberedListing.patch_restored(restored_path)
       end
 
     {:noreply, socket}
@@ -276,7 +286,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("clear_filters", _params, socket) do
-    {:noreply, patch_listing(socket, %ListingParams{})}
+    {:noreply, patch_listing(socket, %ListingParams{}, true)}
   end
 
   # Replies so the LoadMoreSentinel hook knows the batch has landed.
@@ -682,7 +692,7 @@ defmodule MydiaWeb.MediaLive.Index do
     socket =
       if should_process do
         message =
-          scan_completed_message(%{
+          Messages.scan_completed_message(%{
             new_files: new_files,
             modified_files: modified_files,
             deleted_files: deleted_files,
@@ -941,10 +951,13 @@ defmodule MydiaWeb.MediaLive.Index do
   # Filter, search and sort changes replace the history entry rather than
   # adding one, so Back from a title lands on the list in its latest state.
   # They also drop the A-Z jump letter, so the new listing starts at the top.
-  defp patch_listing(socket, %ListingParams{} = params) do
+  # They also save the page's sort and filters for the next visit.
+  defp patch_listing(socket, %ListingParams{} = params, forget? \\ false) do
     params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
-    push_patch(socket,
+    socket
+    |> RememberedListing.remember(params, forget?)
+    |> push_patch(
       to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
     )
@@ -1006,48 +1019,4 @@ defmodule MydiaWeb.MediaLive.Index do
   defp media_status_icon(status), do: AvailabilityStatus.icon(status)
 
   defp media_status_label(status), do: MydiaWeb.StatusLabels.availability(status)
-
-  @doc false
-  # Public so the copy can be unit-tested without mounting the LiveView.
-  #
-  # `auto_linked` is a subset of the files a scan touched, so it is appended as
-  # detail and kept out of the change total. It is also counted on its own,
-  # because the orphan branch links existing files: a scan can auto-import
-  # without any on-disk change at all, and reporting "No changes detected"
-  # there would hide the exact work the flag was turned on for.
-  @spec scan_completed_message(map()) :: String.t()
-  def scan_completed_message(%{
-        new_files: new_files,
-        modified_files: modified_files,
-        deleted_files: deleted_files,
-        auto_linked: auto_linked
-      }) do
-    parts = []
-
-    parts =
-      if new_files > 0,
-        do: [gettext("%{count} new", count: new_files) | parts],
-        else: parts
-
-    parts =
-      if modified_files > 0,
-        do: [gettext("%{count} modified", count: modified_files) | parts],
-        else: parts
-
-    parts =
-      if deleted_files > 0,
-        do: [gettext("%{count} removed", count: deleted_files) | parts],
-        else: parts
-
-    parts =
-      if auto_linked > 0,
-        do: parts ++ [gettext("%{count} imported automatically", count: auto_linked)],
-        else: parts
-
-    if parts == [] do
-      gettext("Library scan completed: No changes detected")
-    else
-      gettext("Library scan completed: %{changes}", changes: Enum.join(parts, ", "))
-    end
-  end
 end

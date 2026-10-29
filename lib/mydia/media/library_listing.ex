@@ -32,6 +32,7 @@ defmodule Mydia.Media.LibraryListing do
   alias Mydia.Media.LibraryListing.Snapshot
   alias Mydia.Media.LibraryRow
   alias Mydia.Media.Restrictions
+  alias Mydia.Media.SortTitle
   alias Mydia.Media.MediaItem
   alias Mydia.Playback.Progress
   alias Mydia.Repo
@@ -59,20 +60,6 @@ defmodule Mydia.Media.LibraryListing do
   @letters ["#" | Enum.map(?a..?z, &<<&1>>)]
   @title_sorts ~w(title_asc title_desc)
 
-  # Latin letters NFD leaves whole, so stripping marks cannot reach their base
-  # letter. Without these, "Ørsted" would file under # rather than O.
-  @latin_folds %{
-    "ø" => "o",
-    "æ" => "ae",
-    "œ" => "oe",
-    "ß" => "ss",
-    "ł" => "l",
-    "đ" => "d",
-    "þ" => "th",
-    "ð" => "d"
-  }
-  @latin_fold_keys Map.keys(@latin_folds)
-
   # Every key sort/2 matches. The LiveView validates URL input against it.
   @sort_keys ~w(title_asc title_desc year_asc year_desc added_asc added_desc
                 rating_asc rating_desc size_asc size_desc last_aired_asc
@@ -89,10 +76,11 @@ defmodule Mydia.Media.LibraryListing do
 
   @doc """
   The letter a row files under in the title sorts: the first character of its
-  accent-folded, lowercased title, or `#` when that is not a-z.
+  sort title (accent-folded, lowercased, without a leading "the", "a" or "an"),
+  or `#` when that is not a-z.
   """
   @spec initial(LibraryRow.t()) :: String.t()
-  def initial(%LibraryRow{item: item}), do: item.title |> fold_title() |> initial_of()
+  def initial(%LibraryRow{item: item}), do: item.title |> SortTitle.key() |> initial_of()
 
   @doc """
   The whole listing, evaluated once.
@@ -471,27 +459,12 @@ defmodule Mydia.Media.LibraryListing do
 
   # The # group ranks first so it is one block: digits and most punctuation
   # already sort before "a", but "[", "~" and non-Latin scripts would land
-  # after "z" without it.
+  # after "z" without it. The full fold breaks ties between a title and its
+  # article-led twin ("Harbor Watch", "The Harbor Watch"), and the item id
+  # breaks any remaining tie so the order stays total across offset pages.
   defp title_key(%LibraryRow{item: item}) do
-    folded = fold_title(item.title)
-    {if(initial_of(folded) == "#", do: 0, else: 1), folded}
-  end
-
-  defp fold_title(title) do
-    title = title || ""
-
-    # Invalid UTF-8 has no NFD form, and the Unicode regex would raise on it.
-    # Its raw bytes still sort, and still file under some letter or #.
-    case :unicode.characters_to_nfd_binary(title) do
-      nfd when is_binary(nfd) ->
-        nfd
-        |> String.replace(~r/\p{Mn}/u, "")
-        |> String.downcase()
-        |> String.replace(@latin_fold_keys, &Map.fetch!(@latin_folds, &1))
-
-      _error ->
-        String.downcase(title)
-    end
+    key = SortTitle.key(item.title)
+    {if(initial_of(key) == "#", do: 0, else: 1), key, SortTitle.fold(item.title), item.id}
   end
 
   defp initial_of(<<c, _rest::binary>>) when c in ?a..?z, do: <<c>>
