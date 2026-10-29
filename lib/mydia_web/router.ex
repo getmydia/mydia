@@ -227,7 +227,8 @@ defmodule MydiaWeb.Router do
     live_session :authenticated,
       on_mount: [
         {MydiaWeb.Live.UserAuth, :ensure_authenticated},
-        {MydiaWeb.Live.UserAuth, :load_navigation_data}
+        {MydiaWeb.Live.UserAuth, :load_navigation_data},
+        MydiaWeb.Live.ComponentFlash
       ] do
       live "/", DashboardLive.Index, :index
       live "/discover", DiscoverLive.Index, :index

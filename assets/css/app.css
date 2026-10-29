@@ -76,7 +76,7 @@
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
 /* `dark:` follows the scheme of whichever theme is active, not a theme name:
-   there are nine dark themes. <html data-color-scheme> is set beside
+   there are many dark themes. <html data-color-scheme> is set beside
    data-theme by theme_html_attrs/1, the inline script in root.html.heex and
    applySelection in theme.mjs. Guarded by
    test/mydia_web/components/dark_variant_test.exs. */

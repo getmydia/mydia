@@ -317,6 +317,34 @@ defmodule Mydia.Subtitles.Sidecars do
     end
   end
 
+  @doc """
+  The entries of `filenames` that `media_file` owns where it sits, by the
+  rule `owning_media_file_for/2` applies. `media_file` counts among the
+  siblings even when its row has since moved away, so a library move can
+  pass the file's old location (an unsaved struct with `:library_path`
+  loaded) and still ask which sidecars it left behind.
+  """
+  @spec owned_by(MediaFile.t(), [String.t()]) :: [String.t()]
+  def owned_by(media_file, filenames) do
+    case dir_for(media_file) do
+      nil ->
+        []
+
+      dir ->
+        others =
+          media_file.library_path_id
+          |> siblings_in_dir(dir)
+          |> Enum.reject(&(&1.id == media_file.id))
+
+        Enum.filter(filenames, fn filename ->
+          match?(
+            %{id: id} when id == media_file.id,
+            owning_media_file(filename, [media_file | others])
+          )
+        end)
+    end
+  end
+
   ## Private
 
   defp dir_for(media_file) do

@@ -51,12 +51,7 @@ defmodule Mydia.Events.Presentation do
       color: "text-info",
       title: "Added to library"
     },
-    %{
-      type: "media_item.updated",
-      icon: "hero-arrow-path",
-      color: "text-info",
-      title: "Updated"
-    },
+    %{type: "media_item.updated", icon: "hero-arrow-path", color: "text-info", title: "Updated"},
     %{
       type: "media_item.removed",
       icon: "hero-trash",
@@ -106,6 +101,18 @@ defmodule Mydia.Events.Presentation do
       icon: "hero-x-circle",
       color: "text-warning",
       title: "Upgrade rejected"
+    },
+    %{
+      type: "media_item.library_moved",
+      icon: "hero-arrow-right-circle",
+      color: "text-info",
+      title: "Moved to library"
+    },
+    %{
+      type: "media_item.library_move_failed",
+      icon: "hero-exclamation-triangle",
+      color: "text-warning",
+      title: "Library move failed"
     },
     %{
       type: "media_file.pruned",
@@ -233,12 +240,7 @@ defmodule Mydia.Events.Presentation do
       color: "text-warning",
       title: "All results filtered out"
     },
-    %{
-      type: "search.deferred",
-      icon: "hero-clock",
-      color: "text-info",
-      title: "Grab delayed"
-    },
+    %{type: "search.deferred", icon: "hero-clock", color: "text-info", title: "Grab delayed"},
     # Recorded only by v0.15.x, which ran the identity check in shadow beside
     # the old title gate. Nothing records it now; kept so those rows render.
     %{
@@ -282,24 +284,14 @@ defmodule Mydia.Events.Presentation do
     },
 
     # playback.*
-    %{
-      type: "playback.started",
-      icon: "hero-play",
-      color: "text-info",
-      title: "Playback started"
-    },
+    %{type: "playback.started", icon: "hero-play", color: "text-info", title: "Playback started"},
     %{
       type: "playback.progressed",
       icon: "hero-forward",
       color: "text-info",
       title: "Playback progressed"
     },
-    %{
-      type: "playback.paused",
-      icon: "hero-pause",
-      color: "text-info",
-      title: "Playback paused"
-    },
+    %{type: "playback.paused", icon: "hero-pause", color: "text-info", title: "Playback paused"},
     %{
       type: "playback.finished",
       icon: "hero-check-circle",
@@ -444,6 +436,14 @@ defmodule Mydia.Events.Presentation do
       "#{title_of(metadata)}, kept #{resolution_of(metadata, "old")} over #{resolution_of(metadata, "new")}"
 
     if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
+  end
+
+  def detail(%Event{type: type, metadata: m})
+      when type in ["media_item.library_moved", "media_item.library_move_failed"] do
+    moved = if (m["moved"] || 0) > 0, do: pluralize_unit(m["moved"], "file"), else: "nothing"
+    to = if m["library"], do: " to #{m["library"]}", else: ""
+    skipped = if (m["skipped"] || 0) > 0, do: ", #{m["skipped"]} skipped", else: ""
+    "#{title_of(m)}, #{moved} moved#{to}#{skipped}"
   end
 
   def detail(%Event{type: "media_file.pruned", metadata: metadata}) do

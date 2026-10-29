@@ -67,8 +67,14 @@ Future<void> _pumpCalendar(
   );
   await tester.pumpAndSettle();
 
-  await tester.drag(find.byType(CustomScrollView), const Offset(0, -20000));
-  await tester.pumpAndSettle();
+  // Twice: reaching the end can change the month at the top, which relabels
+  // the month button. In the test font that label can wrap the bar, growing
+  // the scroll extent after the first drag has already stopped. Whether it
+  // does depends on today's date, so one drag passed some days and not others.
+  for (var i = 0; i < 2; i++) {
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -20000));
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {

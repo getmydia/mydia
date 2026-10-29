@@ -73,6 +73,14 @@ defmodule Mydia.Accounts.ThemesTest do
     assert Themes.active(Themes.selection("system", "nord", "dim", nil)) == nil
   end
 
+  test "the zinc pair is listed last in each scheme" do
+    assert %Theme{id: "zinc-light", label: "Zinc Light", base: "#ffffff"} =
+             List.last(Themes.light())
+
+    assert %Theme{id: "zinc-dark", label: "Zinc Dark", base: "#09090b"} =
+             List.last(Themes.dark())
+  end
+
   test "to_client/1 is the push_event payload" do
     assert Themes.to_client(Themes.selection("dark", "nord", "dim", "soft")) == %{
              mode: "dark",

@@ -43,8 +43,22 @@ defmodule Mydia.Plugins.PageReads do
   @doc """
   Searches the user's visible library (`kind: :library`) or the metadata
   catalog (`kind: :catalog`). Requires `data:search`.
+
+  Returns the `search-hit` shape of contracts 1.4 to 1.7, which has no
+  `vote-count`; `search_with_votes/3` serves 1.8 guests.
   """
   def search(plugin, ctx, req) do
+    with {:ok, hits} <- search_with_votes(plugin, ctx, req) do
+      {:ok, Enum.map(hits, &Map.delete(&1, :"vote-count"))}
+    end
+  end
+
+  @doc """
+  `search/3` for a 1.8 guest: each hit also carries `vote-count`, TMDB's rating
+  count for a catalog hit, so the guest can tell a well-known title from an
+  obscure namesake. Library hits and TVDB-keyed shows have none.
+  """
+  def search_with_votes(plugin, ctx, req) do
     with :ok <- require_flag(plugin, "data:search"),
          {:ok, user} <- acting_user(ctx) do
       limit = req |> opt(:limit) |> clamp_limit()
@@ -203,7 +217,8 @@ defmodule Mydia.Plugins.PageReads do
           "tmdb-id": :none,
           "tvdb-id": :none,
           "poster-path": to_option(r.poster_path),
-          overview: :none
+          overview: :none,
+          "vote-count": :none
         }
       end
 
@@ -280,9 +295,14 @@ defmodule Mydia.Plugins.PageReads do
       "tmdb-id": tmdb,
       "tvdb-id": tvdb,
       "poster-path": to_option(r.poster_path),
-      overview: to_option(r.overview)
+      overview: to_option(r.overview),
+      "vote-count": to_option(vote_count(r.vote_count))
     }
   end
+
+  # A u32 on the wire: anything else (absent, negative, a float) is unknown.
+  defp vote_count(n) when is_integer(n) and n >= 0 and n <= 4_294_967_295, do: n
+  defp vote_count(_), do: nil
 
   defp clamp_limit(n) when is_integer(n) and n > 0, do: min(n, @search_cap)
   defp clamp_limit(_), do: @default_limit

@@ -182,6 +182,17 @@
                       <.icon name="hero-document-text" class="w-4 h-4 2xl:w-5 2xl:h-5" />
                     </button>
                   </div>
+                  <div class="tooltip tooltip-bottom" data-tip={gettext("Move to library")}>
+                    <button
+                      id="move-library-button"
+                      type="button"
+                      phx-click={JS.push("open", target: "#library-move")}
+                      class="btn btn-ghost btn-sm btn-square"
+                      aria-label={gettext("Move to library")}
+                    >
+                      <.icon name="hero-arrows-right-left" class="w-4 h-4" />
+                    </button>
+                  </div>
                 <% end %>
                 <%!-- tooltip-left: the rightmost button, so a centred tooltip
                       would run past the column's right edge. --%>
@@ -573,6 +584,13 @@
       libraries={@target_library_candidates}
     />
   <% end %>
+  <.live_component
+    module={MydiaWeb.Live.LibraryMoveComponent}
+    id="library-move"
+    media_item_ids={[@media_item.id]}
+    current_user={@current_user}
+    current_scope={@current_scope}
+  />
   <%= if @show_add_to_collection_modal do %>
     <PickerModals.add_to_collection_modal
       media_item={@media_item}

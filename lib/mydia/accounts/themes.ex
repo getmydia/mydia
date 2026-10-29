@@ -24,6 +24,7 @@ defmodule Mydia.Accounts.Themes do
     %Theme{id: "mydia-light", label: "Mydia Light", scheme: :light, base: "#f8fafc"},
     %Theme{id: "nord", label: "Nord", scheme: :light, base: "#eceff4"},
     %Theme{id: "emerald", label: "Emerald", scheme: :light, base: "#ffffff"},
+    %Theme{id: "zinc-light", label: "Zinc Light", scheme: :light, base: "#ffffff"},
     %Theme{id: "mydia-dark", label: "Mydia Dark", scheme: :dark, base: "#0f172a"},
     %Theme{id: "mydia-oled", label: "Mydia OLED", scheme: :dark, base: "#000000"},
     %Theme{id: "dim", label: "Dim", scheme: :dark, base: "#2a303c"},
@@ -32,7 +33,8 @@ defmodule Mydia.Accounts.Themes do
     %Theme{id: "sunset", label: "Sunset", scheme: :dark, base: "#121c22"},
     %Theme{id: "frappe", label: "Catppuccin Frappé", scheme: :dark, base: "#303446"},
     %Theme{id: "macchiato", label: "Catppuccin Macchiato", scheme: :dark, base: "#24273a"},
-    %Theme{id: "mocha", label: "Catppuccin Mocha", scheme: :dark, base: "#1e1e2e"}
+    %Theme{id: "mocha", label: "Catppuccin Mocha", scheme: :dark, base: "#1e1e2e"},
+    %Theme{id: "zinc-dark", label: "Zinc Dark", scheme: :dark, base: "#09090b"}
   ]
 
   @doc "The three modes: follow the OS, always light, always dark."
