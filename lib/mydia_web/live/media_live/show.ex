@@ -27,6 +27,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RenameEvents
   alias MydiaWeb.MediaLive.Show.RenameModal
   alias MydiaWeb.MediaLive.Show.SearchEvents
+  alias MydiaWeb.MediaLive.Show.SearchFilterEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
@@ -439,17 +440,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("close_manual_search_modal", params, socket),
     do: SearchEvents.close_manual_search_modal(params, socket)
 
-  def handle_event("filter_search", params, socket),
-    do: SearchEvents.filter_search(params, socket)
-
-  def handle_event("sort_search", params, socket),
-    do: SearchEvents.sort_search(params, socket)
-
-  def handle_event("remove_search_filter", params, socket),
-    do: SearchEvents.remove_search_filter(params, socket)
-
-  def handle_event("clear_search_filters", params, socket),
-    do: SearchEvents.clear_search_filters(params, socket)
+  def handle_event(event, params, socket)
+      when event in ~w(filter_search sort_search remove_search_filter clear_search_filters),
+      do: SearchFilterEvents.handle_filter_event(event, params, socket)
 
   def handle_event("toggle_close_after_grab", params, socket),
     do: SearchEvents.toggle_close_after_grab(params, socket)

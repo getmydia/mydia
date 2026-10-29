@@ -3933,7 +3933,7 @@ msgstr ""
 msgid "Could not save poster display settings"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:553
+#: lib/mydia_web/live/media_live/show/search_events.ex:478
 #, elixir-autogen, elixir-format
 msgid "Could not save preference"
 msgstr ""
@@ -3983,7 +3983,7 @@ msgstr ""
 msgid "Could not send this file to Review"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:646
+#: lib/mydia_web/live/media_live/show/search_events.ex:562
 #, elixir-autogen, elixir-format
 msgid "Could not start download for \"%{title}\""
 msgstr ""
@@ -4611,9 +4611,9 @@ msgstr ""
 msgid "Download speed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:651
-#: lib/mydia_web/live/media_live/show.ex:660
-#: lib/mydia_web/live/media_live/show.ex:664
+#: lib/mydia_web/live/media_live/show.ex:644
+#: lib/mydia_web/live/media_live/show.ex:653
+#: lib/mydia_web/live/media_live/show.ex:657
 #, elixir-autogen, elixir-format
 msgid "Download started: %{title}"
 msgstr ""
@@ -5448,7 +5448,7 @@ msgstr ""
 msgid "Grabbed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:633
+#: lib/mydia_web/live/media_live/show/search_events.ex:549
 #, elixir-autogen, elixir-format
 msgid "Grabbing \"%{title}\" — progress will appear on this page"
 msgstr ""
@@ -8239,13 +8239,13 @@ msgstr[1] ""
 msgid "Retry"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:405
+#: lib/mydia_web/live/media_live/show/search_events.ex:395
 #: lib/mydia_web/live/search_live/index.ex:740
 #, elixir-autogen, elixir-format
 msgid "Retry failed unexpectedly"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:399
+#: lib/mydia_web/live/media_live/show/search_events.ex:389
 #: lib/mydia_web/live/search_live/index.ex:734
 #, elixir-autogen, elixir-format
 msgid "Retry failed: %{reason}"
@@ -8501,12 +8501,12 @@ msgstr ""
 msgid "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, but none matched quality criteria"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:768
+#: lib/mydia_web/live/media_live/show.ex:761
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for S%{season}E%{episode}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:747
+#: lib/mydia_web/live/media_live/show.ex:740
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for season %{season}"
 msgstr ""
@@ -8524,7 +8524,7 @@ msgid "Search failed"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:86
-#: lib/mydia_web/live/media_live/show/search_events.ex:772
+#: lib/mydia_web/live/media_live/show/search_events.ex:688
 #: lib/mydia_web/live/search_live/index.ex:711
 #, elixir-autogen, elixir-format
 msgid "Search failed unexpectedly"
@@ -8537,7 +8537,7 @@ msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:96
 #: lib/mydia_web/live/media_live/show/messages.ex:16
-#: lib/mydia_web/live/media_live/show/search_events.ex:763
+#: lib/mydia_web/live/media_live/show/search_events.ex:679
 #: lib/mydia_web/live/search_live/index.ex:702
 #: lib/mydia_web/live/search_live/index.ex:865
 #, elixir-autogen, elixir-format
@@ -8611,7 +8611,7 @@ msgstr ""
 msgid "Search prefers releases with this audio. A language other than the original falls back to the original."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:703
+#: lib/mydia_web/live/media_live/show.ex:696
 #, elixir-autogen, elixir-format
 msgid "Search timed out - no response from search job"
 msgstr ""
@@ -8636,17 +8636,17 @@ msgstr ""
 msgid "Searching across indexers..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:299
+#: lib/mydia_web/live/media_live/show/search_events.ex:289
 #, elixir-autogen, elixir-format
 msgid "Searching for S%{season}E%{episode}..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:159
+#: lib/mydia_web/live/media_live/show/search_events.ex:149
 #, elixir-autogen, elixir-format
 msgid "Searching for all missing episodes of %{title}..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:275
+#: lib/mydia_web/live/media_live/show/search_events.ex:265
 #, elixir-autogen, elixir-format
 msgid "Searching for season %{season} (preferring season pack)..."
 msgstr ""
@@ -8661,7 +8661,7 @@ msgstr ""
 msgid "Searching indexers"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:139
+#: lib/mydia_web/live/media_live/show/search_events.ex:129
 #, elixir-autogen, elixir-format
 msgid "Searching indexers for %{title}..."
 msgstr ""
