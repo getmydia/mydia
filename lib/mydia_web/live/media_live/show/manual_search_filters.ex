@@ -76,6 +76,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :indexer_filters, :list, default: []
   attr :min_seeders, :integer, default: 0
   attr :class, :any, default: nil
+  # The dialog renders the chips twice (the chip bar below `lg`, beside the
+  # progress summary from `lg`), so each copy needs its own DOM ids.
+  attr :id_prefix, :string, default: "manual-search-chip"
 
   @doc "One removable chip per active filter dimension."
   def active_chips(assigns) do
@@ -85,7 +88,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     <div :if={@chips != []} class={["flex items-center gap-2", @class]}>
       <span
         :for={{dimension, label} <- @chips}
-        id={"manual-search-chip-#{dimension}"}
+        id={"#{@id_prefix}-#{dimension}"}
         class="badge badge-soft badge-primary shrink-0 gap-1 whitespace-nowrap"
       >
         {label}
@@ -260,7 +263,11 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :sort_by, :atom, required: true
   attr :class, :any, default: nil
 
-  @doc "The sort dropdown used below `lg`."
+  @doc """
+  The sort dropdown in the dialog's navbar, the sort control below `lg`. The
+  caller hides it from `lg` with `class="lg:hidden"`, where the sortable column
+  headers take over.
+  """
   def sort_menu(assigns) do
     assigns = assign(assigns, :options, sort_options())
 

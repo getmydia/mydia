@@ -1015,6 +1015,51 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     assert has_element?(view, "##{positioned_result_dom_id(dune)}")
   end
 
+  # The empty state only renders once the search is over (`!@searching`), and a
+  # progress message alone never clears :searching (only handle_search_async/2
+  # does), so the search is parked behind a gate and released explicitly.
+  test "filtering down to nothing offers to clear the filters", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    {indexer, gate} = gated_indexer_fixture("gated-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+    wait_until_gate_entered(gate)
+
+    result = search_result("Glass.Harbor.2019.2160p.UHD")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "gated-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [result],
+         result_count: 1,
+         duration_ms: 700,
+         completed: 1,
+         total: 1
+       }}
+    )
+
+    render(view)
+    open_gate(gate)
+    wait_until_search_finished(view)
+    assert_gate_held(gate)
+
+    view
+    |> element("#manual-search-filter-form")
+    |> render_change(%{"quality" => ["720p"], "min_seeders" => "0"})
+
+    assert has_element?(view, "#manual-search-empty-filtered")
+    view |> element("#manual-search-empty-clear") |> render_click()
+
+    refute has_element?(view, "#manual-search-empty-filtered")
+    assert has_element?(view, "##{positioned_result_dom_id(result)}")
+  end
+
   test "source and codec chips narrow results and offer only what arrived", %{conn: conn} do
     media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
     indexer = pending_indexer_fixture("slow-indexer")
