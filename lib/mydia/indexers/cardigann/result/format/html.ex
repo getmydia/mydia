@@ -44,7 +44,10 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
       nil ->
         case Selector.find(document, row, selector) do
           [] -> :not_found
-          elements -> {:ok, elements |> Selector.text() |> String.trim()}
+          # Prowlarr reads the first match only (QuerySelector, then
+          # TextContent), so a selector such as `td ~ td` yields one cell
+          # rather than every following cell run together.
+          [first | _] -> {:ok, [first] |> Selector.text() |> String.trim()}
         end
 
       attribute ->

@@ -1,21 +1,5 @@
 [
   %{
-    definition: "bigfangroup",
-    query: :movie,
-    kind: :field,
-    field: :title,
-    reason:
-      "the row has three a[href^=\"details.php?id=\"] links (title, seeders 1, leechers 3); native joins all their text (title + \"13\"), wasm takes the first match"
-  },
-  %{
-    definition: "bigfangroup",
-    query: :rss,
-    kind: :field,
-    field: :title,
-    reason:
-      "the row has three a[href^=\"details.php?id=\"] links (title, seeders 2, leechers 4); native joins all their text (title + \"24\"), wasm takes the first match"
-  },
-  %{
     definition: "blueroms",
     query: :rss,
     kind: :field,

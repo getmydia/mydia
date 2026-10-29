@@ -160,10 +160,22 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert Transform.parse_size("2 GiB") == 2_147_483_648
     end
 
-    test "keeps thousands separators in the number" do
+    test "keeps thousands separators before a decimal point" do
       assert Transform.parse_size("1,017.6 MB") == 1_067_030_937
-      assert Transform.parse_size("2,048 KB") == 2_097_152
       assert Transform.parse_size("1,017.6 MiB") == 1_067_030_937
+      assert Transform.parse_size("1.234,5 MB") == 1_294_467_072
+    end
+
+    test "reads a lone comma as a decimal point, as Prowlarr does" do
+      assert Transform.parse_size("1,5 GB") == 1_610_612_736
+      assert Transform.parse_size("4,37 GB") == 4_692_251_770
+      # NormalizeNumber cannot tell a thousands comma from a decimal one, so
+      # Prowlarr reads this as 2.048 KiB.
+      assert Transform.parse_size("2,048 KB") == 2097
+    end
+
+    test "takes the unit from every letter in the value" do
+      assert Transform.parse_size("Size: 1.5 GB") == 1_610_612_736
     end
 
     test "treats a unitless number as bytes" do

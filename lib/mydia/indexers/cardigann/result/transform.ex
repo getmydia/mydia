@@ -109,54 +109,94 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   @spec parse_size_with_title_fallback(String.t() | nil, String.t()) :: non_neg_integer()
   def parse_size_with_title_fallback(raw_size, title) do
     case parse_size(raw_size) do
-      0 -> size_in_bytes(title) || 0
+      0 -> title_size(title)
       size -> size
     end
   end
 
-  # One table, longest spelling first, so a value is read in the unit it names.
-  @size_units [
-    {"tib", 1024 * 1024 * 1024 * 1024},
-    {"tb", 1024 * 1024 * 1024 * 1024},
-    {"gib", 1024 * 1024 * 1024},
-    {"gb", 1024 * 1024 * 1024},
-    {"mib", 1024 * 1024},
-    {"mb", 1024 * 1024},
-    {"kib", 1024},
-    {"kb", 1024}
-  ]
-  @size_pattern Regex.compile!(
-                  "([\\d,]+(?:\\.[\\d]+)?)\\s*(#{Enum.map_join(@size_units, "|", &elem(&1, 0))})",
-                  "i"
-                )
+  # The title fallback is mydia's, not Prowlarr's, so it first has to find a
+  # "number unit" pair inside free text before handing it to the shared parser.
+  @title_size_pattern ~r/([\d,]+(?:\.\d+)?)\s*(tib|tb|gib|gb|mib|mb|kib|kb)/i
 
-  @spec parse_size(String.t() | nil) :: non_neg_integer()
-  def parse_size(nil), do: 0
-  def parse_size(""), do: 0
-
-  def parse_size(size_str) when is_binary(size_str) do
-    size_in_bytes(size_str) || parse_integer(size_str)
-  end
-
-  # A number, with or without thousands separators, followed by a unit.
-  defp size_in_bytes(str) when is_binary(str) do
-    case Regex.run(@size_pattern, str) do
-      [_, number, unit] ->
-        {_, multiplier} = List.keyfind(@size_units, String.downcase(unit), 0)
-
-        case Float.parse(String.replace(number, ",", "")) do
-          {value, _rest} -> trunc(value * multiplier)
-          # A unit with no number, as in ", MB". Falling through lets the
-          # title fallback supply the size instead of failing the whole search.
-          :error -> nil
-        end
-
-      nil ->
-        nil
+  defp title_size(title) when is_binary(title) do
+    case Regex.run(@title_size_pattern, title) do
+      [match | _] -> parse_size(match)
+      nil -> 0
     end
   end
 
-  defp size_in_bytes(_), do: nil
+  defp title_size(_), do: 0
+
+  @doc """
+  Reads a size the way Prowlarr's `ParseUtil.GetBytes(string)` does
+  (`src/NzbDrone.Core/Parser/ParseUtil.cs`): the unit is every letter in the
+  value and the number is every digit, dot and comma, normalized by
+  `NormalizeNumber`. Commas count as decimal points and only the last dot
+  survives, so "1,5 GB" is 1.5 GiB, "1.234,5 MB" is 1234.5 MiB and
+  "1,017.6 MB" is 1017.6 MiB, while "2,048 KB" is 2.048 KiB.
+  """
+  @spec parse_size(String.t() | nil) :: non_neg_integer()
+  def parse_size(nil), do: 0
+
+  def parse_size(size_str) when is_binary(size_str) do
+    case coerce_double(size_str) do
+      {:ok, value} -> bytes(String.replace(size_str, ~r/\P{L}/u, ""), value)
+      # Prowlarr throws here and drops the row; returning zero lets the title
+      # fallback supply the size instead of failing the result.
+      :error -> 0
+    end
+  end
+
+  # ParseUtil.GetBytes(string unit, double value). The "i" is dropped before
+  # lowercasing, as Prowlarr does, so "MiB" reads as "mb".
+  defp bytes(unit, value) do
+    unit = unit |> String.replace("i", "") |> String.downcase()
+
+    cond do
+      String.contains?(unit, "kb") -> scale(value, 1)
+      String.contains?(unit, "mb") -> scale(value, 2)
+      String.contains?(unit, "gb") -> scale(value, 3)
+      String.contains?(unit, "tb") -> scale(value, 4)
+      true -> trunc(value)
+    end
+  end
+
+  # BytesFromTB/GB/MB/KB multiply by 1024 one step at a time in doubles and
+  # truncate once at the end, so the same order is kept here.
+  defp scale(value, 0), do: trunc(value)
+  defp scale(value, steps), do: scale(value * 1024.0, steps - 1)
+
+  # ParseUtil.CoerceDouble: double.Parse(NormalizeNumber(s)).
+  defp coerce_double(str) do
+    case String.split(normalize_number(str), ".") do
+      [int] -> {:ok, String.to_integer(int) * 1.0}
+      ["", ""] -> :error
+      [int, frac] -> {:ok, String.to_float(zero_if_empty(int) <> "." <> zero_if_empty(frac))}
+    end
+  end
+
+  defp zero_if_empty(""), do: "0"
+  defp zero_if_empty(digits), do: digits
+
+  # ParseUtil.NormalizeNumber(s, isInt: false). Keep digits, dots and commas;
+  # an empty value is "0"; every comma becomes a dot; when more than one dot
+  # remains, all but the last are thousands separators and are removed.
+  # Prowlarr also replaces "-" with "0", which cannot match after the filter.
+  defp normalize_number(str) do
+    case String.replace(str, ~r/[^0-9.,]/, "") do
+      "" ->
+        "0"
+
+      digits ->
+        value = String.replace(digits, ",", ".")
+
+        case String.split(value, ".") do
+          [_] -> value
+          [_, _] -> value
+          parts -> Enum.join(Enum.drop(parts, -1)) <> "." <> List.last(parts)
+        end
+    end
+  end
 
   defp parse_integer(nil), do: 0
   defp parse_integer(""), do: 0
