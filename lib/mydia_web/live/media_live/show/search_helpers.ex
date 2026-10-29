@@ -378,7 +378,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     |> Enum.flat_map(&SearchResult.indexers/1)
     |> Enum.frequencies()
     |> then(fn counts -> Enum.reduce(selected, counts, &Map.put_new(&2, &1, 0)) end)
-    |> Enum.sort_by(fn {name, _count} -> String.downcase(name) end)
+    |> Enum.sort_by(fn {name, _count} -> name |> to_string() |> String.downcase() end)
   end
 
   # Drops nil and anything outside the known vocabulary, which also keeps a

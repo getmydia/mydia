@@ -31,6 +31,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     js
     |> JS.toggle_class("max-lg:hidden", to: "#manual-search-filter-sheet")
     |> JS.toggle_class("hidden", to: "#manual-search-filter-backdrop")
+    |> JS.toggle_attribute({"aria-expanded", "true", "false"},
+      to: "#manual-search-filters-button"
+    )
   end
 
   attr :quality_filters, :list, default: []
@@ -54,6 +57,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         class="btn btn-sm btn-primary shrink-0"
         phx-click={toggle_sheet()}
         aria-controls="manual-search-filter-sheet"
+        aria-expanded="false"
       >
         <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
         {gettext("Filters")}
@@ -97,7 +101,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
           class="cursor-pointer opacity-70 hover:opacity-100"
           phx-click="remove_search_filter"
           phx-value-dimension={dimension}
-          aria-label={gettext("Remove filter")}
+          aria-label={gettext("Remove filter: %{filter}", filter: label)}
         >
           <.icon name="hero-x-mark" class="w-3 h-3" />
         </button>
@@ -320,7 +324,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     |> Enum.map(fn {dimension, values} -> {dimension, Enum.join(values, ", ")} end)
     |> then(fn chips ->
       if assigns.min_seeders > 0,
-        do: chips ++ [{"min_seeders", gettext("≥ %{count} seeds", count: assigns.min_seeders)}],
+        do:
+          chips ++
+            [
+              {"min_seeders",
+               ngettext("≥ %{count} seed", "≥ %{count} seeds", assigns.min_seeders,
+                 count: assigns.min_seeders
+               )}
+            ],
         else: chips
     end)
   end

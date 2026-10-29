@@ -140,9 +140,10 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       <div
         class={[
           "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
-          @result.seeders >= 50 && "bg-success/20 text-success",
-          @result.seeders >= 10 && @result.seeders < 50 && "bg-warning/20 text-warning",
-          @result.seeders < 10 && "bg-base-300 text-base-content/70"
+          (@result.seeders || 0) >= 50 && "bg-success/20 text-success",
+          (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 &&
+            "bg-warning/20 text-warning",
+          (@result.seeders || 0) < 10 && "bg-base-300 text-base-content/70"
         ]}
         title={ngettext("%{count} seeder", "%{count} seeders", @result.seeders || 0)}
       >
@@ -179,9 +180,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <%!-- Seeders badge (its own column from lg) --%>
         <span class={[
           "badge badge-sm lg:hidden",
-          @result.seeders >= 50 && "badge-success",
-          @result.seeders >= 10 && @result.seeders < 50 && "badge-warning",
-          @result.seeders < 10 && "badge-error badge-outline"
+          (@result.seeders || 0) >= 50 && "badge-success",
+          (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 && "badge-warning",
+          (@result.seeders || 0) < 10 && "badge-error badge-outline"
         ]}>
           <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
           {@result.seeders}
