@@ -21,6 +21,7 @@ defmodule Mydia.MetadataCacheHelpers do
 
   alias Mydia.Metadata
   alias Mydia.Metadata.Cache
+  alias Mydia.Metadata.ProviderIDRegistry
 
   # Provider ids are offset past this floor rather than taken raw from
   # System.unique_integer/1, which hands out small positive integers. Those
@@ -100,6 +101,16 @@ defmodule Mydia.MetadataCacheHelpers do
     on_exit(fn ->
       Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{relay.options.language}::official")
     end)
+
+    # ProviderIDRegistry is a global ETS table too. A hardcoded id such as 9001
+    # is also a TV show fixture elsewhere in the suite, and once a test has
+    # recorded it as one, the fetch below is refused as a type mismatch. The
+    # previous type is put back afterwards for the test that recorded it.
+    with {:ok, previous} <- ProviderIDRegistry.get_known_type(to_string(tmdb_id), :tmdb) do
+      on_exit(fn -> ProviderIDRegistry.record_id_type({:tmdb, tmdb_id}, previous) end)
+    end
+
+    ProviderIDRegistry.record_id_type({:tmdb, tmdb_id}, :movie)
 
     Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
       body = %{"id" => tmdb_id, "title" => "Source", "belongs_to_collection" => nil}
