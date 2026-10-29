@@ -75,6 +75,7 @@ defmodule Mydia.Media.FranchiseLibrary do
     options =
       (config[:options] || %{})
       |> Map.put(:timeout, @relay_timeout)
+      |> Map.put(:connect_timeout, @relay_timeout)
       |> Map.put(:max_retries, 0)
 
     Map.put(config, :options, options)
