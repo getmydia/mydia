@@ -1025,6 +1025,12 @@ mod tests {
         let w = want("Glass Harbor", 2019, "tv_show");
         assert_eq!(choose(&w, &hits), Some(1));
         assert_eq!(choose_other_type(&w, &hits), Some(1));
+
+        // Equally near on either side: the earlier hit wins.
+        let hits = [show("Glass Harbor", 2021, 5), show("Glass Harbor", 2019, 6)];
+        let w = want("Glass Harbor", 2020, "tv_show");
+        assert_eq!(choose(&w, &hits), Some(0));
+        assert_eq!(choose_other_type(&w, &hits), Some(0));
     }
 
     #[test]
