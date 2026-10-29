@@ -342,6 +342,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       assert content_length(ex) == byte_size(ex.body)
     end
 
+    test "keeps a content-type meta but drops a refresh meta" do
+      page =
+        String.replace(
+          @page,
+          ~s(<meta charset="utf-8">),
+          ~s(<meta http-equiv="Content-Type" content="text/html; charset=utf-8">) <>
+            ~s(<meta http-equiv="refresh" content="0; url=/t/9/Thimble-Gantry">)
+        )
+
+      [ex] = Scrubber.trim(capture([exchange(page)]), parsed()).exchanges
+      assert ex.body =~ ~s(http-equiv="Content-Type")
+      refute ex.body =~ "refresh"
+      refute ex.body =~ "Thimble"
+    end
+
     test "keeps the rows an `after:` block joins to each match" do
       yaml =
         String.replace(@yaml, "    selector: tr.row\n", "    selector: tr.row\n    after: 1\n")
@@ -530,6 +545,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       assert Ids.leftovers(ex.body, ids) == []
     end
 
+    test "replaces a capitalised IMDb id and a provider key without an id suffix" do
+      body = ~s(<td>IMDb: TT0123456</td> {"tmdb": 123456, "tvdb_id": 654321, "size": 123456})
+      {%Capture{exchanges: [ex]}, ids} = Scrubber.scrub_ids(capture([exchange(body)]))
+
+      standin = Map.fetch!(ids, "tt0123456")
+      assert ex.body =~ "IMDb: #{String.upcase(standin)}</td>"
+      assert [_, tmdb] = Regex.run(~r/"tmdb": (\d+)/, ex.body)
+      assert tmdb =~ ~r/\A20\d{8}\z/
+      refute ex.body =~ "654321"
+      # A size is not an id, even when the number matches.
+      assert ex.body =~ ~s("size": 123456)
+      assert Ids.leftovers(ex.body, ids) == []
+      assert Ids.leftovers("IMDb: TT0123456", ids) == ["tt0123456"]
+    end
+
     test "translates what the original replay yielded" do
       {_, ids} = Scrubber.scrub_ids(capture([exchange(id_body())]))
 
@@ -603,6 +633,20 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
 
       assert {:error, [msg]} = Scrubber.verify(@empty, @empty, ["Mellow Kiln"], capture([ex]))
       assert msg =~ "header content-disposition"
+    end
+
+    test "finds a work in a request body" do
+      ex = %{
+        exchange("clean")
+        | request: RequestKey.new("POST", "https://harbor.invalid/search", "q=Mellow%2BKiln")
+      }
+
+      assert {:error, [msg]} = Scrubber.verify(@empty, @empty, ["Mellow Kiln"], capture([ex]))
+      assert msg =~ "request 1 body"
+    end
+
+    test "finds an accented work in a slug that strips its accents" do
+      assert {:error, [_]} = leaks("/movies/kilna-sorrel-dawn-2031", ["Kilnâ Sorrêl Dâwn"])
     end
 
     test "passes clean text" do

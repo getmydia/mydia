@@ -6,9 +6,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
   Text and work are both reduced to lowercase letters and digits after undoing
   every encoding a tracker plausibly applies: percent-encoding (up to three
   times, for `%2520`), the definition's charset, JSON string escapes and HTML
-  entities (every named one lexbor knows, decimal and hex). "Kiln's Harbor"
-  becomes `kilnsharbor`, and so do `Kiln&#039;s Harbor`, `kilns-harbor` and
-  `Kiln%2527s%2520Harbor`. The cost is false alarms where a short work runs
+  entities (every named one lexbor knows, decimal and hex), with accents
+  stripped. "Kiln's Harbor" becomes `kilnsharbor`, and so do
+  `Kiln&#039;s Harbor`, `kilns-harbor` and `Kiln%2527s%2520Harbor`. The cost is false alarms where a short work runs
   across a word boundary; those fail the seed, which is the safe direction.
   """
 
@@ -19,7 +19,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
   @min_work_length 3
 
   @doc """
-  Every leak in a scrubbed capture's request URLs, bodies and headers, as one
+  Every leak in a scrubbed capture's request URLs and bodies and its response
+  bodies and headers, as one
   message each. Three searches per learned work: the renamer's own forms, this
   module's normalised text, and the work's distinctive word pairs (a work
   renamed only in part leaves one behind). Then every original id or hash in
@@ -33,7 +34,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
       capture.exchanges
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {ex, n} ->
-        [{"request #{n} URL", ex.request.url}, {"body #{n}", ex.body || ""}] ++
+        [
+          {"request #{n} URL", ex.request.url},
+          {"request #{n} body", ex.request.body || ""},
+          {"body #{n}", ex.body || ""}
+        ] ++
           for({k, v} <- ex.headers, do: {"response #{n} header #{k}", v})
       end)
       |> Enum.map(fn {label, text} ->
@@ -45,7 +50,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
           String.length(work) >= @min_work_length,
           needles = Names.needles(work, encoding),
           reduced = normalise_work(work),
-          pairs = work |> without(keep) |> Works.distinctive_pairs(),
+          pairs = work |> without(keep) |> Works.distinctive_pairs() |> Enum.map(&unaccent/1),
           {label, _text, folded, normalised} <- texts,
           hit = leak(folded, normalised, needles, reduced, pairs),
           hit != nil do
@@ -79,6 +84,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
   @json_escape ~r/\\u([0-9A-Fa-f]{4})(?:\\u([0-9A-Fa-f]{4}))?/
   @entity ~r/&(#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);/
   @not_alnum ~r/[^\p{L}\p{N}]+/u
+  @mark ~r/\p{Mn}+/u
 
   @doc "`text` (raw bytes in `encoding`) reduced for searching."
   @spec normalise(binary(), String.t() | nil) :: String.t()
@@ -97,7 +103,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.LeakCheck do
   @spec normalise_work(String.t()) :: String.t()
   def normalise_work(work), do: work |> entity_decode() |> reduce()
 
-  defp reduce(text), do: text |> String.downcase() |> String.replace(@not_alnum, "")
+  # Accents go too: a slug spells "Sorrêl" as "sorrel".
+  defp reduce(text), do: text |> String.downcase() |> unaccent() |> String.replace(@not_alnum, "")
+
+  defp unaccent(text),
+    do: text |> :unicode.characters_to_nfd_binary() |> String.replace(@mark, "")
 
   defp percent_decode(text, 0), do: text
 

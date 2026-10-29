@@ -182,8 +182,17 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Trim do
     end
   end
 
-  defp charset_meta?("meta", attrs),
-    do: Enum.any?(attrs, fn {k, _} -> String.downcase(k) in ["charset", "http-equiv"] end)
+  # Only the charset-bearing kinds: a `refresh` meta carries a URL, which can
+  # hold a title no row ever shows.
+  defp charset_meta?("meta", attrs) do
+    Enum.any?(attrs, fn {k, v} ->
+      case String.downcase(k) do
+        "charset" -> true
+        "http-equiv" -> String.downcase(v) == "content-type"
+        _ -> false
+      end
+    end)
+  end
 
   defp charset_meta?(_tag, _attrs), do: false
 

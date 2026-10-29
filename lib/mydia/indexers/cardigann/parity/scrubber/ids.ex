@@ -6,8 +6,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Ids do
   Both engines only echo these values, so replacing every occurrence of one with
   the same stand-in keeps parity intact:
 
-  - IMDb ids (`tt` and 7 to 9 digits) become `tt2` and 8 digits from a hash
-    of the original (see `standin_imdb/1` for why that range).
+  - IMDb ids (`tt` and 7 to 9 digits, either case) become `tt2` and 8 digits
+    from a hash of the original, keeping the prefix's case (see
+    `standin_imdb/1` for why that range).
   - Info hashes, 40 hex characters anywhere (bare, in magnets, in download
     URLs) or 32 base32 characters after `btih:`, become characters from a hash
     of the original, keeping its case.
@@ -25,14 +26,16 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Ids do
   # is itself a hex digit.
   @hex ~r/(?:(?<=%[0-9A-Fa-f]{2})|(?<![0-9A-Fa-f]))[0-9A-Fa-f]{40}(?![0-9A-Fa-f])/
   @base32 ~r/(?<=btih:|btih%3A)[A-Za-z2-7]{32}(?![A-Za-z0-9])/i
-  @imdb ~r/(?<![A-Za-z0-9])tt\d{7,9}(?!\d)/
+  # Some trackers print the prefix in capitals ("IMDb: TT1234567").
+  @imdb ~r/(?<![A-Za-z0-9])[tT]{2}\d{7,9}(?!\d)/
   @id_names "imdb|imdbid|tmdb|tmdbid|tvdb|tvdbid|rageid|tvrageid|tvmazeid|anilistid|malid|doubanid"
   @attr Regex.compile!(
           ~S/(<torznab:attr\s+name="(?:/ <> @id_names <> ~S/)"\s+value=")(\d+)(")/,
           "i"
         )
+  # The key with or without its `id` suffix (`"tmdb": 123`, `"tvdb_id": 123`).
   @json Regex.compile!(
-          ~S/("(?:tmdb|tvdb|tvmaze|anilist|mal|rage|tvrage|douban)_?id"\s*:\s*"?)(\d+)/,
+          ~S/("(?:tmdb|tvdb|tvmaze|anilist|mal|rage|tvrage|douban)(?:_?id)?"\s*:\s*"?)(\d+)/,
           "i"
         )
 
@@ -47,7 +50,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Ids do
         acc
         |> put_all(@hex, text, fn h -> {String.downcase(h), standin_hex(h)} end)
         |> put_all(@base32, text, fn h -> {String.downcase(h), standin_base32(h)} end)
-        |> put_all(@imdb, text, fn id -> {id, standin_imdb(id)} end)
+        |> put_all(@imdb, text, fn id -> {String.downcase(id), standin_imdb(id)} end)
         |> put_numeric(@attr, text)
         |> put_numeric(@json, text)
     end
@@ -73,7 +76,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Ids do
     text
     |> then(&Regex.replace(@hex, &1, fn h -> cased(h, Map.get(ids, String.downcase(h))) end))
     |> then(&Regex.replace(@base32, &1, fn h -> cased(h, Map.get(ids, String.downcase(h))) end))
-    |> then(&Regex.replace(@imdb, &1, fn id -> Map.get(ids, id, id) end))
+    |> then(&Regex.replace(@imdb, &1, fn id -> cased(id, Map.get(ids, String.downcase(id))) end))
     |> then(&Regex.replace(@attr, &1, fn _, a, d, b -> a <> Map.get(ids, d, d) <> b end))
     |> then(&Regex.replace(@json, &1, fn _, a, d -> a <> Map.get(ids, d, d) end))
   end
@@ -130,7 +133,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber.Ids do
   # past every issued one. It stays a 9-digit number because Prowlarr stores an
   # IMDb id as a 32-bit int: `tt99` and 8 digits would overflow it, the wasm
   # engine would drop the id, and the stand-in would change what it parses.
-  defp standin_imdb("tt" <> digits), do: "tt2" <> digits_from("imdb", digits, 8)
+  defp standin_imdb(<<_tt::binary-size(2), digits::binary>>),
+    do: "tt2" <> digits_from("imdb", digits, 8)
 
   # TMDB, TVDB, TVMaze and AniList ids are in the low millions at most, so
   # 2,000,000,000 to 2,099,999,999 has never been issued, and it is still below
