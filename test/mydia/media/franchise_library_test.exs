@@ -66,6 +66,14 @@ defmodule Mydia.Media.FranchiseLibraryTest do
     end)
   end
 
+  # A franchise whose siblings all carry the pointer locally. The collection is
+  # always fetched, so it needs a stub; Bypass fails the test on an unstubbed
+  # request.
+  defp stub_franchise(bypass, tmdb_id, collection_id) do
+    stub_movie(bypass, tmdb_id, collection_id)
+    stub_collection(bypass, collection_id, [tmdb_id])
+  end
+
   defp sibling(tmdb_id, collection_id, attrs) do
     metadata =
       %{
@@ -103,19 +111,59 @@ defmodule Mydia.Media.FranchiseLibraryTest do
     assert FranchiseLibrary.library_for(nil) == nil
   end
 
-  test "a local sibling with a pointer decides without fetching the collection",
+  test "pointerless siblings found only through the parts outvote a pointer-bearing one",
+       %{bypass: bypass, config: config} do
+    cid = System.unique_integer([:positive])
+    id = tmdb_id()
+    old_a = tmdb_id()
+    old_b = tmdb_id()
+    recent = tmdb_id()
+    stub_movie(bypass, id, cid)
+    stub_collection(bypass, cid, [id, old_a, old_b, recent])
+    x = library_path_fixture(%{type: "movies"})
+    y = library_path_fixture(%{type: "movies"})
+    a = sibling(old_a, nil, %{library_path_id: x.id})
+    b = sibling(old_b, nil, %{library_path_id: x.id})
+    sibling(recent, cid, %{library_path_id: y.id})
+
+    assert FranchiseLibrary.library_for(id, config) == x.id
+
+    for item <- [a, b] do
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).metadata.collection_id == cid
+    end
+  end
+
+  test "a failed collection fetch votes on the local siblings alone",
        %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
     stub_movie(bypass, id, cid)
+
+    Bypass.stub(bypass, "GET", "/tmdb/collections/#{cid}", fn conn ->
+      Plug.Conn.resp(conn, 500, "boom")
+    end)
+
     lib = library_path_fixture(%{type: "movies"})
     sibling(tmdb_id(), cid, %{library_path_id: lib.id})
 
-    # No collection stub: a request to it would fail the test via Bypass.
-    assert FranchiseLibrary.library_for(id, config) == lib.id
+    ExUnit.CaptureLog.capture_log(fn ->
+      assert FranchiseLibrary.library_for(id, config) == lib.id
+    end)
   end
 
-  test "falls back to the collection parts and backfills the pointer",
+  test "a raise anywhere in the lookup returns nil" do
+    # HTTP.new_request/1 raises on a config without a base URL.
+    config = %{type: :metadata_relay, base_url: nil, options: %{language: "en-US"}}
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert FranchiseLibrary.library_for(tmdb_id(), config) == nil
+      end)
+
+    assert log =~ "Franchise library lookup raised"
+  end
+
+  test "finds siblings through the collection parts and backfills the pointer",
        %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
@@ -134,7 +182,7 @@ defmodule Mydia.Media.FranchiseLibraryTest do
   test "the library holding most siblings wins", %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
-    stub_movie(bypass, id, cid)
+    stub_franchise(bypass, id, cid)
     a = library_path_fixture(%{type: "movies"})
     b = library_path_fixture(%{type: "movies"})
     sibling(tmdb_id(), cid, %{library_path_id: a.id})
@@ -147,7 +195,7 @@ defmodule Mydia.Media.FranchiseLibraryTest do
   test "a tie returns nil", %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
-    stub_movie(bypass, id, cid)
+    stub_franchise(bypass, id, cid)
     a = library_path_fixture(%{type: "movies"})
     b = library_path_fixture(%{type: "movies"})
     sibling(tmdb_id(), cid, %{library_path_id: a.id})
@@ -160,7 +208,7 @@ defmodule Mydia.Media.FranchiseLibraryTest do
        %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
-    stub_movie(bypass, id, cid)
+    stub_franchise(bypass, id, cid)
     lib = library_path_fixture(%{type: "movies"})
     owned = sibling(tmdb_id(), cid, %{})
     media_file_fixture(%{media_item_id: owned.id, library_path_id: lib.id})
@@ -172,7 +220,7 @@ defmodule Mydia.Media.FranchiseLibraryTest do
        %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])
     id = tmdb_id()
-    stub_movie(bypass, id, cid)
+    stub_franchise(bypass, id, cid)
     default = library_path_fixture(%{type: "movies"})
     Mydia.Settings.set_default_library(default, :movies)
     sibling(tmdb_id(), cid, %{})
@@ -184,12 +232,19 @@ defmodule Mydia.Media.FranchiseLibraryTest do
     id = tmdb_id()
     on_exit(fn -> Cache.delete("fetch_by_ref:tmdb:#{id}:movie:en-US::official") end)
 
+    test_pid = self()
+
     Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+      send(test_pid, :relay_hit)
       Plug.Conn.resp(conn, 500, "boom")
     end)
 
     ExUnit.CaptureLog.capture_log(fn ->
       assert FranchiseLibrary.library_for(id, config) == nil
     end)
+
+    # No retries: a hung relay must not hold an add dialog for minutes.
+    assert_received :relay_hit
+    refute_received :relay_hit
   end
 end
