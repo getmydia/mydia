@@ -146,15 +146,22 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       <div
         class={[
           "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
-          (@result.seeders || 0) >= 50 && "bg-success/20 text-success",
-          (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 &&
-            "bg-warning/20 text-warning",
-          (@result.seeders || 0) < 10 && "bg-base-300 text-base-content/70"
+          seeder_tone(@result.seeders) == :high && "bg-success/20 text-success",
+          seeder_tone(@result.seeders) == :mid && "bg-warning/20 text-warning",
+          seeder_tone(@result.seeders) in [:low, :none] && "bg-base-300 text-base-content/70"
         ]}
-        title={ngettext("%{count} seeder", "%{count} seeders", @result.seeders || 0)}
+        title={
+          if is_nil(@result.seeders),
+            do: gettext("No seeder count (Usenet)"),
+            else: ngettext("%{count} seeder", "%{count} seeders", @result.seeders)
+        }
       >
-        <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-        {@result.seeders || 0}
+        <%= if is_nil(@result.seeders) do %>
+          —
+        <% else %>
+          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
+          {@result.seeders}
+        <% end %>
       </div>
     <% end %>
     <%!-- Main content (title + badges) --%>
@@ -186,12 +193,17 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <%!-- Seeders badge (its own column from lg) --%>
         <span class={[
           "badge badge-sm lg:hidden",
-          (@result.seeders || 0) >= 50 && "badge-success",
-          (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 && "badge-warning",
-          (@result.seeders || 0) < 10 && "badge-error badge-outline"
+          seeder_tone(@result.seeders) == :high && "badge-success",
+          seeder_tone(@result.seeders) == :mid && "badge-warning",
+          seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
+          seeder_tone(@result.seeders) == :none && "badge-ghost"
         ]}>
-          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-          {@result.seeders || 0}
+          <%= if is_nil(@result.seeders) do %>
+            —
+          <% else %>
+            <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
+            {@result.seeders}
+          <% end %>
         </span>
         <%!-- Indexer badge (its own column from lg) --%>
         <span class="lg:hidden">
@@ -273,11 +285,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     <div id={"#{@id}-seeds"} class="hidden self-center lg:block">
       <span class={[
         "badge badge-sm",
-        (@result.seeders || 0) >= 50 && "badge-success",
-        (@result.seeders || 0) >= 10 && (@result.seeders || 0) < 50 && "badge-warning",
-        (@result.seeders || 0) < 10 && "badge-error badge-outline"
+        seeder_tone(@result.seeders) == :high && "badge-success",
+        seeder_tone(@result.seeders) == :mid && "badge-warning",
+        seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
+        seeder_tone(@result.seeders) == :none && "badge-ghost"
       ]}>
-        <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />{@result.seeders || 0}
+        <%= if is_nil(@result.seeders) do %>
+          —
+        <% else %>
+          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />{@result.seeders}
+        <% end %>
       </span>
     </div>
     <div id={"#{@id}-age"} class="hidden self-center text-sm text-base-content/70 lg:block">
@@ -349,6 +366,13 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     </div>
     """
   end
+
+  # Colour band for a seeder count. nil means the release has no seeder concept
+  # (Usenet), which is not the same as a measured 0.
+  defp seeder_tone(nil), do: :none
+  defp seeder_tone(n) when n >= 50, do: :high
+  defp seeder_tone(n) when n >= 10, do: :mid
+  defp seeder_tone(_n), do: :low
 
   # Only a DateTime has a relative age here; a missing or naive timestamp
   # renders nothing rather than a guess.

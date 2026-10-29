@@ -410,6 +410,15 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Score breakdown"
       assert html =~ ~s(id="search-result-00000-1-audio")
 
+      label =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="quality"]))
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert label == "Score"
+
       # The ring shows the ranker's own total for this row, not a second score.
       opts =
         MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(%{
@@ -473,6 +482,19 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
 
       assert html =~ ~s(id="search-result-00000-1")
+    end
+
+    test "nil seeders render a placeholder, not 0, in the seeds cell" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
+
+      cell =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("[id$='-seeds']")
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert cell == "—"
     end
 
     test "a release returned by several trackers names the winner and counts the rest" do
