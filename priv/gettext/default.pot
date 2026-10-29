@@ -2332,14 +2332,14 @@ msgstr ""
 msgid "%{title} deleted from disk."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:782
-#: lib/mydia_web/live/discover_live/index.ex:765
+#: lib/mydia_web/live/dashboard_live/index.ex:795
+#: lib/mydia_web/live/discover_live/index.ex:766
 #, elixir-autogen, elixir-format
 msgid "%{title} has been added to your library"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:815
-#: lib/mydia_web/live/discover_live/index.ex:797
+#: lib/mydia_web/live/dashboard_live/index.ex:828
+#: lib/mydia_web/live/discover_live/index.ex:798
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:215
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:316
 #, elixir-autogen, elixir-format
@@ -2366,8 +2366,8 @@ msgstr ""
 msgid "%{title} removed, but %{files} could not be deleted from disk. Check permissions and remove them manually."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:891
-#: lib/mydia_web/live/discover_live/index.ex:860
+#: lib/mydia_web/live/dashboard_live/index.ex:904
+#: lib/mydia_web/live/discover_live/index.ex:861
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:309
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:244
 #, elixir-autogen, elixir-format
@@ -4923,13 +4923,13 @@ msgstr ""
 msgid "Failed to add to library: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:812
+#: lib/mydia_web/live/discover_live/index.ex:813
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{errors}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:417
-#: lib/mydia_web/live/dashboard_live/index.ex:830
+#: lib/mydia_web/live/dashboard_live/index.ex:843
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{reason}"
 msgstr ""
@@ -4984,8 +4984,8 @@ msgstr ""
 msgid "Failed to dismiss download"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:841
-#: lib/mydia_web/live/discover_live/index.ex:823
+#: lib/mydia_web/live/dashboard_live/index.ex:854
+#: lib/mydia_web/live/discover_live/index.ex:824
 #, elixir-autogen, elixir-format
 msgid "Failed to fetch metadata: %{reason}"
 msgstr ""
