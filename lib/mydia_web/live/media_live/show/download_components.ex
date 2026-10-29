@@ -87,6 +87,9 @@ defmodule MydiaWeb.MediaLive.Show.DownloadComponents do
           <p :for={item <- @visible} class="text-sm font-mono truncate opacity-80">
             {item.download.title}
           </p>
+          <span :if={@hidden_count > 0} class="badge badge-sm badge-ghost">
+            {gettext("+%{count} more", count: @hidden_count)}
+          </span>
         <% else %>
           <ul
             id="active-download-items"

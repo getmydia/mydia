@@ -26,8 +26,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :next_episode, :map, default: nil
   attr :next_episode_state, :atom, default: nil
   attr :auto_searching, :boolean, required: true
-  attr :downloads_with_status, :list, required: true
-  attr :quality_profiles, :list, required: true
   attr :default_quality_profile_name, :string, default: nil
   attr :target_library, :map, default: nil
   attr :target_reason, :atom, default: nil
@@ -134,7 +132,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             type="button"
             phx-click="auto_search_download"
             class="btn btn-primary"
-            disabled={@auto_searching || !can_auto_search?(@media_item, @downloads_with_status)}
+            disabled={@auto_searching || !can_auto_search?(@media_item)}
           >
             <%= if @auto_searching do %>
               <span class="loading loading-spinner loading-sm"></span> {gettext("Searching...")}

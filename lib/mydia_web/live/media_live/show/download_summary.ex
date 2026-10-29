@@ -12,8 +12,9 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummary do
   viewer's side, so they are left out.
 
   A season pack (`episode_id` nil, `metadata.season_pack` with a
-  `season_number`) covers every episode of its season that has no file yet.
-  An episode's own download wins over a pack that also covers it.
+  `season_number`) covers the episodes listed in its `metadata.episode_ids`,
+  or the season's aired episodes when it lists none. An episode's own
+  download wins over a pack that also covers it.
   """
 
   alias MydiaWeb.MediaLive.Show.DownloadSummaryItem, as: Item
@@ -107,7 +108,9 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummary do
   defp pack_season(_download), do: nil
 
   # Direct downloads are written last so they win over a pack for the same
-  # episode.
+  # episode. File state is deliberately not consulted: many handlers reload
+  # the media item without rebuilding this summary, so readers check an
+  # episode's files themselves.
   defp by_episode(items, episodes) do
     {direct, packs} = Enum.split_with(items, &(&1.kind == :episode))
 
@@ -115,7 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummary do
       for %Item{kind: :season_pack} = pack <- packs,
           episode <- episodes,
           episode.season_number == pack.season_number,
-          not has_files?(episode),
+          pack_covers?(pack.download, episode),
           do: {episode.id, pack.download}
 
     direct_entries =
@@ -124,8 +127,19 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummary do
     Map.new(pack_entries ++ direct_entries)
   end
 
-  defp has_files?(%{media_files: [_ | _]}), do: true
-  defp has_files?(_episode), do: false
+  # The grab records the episodes a pack was taken for in `episode_ids`
+  # (see Mydia.Downloads.Queue.Duplicates). Manual grabs and older rows carry
+  # none; for those the pack covers the season's aired episodes, since an
+  # unaired one cannot be in it.
+  defp pack_covers?(%{metadata: metadata}, episode) do
+    case metadata["episode_ids"] || metadata[:episode_ids] do
+      [_ | _] = ids -> episode.id in ids
+      _ -> aired?(episode)
+    end
+  end
+
+  defp aired?(%{air_date: %Date{} = date}), do: Date.compare(date, Date.utc_today()) != :gt
+  defp aired?(_episode), do: false
 
   # Weighted by size when every download reports one, so a 40 GB pack at 10%
   # is not averaged up by a 1 GB episode at 100%. Otherwise a plain mean.
@@ -151,11 +165,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummary do
     end
   end
 
-  # The slowest download decides when the batch is done.
+  # The slowest download decides when the batch is done, so one download
+  # without an estimate leaves the batch without one.
   defp eta(active) do
-    active
-    |> Enum.map(& &1.eta)
-    |> Enum.filter(&(is_integer(&1) and &1 > 0))
-    |> Enum.max(fn -> nil end)
+    etas = Enum.map(active, & &1.eta)
+    if Enum.all?(etas, &(is_integer(&1) and &1 > 0)), do: Enum.max(etas)
   end
 end

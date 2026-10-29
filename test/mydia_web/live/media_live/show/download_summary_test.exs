@@ -1,7 +1,6 @@
 defmodule MydiaWeb.MediaLive.Show.DownloadSummaryTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
   alias MydiaWeb.MediaLive.Show.DownloadSummary
 
@@ -22,8 +21,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummaryTest do
     )
   end
 
-  defp episode(id, season, number, files \\ []) do
-    %Episode{id: id, season_number: season, episode_number: number, media_files: files}
+  defp episode(id, season, number, air_date \\ ~D[2024-01-01]) do
+    %Episode{id: id, season_number: season, episode_number: number, air_date: air_date}
+  end
+
+  defp pack(season, extra \\ %{}) do
+    download(%{metadata: Map.merge(%{"season_pack" => true, "season_number" => season}, extra)})
   end
 
   test "returns nil when nothing is actively downloading" do
@@ -68,20 +71,29 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummaryTest do
            ]
   end
 
-  test "a season pack covers its season's episodes that have no file" do
+  test "a season pack without episode_ids covers its season's aired episodes" do
     episodes = [
-      episode("e1", 3, 1, [%MediaFile{id: "f1"}]),
+      episode("e1", 3, 1),
       episode("e2", 3, 2),
-      episode("e3", 4, 1)
+      episode("e3", 3, 3, Date.add(Date.utc_today(), 7)),
+      episode("e4", 3, 4, nil),
+      episode("e5", 4, 1)
     ]
 
-    pack = download(%{metadata: %{"season_pack" => true, "season_number" => 3}})
+    pack = pack(3)
     summary = DownloadSummary.build([pack], episodes)
 
-    assert summary.by_episode == %{"e2" => pack}
+    assert summary.by_episode == %{"e1" => pack, "e2" => pack}
     assert DownloadSummary.for_episode(summary, "e2") == pack
-    assert DownloadSummary.for_episode(summary, "e3") == nil
+    assert DownloadSummary.for_episode(summary, "e5") == nil
     assert DownloadSummary.for_episode(nil, "e2") == nil
+  end
+
+  test "a season pack with episode_ids covers only those episodes" do
+    episodes = [episode("e1", 3, 1), episode("e2", 3, 2), episode("e3", 3, 3)]
+    pack = pack(3, %{"episode_ids" => ["e2", "e3"]})
+
+    assert Map.keys(DownloadSummary.build([pack], episodes).by_episode) == ["e2", "e3"]
   end
 
   test "an episode's own download wins over a pack covering it" do
@@ -126,6 +138,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummaryTest do
   test "the eta is the slowest download's" do
     summary = DownloadSummary.build([download(%{eta: 60}), download(%{eta: 600})], [])
     assert summary.eta == 600
+  end
+
+  test "there is no eta when any download lacks one" do
+    assert DownloadSummary.build([download(%{eta: 60}), download(%{eta: nil})], []).eta == nil
   end
 
   test "tolerates episodes that are not loaded" do

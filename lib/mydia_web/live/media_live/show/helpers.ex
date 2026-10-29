@@ -425,16 +425,10 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
 
   # Auto search helper functions
 
-  def can_auto_search?(%Media.MediaItem{} = media_item, _downloads_with_status) do
+  def can_auto_search?(%Media.MediaItem{} = media_item) do
     # Always allow auto search for supported media types
     # Users should be able to re-search even if files exist or downloads are in history
     media_item.type in ["movie", "tv_show"]
-  end
-
-  def has_active_download?(downloads_with_status) do
-    Enum.any?(downloads_with_status, fn d ->
-      d.status in ["downloading", "checking"]
-    end)
   end
 
   def episode_in_season?(scope, episode_id, season_num) do
