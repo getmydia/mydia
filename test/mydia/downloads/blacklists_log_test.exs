@@ -40,4 +40,29 @@ defmodule Mydia.Downloads.BlacklistsLogTest do
     assert log =~ "download.php?id=3"
     refute log =~ "QUIETORCHARDSECRET"
   end
+
+  # A ban kept under the legacy title-and-size key has no row for the result's
+  # URL guid, so the log names the key a lookup will find.
+  test "logs the legacy key when that is the one the ban matched" do
+    result = %SearchResult{
+      title: "Lantern Harbor S02E03 720p HDTV",
+      size: 2_147_483_648,
+      seeders: 0,
+      leechers: 0,
+      download_url: "https://tracker.example/download.php?id=9",
+      indexer: "LanternTracker",
+      guid: "https://tracker.example/download.php?id=9"
+    }
+
+    [primary, legacy] = Blacklists.release_guids(result)
+    {:ok, _} = Blacklists.add(result.indexer, legacy, result.title, "stalled")
+
+    log =
+      capture_log([level: :info, metadata: [:guid, :matched_by]], fn ->
+        assert [] = Blacklists.reject_blacklisted([result])
+      end)
+
+    assert log =~ "guid=#{legacy}"
+    refute log =~ primary
+  end
 end

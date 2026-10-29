@@ -370,12 +370,12 @@ defmodule Mydia.Downloads.Blacklists do
         nil ->
           true
 
-        matched_by ->
+        {matched_by, guid} ->
           Logger.info(
             "Rejected blacklisted release",
             [
               indexer: Map.get(result, :indexer),
-              guid: keys |> primary_guid() |> Helpers.redact_url(),
+              guid: Helpers.redact_url(guid),
               title: Map.get(result, :title),
               matched_by: matched_by
             ] ++ log_context
@@ -449,11 +449,18 @@ defmodule Mydia.Downloads.Blacklists do
     end
   end
 
+  # Names the key that hit a ban, so the logged guid is one a lookup finds:
+  # a ban recorded under the legacy title-and-size key has no row for the
+  # result's primary guid.
   defp match_ban(keys, hash, banned_keys, banned_hashes) do
-    cond do
-      Enum.any?(keys, &MapSet.member?(banned_keys, &1)) -> :key
-      hash && MapSet.member?(banned_hashes, hash) -> :info_hash
-      true -> nil
+    case Enum.find(keys, &MapSet.member?(banned_keys, &1)) do
+      {_indexer, guid} ->
+        {:key, guid}
+
+      nil ->
+        if hash && MapSet.member?(banned_hashes, hash),
+          do: {:info_hash, primary_guid(keys)},
+          else: nil
     end
   end
 
