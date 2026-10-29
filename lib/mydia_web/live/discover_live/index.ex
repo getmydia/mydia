@@ -675,12 +675,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         tmdb_id: Ref.tmdb_id(ref)
       )
 
-    opts =
-      defaults
-      |> AddDefaults.to_add_opts()
-      |> Keyword.put(:search_on_add, defaults.search_on_add)
-
-    add_with_opts(ref, media_type, opts, socket)
+    add_with_opts(ref, media_type, AddDefaults.to_add_opts_with_search(defaults), socket)
   end
 
   def handle_info({:add_media_to_library_with_opts, ref, media_type, opts}, socket) do

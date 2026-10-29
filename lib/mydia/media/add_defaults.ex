@@ -153,12 +153,12 @@ defmodule Mydia.Media.AddDefaults do
       fn -> default_library_id(kind_for(media_type)) end,
       fn -> fallback_library_id(media_type) end
     ]
-    |> Enum.find_value(fn layer ->
-      case layer.() do
-        nil -> nil
-        id -> if library_path_valid?(id, media_type), do: id
-      end
-    end)
+    |> Enum.find_value(&valid_layer(&1, media_type))
+  end
+
+  defp valid_layer(layer, media_type) do
+    id = layer.()
+    if id && library_path_valid?(id, media_type), do: id
   end
 
   defp franchise_library(opts, :movie) do

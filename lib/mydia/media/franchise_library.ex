@@ -34,6 +34,7 @@ defmodule Mydia.Media.FranchiseLibrary do
   alias Mydia.Library.TargetResolver
   alias Mydia.Media.{Franchises, MediaItem}
   alias Mydia.Metadata.Provider.Error
+  alias Mydia.Metadata.Ref
 
   @voting_reasons [:explicit, :existing_files]
 
@@ -81,6 +82,25 @@ defmodule Mydia.Media.FranchiseLibrary do
   end
 
   def library_for(_tmdb_id, _config), do: nil
+
+  @doc """
+  Puts the franchise's library into add `opts` when they name no library.
+
+  For add paths that otherwise leave the library to import-time resolution,
+  which knows nothing about franchises. Only a movie with a TMDB ref is looked
+  up; anything else, or a lookup with no answer, returns `opts` unchanged.
+  """
+  @spec fill_opts(keyword(), term(), atom()) :: keyword()
+  def fill_opts(opts, ref, :movie) do
+    with nil <- opts[:library_path_id],
+         id when is_binary(id) <- library_for(Ref.tmdb_id(ref)) do
+      Keyword.put(opts, :library_path_id, id)
+    else
+      _ -> opts
+    end
+  end
+
+  def fill_opts(opts, _ref, _media_type), do: opts
 
   defp lookup(tmdb_id, config) do
     with {:ok, collection_id} <- collection_id_for(tmdb_id, config),
@@ -143,14 +163,7 @@ defmodule Mydia.Media.FranchiseLibrary do
   defp remote_siblings(tmdb_id, collection_id, config) do
     case Metadata.fetch_collection_cached(config, collection_id) do
       {:ok, collection} ->
-        ids =
-          collection.parts
-          |> Enum.flat_map(fn part ->
-            case Integer.parse(part.provider_id || "") do
-              {id, ""} when id != tmdb_id -> [id]
-              _ -> []
-            end
-          end)
+        ids = collection.parts |> Enum.flat_map(&part_tmdb_id/1) |> List.delete(tmdb_id)
 
         MediaItem
         |> where([m], m.type == "movie" and m.tmdb_id in ^ids)
@@ -166,6 +179,13 @@ defmodule Mydia.Media.FranchiseLibrary do
         )
 
         []
+    end
+  end
+
+  defp part_tmdb_id(part) do
+    case Integer.parse(part.provider_id || "") do
+      {id, ""} -> [id]
+      _ -> []
     end
   end
 
