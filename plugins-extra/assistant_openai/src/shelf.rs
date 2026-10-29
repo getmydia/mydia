@@ -406,7 +406,7 @@ pub fn summarize(history: &Value) -> Vec<String> {
             "in progress"
         };
         lines.push(match row["year"].as_i64() {
-            Some(year) => format!("{title} ({year}), {kind}, {status}"),
+            Some(year) => format!("{} ({year}), {kind}, {status}", bare_title(title)),
             None => format!("{title}, {kind}, {status}"),
         });
         if lines.len() == MAX_HISTORY_LINES {
@@ -417,6 +417,7 @@ pub fn summarize(history: &Value) -> Vec<String> {
 }
 
 /// `Title (year), movie|show`, the shape the model sees for feedback titles.
+/// A TVDB name that already ends in its year carries it once.
 fn feedback_line(f: &ShelfFeedback) -> String {
     let title = clip(&f.title, 200);
     let kind = if f.item.media_type == "movie" {
@@ -425,7 +426,7 @@ fn feedback_line(f: &ShelfFeedback) -> String {
         "show"
     };
     match f.year {
-        Some(year) => format!("{title} ({year}), {kind}"),
+        Some(year) => format!("{} ({year}), {kind}", bare_title(&title)),
         None => format!("{title}, {kind}"),
     }
 }
@@ -1363,6 +1364,33 @@ mod tests {
         assert!(msg.contains("Liked (seen outside Mydia):\nEmber Tide (2022), show"));
         assert!(msg.contains("Added from earlier picks:\nLantern Hill (2017), movie"));
         assert!(msg.contains("Rejected:\nGlass Orchard, movie"));
+    }
+
+    #[test]
+    fn a_title_that_already_carries_its_year_shows_it_once() {
+        let history = json!([
+            {"title": "Glass Harbor (2025)", "year": 2025, "type": "episode", "season": 1, "episode": 2, "status": "watched"},
+            {"title": "Ember Tide (2024)", "year": null, "type": "movie", "status": "watched"}
+        ]);
+        assert_eq!(
+            summarize(&history),
+            vec![
+                "Glass Harbor (2025), show, watched",
+                // With no year to append, the name keeps its own.
+                "Ember Tide (2024), movie, watched"
+            ]
+        );
+
+        let feedback = vec![fb(
+            "Glass Harbor (2025)",
+            Some(2025),
+            "tv_show",
+            ShelfRating::Up,
+            Some(ShelfVia::Seen),
+        )];
+        let msg = user_message(&[], &feedback, 12);
+        assert!(msg.contains("Glass Harbor (2025), show"));
+        assert!(!msg.contains("(2025) (2025)"));
     }
 
     #[test]
