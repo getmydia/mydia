@@ -1215,6 +1215,66 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     assert :sys.get_state(view.pid).socket.assigns.sort_by == :quality
   end
 
+  # The min-seeders slider is a display filter. Progress that arrives while it
+  # is raised must still keep the low-seeder releases in the pool, or lowering
+  # the slider (or clearing filters) can never bring them back.
+  test "raising min seeders mid-search hides rows without dropping them", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    low = %{search_result("Glass.Harbor.2019.720p.HDTV.x264") | seeders: 3}
+    high = %{search_result("Glass.Harbor.2019.1080p.WEB-DL.x264") | seeders: 80}
+
+    progress = %IndexerProgress{
+      indexer: "slow-indexer",
+      indexer_id: indexer.id,
+      status: :ok,
+      results: [high],
+      result_count: 1,
+      duration_ms: 700,
+      completed: 1,
+      total: 2
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), progress})
+    render(view)
+
+    view
+    |> element("#manual-search-filter-form")
+    |> render_change(%{"min_seeders" => "20"})
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %{progress | results: [low], completed: 2, total: 2}}
+    )
+
+    render(view)
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
+    refute has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+
+    view
+    |> element("#manual-search-filter-form")
+    |> render_change(%{"min_seeders" => "0"})
+
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+
+    view
+    |> element("#manual-search-filter-form")
+    |> render_change(%{"min_seeders" => "20"})
+
+    refute has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+
+    view |> element("#manual-search-clear-filters") |> render_click()
+
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "HDTV.x264")
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
+  end
+
   # Every test above injects %IndexerProgress{} directly and never runs the
   # real Indexers.search_all/2 fan-out — the exact gap that let the nil-field
   # crash ship. This test drives the real fan-out through a Bypass-backed

@@ -75,7 +75,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
             media_item.title
         end
 
-      min_seeders = socket.assigns.min_seeders
       lv = self()
       search_id = socket.assigns.search_id + 1
 
@@ -108,7 +107,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:prior_attempts_checked, MapSet.new())
        |> stream(:search_results, [], reset: true)
        |> start_async(:search, fn ->
-         perform_search(search_query, min_seeders, lv, search_id)
+         perform_search(search_query, 0, lv, search_id)
        end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -172,7 +171,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     search_query =
       "#{media_item.title} S#{String.pad_leading(to_string(episode.season_number), 2, "0")}E#{String.pad_leading(to_string(episode.episode_number), 2, "0")}"
 
-    min_seeders = socket.assigns.min_seeders
     lv = self()
     search_id = socket.assigns.search_id + 1
 
@@ -207,7 +205,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
-       perform_search(search_query, min_seeders, lv, search_id)
+       perform_search(search_query, 0, lv, search_id)
      end)}
   end
 
@@ -218,7 +216,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     search_query =
       "#{media_item.title} S#{String.pad_leading(to_string(season_num), 2, "0")}"
 
-    min_seeders = socket.assigns.min_seeders
     lv = self()
     search_id = socket.assigns.search_id + 1
 
@@ -245,7 +242,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
-       perform_search(search_query, min_seeders, lv, search_id)
+       perform_search(search_query, 0, lv, search_id)
      end)}
   end
 
@@ -333,7 +330,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       retest_paused? = Keyword.get(opts, :retest_paused, false)
       query = socket.assigns.manual_search_query
-      min_seeders = socket.assigns.min_seeders
       lv = self()
       search_id = socket.assigns.search_id
 
@@ -357,7 +353,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
            send(lv, {:paused_retest, search_id, result})
          end
 
-         perform_search(query, min_seeders, lv, search_id, [indexer_id])
+         # min_seeders is 0, as on every manual search: the slider filters
+         # at display time, so the pool must keep low-seeder releases.
+         perform_search(query, 0, lv, search_id, [indexer_id])
        end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}

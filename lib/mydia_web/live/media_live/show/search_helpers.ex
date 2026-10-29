@@ -189,12 +189,13 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
         Map.put(acc, result.download_url, result)
       end)
 
+    # min_seeders: 0 keeps every release in :raw_search_results. The slider is
+    # a display filter (filter_search_results/2 applies it), so a row hidden by
+    # it must come back when the slider is lowered or the filters are cleared.
     ranked =
       raw_pool
       |> Map.values()
-      |> Indexers.rank_and_dedupe(socket.assigns.manual_search_query,
-        min_seeders: socket.assigns.min_seeders
-      )
+      |> Indexers.rank_and_dedupe(socket.assigns.manual_search_query, min_seeders: 0)
 
     ranking_opts = build_manual_ranking_opts(socket.assigns)
 
