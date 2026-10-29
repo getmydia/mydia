@@ -155,7 +155,7 @@ defmodule MydiaWeb.SegmentedControl do
         @icon_only && "btn-square",
         !@icon_only && "gap-1.5",
         @selected? && "btn-primary",
-        !@selected? && "dark:hover:bg-base-300",
+        !@selected? && "border-base-content/20 dark:hover:bg-base-300",
         !@icon_only && @option[:class]
       ]}
       phx-click={@event}
