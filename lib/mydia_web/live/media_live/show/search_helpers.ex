@@ -158,7 +158,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Two collections are kept deliberately, and must NOT be collapsed into one:
 
     - `:indexer_raw_results` - every release seen so far this search, keyed by
-      `download_url`, UNTRUNCATED. This is what future progress messages fold
+      `{download_url, indexer}` (two trackers can return the same magnet), UNTRUNCATED. This is what future progress messages fold
       new results onto.
     - `:raw_search_results` - the ranked-and-deduplicated (and therefore
       truncated-to-max_results) set, matching what `handle_search_async/2`
@@ -186,7 +186,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
     raw_pool =
       Enum.reduce(progress.results, socket.assigns.indexer_raw_results, fn result, acc ->
-        Map.put(acc, result.download_url, result)
+        Map.put(acc, {result.download_url, result.indexer}, result)
       end)
 
     # min_seeders: 0 keeps every release in :raw_search_results. The slider is

@@ -40,6 +40,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
 
   attr :sort_by, :atom, required: true
 
+  attr :profile?, :boolean, default: true
+
   @doc "Column labels above the results from `lg`; the sortable ones sort."
   def results_header(assigns) do
     assigns = assign(assigns, :grid, @row_grid)
@@ -52,7 +54,11 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         @grid
       ]}
     >
-      <.sort_header value={:quality} sort_by={@sort_by} label={gettext("Score")} />
+      <.sort_header
+        value={:quality}
+        sort_by={@sort_by}
+        label={if(@profile?, do: gettext("Score"), else: gettext("Seeds"))}
+      />
       <span>{gettext("Release")}</span>
       <.sort_header value={:size} sort_by={@sort_by} label={gettext("Size")} />
       <.sort_header value={:seeders} sort_by={@sort_by} label={gettext("Seeds")} />
@@ -148,7 +154,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         title={ngettext("%{count} seeder", "%{count} seeders", @result.seeders || 0)}
       >
         <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-        {@result.seeders}
+        {@result.seeders || 0}
       </div>
     <% end %>
     <%!-- Main content (title + badges) --%>
@@ -185,7 +191,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           (@result.seeders || 0) < 10 && "badge-error badge-outline"
         ]}>
           <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-          {@result.seeders}
+          {@result.seeders || 0}
         </span>
         <%!-- Indexer badge (its own column from lg) --%>
         <span class="lg:hidden">

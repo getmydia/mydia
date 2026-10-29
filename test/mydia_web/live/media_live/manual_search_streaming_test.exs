@@ -1149,6 +1149,50 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     assert assigns.min_seeders == 0
   end
 
+  test "two trackers returning the same download url both survive in the pool", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    shared = search_result("Glass.Harbor.2019.1080p.WEB-DL.x264")
+    nyaa = %{shared | indexer: "Nyaa"}
+    eztv = %{shared | indexer: "EZTV"}
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [nyaa, eztv],
+         result_count: 2,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="indexer[]"][value="Nyaa"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#manual-search-filter-form input[name="indexer[]"][value="EZTV"])
+           )
+
+    assigns = :sys.get_state(view.pid).socket.assigns
+    assert [row] = assigns.raw_search_results
+    assert Enum.sort(Mydia.Indexers.SearchResult.indexers(row)) == ["EZTV", "Nyaa"]
+  end
+
   test "the indexer filter narrows rows, shows a removable chip and survives forged values",
        %{conn: conn} do
     media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})

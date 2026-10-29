@@ -456,6 +456,19 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ ~s(id="search-result-00000-1-audio")
     end
 
+    test "the first column header reads Seeds without a quality profile" do
+      html = modal_html(%{})
+
+      label =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="quality"]))
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert label == "Seeds"
+    end
+
     test "a result with nil seeders still renders" do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
 

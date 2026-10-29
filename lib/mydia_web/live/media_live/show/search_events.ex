@@ -26,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     socket
     |> assign(:raw_search_results, [])
     # Untruncated, undeduplicated pool of every release seen so far in the
-    # current manual search, keyed by download_url. Progress messages fold
+    # current manual search, keyed by {download_url, indexer}. Progress messages fold
     # onto this (never onto :raw_search_results, which is already truncated
     # and deduplicated) so a later, weaker duplicate can never crown itself
     # over a stronger release evicted by an earlier round's truncation. See

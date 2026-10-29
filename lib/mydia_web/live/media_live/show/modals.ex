@@ -1077,7 +1077,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <% end %>
             <%!-- Results List --%>
             <%= if !@results_empty? do %>
-              <.results_header sort_by={@sort_by} />
+              <.results_header
+                sort_by={@sort_by}
+                profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
+              />
               <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
                 <li
                   :for={{id, result} <- @streams.search_results}
