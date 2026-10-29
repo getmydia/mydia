@@ -50,7 +50,10 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan.ResponseType do
   defp declared_type(nil), do: nil
 
   defp declared_type(path) when is_map(path) do
-    get_in(path, [:response, :type]) || get_in(path, ["response", "type"])
+    get_in(path, [:response, :type]) ||
+      get_in(path, [:response, "type"]) ||
+      get_in(path, ["response", :type]) ||
+      get_in(path, ["response", "type"])
   end
 
   defp to_format("xml"), do: :xml

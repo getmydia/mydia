@@ -131,6 +131,8 @@ defmodule Mydia.Indexers.Cardigann.Result.PlanTest do
 
     assert compile!(search, %{}, search_path: %{response: %{type: "json"}}).format == :json
     assert compile!(search, %{}, search_path: %{"response" => %{"type" => "xml"}}).format == :xml
+    assert compile!(search, %{}, search_path: %{response: %{"type" => "xml"}}).format == :xml
+    assert compile!(search, %{}, search_path: %{"response" => %{type: "html"}}).format == :html
     assert compile!(search, %{}, search_path: %{path: "/"}).format == nil
     assert compile!(search).format == nil
   end
