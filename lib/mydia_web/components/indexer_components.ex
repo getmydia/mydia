@@ -148,7 +148,7 @@ defmodule MydiaWeb.IndexerComponents do
               />
 
               <span class="min-w-0 flex-1 truncate font-medium">{row.indexer}</span>
-              <span class="whitespace-nowrap text-xs opacity-70">{status_label(row)}</span>
+              <span class="min-w-0 break-words text-right text-xs opacity-70">{status_label(row)}</span>
 
               <.button
                 :if={@retry_event && row.status in [:error, :timeout]}
