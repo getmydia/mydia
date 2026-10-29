@@ -213,20 +213,32 @@ fn one_wanted(v: &Value) -> Result<Wanted, String> {
 /// remake's title returns the original first, and guessing would put the wrong
 /// film on someone's Home page. One year of slack covers festival and regional
 /// release dates. A hit with fewer than `MIN_VOTES` ratings never counts.
-/// Among the rest, one whose title matches exactly wins, then the first.
+/// Among the rest, an exact title wins, then the first.
 pub fn choose(want: &Wanted, hits: &[Candidate]) -> Option<usize> {
     let fits: Vec<usize> = (0..hits.len()).filter(|&i| fits(want, &hits[i])).collect();
-    fits.iter()
-        .copied()
-        .find(|&i| same_title(&want.title, &hits[i].title))
-        .or_else(|| fits.first().copied())
+    nearest_exact(want, hits, &fits).or_else(|| fits.first().copied())
 }
 
 /// `choose` for the media type the model did not name: only an exact title
 /// counts, since the model never asked for this type.
 pub fn choose_other_type(want: &Wanted, hits: &[Candidate]) -> Option<usize> {
-    hits.iter()
-        .position(|h| fits(want, h) && same_title(&want.title, &h.title))
+    let fits: Vec<usize> = (0..hits.len()).filter(|&i| fits(want, &hits[i])).collect();
+    nearest_exact(want, hits, &fits)
+}
+
+/// The exact title among `fits` nearest the wanted year, the earlier hit on a
+/// tie. TVDB namesakes a year apart both match once their year suffix is
+/// ignored, and the listing order says nothing about which one was meant.
+fn nearest_exact(want: &Wanted, hits: &[Candidate], fits: &[usize]) -> Option<usize> {
+    fits.iter()
+        .copied()
+        .filter(|&i| same_title(&want.title, &hits[i].title))
+        .min_by_key(|&i| {
+            let off = hits[i]
+                .year
+                .map_or(i64::MAX, |y| (i64::from(y) - want.year).abs());
+            (off, i)
+        })
 }
 
 fn fits(want: &Wanted, hit: &Candidate) -> bool {
@@ -1003,6 +1015,16 @@ mod tests {
         let w = want("Glass Harbor", 2020, "tv_show");
         assert_eq!(choose(&w, &hits), Some(2));
         assert_eq!(choose_other_type(&w, &hits), Some(2));
+
+        // Namesakes a year apart both match the title; the nearer year wins
+        // whichever TVDB lists first.
+        let hits = [
+            show("Glass Harbor (2020)", 2020, 3),
+            show("Glass Harbor", 2019, 4),
+        ];
+        let w = want("Glass Harbor", 2019, "tv_show");
+        assert_eq!(choose(&w, &hits), Some(1));
+        assert_eq!(choose_other_type(&w, &hits), Some(1));
     }
 
     #[test]
