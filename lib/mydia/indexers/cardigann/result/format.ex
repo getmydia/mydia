@@ -23,7 +23,12 @@ defmodule Mydia.Indexers.Cardigann.Result.Format do
   @type value :: {:ok, String.t()} | :not_found
 
   @callback document(body :: binary(), Plan.t()) :: {:ok, doc} | {:error, term()}
-  @callback rows(doc, Rows.t()) :: [row]
+  @callback rows(doc, Rows.t()) :: [row] | {:error, term()}
   @callback raw(doc, row, Field.t(), keyword()) :: value
   @callback case_value(doc, row, Field.t(), keyword()) :: value
+
+  # What a document looks like when the row selector matched nothing, for a
+  # debug log. Only HTML has anything useful to say.
+  @callback empty_rows_diagnostics(doc) :: String.t()
+  @optional_callbacks empty_rows_diagnostics: 1
 end

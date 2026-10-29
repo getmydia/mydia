@@ -69,6 +69,12 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.JsonTest do
       assert Json.raw(doc, hd(rows), field(plan, "n")) == {:ok, "Lantern Harbor"}
       assert Json.raw(doc, hd(rows), field(plan, "h")) == {:ok, "aa"}
     end
+
+    test "a selector the response's shape cannot satisfy is an error" do
+      plan = plan(%{rows: %{selector: "data.items"}, fields: %{}})
+      assert {:error, message} = Json.rows(%{"data" => "scalar"}, plan.rows)
+      assert message =~ "does not apply to the response"
+    end
   end
 
   describe "raw/4" do

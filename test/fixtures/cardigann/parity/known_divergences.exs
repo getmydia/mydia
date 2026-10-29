@@ -67,25 +67,9 @@
     definition: "blueroms",
     query: :rss,
     kind: :field,
-    field: :leechers,
-    reason:
-      "`leechers: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
-  },
-  %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
     field: :published_at,
     reason:
       "`date: text: now` has no date filter; native parse_date(\"now\") is nil, wasm resolves now to the replay time"
-  },
-  %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
-    field: :seeders,
-    reason:
-      "`seeders: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
   },
   %{
     definition: "blueroms",
@@ -211,25 +195,9 @@
     definition: "mikan",
     query: :rss,
     kind: :field,
-    field: :category,
-    reason:
-      "`category: text: 1` is a YAML integer; native drops the field (nil), wasm maps site category 1 to 5070 (TV/Anime)"
-  },
-  %{
-    definition: "mikan",
-    query: :rss,
-    kind: :field,
     field: :guid,
     reason:
       "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's .torrent download link"
-  },
-  %{
-    definition: "mikan",
-    query: :rss,
-    kind: :field,
-    field: :leechers,
-    reason:
-      "`leechers: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
   },
   %{
     definition: "mikan",
@@ -243,14 +211,6 @@
     definition: "mikan",
     query: :rss,
     kind: :field,
-    field: :seeders,
-    reason:
-      "`seeders: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
-  },
-  %{
-    definition: "mikan",
-    query: :rss,
-    kind: :field,
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
@@ -259,33 +219,9 @@
     definition: "mikan",
     query: :tv,
     kind: :field,
-    field: :category,
-    reason:
-      "`category: text: 1` is a YAML integer; native drops the field (nil), wasm maps site category 1 to 5070 (TV/Anime)"
-  },
-  %{
-    definition: "mikan",
-    query: :tv,
-    kind: :field,
     field: :guid,
     reason:
       "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's .torrent download link"
-  },
-  %{
-    definition: "mikan",
-    query: :tv,
-    kind: :field,
-    field: :leechers,
-    reason:
-      "`leechers: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
-  },
-  %{
-    definition: "mikan",
-    query: :tv,
-    kind: :field,
-    field: :seeders,
-    reason:
-      "`seeders: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
   },
   %{
     definition: "mikan",
@@ -411,14 +347,6 @@
     definition: "pctorrent",
     query: :rss,
     kind: :field,
-    field: :leechers,
-    reason:
-      "`leechers: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
-  },
-  %{
-    definition: "pctorrent",
-    query: :rss,
-    kind: :field,
     field: :published_at,
     reason:
       "`date: text: now` has no date filter; native parse_date(\"now\") is nil, wasm resolves now to the replay time"
@@ -427,25 +355,9 @@
     definition: "pctorrent",
     query: :rss,
     kind: :field,
-    field: :seeders,
-    reason:
-      "`seeders: text: 1` is a YAML integer; native compute_text_field rejects a non-string template, so the field is dropped and defaults to 0 (wasm 1)"
-  },
-  %{
-    definition: "pctorrent",
-    query: :rss,
-    kind: :field,
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "yts",
-    query: :rss,
-    kind: :field,
-    field: :category,
-    reason:
-      "native's JSON field path ignores `case`, so \"720p\" goes through parse_integer to 720; wasm applies the case block (45) and maps it to 2040 (Movies/HD)"
   },
   %{
     definition: "yts",

@@ -474,9 +474,9 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
         ])
 
       assert {:ok, []} =
-               CardigannResultParser.parse_json_results(
+               CardigannResultParser.parse_results(
                  apibay_definition(),
-                 body,
+                 %{status: 200, body: body},
                  "The Pirate Bay"
                )
     end

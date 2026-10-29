@@ -75,11 +75,12 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
     end
   end
 
+  # Presence, as Prowlarr's `QuerySelector(key) != null` tests it: an empty
+  # `<key/>` still matches. `count()` because a string cast over an element node
+  # raises in SweetXml.
   defp key_element_present?(row, selector, key) do
-    # `/text()` because a string cast over an element node raises in SweetXml
-    # (the parser's copy had no such suffix and crashed on this path).
-    path = if selector == "", do: ".//#{key}/text()", else: "./#{selector}/#{key}/text()"
-    xpath(row, string_spec(path)) not in [nil, ""]
+    path = if selector == "", do: ".//#{key}", else: "./#{selector}/#{key}"
+    xpath(row, count_spec("count(#{path})")) > 0
   end
 
   defp raw_value(row, selector, attribute) do
@@ -163,6 +164,17 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
         end
       )
     )
+  end
+
+  defp count_spec(path) do
+    %SweetXpath{
+      path: path |> css_attrs_to_xpath() |> String.to_charlist(),
+      is_value: true,
+      is_list: false,
+      is_keyword: false,
+      is_optional: false,
+      cast_to: false
+    }
   end
 
   defp string_spec(path) do

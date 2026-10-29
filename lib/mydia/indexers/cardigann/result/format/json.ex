@@ -45,12 +45,11 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
 
         []
 
+      # A selector the response's shape cannot satisfy (an index into a map, a
+      # key into a scalar) is a definition/response mismatch, not an empty page.
       {:error, reason} ->
-        Logger.warning(
-          "JSON row selector #{inspect(selector)} does not apply to the response: #{inspect(reason)}"
-        )
-
-        []
+        {:error,
+         "JSON row selector #{inspect(selector)} does not apply to the response: #{inspect(reason)}"}
     end
   end
 

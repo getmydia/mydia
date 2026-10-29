@@ -67,18 +67,23 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
         sel -> Selector.find(document, row, sel)
       end
 
-    if scope == [] do
-      :not_found
-    else
-      field.case
-      |> Enum.find_value(fn {key, value} ->
-        if matches?(document, scope, Template.render(key, opts)), do: value
-      end)
-      |> case do
-        nil -> :not_found
-        value -> {:ok, value}
-      end
+    if scope == [], do: :not_found, else: first_case(document, scope, field.case, opts)
+  end
+
+  defp first_case(document, scope, cases, opts) do
+    case Enum.find(cases, fn {key, _} -> matches?(document, scope, Template.render(key, opts)) end) do
+      nil -> :not_found
+      {_key, value} -> {:ok, value}
     end
+  end
+
+  @impl true
+  def empty_rows_diagnostics(document) do
+    count = &length(Selector.find(document, :root, &1))
+    preview = document.root |> LazyHTML.to_html() |> String.slice(0, 1000)
+
+    "#{count.("tr")} tr elements, #{count.("table")} tables, " <>
+      "#{count.(~s(a[href*="torrent"]))} links containing 'torrent'; HTML preview: #{preview}"
   end
 
   defp matches?(_document, _scope, "*"), do: true

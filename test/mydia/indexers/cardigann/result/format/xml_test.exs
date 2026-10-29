@@ -131,5 +131,19 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.XmlTest do
 
       assert Xml.case_value(doc, hd(rows), field(plan, "k")) == {:ok, "titled"}
     end
+
+    test "an element-name key tests presence, so an empty element matches" do
+      {plan, doc, [first, _second]} =
+        loaded(%{"k" => %{selector: "", case: %{"enclosure" => "has-file"}}})
+
+      assert Xml.case_value(doc, first, field(plan, "k")) == {:ok, "has-file"}
+    end
+
+    test "an element-name key does not match a row without that element" do
+      {plan, doc, [_first, second]} =
+        loaded(%{"k" => %{selector: "", case: %{"enclosure" => "has-file"}}})
+
+      assert Xml.case_value(doc, second, field(plan, "k")) == :not_found
+    end
   end
 end
