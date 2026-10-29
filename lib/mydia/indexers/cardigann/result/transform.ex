@@ -145,6 +145,13 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
       # fallback supply the size instead of failing the result.
       :error -> 0
     end
+  rescue
+    # A number past the double range. .NET 8 parses it to Infinity and casts
+    # that to a meaningless long, keeping the row; BEAM floats raise instead
+    # (ArgumentError in String.to_float, ArithmeticError in arithmetic), which
+    # would fail the whole response. Zero keeps the row and lets the title
+    # fallback supply the size.
+    _ in [ArgumentError, ArithmeticError] -> 0
   end
 
   # ParseUtil.GetBytes(string unit, double value). The "i" is dropped before

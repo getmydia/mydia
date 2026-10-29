@@ -193,6 +193,22 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert Transform.parse_size(", MB") == 0
       assert Transform.parse_size(" MB") == 0
     end
+
+    # ParseUtil.GetBytes removes a lowercase "i" before lowercasing, so an
+    # all-caps "GIB" becomes "gib", matches no unit and reads as bytes.
+    test "reads an all-caps binary unit as bytes, as Prowlarr does" do
+      assert Transform.parse_size("1 GIB") == 1
+      assert Transform.parse_size("1 GiB") == 1_073_741_824
+    end
+
+    test "returns zero for a number past the float range instead of raising" do
+      huge = String.duplicate("9", 400)
+
+      assert Transform.parse_size(huge <> " GB") == 0
+      assert Transform.parse_size(huge <> ".5 GB") == 0
+      # Finite as a float, but scaling it to bytes overflows.
+      assert Transform.parse_size(String.duplicate("9", 308) <> " TB") == 0
+    end
   end
 
   describe "parse_size_with_title_fallback/2" do
@@ -214,6 +230,13 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
     test "reads thousands separators in a title size too" do
       assert Transform.parse_size_with_title_fallback("", "Lantern Harbor 1,017.6 MB") ==
                1_067_030_937
+    end
+
+    test "falls back to the title when the size overflows" do
+      assert Transform.parse_size_with_title_fallback(
+               String.duplicate("9", 400) <> " GB",
+               "Lantern Harbor 500 MB"
+             ) == 524_288_000
     end
 
     test "returns zero when neither source carries a size" do
