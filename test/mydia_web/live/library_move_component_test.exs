@@ -50,19 +50,15 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
   end
 
   # Starting a move reloads the page at its own URL. Returns that URL and the
-  # flash it carries. The reload ends the view's process, which is linked to
-  # the test, and lands either inside render_async/1 or just after it.
+  # flash it carries. The test proxy reports the reload by itself once the
+  # enqueue finishes, so this only waits for it. Calling render_async/1 here
+  # races the reload: the view can exit while the proxy is still asking it for
+  # its async tasks, and the proxy then dies of :noproc before it passes the
+  # redirect on. The view is linked to the test, hence trap_exit.
   defp confirm(view, target) do
     Process.flag(:trap_exit, true)
     view |> form("#library-move-form", %{"target" => target.id}) |> render_submit()
-
-    case render_async(view) do
-      {:error, {:live_redirect, %{to: to} = opts}} ->
-        {to, Phoenix.LiveView.Utils.verify_flash(MydiaWeb.Endpoint, opts[:flash])}
-
-      _html ->
-        assert_redirect(view)
-    end
+    assert_redirect(view, 1_000)
   end
 
   setup %{tmp_dir: tmp} do
