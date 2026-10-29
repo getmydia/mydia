@@ -8,12 +8,22 @@ defmodule Mydia.Indexers.Cardigann.TextFields do
 
   @doc "True for a field computed from a `text:` template rather than a selector."
   @spec text_field?(term()) :: boolean()
-  def text_field?(config) when is_map(config) do
-    text = Map.get(config, :text) || Map.get(config, "text")
-    is_binary(text) and text != ""
+  def text_field?(config), do: text_value(config) != nil
+
+  @doc """
+  The field's `text:` as a string, or nil when it has none. Any non-empty scalar
+  counts, because YAML reads `text: 1` as an integer and it is still a text field.
+  """
+  @spec text_value(term()) :: String.t() | nil
+  def text_value(config) when is_map(config) do
+    case Map.get(config, :text) || Map.get(config, "text") do
+      text when is_binary(text) and text != "" -> text
+      text when is_number(text) or is_boolean(text) -> to_string(text)
+      _ -> nil
+    end
   end
 
-  def text_field?(_config), do: false
+  def text_value(_config), do: nil
 
   @doc "Orders `{name, config}` text fields so each follows the text fields it reads."
   @spec order([{atom() | String.t(), map()}]) :: [{atom() | String.t(), map()}]
