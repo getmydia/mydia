@@ -4,8 +4,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   query kind, producing `Divergence` records.
 
   Results are paired before comparing so a different ordering between the
-  engines does not read as a field mismatch: first by info hash, then by
-  normalised download URL, then whatever is left by position.
+  engines does not read as a field mismatch: first by info hash and
+  normalised download URL together, then by either alone, then whatever is
+  left by position.
   """
 
   alias Mydia.Indexers.Cardigann.Parity.{Divergence, RequestKey}
@@ -147,10 +148,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
      params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort()}
   end
 
-  # Pairing: info hash, then normalised download URL, then position.
+  # Pairing: info hash, then normalised download URL, then position. A tracker
+  # can list one torrent twice (under two categories, say), so hash and URL
+  # together go first: hash alone would pair two same-hash rows by position,
+  # and an engine returning them in the other order would read as a title
+  # mismatch on both.
   defp pair(native, wasm) do
     {pairs, n_left, w_left} =
       {[], native, wasm}
+      |> pair_by(&hash_and_url/1)
       |> pair_by(&hash_of/1)
       |> pair_by(&url_of/1)
 
@@ -180,4 +186,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   end
 
   defp url_of(r), do: r |> Map.get(:download_url) |> normalise_url()
+
+  defp hash_and_url(r) do
+    with hash when hash != nil <- hash_of(r),
+         url when url != nil <- url_of(r),
+         do: {hash, url}
+  end
 end

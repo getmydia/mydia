@@ -69,6 +69,12 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     assert %{divergences: [], paired: 2, agreeing: 2} = run([a, b], [b, a])
   end
 
+  test "two rows sharing a hash pair by download url, whatever their order" do
+    a = result("Lantern Harbor", @hash_a, download_url: "https://t.test/dl?id=1")
+    b = result("Lantern Harbor Extras", @hash_a, download_url: "https://t.test/dl?id=2")
+    assert %{divergences: [], paired: 2, agreeing: 2} = run([a, b], [b, a])
+  end
+
   test "pairing falls back to download url, then position" do
     a = result("Lantern Harbor", nil, download_url: "https://t.test/dl?id=1&k=2", metadata: nil)
     b = result("Quiet Orchard", nil, download_url: "https://t.test/dl?id=2", metadata: nil)
