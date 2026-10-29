@@ -140,8 +140,13 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
     case Regex.run(@size_pattern, str) do
       [_, number, unit] ->
         {_, multiplier} = List.keyfind(@size_units, String.downcase(unit), 0)
-        {value, _rest} = Float.parse(String.replace(number, ",", ""))
-        trunc(value * multiplier)
+
+        case Float.parse(String.replace(number, ",", "")) do
+          {value, _rest} -> trunc(value * multiplier)
+          # A unit with no number, as in ", MB". Falling through lets the
+          # title fallback supply the size instead of failing the whole search.
+          :error -> nil
+        end
 
       nil ->
         nil

@@ -96,6 +96,12 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert result.imdb_id == nil
     end
 
+    test "keeps a row whose size cell has a unit but no number" do
+      result = one(row(%{"size" => ", MB", "title" => "Lantern Harbor 500 MB"}))
+
+      assert result.size == 524_288_000
+    end
+
     test "prefers a magnet built from the infohash" do
       result = one(row(%{"infohash" => String.duplicate("a", 40)}))
 
@@ -166,6 +172,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert Transform.parse_size("invalid") == 0
       assert Transform.parse_size("N/A") == 0
     end
+
+    test "returns zero for a unit with no number" do
+      assert Transform.parse_size(", MB") == 0
+      assert Transform.parse_size(" MB") == 0
+    end
   end
 
   describe "parse_size_with_title_fallback/2" do
@@ -177,6 +188,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
     test "falls back to a size embedded in the title" do
       assert Transform.parse_size_with_title_fallback("", "Lantern Harbor (2.5Gb)") ==
                2_684_354_560
+    end
+
+    test "falls back to the title when the size cell has a unit but no number" do
+      assert Transform.parse_size_with_title_fallback(", MB", "Lantern Harbor 500 MB") ==
+               524_288_000
     end
 
     test "reads thousands separators in a title size too" do
