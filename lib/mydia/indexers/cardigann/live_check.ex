@@ -230,13 +230,28 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   defp with_grab(bucket, nil), do: bucket
   defp with_grab(_bucket, _failed), do: :grab_failed
 
+  # A definition our engine cannot compile, or whose selector lexbor rejects,
+  # is as unusable as one that does not parse; a response we cannot read, in
+  # any format or none, is a parse error. Neither says the site is down.
   defp classify_error(message) do
     cond do
-      message =~ ~r/^Blocked page:/ -> :blocked_page
-      message =~ ~r/failed to render|parse error at line/i -> :template_error
-      message =~ ~r/Failed to parse (HTML|XML|JSON)/ -> :parse_error
-      message =~ ~r/invalid_request_target|^HTTP 4(?!04)\d\d/ -> :http_4xx
-      true -> :unreachable
+      message =~ ~r/^Blocked page:/ ->
+        :blocked_page
+
+      message =~ ~r/failed to render|parse error at line/i ->
+        :template_error
+
+      message =~ ~r/^(Failed to compile|Invalid selector in) the .* definition/ ->
+        :unsupported_definition
+
+      message =~ ~r/Failed to parse (HTML|XML|JSON|unknown) response|^XML parse error:/ ->
+        :parse_error
+
+      message =~ ~r/invalid_request_target|^HTTP 4(?!04)\d\d/ ->
+        :http_4xx
+
+      true ->
+        :unreachable
     end
   end
 

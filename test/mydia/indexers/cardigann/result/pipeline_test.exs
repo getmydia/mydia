@@ -143,8 +143,11 @@ defmodule Mydia.Indexers.Cardigann.Result.PipelineTest do
     end
 
     test "malformed XML is reported as an XML parse error" do
-      assert {:error, %Error{} = error} = run(%{selector: "item"}, "<rss><item>", :xml)
-      assert Exception.message(error) =~ "XML parse error"
+      # xmerl reports the fatal error through the logger before raising.
+      capture_log(fn ->
+        assert {:error, %Error{} = error} = run(%{selector: "item"}, "<rss><item>", :xml)
+        assert Exception.message(error) =~ "XML parse error"
+      end)
     end
   end
 
@@ -163,9 +166,14 @@ defmodule Mydia.Indexers.Cardigann.Result.PipelineTest do
       base_url: "https://lantern.invalid"
     }
 
-    assert {:error, %Error{type: :search_failed, message: message}} =
-             Pipeline.run(%Plan{format: nil}, @html, ctx)
+    log =
+      capture_log(fn ->
+        assert {:error, %Error{type: :search_failed, message: message}} =
+                 Pipeline.run(%Plan{format: nil}, @html, ctx)
 
-    assert message =~ "Lantern"
+        assert message =~ "Lantern"
+      end)
+
+    assert log =~ "unknown parsing error for Lantern"
   end
 end
