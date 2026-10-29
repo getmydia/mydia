@@ -51,6 +51,34 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
     end
   end
 
+  describe "title sort ignores a leading article" do
+    test "ascending and descending" do
+      items = [
+        item("1", %{title: "Stillwater Run"}),
+        item("2", %{title: "The Saltmarsh Years"}),
+        item("3", %{title: "Sable Point"})
+      ]
+
+      asc = MediaSort.sort(items, %{field: :title, direction: :asc})
+      assert Enum.map(asc, & &1.title) == ["Sable Point", "The Saltmarsh Years", "Stillwater Run"]
+
+      desc = MediaSort.sort(items, %{field: :title, direction: :desc})
+
+      assert Enum.map(desc, & &1.title) == [
+               "Stillwater Run",
+               "The Saltmarsh Years",
+               "Sable Point"
+             ]
+    end
+
+    test "an item without a title still sorts last" do
+      items = [item("1", %{title: nil}), item("2", %{title: "The Saltmarsh Years"})]
+
+      assert Enum.map(MediaSort.sort(items, %{field: :title, direction: :asc}), & &1.id) ==
+               ["2", "1"]
+    end
+  end
+
   describe "added_at" do
     test "orders chronologically rather than by day-of-month" do
       # Plain term comparison on DateTime structs compares :day before :year,
