@@ -40,14 +40,6 @@
       "both set guid from the magnet the infohash builds; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
   },
   %{
-    definition: "mikan",
-    query: :rss,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "date_year_raw's regexp uses \\u00A0, which PCRE2 rejects, so native skips the filter and keeps the size cell (\"360.3 MB\"); date_year becomes \"360.3 MB +08:00\", dateparse leaves it unparsed, `or` prefers it over date_day and parse_date gives nil. wasm drops the non-matching cell and uses date_day (\"今天 02:30\" as today). Native is nil whatever the clock, so the divergence does not depend on when the test runs"
-  },
-  %{
     definition: "yts",
     query: :rss,
     kind: :field,

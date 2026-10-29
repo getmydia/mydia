@@ -9,6 +9,13 @@ defmodule Mydia.Indexers.CardigannFilterImplTest do
   end
 
   describe "regexp filter" do
+    test "accepts a .NET \\u escape" do
+      pattern = ~S"(\d{4}/\d{1,2}/\d{1,2}[\s\u00A0]+\d{1,2}:\d{2})"
+
+      assert {:ok, "2026/10/27 12:00"} =
+               apply_filter("2026/10/27 12:00 in four days", %{name: "regexp", args: [pattern]})
+    end
+
     test "extracts first capture group" do
       assert {:ok, "123"} = apply_filter("abc123def", %{name: "regexp", args: ["(\\d+)"]})
     end

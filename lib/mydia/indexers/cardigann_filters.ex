@@ -46,6 +46,8 @@ defmodule Mydia.Indexers.CardigannFilters do
   - `strdump`/`hexdump` - Log value for debugging (pass through): `{name: "strdump"}`
   """
 
+  alias Mydia.Indexers.Cardigann.DotnetRegex
+
   require Logger
 
   @implemented_filters ~w(
@@ -262,9 +264,7 @@ defmodule Mydia.Indexers.CardigannFilters do
 
   # regexp - extract first capture group
   defp apply_regexp(value, pattern) do
-    pcre_pattern = convert_go_regex_to_pcre(pattern)
-
-    case Regex.compile(pcre_pattern, [:unicode]) do
+    case DotnetRegex.compile(pattern) do
       {:ok, regex} ->
         case Regex.run(regex, value, capture: :all) do
           [_full | [first_group | _]] -> {:ok, first_group}
@@ -283,10 +283,9 @@ defmodule Mydia.Indexers.CardigannFilters do
 
   # re_replace - regex replacement with Go-to-PCRE conversion
   defp apply_re_replace(value, pattern, replacement) do
-    pcre_pattern = convert_go_regex_to_pcre(pattern)
     elixir_replacement = convert_go_backrefs_to_elixir(replacement)
 
-    case Regex.compile(pcre_pattern, [:unicode]) do
+    case DotnetRegex.compile(pattern) do
       {:ok, regex} ->
         {:ok, Regex.replace(regex, value, elixir_replacement)}
 
@@ -701,16 +700,6 @@ defmodule Mydia.Indexers.CardigannFilters do
   end
 
   # Go regex conversion helpers
-
-  defp convert_go_regex_to_pcre(pattern) when is_binary(pattern) do
-    pattern
-    # \p{IsX} → \p{X} (Go Unicode property names)
-    |> then(&Regex.replace(~r/\\p\{Is(\w+)\}/, &1, "\\p{\\1}"))
-    # (?P<name> → (?<name> (Go named capture groups)
-    |> String.replace("(?P<", "(?<")
-  end
-
-  defp convert_go_regex_to_pcre(pattern), do: pattern
 
   defp convert_go_backrefs_to_elixir(replacement) when is_binary(replacement) do
     replacement
