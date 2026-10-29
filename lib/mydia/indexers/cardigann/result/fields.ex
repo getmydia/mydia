@@ -3,8 +3,8 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
   # The one field extractor for every response format. Prowlarr walks a row's
   # fields in definition order and exposes each value as `.Result.<name>` to
   # the fields after it. The parsed definition has lost that order, so this
-  # runs two passes: selector fields in name order (the plan's order), each
-  # seeing the values extracted before it, then text fields in dependency
+  # runs two passes: selector fields in dependency order (the plan's order),
+  # each seeing the values extracted before it, then text fields in dependency
   # order, each seeing everything so far. Filters run after `case`, with the
   # same `.Result` the field's selector saw.
 

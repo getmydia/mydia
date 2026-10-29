@@ -312,6 +312,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       assert Enum.all?(results, &(is_binary(&1.title) and &1.title != ""))
     end
 
+    @tag :snapshot
     test "rows.filters andmatch drops feed rows without the keywords" do
       {{result, _definition}, _log} =
         ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss", keywords: "test") end)
@@ -410,10 +411,14 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2, keywords: "")
     end
 
+    @tag :snapshot
     test "crackingpatching: rows.filters andmatch drops rows without the keywords" do
-      assert_raise ExUnit.AssertionError, ~r/got 0/, fn ->
-        run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 1)
-      end
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          load_and_parse("crackingpatching", keywords: "ubuntu")
+        end)
+
+      assert {:ok, []} = result
     end
 
     # The magnet in download_response.html is synthetic. This only proves that the
