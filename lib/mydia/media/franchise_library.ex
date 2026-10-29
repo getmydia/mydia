@@ -41,6 +41,10 @@ defmodule Mydia.Media.FranchiseLibrary do
   # three retries would hold a dialog open for minutes.
   @relay_timeout 3_000
 
+  # The most a caller waits for the whole lookup, however many relay calls and
+  # queries it makes.
+  @lookup_deadline 3_000
+
   @doc """
   Returns the id of the library most of this movie's franchise lives in, or nil.
 
@@ -54,6 +58,31 @@ defmodule Mydia.Media.FranchiseLibrary do
   def library_for(tmdb_id, config) when is_integer(tmdb_id) do
     config = bounded(config || Metadata.default_relay_config())
 
+    # Unlinked, so nothing inside the task can crash the caller. Task.Supervisor
+    # records the caller in $callers, which keeps Ecto sandbox access in tests.
+    task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> lookup(tmdb_id, config) end)
+
+    case Task.yield(task, @lookup_deadline) || Task.shutdown(task, :brutal_kill) do
+      {:ok, library_id} ->
+        library_id
+
+      {:exit, reason} ->
+        Logger.warning("Franchise library lookup crashed for tmdb #{tmdb_id}: #{inspect(reason)}")
+
+        nil
+
+      nil ->
+        Logger.warning(
+          "Franchise library lookup for tmdb #{tmdb_id} exceeded #{@lookup_deadline}ms"
+        )
+
+        nil
+    end
+  end
+
+  def library_for(_tmdb_id, _config), do: nil
+
+  defp lookup(tmdb_id, config) do
     with {:ok, collection_id} <- collection_id_for(tmdb_id, config),
          [_ | _] = siblings <- siblings(tmdb_id, collection_id, config) do
       majority_library(siblings)
@@ -69,9 +98,10 @@ defmodule Mydia.Media.FranchiseLibrary do
       nil
   end
 
-  def library_for(_tmdb_id, _config), do: nil
-
-  defp bounded(config) do
+  @doc false
+  # Public only so tests can pin the bounds.
+  @spec bounded(map()) :: map()
+  def bounded(config) do
     options =
       (config[:options] || %{})
       |> Map.put(:timeout, @relay_timeout)

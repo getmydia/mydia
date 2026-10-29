@@ -242,9 +242,77 @@ defmodule Mydia.Media.FranchiseLibraryTest do
     ExUnit.CaptureLog.capture_log(fn ->
       assert FranchiseLibrary.library_for(id, config) == nil
     end)
+  end
 
-    # No retries: a hung relay must not hold an add dialog for minutes.
-    assert_received :relay_hit
-    refute_received :relay_hit
+  test "the relay config is bounded: short timeouts and no retries" do
+    options =
+      FranchiseLibrary.bounded(%{base_url: "http://x", options: %{language: "en-US"}}).options
+
+    assert options.max_retries == 0
+    assert options.timeout == 3_000
+    assert options.connect_timeout == 3_000
+    assert options.language == "en-US"
+  end
+
+  test "a slow relay returns nil at the overall deadline", %{bypass: bypass, config: config} do
+    cid = System.unique_integer([:positive])
+    id = tmdb_id()
+    on_exit(fn -> Cache.delete("fetch_by_ref:tmdb:#{id}:movie:en-US::official") end)
+
+    # Each call is under its own 3s timeout; together they exceed the deadline.
+    # Bypass.pass/1 before the sleep: the deadline kills the client mid-request,
+    # which makes Cowboy tear the handler down with :shutdown, and Bypass would
+    # otherwise re-raise that as a test crash (see indexers_test.exs).
+    Bypass.expect(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+      Bypass.pass(bypass)
+      Process.sleep(2_000)
+
+      body = %{
+        "id" => id,
+        "title" => "Starfall Protocol #{id}",
+        "release_date" => "2001-01-01",
+        "belongs_to_collection" => %{"id" => cid, "name" => "Starfall"},
+        "credits" => %{"cast" => [], "crew" => []}
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    Bypass.expect(bypass, "GET", "/tmdb/collections/#{cid}", fn conn ->
+      Bypass.pass(bypass)
+      Process.sleep(2_000)
+
+      Plug.Conn.resp(
+        conn,
+        200,
+        Jason.encode!(%{"id" => cid, "name" => "Starfall", "parts" => []})
+      )
+    end)
+
+    on_exit(fn -> Cache.delete("collection:metadata_relay:#{cid}:en-US") end)
+
+    started = System.monotonic_time(:millisecond)
+
+    ExUnit.CaptureLog.capture_log(fn ->
+      assert FranchiseLibrary.library_for(id, config) == nil
+    end)
+
+    elapsed = System.monotonic_time(:millisecond) - started
+    assert elapsed >= 2_900
+    assert elapsed < 3_800
+  end
+
+  test "the movie being added never votes", %{bypass: bypass, config: config} do
+    cid = System.unique_integer([:positive])
+    id = tmdb_id()
+    stub_franchise(bypass, id, cid)
+    a = library_path_fixture(%{type: "movies"})
+    b = library_path_fixture(%{type: "movies"})
+    sibling(id, cid, %{library_path_id: a.id})
+    sibling(tmdb_id(), cid, %{library_path_id: b.id})
+
+    assert FranchiseLibrary.library_for(id, config) == b.id
   end
 end
