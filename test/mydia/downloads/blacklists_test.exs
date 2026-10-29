@@ -102,6 +102,22 @@ defmodule Mydia.Downloads.BlacklistsTest do
     end
   end
 
+  describe "add/5 fallback_guid" do
+    test "drops a fallback equal to the guid" do
+      {:ok, row} =
+        Blacklists.add("idx", "sha256:same", "T", "stalled", fallback_guid: "sha256:same")
+
+      assert row.fallback_guid == nil
+    end
+
+    test "an upsert without a fallback keeps the stored one" do
+      {:ok, _} = Blacklists.add("idx", "url-guid", "T", "stalled", fallback_guid: "sha256:kept")
+      {:ok, _} = Blacklists.add("idx", "url-guid", "T", "par2_failed")
+
+      assert Repo.get_by!(ReleaseBlacklist, guid: "url-guid").fallback_guid == "sha256:kept"
+    end
+  end
+
   describe "blacklisted?/2" do
     test "returns true for an active row" do
       {:ok, _} = Blacklists.add("nzbhydra2", "active-1", "T", "x")
@@ -291,6 +307,42 @@ defmodule Mydia.Downloads.BlacklistsTest do
       blacklist_as_grabbed(result)
 
       assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    # A Cardigann guid is the download URL, which changes on mirror failover.
+    # The ban is written from the download the grab recorded, as the monitor
+    # and the reject path do.
+    test "drops the same release served by another mirror after a ban via the first" do
+      from_a = search_result(%{guid: "https://mirror-a.example/dl/7.torrent?sid=AAA"})
+
+      download =
+        download_fixture(%{
+          title: from_a.title,
+          indexer: from_a.indexer,
+          download_url: from_a.guid,
+          metadata: Queue.build_download_metadata(from_a)
+        })
+        |> then(&Repo.reload!/1)
+
+      {:ok, indexer, guid} = Blacklists.extract_key(download)
+
+      {:ok, row} =
+        Blacklists.add(
+          indexer,
+          guid,
+          download.title,
+          "stalled",
+          Blacklists.download_ban_opts(download)
+        )
+
+      assert row.fallback_guid == Blacklists.release_guid(%{from_a | guid: nil})
+
+      from_b = %{from_a | guid: "https://mirror-b.example/dl/7.torrent?sid=BBB"}
+      assert [] = Blacklists.reject_blacklisted([from_b])
+      assert Blacklists.blacklisted?(from_b.indexer, row.fallback_guid)
+
+      other_size = %{from_b | size: 2_147_483_648}
+      assert [^other_size] = Blacklists.reject_blacklisted([other_size])
     end
 
     test "keeps a guid-less result from a different release" do

@@ -170,7 +170,7 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
              guid,
              download.title || "Unknown release",
              Keyword.get(opts, :failure_reason, "rejected_by_user"),
-             [info_hash: Blacklists.download_info_hash(download)] ++ blacklist_opts(opts)
+             Blacklists.download_ban_opts(download) ++ blacklist_opts(opts)
            ) do
       :ok
     else

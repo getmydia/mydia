@@ -903,11 +903,11 @@ defmodule Mydia.Upgrades do
   defp season_pack?(%Download{}), do: false
 
   defp do_blacklist(%Download{} = download, log_metadata) do
-    with guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
-         indexer when is_binary(indexer) and indexer != "" <- download.indexer do
-      case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected",
-             info_hash: Blacklists.download_info_hash(download)
-           ) do
+    with {:ok, indexer, guid} <- Blacklists.extract_key(download) do
+      title = download.title || "Unknown release"
+      opts = Blacklists.download_ban_opts(download)
+
+      case Blacklists.add(indexer, guid, title, "upgrade_rejected", opts) do
         {:ok, _row} ->
           true
 

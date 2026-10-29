@@ -348,9 +348,20 @@ belongs in that format's adapter, and a filter that mangles a value belongs in
 (often a magnet built from the infohash), as Prowlarr's release cleanup does. A
 row with neither is already dropped, so its details URL never stands in for a
 guid. `Mydia.Downloads.Blacklists.release_guid/1` therefore keys new Cardigann
-bans by guid instead of the `sha256:` fallback. Lookups also check the old
-fallback key (`release_guids/1`), so blacklist rows written before the change
-still filter their release; only new bans use the guid.
+bans by guid instead of the `sha256:` fallback of indexer, title and size.
+
+That guid is a URL, so it changes when a definition fails over to another
+mirror or the link carries a session token. Each new ban also records the
+`sha256:` key in `fallback_guid`, and lookups (`reject_blacklisted/2` and the
+manual search's prior-attempt labels) compare a result's guid and its
+`sha256:` key against both columns. The ban therefore follows the release
+across mirrors as long as the title and size match.
+
+A ban the built-in engine wrote before the upgrade is keyed by the `sha256:`
+value, so it still matches when the release comes back with the same title and
+size. Legacy matching stops there: a pre-upgrade row has no `fallback_guid`, so
+one keyed by a URL guid (the Prowlarr-based engine already set those) matches
+only that exact URL, and no key survives a change of title or size.
 
 Upgrading also changes which rows come back: `rows.filters: andmatch` now drops
 rows whose title lacks a keyword in every format, not only HTML. Six definitions
