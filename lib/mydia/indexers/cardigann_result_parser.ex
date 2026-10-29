@@ -52,11 +52,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   alias Mydia.Indexers.Cardigann.LinkResolver
   alias Mydia.Indexers.Cardigann.ParseStats
-  alias Mydia.Indexers.Cardigann.Result.{Context, Pipeline, Plan}
+  alias Mydia.Indexers.Cardigann.Result.{Context, Pipeline, Plan, Transform}
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.QualityParser
-  alias Mydia.Indexers.CategoryMapping
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.CardigannTemplate
 
@@ -270,126 +268,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   # Result Transformation
 
-  @doc false
-  # Public only so Result.Pipeline can reach it until the transform moves to
-  # its own module.
-  @spec transform_to_search_results([map()], String.t(), String.t(), list()) ::
-          [SearchResult.t()]
-  def transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings) do
-    parsed_rows
-    |> Enum.map(fn row ->
-      transform_to_search_result(row, indexer_name, base_url, category_mappings)
-    end)
-    |> Enum.filter(&(&1 != nil))
-  end
-
-  defp transform_to_search_result(row, indexer_name, base_url, category_mappings) do
-    raw_size = get_field(row, "size", "0")
-
-    with {:ok, title} <- get_required_field(row, "title"),
-         {:ok, download_url} <- get_download_or_magnet(row, title),
-         size <- parse_size_with_title_fallback(raw_size, title),
-         seeders <- parse_integer(get_field(row, "seeders", "0")),
-         leechers <- parse_integer(get_field(row, "leechers", "0")) do
-      # Parse quality from title
-      quality = QualityParser.parse(title)
-
-      # Resolve relative URLs to absolute
-      resolved_download_url = LinkResolver.resolve(download_url, base_url)
-      resolved_info_url = LinkResolver.resolve(get_field(row, "details"), base_url)
-
-      # Detect download protocol from URL
-      download_protocol = detect_download_protocol(resolved_download_url)
-
-      # Map site-specific category to Torznab category
-      raw_category = get_field(row, "category")
-      torznab_category = map_category(raw_category, category_mappings)
-
-      # Build SearchResult
-      %SearchResult{
-        title: title,
-        size: size,
-        seeders: seeders,
-        leechers: leechers,
-        download_url: resolved_download_url,
-        info_url: resolved_info_url,
-        indexer: indexer_name,
-        category: torznab_category,
-        published_at: parse_date(get_field(row, "date")),
-        quality: quality,
-        tmdb_id: parse_integer(get_field(row, "tmdbid")),
-        imdb_id: get_field(row, "imdbid"),
-        download_protocol: download_protocol
-      }
-    else
-      _ -> nil
-    end
-  end
-
-  # Maps a site-specific category to a Torznab category ID
-  defp map_category(nil, _category_mappings), do: nil
-  defp map_category("", _category_mappings), do: nil
-
-  defp map_category(raw_category, category_mappings)
-       when is_list(category_mappings) and category_mappings != [] do
-    # Try to map using the category mappings from the definition
-    case CategoryMapping.map_site_category_to_torznab(raw_category, category_mappings) do
-      nil ->
-        # Fallback: check if raw_category is already a Torznab ID
-        parse_integer(raw_category)
-
-      torznab_id ->
-        torznab_id
-    end
-  end
-
-  defp map_category(raw_category, _category_mappings) do
-    # No mappings available, just parse as integer (might already be Torznab ID)
-    parse_integer(raw_category)
-  end
-
-  # Resolve a URL relative to a base URL
-  # Gets download URL from 'infohash' (preferred) or 'download' field.
-  # Infohash is preferred because some indexers (e.g. YTS) return HTML
-  # instead of a .torrent file at the download URL.
-  defp get_download_or_magnet(row, title) do
-    alias Mydia.Downloads.TorrentHash
-
-    case get_required_field(row, "infohash") do
-      {:ok, hash} when byte_size(hash) >= 32 ->
-        case TorrentHash.build_magnet(hash, title) do
-          nil -> try_download_field(row)
-          magnet -> {:ok, magnet}
-        end
-
-      _ ->
-        try_download_field(row)
-    end
-  end
-
-  defp try_download_field(row) do
-    case get_required_field(row, "download") do
-      {:ok, url} -> {:ok, url}
-      {:error, _} -> {:error, :no_download_or_infohash}
-    end
-  end
-
-  defp get_required_field(row, field) do
-    # Check both string and atom keys since parser may use either
-    value = Map.get(row, field) || Map.get(row, String.to_atom(field))
-
-    case value do
-      nil -> {:error, :missing_field}
-      "" -> {:error, :empty_field}
-      value -> {:ok, value}
-    end
-  end
-
-  defp get_field(row, field, default \\ nil) do
-    # Check both string and atom keys since parser may use either
-    Map.get(row, field) || Map.get(row, String.to_atom(field), default)
-  end
-
   @doc """
   Parses size with fallback to extracting from title.
 
@@ -397,47 +275,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
   from the title text using patterns like "(3.05Gb)" or "500MB".
   """
   @spec parse_size_with_title_fallback(String.t() | nil, String.t()) :: non_neg_integer()
-  def parse_size_with_title_fallback(raw_size, title) do
-    size = parse_size(raw_size)
-
-    if size == 0 do
-      # Try to extract size from title
-      extract_size_from_text(title)
-    else
-      size
-    end
-  end
-
-  # Extracts size from text containing embedded size like "(3.05Gb)" or "500MB"
-  defp extract_size_from_text(text) when is_binary(text) do
-    # Match patterns like (3.05Gb), 500MB, 1.2 GB, etc.
-    case Regex.run(~r/([\d.]+)\s*(gb|gib|mb|mib|kb|kib|tb|tib)/i, text) do
-      [_, num_str, unit] ->
-        case Float.parse(num_str) do
-          {num, _} ->
-            multiplier = size_unit_multiplier(String.downcase(unit))
-            trunc(num * multiplier)
-
-          :error ->
-            0
-        end
-
-      nil ->
-        0
-    end
-  end
-
-  defp extract_size_from_text(_), do: 0
-
-  defp size_unit_multiplier("tb"), do: 1024 * 1024 * 1024 * 1024
-  defp size_unit_multiplier("tib"), do: 1024 * 1024 * 1024 * 1024
-  defp size_unit_multiplier("gb"), do: 1024 * 1024 * 1024
-  defp size_unit_multiplier("gib"), do: 1024 * 1024 * 1024
-  defp size_unit_multiplier("mb"), do: 1024 * 1024
-  defp size_unit_multiplier("mib"), do: 1024 * 1024
-  defp size_unit_multiplier("kb"), do: 1024
-  defp size_unit_multiplier("kib"), do: 1024
-  defp size_unit_multiplier(_), do: 1
+  defdelegate parse_size_with_title_fallback(raw_size, title), to: Transform
 
   @doc """
   Parses size strings to bytes.
@@ -458,68 +296,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       524_288_000
   """
   @spec parse_size(String.t() | nil) :: non_neg_integer()
-  def parse_size(nil), do: 0
-  def parse_size(""), do: 0
-
-  def parse_size(size_str) when is_binary(size_str) do
-    size_str = String.trim(size_str)
-    size_str_lower = String.downcase(size_str)
-
-    cond do
-      String.contains?(size_str_lower, "gb") || String.contains?(size_str_lower, "gib") ->
-        parse_size_value(size_str, 1024 * 1024 * 1024)
-
-      String.contains?(size_str_lower, "mb") || String.contains?(size_str_lower, "mib") ->
-        parse_size_value(size_str, 1024 * 1024)
-
-      String.contains?(size_str_lower, "kb") || String.contains?(size_str_lower, "kib") ->
-        parse_size_value(size_str, 1024)
-
-      String.contains?(size_str_lower, "tb") || String.contains?(size_str_lower, "tib") ->
-        parse_size_value(size_str, 1024 * 1024 * 1024 * 1024)
-
-      true ->
-        # Assume it's already in bytes
-        parse_integer(size_str)
-    end
-  end
-
-  defp parse_size_value(size_str, multiplier) do
-    # Extract numeric value from string, looking for patterns like "3.05Gb" or "500 MB"
-    # First try to find a number immediately before or after the unit
-    numeric_part =
-      case Regex.run(~r/([\d.]+)\s*(?:gb|gib|mb|mib|kb|kib|tb|tib)/i, size_str) do
-        [_, num] ->
-          num
-
-        nil ->
-          # Fallback: just extract all digits and periods
-          size_str
-          |> String.replace(~r/[^\d.]/, "")
-          |> String.trim()
-      end
-
-    case Float.parse(numeric_part) do
-      {value, _} -> trunc(value * multiplier)
-      :error -> 0
-    end
-  end
-
-  defp parse_integer(nil), do: 0
-  defp parse_integer(""), do: 0
-
-  defp parse_integer(str) when is_binary(str) do
-    # Remove any non-digit characters
-    clean_str = String.replace(str, ~r/[^\d]/, "")
-
-    case Integer.parse(clean_str) do
-      {num, _} -> num
-      :error -> 0
-    end
-  end
-
-  defp parse_integer(num) when is_integer(num), do: num
-  defp parse_integer(_), do: 0
+  defdelegate parse_size(size_str), to: Transform
 
   @doc """
   Parses date strings to DateTime.
@@ -538,40 +315,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       nil
   """
   @spec parse_date(String.t() | nil) :: DateTime.t() | nil
-  def parse_date(nil), do: nil
-  def parse_date(""), do: nil
-
-  def parse_date(date_str) when is_binary(date_str) do
-    # Try ISO 8601 format first
-    case DateTime.from_iso8601(date_str) do
-      {:ok, datetime, _offset} ->
-        datetime
-
-      _ ->
-        # Try other common formats using Timex
-        case Timex.parse(date_str, "{ISO:Extended}") do
-          {:ok, datetime} -> datetime
-          _ -> nil
-        end
-    end
-  rescue
-    _ -> nil
-  end
-
-  # Download Protocol Detection
-  # Detects protocol from URL: magnet/.torrent → :torrent, .nzb → :nzb
-  # Defaults to :torrent as most Cardigann indexers are torrent sites
-  defp detect_download_protocol(url) when is_binary(url) do
-    cond do
-      String.starts_with?(url, "magnet:") -> :torrent
-      String.contains?(url, ".torrent") -> :torrent
-      String.contains?(url, ".nzb") -> :nzb
-      String.contains?(url, "nzb") -> :nzb
-      true -> :torrent
-    end
-  end
-
-  defp detect_download_protocol(_), do: :torrent
+  defdelegate parse_date(date_str), to: Transform
 
   # Response Type Detection
 

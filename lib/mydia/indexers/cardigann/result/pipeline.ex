@@ -10,10 +10,9 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.JsonPath
   alias Mydia.Indexers.Cardigann.ParseStats
-  alias Mydia.Indexers.Cardigann.Result.{Context, Fields, Plan}
+  alias Mydia.Indexers.Cardigann.Result.{Context, Fields, Plan, Transform}
   alias Mydia.Indexers.Cardigann.Result.Format.{Html, Json, Xml}
   alias Mydia.Indexers.Cardigann.Selector
-  alias Mydia.Indexers.CardigannResultParser
 
   @adapters %{html: Html, json: Json, xml: Xml}
   @labels %{html: "HTML", json: "JSON", xml: "XML"}
@@ -91,13 +90,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
 
     kept = andmatch(parsed, plan, ctx.template_context)
 
-    results =
-      CardigannResultParser.transform_to_search_results(
-        kept,
-        ctx.indexer_name,
-        ctx.base_url,
-        ctx.category_mappings
-      )
+    results = Transform.search_results(kept, ctx)
 
     Logger.info("[#{ctx.indexer_name}] Transformed #{length(kept)} rows to #{length(results)}")
 
