@@ -44,6 +44,13 @@ defmodule Mydia.Metadata.Provider.HTTPTest do
       assert req.options[:max_retries] == 3
     end
 
+    test "uses custom max retries when specified in options" do
+      config = put_in(@config, [:options, :max_retries], 0)
+      req = HTTP.new_request(config)
+
+      assert req.options[:max_retries] == 0
+    end
+
     test "registers a request step to inject the API key" do
       req = HTTP.new_request(@config)
 
