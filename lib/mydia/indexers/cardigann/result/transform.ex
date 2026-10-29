@@ -11,6 +11,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   alias Mydia.Indexers.CategoryMapping
   alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.SearchResultMetadata
 
   @spec search_results([%{String.t() => String.t()}], Context.t()) :: [SearchResult.t()]
   def search_results(rows, %Context{} = ctx) do
@@ -41,12 +42,31 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         tmdb_id: parse_optional_integer(get_field(row, "tmdbid")),
         imdb_id: get_field(row, "imdbid"),
         download_protocol: detect_download_protocol(resolved_download_url),
-        guid: release_guid(row, resolved_download_url, ctx)
+        guid: release_guid(row, resolved_download_url, ctx),
+        metadata: source_metadata(row, resolved_download_url, ctx)
       }
     else
       _ -> nil
     end
   end
+
+  # The infohash wins the download URL (get_download_or_magnet/2); the link it
+  # replaced is kept for the parity comparator, which holds it against
+  # Prowlarr's download URL.
+  defp source_metadata(row, "magnet:" <> _, ctx) do
+    case get_required_field(row, "download") do
+      {:ok, "magnet:" <> _} ->
+        nil
+
+      {:ok, url} ->
+        SearchResultMetadata.new(source_download_url: LinkResolver.resolve(url, ctx.base_url))
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  defp source_metadata(_row, _download_url, _ctx), do: nil
 
   # Prowlarr's CleanupReleases fills an unset guid from the release's download
   # URL, then a torrent's magnet, then its details URL. A row without a

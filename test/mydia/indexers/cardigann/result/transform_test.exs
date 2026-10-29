@@ -148,6 +148,17 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert one(row()).guid == "https://lantern.invalid/download/1.torrent"
     end
 
+    test "keeps the download link an info hash replaced" do
+      result = one(row(%{"infohash" => String.duplicate("c", 40)}))
+
+      assert "magnet:" <> _ = result.download_url
+      assert result.metadata.source_download_url == "https://lantern.invalid/download/1.torrent"
+    end
+
+    test "has no source link when no info hash replaced the download" do
+      assert one(row()).metadata == nil
+    end
+
     test "keeps the download link as guid when the infohash supplies the download URL" do
       result = one(row(%{"infohash" => String.duplicate("b", 40)}))
 

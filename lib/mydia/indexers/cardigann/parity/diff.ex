@@ -11,6 +11,9 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   Two magnets with the same btih compare equal whatever their `tr` parameters,
   in `download_url` and `guid`; see `lib/mydia/indexers/README.md`, "Deliberate
   differences".
+
+  A native magnet equals a wasm download link when the native result's
+  `metadata.source_download_url` normalises to it.
   """
 
   alias Mydia.Indexers.Cardigann.Parity.{Divergence, RequestKey}
@@ -79,7 +82,27 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
     end
   end
 
+  defp differs?(:download_url, native, wasm) do
+    not (equal?(:download_url, native.download_url, wasm.download_url) or
+           via_source_link?(native, wasm))
+  end
+
   defp differs?(field, a, b), do: not equal?(field, value(a, field), value(b, field))
+
+  # Native prefers a row's info hash and hands out a magnet where Prowlarr hands
+  # out the row's download link. They agree when that link is the one native
+  # passed over (metadata.source_download_url).
+  defp via_source_link?(%SearchResult{download_url: "magnet:" <> _} = native, %SearchResult{
+         download_url: url
+       })
+       when is_binary(url) do
+    source = metadata_value(native.metadata, :source_download_url)
+
+    not String.starts_with?(url, "magnet:") and is_binary(source) and
+      normalise_url(source) == normalise_url(url)
+  end
+
+  defp via_source_link?(_native, _wasm), do: false
 
   defp value(%SearchResult{} = r, field) when field in @metadata_fields,
     do: metadata_value(r.metadata, field)

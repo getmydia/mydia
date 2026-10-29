@@ -11,6 +11,7 @@ defmodule Mydia.Indexers.Structs.SearchResultMetadata do
   - `:season_number` - Season number for season packs (optional)
   - `:episode_count` - Number of episodes in the season pack (optional)
   - `:episode_ids` - List of episode IDs included in the season pack (optional)
+  - `:source_download_url` - the download link a Cardigann row had when the built-in engine handed out its info-hash magnet instead; the parity comparator reads it (optional)
   """
 
   @enforce_keys []
@@ -18,14 +19,16 @@ defmodule Mydia.Indexers.Structs.SearchResultMetadata do
     :season_pack,
     :season_number,
     :episode_count,
-    :episode_ids
+    :episode_ids,
+    :source_download_url
   ]
 
   @type t :: %__MODULE__{
           season_pack: boolean() | nil,
           season_number: integer() | nil,
           episode_count: integer() | nil,
-          episode_ids: [String.t()] | nil
+          episode_ids: [String.t()] | nil,
+          source_download_url: String.t() | nil
         }
 
   @doc """

@@ -199,4 +199,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     b = %{a | download_url: "https://t.test/dl?id=1"}
     assert [%{kind: :field, field: :download_url}] = run([a], [b]).divergences
   end
+
+  test "a native magnet equals a wasm link only through source_download_url" do
+    link = "https://t.test/torrent/download/1"
+    native = result("Lantern Harbor", @hash_a, metadata: %{source_download_url: link})
+    wasm = %{native | download_url: link, metadata: nil}
+
+    assert %{divergences: []} = run([native], [wasm])
+
+    other = %{native | metadata: %{source_download_url: "https://t.test/torrent/download/2"}}
+    assert [%{field: :download_url}] = run([other], [wasm]).divergences
+  end
 end
