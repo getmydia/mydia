@@ -150,6 +150,12 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert Transform.parse_size("2 GiB") == 2_147_483_648
     end
 
+    test "keeps thousands separators in the number" do
+      assert Transform.parse_size("1,017.6 MB") == 1_067_030_937
+      assert Transform.parse_size("2,048 KB") == 2_097_152
+      assert Transform.parse_size("1,017.6 MiB") == 1_067_030_937
+    end
+
     test "treats a unitless number as bytes" do
       assert Transform.parse_size("1024") == 1024
     end
@@ -171,6 +177,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
     test "falls back to a size embedded in the title" do
       assert Transform.parse_size_with_title_fallback("", "Lantern Harbor (2.5Gb)") ==
                2_684_354_560
+    end
+
+    test "reads thousands separators in a title size too" do
+      assert Transform.parse_size_with_title_fallback("", "Lantern Harbor 1,017.6 MB") ==
+               1_067_030_937
     end
 
     test "returns zero when neither source carries a size" do

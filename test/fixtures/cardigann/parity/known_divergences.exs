@@ -96,14 +96,6 @@
       "date_year_raw's regexp uses \\u00A0, which PCRE2 rejects, so native skips the filter and keeps the size cell (\"360.3 MB\"); date_year becomes \"360.3 MB +08:00\", dateparse leaves it unparsed, `or` prefers it over date_day and parse_date gives nil. wasm drops the non-matching cell and uses date_day (\"今天 02:30\" as today). Native is nil whatever the clock, so the divergence does not depend on when the test runs"
   },
   %{
-    definition: "mikan",
-    query: :tv,
-    kind: :field,
-    field: :size,
-    reason:
-      "native reads the \"1,017.6 MB\" size cell as 17.6 MiB (18454937), losing the thousands group; wasm reads 1017.6 MiB (1067030937)"
-  },
-  %{
     definition: "nekobt",
     query: :movie,
     kind: :field,

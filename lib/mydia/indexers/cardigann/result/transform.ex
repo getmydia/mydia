@@ -106,77 +106,49 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   @spec parse_size_with_title_fallback(String.t() | nil, String.t()) :: non_neg_integer()
   def parse_size_with_title_fallback(raw_size, title) do
     case parse_size(raw_size) do
-      0 -> extract_size_from_text(title)
+      0 -> size_in_bytes(title) || 0
       size -> size
     end
   end
 
-  # Extracts size from text containing embedded size like "(3.05Gb)" or "500MB"
-  defp extract_size_from_text(text) when is_binary(text) do
-    case Regex.run(~r/([\d.]+)\s*(gb|gib|mb|mib|kb|kib|tb|tib)/i, text) do
-      [_, num_str, unit] ->
-        case Float.parse(num_str) do
-          {num, _} -> trunc(num * size_unit_multiplier(String.downcase(unit)))
-          :error -> 0
-        end
-
-      nil ->
-        0
-    end
-  end
-
-  defp extract_size_from_text(_), do: 0
-
-  defp size_unit_multiplier("tb"), do: 1024 * 1024 * 1024 * 1024
-  defp size_unit_multiplier("tib"), do: 1024 * 1024 * 1024 * 1024
-  defp size_unit_multiplier("gb"), do: 1024 * 1024 * 1024
-  defp size_unit_multiplier("gib"), do: 1024 * 1024 * 1024
-  defp size_unit_multiplier("mb"), do: 1024 * 1024
-  defp size_unit_multiplier("mib"), do: 1024 * 1024
-  defp size_unit_multiplier("kb"), do: 1024
-  defp size_unit_multiplier("kib"), do: 1024
-  defp size_unit_multiplier(_), do: 1
+  # One table, longest spelling first, so a value is read in the unit it names.
+  @size_units [
+    {"tib", 1024 * 1024 * 1024 * 1024},
+    {"tb", 1024 * 1024 * 1024 * 1024},
+    {"gib", 1024 * 1024 * 1024},
+    {"gb", 1024 * 1024 * 1024},
+    {"mib", 1024 * 1024},
+    {"mb", 1024 * 1024},
+    {"kib", 1024},
+    {"kb", 1024}
+  ]
+  @size_pattern Regex.compile!(
+                  "([\\d,]+(?:\\.[\\d]+)?)\\s*(#{@size_units |> Enum.map(&elem(&1, 0)) |> Enum.join("|")})",
+                  "i"
+                )
 
   @spec parse_size(String.t() | nil) :: non_neg_integer()
   def parse_size(nil), do: 0
   def parse_size(""), do: 0
 
   def parse_size(size_str) when is_binary(size_str) do
-    size_str = String.trim(size_str)
-    size_str_lower = String.downcase(size_str)
+    size_in_bytes(size_str) || parse_integer(size_str)
+  end
 
-    cond do
-      String.contains?(size_str_lower, "gb") || String.contains?(size_str_lower, "gib") ->
-        parse_size_value(size_str, 1024 * 1024 * 1024)
+  # A number, with or without thousands separators, followed by a unit.
+  defp size_in_bytes(str) when is_binary(str) do
+    case Regex.run(@size_pattern, str) do
+      [_, number, unit] ->
+        {_, multiplier} = List.keyfind(@size_units, String.downcase(unit), 0)
+        {value, _rest} = Float.parse(String.replace(number, ",", ""))
+        trunc(value * multiplier)
 
-      String.contains?(size_str_lower, "mb") || String.contains?(size_str_lower, "mib") ->
-        parse_size_value(size_str, 1024 * 1024)
-
-      String.contains?(size_str_lower, "kb") || String.contains?(size_str_lower, "kib") ->
-        parse_size_value(size_str, 1024)
-
-      String.contains?(size_str_lower, "tb") || String.contains?(size_str_lower, "tib") ->
-        parse_size_value(size_str, 1024 * 1024 * 1024 * 1024)
-
-      true ->
-        parse_integer(size_str)
+      nil ->
+        nil
     end
   end
 
-  defp parse_size_value(size_str, multiplier) do
-    # A number right before the unit, as in "3.05Gb" or "500 MB"; otherwise
-    # every digit and period in the string.
-    numeric_part =
-      case Regex.run(~r/([\d.]+)\s*(?:gb|gib|mb|mib|kb|kib|tb|tib)/i, size_str) do
-        [_, num] -> num
-        nil -> size_str |> String.replace(~r/[^\d.]/, "") |> String.trim()
-      end
-
-    case Float.parse(numeric_part) do
-      {value, _} -> trunc(value * multiplier)
-      :error -> 0
-    end
-  end
+  defp size_in_bytes(_), do: nil
 
   defp parse_integer(nil), do: 0
   defp parse_integer(""), do: 0
