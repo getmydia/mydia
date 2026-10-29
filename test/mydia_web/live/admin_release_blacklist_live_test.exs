@@ -60,8 +60,9 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       assert has_element?(view, "#block-forever-#{row.id}")
     end
 
-    test "redacts a passkey carried by a URL guid", %{view: view} do
-      guid = "https://tracker.example/download.php?id=7&passkey=QUIETORCHARDSECRET"
+    test "redacts a passkey and userinfo carried by a URL guid", %{view: view} do
+      guid =
+        "https://orchard:LANTERNPASSWORD@tracker.example/download.php?id=7&passkey=QUIETORCHARDSECRET"
 
       {:ok, row} = Blacklists.add("lanterntracker", guid, "Quiet Orchard S01E01", "stalled")
 
@@ -71,6 +72,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
 
       assert has_element?(view, "#blacklist-row-#{row.id}", "download.php?id=7")
       refute html =~ "QUIETORCHARDSECRET"
+      refute html =~ "LANTERNPASSWORD"
     end
 
     test "remove deletes the row", %{view: view} do

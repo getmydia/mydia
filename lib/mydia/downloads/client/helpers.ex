@@ -21,6 +21,7 @@ defmodule Mydia.Downloads.Client.Helpers do
   # spellings matter because a Cardigann guid is the release's download URL.
   @sensitive_url_params ~w(token auth apikey api_key agent _apikey password
                            passkey authkey rsskey torrent_pass api_token)
+  @redacted_param_value URI.encode_www_form("[REDACTED]")
 
   # Upper bound on a `DownloadStatus.failure_detail`. Provider detail is a
   # short native token; anything longer is a payload dump that has no
@@ -137,8 +138,13 @@ defmodule Mydia.Downloads.Client.Helpers do
   end
 
   @doc """
-  Strips credential-bearing query parameters from a URL. Used everywhere a
-  URL might end up in a `Logger` line or an `Error` envelope.
+  Strips credentials from a URL: the value of every credential-bearing query
+  parameter, and any `user:password@` userinfo. Used everywhere a URL might
+  end up in a `Logger` line, an `Error` envelope or an admin page.
+
+  Parameters are rewritten pair by pair, so the rest of the query keeps its
+  original encoding and order, repeated keys (a magnet's `tr=`) all survive,
+  and a URL carrying no credentials comes back byte for byte.
 
   Returns the URL unchanged if parsing fails (safer to log a half-redacted
   string than to crash inside an error-handling path).
@@ -147,29 +153,30 @@ defmodule Mydia.Downloads.Client.Helpers do
   def redact_url(nil), do: nil
 
   def redact_url(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{query: nil} ->
-        url
+    uri = URI.parse(url)
+    query = uri.query && redact_query(uri.query)
 
-      %URI{query: query} = uri ->
-        scrubbed =
-          query
-          |> URI.decode_query()
-          |> Enum.map(fn {k, v} ->
-            if String.downcase(k) in @sensitive_url_params do
-              {k, "[REDACTED]"}
-            else
-              {k, v}
-            end
-          end)
-          |> Enum.map_join("&", fn {k, v} ->
-            "#{URI.encode_www_form(k)}=#{URI.encode_www_form(v)}"
-          end)
-
-        URI.to_string(%{uri | query: scrubbed})
-    end
+    if is_nil(uri.userinfo) and query == uri.query,
+      do: url,
+      else: URI.to_string(%{uri | userinfo: nil, query: query})
   rescue
     _ -> url
+  end
+
+  defp redact_query(query) do
+    query
+    |> String.split("&")
+    |> Enum.map_join("&", fn pair ->
+      [key | _] = String.split(pair, "=", parts: 2)
+      if sensitive_param?(key), do: key <> "=" <> @redacted_param_value, else: pair
+    end)
+  end
+
+  defp sensitive_param?(key) do
+    String.downcase(URI.decode_www_form(key)) in @sensitive_url_params
+  rescue
+    # A malformed escape in the key; compare it as written.
+    ArgumentError -> String.downcase(key) in @sensitive_url_params
   end
 
   @doc """
