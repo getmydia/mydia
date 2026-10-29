@@ -23,8 +23,12 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   alias MydiaWeb.SearchLive.ReleaseAdd
 
   # Creating a movie asks the relay whether it belongs to a franchise (#1293).
+  # The details cache is global and this module is async, so each test warms
+  # an id of its own; a shared one like 1 collides with other tests' entries.
   setup do
-    warm_movie_details_cache(1)
+    provider_id = unique_provider_id()
+    warm_movie_details_cache(provider_id)
+    %{provider_id: to_string(provider_id)}
   end
 
   defp cartoon_only_scope do
@@ -36,35 +40,50 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   end
 
   defp metadata(attrs) do
-    struct!(%MediaMetadata{provider_id: "1", provider: :tmdb, media_type: :movie}, attrs)
+    struct!(MediaMetadata, Keyword.merge([provider: :tmdb, media_type: :movie], attrs))
   end
 
-  test "an out-of-bounds release refuses cleanly instead of raising" do
+  test "an out-of-bounds release refuses cleanly instead of raising", %{provider_id: id} do
     assert {:error, :restricted} =
              ReleaseAdd.create_media_item_from_metadata(
                cartoon_only_scope(),
                parsed(title: "Live Action Thriller", year: 2024),
-               metadata(title: "Live Action Thriller", genres: ["Thriller"], content_rating: "R")
+               metadata(
+                 title: "Live Action Thriller",
+                 genres: ["Thriller"],
+                 content_rating: "R",
+                 provider_id: id
+               )
              )
   end
 
-  test "an in-bounds release still creates normally" do
+  test "an in-bounds release still creates normally", %{provider_id: id} do
     assert {:ok, item, :created} =
              ReleaseAdd.create_media_item_from_metadata(
                cartoon_only_scope(),
                parsed(title: "Animated Feature", year: 2024),
-               metadata(title: "Animated Feature", genres: ["Animation"], content_rating: "G")
+               metadata(
+                 title: "Animated Feature",
+                 genres: ["Animation"],
+                 content_rating: "G",
+                 provider_id: id
+               )
              )
 
     assert item.category == "cartoon_movie"
   end
 
-  test "an unrestricted scope is unaffected" do
+  test "an unrestricted scope is unaffected", %{provider_id: id} do
     assert {:ok, _item, :created} =
              ReleaseAdd.create_media_item_from_metadata(
                Scope.unrestricted(),
                parsed(title: "Anything At All", year: 2024),
-               metadata(title: "Anything At All", genres: ["Thriller"], content_rating: "R")
+               metadata(
+                 title: "Anything At All",
+                 genres: ["Thriller"],
+                 content_rating: "R",
+                 provider_id: id
+               )
              )
   end
 end
