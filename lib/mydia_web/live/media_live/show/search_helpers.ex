@@ -238,12 +238,37 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     stream_prepared_results(socket, sorted_results)
   end
 
+  @quality_options ["720p", "1080p", "2160p"]
+
+  @doc """
+  The resolutions the Quality filter offers, in display order.
+  """
+  def quality_options, do: @quality_options
+
+  @doc """
+  Folds the spellings of one resolution into the value the Quality filter
+  uses: `4k` and `2160p` are the same choice.
+  """
+  def normalize_quality(resolution) when is_binary(resolution) do
+    case String.downcase(resolution) do
+      "4k" -> "2160p"
+      other -> other
+    end
+  end
+
+  @doc """
+  Applies the manual search filters to `results`.
+
+  Each list filter keeps a result that matches any of its values; the lists
+  combine with AND. An empty list (or a missing key) does not filter.
+  """
   def filter_search_results(results, assigns) do
     results
-    |> filter_by_seeders(assigns.min_seeders)
-    |> filter_by_quality(assigns.quality_filter)
-    |> filter_by_source(Map.get(assigns, :source_filter))
-    |> filter_by_codec(Map.get(assigns, :codec_filter))
+    |> filter_by_seeders(Map.get(assigns, :min_seeders, 0))
+    |> keep_matching(Map.get(assigns, :quality_filters, []), &quality_values/1)
+    |> keep_matching(Map.get(assigns, :source_filters, []), &source_values/1)
+    |> keep_matching(Map.get(assigns, :codec_filters, []), &codec_values/1)
+    |> keep_matching(Map.get(assigns, :indexer_filters, []), &SearchResult.indexers/1)
   end
 
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
@@ -255,38 +280,26 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   defp filter_by_seeders(results, _), do: results
 
-  defp filter_by_quality(results, nil), do: results
+  # A release whose name carries no resolution, source or codec token is
+  # hidden while that filter is active: it has no value that could match.
+  defp keep_matching(results, [], _values), do: results
 
-  defp filter_by_quality(results, quality_filter) do
+  defp keep_matching(results, selected, values) do
+    selected = MapSet.new(selected)
+
     Enum.filter(results, fn result ->
-      case result.quality do
-        %{resolution: resolution} when not is_nil(resolution) ->
-          # Normalize 2160p to 4k and vice versa
-          normalized_resolution = normalize_resolution(resolution)
-          normalized_filter = normalize_resolution(quality_filter)
-          normalized_resolution == normalized_filter
-
-        _ ->
-          false
-      end
+      Enum.any?(values.(result), &MapSet.member?(selected, &1))
     end)
   end
 
-  defp normalize_resolution("2160p"), do: "4k"
-  defp normalize_resolution("4k"), do: "4k"
-  defp normalize_resolution(res), do: String.downcase(res)
+  defp quality_values(%{quality: %{resolution: resolution}}) when is_binary(resolution),
+    do: [normalize_quality(resolution)]
 
-  # A release whose name carries no source or codec token is hidden while that
-  # filter is active, the same way filter_by_quality/2 treats a nil resolution.
-  defp filter_by_source(results, nil), do: results
+  defp quality_values(_result), do: []
 
-  defp filter_by_source(results, source),
-    do: Enum.filter(results, &(result_source(&1) == source))
+  defp source_values(result), do: List.wrap(result_source(result))
 
-  defp filter_by_codec(results, nil), do: results
-
-  defp filter_by_codec(results, family),
-    do: Enum.filter(results, &(codec_family(result_codec(&1)) == family))
+  defp codec_values(result), do: result |> result_codec() |> codec_family() |> List.wrap()
 
   defp result_source(%{quality: %{source: source}}), do: source
   defp result_source(_), do: nil
@@ -326,26 +339,43 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   end
 
   @doc """
-  The Source and Codec options for the current pre-filter result pool.
+  The Source, Codec and Indexer options for the current pre-filter result pool.
 
   Only values present in `results` are offered, so a choice never matches
   nothing. The active selections are always kept so a filter whose value has
-  dropped out of the pool can still be cleared.
+  dropped out of the pool can still be cleared. Indexers come with the number
+  of pool results each tracker returned; counts use the whole pool, so they do
+  not move as other filters change.
   """
-  def filter_options(results, source_filter, codec_filter) do
-    sources =
-      results
-      |> Enum.map(&result_source/1)
-      |> Kernel.++([source_filter])
-      |> order_by(Sources.all())
+  def filter_options(results, assigns) do
+    %{
+      sources:
+        results
+        |> Enum.flat_map(&source_values/1)
+        |> Kernel.++(Map.get(assigns, :source_filters, []))
+        |> order_by(Sources.all()),
+      codecs:
+        results
+        |> Enum.flat_map(&codec_values/1)
+        |> Kernel.++(Map.get(assigns, :codec_filters, []))
+        |> order_by(@codec_families),
+      indexers: indexer_options(results, Map.get(assigns, :indexer_filters, []))
+    }
+  end
 
-    codecs =
-      results
-      |> Enum.map(&(&1 |> result_codec() |> codec_family()))
-      |> Kernel.++([codec_filter])
-      |> order_by(@codec_families)
+  @doc """
+  Every tracker that returned a release in `results`.
+  """
+  def known_indexers(results) do
+    results |> Enum.flat_map(&SearchResult.indexers/1) |> MapSet.new()
+  end
 
-    %{sources: sources, codecs: codecs}
+  defp indexer_options(results, selected) do
+    results
+    |> Enum.flat_map(&SearchResult.indexers/1)
+    |> Enum.frequencies()
+    |> then(fn counts -> Enum.reduce(selected, counts, &Map.put_new(&2, &1, 0)) end)
+    |> Enum.sort_by(fn {name, _count} -> String.downcase(name) end)
   end
 
   # Drops nil and anything outside the known vocabulary, which also keeps a

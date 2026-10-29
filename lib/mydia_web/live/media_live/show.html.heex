@@ -510,11 +510,11 @@
       source_filter={@source_filter}
       codec_filter={@codec_filter}
       filter_options={
-        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(
-          @raw_search_results,
-          @source_filter,
-          @codec_filter
-        )
+        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(@raw_search_results, %{
+          source_filters: List.wrap(@source_filter),
+          codec_filters: List.wrap(@codec_filter),
+          indexer_filters: []
+        })
       }
       min_seeders={@min_seeders}
       sort_by={@sort_by}

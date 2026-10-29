@@ -462,6 +462,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:download_error, nil)
     |> assign(:source_filter, nil)
     |> assign(:codec_filter, nil)
+    |> assign(:source_filters, [])
+    |> assign(:codec_filters, [])
     |> stream(:search_results, [], reset: true)
   end
 
@@ -489,6 +491,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:quality_filter, quality_filter)
      |> assign(:source_filter, source_filter)
      |> assign(:codec_filter, codec_filter)
+     # Temporary bridge: the list assigns are what filter_search_results/2
+     # reads; the single-value assigns above still drive the current UI.
+     |> assign(:quality_filters, List.wrap(quality_filter && normalize_quality(quality_filter)))
+     |> assign(:source_filters, List.wrap(source_filter))
+     |> assign(:codec_filters, List.wrap(codec_filter))
      |> apply_search_filters()}
   end
 
