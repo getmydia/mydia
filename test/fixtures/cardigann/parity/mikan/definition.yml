@@ -1,0 +1,75 @@
+---
+id: mikan
+name: Mikan
+description: "Mikan is a CHINESE Public torrent tracker for ANIME"
+language: zh-CN
+type: public
+encoding: UTF-8
+links:
+  - https://mikanani.me/
+
+caps:
+  categorymappings:
+    - {id: 1, cat: TV/Anime, desc: "Anime"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+
+settings: []
+
+search:
+  paths:
+    # https://mikanani.me/Home/Search?searchstr=%E5%90%8D%E4%BE%A6%E6%8E%A2%E6%9F%AF%E5%8D%97
+    - path: "Home/{{ if .Keywords }}Search?searchstr={{ .Keywords }}{{ else }}Classic{{ end }}"
+
+  rows:
+    selector: table.table-striped tbody tr
+
+  fields:
+    category:
+      text: 1
+    title:
+      selector: a[href^="/Home/Episode/"]
+    details:
+      selector: a[href^="/Home/Episode/"]
+      attribute: href
+    download:
+      selector: a[href^="/Download/"]
+      attribute: href
+    magnet:
+      selector: a[data-clipboard-text]
+      attribute: data-clipboard-text
+    date_day:
+      selector: td:nth-child(1):contains("今天"), td:nth-child(1):contains("昨天")
+      optional: true
+      filters:
+        - name: replace
+          args: ["昨天", "Yesterday"]
+        - name: replace
+          args: ["今天", "Today"]
+        - name: fuzzytime
+    date_year_raw:
+      selector: td:nth-of-type(4)
+      optional: true
+      filters:
+        - name: regexp
+          args: "(\\d{4}/\\d{1,2}/\\d{1,2}[\\s\\u00A0]+\\d{1,2}:\\d{2})"
+    date_year:
+      text: "{{ if .Result.date_year_raw }}{{ .Result.date_year_raw }} +08:00{{ else }}{{ end }}"
+      filters:
+        - name: dateparse
+          args: "yyyy/MM/dd HH:mm zzz"
+    date:
+      text: "{{ if or .Result.date_year .Result.date_day }}{{ or .Result.date_year .Result.date_day }}{{ else }}now{{ end }}"
+    size:
+      selector: td:has(a[data-clipboard-text]) ~ td
+    seeders:
+      text: 1
+    leechers:
+      text: 1
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# Engine n/a

@@ -14,6 +14,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   `option<list<u8>>` request bodies, `list<u8>` response bodies as integer
   lists, and the `http-error` variant as `{case, message}`.
 
+  The parity harness (`Mydia.Indexers.Cardigann.Parity`) can ride in the ctx:
+  `:replay` answers every exchange from a recorded capture instead of the
+  network (no throttle, gate or FlareSolverr), and `:record` collects each
+  live exchange as the guest saw it. `Wasm.Adapter` copies them from the
+  parity seam when it builds the ctx; this module never reads the seam, since
+  the guest runs in a separate process.
+
   Request and response bodies, and Cookie and Authorization values, are
   credentials and are never logged. Only method, host and status are.
   """
@@ -21,6 +28,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   require Logger
 
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
+  alias Mydia.Indexers.Cardigann.Parity.{Recorder, Replay, RequestKey}
+  alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
   alias Mydia.Indexers.RateLimiter
@@ -45,7 +54,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           # benchmark only: index 1 accumulates the exchanges' wall-clock microseconds
           optional(:network) => :atomics.atomics_ref(),
           # test-only: called with {:task, pid}, {:watcher, pid} and {:instance, pid} by the engine
-          optional(:guest_probe) => (term() -> any())
+          optional(:guest_probe) => (term() -> any()),
+          # parity harness: a Parity.Replay answering in place of the network
+          optional(:replay) => pid(),
+          # parity harness: a Parity.Recorder collecting the live exchanges
+          optional(:record) => pid()
         }
 
   @type header :: %{name: String.t(), value: String.t()}
@@ -135,21 +148,54 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   def default_timeout_ms, do: @default_timeout_ms
 
   @doc """
-  Performs one gated HTTP exchange for the guest.
+  Performs one gated HTTP exchange for the guest. When the ctx carries
+  `:replay`, the exchange is answered from the recorded capture instead, with
+  no throttle, gate or FlareSolverr.
   """
   @spec exchange(ctx(), request()) :: {:ok, response()} | {:error, {error_kind(), String.t()}}
+  def exchange(%{replay: replay}, req) when is_pid(replay) do
+    key = RequestKey.new(req.method, req.url, req.body)
+
+    case Replay.fetch(replay, key) do
+      {:ok, %Exchange{error: nil} = ex} ->
+        headers = Enum.map(ex.headers, fn {name, value} -> %{name: name, value: value} end)
+        {:ok, %{status: ex.status, headers: headers, body: ex.body || ""}}
+
+      {:ok, %Exchange{error: kind}} ->
+        {:error, {replay_error_kind(kind), "parity replay: recorded #{kind}"}}
+
+      :miss ->
+        {:ok, %{status: 404, headers: [], body: "parity replay miss"}}
+    end
+  end
+
   def exchange(ctx, req) do
     :ok = RateLimiter.throttle(ctx.definition_id, ctx.request_delay_ms)
     started = System.monotonic_time(:microsecond)
 
     try do
       result = do_exchange(ctx, req)
+      maybe_record(ctx, req, result)
       log_outcome(req, result)
       result
     after
       record_network(ctx, System.monotonic_time(:microsecond) - started)
     end
   end
+
+  # Captures use the Elixir engine's transport reasons; the guest only knows
+  # the four host error kinds. A capture recorded through the native engine
+  # stores Req's raw reasons (:closed, :econnrefused, :nxdomain), and replaying
+  # it through wasm must fail the way a live wasm exchange would, which
+  # map_error/1 reports as :connect for all three.
+  defp replay_error_kind(kind) when kind in [:timeout, :connect, :blocked], do: kind
+  defp replay_error_kind(kind) when kind in [:closed, :econnrefused, :nxdomain], do: :connect
+  defp replay_error_kind(_kind), do: :other
+
+  defp maybe_record(%{record: recorder}, req, result) when is_pid(recorder),
+    do: Recorder.record(recorder, RequestKey.new(req.method, req.url, req.body), result)
+
+  defp maybe_record(_ctx, _req, _result), do: :ok
 
   defp do_exchange(ctx, req) do
     with {:ok, response} <- send_once(ctx, req) do

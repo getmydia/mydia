@@ -1,0 +1,104 @@
+{
+  "definition": "nekobt",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "method": "GET",
+        "url": "https://nekobt.to/api/torznab/api?limit=100&t=search"
+      },
+      "response": {
+        "body_file": "001.xml",
+        "headers": [
+          [
+            "alt-svc",
+            "h3=\":443\"; ma=86400"
+          ],
+          [
+            "cf-cache-status",
+            "DYNAMIC"
+          ],
+          [
+            "cf-ray",
+            "a51c2ada5d2b5619-BOS"
+          ],
+          [
+            "connection",
+            "close"
+          ],
+          [
+            "content-type",
+            "application/xml"
+          ],
+          [
+            "date",
+            "Wed, 28 Oct 2026 18:57:39 GMT"
+          ],
+          [
+            "expect-ct",
+            "max-age=86400, enforce"
+          ],
+          [
+            "nel",
+            "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+          ],
+          [
+            "referrer-policy",
+            "same-origin"
+          ],
+          [
+            "report-to",
+            "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=W%2FVyQmvPYQKC0Xb%2BwGrvRwLAqPli%2FtW8hSgcLuRBOEaOg%2B8leknYbKoT0h9Ix68FQ%2FgVxbizIb0HtZHm4DmyyUn0C%2BmBA0MEa7SjLgsfP4YrhJsbEt56Kv9jcH8%3D\"}]}"
+          ],
+          [
+            "server",
+            "cloudflare"
+          ],
+          [
+            "server-timing",
+            "cfCacheStatus;desc=\"DYNAMIC\""
+          ],
+          [
+            "server-timing",
+            "cfEdge;dur=4,cfOrigin;dur=314"
+          ],
+          [
+            "speculation-rules",
+            "\"/cdn-cgi/speculation\""
+          ],
+          [
+            "strict-transport-security",
+            "max-age=31536000; includeSubDomains; preload"
+          ],
+          [
+            "transfer-encoding",
+            "chunked"
+          ],
+          [
+            "vary",
+            "Accept-Encoding"
+          ],
+          [
+            "x-content-type-options",
+            "nosniff"
+          ],
+          [
+            "x-frame-options",
+            "SAMEORIGIN"
+          ],
+          [
+            "x-xss-protection",
+            "1; mode=block"
+          ]
+        ],
+        "status": 200
+      }
+    }
+  ],
+  "format_version": 1,
+  "query": {
+    "kind": "rss",
+    "term": ""
+  },
+  "ref": "d34bddc56cfd6a55f75a9f69dcc2df9eb591662c"
+}

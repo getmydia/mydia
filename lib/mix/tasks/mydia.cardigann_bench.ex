@@ -111,7 +111,8 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
   end
 
   # The switcher starts the engine only when it is chosen; the bench starts it itself.
-  defp ensure_engine! do
+  @doc false
+  def ensure_engine! do
     :ok = Engine.ensure_started()
 
     unless Engine.available?() do
@@ -141,7 +142,9 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
 
   # -- database ---------------------------------------------------------------------
 
-  defp isolate_database!(database) do
+  @doc false
+  # Shared with mix mydia.cardigann_parity.
+  def isolate_database!(database) do
     Mix.Task.run("app.config")
 
     repo_config = Application.get_env(:mydia, Mydia.Repo, [])
@@ -181,7 +184,8 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
       end)
   end
 
-  defp verify_database!(database) do
+  @doc false
+  def verify_database!(database) do
     configured = Mydia.Repo.config()[:database]
 
     if Path.expand(configured || "") != database do

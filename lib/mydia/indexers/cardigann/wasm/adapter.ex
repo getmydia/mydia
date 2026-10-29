@@ -71,6 +71,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.{AdapterSupport, Links}
+  alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.Wasm.Engine
 
   alias Mydia.Indexers.{
@@ -446,6 +447,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       indexer_name: setting(config, :name) || definition.name,
       gate_opts: gate_opts()
     }
+    |> Map.merge(Map.take(Seam.current() || %{}, [:replay, :record]))
   end
 
   @doc false

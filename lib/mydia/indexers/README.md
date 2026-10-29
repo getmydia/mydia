@@ -413,6 +413,131 @@ through the real search path and buckets the result (`ok`, `ok_empty_query`,
 run it by hand, never in CI. `--capture tmp/cardigann_captures` saves raw pages;
 committed fixtures are reduced from them with invented titles, never copied.
 
+## Cardigann parity oracle
+
+The wasm engine runs Prowlarr's own Cardigann code, so on the same HTTP it gives
+the answer Prowlarr would. The parity oracle uses it as the reference for the
+built-in engine: it records real tracker responses once, replays them offline
+through both engines, and compares the results field by field (title, size,
+seeders, leechers, download and info URLs, guid, category, date, external IDs,
+info hash, volume factors). Code is under `lib/mydia/indexers/cardigann/parity/`;
+the task is `mix mydia.cardigann_parity` (its moduledoc lists every flag).
+
+- `record [--ref SHA] [--only a,b]` runs the wasm engine live against the
+  trackers at a Prowlarr/Indexers commit and saves every exchange under
+  `~/.cache/mydia-cardigann-parity/<ref>/<definition>/<query>/`. This is the
+  only command that touches the network. Nothing it writes goes in the repository.
+- `diff [--only a,b] [--seed] [--write-ratchet]` replays a capture set (the
+  newest one, or the committed seed with `--seed`) and prints a report of every
+  divergence. `--write-ratchet` rewrites the ratchet, keeping existing reasons
+  and marking new entries `"TODO"`.
+- `seed <definition>` scrubs one definition's cached captures into
+  `test/fixtures/cardigann/parity/<definition>/`: pages trimmed to their rows,
+  real names replaced, and the result replayed to prove the wasm engine still
+  parses it the same way. It refuses to write a capture that fails that check.
+
+### The seed set
+
+Recorded at Prowlarr/Indexers `d34bddc56cfd6a55f75a9f69dcc2df9eb591662c` on
+2026-10-28. Nine definitions, 18 captures, 2.7 MB. The set leans on game,
+distro and anime trackers, whose titles carry fewer film and series names for
+the scrubber to catch.
+
+| Definition | Captures | What it covers |
+|---|---|---|
+| bigfangroup | movie, rss | windows-1251 HTML; a title selector that matches three links per row |
+| blueroms | generic, rss | a title built from another field by an `append` filter template; console categories; `generic` is a page with no results |
+| dmhy | movie, rss | CJK fansub titles with several names each; a hidden absolute date beside a relative one |
+| linuxtracker | generic, rss | `categorydesc`; magnets built from an info hash; rows whose category has no mapping |
+| mikan | tv, rss | a chain of text fields (`date_year_raw` to `date_year` to `date`) and fuzzy relative dates |
+| nekobt | movie, rss | XML (Torznab feed), kept whole |
+| nyaasi | movie, rss | a multi-page search: the keywordless `rss` query reads two pages from two search paths |
+| pctorrent | generic, rss | windows-1251 HTML; `rows.filters: andmatch` (24 rows against 0) |
+| yts | movie, rss | JSON; the `case` block (one of three public definitions with one), exercised by `rss` only: `movie` is an empty answer (`movie_count: 0`), because the corpus's movie term `1080p` matches no YTS title |
+
+byrutor and crackingpatching were seeded once and dropped: their pages repeat
+real names outside the titles (a developer that shares words with a title,
+software names in descriptions and image alt text), which the leak check
+rejects. Adult trackers are never in the set. `parity_test.exs` pins the list
+of captures, so adding or dropping one is a deliberate change to the test, the
+ratchet and this table together.
+
+### The ratchet
+
+`test/fixtures/cardigann/parity/known_divergences.exs` lists every divergence
+the built-in engine still has on the seed, one entry per definition, query,
+kind and field, each with a reason. `test/mydia/indexers/cardigann/parity_test.exs`
+replays every capture (one test per capture, tagged `cardigann_wasm`, so it runs
+wherever the guest is present) and fails when:
+
+- a divergence is not in the file (a regression, or a new capture);
+- an entry no longer occurs (a fix: delete the entry, so the file only shrinks);
+- an entry still reads `"TODO"`.
+
+A reason comes from reading both engines' output for that field and the code
+that produced it. When the cause is not known, the reason starts with
+`unexplained:` and says what differs.
+
+To refresh the seed: `record`, then `seed` each definition, then
+`diff --seed --write-ratchet`, then annotate the new entries and run the test.
+
+### What scrubbing guarantees, and what it does not
+
+Work names in the seed's release titles are invented (`Mellow Kiln`). The one
+exception is a work that equals a category name in the definition, which is
+kept as the limits below describe. The scrubber learns real names from the
+titles both engines parse: the text before the first release marker, each
+bracketed, slashed, comma-listed, `+`-joined or colon-split segment, the same
+without numbered or version tokens at its edges, the Latin part of a name
+written in two scripts, and an episode title of two or more words between two
+markers. It replaces them one work at a time, longest first, in every spelling
+a tracker uses (escaped, percent-encoded, as a slug, in the page's charset,
+with any punctuation between its words, with accents stripped or dropped, with
+an acronym's dots taken out), so a shorter name never renames the start of a
+longer one and leaves the rest.
+
+Real identifiers are replaced too: IMDb ids, TMDB, TVDB, TVMaze, AniList and
+similar ids in Torznab attributes and JSON keys, and BitTorrent info hashes
+(hex or base32, bare, in magnets or in URLs, keeping their case). Each becomes
+a deterministic stand-in, so both engines still see the same value. The
+stand-ins sit in ranges that have never been issued but still fit a 32-bit
+int (`tt2` and 8 digits for IMDb, `20` and 8 digits for the others), so none
+of them names a real title.
+
+The seed then replays the scrubbed capture and fails if parsing changed (ids
+and hashes are compared through their stand-ins), if any learned name is still
+there in a renamer form, in text with every encoding undone, or as a pair of
+its distinctive words (what a partial rename leaves behind), or if any original
+id or hash survived.
+
+That guarantee covers names learned from titles, and ids and hashes, and
+nothing else:
+
+- a name too short to rename safely (under three characters, or a segment
+  under five, or three for CJK) is left as it is;
+- a one-word episode title (`S01E04 Lantern 1080p`) is not learned, because
+  between two markers a single word reads as a release tag as often as a name;
+- a work that equals a category name in the definition (`SparkyLinux` on a
+  distro tracker) is tracker vocabulary and stays, since renaming it would also
+  rename the category label;
+- text no title contains passes through: uploader and fansub group names,
+  descriptions, category labels, and an alternate name that only appears
+  elsewhere in a row or in an untrimmed body (XML feeds, pages with no rows,
+  error pages);
+- a body that is neither UTF-8 nor a clean round trip through its charset only
+  gets the fixed spellings, and `seed` says so;
+- a tracker's own release ids in row links (`/view/2179870`,
+  `details.php?id=420750`, `torrents/14726011222030`) are kept, so a link still
+  resolves to the real release page on that tracker. Every tracker shapes them
+  differently, and some share digits with dates in the same URL, so there is
+  no safe general rule for them yet.
+
+`seed` prints a `WARNING` line for every body it keeps whole, every category
+name it leaves alone and every body the word pass could not read. Read those
+bodies, and skim the others, before committing. A film or series title found
+there is a gap in the scrubber: fix the scrubber with a test and seed again, or
+drop the definition. Never edit a fixture by hand.
+
 ## Search metrics
 
 Every indexer call settles into one `[:mydia, :indexers, :search, :stop]`
