@@ -103,6 +103,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
     end
   end
 
+  @spec get_field(map(), String.t(), String.t() | nil) :: String.t() | nil
   defp get_field(row, field, default \\ nil), do: Map.get(row, field) || default
 
   @spec parse_size_with_title_fallback(String.t() | nil, String.t()) :: non_neg_integer()
