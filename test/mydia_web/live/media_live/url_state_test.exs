@@ -230,5 +230,55 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
 
       assert Mydia.Accounts.library_listing_state(user, "movies") == %{}
     end
+
+    test "searching a page whose URL overrides the saved state keeps the saved state",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+      view |> element("#library-search-form") |> render_change(%{"search" => "fern"})
+
+      assert Mydia.Accounts.library_listing_state(user, "movies") == %{"sort" => "year_desc"}
+    end
+
+    test "Clear filters on a page whose URL overrides the saved state forgets it",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=added_desc")
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.library_listing_state(user, "movies") == %{}
+    end
+
+    test "Clear filters forgets the saved state even when the URL shows the defaults",
+         %{conn: conn, user: user} do
+      :ok = Mydia.Accounts.put_library_listing_state(user, "movies", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=title_asc&q=fern")
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.library_listing_state(user, "movies") == %{}
+    end
+
+    test "a live patch to a page with the same restored listing loads that page's rows",
+         %{conn: conn, user: user} do
+      movie = media_item_fixture(%{type: "movie", title: "Quillmere Drift"})
+      show = media_item_fixture(%{type: "tv_show", title: "Harrowfen Lanterns"})
+      :ok = Mydia.Accounts.put_library_listing_state(user, "tv_shows", %{"sort" => "year_desc"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies?sort=year_desc")
+      assert has_element?(view, "#media_items-#{movie.id}")
+
+      render_patch(view, ~p"/tv")
+
+      assert has_element?(view, "#media_items-#{show.id}")
+      refute has_element?(view, "#media_items-#{movie.id}")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
   end
 end

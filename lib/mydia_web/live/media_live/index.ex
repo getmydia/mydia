@@ -116,8 +116,11 @@ defmodule MydiaWeb.MediaLive.Index do
           |> assign(:page_key, page_key)
           |> apply_action(socket.assigns.live_action, params)
 
-        {socket, params} = restore_listing(socket, params)
-        apply_listing_params(socket, params, true)
+        {socket, params, restored_path} = restore_listing(socket, params)
+
+        socket
+        |> apply_listing_params(params, true)
+        |> patch_restored(restored_path)
       end
 
     {:noreply, socket}
@@ -280,7 +283,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("clear_filters", _params, socket) do
-    {:noreply, patch_listing(socket, %ListingParams{})}
+    {:noreply, patch_listing(socket, %ListingParams{}, true)}
   end
 
   # Replies so the LoadMoreSentinel hook knows the batch has landed.
@@ -946,11 +949,11 @@ defmodule MydiaWeb.MediaLive.Index do
   # adding one, so Back from a title lands on the list in its latest state.
   # They also drop the A-Z jump letter, so the new listing starts at the top.
   # They also save the page's sort and filters for the next visit.
-  defp patch_listing(socket, %ListingParams{} = params) do
+  defp patch_listing(socket, %ListingParams{} = params, forget? \\ false) do
     params = %{params | shown: ListingParams.first_page(), above: 0, letter: nil}
 
     socket
-    |> remember_listing(params)
+    |> remember_listing(params, forget?)
     |> push_patch(
       to: ListingParams.path(socket.assigns.listing_base_path, params),
       replace: true
@@ -965,41 +968,47 @@ defmodule MydiaWeb.MediaLive.Index do
   # Entering a page whose URL sets no sort or filter starts from the ones the
   # user last chose there. The saved pairs go through the same parse as the
   # URL, so a deleted library or a retired sort key falls back to its default.
-  # The URL is patched to match once connected; that patch sees the same
-  # listing and reloads nothing. A URL that sets any of them wins outright.
+  # Returns the merged params and, when it restored anything, the path the URL
+  # is patched to once they are applied (patch_restored/2); that patch then
+  # sees the same listing and reloads nothing. Patching before applying would
+  # mark the socket redirected and skip the load. A URL that sets any of them
+  # wins outright.
   defp restore_listing(%{redirected: redirected} = socket, params)
        when not is_nil(redirected),
-       do: {socket, params}
+       do: {socket, params, nil}
 
   defp restore_listing(socket, params) do
     saved = Accounts.library_listing_state(socket.assigns.current_user, remembered_page(socket))
     socket = assign(socket, :remembered_listing, saved)
 
     if saved == %{} or ListingParams.listing_in_url?(params) do
-      {socket, params}
+      {socket, params, nil}
     else
       params = Map.merge(saved, params)
       restored = ListingParams.parse(params, library_choices(socket))
-
-      socket =
-        if connected?(socket),
-          do:
-            push_patch(socket,
-              to: ListingParams.path(socket.assigns.listing_base_path, restored),
-              replace: true
-            ),
-          else: socket
-
-      {socket, params}
+      {socket, params, ListingParams.path(socket.assigns.listing_base_path, restored)}
     end
   end
 
-  # Saves the page's sort and filters when they changed. A failed write only
-  # costs the memory of this choice, so it never blocks the patch.
-  defp remember_listing(socket, %ListingParams{} = params) do
-    pairs = ListingParams.to_remembered(params)
+  defp patch_restored(socket, nil), do: socket
 
-    if pairs == socket.assigns.remembered_listing do
+  defp patch_restored(%{redirected: redirected} = socket, _path) when not is_nil(redirected),
+    do: socket
+
+  defp patch_restored(socket, path) do
+    if connected?(socket), do: push_patch(socket, to: path, replace: true), else: socket
+  end
+
+  # Saves the page's sort and filters when the change alters the listing on
+  # screen, so a search, or a URL that overrides the saved state, writes
+  # nothing until the user picks a sort or filter. Clear filters (`forget?`)
+  # also drops a saved state the screen was not showing. A failed write only
+  # costs the memory of this choice, so it never blocks the patch.
+  defp remember_listing(socket, %ListingParams{} = params, forget?) do
+    pairs = ListingParams.to_remembered(params)
+    shown = ListingParams.to_remembered(Window.listing_params(socket.assigns))
+
+    if pairs == socket.assigns.remembered_listing or (pairs == shown and not forget?) do
       socket
     else
       case Accounts.put_library_listing_state(
