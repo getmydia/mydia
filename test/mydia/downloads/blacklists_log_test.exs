@@ -63,6 +63,7 @@ defmodule Mydia.Downloads.BlacklistsLogTest do
       end)
 
     assert log =~ "guid=#{legacy}"
+    assert log =~ "matched_by=key"
     refute log =~ primary
   end
 end
