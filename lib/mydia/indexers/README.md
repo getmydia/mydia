@@ -309,13 +309,16 @@ The health check and `LiveCheck` request page 1 only.
 
 `CardigannResultParser` is a thin facade over `lib/mydia/indexers/cardigann/result/`.
 `Result.Plan.compile/2` turns a definition's `search.rows` and `search.fields`
-into typed structs once per search: the row selector, its attribute,
+into typed structs once per parsed response: the row selector, its attribute,
 `after`/`count`, `andmatch`, `missingAttributeEqualsNoResults` and row filters,
 plus one `Plan.Field` per field with its selector, attribute, `case`, `remove`,
 `optional`/`default` and `text`. A template that reads `.Result` stays raw and is
-rendered per row; every other template is rendered at compile time. The search
-path's declared `response.type` picks the format, and only a definition that
-declares none gets the body sniffed (JSON, XML prolog or feed, else HTML).
+rendered per row; every other template is rendered at compile time. Each page's
+response compiles its own plan, so a multi-page search compiles once per page.
+The search path's declared `response.type` picks the format, and only a
+definition that declares none gets the body sniffed: a pre-decoded map or list
+is JSON, a body starting with `{` or `[` is JSON when it decodes, an `<?xml`
+prolog or an `<rss>` or `<torrents>` root is XML, and anything else is HTML.
 
 `Result.Pipeline.run/3` asks a format adapter to decode the body and list its
 rows, then runs `Result.Fields` over each row. The extractor makes two passes:
@@ -342,11 +345,18 @@ belongs in that format's adapter, and a filter that mangles a value belongs in
 `CardigannFilters`.
 
 `guid` is always set now: the download field, else the resolved download URL
-(often a magnet built from the infohash), else the details URL, as Prowlarr's
-release cleanup does. `Mydia.Downloads.Blacklists.release_guid/1` therefore
+(often a magnet built from the infohash), as Prowlarr's release cleanup does. A
+row with neither is already dropped, so its details URL never stands in for a
+guid. `Mydia.Downloads.Blacklists.release_guid/1` therefore
 keys Cardigann releases by guid instead of the `sha256:` fallback, so blacklist
 rows written before the change keep the fallback and a release blacklisted
 earlier can be grabbed once before it is blacklisted under the new key.
+
+Upgrading also changes which rows come back: `rows.filters: andmatch` now drops
+rows whose title lacks a keyword in every format, not only HTML. Five seeded
+snapshot definitions declare it (showrss, crackingpatching, eztv, ebookbay and
+torrentlt), so a keyworded query against any of them returns fewer rows than
+before.
 
 ## Cardigann engines: built-in and Prowlarr-based
 
