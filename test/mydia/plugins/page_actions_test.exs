@@ -507,6 +507,50 @@ defmodule Mydia.Plugins.PageActionsTest do
       assert request.tvdb_id == nil
     end
 
+    test "reading the title for a request does not run the franchise library lookup",
+         %{plugin: plugin} do
+      guest = user_fixture(%{role: "guest"})
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      collection_id = System.unique_integer([:positive])
+      bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
+      language = Mydia.Metadata.default_relay_config().options.language
+      test_pid = self()
+
+      on_exit(fn ->
+        Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{language}::official")
+        Cache.delete("collection:metadata_relay:#{collection_id}:#{language}")
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "title" => "The Tin Orchard",
+          "release_date" => "2031-03-04",
+          "credits" => %{"cast" => [], "crew" => []},
+          "belongs_to_collection" => %{"id" => collection_id, "name" => "Tin Orchard"}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/collections/#{collection_id}", fn conn ->
+        send(test_pid, :collection_fetched)
+        Plug.Conn.resp(conn, 404, "{}")
+      end)
+
+      :ok = Grants.grant("helper", guest.id, "media:add", "session", "s1")
+
+      assert {:ok, {:done, _json}} =
+               PageActions.media_add(plugin, ctx(guest), movie_target(tmdb_id))
+
+      assert [%{title: "The Tin Orchard", year: 2031}] =
+               Mydia.MediaRequests.list_requests(requester_id: guest.id)
+
+      refute_received :collection_fetched
+    end
+
     test "a role that can neither add nor request is refused", %{plugin: plugin} do
       ro = user_fixture(%{role: "readonly"})
 

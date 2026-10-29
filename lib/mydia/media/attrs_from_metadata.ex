@@ -98,7 +98,13 @@ defmodule Mydia.Media.AttrsFromMetadata do
   defp put_provider_id(base, _media_type, metadata),
     do: Map.put(base, :tmdb_id, metadata.provider_id)
 
-  defp year_from(metadata) do
+  @doc """
+  The release year of `metadata`: its `year`, else the year of its release or
+  first air date. For callers that need only the title and year, which
+  `from_metadata/3` would cost a full add-defaults resolution.
+  """
+  @spec year_from(map()) :: integer() | nil
+  def year_from(metadata) do
     Map.get(metadata, :year) ||
       extract_year(Map.get(metadata, :release_date)) ||
       extract_year(Map.get(metadata, :first_air_date))
