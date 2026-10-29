@@ -155,4 +155,17 @@ defmodule Mydia.Indexers.Cardigann.Result.PipelineTest do
     {:ok, doc} = Html.document(@html, plan)
     assert Html.empty_rows_diagnostics(doc) =~ "4 tr elements, 1 tables"
   end
+
+  test "a plan with no format reports an error instead of raising" do
+    ctx = %Context{
+      indexer_name: "Lantern",
+      template_context: %{},
+      base_url: "https://lantern.invalid"
+    }
+
+    assert {:error, %Error{type: :search_failed, message: message}} =
+             Pipeline.run(%Plan{format: nil}, @html, ctx)
+
+    assert message =~ "Lantern"
+  end
 end

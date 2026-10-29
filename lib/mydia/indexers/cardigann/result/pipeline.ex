@@ -38,7 +38,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
   # the message, and the indexer makes it traceable to a definition. Anything
   # else is the format's generic parse failure, which LiveCheck classifies by
   # its "Failed to parse <FORMAT>" prefix.
-  @spec parse_failure(Exception.t() | term(), :html | :json | :xml, String.t()) ::
+  @spec parse_failure(Exception.t() | term(), :html | :json | :xml | nil, String.t()) ::
           {:error, Error.t()}
   def parse_failure(error, format, indexer_name) do
     if Selector.selector_error?(error) do
@@ -48,9 +48,13 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
       {:error,
        Error.search_failed("Invalid selector in the #{indexer_name} definition: #{message}")}
     else
-      label = Map.fetch!(@labels, format)
+      label = Map.get(@labels, format, "unknown")
       Logger.error("#{label} parsing error for #{indexer_name}: #{inspect(error)}")
-      {:error, Error.search_failed("Failed to parse #{label} response: #{inspect(error)}")}
+
+      {:error,
+       Error.search_failed(
+         "Failed to parse #{label} response from #{indexer_name}: #{inspect(error)}"
+       )}
     end
   end
 
