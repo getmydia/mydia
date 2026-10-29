@@ -88,6 +88,30 @@ defmodule Mydia.Indexers.Cardigann.Result.FieldsTest do
                "orchard {{ .Config.flag }} / Lantern Harbor / orchard {{ .Config.flag }}"
     end
 
+    # Prowlarr's ApplyGoTemplateText substitutes `.Keywords` as literal text in
+    # its single per-row pass, so a keyword spelling out a `.Result` template
+    # reaches the filter unrendered.
+    test "a keyword spelling out a .Result template is not rendered against the row" do
+      context = %{keywords: "{{ .Result.platform }}"}
+
+      fields =
+        Map.merge(@download, %{
+          "title" => %{
+            selector: "td.name",
+            filters: [
+              %{name: "append", args: " / {{ .Keywords }}"},
+              %{name: "append", args: " - {{ .Result.platform }}"}
+            ]
+          },
+          "platform" => %{selector: "td.platform"}
+        })
+
+      assert {:ok, values} = extract_html(fields, context)
+
+      assert values["title"] ==
+               "Lantern Harbor / {{ .Result.platform }} - Quiet Orchard Console"
+    end
+
     test "filters run on the case result" do
       fields =
         Map.merge(@download, %{

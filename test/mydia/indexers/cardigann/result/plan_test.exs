@@ -3,7 +3,7 @@ defmodule Mydia.Indexers.Cardigann.Result.PlanTest do
 
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.Result.Plan
-  alias Mydia.Indexers.Cardigann.Result.Plan.{Field, Rows}
+  alias Mydia.Indexers.Cardigann.Result.Plan.{Field, RowTemplate, Rows}
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
   defp definition(search), do: %Parsed{id: "lantern", encoding: "UTF-8", search: search}
@@ -112,7 +112,10 @@ defmodule Mydia.Indexers.Cardigann.Result.PlanTest do
     assert title.remove == ["span.3"]
     assert title.filters == [%{name: "append", args: ["3"]}]
     assert raw.selector == "a.{{ .Result.title }}"
-    assert raw.filters == [%{name: "prepend", args: ["{{ .Result.title }}"]}]
+
+    assert raw.filters == [
+             %{name: "prepend", args: [%RowTemplate{template: "{{ .Result.title }}"}]}
+           ]
   end
 
   test "a non-map field config is an error naming the field" do

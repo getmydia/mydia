@@ -8,6 +8,8 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan.Field do
           name: String.t(),
           selector: String.t() | nil,
           attribute: String.t() | nil,
+          # Each filter's `args` hold final strings, plus a
+          # `Plan.RowTemplate` for every argument that reads `.Result`.
           filters: list(),
           remove: [String.t()] | nil,
           case: [{String.t(), String.t()}] | nil,

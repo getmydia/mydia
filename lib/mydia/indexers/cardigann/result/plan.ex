@@ -7,7 +7,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
   # depend on a row's `.Result` are rendered a single time.
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.Result.Plan.{Field, ResponseType, Rows}
+  alias Mydia.Indexers.Cardigann.Result.Plan.{Field, ResponseType, RowTemplate, Rows}
   alias Mydia.Indexers.Cardigann.TextFields
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -57,7 +57,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
   defp selector_templates(%Field{} = field) do
     filter_args =
       Enum.flat_map(field.filters, fn
-        %{} = filter -> List.wrap(fetch(filter, :args))
+        %{} = filter -> filter |> fetch(:args) |> List.wrap() |> Enum.map(&arg_template/1)
         _ -> []
       end)
 
@@ -67,6 +67,9 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
     |> Enum.filter(&is_binary/1)
     |> Enum.join(" ")
   end
+
+  defp arg_template(%RowTemplate{template: template}), do: template
+  defp arg_template(arg), do: arg
 
   defp compile_rows(rows, context) when is_binary(rows),
     do: compile_rows(%{selector: rows}, context)
@@ -154,13 +157,24 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
     key = if Map.has_key?(filter, :args), do: :args, else: "args"
 
     case fetch(filter, :args) do
-      args when is_list(args) -> Map.put(filter, key, Enum.map(args, &render(&1, context)))
-      args when is_binary(args) -> Map.put(filter, key, [render(args, context)])
+      args when is_list(args) -> Map.put(filter, key, Enum.map(args, &compile_arg(&1, context)))
+      args when is_binary(args) -> Map.put(filter, key, [compile_arg(args, context)])
       _ -> filter
     end
   end
 
   defp compile_filter(filter, _context), do: filter
+
+  # An argument left for the row is marked, so its rendered siblings are never
+  # mistaken for templates when a keyword spells out `{{ .Result... }}`.
+  defp compile_arg(arg, context) when is_binary(arg) do
+    if row_template?(arg), do: %RowTemplate{template: arg}, else: render(arg, context)
+  end
+
+  defp compile_arg(arg, _context), do: arg
+
+  defp row_template?(value),
+    do: String.contains?(value, "{{") and String.contains?(value, ".Result")
 
   defp render_optional(value, context) when is_binary(value), do: render(value, context)
   defp render_optional(value, _context), do: value

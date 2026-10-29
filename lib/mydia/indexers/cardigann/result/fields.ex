@@ -11,7 +11,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
   require Logger
 
   alias Mydia.Indexers.Cardigann.Result.Plan
-  alias Mydia.Indexers.Cardigann.Result.Plan.Field
+  alias Mydia.Indexers.Cardigann.Result.Plan.{Field, RowTemplate}
   alias Mydia.Indexers.Cardigann.Result.Format.Template
   alias Mydia.Indexers.CardigannFilters
   alias Mydia.Indexers.CardigannTemplate
@@ -104,7 +104,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
 
     case Map.get(filter, key) do
       args when is_list(args) ->
-        Map.put(filter, key, Enum.map(args, &Template.render(&1, context: context)))
+        Map.put(filter, key, Enum.map(args, &render_arg(&1, context)))
 
       _ ->
         filter
@@ -112,6 +112,13 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
   end
 
   defp render_args(filter, _context), do: filter
+
+  # Only an argument the plan marked is a template; anything else is final text,
+  # even when a keyword it carries spells out `{{ .Result... }}`.
+  defp render_arg(%RowTemplate{template: template}, context),
+    do: Template.render(template, context: context)
+
+  defp render_arg(arg, _context), do: arg
 
   # Definitions that predate `text:` spell a fallback title as title_default
   # plus title_optional, and a download as download2 or magnet. Fold them into
