@@ -130,10 +130,11 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
 
     Mix.shell().info("Recording #{length(definitions)} definitions into #{meta.cache_dir}")
 
+    # A recording that makes no exchange writes nothing, so the previous
+    # capture survives a tracker that is down today (Capture.write!/2
+    # replaces the directory only once there is something to write).
     outcomes =
       for definition <- definitions, query <- definition.queries do
-        File.rm_rf!(Path.join([meta.cache_dir, definition.id, query.label]))
-
         case Runner.record(definition, query, meta.cache_dir, ref: meta.ref) do
           {:ok, capture} ->
             Mix.shell().info(
@@ -223,14 +224,8 @@ defmodule Mix.Tasks.Mydia.CardigannParity do
   # The named ref, or the most recently written capture set under the root.
   defp capture_set(root, ref) when is_binary(ref), do: Path.join(root, ref)
 
-  defp capture_set(root, nil) do
-    sets = root |> Path.join("*") |> Path.wildcard() |> Enum.filter(&File.dir?/1)
-
-    case Enum.sort_by(sets, &File.stat!(&1, time: :posix).mtime, :desc) do
-      [newest | _] -> newest
-      [] -> Mix.raise("No captures under #{root}; run record first")
-    end
-  end
+  defp capture_set(root, nil),
+    do: Capture.newest_set(root) || Mix.raise("No captures under #{root}; run record first")
 
   defp start_app!(opts, root) do
     database = Path.expand(opts[:database] || Path.join(root, "parity.db"))

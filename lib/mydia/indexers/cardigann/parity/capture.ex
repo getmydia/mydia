@@ -45,8 +45,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
     end)
   end
 
+  @doc """
+  Writes `capture` into `dir`, replacing whatever was there, so a body file
+  from an earlier, longer capture never lingers beside the new one. Callers
+  only get here once they have something to write, so a failed recording
+  leaves the previous capture alone.
+  """
   @spec write!(t(), Path.t()) :: :ok
   def write!(%__MODULE__{} = capture, dir) do
+    File.rm_rf!(dir)
     File.mkdir_p!(dir)
 
     exchanges =
@@ -63,6 +70,27 @@ defmodule Mydia.Indexers.Cardigann.Parity.Capture do
     }
 
     File.write!(Path.join(dir, "exchanges.json"), Jason.encode!(json, pretty: true))
+  end
+
+  @doc """
+  The capture set under `root` (laid out `root/<ref>/<definition>/<kind>/`)
+  holding the most recently written capture, or nil. Ranked by the captures'
+  own files: re-recording into an existing set leaves the set directory's
+  mtime as it was.
+  """
+  @spec newest_set(Path.t()) :: Path.t() | nil
+  def newest_set(root) do
+    case root |> Path.join("*/*/*/exchanges.json") |> Path.wildcard() do
+      [] ->
+        nil
+
+      files ->
+        files
+        |> Enum.max_by(&File.stat!(&1, time: :posix).mtime)
+        |> Path.dirname()
+        |> Path.dirname()
+        |> Path.dirname()
+    end
   end
 
   @spec read!(Path.t()) :: t()

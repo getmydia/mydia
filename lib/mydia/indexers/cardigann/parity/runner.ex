@@ -107,15 +107,21 @@ defmodule Mydia.Indexers.Cardigann.Parity.Runner do
     with :ok <- Bench.prepare_row(definition) do
       {:ok, recorder} = Recorder.start_link()
 
-      outcome =
-        Seam.with(%{record: recorder}, fn ->
-          WasmAdapter.search(Bench.adapter_config(definition), query.term,
-            limit: @result_limit,
-            timeout: @wasm_timeout_ms
-          )
-        end)
+      # The recorder holds every response body; a run over the whole corpus
+      # would otherwise keep all of them until the task exits.
+      try do
+        outcome =
+          Seam.with(%{record: recorder}, fn ->
+            WasmAdapter.search(Bench.adapter_config(definition), query.term,
+              limit: @result_limit,
+              timeout: @wasm_timeout_ms
+            )
+          end)
 
-      write_capture(definition, query, out_dir, Recorder.exchanges(recorder), outcome, opts)
+        write_capture(definition, query, out_dir, Recorder.exchanges(recorder), outcome, opts)
+      after
+        Agent.stop(recorder)
+      end
     end
   end
 

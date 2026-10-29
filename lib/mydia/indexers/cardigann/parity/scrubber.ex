@@ -248,7 +248,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
            ) do
       File.mkdir_p!(Path.dirname(kind_dir))
       File.write!(Path.join(Path.dirname(kind_dir), "definition.yml"), yaml)
-      File.rm_rf!(kind_dir)
       Capture.write!(scrubbed, kind_dir)
       {:ok, notes ++ binary_notes(scrubbed, encoding) ++ kept_notes(titles, vocabulary)}
     end
