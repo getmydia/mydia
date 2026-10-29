@@ -11,16 +11,13 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
 
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.JsonPath
+  alias Mydia.Indexers.Cardigann.Result.Format.Template
   alias Mydia.Indexers.Cardigann.Result.Plan
   alias Mydia.Indexers.Cardigann.Result.Plan.Rows
-  alias Mydia.Indexers.CardigannTemplate
 
   @impl true
   def document(body, %Plan{} = plan) when is_binary(body) do
-    case body |> Charset.decode(plan.encoding) |> Jason.decode() do
-      {:ok, json} -> {:ok, json}
-      {:error, error} -> {:error, error}
-    end
+    body |> Charset.decode(plan.encoding) |> Jason.decode()
   end
 
   # The map variant of the entry point hands over a body that is already decoded.
@@ -60,14 +57,17 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
   @impl true
   def raw(_document, row, field, opts \\ []) do
     case field.selector do
-      selector when is_binary(selector) -> value_by_selector(row, render(selector, opts))
+      selector when is_binary(selector) -> value_by_selector(row, Template.render(selector, opts))
       _ -> :not_found
     end
   end
 
   # Prowlarr's `HandleJsonSelector` compares each case key with the extracted
   # value by equality, in definition order, and `*` matches even when nothing
-  # was extracted. `remove` and `attribute` do not apply to JSON.
+  # was extracted. `remove` and `attribute` do not apply to JSON. Values are
+  # compared as strings, so a numeric 720 matches the key "720". Prowlarr's
+  # ToString would give "True" for a boolean; `ensure_string/1` treats booleans
+  # as not found here, so a boolean never matches a specific key.
   @impl true
   def case_value(document, row, field, opts \\ []) do
     value =
@@ -78,7 +78,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
 
     field.case
     |> Enum.find_value(fn {key, result} ->
-      if key == "*" or (value != nil and value == render(key, opts)), do: result
+      if key == "*" or (value != nil and value == Template.render(key, opts)), do: result
     end)
     |> case do
       nil -> :not_found
@@ -134,17 +134,4 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
   defp ensure_string(value) when is_integer(value), do: {:ok, Integer.to_string(value)}
   defp ensure_string(value) when is_float(value), do: {:ok, Float.to_string(value)}
   defp ensure_string(_other), do: :not_found
-
-  defp render(selector, opts) when is_binary(selector) do
-    context = Keyword.get(opts, :context, %{})
-
-    if map_size(context) > 0 and String.contains?(selector, "{{") do
-      case CardigannTemplate.render(selector, context, url_encode: false) do
-        {:ok, rendered} -> rendered
-        {:error, _} -> selector
-      end
-    else
-      selector
-    end
-  end
 end

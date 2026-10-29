@@ -133,5 +133,25 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.JsonTest do
 
       assert Json.case_value(doc, hd(rows), field(plan, "c")) == :not_found
     end
+
+    test "a numeric value matches a string key" do
+      {plan, doc, rows} =
+        loaded(%{
+          rows: %{selector: "data.items"},
+          fields: %{"c" => %{selector: "size", case: %{"1234" => "hit", "*" => "miss"}}}
+        })
+
+      assert Json.case_value(doc, hd(rows), field(plan, "c")) == {:ok, "hit"}
+    end
+
+    test "the wildcard matches when nothing was extracted" do
+      {plan, doc, rows} =
+        loaded(%{
+          rows: %{selector: "data.items"},
+          fields: %{"c" => %{selector: "missing", case: %{"x" => "hit", "*" => "dflt"}}}
+        })
+
+      assert Json.case_value(doc, hd(rows), field(plan, "c")) == {:ok, "dflt"}
+    end
   end
 end

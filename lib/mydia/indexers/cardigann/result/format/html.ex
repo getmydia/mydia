@@ -10,8 +10,8 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.Result.Plan
   alias Mydia.Indexers.Cardigann.Result.Plan.Rows
+  alias Mydia.Indexers.Cardigann.Result.Format.Template
   alias Mydia.Indexers.Cardigann.Selector
-  alias Mydia.Indexers.CardigannTemplate
 
   @impl true
   def document(body, %Plan{} = plan) do
@@ -38,7 +38,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
   @impl true
   def raw(document, row, field, opts \\ []) do
     row = without_removed(document, row, field.remove, opts)
-    selector = render(field.selector, opts)
+    selector = Template.render(field.selector, opts)
 
     case field.attribute do
       nil ->
@@ -62,7 +62,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
     row = without_removed(document, row, field.remove, opts)
 
     scope =
-      case render(field.selector, opts) do
+      case Template.render(field.selector, opts) do
         sel when sel in [nil, ""] -> [row]
         sel -> Selector.find(document, row, sel)
       end
@@ -72,7 +72,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
     else
       field.case
       |> Enum.find_value(fn {key, value} ->
-        if matches?(document, scope, render(key, opts)), do: value
+        if matches?(document, scope, Template.render(key, opts)), do: value
       end)
       |> case do
         nil -> :not_found
@@ -89,7 +89,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
   defp without_removed(_document, row, nil, _opts), do: row
 
   defp without_removed(document, row, remove, opts),
-    do: Selector.without(document, row, Enum.map(remove, &render(&1, opts)))
+    do: Selector.without(document, row, Enum.map(remove, &Template.render(&1, opts)))
 
   # Every selector the plan may evaluate, so Selector.parse/2 marks each
   # :contains() needle once.
@@ -103,19 +103,4 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Html do
 
     [plan.rows.selector | field_selectors] |> Enum.reject(&is_nil/1) |> Enum.map(&to_string/1)
   end
-
-  defp render(selector, opts) when is_binary(selector) do
-    context = Keyword.get(opts, :context, %{})
-
-    if map_size(context) > 0 and String.contains?(selector, "{{") do
-      case CardigannTemplate.render(selector, context, url_encode: false) do
-        {:ok, rendered} -> rendered
-        {:error, _} -> selector
-      end
-    else
-      selector
-    end
-  end
-
-  defp render(selector, _opts), do: selector
 end

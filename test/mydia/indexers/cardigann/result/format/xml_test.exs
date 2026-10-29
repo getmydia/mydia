@@ -85,6 +85,18 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.XmlTest do
     end
   end
 
+  test "the . selector reads the row's own attribute" do
+    plan =
+      plan(%{
+        rows: %{selector: "enclosure"},
+        fields: %{"u" => %{selector: ".", attribute: "url"}}
+      })
+
+    assert {:ok, doc} = Xml.document(@xml, plan)
+    [row] = Xml.rows(doc, plan.rows)
+    assert Xml.raw(doc, row, field(plan, "u")) == {:ok, "http://example.invalid/d/1"}
+  end
+
   describe "case_value/4" do
     setup do
       {plan, doc, rows} =
@@ -104,6 +116,20 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.XmlTest do
 
     test "falls back to the wildcard", ctx do
       assert Xml.case_value(ctx.doc, List.last(ctx.rows), ctx.field) == {:ok, "other"}
+    end
+
+    test "a :contains miss with no wildcard is not found" do
+      {plan, doc, rows} =
+        loaded(%{"k" => %{selector: "title", case: %{":contains(\"zzz\")" => "x"}}})
+
+      assert Xml.case_value(doc, hd(rows), field(plan, "k")) == :not_found
+    end
+
+    test "an element-name key matches when that child element exists" do
+      {plan, doc, rows} =
+        loaded(%{"k" => %{selector: "", case: %{"title" => "titled", "*" => "none"}}})
+
+      assert Xml.case_value(doc, hd(rows), field(plan, "k")) == {:ok, "titled"}
     end
   end
 end

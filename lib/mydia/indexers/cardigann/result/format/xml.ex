@@ -10,9 +10,9 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
   require Logger
 
   alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.Result.Format.Template
   alias Mydia.Indexers.Cardigann.Result.Plan
   alias Mydia.Indexers.Cardigann.Result.Plan.Rows
-  alias Mydia.Indexers.CardigannTemplate
 
   @impl true
   def document(body, %Plan{} = plan) do
@@ -34,8 +34,11 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
   @impl true
   def raw(_document, row, field, opts \\ []) do
     case field.selector do
-      selector when is_binary(selector) -> raw_value(row, render(selector, opts), field.attribute)
-      _ -> :not_found
+      selector when is_binary(selector) ->
+        raw_value(row, Template.render(selector, opts), field.attribute)
+
+      _ ->
+        :not_found
     end
   end
 
@@ -43,11 +46,11 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
   # selector. The plan orders `*` last, so it is the fallback.
   @impl true
   def case_value(_document, row, field, opts \\ []) do
-    selector = render(field.selector || "", opts)
+    selector = Template.render(field.selector || "", opts)
 
     field.case
     |> Enum.find_value(fn {key, value} ->
-      if key == "*" or case_matches?(row, selector, field.attribute, render(key, opts)),
+      if key == "*" or case_matches?(row, selector, field.attribute, Template.render(key, opts)),
         do: value
     end)
     |> case do
@@ -73,7 +76,9 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
   end
 
   defp key_element_present?(row, selector, key) do
-    path = if selector == "", do: ".//#{key}", else: "./#{selector}/#{key}"
+    # `/text()` because a string cast over an element node raises in SweetXml
+    # (the parser's copy had no such suffix and crashed on this path).
+    path = if selector == "", do: ".//#{key}/text()", else: "./#{selector}/#{key}/text()"
     xpath(row, string_spec(path)) not in [nil, ""]
   end
 
@@ -170,19 +175,4 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Xml do
       cast_to: :string
     }
   end
-
-  defp render(selector, opts) when is_binary(selector) do
-    context = Keyword.get(opts, :context, %{})
-
-    if map_size(context) > 0 and String.contains?(selector, "{{") do
-      case CardigannTemplate.render(selector, context, url_encode: false) do
-        {:ok, rendered} -> rendered
-        {:error, _} -> selector
-      end
-    else
-      selector
-    end
-  end
-
-  defp render(selector, _opts), do: selector
 end
