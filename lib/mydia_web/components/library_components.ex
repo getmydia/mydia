@@ -214,7 +214,7 @@ defmodule MydiaWeb.LibraryComponents do
     <button
       id={@id}
       type="button"
-      class={["btn btn-sm gap-1", @selection_mode && "btn-active"]}
+      class={["btn btn-sm gap-1 border-base-content/20", @selection_mode && "btn-active"]}
       phx-click="toggle_selection_mode"
       title={
         if @selection_mode,

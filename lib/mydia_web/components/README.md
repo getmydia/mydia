@@ -100,6 +100,12 @@ Use `MydiaWeb.SegmentedControl` rather than hand-rolling either. It marks the
 selected option `btn-primary` and gives unselected options no colour class,
 which leaves them as plain opaque `.btn`.
 
+A plain `.btn` is still a weak edge on its own. Its fill and border are both
+`base-200`, which `mydia-dark` puts only 1.2 above the page, and Dim, Night,
+Sunset, Dracula and Catppuccin put *below* the page, so the button sinks into
+it. Toolbar buttons and unselected segments add `border-base-content/20`, a
+hairline in the theme's text colour that holds up on every theme.
+
 `test/mydia_web/components/no_ghost_segments_test.exs` fails the build if any
 `join` in `lib/mydia_web` pairs `btn-ghost` with `btn-primary`.
 
