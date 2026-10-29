@@ -51,8 +51,6 @@ defmodule MydiaWeb.MediaLive.Index.Messages do
   def format_episode_count(_), do: nil
 
   @doc false
-  # Reached through MediaLive.Index.scan_completed_message/1, which the copy tests call without mounting the LiveView.
-  #
   # `auto_linked` is a subset of the files a scan touched, so it is appended as
   # detail and kept out of the change total. It is also counted on its own,
   # because the orphan branch links existing files: a scan can auto-import

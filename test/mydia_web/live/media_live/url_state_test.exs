@@ -182,6 +182,21 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
              )
     end
 
+    test "a saved library that no longer exists is dropped and a bare visit shows defaults",
+         %{conn: conn, user: user} do
+      :ok =
+        Mydia.Accounts.LibraryListingState.put(user, "movies", %{"library" => "does-not-exist"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=title_asc]"
+             )
+
+      refute has_element?(view, "#library-filter-form option[selected][value=does-not-exist]")
+    end
+
     test "each page remembers its own state", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/movies")
       choose(view, "year_desc", "missing")

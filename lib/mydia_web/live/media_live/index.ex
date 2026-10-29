@@ -1019,6 +1019,4 @@ defmodule MydiaWeb.MediaLive.Index do
   defp media_status_icon(status), do: AvailabilityStatus.icon(status)
 
   defp media_status_label(status), do: MydiaWeb.StatusLabels.availability(status)
-
-  defdelegate scan_completed_message(summary), to: MydiaWeb.MediaLive.Index.Messages
 end

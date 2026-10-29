@@ -29,6 +29,8 @@ defmodule MydiaWeb.MediaLive.Index.RememberedListing do
   mark the socket redirected and skip the load. A URL that sets any of them
   wins outright. `library_ids` are the libraries the page offers.
   """
+  @spec restore(Phoenix.LiveView.Socket.t(), map(), [binary()]) ::
+          {Phoenix.LiveView.Socket.t(), map(), String.t() | nil}
   def restore(%{redirected: redirected} = socket, params, _library_ids)
       when not is_nil(redirected),
       do: {socket, params, nil}
@@ -42,10 +44,19 @@ defmodule MydiaWeb.MediaLive.Index.RememberedListing do
     else
       params = Map.merge(saved, params)
       restored = ListingParams.parse(params, library_ids)
-      {socket, params, ListingParams.path(socket.assigns.listing_base_path, restored)}
+
+      # Every saved pair may have been dropped by the parse (a deleted
+      # library): nothing was restored, so there is nothing to patch.
+      path =
+        if ListingParams.to_remembered(restored) != %{},
+          do: ListingParams.path(socket.assigns.listing_base_path, restored)
+
+      {socket, params, path}
     end
   end
 
+  @spec patch_restored(Phoenix.LiveView.Socket.t(), String.t() | nil) ::
+          Phoenix.LiveView.Socket.t()
   def patch_restored(socket, nil), do: socket
 
   def patch_restored(%{redirected: redirected} = socket, _path) when not is_nil(redirected),
@@ -62,6 +73,8 @@ defmodule MydiaWeb.MediaLive.Index.RememberedListing do
   also drops a saved state the screen was not showing. A failed write only
   costs the memory of this choice, so it never blocks the patch.
   """
+  @spec remember(Phoenix.LiveView.Socket.t(), ListingParams.t(), boolean()) ::
+          Phoenix.LiveView.Socket.t()
   def remember(socket, %ListingParams{} = params, forget?) do
     pairs = ListingParams.to_remembered(params)
     shown = ListingParams.to_remembered(Window.listing_params(socket.assigns))
