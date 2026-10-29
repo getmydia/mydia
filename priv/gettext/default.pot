@@ -1164,7 +1164,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/components.ex:356
 #: lib/mydia_web/live/admin_plugins_live/components.ex:276
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:142
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:114
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:117
 #: lib/mydia_web/live/admin_settings_live/components.ex:40
 #: lib/mydia_web/live/devices_live/components.ex:195
 #: lib/mydia_web/live/discover_live/regional_components.ex:189
@@ -1465,7 +1465,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:59
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:60
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:155
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:158
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:182
 #, elixir-autogen, elixir-format
 msgid "never"
@@ -2605,7 +2605,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:108
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:249
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:90
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:93
 #: lib/mydia_web/live/collection_live/preset_components.ex:94
 #: lib/mydia_web/live/collection_live/show.ex:575
 #: lib/mydia_web/live/media_live/show/modals.ex:770
@@ -6464,7 +6464,7 @@ msgstr ""
 msgid "Newest first"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:148
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:151
 #: lib/mydia_web/live/admin_trash_live/components.ex:340
 #: lib/mydia_web/live/calendar_live/index.html.heex:62
 #: lib/mydia_web/live/import_media_live/index.html.heex:142
@@ -7417,7 +7417,7 @@ msgstr ""
 msgid "Preview Results"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:133
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:136
 #: lib/mydia_web/live/calendar_live/index.html.heex:41
 #: lib/mydia_web/live/import_media_live/index.html.heex:134
 #, elixir-autogen, elixir-format
@@ -9891,7 +9891,7 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:468
 #: lib/mydia_web/components/collection_components.ex:631
 #: lib/mydia_web/components/library_components.ex:92
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:69
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:71
 #: lib/mydia_web/live/collection_live/components.ex:125
 #: lib/mydia_web/live/collection_live/components.ex:213
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:144
@@ -13356,12 +13356,12 @@ msgstr ""
 msgid "Blacklist row not found."
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:106
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:109
 #, elixir-autogen, elixir-format
 msgid "Block forever"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:109
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:112
 #, elixir-autogen, elixir-format
 msgid "Block this release forever?"
 msgstr ""
@@ -13685,7 +13685,7 @@ msgstr ""
 msgid "Clear all pending crash reports?"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:52
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:54
 #, elixir-autogen, elixir-format
 msgid "Clear filter"
 msgstr ""
@@ -14259,7 +14259,7 @@ msgstr ""
 msgid "Default Quality Profile"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:19
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:21
 #, elixir-autogen, elixir-format
 msgid "Default TTL is 30 days. Use \"Block Forever\" to make a block permanent, or \"Remove\" to lift it immediately."
 msgstr ""
@@ -14941,7 +14941,7 @@ msgid "Experimental:"
 msgstr ""
 
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:112
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:93
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:96
 #, elixir-autogen, elixir-format
 msgid "Expires"
 msgstr ""
@@ -15216,7 +15216,7 @@ msgstr ""
 msgid "Fails over to a mirror when a tracker's link is down"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:31
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:33
 #, elixir-autogen, elixir-format
 msgid "Failure reason"
 msgstr ""
@@ -15601,7 +15601,7 @@ msgid "In priority order"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:52
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:74
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
 #, elixir-autogen, elixir-format
 msgid "Indexer"
 msgstr ""
@@ -16649,7 +16649,7 @@ msgstr ""
 msgid "No recorded requests."
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:121
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:124
 #, elixir-autogen, elixir-format
 msgid "No releases are currently blacklisted."
 msgstr ""
@@ -16969,7 +16969,7 @@ msgstr ""
 msgid "P2P powered by iroh"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:136
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:139
 #, elixir-autogen, elixir-format
 msgid "Page %{page} of %{total}"
 msgstr ""
@@ -17451,7 +17451,7 @@ msgstr ""
 msgid "Readonly"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:82
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:85
 #, elixir-autogen, elixir-format
 msgid "Reason"
 msgstr ""
@@ -17579,7 +17579,7 @@ msgstr ""
 msgid "Releases blocked from future searches"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:16
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:18
 #, elixir-autogen, elixir-format
 msgid "Releases that failed to download are temporarily blocked so the next search avoids them."
 msgstr ""
@@ -17666,7 +17666,7 @@ msgstr ""
 msgid "Remove downloads from the client after importing. Torrent clients that support seeding wait until the torrent is stopped or paused (seed ratio/time), then remove. Usenet and similar clients remove immediately."
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:118
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:121
 #, elixir-autogen, elixir-format
 msgid "Remove this release from the blacklist?"
 msgstr ""
@@ -18307,7 +18307,7 @@ msgstr ""
 msgid "Showing %{from}-%{to} of %{total}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:57
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Showing %{shown} of %{count} row"
 msgid_plural "Showing %{shown} of %{count} rows"
@@ -19851,7 +19851,7 @@ msgstr ""
 msgid "e.g., https://example.com/feed.json"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:167
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:170
 #, elixir-autogen, elixir-format
 msgid "expired"
 msgstr ""
@@ -19876,7 +19876,7 @@ msgstr ""
 msgid "finished playback"
 msgstr ""
 
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:161
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:164
 #, elixir-autogen, elixir-format
 msgid "forever"
 msgstr ""
@@ -20573,7 +20573,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/items_components.ex:50
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:277
-#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:37
+#: lib/mydia_web/live/admin_release_blacklist_live/components.ex:39
 #: lib/mydia_web/live/admin_requests_live/components.ex:32
 #: lib/mydia_web/live/admin_trash_live/components.ex:152
 #, elixir-autogen, elixir-format
