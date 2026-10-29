@@ -142,4 +142,15 @@ defmodule Mydia.Indexers.Cardigann.Result.PlanTest do
     refute TextFields.text_field?(%{text: nil})
     refute TextFields.text_field?("x")
   end
+
+  test "case keeps the * default last" do
+    plan =
+      compile!(%{
+        rows: %{selector: "tr"},
+        fields: %{quality: %{selector: "td", case: %{"*" => "1", "b" => "3", "a" => "2"}}}
+      })
+
+    [field] = plan.selector_fields
+    assert field.case == [{"a", "2"}, {"b", "3"}, {"*", "1"}]
+  end
 end

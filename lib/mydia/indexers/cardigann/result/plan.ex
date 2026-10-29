@@ -114,7 +114,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
   defp compile_case(case_map, context) when is_map(case_map) and map_size(case_map) > 0 do
     case_map
     |> Enum.map(fn {k, v} -> {render(to_string(k), context), to_string(v)} end)
-    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.sort_by(&{elem(&1, 0) == "*", elem(&1, 0)})
   end
 
   defp compile_case(_case_map, _context), do: nil
