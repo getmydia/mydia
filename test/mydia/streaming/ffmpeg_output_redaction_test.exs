@@ -45,19 +45,25 @@ defmodule Mydia.Streaming.FfmpegOutputRedactionTest do
       )
 
     # The transcoder can stop on its own between the alive? check and the
-    # stop, which then exits with :shutdown or :noproc.
+    # stop, which then exits with :shutdown or :noproc. If it stops while
+    # :sys.terminate is waiting on it, the reason arrives wrapped:
+    # {:shutdown, {:sys, :terminate, _}}.
     on_exit(fn ->
       if Process.alive?(pid) do
         try do
           FfmpegHlsTranscoder.stop_transcoding(pid)
         catch
-          :exit, {reason, {GenServer, :stop, _}} when reason in [:noproc, :shutdown] -> :ok
+          :exit, {reason, {GenServer, :stop, _}} ->
+            unless already_stopped?(reason), do: exit(reason)
         end
       end
     end)
 
     pid
   end
+
+  defp already_stopped?({reason, {:sys, :terminate, _}}), do: already_stopped?(reason)
+  defp already_stopped?(reason), do: reason in [:noproc, :shutdown]
 
   defp port_of(pid), do: :sys.get_state(pid).ffmpeg_port
 
