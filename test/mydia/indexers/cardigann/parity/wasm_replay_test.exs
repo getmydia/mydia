@@ -23,12 +23,16 @@ defmodule Mydia.Indexers.Cardigann.Parity.WasmReplayTest do
   """
 
   setup do
+    # Clean up only an engine this test started, never the application's own.
+    owned? = is_nil(Process.whereis(Engine))
     :ok = Engine.ensure_started()
 
-    on_exit(fn ->
-      Supervisor.terminate_child(Mydia.Supervisor, Engine)
-      Supervisor.delete_child(Mydia.Supervisor, Engine)
-    end)
+    if owned? do
+      on_exit(fn ->
+        Supervisor.terminate_child(Mydia.Supervisor, Engine)
+        Supervisor.delete_child(Mydia.Supervisor, Engine)
+      end)
+    end
 
     unless Engine.available?() do
       flunk(

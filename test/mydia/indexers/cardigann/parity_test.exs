@@ -20,13 +20,17 @@ defmodule Mydia.Indexers.Cardigann.ParityTest do
              end)
 
   setup do
+    # Clean up only an engine this test started, never the application's own.
+    owned? = is_nil(Process.whereis(Engine))
     :ok = Engine.ensure_started()
 
     # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
-    on_exit(fn ->
-      Supervisor.terminate_child(Mydia.Supervisor, Engine)
-      Supervisor.delete_child(Mydia.Supervisor, Engine)
-    end)
+    if owned? do
+      on_exit(fn ->
+        Supervisor.terminate_child(Mydia.Supervisor, Engine)
+        Supervisor.delete_child(Mydia.Supervisor, Engine)
+      end)
+    end
 
     unless Engine.available?() do
       flunk(
