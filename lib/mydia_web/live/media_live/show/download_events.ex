@@ -12,7 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   alias MydiaWeb.Live.Authorization
 
   import MydiaWeb.MediaLive.Show.Loaders,
-    only: [load_media_item: 2, load_downloads_with_status: 1]
+    only: [load_media_item: 2, load_downloads_with_status: 1, assign_downloads: 2]
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [maybe_add_opt: 3]
 
@@ -38,11 +38,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   defp refresh_downloads(socket) do
-    assign(
-      socket,
-      :downloads_with_status,
-      load_downloads_with_status(socket.assigns.media_item)
-    )
+    assign_downloads(socket, load_downloads_with_status(socket.assigns.media_item))
   end
 
   def show_download_cancel_confirm(%{"download-id" => download_id}, socket) do

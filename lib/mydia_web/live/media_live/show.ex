@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.SubtitleModal
   alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.DownloadComponents
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
@@ -40,8 +41,6 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.DiscoverComponents
 
   # Import helper modules
-  import MydiaWeb.MediaLive.Show.Formatters
-  import MydiaWeb.Formatters, only: [format_progress: 1]
   import MydiaWeb.MediaLive.Show.Helpers
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Loaders
@@ -82,7 +81,7 @@ defmodule MydiaWeb.MediaLive.Show do
     {:ok,
      socket
      |> assign(:media_item, media_item)
-     |> assign(:downloads_with_status, downloads_with_status)
+     |> assign_downloads(downloads_with_status)
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)
      |> assign(:show_delete_confirm, false)
@@ -663,7 +662,7 @@ defmodule MydiaWeb.MediaLive.Show do
       {:noreply,
        socket
        |> assign(:media_item, media_item)
-       |> assign(:downloads_with_status, downloads_with_status)
+       |> assign_downloads(downloads_with_status)
        |> assign(:timeline_events, timeline_events)
        |> assign(:auto_searching, false)
        |> assign(:auto_searching_season, nil)
@@ -682,7 +681,7 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply,
      socket
      |> assign(:media_item, media_item)
-     |> assign(:downloads_with_status, downloads_with_status)
+     |> assign_downloads(downloads_with_status)
      |> assign(:timeline_events, timeline_events)}
   end
 

@@ -410,14 +410,12 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     end
   end
 
-  @in_client_active_statuses ["downloading", "seeding", "checking", "paused"]
-
-  # Header status pick, in priority order: a live in-client download, then a
-  # grab in flight, then a failed grab (a failure that never reached a client
-  # — client-side failures have their own surfaces on the Downloads page).
-  def get_download_status(downloads_with_status) do
-    Enum.find(downloads_with_status, &(&1.status in @in_client_active_statuses)) ||
-      Enum.find(downloads_with_status, &(&1.status == "grabbing")) ||
+  # The header's fallback when nothing is downloading (that case is
+  # `DownloadSummary`'s): a grab in flight, then a failed grab (a failure that
+  # never reached a client; client-side failures have their own surfaces on the
+  # Downloads page).
+  def get_grab_status(downloads_with_status) do
+    Enum.find(downloads_with_status, &(&1.status == "grabbing")) ||
       Enum.find(downloads_with_status, &failed_grab?/1)
   end
 

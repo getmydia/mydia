@@ -437,6 +437,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   `SeasonComponents.season_section/1`.
   """
   attr :media_item, :map, required: true
+  attr :download_summary, :any, default: nil
   attr :expanded_seasons, :any, required: true
   attr :expanded_episodes, :map, default: MapSet.new()
   attr :expanded_chunks, :any, default: MapSet.new()
@@ -529,6 +530,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <SeasonComponents.season_section
               season_number={season_num}
               episodes={episodes}
+              download_summary={@download_summary}
               expanded?={MapSet.member?(@expanded_seasons, season_num)}
               expanded_episodes={@expanded_episodes}
               expanded_chunks={@expanded_chunks}
