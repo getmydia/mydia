@@ -233,6 +233,23 @@ defmodule Mydia.Indexers.CategoryMappingTest do
     end
   end
 
+  describe "console and PC categories" do
+    test "map to Prowlarr's NewznabStandardCategory ids, case-insensitively" do
+      assert CategoryMapping.category_id_from_name("Console/NDS") == 1010
+      assert CategoryMapping.category_id_from_name("console/xbox 360") == 1050
+      assert CategoryMapping.category_id_from_name("Console/PS Vita") == 1120
+      assert CategoryMapping.category_id_from_name("PC") == 4000
+      assert CategoryMapping.category_id_from_name("PC/ISO") == 4020
+      assert CategoryMapping.category_id_from_name("PC/Games") == 4050
+    end
+
+    test "have names and are listed" do
+      assert CategoryMapping.category_name(1010) == "Console/NDS"
+      assert CategoryMapping.category_name(4020) == "PC/ISO"
+      assert %{id: 4050, name: "PC/Games", type: :other} in CategoryMapping.all_categories()
+    end
+  end
+
   describe "map_site_category_to_torznab/2" do
     test "maps site category ID to Torznab category using mappings" do
       # Example 1337x category mappings

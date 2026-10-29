@@ -41,6 +41,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
   end
 
   describe "search_results/2" do
+    test "maps a PC site category to Prowlarr's Torznab id" do
+      ctx = ctx(%{category_mappings: [%{"id" => 1, "cat" => "PC/Games", "desc" => "Games"}]})
+      assert one(row(%{"category" => "1"}), ctx).category == 4050
+    end
+
     test "builds a result from a complete row" do
       result = one(row())
 

@@ -1,13 +1,5 @@
 [
   %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
-    field: :category,
-    reason:
-      "native CategoryMapping maps PC and Console categories to 8000 (Other) on purpose; wasm maps this row's Console/NDS (/switch) to 1010"
-  },
-  %{
     definition: "linuxtracker",
     query: :generic,
     kind: :field,
@@ -70,14 +62,6 @@
     field: :published_at,
     reason:
       "date_year_raw's regexp uses \\u00A0, which PCRE2 rejects, so native skips the filter and keeps the size cell (\"360.3 MB\"); date_year becomes \"360.3 MB +08:00\", dateparse leaves it unparsed, `or` prefers it over date_day and parse_date gives nil. wasm drops the non-matching cell and uses date_day (\"今天 02:30\" as today). Native is nil whatever the clock, so the divergence does not depend on when the test runs"
-  },
-  %{
-    definition: "pctorrent",
-    query: :rss,
-    kind: :field,
-    field: :category,
-    reason:
-      "`category: text: 1` extracts \"1\" in native, whose CategoryMapping maps PC/Games to 8000 (Other) on purpose; wasm maps site category 1 to 4050 (PC/Games)"
   },
   %{
     definition: "yts",
