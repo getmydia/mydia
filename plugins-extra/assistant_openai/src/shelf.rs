@@ -237,10 +237,32 @@ fn fits(want: &Wanted, hit: &Candidate) -> bool {
             .is_some_and(|y| (i64::from(y) - want.year).abs() <= 1)
 }
 
-/// Titles compared by their letters and digits alone, ignoring case.
+/// `title` without the ` (YYYY)` TVDB appends to the later of two namesakes,
+/// as in "Glass Harbor (2020)". The year is matched on its own, so the suffix
+/// only hides an exact title. Same rule as the relay's alias cleanup. A title
+/// that is nothing but the suffix is returned unchanged.
+fn bare_title(title: &str) -> &str {
+    let trimmed = title.trim_end();
+    let Some((head, year)) = trimmed.strip_suffix(')').and_then(|t| t.rsplit_once('(')) else {
+        return title;
+    };
+    let head = head.trim_end();
+    let is_year = year.len() == 4
+        && year.bytes().all(|b| b.is_ascii_digit())
+        && (year.starts_with("19") || year.starts_with("20"));
+    if is_year && !head.is_empty() {
+        head
+    } else {
+        title
+    }
+}
+
+/// Titles compared by their letters and digits alone, ignoring case and a
+/// TVDB year suffix.
 fn same_title(a: &str, b: &str) -> bool {
     let key = |s: &str| {
-        s.chars()
+        bare_title(s)
+            .chars()
             .filter(|c| c.is_alphanumeric())
             .flat_map(char::to_lowercase)
             .collect::<String>()
@@ -949,10 +971,48 @@ mod tests {
     }
 
     #[test]
+    fn bare_title_drops_only_a_trailing_year_in_parentheses() {
+        assert_eq!(bare_title("Glass Harbor (2020)"), "Glass Harbor");
+        assert_eq!(bare_title("Glass Harbor  (1985) "), "Glass Harbor");
+        assert_eq!(bare_title("Glass Harbor"), "Glass Harbor");
+        assert_eq!(
+            bare_title("Glass Harbor (Director's Cut)"),
+            "Glass Harbor (Director's Cut)"
+        );
+        assert_eq!(bare_title("Glass Harbor (1850)"), "Glass Harbor (1850)");
+        assert_eq!(bare_title("(2020)"), "(2020)");
+        assert_eq!(bare_title("2049"), "2049");
+    }
+
+    #[test]
+    fn a_tvdb_year_suffix_does_not_hide_an_exact_title() {
+        // TVDB names the later of two namesakes "Glass Harbor (2020)". It must
+        // still beat a near miss from the same year.
+        let show = |title: &str, year: u32, id: i64| Candidate {
+            title: title.into(),
+            year: Some(year),
+            id: Some((Catalog::Tvdb, id)),
+            votes: None,
+        };
+        let hits = [
+            show("Glass Harbor", 2014, 1),
+            show("The Glass Harbor Files", 2020, 2),
+            show("Glass Harbor (2020)", 2020, 3),
+        ];
+        let w = want("Glass Harbor", 2020, "tv_show");
+        assert_eq!(choose(&w, &hits), Some(2));
+        assert_eq!(choose_other_type(&w, &hits), Some(2));
+    }
+
+    #[test]
     fn titles_compare_by_letters_and_digits() {
         assert!(same_title("Glass Harbor: Part 2", "glass harbor part 2"));
         assert!(!same_title("Glass Harbor", "Glass Harbor 2"));
         assert!(!same_title("", ""));
+        assert!(same_title("Glass Harbor", "Glass Harbor (2020)"));
+        // The year window, not the title, tells these two apart.
+        assert!(same_title("Glass Harbor (2020)", "glass harbor (2021)"));
+        assert!(!same_title("Glass Harbor", "Glass Harbor 2020"));
     }
 
     #[test]
