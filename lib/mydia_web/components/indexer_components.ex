@@ -121,11 +121,14 @@ defmodule MydiaWeb.IndexerComponents do
           ></progress>
         </summary>
         <div class="collapse-content">
-          <ul class="menu w-full">
+          <%!-- A plain list rather than daisyUI's menu: menu items lay their
+               children out as a column, which stacked icon, name and status
+               on top of each other on narrow screens. --%>
+          <ul class="w-full divide-y divide-base-300 text-sm">
             <li
               :for={row <- @rows}
               id={"indexer-status-#{row.indexer_id}"}
-              class="flex flex-wrap items-center gap-2"
+              class="flex flex-wrap items-center gap-x-2 gap-y-1 py-2"
             >
               <span :if={row.status == :pending} class="loading loading-spinner loading-xs"></span>
               <.icon
@@ -144,8 +147,8 @@ defmodule MydiaWeb.IndexerComponents do
                 class="w-4 h-4 shrink-0 text-warning"
               />
 
-              <span class="font-medium">{row.indexer}</span>
-              <span class="text-xs opacity-70">{status_label(row)}</span>
+              <span class="min-w-0 flex-1 truncate font-medium">{row.indexer}</span>
+              <span class="min-w-0 break-words text-right text-xs opacity-70">{status_label(row)}</span>
 
               <.button
                 :if={@retry_event && row.status in [:error, :timeout]}

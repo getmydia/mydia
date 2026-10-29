@@ -1861,7 +1861,7 @@ msgstr[1] ""
 msgid "%{count} imported automatically"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:243
+#: lib/mydia_web/components/indexer_components.ex:246
 #, elixir-autogen, elixir-format
 msgid "%{count} indexer paused by Prowlarr"
 msgid_plural "%{count} indexers paused by Prowlarr"
@@ -2004,7 +2004,7 @@ msgid_plural "%{count} results · %{done}/%{total} indexers"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/indexer_components.ex:202
+#: lib/mydia_web/components/indexer_components.ex:205
 #, elixir-autogen, elixir-format
 msgid "%{count} result · %{duration}ms"
 msgid_plural "%{count} results · %{duration}ms"
@@ -2195,7 +2195,7 @@ msgstr ""
 msgid "%{mbps} Mbps"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:235
+#: lib/mydia_web/components/indexer_components.ex:238
 #, elixir-autogen, elixir-format
 msgid "%{name} (%{remaining} left)"
 msgstr ""
@@ -2215,7 +2215,7 @@ msgstr ""
 msgid "%{name} connected."
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:276
+#: lib/mydia_web/components/indexer_components.ex:279
 #, elixir-autogen, elixir-format
 msgid "%{name} passed its test but Prowlarr still lists it as paused"
 msgstr ""
@@ -2225,12 +2225,12 @@ msgstr ""
 msgid "%{name} plugin"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:279
+#: lib/mydia_web/components/indexer_components.ex:282
 #, elixir-autogen, elixir-format
 msgid "%{name} recovered"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:285
+#: lib/mydia_web/components/indexer_components.ex:288
 #, elixir-autogen, elixir-format
 msgid "%{name} still failing: %{message}"
 msgstr ""
@@ -6692,7 +6692,7 @@ msgstr ""
 msgid "No overview available."
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:257
+#: lib/mydia_web/components/indexer_components.ex:260
 #, elixir-autogen, elixir-format
 msgid "No paused indexers to retest"
 msgstr ""
@@ -8209,12 +8209,12 @@ msgstr ""
 msgid "Resume download"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:179
+#: lib/mydia_web/components/indexer_components.ex:182
 #, elixir-autogen, elixir-format
 msgid "Retest & search again"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:270
+#: lib/mydia_web/components/indexer_components.ex:273
 #, elixir-autogen, elixir-format
 msgid "Retest failed: %{reason}"
 msgstr ""
@@ -8226,7 +8226,7 @@ msgid_plural "Retries %{count} downloads"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/indexer_components.ex:157
+#: lib/mydia_web/components/indexer_components.ex:160
 #: lib/mydia_web/live/discover_live/index.html.heex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:73
 #: lib/mydia_web/live/discover_live/regional_components.ex:159
@@ -9089,7 +9089,7 @@ msgstr ""
 msgid "Skipped"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:167
+#: lib/mydia_web/components/indexer_components.ex:170
 #, elixir-autogen, elixir-format
 msgid "Skipped by Prowlarr (paused after failures): %{indexers}"
 msgstr ""
@@ -10680,7 +10680,7 @@ msgstr ""
 msgid "equals"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:210
+#: lib/mydia_web/components/indexer_components.ex:213
 #, elixir-autogen, elixir-format
 msgid "failed"
 msgstr ""
@@ -10871,7 +10871,7 @@ msgid_plural "refreshed metadata for %{count} files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/indexer_components.ex:198
+#: lib/mydia_web/components/indexer_components.ex:201
 #, elixir-autogen, elixir-format
 msgid "searching..."
 msgstr ""
@@ -10984,7 +10984,7 @@ msgstr ""
 msgid "three seasons of %{counts}"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:209
+#: lib/mydia_web/components/indexer_components.ex:212
 #, elixir-autogen, elixir-format
 msgid "timed out"
 msgstr ""
@@ -11566,25 +11566,25 @@ msgctxt "month abbreviation"
 msgid "Sep"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:220
+#: lib/mydia_web/components/indexer_components.ex:223
 #, elixir-autogen, elixir-format
 msgctxt "pause time left"
 msgid "%{days}d"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:219
+#: lib/mydia_web/components/indexer_components.ex:222
 #, elixir-autogen, elixir-format
 msgctxt "pause time left"
 msgid "%{hours}h"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:218
+#: lib/mydia_web/components/indexer_components.ex:221
 #, elixir-autogen, elixir-format
 msgctxt "pause time left"
 msgid "%{minutes}m"
 msgstr ""
 
-#: lib/mydia_web/components/indexer_components.ex:217
+#: lib/mydia_web/components/indexer_components.ex:220
 #, elixir-autogen, elixir-format
 msgctxt "pause time left"
 msgid "<1m"
