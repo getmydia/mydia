@@ -72,6 +72,10 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert one(row(%{"tmdbid" => ""})).tmdb_id == nil
     end
 
+    test "leaves a zero tmdbid nil" do
+      assert one(row(%{"tmdbid" => "0"})).tmdb_id == nil
+    end
+
     test "leaves absent optional fields empty and counts at zero" do
       result =
         one(
@@ -227,6 +231,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
 
     test "reads a Unix timestamp in seconds" do
       assert Transform.parse_date("1791000000") == DateTime.from_unix!(1_791_000_000)
+    end
+
+    test "reads an all-digit date as Unix seconds, not a calendar date" do
+      # Prowlarr parity: "20261028" is 20,261,028 seconds after the epoch.
+      assert Transform.parse_date("20261028") == DateTime.from_unix!(20_261_028)
     end
 
     test "reads an RFC 1123 date whose offset has no colon" do
