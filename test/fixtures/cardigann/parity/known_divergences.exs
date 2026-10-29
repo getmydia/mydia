@@ -45,7 +45,7 @@
     kind: :field,
     field: :guid,
     reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
+      "both set guid from the magnet the infohash builds; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
   },
   %{
     definition: "linuxtracker",
@@ -77,7 +77,7 @@
     kind: :field,
     field: :guid,
     reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
+      "both set guid from the magnet the infohash builds; native TorrentHash.build_magnet uses a lowercase hash and Mydia's 8 trackers, wasm an uppercase hash and Prowlarr's 20"
   },
   %{
     definition: "mikan",
@@ -93,7 +93,7 @@
     kind: :field,
     field: :category,
     reason:
-      "`category: text: 1` is a YAML integer; native drops the field (nil), wasm maps site category 1 to 4050 (PC/Games)"
+      "`category: text: 1` extracts \"1\" in native, whose CategoryMapping maps PC/Games to 8000 (Other) on purpose; wasm maps site category 1 to 4050 (PC/Games)"
   },
   %{
     definition: "yts",
@@ -109,7 +109,7 @@
     kind: :field,
     field: :guid,
     reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's torrent download URL"
+      "both set guid from the download field; native has no .Config.sitelink, so the definition's re_replace strips the yts domain and LinkResolver resolves the rest against the API search URL; wasm substitutes https://yts.gg/"
   },
   %{
     definition: "yts",

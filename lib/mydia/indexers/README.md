@@ -305,6 +305,49 @@ Each path keeps its own `inputs` (merged over the search inputs unless
 `inheritinputs: false`), `method`, `response` type and `followredirect`.
 The health check and `LiveCheck` request page 1 only.
 
+## Cardigann result parsing
+
+`CardigannResultParser` is a thin facade over `lib/mydia/indexers/cardigann/result/`.
+`Result.Plan.compile/2` turns a definition's `search.rows` and `search.fields`
+into typed structs once per search: the row selector, its attribute,
+`after`/`count`, `andmatch`, `missingAttributeEqualsNoResults` and row filters,
+plus one `Plan.Field` per field with its selector, attribute, `case`, `remove`,
+`optional`/`default` and `text`. A template that reads `.Result` stays raw and is
+rendered per row; every other template is rendered at compile time. The search
+path's declared `response.type` picks the format, and only a definition that
+declares none gets the body sniffed (JSON, XML prolog or feed, else HTML).
+
+`Result.Pipeline.run/3` asks a format adapter to decode the body and list its
+rows, then runs `Result.Fields` over each row. The extractor makes two passes:
+selector fields in dependency order, each seeing the fields before it through
+`.Result`, then text fields in dependency order among themselves. It folds
+`title_default`/`title_optional` into `title` and `download2`/`magnet` into
+`download`, and a row without a title or without a download or infohash is
+dropped. `Result.Transform` then builds the `SearchResult`s, and `ParseStats`
+counts what matched, what a row filter removed and what was dropped.
+
+The adapters only read a document: HTML through lexbor and `Selector`, JSON
+through `JsonPath` (`..` reaches the parent row, and `case` keys compare by
+equality), XML through SweetXml with CSS child combinators and attribute
+predicates translated to XPath. Everything a definition declares around the
+value (filters run after `case` and after a default, text fields, `rows.after`
+and `rows.count`, the row-level `andmatch` filter) lives in the pipeline and
+extractor, so all three formats behave the same.
+
+A field that is wrong for every format is fixed once in `Result.Fields` or
+`Result.Transform`: the extractor owns ordering, defaults, compound fields and
+filters, while the transform owns the title and download choice, size, date,
+category, guid and external ids. A field wrong only for one response format
+belongs in that format's adapter, and a filter that mangles a value belongs in
+`CardigannFilters`.
+
+`guid` is always set now: the download field, else the resolved download URL
+(often a magnet built from the infohash), else the details URL, as Prowlarr's
+release cleanup does. `Mydia.Downloads.Blacklists.release_guid/1` therefore
+keys Cardigann releases by guid instead of the `sha256:` fallback, so blacklist
+rows written before the change keep the fallback and a release blacklisted
+earlier can be grabbed once before it is blacklisted under the new key.
+
 ## Cardigann engines: built-in and Prowlarr-based
 
 Two engines can run Cardigann definitions, chosen by the layered setting
@@ -466,7 +509,8 @@ ratchet and this table together.
 
 `test/fixtures/cardigann/parity/known_divergences.exs` lists every divergence
 the built-in engine still has on the seed, one entry per definition, query,
-kind and field, each with a reason. `test/mydia/indexers/cardigann/parity_test.exs`
+kind and field, each with a reason. There are 15 on the current seed.
+`test/mydia/indexers/cardigann/parity_test.exs`
 replays every capture (one test per capture, tagged `cardigann_wasm`, so it runs
 wherever the guest is present) and fails when:
 

@@ -301,10 +301,15 @@ defmodule Mydia.Indexers.CardigannResultParser do
   @doc """
   Parses date strings to DateTime.
 
-  Attempts to parse various date formats:
+  Follows Prowlarr's `DateTimeUtil.FromUnknown`: an all-digit value is Unix
+  seconds, a value naming "now" (in any case) is the current time, and the
+  rest is tried as ISO 8601, then an extended ISO form, then RFC 1123:
+  - Unix seconds: "1705321800"
+  - "now", "just now"
   - ISO 8601: "2024-01-15T12:30:00Z"
-  - Relative: "2 hours ago", "yesterday"
-  - Custom formats based on common patterns
+  - RFC 1123: "Mon, 15 Jan 2024 12:30:00 GMT"
+
+  Anything else, including nil, is nil.
 
   ## Examples
 
