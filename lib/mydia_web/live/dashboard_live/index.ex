@@ -628,7 +628,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> put_flash(:error, gettext("That library is no longer available. Nothing was added."))}
 
       {:ok, opts} ->
-        add_with_opts(ref, media_type, opts, socket)
+        add_with_opts(ref, media_type, put_franchise_library(opts, ref, media_type), socket)
     end
   end
 
@@ -680,6 +680,19 @@ defmodule MydiaWeb.DashboardLive.Index do
   def trending_rail_limit, do: @trending_rail_limit
 
   ## Private Helpers
+
+  # The dashboard leaves the library to import-time resolution, which knows
+  # nothing about franchises. Fill it in only when the franchise answers (#1293).
+  defp put_franchise_library(opts, ref, :movie) do
+    with nil <- opts[:library_path_id],
+         id when is_binary(id) <- Mydia.Media.FranchiseLibrary.library_for(Ref.tmdb_id(ref)) do
+      Keyword.put(opts, :library_path_id, id)
+    else
+      _ -> opts
+    end
+  end
+
+  defp put_franchise_library(opts, _ref, _media_type), do: opts
 
   # Shared by the first load and the periodic refresh. Indexer health counts
   # configured connections and enabled Cardigann library trackers together.

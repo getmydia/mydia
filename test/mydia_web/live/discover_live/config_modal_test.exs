@@ -34,6 +34,9 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     library_path_fixture(%{type: :movies})
     quality_profile_fixture()
 
+    # Opening Configure also asks whether the title belongs to a franchise (#1293).
+    warm_movie_details_cache(provider_id)
+
     %{conn: log_in_user(conn, user), provider_id: provider_id}
   end
 
@@ -95,6 +98,8 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   # coverage for a crafted `library_path_id` that names no real, monitored,
   # type-matching row.
   test "a rejected library flashes rather than silently adding elsewhere", %{conn: conn} do
+    warm_movie_details_cache(551)
+
     {:ok, view, _html} = live(conn, ~p"/discover")
 
     render_hook(view, "open_add_config", %{
@@ -277,6 +282,9 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
         %{"id" => recommended_id, "title" => "Second Reef", "release_date" => "2023-01-01"}
       ])
 
+      # Opening Configure also asks whether the title belongs to a franchise (#1293).
+      warm_movie_details_cache(recommended_id)
+
       bypass = Bypass.open()
       previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
       Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
@@ -345,6 +353,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   describe "Configure after swapping the detail modal through its rail" do
     setup %{provider_id: provider_id} do
       recommended_id = unique_provider_id()
+      warm_movie_details_cache(recommended_id)
 
       warm_recommendations_cache(provider_id, :movie, [
         %{

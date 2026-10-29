@@ -55,6 +55,9 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
 
     warm_recommendations_cache(own_tmdb_id, :movie, [])
 
+    # Opening Configure asks whether the title belongs to a franchise (#1293).
+    warm_movie_details_cache(missing_tmdb_id)
+
     {movie, missing_tmdb_id}
   end
 
@@ -113,6 +116,9 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
       %{"id" => own_tmdb_id, "title" => "Marrow Station", "release_date" => "1979-05-25"},
       %{"id" => overlap_tmdb_id, "title" => "Marrow Station II", "release_date" => "1986-07-18"}
     ])
+
+    # Opening Configure asks whether the title belongs to a franchise (#1293).
+    warm_movie_details_cache(overlap_tmdb_id)
 
     warm_recommendations_cache(own_tmdb_id, :movie, [
       %{

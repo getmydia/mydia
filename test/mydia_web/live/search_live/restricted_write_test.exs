@@ -15,11 +15,17 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   use Mydia.DataCase, async: true
 
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts.Scope
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Metadata.Structs.MediaMetadata
   alias MydiaWeb.SearchLive.ReleaseAdd
+
+  # Creating a movie asks the relay whether it belongs to a franchise (#1293).
+  setup do
+    warm_movie_details_cache(1)
+  end
 
   defp cartoon_only_scope do
     Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))

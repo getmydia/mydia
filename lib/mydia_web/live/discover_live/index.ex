@@ -671,7 +671,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_info({:add_media_to_library, ref, media_type, library_path_id}, socket) do
     defaults =
       AddDefaults.resolve(socket.assigns.current_user, media_type,
-        library_path_id: presence(library_path_id)
+        library_path_id: presence(library_path_id),
+        tmdb_id: Ref.tmdb_id(ref)
       )
 
     opts =

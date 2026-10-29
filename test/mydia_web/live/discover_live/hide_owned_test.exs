@@ -165,6 +165,9 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
         %{"id" => keeper_id, "title" => "Velvet Static"}
       ])
 
+      # The add also asks whether the title belongs to a franchise (#1293).
+      warm_movie_details_cache(addable_id)
+
       # The add flow's metadata fetch (Add.from_provider -> Metadata.fetch_by_ref)
       # is uncached, unlike the curated-list lookups above, so it needs its own
       # Bypass and a temporary metadata_relay_url swap rather than a cache warm.

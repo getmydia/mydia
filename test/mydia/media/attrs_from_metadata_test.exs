@@ -1,10 +1,17 @@
 defmodule Mydia.Media.AttrsFromMetadataTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.MetadataCacheHelpers
   import Mydia.SettingsFixtures
 
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.AttrsFromMetadata
+
+  # Adding a movie now asks the relay whether it belongs to a franchise;
+  # warm that lookup for the fixture id so it resolves offline (#1293).
+  setup do
+    warm_movie_details_cache(9001)
+  end
 
   defp metadata do
     %{
@@ -152,6 +159,22 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
       attrs = AttrsFromMetadata.from_parsed(parsed, meta)
 
       assert attrs.year == 2021
+    end
+  end
+
+  describe "franchise library" do
+    test "a movie defaults to the library its franchise lives in" do
+      franchise = library_path_fixture(%{type: :movies})
+      tmdb_id = 900_000 + System.unique_integer([:positive])
+
+      metadata = %{metadata() | provider_id: to_string(tmdb_id), title: "Starfall Protocol"}
+
+      attrs =
+        AttrsFromMetadata.from_metadata(metadata, :movie,
+          franchise_lookup: fn ^tmdb_id -> franchise.id end
+        )
+
+      assert attrs.library_path_id == franchise.id
     end
   end
 end
