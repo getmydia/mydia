@@ -46,21 +46,5 @@
     field: :download_url,
     reason:
       "native prefers the infohash field and builds a magnet; wasm keeps the yts.gg torrent download URL"
-  },
-  %{
-    definition: "yts",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "both set guid from the download field; native has no .Config.sitelink, so the definition's re_replace strips the yts domain and LinkResolver resolves the rest against the API search URL; wasm substitutes https://yts.gg/"
-  },
-  %{
-    definition: "yts",
-    query: :rss,
-    kind: :field,
-    field: :info_url,
-    reason:
-      "native has no .Config.sitelink, so the details re_replace leaves movies/<slug>, which resolves against the API search URL; wasm substitutes https://yts.gg/"
   }
 ]

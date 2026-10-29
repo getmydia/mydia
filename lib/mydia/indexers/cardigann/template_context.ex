@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.Cardigann.TemplateContext do
   @moduledoc false
 
   alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannFilters
   alias Mydia.Indexers.CardigannTemplate
@@ -34,7 +35,7 @@ defmodule Mydia.Indexers.Cardigann.TemplateContext do
 
     %{
       keywords: query,
-      config: Keyword.get(opts, :config, %{}),
+      config: config(definition, opts),
       query: %{
         series: query,
         season: Keyword.get(opts, :season),
@@ -46,5 +47,20 @@ defmodule Mydia.Indexers.Cardigann.TemplateContext do
       categories: Keyword.get(opts, :categories, []),
       settings: definition.settings
     }
+  end
+
+  # Prowlarr's `.Config.sitelink` (CardigannBase.GetBaseTemplateVariables): the
+  # site being searched, with the trailing slash definition links carry. A
+  # setting of the same name overrides it there too.
+  defp config(definition, opts) do
+    config = Keyword.get(opts, :config) || %{}
+
+    case Keyword.get(opts, :base_url) || List.first(Links.current(definition)) do
+      url when is_binary(url) and url != "" ->
+        Map.put_new(config, "sitelink", String.trim_trailing(url, "/") <> "/")
+
+      _ ->
+        config
+    end
   end
 end

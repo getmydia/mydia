@@ -961,7 +961,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
       assert context.keywords == "The Matrix"
       assert context.query.series == "The Matrix"
-      assert context.config == %{"sort" => "seeders"}
+      assert context.config == %{"sort" => "seeders", "sitelink" => "https://example.com/"}
     end
   end
 
