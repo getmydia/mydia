@@ -1855,7 +1855,7 @@ msgid_plural "%{count} hours ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:87
+#: lib/mydia_web/live/media_live/index/messages.ex:85
 #, elixir-autogen, elixir-format
 msgid "%{count} imported automatically"
 msgstr ""
@@ -1946,12 +1946,12 @@ msgid_plural "%{count} missing"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:77
+#: lib/mydia_web/live/media_live/index/messages.ex:75
 #, elixir-autogen, elixir-format
 msgid "%{count} modified"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:72
+#: lib/mydia_web/live/media_live/index/messages.ex:70
 #, elixir-autogen, elixir-format
 msgid "%{count} new"
 msgstr ""
@@ -1977,7 +1977,7 @@ msgid_plural "%{count} peers"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:82
+#: lib/mydia_web/live/media_live/index/messages.ex:80
 #, elixir-autogen, elixir-format
 msgid "%{count} removed"
 msgstr ""
@@ -5905,12 +5905,12 @@ msgstr ""
 msgid "Library is now chosen automatically"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:93
+#: lib/mydia_web/live/media_live/index/messages.ex:91
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: %{changes}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/messages.ex:91
+#: lib/mydia_web/live/media_live/index/messages.ex:89
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: No changes detected"
 msgstr ""
