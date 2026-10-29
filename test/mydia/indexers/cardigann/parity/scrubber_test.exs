@@ -625,6 +625,29 @@ defmodule Mydia.Indexers.Cardigann.Parity.ScrubberTest do
       Scrubber.verify(@empty, @empty, works, cap, Keyword.take(opts, [:encoding]))
     end
 
+    test "translates only id fields, so a seeders count equal to an id stays as it was" do
+      row = fn tmdb ->
+        Mydia.Indexers.SearchResult.new(
+          title: "Mellow Kiln",
+          size: 1000,
+          seeders: 20,
+          leechers: 2,
+          download_url: "https://harbor.invalid/dl/1.torrent",
+          indexer: "x",
+          category: 2000,
+          metadata: %{tmdb_id: tmdb}
+        )
+      end
+
+      ids = %{"20" => "2012345678"}
+      before = %{wasm: {:ok, [row.(20)]}, wasm_misses: []}
+      now = %{wasm: {:ok, [row.(2_012_345_678)]}, wasm_misses: []}
+      cap = capture([exchange("x")])
+
+      # The id field is expected to come back as its stand-in; seeders is not.
+      assert Scrubber.verify(before, now, [], cap, ids: ids) == :ok
+    end
+
     test "finds a work behind a padded apostrophe entity" do
       assert {:error, [msg]} = leaks("<a>Kiln&#039;s Harbor</a>", ["Kiln's Harbor"])
       assert msg =~ "body 1"

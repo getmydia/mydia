@@ -144,8 +144,15 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
         _ -> nil
       end)
 
-    {:magnet, hash, for({"dn", v} <- params, do: v),
-     params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort()}
+    {
+      :magnet,
+      hash,
+      for({"dn", v} <- params, do: v),
+      params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort(),
+      # ws, x.pe and the rest change how a client gets the data, so they stay in
+      # the key, sorted but with repeats kept.
+      params |> Enum.reject(fn {k, _} -> k in ["xt", "dn", "tr"] end) |> Enum.sort()
+    }
   end
 
   # Pairing: info hash, then normalised download URL, then position. A tracker

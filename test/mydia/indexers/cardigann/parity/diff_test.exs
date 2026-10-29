@@ -97,6 +97,14 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     assert [%{field: :published_at}] = run([a], [%{a | published_at: nil}]).divergences
   end
 
+  test "magnets that differ only in ws diverge" do
+    base = "magnet:?xt=urn:btih:#{@hash_a}&dn=Lantern%20Harbor"
+    a = result("Lantern Harbor", @hash_a, download_url: base <> "&ws=https%3A%2F%2Fa.test%2Fx")
+    b = %{a | download_url: base <> "&ws=https%3A%2F%2Fb.test%2Fx"}
+
+    assert [%{field: :download_url}] = run([a], [b]).divergences
+  end
+
   test "magnet trackers in a different order are equal" do
     base = "magnet:?xt=urn:btih:#{@hash_a}&dn=Lantern%20Harbor"
 

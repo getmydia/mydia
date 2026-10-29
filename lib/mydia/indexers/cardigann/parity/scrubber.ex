@@ -35,6 +35,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
   # Compared fields, minus the ones that carry the renamed title.
   @struct_fields ~w(size seeders leechers category published_at imdb_id tmdb_id tvdb_id)a
   @metadata_fields ~w(info_hash download_volume_factor upload_volume_factor)a
+  @id_fields ~w(imdb_id tmdb_id tvdb_id info_hash)a
   @date_tolerance_seconds 60
 
   @doc """
@@ -175,7 +176,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     fields =
       for {{a, b}, i} <- before |> Enum.zip(now) |> Enum.with_index(1),
           field <- @struct_fields ++ @metadata_fields,
-          expected = Ids.translate(value(a, field), ids),
+          expected = expected_value(value(a, field), field, ids),
           not equal?(field, expected, value(b, field)) do
         "result #{i} #{field}: #{inspect(expected)} became #{inspect(value(b, field))}"
       end
@@ -187,6 +188,11 @@ defmodule Mydia.Indexers.Cardigann.Parity.Scrubber do
     do: [
       "wasm outcome changed or failed: #{inspect(before, limit: 5)} -> #{inspect(now, limit: 5)}"
     ]
+
+  # Only id and hash fields were rewritten; a seeders count that happens to
+  # equal an id's digits must stay as it was.
+  defp expected_value(v, field, ids) when field in @id_fields, do: Ids.translate(v, ids)
+  defp expected_value(v, _field, _ids), do: v
 
   defp value(result, field) when field in @metadata_fields do
     meta = result.metadata || %{}
