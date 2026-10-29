@@ -293,6 +293,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_time_zone()
     |> validate_home_widgets()
     |> validate_poster_fields()
+    |> validate_library_listing()
   end
 
   # Same stale-value rule as validate_time_zone/1: a locale whose translation a
@@ -360,6 +361,34 @@ defmodule Mydia.Accounts.UserPreference do
        do: String.trim(name) != ""
 
   defp valid_service?(_), do: false
+
+  # The library pages' remembered sort and filters, keyed by page
+  # ("movies", "tv_shows", "section:<id>"). Values are URL query pairs that
+  # MydiaWeb.MediaLive.Index.ListingParams re-validates on read, so only the
+  # shape is checked here. Only a new or changed value is checked.
+  defp validate_library_listing(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "library_listing"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "library_listing"),
+         false <- valid_library_listing?(value) do
+      add_error(changeset, :preferences, "invalid value for library_listing: #{inspect(value)}")
+    else
+      _ -> changeset
+    end
+  end
+
+  defp string_pairs?(pairs) when is_map(pairs),
+    do: Enum.all?(pairs, fn {k, v} -> is_binary(k) and is_binary(v) end)
+
+  defp string_pairs?(_pairs), do: false
+
+  @doc "Whether `value` is a well-formed `library_listing` preference."
+  @spec valid_library_listing?(term()) :: boolean()
+  def valid_library_listing?(value) when is_map(value) do
+    Enum.all?(value, fn {page, pairs} -> is_binary(page) and string_pairs?(pairs) end)
+  end
+
+  def valid_library_listing?(_value), do: false
 
   # Same stale-value rule as validate_poster_fields/1: a theme a later release
   # drops from Themes must not fail every unrelated save. Only a new or
