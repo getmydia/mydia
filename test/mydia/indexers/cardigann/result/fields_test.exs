@@ -64,6 +64,30 @@ defmodule Mydia.Indexers.Cardigann.Result.FieldsTest do
       assert {:ok, %{"title" => "Lantern Harbor - Quiet Orchard Console"}} = extract_html(fields)
     end
 
+    # The plan renders a template that does not read `.Result` once. Rendering
+    # it again per row would evaluate template syntax the keywords carry.
+    test "a keyword holding template syntax is used as written" do
+      context = %{keywords: "orchard {{ .Config.flag }}", config: %{"flag" => "LEAKED"}}
+
+      fields =
+        Map.merge(@download, %{
+          "title" => %{
+            selector: "td.name",
+            filters: [%{name: "append", args: " / {{ .Keywords }}"}]
+          },
+          "description" => %{
+            text: "{{ .Result.title }}",
+            filters: [%{name: "prepend", args: "{{ .Keywords }} / "}]
+          }
+        })
+
+      assert {:ok, values} = extract_html(fields, context)
+      assert values["title"] == "Lantern Harbor / orchard {{ .Config.flag }}"
+
+      assert values["description"] ==
+               "orchard {{ .Config.flag }} / Lantern Harbor / orchard {{ .Config.flag }}"
+    end
+
     test "filters run on the case result" do
       fields =
         Map.merge(@download, %{

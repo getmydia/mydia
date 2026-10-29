@@ -165,9 +165,11 @@ defmodule Mydia.Indexers.Cardigann.Result.Plan do
   defp render_optional(value, context) when is_binary(value), do: render(value, context)
   defp render_optional(value, _context), do: value
 
-  # Templates that read a row's `.Result` can only be rendered per row. A render
-  # failure keeps the raw string, as the per-row code did.
-  defp render(value, context) when is_binary(value) and map_size(context) > 0 do
+  # Templates that read a row's `.Result` can only be rendered per row; every
+  # other template is rendered here and nowhere else, even with an empty
+  # context, so its output is never evaluated a second time. A render failure
+  # keeps the raw string, as the per-row code did.
+  defp render(value, context) when is_binary(value) and is_map(context) do
     if String.contains?(value, "{{") and not String.contains?(value, ".Result") do
       case CardigannTemplate.render(value, context, url_encode: false) do
         {:ok, rendered} -> rendered

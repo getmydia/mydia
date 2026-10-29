@@ -12,7 +12,8 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
 
   alias Mydia.Indexers.Cardigann.Result.Plan
   alias Mydia.Indexers.Cardigann.Result.Plan.Field
-  alias Mydia.Indexers.CardigannResultParser
+  alias Mydia.Indexers.Cardigann.Result.Format.Template
+  alias Mydia.Indexers.CardigannFilters
   alias Mydia.Indexers.CardigannTemplate
 
   @spec extract(term(), term(), Plan.t(), module(), map()) ::
@@ -88,8 +89,29 @@ defmodule Mydia.Indexers.Cardigann.Result.Fields do
       :error
   end
 
-  defp filter(value, %Field{filters: filters}, context),
-    do: CardigannResultParser.apply_filters(value, filters, context)
+  # The plan rendered every filter argument that does not read `.Result`, so
+  # only those that do are rendered here, once, against this row.
+  defp filter(value, %Field{filters: filters}, context) do
+    {:ok,
+     Enum.reduce(filters, value, fn filter, acc ->
+       {:ok, filtered} = CardigannFilters.apply(render_args(filter, context), acc)
+       filtered
+     end)}
+  end
+
+  defp render_args(%{} = filter, context) do
+    key = if Map.has_key?(filter, :args), do: :args, else: "args"
+
+    case Map.get(filter, key) do
+      args when is_list(args) ->
+        Map.put(filter, key, Enum.map(args, &Template.render(&1, context: context)))
+
+      _ ->
+        filter
+    end
+  end
+
+  defp render_args(filter, _context), do: filter
 
   # Definitions that predate `text:` spell a fallback title as title_default
   # plus title_optional, and a download as download2 or magnet. Fold them into
