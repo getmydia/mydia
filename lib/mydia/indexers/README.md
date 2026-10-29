@@ -353,10 +353,10 @@ rows written before the change keep the fallback and a release blacklisted
 earlier can be grabbed once before it is blacklisted under the new key.
 
 Upgrading also changes which rows come back: `rows.filters: andmatch` now drops
-rows whose title lacks a keyword in every format, not only HTML. Five seeded
-snapshot definitions declare it (showrss, crackingpatching, eztv, ebookbay and
-torrentlt), so a keyworded query against any of them returns fewer rows than
-before.
+rows whose title lacks a keyword in every format, not only HTML. Six definitions
+declare it: five snapshot fixtures (showrss, crackingpatching, eztv, ebookbay and
+torrentlt) and the seeded parity definition pctorrent, so a keyworded query
+against any of them returns fewer rows than before.
 
 ## Cardigann engines: built-in and Prowlarr-based
 
