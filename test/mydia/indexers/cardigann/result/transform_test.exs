@@ -201,5 +201,21 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert Transform.parse_date("") == nil
       assert Transform.parse_date("not a date") == nil
     end
+
+    test "resolves now to the current time" do
+      now = Transform.parse_date("now")
+
+      assert %DateTime{} = now
+      assert_in_delta DateTime.diff(now, DateTime.utc_now()), 0, 1
+    end
+
+    test "reads a Unix timestamp in seconds" do
+      assert Transform.parse_date("1791000000") == DateTime.from_unix!(1_791_000_000)
+    end
+
+    test "reads an RFC 1123 date whose offset has no colon" do
+      assert Transform.parse_date("Wed, 28 Oct 2026 16:05:28 +0000") ==
+               ~U[2026-10-28 16:05:28Z]
+    end
   end
 end

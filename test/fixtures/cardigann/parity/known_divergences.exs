@@ -24,14 +24,6 @@
       "native CategoryMapping maps PC and Console categories to 8000 (Other) on purpose; wasm maps this row's Console/NDS (/switch) to 1010"
   },
   %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "`date: text: now` has no date filter; native parse_date(\"now\") is nil, wasm resolves now to the replay time"
-  },
-  %{
     definition: "linuxtracker",
     query: :generic,
     kind: :field,
@@ -96,36 +88,12 @@
       "date_year_raw's regexp uses \\u00A0, which PCRE2 rejects, so native skips the filter and keeps the size cell (\"360.3 MB\"); date_year becomes \"360.3 MB +08:00\", dateparse leaves it unparsed, `or` prefers it over date_day and parse_date gives nil. wasm drops the non-matching cell and uses date_day (\"今天 02:30\" as today). Native is nil whatever the clock, so the divergence does not depend on when the test runs"
   },
   %{
-    definition: "nekobt",
-    query: :movie,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "pubDate ends in \"+0000\" and the GMT replace does not fire; native dateparse \"zzz\" only accepts \"+00:00\" (nil), wasm parses \"+0000\""
-  },
-  %{
-    definition: "nekobt",
-    query: :rss,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "pubDate ends in \"+0000\" and the GMT replace does not fire; native dateparse \"zzz\" only accepts \"+00:00\" (nil), wasm parses \"+0000\""
-  },
-  %{
     definition: "pctorrent",
     query: :rss,
     kind: :field,
     field: :category,
     reason:
       "`category: text: 1` is a YAML integer; native drops the field (nil), wasm maps site category 1 to 4050 (PC/Games)"
-  },
-  %{
-    definition: "pctorrent",
-    query: :rss,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "`date: text: now` has no date filter; native parse_date(\"now\") is nil, wasm resolves now to the replay time"
   },
   %{
     definition: "yts",
@@ -150,13 +118,5 @@
     field: :info_url,
     reason:
       "native has no .Config.sitelink, so the details re_replace leaves movies/<slug>, which resolves against the API search URL; wasm substitutes https://yts.gg/"
-  },
-  %{
-    definition: "yts",
-    query: :rss,
-    kind: :field,
-    field: :published_at,
-    reason:
-      "date is date_uploaded_unix with no filter; native parse_date only takes ISO 8601 (nil), wasm reads the Unix timestamp"
   }
 ]

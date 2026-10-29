@@ -123,7 +123,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
     {"kb", 1024}
   ]
   @size_pattern Regex.compile!(
-                  "([\\d,]+(?:\\.[\\d]+)?)\\s*(#{@size_units |> Enum.map(&elem(&1, 0)) |> Enum.join("|")})",
+                  "([\\d,]+(?:\\.[\\d]+)?)\\s*(#{Enum.map_join(@size_units, "|", &elem(&1, 0))})",
                   "i"
                 )
 
@@ -177,18 +177,48 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   def parse_date(""), do: nil
 
   def parse_date(date_str) when is_binary(date_str) do
-    case DateTime.from_iso8601(date_str) do
-      {:ok, datetime, _offset} ->
-        datetime
+    date_str = String.trim(date_str)
 
-      _ ->
-        case Timex.parse(date_str, "{ISO:Extended}") do
-          {:ok, datetime} -> datetime
-          _ -> nil
-        end
+    cond do
+      date_str == "" -> nil
+      String.match?(date_str, ~r/^\d+$/) -> parse_unix(date_str)
+      String.contains?(String.downcase(date_str), "now") -> DateTime.utc_now()
+      true -> parse_datetime(date_str)
     end
   rescue
     _ -> nil
+  end
+
+  # Prowlarr's DateTimeUtil.FromUnknown treats an all-digit value as Unix
+  # seconds and any value naming "now" as the current time, before trying its
+  # date layouts.
+  defp parse_unix(seconds_str) do
+    case Integer.parse(seconds_str) do
+      {seconds, ""} ->
+        case DateTime.from_unix(seconds) do
+          {:ok, datetime} -> datetime
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_datetime(date_str) do
+    case DateTime.from_iso8601(date_str) do
+      {:ok, datetime, _offset} -> datetime
+      _ -> parse_timex(date_str)
+    end
+  end
+
+  defp parse_timex(date_str) do
+    Enum.find_value(["{ISO:Extended}", "{RFC1123}"], fn format ->
+      case Timex.parse(date_str, format) do
+        {:ok, datetime} -> datetime
+        _ -> nil
+      end
+    end)
   end
 
   # magnet and .torrent links are torrents, .nzb links NZBs; anything else is
