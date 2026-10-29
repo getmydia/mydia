@@ -67,6 +67,11 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert result.title == "Lantern Harbor 1080p"
     end
 
+    test "leaves a missing or blank tmdbid nil" do
+      assert one(row(%{"tmdbid" => nil})).tmdb_id == nil
+      assert one(row(%{"tmdbid" => ""})).tmdb_id == nil
+    end
+
     test "leaves absent optional fields empty and counts at zero" do
       result =
         one(

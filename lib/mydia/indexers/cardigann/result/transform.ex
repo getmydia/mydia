@@ -38,7 +38,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         category: map_category(get_field(row, "category"), ctx.category_mappings),
         published_at: parse_date(get_field(row, "date")),
         quality: QualityParser.parse(title),
-        tmdb_id: parse_integer(get_field(row, "tmdbid")),
+        tmdb_id: parse_optional_integer(get_field(row, "tmdbid")),
         imdb_id: get_field(row, "imdbid"),
         download_protocol: detect_download_protocol(resolved_download_url),
         guid: release_guid(row, resolved_download_url, resolved_info_url, ctx)
@@ -190,6 +190,15 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
 
   defp parse_integer(num) when is_integer(num), do: num
   defp parse_integer(_), do: 0
+
+  # Prowlarr decodes an absent or zero id back to nil, so it never claims an id
+  # the release does not have.
+  defp parse_optional_integer(value) do
+    case parse_integer(value) do
+      0 -> nil
+      number -> number
+    end
+  end
 
   @spec parse_date(String.t() | nil) :: DateTime.t() | nil
   def parse_date(nil), do: nil
