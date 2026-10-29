@@ -42,7 +42,7 @@ defmodule MydiaWeb.MediaLive.Index.RememberedListing do
     if saved == %{} or ListingParams.listing_in_url?(params) do
       {socket, params, nil}
     else
-      params = Map.merge(saved, params)
+      params = Map.merge(Map.take(saved, ListingParams.remembered_keys()), params)
       restored = ListingParams.parse(params, library_ids)
 
       # Every saved pair may have been dropped by the parse (a deleted
@@ -79,7 +79,12 @@ defmodule MydiaWeb.MediaLive.Index.RememberedListing do
     pairs = ListingParams.to_remembered(params)
     shown = ListingParams.to_remembered(Window.listing_params(socket.assigns))
 
-    if pairs == socket.assigns.remembered_listing or (pairs == shown and not forget?) do
+    # Clear filters always writes: the assign can be stale when another tab
+    # saved since this page mounted, so equality with it proves nothing.
+    skip? =
+      not forget? and (pairs == socket.assigns.remembered_listing or pairs == shown)
+
+    if skip? do
       socket
     else
       case LibraryListingState.put(socket.assigns.current_user, page(socket), pairs) do

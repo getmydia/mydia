@@ -43,6 +43,14 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
   defp ids(items), do: Enum.map(items, & &1.id)
 
   describe "title" do
+    test "titles that fold alike tie-break by id, whatever the input order" do
+      a = item("a", %{title: "Elan Quarry"})
+      b = item("b", %{title: "Élan Quarry"})
+
+      assert ids(MediaSort.sort([b, a], %{field: :title, direction: :asc})) == ["a", "b"]
+      assert ids(MediaSort.sort([a, b], %{field: :title, direction: :asc})) == ["a", "b"]
+    end
+
     test "sorts case-insensitively in both directions" do
       items = [item("1", %{title: "banana"}), item("2", %{title: "Apple"})]
 

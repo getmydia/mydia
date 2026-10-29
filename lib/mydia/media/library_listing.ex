@@ -460,10 +460,11 @@ defmodule Mydia.Media.LibraryListing do
   # The # group ranks first so it is one block: digits and most punctuation
   # already sort before "a", but "[", "~" and non-Latin scripts would land
   # after "z" without it. The full fold breaks ties between a title and its
-  # article-led twin ("Harbor Watch", "The Harbor Watch").
+  # article-led twin ("Harbor Watch", "The Harbor Watch"), and the item id
+  # breaks any remaining tie so the order stays total across offset pages.
   defp title_key(%LibraryRow{item: item}) do
     key = SortTitle.key(item.title)
-    {if(initial_of(key) == "#", do: 0, else: 1), key, SortTitle.fold(item.title)}
+    {if(initial_of(key) == "#", do: 0, else: 1), key, SortTitle.fold(item.title), item.id}
   end
 
   defp initial_of(<<c, _rest::binary>>) when c in ?a..?z, do: <<c>>

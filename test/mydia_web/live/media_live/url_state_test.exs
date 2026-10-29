@@ -276,6 +276,37 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
       assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
     end
 
+    test "Clear filters forgets the saved state even when another tab saved since mount",
+         %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies?progress=missing")
+
+      # Another tab saves after this page mounted with nothing saved.
+      :ok = Mydia.Accounts.LibraryListingState.put(user, "movies", %{"sort" => "year_desc"})
+
+      view |> element("#library-reset-filters") |> render_click()
+
+      assert Mydia.Accounts.LibraryListingState.get(user, "movies") == %{}
+    end
+
+    test "only remembered keys are restored from the saved state", %{conn: conn, user: user} do
+      movie = media_item_fixture(%{type: "movie", title: "Quillmere Drift"})
+
+      :ok =
+        Mydia.Accounts.LibraryListingState.put(user, "movies", %{
+          "q" => "zzz-no-match",
+          "sort" => "year_desc"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(view, "#media_items-#{movie.id}")
+
+      assert has_element?(
+               view,
+               "#library-filter-form select[name=sort_by] option[selected][value=year_desc]"
+             )
+    end
+
     test "a live patch to a page with the same restored listing loads that page's rows",
          %{conn: conn, user: user} do
       movie = media_item_fixture(%{type: "movie", title: "Quillmere Drift"})

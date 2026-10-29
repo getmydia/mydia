@@ -385,10 +385,16 @@ defmodule Mydia.Accounts.UserPreference do
   @doc "Whether `value` is a well-formed `library_listing` preference."
   @spec valid_library_listing?(term()) :: boolean()
   def valid_library_listing?(value) when is_map(value) do
-    Enum.all?(value, fn {page, pairs} -> is_binary(page) and string_pairs?(pairs) end)
+    Enum.all?(value, fn {page, pairs} ->
+      is_binary(page) and valid_library_listing_entry?(pairs)
+    end)
   end
 
   def valid_library_listing?(_value), do: false
+
+  @doc "Whether `pairs` is a well-formed entry of one library page: string keys to string values."
+  @spec valid_library_listing_entry?(term()) :: boolean()
+  def valid_library_listing_entry?(pairs), do: string_pairs?(pairs)
 
   # Same stale-value rule as validate_poster_fields/1: a theme a later release
   # drops from Themes must not fail every unrelated save. Only a new or

@@ -123,10 +123,11 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
   defp sorter_for(:last_played, direction), do: {direction, DateTime}
   defp sorter_for(_field, direction), do: direction
 
-  # The fold breaks ties between a title and its article-led twin, keeping the
-  # order total.
-  defp title_key(%{title: title}) when is_binary(title),
-    do: {SortTitle.key(title), SortTitle.fold(title)}
+  # The fold breaks ties between a title and its article-led twin, and the id
+  # breaks the rest ("Élan" and "Elan" fold alike), so the order stays total
+  # and offset pagination never shifts.
+  defp title_key(%{title: title, id: id}) when is_binary(title),
+    do: {SortTitle.key(title), SortTitle.fold(title), id}
 
   defp title_key(_item), do: nil
 

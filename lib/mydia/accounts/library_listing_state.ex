@@ -18,10 +18,10 @@ defmodule Mydia.Accounts.LibraryListingState do
   """
   @spec get(User.t(), String.t()) :: pairs()
   def get(%User{} = user, page) when is_binary(page) do
-    listing = Accounts.get_user_preference!(user).preferences["library_listing"]
-
-    with true <- UserPreference.valid_library_listing?(listing),
-         pairs when is_map(pairs) <- Map.get(listing, page) do
+    with listing when is_map(listing) <-
+           Accounts.get_user_preference!(user).preferences["library_listing"],
+         pairs <- Map.get(listing, page),
+         true <- UserPreference.valid_library_listing_entry?(pairs) do
       pairs
     else
       _ -> %{}
@@ -31,7 +31,8 @@ defmodule Mydia.Accounts.LibraryListingState do
   @doc """
   Saves a library page's sort and filters. Other pages' entries are kept:
   `Accounts.update_preference/2` merges only the top level, so the nested map
-  is merged here.
+  is merged here. Sibling entries that are malformed are dropped first, so one
+  corrupt entry cannot make every save fail validation.
   """
   @spec put(User.t(), String.t(), pairs()) :: :ok | {:error, Ecto.Changeset.t()}
   def put(%User{} = user, page, pairs) when is_binary(page) and is_map(pairs) do
@@ -39,8 +40,13 @@ defmodule Mydia.Accounts.LibraryListingState do
 
     listing =
       case pref.preferences["library_listing"] do
-        current when is_map(current) -> current
-        _ -> %{}
+        current when is_map(current) ->
+          Map.filter(current, fn {key, entry} ->
+            is_binary(key) and UserPreference.valid_library_listing_entry?(entry)
+          end)
+
+        _ ->
+          %{}
       end
 
     case Accounts.update_preference(pref, %{"library_listing" => Map.put(listing, page, pairs)}) do
