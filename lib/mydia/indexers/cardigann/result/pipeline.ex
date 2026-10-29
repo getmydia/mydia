@@ -117,8 +117,9 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
     {Enum.map(kept, &elem(&1, 1)), Enum.map(drops, &elem(&1, 1))}
   end
 
-  # `andmatch` drops rows whose title lacks any search keyword. Only a field
-  # filter declares it for now.
+  # `andmatch` drops rows whose title lacks any search keyword. Definitions
+  # declare it on `rows.filters`, where Prowlarr reads it, or as a field
+  # filter, which the native engine has always honoured too.
   defp andmatch(rows, plan, template_context) do
     words =
       (template_context[:keywords] || "")
@@ -135,11 +136,12 @@ defmodule Mydia.Indexers.Cardigann.Result.Pipeline do
     end
   end
 
-  defp andmatch?(%Plan{} = plan) do
-    Enum.any?(
-      Enum.map(plan.selector_fields ++ plan.text_fields, & &1.filters),
-      &Enum.any?(&1, fn filter -> filter_name(filter) == "andmatch" end)
-    )
+  defp andmatch?(%Plan{rows: rows} = plan) do
+    rows.andmatch == true or
+      Enum.any?(
+        [rows.filters | Enum.map(plan.selector_fields ++ plan.text_fields, & &1.filters)],
+        &Enum.any?(&1, fn filter -> filter_name(filter) == "andmatch" end)
+      )
   end
 
   defp filter_name(%{} = filter), do: to_string(filter[:name] || filter["name"])

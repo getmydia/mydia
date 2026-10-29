@@ -300,13 +300,23 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   describe "showRSS snapshot" do
     @tag :snapshot
     test "parses captured XML RSS feed without error" do
+      # The capture is the global feed, a keywordless request. With the
+      # metadata's query the definition's `rows.filters: andmatch` would drop
+      # every row (see the next test).
       {{result, _definition}, _log} =
-        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss") end)
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss", keywords: "") end)
 
       # The feed names its title element `tv:raw_title`; the definition selects
       # it as `raw_title`, as a CSS type selector matches by local name.
       assert {:ok, [_ | _] = results} = result
       assert Enum.all?(results, &(is_binary(&1.title) and &1.title != ""))
+    end
+
+    test "rows.filters andmatch drops feed rows without the keywords" do
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss", keywords: "test") end)
+
+      assert {:ok, []} = result
     end
   end
 
@@ -393,8 +403,17 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
 
   describe "CrackingPatching snapshot" do
     @tag :snapshot
+    # The definition declares `rows.filters: andmatch`, and no row title in the
+    # capture contains its query ("ubuntu"), so Prowlarr keeps none of them.
+    # Row parsing is exercised as a keywordless request instead.
     test "crackingpatching: search rows parse" do
-      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2)
+      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2, keywords: "")
+    end
+
+    test "crackingpatching: rows.filters andmatch drops rows without the keywords" do
+      assert_raise ExUnit.AssertionError, ~r/got 0/, fn ->
+        run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 1)
+      end
     end
 
     # The magnet in download_response.html is synthetic. This only proves that the

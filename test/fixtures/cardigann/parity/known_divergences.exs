@@ -321,14 +321,6 @@
   },
   %{
     definition: "pctorrent",
-    query: :generic,
-    kind: :count,
-    field: nil,
-    reason:
-      "`rows.filters: andmatch` drops rows whose title lacks the keywords; native only honours andmatch on a field, not on rows, so it keeps all 24 where wasm keeps 0"
-  },
-  %{
-    definition: "pctorrent",
     query: :rss,
     kind: :field,
     field: :category,

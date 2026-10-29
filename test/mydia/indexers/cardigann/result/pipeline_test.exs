@@ -65,6 +65,44 @@ defmodule Mydia.Indexers.Cardigann.Result.PipelineTest do
   end
 
   describe "andmatch" do
+    test "rows.filters andmatch drops rows whose title lacks a keyword" do
+      rows = %{selector: "tr", after: 1, filters: [%{name: "andmatch"}]}
+
+      assert {:ok, results, %ParseStats{matched: 3, filtered: 1, dropped: 0}} =
+               run(rows, @html, :html, keywords: "lantern harbor")
+
+      assert titles(results) == ["Lantern Harbor 1080p", "Lantern Harbor 720p"]
+    end
+
+    test "rows.filters andmatch reaches the plan from a YAML definition" do
+      yaml = """
+      id: lantern
+      name: Lantern
+      description: Lantern Harbor test tracker
+      language: en-US
+      encoding: UTF-8
+      type: public
+      links: [https://lantern.invalid/]
+      caps:
+        categorymappings: []
+      search:
+        paths: [{path: /}]
+        rows:
+          selector: tr
+          filters:
+            - name: andmatch
+        fields:
+          title: {selector: td.t}
+          download: {selector: a, attribute: href}
+          size: {text: 1 GB}
+          seeders: {text: 1}
+      """
+
+      {:ok, definition} = Mydia.Indexers.CardigannParser.parse_definition(yaml)
+      {:ok, plan} = Plan.compile(definition, %{})
+      assert [%{"name" => "andmatch"}] = plan.rows.filters
+    end
+
     test "a field-level andmatch filter drops rows whose title lacks a keyword" do
       fields = put_in(@fields, ["title", :filters], [%{name: "andmatch"}])
 
