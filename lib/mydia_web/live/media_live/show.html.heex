@@ -506,15 +506,17 @@
       indexer_progress={@indexer_progress}
       cardigann_summary={@cardigann_summary}
       streams={@streams}
-      quality_filter={@quality_filter}
-      source_filter={@source_filter}
-      codec_filter={@codec_filter}
+      quality_filters={@quality_filters}
+      source_filters={@source_filters}
+      codec_filters={@codec_filters}
+      indexer_filters={@indexer_filters}
+      result_count={@result_count}
       filter_options={
-        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(
-          @raw_search_results,
-          @source_filter,
-          @codec_filter
-        )
+        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(@raw_search_results, %{
+          source_filters: @source_filters,
+          codec_filters: @codec_filters,
+          indexer_filters: @indexer_filters
+        })
       }
       min_seeders={@min_seeders}
       sort_by={@sort_by}

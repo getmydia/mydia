@@ -312,7 +312,11 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
             results_empty?: false,
             indexer_errors: [],
             streams: %{search_results: [{"search-result-00000-1", result}]},
-            quality_filter: nil,
+            quality_filters: [],
+            source_filters: [],
+            codec_filters: [],
+            indexer_filters: [],
+            result_count: 1,
             min_seeders: 0,
             sort_by: :seeders,
             close_after_grab: false
@@ -406,6 +410,15 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Score breakdown"
       assert html =~ ~s(id="search-result-00000-1-audio")
 
+      label =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="quality"]))
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert label == "Score"
+
       # The ring shows the ranker's own total for this row, not a second score.
       opts =
         MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(%{
@@ -452,10 +465,59 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ ~s(id="search-result-00000-1-audio")
     end
 
+    test "the first column header reads Seeds without a quality profile" do
+      html = modal_html(%{})
+
+      label =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="quality"]))
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert label == "Seeds"
+    end
+
     test "a result with nil seeders still renders" do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
 
       assert html =~ ~s(id="search-result-00000-1")
+    end
+
+    test "nil seeders render a placeholder, not 0, in the seeds cell" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
+
+      cell =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("[id$='-seeds']")
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert cell == "—"
+    end
+
+    test "a release returned by several trackers names the winner and counts the rest" do
+      html = modal_html(%{indexer: "TorrentDay", indexers: ["EZTV", "Nyaa", "TorrentDay"]}, %{})
+      doc = LazyHTML.from_fragment(html)
+
+      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
+      assert html =~ ~s(title="EZTV, Nyaa, TorrentDay")
+    end
+
+    test "the desktop column header sorts by the clicked column" do
+      html = modal_html(%{}, %{sort_by: :seeders})
+      doc = LazyHTML.from_fragment(html)
+
+      assert doc
+             |> LazyHTML.query(~s(#manual-search-columns [phx-value-sort_by="size"]))
+             |> Enum.count() == 1
+
+      assert doc
+             |> LazyHTML.query(
+               ~s(#manual-search-columns .text-primary[phx-value-sort_by="seeders"])
+             )
+             |> Enum.count() == 1
     end
   end
 

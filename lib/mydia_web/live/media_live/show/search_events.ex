@@ -3,7 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   use Gettext, backend: MydiaWeb.Gettext
 
-  import Phoenix.Component, only: [assign: 3]
+  import Phoenix.Component, only: [assign: 2, assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3, stream: 4, stream_insert: 3]
 
   alias Mydia.Media
@@ -11,7 +11,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
-  alias Mydia.Quality.Sources
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.MediaLive.Show.ExistingFiles
 
@@ -27,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     socket
     |> assign(:raw_search_results, [])
     # Untruncated, undeduplicated pool of every release seen so far in the
-    # current manual search, keyed by download_url. Progress messages fold
+    # current manual search, keyed by {download_url, indexer}. Progress messages fold
     # onto this (never onto :raw_search_results, which is already truncated
     # and deduplicated) so a later, weaker duplicate can never crown itself
     # over a stronger release evicted by an earlier round's truncation. See
@@ -66,7 +65,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
             media_item.title
         end
 
-      min_seeders = socket.assigns.min_seeders
       lv = self()
       search_id = socket.assigns.search_id + 1
 
@@ -99,7 +97,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:prior_attempts_checked, MapSet.new())
        |> stream(:search_results, [], reset: true)
        |> start_async(:search, fn ->
-         perform_search(search_query, min_seeders, lv, search_id)
+         perform_search(search_query, 0, lv, search_id)
        end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -163,7 +161,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     search_query =
       "#{media_item.title} S#{String.pad_leading(to_string(episode.season_number), 2, "0")}E#{String.pad_leading(to_string(episode.episode_number), 2, "0")}"
 
-    min_seeders = socket.assigns.min_seeders
     lv = self()
     search_id = socket.assigns.search_id + 1
 
@@ -198,7 +195,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
-       perform_search(search_query, min_seeders, lv, search_id)
+       perform_search(search_query, 0, lv, search_id)
      end)}
   end
 
@@ -209,7 +206,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     search_query =
       "#{media_item.title} S#{String.pad_leading(to_string(season_num), 2, "0")}"
 
-    min_seeders = socket.assigns.min_seeders
     lv = self()
     search_id = socket.assigns.search_id + 1
 
@@ -236,7 +232,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:prior_attempts_checked, MapSet.new())
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
-       perform_search(search_query, min_seeders, lv, search_id)
+       perform_search(search_query, 0, lv, search_id)
      end)}
   end
 
@@ -324,7 +320,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       retest_paused? = Keyword.get(opts, :retest_paused, false)
       query = socket.assigns.manual_search_query
-      min_seeders = socket.assigns.min_seeders
       lv = self()
       search_id = socket.assigns.search_id
 
@@ -348,7 +343,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
            send(lv, {:paused_retest, search_id, result})
          end
 
-         perform_search(query, min_seeders, lv, search_id, [indexer_id])
+         # min_seeders is 0, as on every manual search: the slider filters
+         # at display time, so the pool must keep low-seeder releases.
+         perform_search(query, 0, lv, search_id, [indexer_id])
        end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -460,44 +457,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:prior_attempts_checked, MapSet.new())
     |> assign(:manual_search_blocking, [])
     |> assign(:download_error, nil)
-    |> assign(:source_filter, nil)
-    |> assign(:codec_filter, nil)
+    |> assign(quality_filters: [], source_filters: [], codec_filters: [], indexer_filters: [])
+    |> assign(:min_seeders, 0)
+    |> assign(:result_count, 0)
     |> stream(:search_results, [], reset: true)
   end
-
-  def filter_search(params, socket) do
-    min_seeders =
-      case params["min_seeders"] do
-        "" -> 0
-        val when is_binary(val) -> String.to_integer(val)
-        _ -> 0
-      end
-
-    quality_filter =
-      case params["quality"] do
-        "" -> nil
-        q when q in ["720p", "1080p", "2160p", "4k"] -> q
-        _ -> nil
-      end
-
-    source_filter = known_or_nil(params["source"], Sources.all())
-    codec_filter = known_or_nil(params["codec"], codec_families())
-
-    {:noreply,
-     socket
-     |> assign(:min_seeders, min_seeders)
-     |> assign(:quality_filter, quality_filter)
-     |> assign(:source_filter, source_filter)
-     |> assign(:codec_filter, codec_filter)
-     |> apply_search_filters()}
-  end
-
-  # Filter values come straight from the form, so anything outside the known
-  # vocabulary (including "" for "All") clears the filter.
-  defp known_or_nil(value, known) when is_binary(value),
-    do: if(value in known, do: value, else: nil)
-
-  defp known_or_nil(_value, _known), do: nil
 
   def toggle_close_after_grab(_params, socket) do
     new_value = not socket.assigns.close_after_grab
@@ -513,15 +477,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, gettext("Could not save preference"))}
     end
-  end
-
-  def sort_search(%{"sort_by" => sort_by}, socket) do
-    sort_by = String.to_existing_atom(sort_by)
-
-    {:noreply,
-     socket
-     |> assign(:sort_by, sort_by)
-     |> apply_search_sort()}
   end
 
   def download_from_search(

@@ -74,13 +74,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchInfoLinkTest do
     refute has_element?(view, "#manual-search-results a[href]")
   end
 
-  test "the no-URL fallback badge keeps its pre-existing xs-screen hiding", %{conn: conn} do
+  test "the no-URL fallback badge is visible at every breakpoint", %{conn: conn} do
     view = open_manual_search(conn, [result_with_info_url(nil)])
 
-    # The badge was `hidden sm:inline-flex` before this feature existed. A
-    # non-actionable badge should stay hidden on xs; only the linked one earns
-    # room in a dense mobile row.
-    assert has_element?(view, "#manual-search-results span.badge.hidden.sm\\:inline-flex")
+    # The badge used to be `hidden sm:inline-flex`, since a non-actionable
+    # badge earned no room in a dense mobile row. It is now the only place a
+    # row names its trackers, so it shows on phones too.
+    assert has_element?(view, "#manual-search-results span.badge.badge-outline[title]")
+    refute has_element?(view, "#manual-search-results span.badge.badge-outline[title].hidden")
   end
 
   test "the linked badge is visible at every breakpoint", %{conn: conn} do

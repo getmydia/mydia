@@ -14,10 +14,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.Formatters, only: [format_progress: 1, format_file_size: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
-  import MydiaWeb.MediaLive.Show.ScoreBreakdown
   import MydiaWeb.MediaLive.Show.ManualSearchComponents
 
-  alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
   alias Mydia.Media.DiskRemoval.Preview
   alias MydiaWeb.MediaLive.Show.ManualSearchFilters
@@ -825,10 +823,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :indexer_progress, :map, default: %{}
   attr :cardigann_summary, Mydia.Indexers.CardigannSummary, default: nil
   attr :streams, :map, required: true
-  attr :quality_filter, :string, default: nil
-  attr :source_filter, :string, default: nil
-  attr :codec_filter, :string, default: nil
-  attr :filter_options, :map, default: %{sources: [], codecs: []}
+  attr :quality_filters, :list, default: []
+  attr :source_filters, :list, default: []
+  attr :codec_filters, :list, default: []
+  attr :indexer_filters, :list, default: []
+  attr :filter_options, :map, default: %{sources: [], codecs: [], indexers: []}
+  attr :result_count, :integer, default: 0
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
 
@@ -850,16 +850,22 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       assigns
       |> assign(:media_type, media_type)
       |> assign(:manual_ranking_opts, manual_ranking_opts)
+      # See the comment above the filter controls in the template.
+      |> assign(:filters_visible?, !assigns.raw_results_empty? or !assigns.searching)
 
     ~H"""
     <div class="modal modal-open" id="manual-search-modal">
-      <div class="modal-box max-w-4xl h-[90vh] flex flex-col p-0">
-        <%!-- Modal Header --%>
-        <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-xl sm:text-2xl font-bold">
-              {gettext("Manual Search")}
-              <%= if @manual_search_context do %>
+      <div class={[
+        "modal-box relative flex flex-col overflow-hidden p-0",
+        "max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none",
+        "sm:h-[90vh] sm:max-w-4xl lg:max-w-6xl"
+      ]}>
+        <%!-- Header --%>
+        <div class="navbar min-h-0 shrink-0 gap-2 border-b border-base-300 px-3 py-2 sm:px-4">
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-bold leading-tight sm:text-xl">{gettext("Manual Search")}</h3>
+            <%= if @manual_search_context do %>
+              <p class="truncate text-sm text-base-content/70">
                 <%= case @manual_search_context.type do %>
                   <% :episode -> %>
                     <span class="text-sm sm:text-base text-base-content/70">
@@ -879,16 +885,20 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   <% _ -> %>
                     <span></span>
                 <% end %>
-              <% end %>
-            </h3>
-            <button
-              type="button"
-              phx-click="close_manual_search_modal"
-              class="btn btn-ghost btn-sm btn-circle"
-            >
-              <.icon name="hero-x-mark" class="w-6 h-6" />
-            </button>
+              </p>
+            <% end %>
           </div>
+          <ManualSearchFilters.sort_menu sort_by={@sort_by} class="lg:hidden" />
+          <button
+            type="button"
+            phx-click="close_manual_search_modal"
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label={gettext("Close")}
+          >
+            <.icon name="hero-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+        <div class="shrink-0 space-y-1 border-b border-base-300 px-3 py-2 sm:px-4">
           <%!-- Search Query Display --%>
           <div class="flex items-center gap-2 text-sm">
             <.icon name="hero-magnifying-glass" class="w-4 h-4 text-base-content/60" />
@@ -933,8 +943,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
         </div>
-        <%!-- Filters Bar (compact) --%>
-        <%!-- Additive to the old `!@searching` gate. Results now stream in
+        <%!-- Filter controls: chip bar and filter panel --%>
+        <%!-- `@filters_visible?` is `!@raw_results_empty? or !@searching`.
+             Additive to the old `!@searching` gate. Results now stream in
              indexer by indexer, so gating only on the search being over left
              the user staring at rows they could not filter or re-sort for up
              to the full 120s deadline. Adding "or the accumulated pool is not
@@ -946,301 +957,144 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
              nothing would hide the very controls needed to undo it. Keeping
              `!@searching` as a floor also keeps the "Close after grabbing"
              preference reachable after a search that found nothing. --%>
-        <%= if !@raw_results_empty? or !@searching do %>
-          <ManualSearchFilters.filters_bar
-            quality_filter={@quality_filter}
-            source_filter={@source_filter}
-            codec_filter={@codec_filter}
+        <ManualSearchFilters.chip_bar
+          :if={@filters_visible?}
+          quality_filters={@quality_filters}
+          source_filters={@source_filters}
+          codec_filters={@codec_filters}
+          indexer_filters={@indexer_filters}
+          min_seeders={@min_seeders}
+        />
+        <div class={[
+          "flex min-h-0 flex-1 flex-col",
+          @filters_visible? &&
+            "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]"
+        ]}>
+          <ManualSearchFilters.filter_panel
+            :if={@filters_visible?}
+            quality_filters={@quality_filters}
+            source_filters={@source_filters}
+            codec_filters={@codec_filters}
+            indexer_filters={@indexer_filters}
             filter_options={@filter_options}
+            quality_options={quality_options()}
             min_seeders={@min_seeders}
             close_after_grab={@close_after_grab}
-            sort_by={@sort_by}
+            result_count={@result_count}
           />
-        <% end %>
-        <%!-- Modal Body --%>
-        <div class="flex-1 overflow-y-auto">
-          <%!-- Inline Download Error --%>
-          <%= if @download_error do %>
-            <div class="alert alert-error mx-4 mt-3 mb-1">
-              <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
-              <span class="text-sm">{@download_error}</span>
-            </div>
-          <% end %>
-          <.blocking_banner
-            :if={@blocking != []}
-            blocking={@blocking}
-            context_type={@manual_search_context && @manual_search_context.type}
-          />
-          <%!-- Per-indexer search progress --%>
-          <div class="px-4">
-            <.indexer_search_status
-              progress={@indexer_progress}
-              cardigann={@cardigann_summary}
-              retry_event="retry_indexer"
-              retest_paused_event="retest_paused"
+          <div id="manual-search-results-pane" class="min-h-0 flex-1 overflow-y-auto">
+            <%!-- Inline Download Error --%>
+            <%= if @download_error do %>
+              <div class="alert alert-error mx-4 mt-3 mb-1">
+                <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
+                <span class="text-sm">{@download_error}</span>
+              </div>
+            <% end %>
+            <.blocking_banner
+              :if={@blocking != []}
+              blocking={@blocking}
+              context_type={@manual_search_context && @manual_search_context.type}
             />
-          </div>
-          <%!-- Loading State --%>
-          <%= if @searching && @results_empty? do %>
-            <div
-              id="manual-search-loading-state"
-              class="flex flex-col items-center justify-center py-16"
-            >
-              <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                {gettext("Searching across indexers...")}
-              </h3>
-              <p class="text-base-content/50">
-                {gettext("This may take a few seconds")}
-              </p>
+            <%!-- Per-indexer search progress, and the active filters from lg --%>
+            <div class="px-4 pt-3 lg:flex lg:items-start lg:gap-3">
+              <div class="min-w-0 flex-1">
+                <.indexer_search_status
+                  progress={@indexer_progress}
+                  cardigann={@cardigann_summary}
+                  retry_event="retry_indexer"
+                  retest_paused_event="retest_paused"
+                />
+              </div>
+              <ManualSearchFilters.active_chips
+                :if={@filters_visible?}
+                id_prefix="manual-search-lg-chip"
+                class="hidden flex-wrap justify-end pt-2 lg:flex"
+                quality_filters={@quality_filters}
+                source_filters={@source_filters}
+                codec_filters={@codec_filters}
+                indexer_filters={@indexer_filters}
+                min_seeders={@min_seeders}
+              />
             </div>
-          <% end %>
-          <%!-- Empty State (no results) --%>
-          <%= if @results_empty? && !@searching do %>
-            <div class="flex flex-col items-center justify-center py-16 text-center px-4">
-              <.icon name="hero-exclamation-circle" class="w-16 h-16 text-base-content/20 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                {gettext("No Results Found")}
-              </h3>
-              <p class="text-base-content/50 max-w-sm mb-4">
-                {gettext("We couldn't find any releases matching \"%{query}\"",
-                  query: @manual_search_query
-                )}
-              </p>
-              <div class="text-sm text-base-content/60">
-                <p>
-                  {gettext("Try different keywords, adjusting filters, or checking your indexers.")}
+            <%!-- Loading State --%>
+            <%= if @searching && @results_empty? do %>
+              <div
+                id="manual-search-loading-state"
+                class="flex flex-col items-center justify-center py-16"
+              >
+                <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+                <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                  {gettext("Searching across indexers...")}
+                </h3>
+                <p class="text-base-content/50">
+                  {gettext("This may take a few seconds")}
                 </p>
               </div>
-            </div>
-          <% end %>
-          <%!-- Results List --%>
-          <%= if !@results_empty? do %>
-            <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
-              <li
-                :for={{id, result} <- @streams.search_results}
-                id={id}
-                class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
-              >
-                <% profile? = Keyword.get(@manual_ranking_opts, :quality_profile) != nil %>
-                <%!-- One scorer call per row: the audio badge needs the breakdown
-                     with or without a profile; the score ring only with one. --%>
-                <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
-                <% breakdown = score_data.breakdown %>
-                <% audio = breakdown %>
-                <% score = score_data.score %>
-                <% ring_value = max(0, trunc(score)) %>
-                <% has_penalty =
-                  profile? &&
-                    (breakdown.seeder_penalty < 0.0 or breakdown.identity_penalty < 0.0 or
-                       not is_nil(breakdown.limit_violation)) %>
-                <%!-- Score display --%>
-                <%= if profile? do %>
-                  <.score_trigger
-                    id={"#{id}-score-badge"}
-                    panel_id={"#{id}-score-breakdown"}
-                    class={[
-                      "radial-progress text-sm font-bold cursor-pointer",
-                      score >= 80 && "text-success",
-                      score >= 50 && score < 80 && "text-warning",
-                      score < 50 && "text-error"
-                    ]}
-                    style={"--value:#{ring_value}; --size:3rem; --thickness:4px;"}
-                    title={gettext("Show score breakdown")}
-                  >
-                    {trunc(score)}
-                  </.score_trigger>
-                <% else %>
-                  <%!-- No profile - just show seeders count (sorted by most seeders) --%>
-                  <div
-                    class={[
-                      "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
-                      result.seeders >= 50 && "bg-success/20 text-success",
-                      result.seeders >= 10 && result.seeders < 50 && "bg-warning/20 text-warning",
-                      result.seeders < 10 && "bg-base-300 text-base-content/70"
-                    ]}
-                    title={ngettext("%{count} seeder", "%{count} seeders", result.seeders || 0)}
-                  >
-                    <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-                    {result.seeders}
+            <% end %>
+            <%!-- Empty State: nothing found, or filtered down to nothing --%>
+            <%= if @results_empty? && !@searching do %>
+              <%= if @raw_results_empty? do %>
+                <div class="flex flex-col items-center justify-center py-16 text-center px-4">
+                  <.icon
+                    name="hero-exclamation-circle"
+                    class="w-16 h-16 text-base-content/20 mb-4"
+                  />
+                  <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                    {gettext("No Results Found")}
+                  </h3>
+                  <p class="text-base-content/50 max-w-sm mb-4">
+                    {gettext("We couldn't find any releases matching \"%{query}\"",
+                      query: @manual_search_query
+                    )}
+                  </p>
+                  <div class="text-sm text-base-content/60">
+                    <p>
+                      {gettext(
+                        "Try different keywords, adjusting filters, or checking your indexers."
+                      )}
+                    </p>
                   </div>
-                <% end %>
-                <%!-- Main content (title + badges) --%>
-                <div class="flex-1 min-w-0">
-                  <%!-- Release Title --%>
-                  <div
-                    class="font-medium text-sm leading-tight mb-2 line-clamp-2"
-                    title={result.title}
-                  >
-                    {result.title}
-                  </div>
-                  <%!-- Quality badges row --%>
-                  <div class="flex flex-wrap gap-1.5">
-                    <%!-- Resolution/Quality badge --%>
-                    <span class="badge badge-primary badge-sm">
-                      {get_search_quality_badge(result)}
-                    </span>
-                    <%!-- Size badge --%>
-                    <span class="badge badge-ghost badge-sm font-mono">
-                      {format_search_size(result)}
-                    </span>
-                    <%!-- Audio languages the release title claims --%>
-                    <MydiaWeb.AudioLanguageComponents.audio_badge
-                      id={"#{id}-audio"}
-                      languages={audio.audio_languages}
-                      assumed={audio.audio_assumed}
-                      rank={audio.language_rank}
-                    />
-                    <%!-- Seeders badge --%>
-                    <span class={[
-                      "badge badge-sm",
-                      result.seeders >= 50 && "badge-success",
-                      result.seeders >= 10 && result.seeders < 50 && "badge-warning",
-                      result.seeders < 10 && "badge-error badge-outline"
-                    ]}>
-                      <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-                      {result.seeders}
-                    </span>
-                    <%!-- Indexer badge, linking to the release's tracker page when usable --%>
-                    <% info_page_url = SearchResult.info_page_url(result) %>
-                    <%= if info_page_url do %>
-                      <a
-                        href={info_page_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
-                        title={gettext("View this release on %{indexer}", indexer: result.indexer)}
-                      >
-                        {result.indexer}
-                        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
-                      </a>
-                    <% else %>
-                      <%!-- No usable URL: keep the pre-existing xs-screen hiding, since a
-                           non-actionable badge earns no room in a dense mobile row. --%>
-                      <span class="badge badge-outline badge-sm hidden sm:inline-flex">
-                        {result.indexer}
-                      </span>
-                    <% end %>
-                    <%!-- Tried before: failed for this target or blacklisted --%>
-                    <%= if attempt = visible_prior_attempt(result) do %>
-                      <span
-                        id={"#{id}-prior-attempt"}
-                        class="badge badge-error badge-outline badge-sm"
-                      >
-                        <%= if attempt.kind == :blacklisted do %>
-                          {gettext("Blacklisted")}
-                        <% else %>
-                          {failed_ago_text(format_relative_time_short(attempt.at))}
-                        <% end %>
-                      </span>
-                    <% end %>
-                  </div>
-                  <%!-- A live failure from this dialog wins over the recorded one --%>
-                  <%= if reason = Map.get(result, :grab_failed) || visible_prior_reason(result) do %>
-                    <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
-                  <% end %>
-                  <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
-                    <.score_row
-                      label={gettext("Resolution")}
-                      value={score_data.detected[:resolution]}
-                      score={breakdown.quality}
-                      weight={60}
-                    />
-                    <.score_row
-                      label={gettext("Title match")}
-                      value={nil}
-                      score={breakdown.title_match}
-                      weight={10}
-                    />
-                    <.score_row
-                      label={gettext("File Size")}
-                      value={
-                        if(score_data.detected[:size_mb],
-                          do: "#{score_data.detected[:size_mb]} MB",
-                          else: nil
-                        )
-                      }
-                      score={breakdown.size}
-                      weight={5}
-                    />
-                    <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
-                    <.score_row
-                      label={gettext("Seeders")}
-                      value={ngettext("%{count} peer", "%{count} peers", result.seeders || 0)}
-                      score={breakdown.seeders}
-                      weight={30}
-                    />
-                    <%= if has_penalty do %>
-                      <div class="divider my-1 text-xs opacity-50">{gettext("Penalties")}</div>
-                      <%= if breakdown.limit_violation do %>
-                        <div id={"#{id}-limit-violation"} class="text-xs text-warning py-1">
-                          {gettext("Outside profile limits: %{violation}",
-                            violation: breakdown.limit_violation
-                          )}
-                        </div>
-                      <% end %>
-                      <.penalty_row
-                        label={gettext("Seeder penalty")}
-                        score={breakdown.seeder_penalty}
-                      />
-                      <.penalty_row
-                        label={gettext("Identity mismatch")}
-                        score={breakdown.identity_penalty}
-                      />
-                    <% end %>
-                  </.score_panel>
                 </div>
-                <%!-- Download Action --%>
-                <div class="flex items-center">
-                  <%= cond do %>
-                    <% Map.get(result, :downloaded) -> %>
-                      <button class="btn btn-success btn-sm btn-disabled" disabled>
-                        <.icon name="hero-check" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Grabbed")}</span>
-                      </button>
-                    <% Map.get(result, :duplicate) -> %>
-                      <button class="btn btn-ghost btn-sm btn-disabled" disabled>
-                        <.icon name="hero-check-circle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Already downloading")}</span>
-                      </button>
-                    <% Map.get(result, :downloading) -> %>
-                      <button class="btn btn-primary btn-sm btn-disabled" disabled>
-                        <span class="loading loading-spinner loading-xs"></span>
-                        <span class="hidden sm:inline">{gettext("Grabbing…")}</span>
-                      </button>
-                    <% Map.get(result, :grab_failed) -> %>
-                      <.retry_button result={result} reason={Map.get(result, :grab_failed)} />
-                    <% Map.get(result, :prior_attempt) -> %>
-                      <.retry_button
-                        result={result}
-                        reason={prior_attempt_reason(result)}
-                        blacklisted={result.prior_attempt.kind == :blacklisted}
-                      />
-                    <% true -> %>
-                      <button
-                        class="btn btn-primary btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
-                        phx-click="download_from_search"
-                        phx-value-download-url={result.download_url}
-                        phx-value-title={result.title}
-                        phx-value-indexer={result.indexer}
-                        phx-value-size={result.size}
-                        phx-value-seeders={result.seeders || 0}
-                        phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result)}
-                        title={gettext("Download this release")}
-                      >
-                        <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>
-                        <.icon
-                          name="hero-arrow-down-tray"
-                          class="w-4 h-4 group-[.phx-click-loading]/dl:hidden"
-                        />
-                        <span class="hidden sm:inline">{gettext("Download")}</span>
-                      </button>
-                  <% end %>
+              <% else %>
+                <div
+                  id="manual-search-empty-filtered"
+                  class="flex flex-col items-center justify-center px-4 py-16 text-center"
+                >
+                  <.icon name="hero-funnel" class="mb-4 h-14 w-14 text-base-content/20" />
+                  <h3 class="mb-2 text-lg font-semibold text-base-content/70">
+                    {gettext("No releases match these filters")}
+                  </h3>
+                  <button
+                    type="button"
+                    id="manual-search-empty-clear"
+                    class="btn btn-primary btn-sm"
+                    phx-click="clear_search_filters"
+                  >
+                    {gettext("Clear filters")}
+                  </button>
                 </div>
-              </li>
-            </ul>
-          <% end %>
+              <% end %>
+            <% end %>
+            <%!-- Results List --%>
+            <%= if !@results_empty? do %>
+              <.results_header
+                sort_by={@sort_by}
+                profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
+              />
+              <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
+                <li
+                  :for={{id, result} <- @streams.search_results}
+                  id={id}
+                  class={[
+                    "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
+                    row_grid()
+                  ]}
+                >
+                  <.release_row id={id} result={result} manual_ranking_opts={@manual_ranking_opts} />
+                </li>
+              </ul>
+            <% end %>
+          </div>
         </div>
       </div>
       <div class="modal-backdrop" phx-click="close_manual_search_modal"></div>

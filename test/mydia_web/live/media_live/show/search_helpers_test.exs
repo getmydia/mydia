@@ -536,11 +536,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
   end
 
   describe "source and codec filters" do
-    defp filter_result(title, source, codec) do
+    defp filter_result(title, source, codec, indexer \\ "idx") do
       %SearchResult{
         title: title,
         download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
-        indexer: "idx",
+        indexer: indexer,
         size: 1,
         seeders: 10,
         leechers: 0,
@@ -550,7 +550,13 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
 
     defp filter_assigns(extra) do
       Map.merge(
-        %{min_seeders: 0, quality_filter: nil, source_filter: nil, codec_filter: nil},
+        %{
+          min_seeders: 0,
+          quality_filters: [],
+          source_filters: [],
+          codec_filters: [],
+          indexer_filters: []
+        },
         extra
       )
     end
@@ -570,7 +576,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       titles =
         results
         |> SearchHelpers.filter_search_results(
-          filter_assigns(%{source_filter: "WEB-DL", codec_filter: "HEVC"})
+          filter_assigns(%{source_filters: ["WEB-DL"], codec_filters: ["HEVC"]})
         )
         |> Enum.map(& &1.title)
 
@@ -580,7 +586,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     test "a codec family matches every member", %{results: results} do
       titles =
         results
-        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filter: "HEVC"}))
+        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filters: ["HEVC"]}))
         |> Enum.map(& &1.title)
 
       assert titles == [
@@ -605,7 +611,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
 
       filtered = fn codec ->
         results
-        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filter: codec}))
+        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filters: [codec]}))
         |> Enum.map(& &1.title)
       end
 
@@ -619,30 +625,113 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       refute Enum.any?(
                SearchHelpers.filter_search_results(
                  results,
-                 filter_assigns(%{source_filter: "REMUX"})
+                 filter_assigns(%{source_filters: ["REMUX"]})
                ),
                &is_nil(&1.quality.source)
              )
     end
 
-    test "callers without the new keys are unaffected", %{results: results} do
-      assert length(
-               SearchHelpers.filter_search_results(results, %{min_seeders: 0, quality_filter: nil})
-             ) == 4
+    test "callers without the filter keys are unaffected", %{results: results} do
+      assert length(SearchHelpers.filter_search_results(results, %{min_seeders: 0})) == 4
     end
 
     test "options list only what the pool contains, in a stable order", %{results: results} do
-      assert SearchHelpers.filter_options(results, nil, nil) == %{
+      assert SearchHelpers.filter_options(results, filter_assigns(%{})) == %{
                sources: ["REMUX", "BluRay", "WEB-DL"],
-               codecs: ["HEVC", "AVC"]
+               codecs: ["HEVC", "AVC"],
+               indexers: [{"idx", 4}]
              }
     end
 
     test "a selected value missing from the pool stays listed so it can be cleared" do
-      assert SearchHelpers.filter_options([], "HDTV", "AV1") == %{
+      assigns =
+        filter_assigns(%{
+          source_filters: ["HDTV"],
+          codec_filters: ["AV1"],
+          indexer_filters: ["Gone"]
+        })
+
+      assert SearchHelpers.filter_options([], assigns) == %{
                sources: ["HDTV"],
-               codecs: ["AV1"]
+               codecs: ["AV1"],
+               indexers: [{"Gone", 0}]
              }
+    end
+
+    test "values inside one dimension combine with OR", %{results: results} do
+      titles =
+        results
+        |> SearchHelpers.filter_search_results(
+          filter_assigns(%{source_filters: ["REMUX", "BluRay"]})
+        )
+        |> Enum.map(& &1.title)
+
+      assert titles == [
+               "Glass.Harbor.2019.1080p.REMUX.HEVC",
+               "Glass.Harbor.2019.1080p.BluRay.x264"
+             ]
+    end
+
+    test "quality accepts 4k and 2160p as the same value" do
+      uhd = %{
+        filter_result("Glass.Harbor.2019.2160p", "WEB-DL", "x265")
+        | quality: %{resolution: "4K", source: "WEB-DL", codec: "x265"}
+      }
+
+      hd = filter_result("Glass.Harbor.2019.1080p", "WEB-DL", "x264")
+
+      assert [^uhd] =
+               SearchHelpers.filter_search_results(
+                 [uhd, hd],
+                 filter_assigns(%{quality_filters: ["2160p"]})
+               )
+
+      assert [^uhd, ^hd] =
+               SearchHelpers.filter_search_results(
+                 [uhd, hd],
+                 filter_assigns(%{quality_filters: ["2160p", "1080p"]})
+               )
+
+      assert SearchHelpers.normalize_quality("4k") == "2160p"
+      assert SearchHelpers.normalize_quality("1080P") == "1080p"
+    end
+
+    test "the indexer filter matches any tracker that returned the release" do
+      merged = %{
+        filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "TorrentDay")
+        | indexers: ["Nyaa", "TorrentDay"]
+      }
+
+      other = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "EZTV")
+
+      assert [^merged] =
+               SearchHelpers.filter_search_results(
+                 [merged, other],
+                 filter_assigns(%{indexer_filters: ["Nyaa"]})
+               )
+
+      assert [^merged, ^other] =
+               SearchHelpers.filter_search_results(
+                 [merged, other],
+                 filter_assigns(%{indexer_filters: ["Nyaa", "EZTV"]})
+               )
+
+      assert SearchHelpers.filter_options([merged, other], filter_assigns(%{})).indexers ==
+               [{"EZTV", 1}, {"Nyaa", 1}, {"TorrentDay", 1}]
+
+      assert SearchHelpers.known_indexers([merged, other]) ==
+               MapSet.new(["EZTV", "Nyaa", "TorrentDay"])
+    end
+
+    test "indexer and source filters combine with AND" do
+      a = filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "Nyaa")
+      b = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "Nyaa")
+
+      assert [^a] =
+               SearchHelpers.filter_search_results(
+                 [a, b],
+                 filter_assigns(%{indexer_filters: ["Nyaa"], source_filters: ["WEB-DL"]})
+               )
     end
   end
 

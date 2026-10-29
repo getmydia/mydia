@@ -49,10 +49,21 @@ defmodule Mydia.Indexers.ResultDedup do
     # 1. Results with more seeders
     # 2. Results from more reliable sources (if we had source ranking)
     # 3. Results with complete metadata
-    Enum.max_by(duplicates, fn result ->
-      # NZB results have nil seeders; treat as 0 for ordering only.
-      {result.seeders || 0, has_complete_metadata?(result)}
-    end)
+    best =
+      Enum.max_by(duplicates, fn result ->
+        # NZB results have nil seeders; treat as 0 for ordering only.
+        {result.seeders || 0, has_complete_metadata?(result)}
+      end)
+
+    # The manual search indexer filter matches any tracker that returned the
+    # release, not only the one whose copy won.
+    indexers =
+      duplicates
+      |> Enum.flat_map(&SearchResult.indexers/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{best | indexers: indexers}
   end
 
   defp has_complete_metadata?(%SearchResult{quality: quality}) do
