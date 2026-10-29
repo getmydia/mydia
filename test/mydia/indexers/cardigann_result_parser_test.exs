@@ -2229,6 +2229,58 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "compile errors" do
+    test "a non-scalar case value returns an error instead of raising" do
+      definition = %Parsed{
+        id: "bad-case",
+        name: "Bad Case",
+        search: %{
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td", case: %{"*" => %{"nested" => "map"}}},
+            "download" => %{selector: "a", attribute: "href"}
+          }
+        }
+      }
+
+      response = %{
+        status: 200,
+        body: "<html><body><table><tr><td>x</td></tr></table></body></html>"
+      }
+
+      assert {:error, %Mydia.Indexers.Adapter.Error{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Bad Case")
+
+      assert message =~ "Bad Case"
+      assert message =~ "compile"
+    end
+
+    test "a non-scalar remove entry returns an error instead of raising" do
+      definition = %Parsed{
+        id: "bad-remove",
+        name: "Bad Remove",
+        search: %{
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td", remove: [%{"nested" => "map"}]},
+            "download" => %{selector: "a", attribute: "href"}
+          }
+        }
+      }
+
+      response = %{
+        status: 200,
+        body: "<html><body><table><tr><td>x</td></tr></table></body></html>"
+      }
+
+      assert {:error, %Mydia.Indexers.Adapter.Error{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Bad Remove")
+
+      assert message =~ "Bad Remove"
+      assert message =~ "compile"
+    end
+  end
+
   describe "html_parse_failure/2" do
     import ExUnit.CaptureLog
 

@@ -58,6 +58,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.CardigannTemplate
 
+  require Logger
+
   @type parse_result :: {:ok, [SearchResult.t()]} | {:error, Error.t()}
   @type http_response :: %{
           required(:status) => integer(),
@@ -150,9 +152,25 @@ defmodule Mydia.Indexers.CardigannResultParser do
   # `pick_format` gets the response type the search path declares (nil when
   # it declares none) and returns the one to parse with.
   defp run(definition, body, ctx, opts, pick_format) do
-    with {:ok, plan} <- Plan.compile(definition, ctx.template_context, opts) do
+    with {:ok, plan} <- compile(definition, ctx, opts) do
       Pipeline.run(%{plan | format: pick_format.(plan.format)}, body, ctx)
     end
+  end
+
+  # Definition data is external input: a `case` value, `remove` entry or field
+  # name that is not a scalar raises while the plan renders it to a string.
+  # That is a defect in the definition, not in the response, and reporting it
+  # as a search failure keeps `Indexers.search/3` and the health check on the
+  # documented error path instead of crashing them.
+  defp compile(definition, ctx, opts) do
+    Plan.compile(definition, ctx.template_context, opts)
+  rescue
+    error ->
+      message = Exception.message(error)
+      Logger.error("Failed to compile the #{ctx.indexer_name} definition: #{message}")
+
+      {:error,
+       Error.search_failed("Failed to compile the #{ctx.indexer_name} definition: #{message}")}
   end
 
   @doc false
