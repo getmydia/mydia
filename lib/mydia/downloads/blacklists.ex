@@ -28,7 +28,9 @@ defmodule Mydia.Downloads.Blacklists do
   `guid` per release; others don't. `release_guid/1` supplies a SHA-256 of
   `(indexer, title, size)` for the ones that don't, and both sides of the
   blacklist go through it: the grab path records it on the download, and
-  `reject_blacklisted/2` checks search results against it.
+  `reject_blacklisted/2` checks search results against it. Lookups also accept
+  the fallback key (`release_guids/1`), so a ban written before an indexer
+  started supplying guids still filters its release.
   """
 
   import Ecto.Query
@@ -63,8 +65,23 @@ defmodule Mydia.Downloads.Blacklists do
   """
   @spec release_guid(map()) :: String.t()
   def release_guid(%{guid: guid}) when is_binary(guid) and guid != "", do: guid
+  def release_guid(result), do: fallback_guid(result)
 
-  def release_guid(result) do
+  @doc """
+  Returns every key a search result may be blacklisted under: its own guid when
+  it has one, plus the `sha256:` fallback. Lookups check both so a ban written
+  before an indexer started supplying guids still matches; new bans are written
+  under `release_guid/1`.
+  """
+  @spec release_guids(map()) :: [String.t()]
+  def release_guids(result) do
+    primary = release_guid(result)
+    legacy = fallback_guid(result)
+
+    if legacy == primary, do: [primary], else: [primary, legacy]
+  end
+
+  defp fallback_guid(result) do
     payload =
       Enum.join(
         [
@@ -296,15 +313,15 @@ defmodule Mydia.Downloads.Blacklists do
   def reject_blacklisted(results, log_context \\ []) when is_list(results) do
     keyed =
       Enum.map(results, fn result ->
-        {result, blacklist_key(result), info_hash_from_url(Map.get(result, :download_url))}
+        {result, blacklist_keys(result), info_hash_from_url(Map.get(result, :download_url))}
       end)
 
-    banned_keys = keyed |> Enum.map(&elem(&1, 1)) |> batch_blacklisted()
+    banned_keys = keyed |> Enum.flat_map(&elem(&1, 1)) |> batch_blacklisted()
     banned_hashes = keyed |> Enum.map(&elem(&1, 2)) |> active_info_hashes()
 
     keyed
-    |> Enum.filter(fn {result, key, hash} ->
-      case match_ban(key, hash, banned_keys, banned_hashes) do
+    |> Enum.filter(fn {result, keys, hash} ->
+      case match_ban(keys, hash, banned_keys, banned_hashes) do
         nil ->
           true
 
@@ -313,7 +330,7 @@ defmodule Mydia.Downloads.Blacklists do
             "Rejected blacklisted release",
             [
               indexer: Map.get(result, :indexer),
-              guid: key && elem(key, 1),
+              guid: primary_guid(keys),
               title: Map.get(result, :title),
               matched_by: matched_by
             ] ++ log_context
@@ -386,19 +403,23 @@ defmodule Mydia.Downloads.Blacklists do
     end
   end
 
-  defp match_ban(key, hash, banned_keys, banned_hashes) do
+  defp match_ban(keys, hash, banned_keys, banned_hashes) do
     cond do
-      key && MapSet.member?(banned_keys, key) -> :key
+      Enum.any?(keys, &MapSet.member?(banned_keys, &1)) -> :key
       hash && MapSet.member?(banned_hashes, hash) -> :info_hash
       true -> nil
     end
   end
 
-  defp blacklist_key(%{indexer: indexer} = result) when is_binary(indexer) and indexer != "" do
-    {ReleaseBlacklist.normalize_indexer(indexer), release_guid(result)}
+  defp blacklist_keys(%{indexer: indexer} = result) when is_binary(indexer) and indexer != "" do
+    normalized = ReleaseBlacklist.normalize_indexer(indexer)
+    Enum.map(release_guids(result), &{normalized, &1})
   end
 
-  defp blacklist_key(_), do: nil
+  defp blacklist_keys(_), do: []
+
+  defp primary_guid([{_indexer, guid} | _]), do: guid
+  defp primary_guid([]), do: nil
 
   @doc """
   Lists blacklist rows, newest first.

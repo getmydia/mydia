@@ -347,10 +347,10 @@ belongs in that format's adapter, and a filter that mangles a value belongs in
 `guid` is always set now: the download field, else the resolved download URL
 (often a magnet built from the infohash), as Prowlarr's release cleanup does. A
 row with neither is already dropped, so its details URL never stands in for a
-guid. `Mydia.Downloads.Blacklists.release_guid/1` therefore
-keys Cardigann releases by guid instead of the `sha256:` fallback, so blacklist
-rows written before the change keep the fallback and a release blacklisted
-earlier can be grabbed once before it is blacklisted under the new key.
+guid. `Mydia.Downloads.Blacklists.release_guid/1` therefore keys new Cardigann
+bans by guid instead of the `sha256:` fallback. Lookups also check the old
+fallback key (`release_guids/1`), so blacklist rows written before the change
+still filter their release; only new bans use the guid.
 
 Upgrading also changes which rows come back: `rows.filters: andmatch` now drops
 rows whose title lacks a keyword in every format, not only HTML. Six definitions

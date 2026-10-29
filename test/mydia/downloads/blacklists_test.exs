@@ -266,6 +266,16 @@ defmodule Mydia.Downloads.BlacklistsTest do
       assert [] = Blacklists.reject_blacklisted([result])
     end
 
+    # Bans written before Cardigann set guids carry the fallback key. Lookups
+    # check it too, so upgrading does not re-grab a release the user banned.
+    test "drops a result blacklisted under the legacy fallback before it had a guid" do
+      result = search_result(%{guid: "abc123"})
+      legacy_guid = Blacklists.release_guid(%{result | guid: nil})
+      {:ok, _} = Blacklists.add(result.indexer, legacy_guid, result.title, "rejected_by_user")
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
     # Production loop: an indexer without guids re-served a rejected malware
     # release, and every re-grab was rejected again until the auto-reject cap
     # stopped rejecting and the payload downloaded.
@@ -360,6 +370,19 @@ defmodule Mydia.Downloads.BlacklistsTest do
 
       assert "sha256:c9283b621de8b5f024da89b600a87a5093c206a295d6bab9b107f8911068bf4e" =
                Blacklists.release_guid(result)
+    end
+
+    test "release_guids/1 returns the guid and the legacy fallback" do
+      result = %{indexer: "nyaa", guid: "abc123", title: "T", size: 1}
+
+      assert ["abc123", "sha256:" <> _] = Blacklists.release_guids(result)
+    end
+
+    test "release_guids/1 returns one key when there is no guid" do
+      result = %{indexer: "nyaa", guid: nil, title: "T", size: 1}
+
+      assert [key] = Blacklists.release_guids(result)
+      assert key == Blacklists.release_guid(result)
     end
   end
 
