@@ -191,13 +191,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           rank={@audio.language_rank}
         />
         <%!-- Seeders badge (its own column from lg) --%>
-        <span class={[
-          "badge badge-sm lg:hidden",
-          seeder_tone(@result.seeders) == :high && "badge-success",
-          seeder_tone(@result.seeders) == :mid && "badge-warning",
-          seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
-          seeder_tone(@result.seeders) == :none && "badge-ghost"
-        ]}>
+        <span
+          class={[
+            "badge badge-sm lg:hidden",
+            seeder_tone(@result.seeders) == :high && "badge-success",
+            seeder_tone(@result.seeders) == :mid && "badge-warning",
+            seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
+            seeder_tone(@result.seeders) == :none && "badge-ghost"
+          ]}
+          title={if is_nil(@result.seeders), do: gettext("No seeder count (Usenet)")}
+        >
           <%= if is_nil(@result.seeders) do %>
             —
           <% else %>
@@ -254,7 +257,11 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
         <.score_row
           label={gettext("Seeders")}
-          value={ngettext("%{count} peer", "%{count} peers", @result.seeders || 0)}
+          value={
+            if is_nil(@result.seeders),
+              do: gettext("No seeder count (Usenet)"),
+              else: ngettext("%{count} peer", "%{count} peers", @result.seeders)
+          }
           score={@breakdown.seeders}
           weight={30}
         />
