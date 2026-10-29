@@ -168,9 +168,6 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
     end
   end
 
-  defp parse_integer(num) when is_integer(num), do: num
-  defp parse_integer(_), do: 0
-
   # Prowlarr decodes an absent or zero id back to nil, so it never claims an id
   # the release does not have.
   defp parse_optional_integer(value) do
