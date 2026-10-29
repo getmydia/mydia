@@ -28,12 +28,20 @@ defmodule Mydia.Downloads.Blacklists do
   `guid` per release; others don't. `release_guid/1` supplies a SHA-256 of
   `(indexer, title, size)` for the ones that don't, and both sides of the
   blacklist go through it: the grab path records it on the download, and
-  `reject_blacklisted/2` checks search results against it.
+  `reject_blacklisted/2` checks search results against it. Lookups also accept
+  the fallback key (`release_guids/1`), so a ban written before an indexer
+  started supplying guids still filters its release.
+
+  A row also records that fallback key in `fallback_guid` whenever it differs
+  from the guid. A Cardigann guid is the resolved download URL, which changes
+  when a definition fails over to another mirror or the link carries a session
+  token; the fallback key does not, so the ban follows the release.
   """
 
   import Ecto.Query
 
   alias Ecto.Changeset
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Downloads.TorrentHash
   alias Mydia.Repo
@@ -45,7 +53,8 @@ defmodule Mydia.Downloads.Blacklists do
   @type add_opts :: [
           expires_at: DateTime.t() | nil,
           ttl_days: non_neg_integer() | nil,
-          info_hash: String.t() | nil
+          info_hash: String.t() | nil,
+          fallback_guid: String.t() | nil
         ]
 
   @doc """
@@ -63,8 +72,24 @@ defmodule Mydia.Downloads.Blacklists do
   """
   @spec release_guid(map()) :: String.t()
   def release_guid(%{guid: guid}) when is_binary(guid) and guid != "", do: guid
+  def release_guid(result), do: fallback_guid(result)
 
-  def release_guid(result) do
+  @doc """
+  Returns every key a search result may be blacklisted under: its own guid when
+  it has one, plus the `sha256:` fallback. Lookups check both so a ban written
+  before an indexer started supplying guids still matches. New bans are written
+  under `release_guid/1` and record the fallback in `fallback_guid`, which
+  lookups also compare against.
+  """
+  @spec release_guids(map()) :: [String.t()]
+  def release_guids(result) do
+    primary = release_guid(result)
+    legacy = fallback_guid(result)
+
+    if legacy == primary, do: [primary], else: [primary, legacy]
+  end
+
+  defp fallback_guid(result) do
     payload =
       Enum.join(
         [
@@ -112,6 +137,31 @@ defmodule Mydia.Downloads.Blacklists do
   defp hex_info_hash(_value), do: nil
 
   @doc """
+  The `add/5` options every ban on a download carries: its infohash and its
+  mirror-independent `fallback_guid`, rebuilt from the indexer, title and size
+  the grab path stored, exactly as `release_guid/1` builds it for a search
+  result.
+  """
+  @spec download_ban_opts(Mydia.Downloads.Download.t()) :: add_opts()
+  def download_ban_opts(download) do
+    metadata = download.metadata || %{}
+
+    fallback =
+      fallback_guid(%{
+        indexer: download.indexer || metadata_value(metadata, :indexer),
+        title: download.title,
+        size: metadata_value(metadata, :size)
+      })
+
+    [info_hash: download_info_hash(download), fallback_guid: fallback]
+  end
+
+  # Metadata read back from the database is string-keyed; a download built in
+  # memory may still carry the atom keys it was created with.
+  defp metadata_value(metadata, key),
+    do: Map.get(metadata, Atom.to_string(key)) || Map.get(metadata, key)
+
+  @doc """
   Pulls the `(indexer, guid)` blacklist key off a download.
 
   The indexer is read from the column first and falls back to the copy stored
@@ -142,6 +192,9 @@ defmodule Mydia.Downloads.Blacklists do
       `:expires_at` is supplied.
     * `:info_hash` — the torrent's v1 infohash, when known. An upsert without
       one keeps the hash already stored.
+    * `:fallback_guid` — the release's `sha256:` key (see `release_guids/1`),
+      so the ban survives a change of guid. Dropped when equal to `guid`; an
+      upsert without one keeps the key already stored.
 
   Returns `{:ok, %ReleaseBlacklist{}}` on success.
   """
@@ -154,6 +207,7 @@ defmodule Mydia.Downloads.Blacklists do
 
     expires_at = resolve_expires_at(now, opts)
     info_hash = ReleaseBlacklist.normalize_info_hash(Keyword.get(opts, :info_hash))
+    fallback = distinct_fallback(Keyword.get(opts, :fallback_guid), guid)
 
     attrs = %{
       indexer: indexer,
@@ -162,12 +216,14 @@ defmodule Mydia.Downloads.Blacklists do
       failure_reason: failure_reason,
       expires_at: expires_at,
       info_hash: info_hash,
+      fallback_guid: fallback,
       inserted_at: now
     }
 
-    # A write that does not know the hash must not erase one an earlier write
-    # recorded, so the column is only set when this write has a value.
-    hash_update = if info_hash, do: [info_hash: info_hash], else: []
+    # A write that does not know the hash or the fallback key must not erase
+    # one an earlier write recorded, so each is only set when this write has it.
+    known_update =
+      Enum.reject([info_hash: info_hash, fallback_guid: fallback], &is_nil(elem(&1, 1)))
 
     %ReleaseBlacklist{}
     |> ReleaseBlacklist.changeset(attrs)
@@ -179,11 +235,16 @@ defmodule Mydia.Downloads.Blacklists do
             failure_reason: failure_reason,
             expires_at: expires_at,
             inserted_at: now
-          ] ++ hash_update
+          ] ++ known_update
       ],
       conflict_target: [:indexer, :guid]
     )
   end
+
+  defp distinct_fallback(fallback, guid) when is_binary(fallback) and fallback not in ["", guid],
+    do: fallback
+
+  defp distinct_fallback(_fallback, _guid), do: nil
 
   @doc """
   The configured default ban length in days
@@ -220,7 +281,7 @@ defmodule Mydia.Downloads.Blacklists do
 
     query =
       from b in ReleaseBlacklist,
-        where: b.indexer == ^normalized and b.guid == ^guid,
+        where: b.indexer == ^normalized and (b.guid == ^guid or b.fallback_guid == ^guid),
         where: is_nil(b.expires_at) or b.expires_at > ^now,
         select: 1,
         limit: 1
@@ -263,7 +324,8 @@ defmodule Mydia.Downloads.Blacklists do
   def alias_ban(%ReleaseBlacklist{} = ban, result, info_hash) do
     add(result.indexer, release_guid(result), result.title, ban.failure_reason,
       expires_at: ban.expires_at,
-      info_hash: info_hash
+      info_hash: info_hash,
+      fallback_guid: fallback_guid(result)
     )
   rescue
     error -> {:error, error}
@@ -296,24 +358,24 @@ defmodule Mydia.Downloads.Blacklists do
   def reject_blacklisted(results, log_context \\ []) when is_list(results) do
     keyed =
       Enum.map(results, fn result ->
-        {result, blacklist_key(result), info_hash_from_url(Map.get(result, :download_url))}
+        {result, blacklist_keys(result), info_hash_from_url(Map.get(result, :download_url))}
       end)
 
-    banned_keys = keyed |> Enum.map(&elem(&1, 1)) |> batch_blacklisted()
+    banned_keys = keyed |> Enum.flat_map(&elem(&1, 1)) |> batch_blacklisted()
     banned_hashes = keyed |> Enum.map(&elem(&1, 2)) |> active_info_hashes()
 
     keyed
-    |> Enum.filter(fn {result, key, hash} ->
-      case match_ban(key, hash, banned_keys, banned_hashes) do
+    |> Enum.filter(fn {result, keys, hash} ->
+      case match_ban(keys, hash, banned_keys, banned_hashes) do
         nil ->
           true
 
-        matched_by ->
+        {matched_by, guid} ->
           Logger.info(
             "Rejected blacklisted release",
             [
               indexer: Map.get(result, :indexer),
-              guid: key && elem(key, 1),
+              guid: Helpers.redact_url(guid),
               title: Map.get(result, :title),
               matched_by: matched_by
             ] ++ log_context
@@ -353,14 +415,15 @@ defmodule Mydia.Downloads.Blacklists do
 
         query =
           from b in ReleaseBlacklist,
-            where: b.indexer in ^indexers and b.guid in ^guids,
-            where: is_nil(b.expires_at) or b.expires_at > ^now,
-            select: {b.indexer, b.guid}
+            where: b.indexer in ^indexers,
+            where: b.guid in ^guids or b.fallback_guid in ^guids,
+            where: is_nil(b.expires_at) or b.expires_at > ^now
 
         candidate = MapSet.new(normalized_pairs)
 
         query
         |> Repo.all()
+        |> Enum.flat_map(&row_keys/1)
         |> Enum.filter(&MapSet.member?(candidate, &1))
         |> MapSet.new()
     end
@@ -386,19 +449,41 @@ defmodule Mydia.Downloads.Blacklists do
     end
   end
 
-  defp match_ban(key, hash, banned_keys, banned_hashes) do
-    cond do
-      key && MapSet.member?(banned_keys, key) -> :key
-      hash && MapSet.member?(banned_hashes, hash) -> :info_hash
-      true -> nil
+  # Names the key that hit a ban, so the logged guid is one a lookup finds:
+  # a ban recorded under the legacy title-and-size key has no row for the
+  # result's primary guid.
+  defp match_ban(keys, hash, banned_keys, banned_hashes) do
+    case Enum.find(keys, &MapSet.member?(banned_keys, &1)) do
+      {_indexer, guid} ->
+        {:key, guid}
+
+      nil ->
+        if hash && MapSet.member?(banned_hashes, hash),
+          do: {:info_hash, primary_guid(keys)},
+          else: nil
     end
   end
 
-  defp blacklist_key(%{indexer: indexer} = result) when is_binary(indexer) and indexer != "" do
-    {ReleaseBlacklist.normalize_indexer(indexer), release_guid(result)}
+  defp blacklist_keys(%{indexer: indexer} = result) when is_binary(indexer) and indexer != "" do
+    normalized = ReleaseBlacklist.normalize_indexer(indexer)
+    Enum.map(release_guids(result), &{normalized, &1})
   end
 
-  defp blacklist_key(_), do: nil
+  defp blacklist_keys(_), do: []
+
+  @doc """
+  The `{indexer, key}` pairs a blacklist row matches: its guid and, when it
+  has one, its `fallback_guid`.
+  """
+  @spec row_keys(ReleaseBlacklist.t()) :: [{String.t(), String.t()}]
+  def row_keys(%ReleaseBlacklist{indexer: indexer, guid: guid, fallback_guid: nil}),
+    do: [{indexer, guid}]
+
+  def row_keys(%ReleaseBlacklist{indexer: indexer, guid: guid, fallback_guid: fallback}),
+    do: [{indexer, guid}, {indexer, fallback}]
+
+  defp primary_guid([{_indexer, guid} | _]), do: guid
+  defp primary_guid([]), do: nil
 
   @doc """
   Lists blacklist rows, newest first.

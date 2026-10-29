@@ -20,10 +20,6 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
   </table></body></html>
   """
 
-  # Divergences the oracle reports for every result of this definition: the wasm
-  # engine sets a guid and leaves tmdb_id nil where the native one does the reverse.
-  @known_fields [:guid, :tmdb_id]
-
   @wasm_shaped "search?q=lantern%3Fq%3Dlantern"
 
   @yaml """
@@ -133,7 +129,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
     end
   end
 
-  test "replays a capture through both engines with only the known field divergences" do
+  test "replays a capture through both engines with no field divergences" do
     result =
       Runner.replay(
         capture([
@@ -144,10 +140,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
 
     assert {:ok, [_, _]} = result.wasm
     assert result.wasm_misses == []
-    assert %{divergences: divs, paired: 2} = Runner.compare(result)
+    assert %{divergences: [], paired: 2} = Runner.compare(result)
     assert {:ok, _} = result.native
-    assert MapSet.new(divs, & &1.field) == MapSet.new(@known_fields)
-    assert Enum.all?(divs, &(&1.kind == :field))
   end
 
   test "a changed body that both engines read the same way adds no divergence" do
@@ -163,10 +157,8 @@ defmodule Mydia.Indexers.Cardigann.Parity.RunnerTest do
 
     assert {:ok, results} = result.native
     assert "Lantern Quay 2031 1080p WEB" in Enum.map(results, & &1.title)
-    assert %{divergences: divs, paired: 2} = Runner.compare(result)
+    assert %{divergences: [], paired: 2} = Runner.compare(result)
     assert {:ok, _} = result.native
-    assert MapSet.new(divs, & &1.field) == MapSet.new(@known_fields)
-    assert Enum.all?(divs, &(&1.kind == :field))
   end
 
   test "a request only the native engine makes is a real :request divergence" do

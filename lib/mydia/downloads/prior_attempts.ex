@@ -76,29 +76,20 @@ defmodule Mydia.Downloads.PriorAttempts do
   defp scope(query, media_item, _context),
     do: where(query, [d], d.media_item_id == ^media_item.id)
 
+  # Every key `Blacklists.reject_blacklisted/2` checks, so a release the search
+  # filters out is also the one the modal labels: the guid and the `sha256:`
+  # fallback, matched against both the row's guid and its `fallback_guid`.
   defp blacklisted_attempts(results) do
     keyed =
       Enum.map(results, fn result ->
         {result.download_url, ReleaseBlacklist.normalize_indexer(result.indexer),
-         Blacklists.release_guid(result), Blacklists.info_hash_from_url(result.download_url)}
+         Blacklists.release_guids(result), Blacklists.info_hash_from_url(result.download_url)}
       end)
 
-    indexers = keyed |> Enum.map(&elem(&1, 1)) |> Enum.reject(&is_nil/1) |> Enum.uniq()
-    guids = keyed |> Enum.map(&elem(&1, 2)) |> Enum.uniq()
-    hashes = keyed |> Enum.map(&elem(&1, 3)) |> Enum.reject(&is_nil/1) |> Enum.uniq()
-    now = DateTime.utc_now()
+    rows = active_bans(keyed)
 
-    rows =
-      ReleaseBlacklist
-      |> where([b], is_nil(b.expires_at) or b.expires_at > ^now)
-      |> where(
-        [b],
-        (b.indexer in ^indexers and b.guid in ^guids) or b.info_hash in ^hashes
-      )
-      |> order_by([b], desc: b.inserted_at)
-      |> Repo.all()
-
-    by_key = Enum.reduce(Enum.reverse(rows), %{}, &Map.put(&2, {&1.indexer, &1.guid}, &1))
+    by_key =
+      for row <- Enum.reverse(rows), key <- Blacklists.row_keys(row), into: %{}, do: {key, row}
 
     by_hash =
       rows
@@ -106,8 +97,8 @@ defmodule Mydia.Downloads.PriorAttempts do
       |> Enum.reverse()
       |> Enum.reduce(%{}, &Map.put(&2, &1.info_hash, &1))
 
-    Enum.reduce(keyed, %{}, fn {url, indexer, guid, hash}, acc ->
-      case Map.get(by_key, {indexer, guid}) || (hash && Map.get(by_hash, hash)) do
+    Enum.reduce(keyed, %{}, fn {url, indexer, guids, hash}, acc ->
+      case Enum.find_value(guids, &Map.get(by_key, {indexer, &1})) || by_hash[hash] do
         nil ->
           acc
 
@@ -119,6 +110,23 @@ defmodule Mydia.Downloads.PriorAttempts do
           })
       end
     end)
+  end
+
+  defp active_bans(keyed) do
+    indexers = keyed |> Enum.map(&elem(&1, 1)) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    guids = keyed |> Enum.flat_map(&elem(&1, 2)) |> Enum.uniq()
+    hashes = keyed |> Enum.map(&elem(&1, 3)) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    now = DateTime.utc_now()
+
+    ReleaseBlacklist
+    |> where([b], is_nil(b.expires_at) or b.expires_at > ^now)
+    |> where(
+      [b],
+      (b.indexer in ^indexers and (b.guid in ^guids or b.fallback_guid in ^guids)) or
+        b.info_hash in ^hashes
+    )
+    |> order_by([b], desc: b.inserted_at)
+    |> Repo.all()
   end
 
   defp as_utc(%DateTime{} = dt), do: dt

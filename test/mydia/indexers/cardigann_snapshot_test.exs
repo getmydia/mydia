@@ -300,13 +300,24 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   describe "showRSS snapshot" do
     @tag :snapshot
     test "parses captured XML RSS feed without error" do
+      # The capture is the global feed, a keywordless request. With the
+      # metadata's query the definition's `rows.filters: andmatch` would drop
+      # every row (see the next test).
       {{result, _definition}, _log} =
-        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss") end)
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss", keywords: "") end)
 
       # The feed names its title element `tv:raw_title`; the definition selects
       # it as `raw_title`, as a CSS type selector matches by local name.
       assert {:ok, [_ | _] = results} = result
       assert Enum.all?(results, &(is_binary(&1.title) and &1.title != ""))
+    end
+
+    @tag :snapshot
+    test "rows.filters andmatch drops feed rows without the keywords" do
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss", keywords: "test") end)
+
+      assert {:ok, []} = result
     end
   end
 
@@ -393,8 +404,37 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
 
   describe "CrackingPatching snapshot" do
     @tag :snapshot
+    # The definition declares `rows.filters: andmatch`, and no row title in the
+    # capture contains its query ("ubuntu"), so Prowlarr keeps none of them.
+    # Row parsing is exercised as a keywordless request instead.
     test "crackingpatching: search rows parse" do
-      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2)
+      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2, keywords: "")
+    end
+
+    @tag :snapshot
+    test "crackingpatching: rows.filters andmatch drops rows without the keywords" do
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          load_and_parse("crackingpatching", keywords: "ubuntu")
+        end)
+
+      assert {:ok, []} = result
+    end
+
+    @tag :snapshot
+    test "crackingpatching: rows.filters andmatch keeps rows whose titles hold every keyword" do
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          load_and_parse("crackingpatching", keywords: "orchard desktop")
+        end)
+
+      assert {:ok, results} = result
+      assert length(results) >= 2
+
+      assert Enum.all?(results, fn r ->
+               title = String.downcase(r.title)
+               String.contains?(title, "orchard") and String.contains?(title, "desktop")
+             end)
     end
 
     # The magnet in download_response.html is synthetic. This only proves that the

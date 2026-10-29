@@ -102,6 +102,22 @@ defmodule Mydia.Downloads.BlacklistsTest do
     end
   end
 
+  describe "add/5 fallback_guid" do
+    test "drops a fallback equal to the guid" do
+      {:ok, row} =
+        Blacklists.add("idx", "sha256:same", "T", "stalled", fallback_guid: "sha256:same")
+
+      assert row.fallback_guid == nil
+    end
+
+    test "an upsert without a fallback keeps the stored one" do
+      {:ok, _} = Blacklists.add("idx", "url-guid", "T", "stalled", fallback_guid: "sha256:kept")
+      {:ok, _} = Blacklists.add("idx", "url-guid", "T", "par2_failed")
+
+      assert Repo.get_by!(ReleaseBlacklist, guid: "url-guid").fallback_guid == "sha256:kept"
+    end
+  end
+
   describe "blacklisted?/2" do
     test "returns true for an active row" do
       {:ok, _} = Blacklists.add("nzbhydra2", "active-1", "T", "x")
@@ -266,6 +282,16 @@ defmodule Mydia.Downloads.BlacklistsTest do
       assert [] = Blacklists.reject_blacklisted([result])
     end
 
+    # Bans written before Cardigann set guids carry the fallback key. Lookups
+    # check it too, so upgrading does not re-grab a release the user banned.
+    test "drops a result blacklisted under the legacy fallback before it had a guid" do
+      result = search_result(%{guid: "abc123"})
+      legacy_guid = Blacklists.release_guid(%{result | guid: nil})
+      {:ok, _} = Blacklists.add(result.indexer, legacy_guid, result.title, "rejected_by_user")
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
     # Production loop: an indexer without guids re-served a rejected malware
     # release, and every re-grab was rejected again until the auto-reject cap
     # stopped rejecting and the payload downloaded.
@@ -281,6 +307,42 @@ defmodule Mydia.Downloads.BlacklistsTest do
       blacklist_as_grabbed(result)
 
       assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    # A Cardigann guid is the download URL, which changes on mirror failover.
+    # The ban is written from the download the grab recorded, as the monitor
+    # and the reject path do.
+    test "drops the same release served by another mirror after a ban via the first" do
+      from_a = search_result(%{guid: "https://mirror-a.example/dl/7.torrent?sid=AAA"})
+
+      download =
+        download_fixture(%{
+          title: from_a.title,
+          indexer: from_a.indexer,
+          download_url: from_a.guid,
+          metadata: Queue.build_download_metadata(from_a)
+        })
+        |> then(&Repo.reload!/1)
+
+      {:ok, indexer, guid} = Blacklists.extract_key(download)
+
+      {:ok, row} =
+        Blacklists.add(
+          indexer,
+          guid,
+          download.title,
+          "stalled",
+          Blacklists.download_ban_opts(download)
+        )
+
+      assert row.fallback_guid == Blacklists.release_guid(%{from_a | guid: nil})
+
+      from_b = %{from_a | guid: "https://mirror-b.example/dl/7.torrent?sid=BBB"}
+      assert [] = Blacklists.reject_blacklisted([from_b])
+      assert Blacklists.blacklisted?(from_b.indexer, row.fallback_guid)
+
+      other_size = %{from_b | size: 2_147_483_648}
+      assert [^other_size] = Blacklists.reject_blacklisted([other_size])
     end
 
     test "keeps a guid-less result from a different release" do
@@ -360,6 +422,19 @@ defmodule Mydia.Downloads.BlacklistsTest do
 
       assert "sha256:c9283b621de8b5f024da89b600a87a5093c206a295d6bab9b107f8911068bf4e" =
                Blacklists.release_guid(result)
+    end
+
+    test "release_guids/1 returns the guid and the legacy fallback" do
+      result = %{indexer: "nyaa", guid: "abc123", title: "T", size: 1}
+
+      assert ["abc123", "sha256:" <> _] = Blacklists.release_guids(result)
+    end
+
+    test "release_guids/1 returns one key when there is no guid" do
+      result = %{indexer: "nyaa", guid: nil, title: "T", size: 1}
+
+      assert [key] = Blacklists.release_guids(result)
+      assert key == Blacklists.release_guid(result)
     end
   end
 

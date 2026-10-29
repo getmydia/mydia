@@ -138,6 +138,36 @@ defmodule Mydia.Downloads.PriorAttemptsTest do
     assert %PriorAttempt{kind: :blacklisted, reason: "par fail"} = map[res.download_url]
   end
 
+  # Bans written before Cardigann set guids are keyed by the sha256 fallback.
+  test "blacklist matches a URL-guid result under its legacy fallback key" do
+    item = media_item_fixture(%{type: "movie"})
+    res = result(indexer: "LanternTracker", guid: "https://mirror-a.example/dl/7.torrent")
+    legacy = Blacklists.release_guid(%{res | guid: nil})
+    {:ok, _} = Blacklists.add(res.indexer, legacy, res.title, "rejected_by_user")
+
+    assert {:ok, map} = Downloads.prior_attempts_for_results([res], item, nil)
+    assert %PriorAttempt{kind: :blacklisted, reason: "rejected_by_user"} = map[res.download_url]
+  end
+
+  test "blacklist written via one mirror labels the same release from another" do
+    item = media_item_fixture(%{type: "movie"})
+    from_a = result(indexer: "LanternTracker", guid: "https://mirror-a.example/dl/7.torrent")
+
+    from_b = %{
+      from_a
+      | guid: "https://mirror-b.example/dl/7.torrent",
+        download_url: "https://mirror-b.example/dl/7.torrent"
+    }
+
+    {:ok, _} =
+      Blacklists.add(from_a.indexer, from_a.guid, from_a.title, "stalled",
+        fallback_guid: Blacklists.release_guid(%{from_a | guid: nil})
+      )
+
+    assert {:ok, map} = Downloads.prior_attempts_for_results([from_b], item, nil)
+    assert %PriorAttempt{kind: :blacklisted, reason: "stalled"} = map[from_b.download_url]
+  end
+
   test "an expired ban is ignored" do
     item = media_item_fixture(%{type: "movie"})
     res = result(indexer: "idx", guid: "old")

@@ -709,14 +709,14 @@ defmodule Mydia.Jobs.DownloadMonitor do
     case Blacklists.extract_key(download) do
       {:ok, indexer, guid} ->
         try do
-          case Blacklists.add(indexer, guid, download.title || "", failure_reason,
-                 info_hash: Blacklists.download_info_hash(download)
-               ) do
+          opts = Blacklists.download_ban_opts(download)
+
+          case Blacklists.add(indexer, guid, download.title || "", failure_reason, opts) do
             {:ok, _row} ->
               Logger.info("Release blacklisted after failure",
                 download_id: download.id,
                 indexer: indexer,
-                guid: guid,
+                guid: Client.Helpers.redact_url(guid),
                 failure_reason: failure_reason
               )
 
@@ -726,7 +726,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
               Logger.warning("Failed to blacklist release",
                 download_id: download.id,
                 indexer: indexer,
-                guid: guid,
+                guid: Client.Helpers.redact_url(guid),
                 reason: inspect(reason)
               )
 

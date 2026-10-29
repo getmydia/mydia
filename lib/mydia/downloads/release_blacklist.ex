@@ -24,6 +24,7 @@ defmodule Mydia.Downloads.ReleaseBlacklist do
           failure_reason: String.t(),
           expires_at: DateTime.t() | nil,
           info_hash: String.t() | nil,
+          fallback_guid: String.t() | nil,
           inserted_at: DateTime.t() | nil
         }
 
@@ -36,13 +37,16 @@ defmodule Mydia.Downloads.ReleaseBlacklist do
     # The torrent's v1 infohash (40-char lowercase hex), when known. Lets a ban
     # match the same torrent listed by another indexer under another guid.
     field :info_hash, :string
+    # The `sha256:` key of (indexer, title, size), so a ban written under a
+    # mirror's download URL still matches the release from another mirror.
+    field :fallback_guid, :string
 
     # Custom timestamps — no updated_at, only inserted_at.
     field :inserted_at, :utc_datetime_usec
   end
 
   @required ~w(indexer guid title failure_reason)a
-  @optional ~w(expires_at inserted_at info_hash)a
+  @optional ~w(expires_at inserted_at info_hash fallback_guid)a
 
   @doc """
   Builds a changeset for the schema.

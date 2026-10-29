@@ -41,6 +41,9 @@ defmodule Mydia.CardigannSnapshotHelper do
   - `:min_results` - Minimum expected result count (default: 1)
   - `:assertions` - Function receiving the results list for custom assertions
   - `:template_context` - Template context for rendering (default: builds from metadata)
+  - `:keywords` - Search keywords for the built context, overriding the metadata
+    query (`""` replays the response as a keywordless request, so `andmatch`
+    keeps every row)
   """
   def run_snapshot(fixture_dir, opts \\ []) do
     min_results = Keyword.get(opts, :min_results, 1)
@@ -67,7 +70,10 @@ defmodule Mydia.CardigannSnapshotHelper do
     # Build template context
     template_context =
       extra_context ||
-        build_template_context(metadata, definition)
+        build_template_context(
+          Keyword.get(opts, :keywords, Map.get(metadata, "query", "test")),
+          definition
+        )
 
     # Build base URL from definition
     base_url =
@@ -346,9 +352,7 @@ defmodule Mydia.CardigannSnapshotHelper do
     end
   end
 
-  defp build_template_context(metadata, definition) do
-    keywords = Map.get(metadata, "query", "test")
-
+  defp build_template_context(keywords, definition) do
     # Build config from definition settings defaults
     config =
       definition.settings
