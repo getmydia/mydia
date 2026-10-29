@@ -794,6 +794,39 @@ defmodule Mydia.Media.LibraryListingTest do
                ["Élan Quarry", "Brindle Coast", "Amber Tide", "[Redacted] Fen", "9 Lanterns"]
     end
 
+    test "title sort ignores a leading article in both directions", %{user: user} do
+      for title <- ["Stillwater Run", "The Saltmarsh Years", "Sable Point", "Tamarind Coast"] do
+        media_item_fixture(%{type: "movie", title: title})
+      end
+
+      assert titles(page(user, sort_by: "title_asc")) ==
+               ["Sable Point", "The Saltmarsh Years", "Stillwater Run", "Tamarind Coast"]
+
+      assert titles(page(user, sort_by: "title_desc")) ==
+               ["Tamarind Coast", "Stillwater Run", "The Saltmarsh Years", "Sable Point"]
+    end
+
+    test "an article-led title files under its next word's letter", %{user: user} do
+      media_item_fixture(%{type: "movie", title: "Amber Tide"})
+      media_item_fixture(%{type: "movie", title: "The Saltmarsh Years"})
+      media_item_fixture(%{type: "movie", title: "The 400"})
+
+      listing = page(user, sort_by: "title_asc")
+
+      assert Enum.map(listing.rows, &LibraryListing.initial/1) == ["#", "a", "s"]
+      assert listing.letter_offsets == %{"#" => 0, "a" => 1, "s" => 2}
+
+      jumped = page(user, sort_by: "title_asc", letter: "s")
+      assert jumped.letter_start == 2
+    end
+
+    test "a title and its article-led twin order the same way every time", %{user: user} do
+      media_item_fixture(%{type: "movie", title: "The Harbor Watch"})
+      media_item_fixture(%{type: "movie", title: "Harbor Watch"})
+
+      assert titles(page(user, sort_by: "title_asc")) == ["Harbor Watch", "The Harbor Watch"]
+    end
+
     test "initial/1 buckets by folded first letter", %{user: user} do
       for title <- ["Élan Quarry", "9 Lanterns", "amber tide", "Ørsted Drift", "Æther Bay"] do
         media_item_fixture(%{type: "movie", title: title})

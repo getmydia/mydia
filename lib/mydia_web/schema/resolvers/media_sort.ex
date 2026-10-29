@@ -17,6 +17,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
       lowest-rated list.
   """
 
+  alias Mydia.Media.SortTitle
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Playback
 
@@ -99,7 +100,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
 
   # Key extraction. Returning nil puts the item in the unknown group.
 
-  defp mapper_for(:title, _progress), do: &downcased_title/1
+  defp mapper_for(:title, _progress), do: &title_key/1
   defp mapper_for(:year, _progress), do: & &1.year
   defp mapper_for(:added_at, _progress), do: & &1.inserted_at
   defp mapper_for(:rating, _progress), do: &MetadataAccess.get_field(&1, :vote_average)
@@ -112,7 +113,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
   defp mapper_for(:release_date, _progress), do: &release_date/1
   defp mapper_for(:last_played, progress), do: &last_played(&1, progress)
   defp mapper_for(:watch_state, progress), do: &watched?(&1, progress)
-  defp mapper_for(_unknown, _progress), do: &downcased_title/1
+  defp mapper_for(_unknown, _progress), do: &title_key/1
 
   # Comparison terms. Date and DateTime need their module, since plain term
   # order on those structs compares :day before :month before :year.
@@ -122,8 +123,13 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
   defp sorter_for(:last_played, direction), do: {direction, DateTime}
   defp sorter_for(_field, direction), do: direction
 
-  defp downcased_title(%{title: title}) when is_binary(title), do: String.downcase(title)
-  defp downcased_title(_item), do: nil
+  # The fold breaks ties between a title and its article-led twin, and the id
+  # breaks the rest ("Élan" and "Elan" fold alike), so the order stays total
+  # and offset pagination never shifts.
+  defp title_key(%{title: title, id: id}) when is_binary(title),
+    do: {SortTitle.key(title), SortTitle.fold(title), id}
+
+  defp title_key(_item), do: nil
 
   # TMDB gives films a scalar `runtime` and shows a list of typical episode
   # lengths, so a show's duration is the head of that list.

@@ -43,11 +43,47 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
   defp ids(items), do: Enum.map(items, & &1.id)
 
   describe "title" do
+    test "titles that fold alike tie-break by id, whatever the input order" do
+      a = item("a", %{title: "Elan Quarry"})
+      b = item("b", %{title: "Élan Quarry"})
+
+      assert ids(MediaSort.sort([b, a], %{field: :title, direction: :asc})) == ["a", "b"]
+      assert ids(MediaSort.sort([a, b], %{field: :title, direction: :asc})) == ["a", "b"]
+    end
+
     test "sorts case-insensitively in both directions" do
       items = [item("1", %{title: "banana"}), item("2", %{title: "Apple"})]
 
       assert ids(MediaSort.sort(items, %{field: :title, direction: :asc})) == ["2", "1"]
       assert ids(MediaSort.sort(items, %{field: :title, direction: :desc})) == ["1", "2"]
+    end
+  end
+
+  describe "title sort ignores a leading article" do
+    test "ascending and descending" do
+      items = [
+        item("1", %{title: "Stillwater Run"}),
+        item("2", %{title: "The Saltmarsh Years"}),
+        item("3", %{title: "Sable Point"})
+      ]
+
+      asc = MediaSort.sort(items, %{field: :title, direction: :asc})
+      assert Enum.map(asc, & &1.title) == ["Sable Point", "The Saltmarsh Years", "Stillwater Run"]
+
+      desc = MediaSort.sort(items, %{field: :title, direction: :desc})
+
+      assert Enum.map(desc, & &1.title) == [
+               "Stillwater Run",
+               "The Saltmarsh Years",
+               "Sable Point"
+             ]
+    end
+
+    test "an item without a title still sorts last" do
+      items = [item("1", %{title: nil}), item("2", %{title: "The Saltmarsh Years"})]
+
+      assert Enum.map(MediaSort.sort(items, %{field: :title, direction: :asc}), & &1.id) ==
+               ["2", "1"]
     end
   end
 

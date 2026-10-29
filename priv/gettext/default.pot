@@ -447,7 +447,7 @@ msgstr ""
 #: lib/mydia_web/live/calendar_live/index.html.heex:28
 #: lib/mydia_web/live/dashboard_live/index.html.heex:66
 #: lib/mydia_web/live/discover_live/index.html.heex:54
-#: lib/mydia_web/live/media_live/index.ex:124
+#: lib/mydia_web/live/media_live/index.ex:134
 #: lib/mydia_web/live/search_live/index.ex:29
 #: lib/mydia_web/live/search_live/index.ex:1016
 #: lib/mydia_web/live/search_live/index.ex:1359
@@ -624,7 +624,7 @@ msgstr ""
 #: lib/mydia_web/live/calendar_live/index.html.heex:26
 #: lib/mydia_web/live/dashboard_live/index.html.heex:74
 #: lib/mydia_web/live/discover_live/index.html.heex:55
-#: lib/mydia_web/live/media_live/index.ex:132
+#: lib/mydia_web/live/media_live/index.ex:142
 #: lib/mydia_web/live/media_live/index.html.heex:295
 #, elixir-autogen, elixir-format
 msgid "TV Shows"
@@ -1856,7 +1856,7 @@ msgid_plural "%{count} hours ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1044
+#: lib/mydia_web/live/media_live/index/messages.ex:85
 #, elixir-autogen, elixir-format
 msgid "%{count} imported automatically"
 msgstr ""
@@ -1909,7 +1909,7 @@ msgid_plural "%{count} items set to unmonitored"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:819
+#: lib/mydia_web/live/media_live/index.ex:829
 #, elixir-autogen, elixir-format
 msgid "%{count} item updated successfully"
 msgid_plural "%{count} items updated successfully"
@@ -1947,12 +1947,12 @@ msgid_plural "%{count} missing"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1034
+#: lib/mydia_web/live/media_live/index/messages.ex:75
 #, elixir-autogen, elixir-format
 msgid "%{count} modified"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1029
+#: lib/mydia_web/live/media_live/index/messages.ex:70
 #, elixir-autogen, elixir-format
 msgid "%{count} new"
 msgstr ""
@@ -1978,7 +1978,7 @@ msgid_plural "%{count} peers"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index.ex:1039
+#: lib/mydia_web/live/media_live/index/messages.ex:80
 #, elixir-autogen, elixir-format
 msgid "%{count} removed"
 msgstr ""
@@ -2620,7 +2620,7 @@ msgstr ""
 msgid "Added \"%{name}\""
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:507
+#: lib/mydia_web/live/media_live/index.ex:517
 #, elixir-autogen, elixir-format
 msgid "Added %{count} item to %{name}"
 msgid_plural "Added %{count} items to %{name}"
@@ -3229,7 +3229,7 @@ msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:916
-#: lib/mydia_web/live/media_live/index.ex:521
+#: lib/mydia_web/live/media_live/index.ex:531
 #: lib/mydia_web/live/media_live/show/collection_events.ex:65
 #, elixir-autogen, elixir-format
 msgid "Cannot add items to smart collections"
@@ -3590,7 +3590,7 @@ msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:411
 #: lib/mydia_web/live/collection_live/show.ex:33
-#: lib/mydia_web/live/media_live/index.ex:498
+#: lib/mydia_web/live/media_live/index.ex:508
 #: lib/mydia_web/live/media_live/show/collection_events.ex:49
 #: lib/mydia_web/live/media_live/show/collection_events.ex:79
 #, elixir-autogen, elixir-format
@@ -3835,7 +3835,7 @@ msgstr ""
 msgid "Could not create that section."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:629
+#: lib/mydia_web/live/media_live/index.ex:639
 #, elixir-autogen, elixir-format
 msgid "Could not create the Anime section"
 msgstr ""
@@ -3902,7 +3902,7 @@ msgstr ""
 msgid "Could not reclassify that file"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:599
+#: lib/mydia_web/live/media_live/index.ex:609
 #, elixir-autogen, elixir-format
 msgid "Could not remove the section"
 msgstr ""
@@ -4024,7 +4024,7 @@ msgstr ""
 msgid "Could not undo that change."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:582
+#: lib/mydia_web/live/media_live/index.ex:592
 #, elixir-autogen, elixir-format
 msgid "Could not update the section"
 msgstr ""
@@ -4900,7 +4900,7 @@ msgstr ""
 msgid "Failed to add item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:527
+#: lib/mydia_web/live/media_live/index.ex:537
 #: lib/mydia_web/live/media_live/show/collection_events.ex:68
 #, elixir-autogen, elixir-format
 msgid "Failed to add to collection"
@@ -4959,7 +4959,7 @@ msgstr ""
 msgid "Failed to delete download"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:798
+#: lib/mydia_web/live/media_live/index.ex:808
 #, elixir-autogen, elixir-format
 msgid "Failed to delete items"
 msgstr ""
@@ -5000,7 +5000,7 @@ msgstr ""
 msgid "Failed to pause download: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:865
+#: lib/mydia_web/live/media_live/index.ex:875
 #, elixir-autogen, elixir-format
 msgid "Failed to queue searches"
 msgstr ""
@@ -5121,8 +5121,8 @@ msgstr ""
 msgid "Failed to update favorites"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:754
-#: lib/mydia_web/live/media_live/index.ex:833
+#: lib/mydia_web/live/media_live/index.ex:764
+#: lib/mydia_web/live/media_live/index.ex:843
 #, elixir-autogen, elixir-format
 msgid "Failed to update items"
 msgstr ""
@@ -5902,17 +5902,17 @@ msgstr ""
 msgid "Library is now chosen automatically"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1050
+#: lib/mydia_web/live/media_live/index/messages.ex:91
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: %{changes}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:1048
+#: lib/mydia_web/live/media_live/index/messages.ex:89
 #, elixir-autogen, elixir-format
 msgid "Library scan completed: No changes detected"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:714
+#: lib/mydia_web/live/media_live/index.ex:724
 #, elixir-autogen, elixir-format
 msgid "Library scan failed: %{error}"
 msgstr ""
@@ -6380,7 +6380,7 @@ msgstr ""
 #: lib/mydia_web/live/jobs_live/components.ex:338
 #: lib/mydia_web/live/jobs_live/components.ex:339
 #: lib/mydia_web/live/jobs_live/components.ex:353
-#: lib/mydia_web/live/media_live/index.ex:972
+#: lib/mydia_web/live/media_live/index.ex:985
 #: lib/mydia_web/live/media_live/show/formatters.ex:13
 #, elixir-autogen, elixir-format
 msgid "N/A"
@@ -8716,7 +8716,7 @@ msgstr ""
 msgid "Seasons & Episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:595
+#: lib/mydia_web/live/media_live/index.ex:605
 #, elixir-autogen, elixir-format
 msgid "Section removed from the sidebar"
 msgstr ""
@@ -8727,7 +8727,7 @@ msgstr ""
 msgid "Section settings"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:579
+#: lib/mydia_web/live/media_live/index.ex:589
 #, elixir-autogen, elixir-format
 msgid "Section updated"
 msgstr ""
@@ -9604,7 +9604,7 @@ msgstr ""
 msgid "That result is no longer available. Search again."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index.ex:155
+#: lib/mydia_web/live/media_live/index.ex:165
 #, elixir-autogen, elixir-format
 msgid "That section is no longer available."
 msgstr ""

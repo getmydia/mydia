@@ -7,10 +7,10 @@ defmodule MydiaWeb.MediaLive.ScanFlashTest do
   """
   use ExUnit.Case, async: true
 
-  alias MydiaWeb.MediaLive.Index
+  alias MydiaWeb.MediaLive.Index.Messages
 
   test "reports nothing when a scan changed nothing" do
-    assert Index.scan_completed_message(%{
+    assert Messages.scan_completed_message(%{
              new_files: 0,
              modified_files: 0,
              deleted_files: 0,
@@ -21,7 +21,7 @@ defmodule MydiaWeb.MediaLive.ScanFlashTest do
   test "keeps today's copy for a scan that auto-imported nothing" do
     # The existing builder prepends, so the emitted order is removed, modified,
     # new. That is pre-existing behavior and this change must not alter it.
-    assert Index.scan_completed_message(%{
+    assert Messages.scan_completed_message(%{
              new_files: 3,
              modified_files: 1,
              deleted_files: 2,
@@ -30,7 +30,7 @@ defmodule MydiaWeb.MediaLive.ScanFlashTest do
   end
 
   test "appends the auto-imported count when auto-import linked something" do
-    assert Index.scan_completed_message(%{
+    assert Messages.scan_completed_message(%{
              new_files: 3,
              modified_files: 0,
              deleted_files: 0,
@@ -40,7 +40,7 @@ defmodule MydiaWeb.MediaLive.ScanFlashTest do
 
   test "omits the auto-imported clause entirely when nothing was auto-imported" do
     message =
-      Index.scan_completed_message(%{
+      Messages.scan_completed_message(%{
         new_files: 1,
         modified_files: 0,
         deleted_files: 0,
@@ -54,7 +54,7 @@ defmodule MydiaWeb.MediaLive.ScanFlashTest do
     # The orphan branch links existing files, so a scan can auto-import
     # without any on-disk change at all. Reporting "No changes detected" here
     # would hide exactly the work the operator turned the flag on for.
-    assert Index.scan_completed_message(%{
+    assert Messages.scan_completed_message(%{
              new_files: 0,
              modified_files: 0,
              deleted_files: 0,
