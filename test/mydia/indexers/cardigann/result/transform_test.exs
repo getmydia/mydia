@@ -104,6 +104,23 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert result.download_url == "https://lantern.invalid/download/1.torrent"
     end
 
+    test "sets the guid to the resolved download link" do
+      assert one(row()).guid == "https://lantern.invalid/download/1.torrent"
+    end
+
+    test "keeps the download link as guid when the infohash supplies the download URL" do
+      result = one(row(%{"infohash" => String.duplicate("b", 40)}))
+
+      assert result.download_url =~ "magnet:?xt=urn:btih:" <> String.duplicate("b", 40)
+      assert result.guid == "https://lantern.invalid/download/1.torrent"
+    end
+
+    test "sets the guid to the magnet built from the infohash when there is no download link" do
+      result = one(row(%{"download" => nil, "infohash" => String.duplicate("c", 40)}))
+
+      assert result.guid == result.download_url
+    end
+
     test "detects an NZB download URL" do
       result = one(row(%{"download" => "/download/1.nzb"}))
 

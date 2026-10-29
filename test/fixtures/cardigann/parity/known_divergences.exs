@@ -3,14 +3,6 @@
     definition: "bigfangroup",
     query: :movie,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's download.php link"
-  },
-  %{
-    definition: "bigfangroup",
-    query: :movie,
-    kind: :field,
     field: :title,
     reason:
       "the row has three a[href^=\"details.php?id=\"] links (title, seeders 1, leechers 3); native joins all their text (title + \"13\"), wasm takes the first match"
@@ -22,14 +14,6 @@
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "bigfangroup",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's download.php link"
   },
   %{
     definition: "bigfangroup",
@@ -59,14 +43,6 @@
     definition: "blueroms",
     query: :rss,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's download link"
-  },
-  %{
-    definition: "blueroms",
-    query: :rss,
-    kind: :field,
     field: :published_at,
     reason:
       "`date: text: now` has no date filter; native parse_date(\"now\") is nil, wasm resolves now to the replay time"
@@ -83,25 +59,9 @@
     definition: "dmhy",
     query: :movie,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
-  },
-  %{
-    definition: "dmhy",
-    query: :movie,
-    kind: :field,
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "dmhy",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
   },
   %{
     definition: "dmhy",
@@ -187,14 +147,6 @@
     definition: "mikan",
     query: :rss,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's .torrent download link"
-  },
-  %{
-    definition: "mikan",
-    query: :rss,
-    kind: :field,
     field: :published_at,
     reason:
       "date_year_raw's regexp uses \\u00A0, which PCRE2 rejects, so native skips the filter and keeps the size cell (\"360.3 MB\"); date_year becomes \"360.3 MB +08:00\", dateparse leaves it unparsed, `or` prefers it over date_day and parse_date gives nil. wasm drops the non-matching cell and uses date_day (\"今天 02:30\" as today). Native is nil whatever the clock, so the divergence does not depend on when the test runs"
@@ -206,14 +158,6 @@
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "mikan",
-    query: :tv,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's .torrent download link"
   },
   %{
     definition: "mikan",
@@ -235,14 +179,6 @@
     definition: "nekobt",
     query: :movie,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
-  },
-  %{
-    definition: "nekobt",
-    query: :movie,
-    kind: :field,
     field: :published_at,
     reason:
       "pubDate ends in \"+0000\" and the GMT replace does not fire; native dateparse \"zzz\" only accepts \"+00:00\" (nil), wasm parses \"+0000\""
@@ -254,14 +190,6 @@
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "nekobt",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
   },
   %{
     definition: "nekobt",
@@ -283,25 +211,9 @@
     definition: "nyaasi",
     query: :movie,
     kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
-  },
-  %{
-    definition: "nyaasi",
-    query: :movie,
-    kind: :field,
     field: :tmdb_id,
     reason:
       "no tmdbid field: native parse_integer(nil) turns the missing value into 0, wasm leaves nil"
-  },
-  %{
-    definition: "nyaasi",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's magnet link"
   },
   %{
     definition: "nyaasi",
@@ -318,14 +230,6 @@
     field: :category,
     reason:
       "`category: text: 1` is a YAML integer; native drops the field (nil), wasm maps site category 1 to 4050 (PC/Games)"
-  },
-  %{
-    definition: "pctorrent",
-    query: :rss,
-    kind: :field,
-    field: :guid,
-    reason:
-      "native never sets SearchResult.guid; wasm fills Prowlarr's guid with the release's details page URL"
   },
   %{
     definition: "pctorrent",

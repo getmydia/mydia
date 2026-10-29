@@ -25,6 +25,7 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
     with {:ok, title} <- get_required_field(row, "title"),
          {:ok, download_url} <- get_download_or_magnet(row, title) do
       resolved_download_url = LinkResolver.resolve(download_url, ctx.base_url)
+      resolved_info_url = LinkResolver.resolve(get_field(row, "details"), ctx.base_url)
 
       %SearchResult{
         title: title,
@@ -32,17 +33,28 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         seeders: parse_integer(get_field(row, "seeders", "0")),
         leechers: parse_integer(get_field(row, "leechers", "0")),
         download_url: resolved_download_url,
-        info_url: LinkResolver.resolve(get_field(row, "details"), ctx.base_url),
+        info_url: resolved_info_url,
         indexer: ctx.indexer_name,
         category: map_category(get_field(row, "category"), ctx.category_mappings),
         published_at: parse_date(get_field(row, "date")),
         quality: QualityParser.parse(title),
         tmdb_id: parse_integer(get_field(row, "tmdbid")),
         imdb_id: get_field(row, "imdbid"),
-        download_protocol: detect_download_protocol(resolved_download_url)
+        download_protocol: detect_download_protocol(resolved_download_url),
+        guid: release_guid(row, resolved_download_url, resolved_info_url, ctx)
       }
     else
       _ -> nil
+    end
+  end
+
+  # Prowlarr's CleanupReleases fills an unset guid from the release's download
+  # URL, then a torrent's magnet, then its details URL. The download field wins
+  # even when the infohash supplies the download URL, as on YTS.
+  defp release_guid(row, download_url, info_url, ctx) do
+    case get_required_field(row, "download") do
+      {:ok, url} -> LinkResolver.resolve(url, ctx.base_url)
+      {:error, _} -> download_url || info_url
     end
   end
 
