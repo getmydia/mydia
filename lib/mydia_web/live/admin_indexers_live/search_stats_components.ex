@@ -8,8 +8,8 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   alias Mydia.Indexers.SearchStats.Summary
   alias Phoenix.LiveView.JS
 
-  @healthy_rate 0.95
-  @degraded_rate 0.80
+  @healthy_percent 95
+  @degraded_percent 80
 
   attr :window, :atom, required: true
 
@@ -40,7 +40,10 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
       <span :if={@summaries == []} class="text-xs text-base-content/70">
         {gettext("No searches yet")}
       </span>
-      <div :for={summary <- @summaries} class="flex flex-col items-start gap-1 max-w-full">
+      <div
+        :for={{summary, percent} <- Enum.map(@summaries, &{&1, success_percent(&1)})}
+        class="flex flex-col items-start gap-1 max-w-full"
+      >
         <span :if={summary.engine} class="badge badge-xs badge-ghost">
           {engine_label(summary.engine)}
         </span>
@@ -56,9 +59,9 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
             <span class="stat-title text-xs">{gettext("Success")}</span>
             <span
               id={stats_id(@indexer_id, summary) <> "-success"}
-              class={["stat-value text-lg", rate_class(Summary.success_rate(summary))]}
+              class={["stat-value text-lg", rate_class(percent)]}
             >
-              {format_rate(Summary.success_rate(summary))}
+              {format_rate(percent)}
             </span>
             <span class="stat-desc">
               {gettext("%{ok} of %{attempts}", ok: summary.successes, attempts: summary.attempts)}
@@ -126,17 +129,21 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   defp stats_id(indexer_id, summary),
     do: "indexer-stats-#{indexer_id}-#{summary.engine || "none"}"
 
+  # Integer math keeps the displayed percent and its color band in agreement.
+  defp success_percent(%Summary{attempts: 0}), do: nil
+  defp success_percent(%Summary{successes: ok, attempts: n}), do: div(ok * 100, n)
+
   defp rate_class(nil), do: "text-base-content/50"
-  defp rate_class(rate) when rate >= @healthy_rate, do: "text-success"
-  defp rate_class(rate) when rate >= @degraded_rate, do: "text-warning"
-  defp rate_class(_rate), do: "text-error"
+  defp rate_class(pct) when pct >= @healthy_percent, do: "text-success"
+  defp rate_class(pct) when pct >= @degraded_percent, do: "text-warning"
+  defp rate_class(_pct), do: "text-error"
 
   defp engine_label("builtin"), do: gettext("Built-in engine")
   defp engine_label("prowlarr"), do: gettext("Prowlarr engine")
   defp engine_label(other), do: other
 
   defp format_rate(nil), do: gettext("n/a")
-  defp format_rate(rate), do: "#{trunc(rate * 100)}%"
+  defp format_rate(pct), do: "#{pct}%"
 
   defp format_ms(nil), do: gettext("n/a")
   defp format_ms(ms) when ms < 1_000, do: gettext("%{ms} ms", ms: ms)
