@@ -203,8 +203,8 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       |> assign(:folder, folder_of(assigns.file.relative_path))
 
     ~H"""
-    <div class="flex items-center gap-3 px-3 py-2 flex-wrap">
-      <div class="basis-full sm:basis-auto sm:flex-1 min-w-0">
+    <div class="flex items-center gap-3 px-3 py-2 max-sm:flex-wrap">
+      <div class="flex-1 min-w-0 max-sm:basis-full">
         <%!--
         The filename, not the whole relative path. Copies of one item share a
         folder and differ in the tail of their name ("...1080p.BluRay.x265"),
@@ -229,11 +229,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         <span class="text-xs opacity-60 whitespace-nowrap">{format_file_size(@file.size)}</span>
 
         <%!--
-      One radiogroup per file, not a checkbox: the two options are named on
-      screen, so the row reads as a state ("this file is set to Keep") and the
-      other half of the pair reads as the action. daisyUI renders the
-      aria-label of an input styled `.btn` as its text.
-      --%>
+        One radiogroup per file, not a checkbox: the two options are named on
+        screen, so the row reads as a state ("this file is set to Keep") and the
+        other half of the pair reads as the action. daisyUI renders the
+        aria-label of an input styled `.btn` as its text.
+        --%>
         <div
           class="join shrink-0"
           role="radiogroup"
@@ -251,13 +251,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
             phx-value-file={@file.id}
           />
           <%!--
-        `btn-error` and `checked:btn-error` both lose to daisyUI's own
-        "a checked .btn is primary" rule, which sits in the outer
-        `daisyui.l1` cascade layer and so outranks every colour class in the
-        nested layers no matter how specific. Setting the variables that rule
-        writes is the way to recolour it: an arbitrary property lands outside
-        daisyUI's layers entirely.
-        --%>
+          `btn-error` and `checked:btn-error` both lose to daisyUI's own
+          "a checked .btn is primary" rule, which sits in the outer
+          `daisyui.l1` cascade layer and so outranks every colour class in the
+          nested layers no matter how specific. Setting the variables that rule
+          writes is the way to recolour it: an arbitrary property lands outside
+          daisyUI's layers entirely.
+          --%>
           <input
             type="radio"
             class={[
