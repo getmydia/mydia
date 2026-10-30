@@ -146,6 +146,13 @@ defmodule Mydia.Downloads.Client.Helpers do
   original encoding and order, repeated keys (a magnet's `tr=`) all survive,
   and a URL carrying no credentials comes back byte for byte.
 
+  Some trackers carry the key in the path instead: UNIT3D downloads are
+  `/torrent/download/<id>.<rsskey>`. For a URL with a host, a path segment, or
+  a dot-separated part of one, that looks like a key is redacted too (see
+  `secret_like?/1`). Free text and magnets have no host and keep their path.
+
+  Display and logging only: the result is not a working URL.
+
   Returns the URL unchanged if parsing fails (safer to log a half-redacted
   string than to crash inside an error-handling path).
   """
@@ -155,12 +162,32 @@ defmodule Mydia.Downloads.Client.Helpers do
   def redact_url(url) when is_binary(url) do
     uri = URI.parse(url)
     query = uri.query && redact_query(uri.query)
+    path = if uri.host && uri.path, do: redact_path(uri.path), else: uri.path
 
-    if is_nil(uri.userinfo) and query == uri.query,
+    if is_nil(uri.userinfo) and query == uri.query and path == uri.path,
       do: url,
-      else: URI.to_string(%{uri | userinfo: nil, query: query})
+      else: URI.to_string(%{uri | userinfo: nil, query: query, path: path})
   rescue
     _ -> url
+  end
+
+  defp redact_path(path) do
+    path
+    |> String.split("/")
+    |> Enum.map_join("/", fn segment ->
+      segment
+      |> String.split(".")
+      |> Enum.map_join(".", &if(secret_like?(&1), do: @redacted_param_value, else: &1))
+    end)
+  end
+
+  # A key, not an id or a slug: 24+ characters of [A-Za-z0-9_-] with both
+  # letters and digits, and a run of 16+ letters and digits with no `-` or `_`
+  # (release slugs split into short words). A 40-hex info hash matches too,
+  # which is fine for display.
+  defp secret_like?(part) do
+    String.length(part) >= 24 and part =~ ~r/\A[A-Za-z0-9_-]+\z/ and part =~ ~r/[A-Za-z]/ and
+      part =~ ~r/[0-9]/ and part =~ ~r/[A-Za-z0-9]{16,}/
   end
 
   defp redact_query(query) do

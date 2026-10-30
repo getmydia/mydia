@@ -219,9 +219,12 @@ server:
 - Search rows send `MydiaWeb.Live.SearchResultRef.ref/1`, and the LiveView
   resolves the result it already holds. Never put the URL in a `phx-value-*`.
 - Anything rendered or logged goes through
-  `Mydia.Downloads.Client.Helpers.redact_url/1`. It redacts query parameters
-  and userinfo only; a passkey in the path (`/rss/<passkey>/`) survives it, so
-  prefer not rendering the URL at all.
+  `Mydia.Downloads.Client.Helpers.redact_url/1`. It redacts credential query
+  parameters (Gazelle's `authkey`, `torrent_pass`), userinfo, and path parts
+  that look like keys (UNIT3D's `/torrent/download/<id>.<rsskey>`): 24+
+  characters of `[A-Za-z0-9_-]` with letters, digits and a 16-character run
+  without separators. Its result is for display and logs only, never a URL
+  to fetch.
 - Events carry the download id (`Downloads.Grabber` broadcasts
   `%{download_id: id}`), never the URL.
 

@@ -59,6 +59,52 @@ defmodule Mydia.Downloads.Client.HelpersTest do
       assert Helpers.redact_url("https://orchard:HUNTER2@tracker.example/rss") ==
                "https://tracker.example/rss"
     end
+
+    # UNIT3D puts the account's rsskey in the path: /torrent/download/<id>.<key>.
+    test "redacts a UNIT3D key after the torrent id in the path" do
+      url = "https://tracker.example.test/torrent/download/48213.a1b2c3d4e5f60718293a4b5c6d7e8f90"
+
+      assert Helpers.redact_url(url) ==
+               "https://tracker.example.test/torrent/download/48213.%5BREDACTED%5D"
+    end
+
+    test "redacts a whole path segment that looks like a key" do
+      url = "https://tracker.example.test/rss/Zq9xY7wV5uT3sR1pQ0oN8mL6kJ4h/download/77"
+
+      assert Helpers.redact_url(url) ==
+               "https://tracker.example.test/rss/%5BREDACTED%5D/download/77"
+    end
+
+    test "redacts Gazelle query credentials and keeps the path" do
+      url =
+        "https://tracker.example.test/torrents.php?action=download&id=991&authkey=ak77&torrent_pass=tp88"
+
+      redacted = Helpers.redact_url(url)
+
+      assert redacted =~ "https://tracker.example.test/torrents.php?action=download&id=991"
+      refute redacted =~ "ak77"
+      refute redacted =~ "tp88"
+    end
+
+    test "keeps numeric ids, ordinary slugs and short tokens in a public URL" do
+      for url <- [
+            "https://indexer.example.test/download/123456789012345678901234567890.torrent",
+            "https://indexer.example.test/details/invented-feature-2021-1080p-bluray-x264",
+            "https://indexer.example.test/releases/Invented_Feature_2021_1080p_BluRay/a1b2"
+          ] do
+        assert Helpers.redact_url(url) == url
+      end
+    end
+
+    test "leaves a magnet byte for byte" do
+      magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Invented"
+      assert Helpers.redact_url(magnet) == magnet
+    end
+
+    test "leaves free text without a host alone" do
+      text = "statusCode 503 upstream_unavailable_after_retry_2"
+      assert Helpers.redact_url(text) == text
+    end
   end
 
   describe "sanitize_failure_detail/1" do
