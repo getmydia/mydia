@@ -604,6 +604,28 @@ crate's `Cargo.toml` on GitHub at the tag matching `mix.lock`, and
 `scripts/cardigann_precompile.exs` fails the build if that disagrees with the
 crate it actually compiled against.
 
+## The Docker image builds the NIFs in their own stage
+
+`Dockerfile` builds `mydia_p2p` and `mydia_subsync` in a `nifs` stage that
+copies only those crates (plus `mydia_p2p_core`), then `builder` copies the two
+`.so` files into `priv/native/`. `ENV MYDIA_PREBUILT_NIFS=1` makes
+`config/prod.exs` set Rustler's `skip_compilation?`, so `mix compile` loads them
+rather than running cargo. Before this, Rustler built them after `COPY lib`, and
+every Elixir change rebuilt iroh from scratch: `mix compile` took 5m20s of
+`ci-player-e2e.yml`'s image build on 2026-10-30, and 425.6s against 98.3s in a
+local `builder` build before and after. The stage is cached through the same
+`:buildcache-*` registry tags as the rest of the image. Its cargo target
+directories are BuildKit cache mounts, so the ~1 GB cargo target never enters
+the registry cache and only the ~23 MB of `.so` files land in the layer.
+
+cargo runs from each crate directory, not through Rustler, because each crate's
+`.cargo/config.toml` already turns `crt-static` off on musl. A probe after
+`mix compile` loads both modules and fails the image build if a NIF does not
+load. A new Rustler crate needs three edits: the `nifs` stage's COPY and loop,
+the `skip_compilation?` lines in `config/prod.exs`, and the probe's module list.
+Miss the first and `mix compile` fails because `priv/native/<crate>.so` is
+missing. Miss the second and the crate is silently built twice.
+
 ## Docker tags
 
 `ci-docker.yml` pushes `:master` and `:master-pg` on every master push, which is
