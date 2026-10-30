@@ -1102,6 +1102,34 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
              ]
     end
 
+    test "row templates see the mirror that answered as .Config.sitelink", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      dead = Bypass.open()
+      Bypass.down(dead)
+
+      live_url = "http://localhost:#{bypass.port}"
+      dead_url = "http://localhost:#{dead.port}"
+
+      yaml =
+        sample_yaml(dead_url)
+        |> String.replace(
+          "links:\n  - #{dead_url}\n",
+          "links:\n  - #{dead_url}\n  - #{live_url}\n"
+        )
+        |> String.replace(
+          "    download:\n      selector: \"td.download a\"\n      attribute: href\n",
+          "    download:\n      text: \"{{ .Config.sitelink }}get/{{ .Result.title }}\"\n"
+        )
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+      serve(bypass, "/search/zq/", page([{"QuietHarbor", 1}]))
+
+      assert {:ok, [result]} = Cardigann.search(@config, "zq")
+      assert result.download_url == "#{live_url}/get/QuietHarbor"
+    end
+
     test "only the paths whose categories match the query are requested", %{
       definition: definition,
       bypass: bypass

@@ -166,19 +166,23 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   # Each page is parsed with its own search path, so a path's declared response
-  # type applies to that page only.
+  # type applies to that page only. Links and row templates' `.Config.sitelink`
+  # both use the mirror that answered, which differs from the first link after
+  # failover.
   defp page_parser(parsed, definition, config, search_opts) do
-    template_context = build_template_context_for_parsing(parsed, search_opts)
-
     base_url =
       definition.active_link || List.first(Mydia.Indexers.Cardigann.Links.candidates(parsed)) ||
         ""
 
     fn path, response ->
+      answered = Map.get(response, :base_url)
+
+      context_opts =
+        if answered, do: Keyword.put(search_opts, :base_url, answered), else: search_opts
+
       CardigannResultParser.parse_results(parsed, response, config.name,
-        template_context: template_context,
-        # The mirror that answered, which differs from the first link after failover.
-        base_url: Map.get(response, :base_url) || base_url,
+        template_context: build_template_context_for_parsing(parsed, context_opts),
+        base_url: answered || base_url,
         search_path: path
       )
     end
