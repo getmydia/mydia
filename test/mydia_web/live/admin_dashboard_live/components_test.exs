@@ -88,6 +88,23 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert html =~ "<rect"
     end
 
+    test "names the plot as a group and keeps its per-day titles exposed" do
+      days = [%{date: ~D[2026-09-01], movies: 2, episodes: 4}]
+
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
+      doc = LazyHTML.from_fragment(html)
+
+      assert [svg] = doc |> LazyHTML.query("#plays-chart svg") |> Enum.to_list()
+      assert LazyHTML.attribute(svg, "role") == ["group"]
+      assert [label] = LazyHTML.attribute(svg, "aria-label")
+      assert label != ""
+      assert LazyHTML.attribute(svg, "aria-hidden") == []
+      assert [title] = doc |> LazyHTML.query("#plays-chart svg title") |> Enum.to_list()
+      assert LazyHTML.text(title) =~ "Sep 01"
+      assert LazyHTML.text(title) =~ "2 movies"
+      assert LazyHTML.text(title) =~ "4 episodes"
+    end
+
     test "labels the y-axis with the peak play count" do
       days = [
         %{date: ~D[2026-09-01], movies: 2, episodes: 4},
@@ -96,8 +113,24 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
 
       html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
 
-      assert html =~ ">6</text>"
-      assert html =~ ">0</text>"
+      doc = LazyHTML.from_fragment(html)
+      labels = doc |> LazyHTML.query("#plays-chart-y-axis span") |> Enum.map(&LazyHTML.text/1)
+
+      assert "6" in labels
+      assert "0" in labels
+
+      # Each label sits at its value's height: the peak at the top edge, zero
+      # at the bottom, the midpoint halfway.
+      tops =
+        doc
+        |> LazyHTML.query("#plays-chart-y-axis span")
+        |> Enum.map(fn span ->
+          [style] = LazyHTML.attribute(span, "style")
+          [_, pct] = Regex.run(~r/top:\s*([\d.]+)%/, style)
+          {LazyHTML.text(span), String.to_float(pct)}
+        end)
+
+      assert tops == [{"0", 100.0}, {"3", 50.0}, {"6", 0.0}]
     end
 
     test "marks the active range and offers the other two" do

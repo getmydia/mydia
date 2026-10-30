@@ -136,12 +136,12 @@ defmodule MydiaWeb.CollectionLive.Show do
         <%!-- Header --%>
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div class="flex items-center gap-4">
-            <.link navigate={~p"/collections"} class="btn btn-ghost btn-sm btn-circle">
+            <.link navigate={~p"/collections"} class="btn btn-ghost btn-sm btn-circle shrink-0">
               <.icon name="hero-arrow-left" class="w-5 h-5" />
             </.link>
-            <div>
+            <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <h1 class="text-2xl font-bold">{@collection.name}</h1>
+                <h1 class="text-2xl font-bold min-w-0 wrap-anywhere">{@collection.name}</h1>
                 <%= if @collection.is_system do %>
                   <span class="badge badge-ghost gap-1">
                     <.icon name="hero-star" class="w-3 h-3" /> {gettext("System")}
@@ -157,7 +157,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               <% end %>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 max-sm:flex-wrap">
             <span class="text-base-content/60">
               {ngettext("%{count} item", "%{count} items", @item_count)}
             </span>
@@ -215,7 +215,7 @@ defmodule MydiaWeb.CollectionLive.Show do
             <% end %>
             <%!-- Settings dropdown for non-system collections --%>
             <%= if not @collection.is_system and can_edit?(@collection, @current_user) do %>
-              <div class="dropdown dropdown-end">
+              <div class="dropdown dropdown-end shrink-0">
                 <label tabindex="0" class="btn btn-ghost btn-sm gap-1">
                   <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
                 </label>

@@ -44,6 +44,35 @@
 @plugin "./catppuccinTheme.macchiato.ts";
 @plugin "./catppuccinTheme.mocha.ts";
 
+/* Phone-only floor for daisyUI's extra-small sizes. The mobile layout sweep
+   (test/mydia_web/features/mobile_layout_sweep_test.exs) requires text of at
+   least 12px and tap targets of at least 24px, and daisyUI's xs/sm sizes
+   fall under both. This is scoped to phones on purpose: desktop keeps
+   daisyUI's sizes untouched. It sets the variables daisyUI reads instead of
+   forcing values, and sits unlayered so it outranks daisyUI's layers. For the
+   same reason it also outranks Tailwind text utilities (`text-[10px]` and the
+   like) on `.badge-xs` and `.btn-xs` below 640px. */
+@media (width < 40rem) {
+  .btn-xs {
+    --fontsize: 0.75rem;
+  }
+
+  .badge-xs {
+    --size: 1.25rem;
+    font-size: 0.75rem;
+  }
+
+  .toggle-sm[type="checkbox"],
+  .toggle-sm:has([type="checkbox"]) {
+    --size: 1.5rem;
+  }
+
+  .checkbox-sm,
+  .checkbox-xs {
+    --size: 1.5rem;
+  }
+}
+
 /* Corner roundness presets (Mydia.Accounts.Themes.radii/0). `theme` has no rule
    and keeps each theme's own values. :root[...] outranks daisyUI's
    [data-theme=x] on <html> whatever the source order; the descendant selector

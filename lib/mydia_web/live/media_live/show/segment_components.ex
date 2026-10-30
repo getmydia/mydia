@@ -49,7 +49,7 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
 
       <span :for={source <- @status.sources} class="badge badge-ghost badge-sm">{source}</span>
 
-      <div class="tooltip tooltip-bottom ml-auto" data-tip={gettext("Re-analyze skip segments")}>
+      <div class="sm:tooltip sm:tooltip-bottom ml-auto" data-tip={gettext("Re-analyze skip segments")}>
         <button
           id={"segment-reanalyze-season-#{@season_number}"}
           type="button"

@@ -139,11 +139,7 @@ defmodule MydiaWeb.Layouts do
           </div>
           {render_slot(@inner_block)}
         </main>
-        <.mobile_dock
-          current_user={@current_user}
-          current_path={@current_path}
-          hide_player={@hide_player}
-        />
+        <.mobile_dock current_user={@current_user} current_path={@current_path} />
       </div>
 
       <%!-- Sidebar --%>
@@ -512,10 +508,6 @@ defmodule MydiaWeb.Layouts do
   attr :current_user, :map, default: nil, doc: "the currently authenticated user"
   attr :current_path, :string, default: nil, doc: "the current request path"
 
-  attr :hide_player, :boolean,
-    default: false,
-    doc: "when true, omit the Player tab from the dock"
-
   def mobile_dock(assigns) do
     ~H"""
     <nav
@@ -525,7 +517,7 @@ defmodule MydiaWeb.Layouts do
         "lg:hidden fixed z-50 left-3 right-3",
         "bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))]",
         "flex items-center justify-around",
-        "rounded-2xl px-2 py-2",
+        "rounded-2xl px-1 py-2",
         "transition-[opacity,visibility] duration-200 ease-out",
         "bg-base-100/60 backdrop-blur-3xl backdrop-saturate-150",
         "border border-white/20",
@@ -574,16 +566,6 @@ defmodule MydiaWeb.Layouts do
           icon="hero-arrow-down-tray"
           label={gettext("Downloads")}
         />
-        <a
-          :if={!@hide_player and Mydia.Player.enabled?()}
-          id="dock-player-link"
-          href="/player"
-          data-dock-link
-          class="flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl text-primary hover:bg-primary/10 transition-[color,opacity] duration-300 ease-in-out relative z-10"
-        >
-          <.icon name="hero-play-circle-solid" class="size-5" />
-          <span class="text-[10px] mt-0.5 opacity-70">{gettext("Player")}</span>
-        </a>
       <% end %>
     </nav>
     """
@@ -605,7 +587,7 @@ defmodule MydiaWeb.Layouts do
       data-dock-link
       data-active={@active? && "true"}
       class={[
-        "flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl",
+        "flex flex-col items-center justify-center flex-1 min-w-0 sm:flex-none sm:min-w-[52px] py-1.5 rounded-xl",
         "transition-[color,opacity] duration-300 ease-in-out relative z-10",
         if(@active?,
           do: "text-primary opacity-100",
@@ -614,7 +596,7 @@ defmodule MydiaWeb.Layouts do
       ]}
     >
       <.icon name={@icon} class="size-5" />
-      <span class="text-[10px] mt-0.5">{@label}</span>
+      <span class="text-xs mt-0.5 max-w-full truncate">{@label}</span>
     </.link>
     """
   end

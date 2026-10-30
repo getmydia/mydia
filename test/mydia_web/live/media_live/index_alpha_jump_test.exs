@@ -68,10 +68,58 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
     view |> element("a#alpha-jump-m") |> render_click()
     assert_patch(view, "/movies?letter=m")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
 
     assert hd(card_ids(view)) == card(first_m)
     assert has_element?(view, "#media-items-top-sentinel")
+  end
+
+  test "the phone picker lists only letters with titles", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    assert has_element?(view, "#alpha-jump-picker select option[value=m]")
+    assert has_element?(view, "#alpha-jump-picker select option[value=z]")
+    refute has_element?(view, "#alpha-jump-picker select option[value=b]")
+  end
+
+  test "choosing a letter in the picker jumps like its link", %{conn: conn} do
+    %{marrows: [first_m | _]} = library()
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
+    assert_patch(view, "/movies?letter=m")
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
+    assert hd(card_ids(view)) == card(first_m)
+  end
+
+  test "the picker returns to its placeholder, so the same letter jumps again", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    wrapper = fn -> view |> element("[id^=alpha-jump-picker-]") |> render() end
+    before = wrapper.()
+
+    view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
+    assert_patch(view, "/movies?letter=m")
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
+    refute wrapper.() == before
+
+    # The letter is already in the URL, so the client is told which one to
+    # scroll to rather than to the list's top.
+    view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
+  end
+
+  test "a letter without titles is ignored by the picker event", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    render_hook(view, "jump_letter", %{"letter" => "b"})
+    render_hook(view, "jump_letter", %{"letter" => ""})
+
+    assert has_element?(view, "#alpha-jump-picker")
+    refute_push_event(view, "alpha_jump:scroll_top", %{})
   end
 
   test "load_previous prepends the titles above, in order", %{conn: conn} do
@@ -162,7 +210,7 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     refute_push_event(view, "alpha_jump:scroll_top", %{})
 
     render_patch(view, "/movies?letter=z")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "z"})
   end
 
   test "a letter with no titles starts at the next letter", %{conn: conn} do

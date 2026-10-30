@@ -42,10 +42,12 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         <.env_lock_badge :if={@runtime?} />
         <span
           :if={@registry?}
-          class="badge badge-ghost badge-xs tooltip"
+          class="sm:tooltip"
           data-tip={gettext("Built-in default. Saving an edit creates a database row.")}
         >
-          {gettext("Default")}
+          <span class="badge badge-ghost badge-xs">
+            {gettext("Default")}
+          </span>
         </span>
       </:title>
       <:descriptor>

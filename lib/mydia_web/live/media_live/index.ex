@@ -19,6 +19,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.PosterFields, as: PosterFieldsPref
   alias MydiaWeb.MediaLive.DiskRemovalFlash
+  alias MydiaWeb.MediaLive.Index.AlphaJump
   alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
   alias MydiaWeb.MediaLive.Index.Messages
@@ -67,7 +68,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> GridDensity.assign_current(session)
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
-     |> assign(:page_key, nil)
+     |> assign(page_key: nil, alpha_picker_version: 0)
      |> assign(:remembered_listing, %{})
      |> assign(:library_options, [])
      |> assign(:loading?, true)
@@ -236,6 +237,9 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:view_mode, view_mode)
      |> load_media_items()}
   end
+
+  def handle_event("jump_letter", %{"letter" => letter}, socket),
+    do: AlphaJump.jump_letter(socket, letter)
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
     {:noreply, GridDensity.put(socket, density)}
@@ -906,7 +910,7 @@ defmodule MydiaWeb.MediaLive.Index do
     if force? or not ListingParams.same_listing?(parsed, current) do
       socket
       # Only an in-page jump scrolls; a mount or reconnect keeps the user's place.
-      |> maybe_scroll_to_letter(
+      |> AlphaJump.maybe_scroll_to_letter(
         not force? and parsed.letter != socket.assigns.letter and parsed.letter
       )
       # A letter jump moves through the same items, so a selection survives it.
@@ -923,11 +927,6 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp maybe_clear_selection(socket, true), do: assign(socket, :selected_ids, MapSet.new())
   defp maybe_clear_selection(socket, false), do: socket
-
-  defp maybe_scroll_to_letter(socket, nil_or_false) when nil_or_false in [nil, false], do: socket
-
-  defp maybe_scroll_to_letter(socket, _letter),
-    do: push_event(socket, "alpha_jump:scroll_top", %{})
 
   # The select is hidden below two options, where a chosen library could not
   # be cleared, so it is only honoured from two up.

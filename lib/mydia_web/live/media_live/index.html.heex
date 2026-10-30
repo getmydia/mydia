@@ -1,8 +1,9 @@
 <Layouts.app {assigns}>
-  <%!-- Below lg the A-Z strip runs from under the header to the dock, beside
-       the toolbar as well as the cards, so the whole page makes room for it. --%>
+  <%!-- From sm to lg the A-Z strip runs from under the header to the dock,
+       beside the toolbar as well as the cards, so the whole page makes room
+       for it. Phones get the toolbar's letter picker instead. --%>
   <div
-    class={["flex flex-col h-full", @letter_paths != %{} && "max-lg:pr-5"]}
+    class={["flex flex-col h-full", @letter_paths != %{} && "sm:max-lg:pr-5"]}
     phx-window-keydown="keydown"
   >
     <%!-- Header with title and view controls --%>
@@ -315,6 +316,11 @@
           <% end %>
         </select>
       </.form>
+      <.alpha_jump_picker
+        :if={@letter_paths != %{}}
+        paths={@letter_paths}
+        version={@alpha_picker_version}
+      />
       <.button
         :if={@filtered?}
         id="library-reset-filters"

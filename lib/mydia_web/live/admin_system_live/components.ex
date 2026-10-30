@@ -49,7 +49,10 @@ defmodule MydiaWeb.AdminSystemLive.Components do
           <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
             <div class="stat-title text-xs sm:text-sm">{gettext("Version")}</div>
             <div class="stat-value text-base sm:text-xl">
-              <.link navigate={~p"/changelog"} class="link link-hover">
+              <.link
+                navigate={~p"/changelog"}
+                class="link link-hover max-sm:inline-flex max-sm:items-center max-sm:min-h-6"
+              >
                 {@system_info.app_version}
               </.link>
               <%= if @system_info.dev_mode do %>

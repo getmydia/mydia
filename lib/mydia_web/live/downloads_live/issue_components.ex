@@ -97,7 +97,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           <.link
             :if={@issue.media_item_id}
             navigate={~p"/media/#{@issue.media_item_id}"}
-            class="link link-hover font-medium text-sm truncate min-w-0"
+            class="link link-hover font-medium text-sm truncate min-w-0 max-sm:min-h-6"
           >
             {@issue.title}
           </.link>
@@ -115,7 +115,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
               type="button"
               phx-click="open_details"
               phx-value-id={@issue.id}
-              class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors"
+              class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors max-sm:min-h-6"
             >
               {@issue.subtitle || gettext("Details")}
             </button>

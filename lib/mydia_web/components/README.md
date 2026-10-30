@@ -591,13 +591,31 @@ dialogs is follow-up work.
 Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`
 ids with `*`, so an entry keeps matching between runs whose rows get new ids.
 
-`@known` in the sweep holds accepted violations. Each is
+`@known` in the sweep is the list of accepted violations, and it is empty: no
+page has an accepted defect. A new page must pass at 320px without an entry, so
+fix the layout rather than adding one. The attribute, `Report.diff/2` and the
+stale rule stay as the guard. Each entry would be
 `{route, widths, check, selector, reason}`, where `widths` is one integer or a
-list (`@all` is 320, 375 and 414). `@chrome` holds entries that apply to every
-route and state but those in `@no_dock` (the mobile dock, which the open
-drawer hides), and the alphabet bar's letters on the
-library grids are added in code. The failure output prints the entry that would
-accept a new violation, with one width; it pastes in unchanged. Adding one is
-a review decision, not a fix. An entry that stops matching fails the sweep, so
-remove it when the page is fixed. The checker's own tests are in
+list (such as `[320, 375, 414]`). The failure output prints the entry that would
+accept a violation, with one width; adding one is a review decision, not a fix.
+An entry that stops matching fails the sweep, so remove it when the page is
+fixed. The checker's own tests are in
 `test/mydia_web/features/mobile_layout_self_test.exs`.
+
+### What keeps pages passing on phones
+
+- **Phone-only size layer.** `assets/css/app.css` has a block scoped to
+  `@media (width < 40rem)` (Tailwind's `sm` breakpoint). Below it, daisyUI's
+  `btn-xs` and `badge-xs` text is raised to 12px, and `toggle-sm`, `checkbox-sm`
+  and `checkbox-xs` are raised to 24px, so they meet the sweep's `tiny_text` and
+  `small_target` thresholds. Desktop sizes are unchanged. Use the daisyUI size
+  classes as usual; do not swap them per call site to satisfy the sweep. The
+  block is unlayered, so below 640px it also outranks Tailwind text utilities
+  on `.badge-xs` and `.btn-xs`; a `text-[10px]` there does nothing on phones.
+- **Mobile dock: at most five items.** The dock labels are 12px and five items
+  fit at 320px. Player lives in the drawer only. A sixth item would not fit, so
+  put it in the drawer instead. The `DockNav` hook re-measures on resize.
+- **Library grids** use a letter picker in the toolbar below `sm` instead of the
+  A-Z strip.
+- **Charts** draw axis labels in HTML (the plays chart), and the `tiny_text`
+  check measures SVG text at its rendered size, not its user-space size.
