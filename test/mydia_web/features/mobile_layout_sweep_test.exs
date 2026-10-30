@@ -30,13 +30,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   # expands both forms. Selectors replace database ids with `*` (see
   # MobileLayout.audit/2). Grouped by route.
   @known [
-    # /activity
-    {"/activity", 320, :escapes_viewport,
-     "#activity-date-filter button.btn.join-item.btn-sm.gap-1.5",
-     "daisyUI join of date range buttons does not wrap"},
-    {"/activity", 320, :page_overflow, "html",
-     "daisyUI join of date range buttons does not wrap"},
-
     # /admin/dashboard
     {"/admin/dashboard", @all, :tiny_text, "#plays-chart text.fill-base-content/60",
      "chart axis labels are 10px SVG text"},
@@ -49,20 +42,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     # /admin/status
     {"/admin/status", @all, :small_target, "#status-system a.link.link-hover",
      "version link in the stat value is 19px tall"},
-
-    # /admin/subtitle-providers
-    {"/admin/subtitle-providers", 320, :page_overflow, "html",
-     "hidden tooltips on the provider rows' badges widen the page"},
-
-    # /admin/users
-    {"/admin/users", 320, :escapes_viewport, "#user-* div",
-     "unbroken username and email do not wrap in the user card"},
-    {"/admin/users", 320, :page_overflow, "html",
-     "unbroken username and email do not wrap in the user card"},
-
-    # /collections/:id
-    {"/collections/:id", 320, :escapes_viewport, "#phx-* div.dropdown.dropdown-end",
-     "header actions menu is pushed past the edge by the long collection name"},
 
     # /downloads, Issues tab
     {"/downloads#issues", @all, :small_target, "#issue-open-*",
@@ -78,19 +57,11 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/movies/:id#manual-search", @all, :small_target, "#main-column button.group.cursor-pointer",
      "category badge button is 21px tall (still measured behind the dialog)"},
 
-    # /requests
-    {"/requests", 320, :escapes_viewport, "#phx-* a.btn.btn-primary",
-     "Request Movie and Request Series buttons do not wrap"},
-    {"/requests", 320, :page_overflow, "html",
-     "Request Movie and Request Series buttons do not wrap"},
-
     # /profile
     {"/profile", @all, :small_target, "#phx-* label.label",
      "Theme label (for the picker) is 21px tall"},
 
     # /tv/:id
-    {"/tv/:id", @all, :page_overflow, "html",
-     "hidden tooltip-bottom on the right-aligned re-analyze button widens the page"},
     {"/tv/:id", @all, :small_target,
      "#episode-*-grid button.flex-1.min-w-0.cursor-pointer.text-left",
      "episode title button is 20px tall"},
