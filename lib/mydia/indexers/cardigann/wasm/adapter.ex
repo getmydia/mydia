@@ -63,10 +63,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   (`{:error, %Error{type: :authentication_failed}}`).
 
   A login that needs a person (an image captcha or a 2FA code, per
-  `Login.needs_person?/1`) is the exception, since its failure inside a search
-  is certain: with no stored session the definition is parked in `needs_login`
-  without calling the guest, and a search that reached the login form and came
-  back empty parks it too, as the built-in engine does. The Indexers page logs
+  `Login.needs_person?/1`) is the exception: a search that reached the login
+  form, came back empty and left the cookies unchanged parks the definition in
+  `needs_login`, as the built-in engine does. The Indexers page logs
   in with the built-in login code, and the session it stores is the one this
   adapter reads.
 
@@ -79,6 +78,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.{AdapterSupport, Links, Login}
+  alias Mydia.Indexers.Cardigann.Login.Inputs, as: LoginInputs
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.Wasm.Engine
 
@@ -148,12 +148,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     with {:ok, definition, doc} <- load(config),
          :ok <- check_login_needed(definition, doc),
          session = stored_session(definition),
-         parsed = parse_links(definition),
-         :ok <- check_person_login(parsed, definition, session),
-         watch = login_watch(parsed),
+         watch = definition |> parse_links() |> login_watch(definition),
          opts = if(watch, do: Keyword.put(opts, :login_watch, watch), else: opts),
          {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts),
-         :ok <- check_swallowed_login(watch, out, definition) do
+         :ok <- check_swallowed_login(watch, out, definition, session) do
       if out.session_changed, do: persist_session(definition, out.session, session)
       {:ok, apply_search_filters(out.releases, opts)}
     end
@@ -163,46 +161,61 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
   # Prowlarr's search logs in by itself and swallows a failed login into an
   # empty page. For a login that needs a person (an image captcha, a one-time
-  # 2FA code) that failure is certain, so such a definition is handled as the
-  # built-in engine handles it: with no stored session it is never searched and
-  # is parked in `needs_login`, and a search that reached the login form and
-  # came back empty means the session expired and the login stopped at the
-  # captcha, which parks it too. A person then logs in from the Indexers page.
-  defp check_person_login(parsed, definition, %{cookies: cookies}) do
-    if person_login?(parsed) and map_size(cookies) == 0,
-      do: SessionManager.park(definition),
-      else: :ok
-  end
-
-  defp check_swallowed_login(%{hit: hit}, %{releases: []}, definition) do
-    if :atomics.get(hit, 1) == 1 do
+  # 2FA code), a search that reached the login form, came back empty and left
+  # the cookies as they were means the login stopped at the captcha or the
+  # code. The definition is then parked in `needs_login`, as the built-in
+  # engine parks it, and a person logs in from the Indexers page. A login that
+  # went through changes the cookies, so an honest empty result is not parked.
+  defp check_swallowed_login(%{hit: hit}, %{releases: []} = out, definition, session) do
+    if :atomics.get(hit, 1) == 1 and out.session.cookies == session.cookies do
       Logger.info(
-        "Cardigann #{definition.indexer_id}: session rejected and the login needs a person"
+        "Cardigann #{definition.indexer_id}: the login stopped for a captcha or 2FA code"
       )
 
-      CardigannAuth.invalidate_session(definition.id)
+      invalidate_rejected(definition, session.cookies)
       SessionManager.park(definition)
     else
       :ok
     end
   end
 
-  defp check_swallowed_login(_watch, _out, _definition), do: :ok
+  defp check_swallowed_login(_watch, _out, _definition, _session), do: :ok
 
-  defp person_login?(nil), do: false
-  defp person_login?(parsed), do: Login.needs_person?(parsed)
+  # Deletes the stored session only while it is still the one the search sent;
+  # a session stored meanwhile from the Indexers page survives (and then keeps
+  # `SessionManager.park/1` from parking the definition).
+  defp invalidate_rejected(definition, rejected) do
+    with {:ok, %{cookies: stored}} <- CardigannAuth.get_stored_session(definition.id),
+         true <- cookies_to_map(stored) == rejected do
+      CardigannAuth.invalidate_session(definition.id, stored)
+    end
+  end
 
-  # The login form's paths, for HostHttp to flag a request to. A templated path
-  # cannot be matched statically and is left out.
-  defp login_watch(parsed) do
-    if person_login?(parsed) do
-      paths =
-        [parsed.login.path, parsed.login.submitpath]
-        |> Enum.filter(&(is_binary(&1) and &1 != "" and not String.contains?(&1, "{{")))
-        |> Enum.map(&("/" <> (&1 |> String.split("?") |> hd() |> String.trim_leading("/"))))
-        |> Enum.reject(&(&1 == "/"))
+  # Every URL the login form can be fetched or posted at: `login.path` and
+  # `login.submitpath`, rendered with the stored settings, on each of the
+  # definition's current links. HostHttp flags a request to one of them.
+  defp login_watch(nil, _definition), do: nil
 
-      if paths != [], do: %{paths: paths, hit: :atomics.new(1, [])}
+  defp login_watch(parsed, definition) do
+    if Login.needs_person?(parsed) do
+      context = LoginInputs.context(parsed, definition.config || %{})
+
+      bases =
+        [definition.active_link | Links.current(parsed)]
+        |> Enum.filter(&is_binary/1)
+        |> Enum.map(&String.trim_trailing(&1, "/"))
+        |> Enum.uniq()
+
+      targets =
+        for template <- [parsed.login.path, parsed.login.submitpath],
+            {:ok, path} <- [LoginInputs.render(template, context)],
+            path != "",
+            base <- bases,
+            uri = URI.parse(LoginInputs.resolve(base, path)),
+            uniq: true,
+            do: %{uri | query: nil, fragment: nil}
+
+      if targets != [], do: %{targets: targets, hit: :atomics.new(1, [])}
     end
   end
 
@@ -289,6 +302,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     attempt = fn base_url ->
       remaining = max(deadline - System.monotonic_time(:millisecond), 1)
+      # Only the answering mirror's requests decide whether the login was reached.
+      with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
 
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}

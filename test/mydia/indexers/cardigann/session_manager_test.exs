@@ -130,6 +130,21 @@ defmodule Mydia.Indexers.Cardigann.SessionManagerTest do
     assert_receive {:cardigann_health_changed, id} when id == d.id
   end
 
+  test "park leaves a definition healthy when a session was stored meanwhile" do
+    d = definition(%{"username" => "a"})
+    {:ok, _} = CardigannAuth.store_session(d.id, ["uid=fresh"])
+
+    assert {:error, %Error{type: :login_required}} = SessionManager.park(d)
+    assert Repo.get!(CardigannDefinition, d.id).health_status != "needs_login"
+  end
+
+  test "park without a stored session moves the definition to needs_login" do
+    d = definition(%{"username" => "a"})
+
+    assert {:error, %Error{type: :login_required}} = SessionManager.park(d)
+    assert Repo.get!(CardigannDefinition, d.id).health_status == "needs_login"
+  end
+
   test "needs_login indexers are skipped without a request", %{base: base} do
     d = definition(%{}, %{health_status: "needs_login"})
 

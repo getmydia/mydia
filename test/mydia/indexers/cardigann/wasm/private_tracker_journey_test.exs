@@ -140,6 +140,40 @@ defmodule Mydia.Indexers.Cardigann.Wasm.PrivateTrackerJourneyTest do
     end
   end
 
+  describe "captcha tracker with templated login paths" do
+    test "a captcha on re-login still parks the indexer", %{bypass: bypass} do
+      tracker =
+        Trackers.start_tracker(bypass, :captcha, %{
+          "username" => @secrets.username,
+          "password" => @secrets.password
+        })
+
+      yaml =
+        tracker.definition.definition
+        |> String.replace(
+          "path: login.php",
+          ~s(path: "{{ .Config.sitelink }}login.php")
+        )
+        |> String.replace(
+          "submitpath: takelogin.php",
+          ~s(submitpath: "{{ .Config.sitelink }}takelogin.php")
+        )
+
+      definition =
+        tracker.definition |> Ecto.Changeset.change(definition: yaml) |> Repo.update!()
+
+      tracker = %{tracker | definition: definition}
+
+      built_in_login(tracker)
+      assert {:ok, [_]} = search(tracker)
+
+      Trackers.expire_sessions(tracker)
+
+      assert {:error, %Error{type: :login_required}} = search(tracker)
+      assert status(tracker) == "needs_login"
+    end
+  end
+
   # What the Indexers page does: the built-in login, whatever the engine.
   defp built_in_login(%{definition: definition}) do
     definition = Repo.get!(CardigannDefinition, definition.id)

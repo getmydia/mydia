@@ -127,12 +127,15 @@ Status changes broadcast on `SessionManager.topic/0` for the admin page.
 
 The Prowlarr-based engine parks the same definitions the same way. Prowlarr's
 search logs in by itself and swallows a failed login into an empty page, so
-for a definition where `Login.needs_person?/1` holds, `Wasm.Adapter` never
-calls the guest without a stored session (it calls `SessionManager.park/1`),
-and a search that reached the login form and came back empty parks it too.
-"Reached the login form" is `HostHttp` flagging a request to `login.path` or
-`login.submitpath` through the ctx's `:login_watch`; a templated path is not
-watched. The Indexers page's **Log in** always runs the built-in `Login`, on
+for a definition where `Login.needs_person?/1` holds, `Wasm.Adapter` parks it
+(`SessionManager.park/1`) when a search reached the login form, came back
+empty and left the cookies unchanged (a login that went through changes them,
+so an honest empty page on a fresh login is not parked). "Reached the login
+form" is `HostHttp` flagging a request whose scheme, host, port and path match
+`login.path` or `login.submitpath`, rendered with the stored settings and
+resolved on each current link, through the ctx's `:login_watch`; the flag is
+reset before each mirror attempt. Only the rejected session is deleted, and
+`park/1` leaves the status alone when a session was stored meanwhile. The Indexers page's **Log in** always runs the built-in `Login`, on
 either engine, and both engines read the session it stores. The guest's own
 `login/2` can return a captcha too, but nothing calls it from the UI.
 

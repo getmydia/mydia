@@ -130,7 +130,11 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
   """
   @spec park(CardigannDefinition.t()) :: {:error, Error.t()}
   def park(%CardigannDefinition{} = definition) do
-    set_status(definition, "needs_login")
+    # A person may have logged in from the Indexers page while this search
+    # failed; parking now would hide that session until the next login.
+    unless match?({:ok, _}, CardigannAuth.get_stored_session(definition.id)),
+      do: set_status(definition, "needs_login")
+
     {:error, needs_login_error(definition.name)}
   end
 
