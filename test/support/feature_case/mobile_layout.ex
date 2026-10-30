@@ -274,8 +274,19 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
 
       // 6. tiny_text
-      if (hasOwnText(el) && parseFloat(s.fontSize) < MIN_FONT - 0.01) {
-        push('tiny_text', el, 'font-size=' + s.fontSize);
+      // Text inside an <svg> is drawn through its viewBox scale, so the size
+      // that reaches the screen is the computed one times that scale.
+      if (hasOwnText(el)) {
+        var fs = parseFloat(s.fontSize), eff = fs, scaled = false;
+        if (el instanceof SVGElement && typeof el.getScreenCTM === 'function') {
+          var ctm = el.getScreenCTM();
+          if (ctm) { eff = fs * Math.hypot(ctm.b, ctm.d); scaled = true; }
+        }
+        if (eff < MIN_FONT - 0.01) {
+          push('tiny_text', el, scaled
+            ? 'font-size=' + s.fontSize + ' rendered=' + (Math.round(eff * 10) / 10) + 'px'
+            : 'font-size=' + s.fontSize);
+        }
       }
     }
 

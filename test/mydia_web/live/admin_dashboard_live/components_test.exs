@@ -96,8 +96,11 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
 
       html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
 
-      assert html =~ ">6</text>"
-      assert html =~ ">0</text>"
+      doc = LazyHTML.from_fragment(html)
+      labels = doc |> LazyHTML.query("#plays-chart-y-axis span") |> Enum.map(&LazyHTML.text/1)
+
+      assert "6" in labels
+      assert "0" in labels
     end
 
     test "marks the active range and offers the other two" do

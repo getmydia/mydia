@@ -32,6 +32,11 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
      ~s|<div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:60px"><span>A considerably long fictional label</span></div>|},
     {:tiny_text, ~s|<span style="font-size:10px">tiny</span>|,
      ~s|<span style="font-size:12px">fine</span>|},
+    # SVG text is scaled by its viewBox: 12 units in a 600-unit viewBox shown
+    # 300px wide renders at 6px.
+    {:tiny_text,
+     ~s|<svg viewBox="0 0 600 100" style="width:300px;height:50px"><text x="0" y="40" font-size="12">scaled</text></svg>|,
+     ~s|<svg viewBox="0 0 600 100" style="width:300px;height:50px"><text x="0" y="40" font-size="24">scaled</text></svg>|},
     # Text cut by an overflow: hidden box is reported even when a nearer
     # ancestor is a scroller that does not itself cut it.
     {:clipped_text,

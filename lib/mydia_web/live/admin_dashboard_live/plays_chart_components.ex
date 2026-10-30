@@ -10,11 +10,8 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
   @chart_h 160
   @stack_gap 2
 
-  # @chart_w / @chart_h are the PLOT box. Padding is added around it in the
-  # viewBox so tick labels have somewhere to live without being clipped.
-  @pad_l 28
-  @pad_t 8
-  @pad_b 24
+  # @chart_w / @chart_h are the plot's viewBox; the SVG is stretched to the card
+  # and the axis labels are HTML placed by percentage around it.
 
   @doc "The chart ranges, in days, that the picker offers."
   def ranges, do: @ranges
@@ -31,10 +28,6 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
       |> assign(:chart_w, @chart_w)
       |> assign(:chart_h, @chart_h)
       |> assign(:stack_gap, @stack_gap)
-      |> assign(:pad_l, @pad_l)
-      |> assign(:pad_t, @pad_t)
-      |> assign(:view_w, @chart_w + @pad_l)
-      |> assign(:view_h, @chart_h + @pad_t + @pad_b)
       |> assign(:ranges, @ranges)
 
     ~H"""
@@ -51,66 +44,75 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
         </.segmented_control>
       </:actions>
       <div id="plays-chart">
-        <svg viewBox={"0 0 #{@view_w} #{@view_h}"} class="w-full h-48">
-          <g transform={"translate(#{@pad_l}, #{@pad_t})"}>
-            <line
+        <%!-- Axis labels are HTML, not SVG <text>: the plot is scaled to the
+              card, and scaled SVG text shrinks below 12px on a phone. The
+              labels sit beside the plot at the same percentages the SVG uses. --%>
+        <div class="flex gap-1 pt-2 pr-5">
+          <div id="plays-chart-y-axis" class="relative w-8 h-40 shrink-0 text-xs text-base-content/60">
+            <span
               :for={tick <- @y_ticks}
-              x1="0"
-              y1={tick.y}
-              x2={@chart_w}
-              y2={tick.y}
-              class="stroke-base-300"
-              stroke-width="1"
-            />
-            <text
-              :for={tick <- @y_ticks}
-              x="-6"
-              y={tick.y + 3}
-              text-anchor="end"
-              font-size="9"
-              class="fill-base-content/60 max-sm:text-xs"
-              phx-no-format
-            >{tick.value}</text>
-            <%= for col <- @columns do %>
-              <% gap = if col.episodes.height > 0 and col.movies.height > 0, do: @stack_gap, else: 0 %>
-              <rect
-                :if={col.episodes.height > 0}
-                x={col.x}
-                y={col.episodes.y}
-                width={col.width}
-                height={max(col.episodes.height - gap / 2, 0)}
-                class="fill-primary"
-              />
-              <rect
-                :if={col.movies.height > 0}
-                x={col.x}
-                y={col.movies.y + gap / 2}
-                width={col.width}
-                height={max(col.movies.height - gap / 2, 0)}
-                class="fill-secondary"
-              />
-              <rect x={col.x} y="0" width={col.width} height={@chart_h} fill="transparent">
-                <title>
-                  {gettext("%{label}: %{movies}, %{episodes}",
-                    label: col.label,
-                    movies: ngettext("%{count} movie", "%{count} movies", col.movies.count),
-                    episodes: ngettext("%{count} episode", "%{count} episodes", col.episodes.count)
-                  )}
-                </title>
-              </rect>
-            <% end %>
-            <text
-              :for={tick <- @x_ticks}
-              x={tick.x}
-              y={@chart_h + 16}
-              text-anchor="middle"
-              font-size="9"
-              class="fill-base-content/60 max-sm:text-xs"
+              class="absolute right-0 -translate-y-1/2 tabular-nums leading-none"
+              style={"top: #{tick.y / @chart_h * 100}%"}
+            >{tick.value}</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <svg
+              viewBox={"0 0 #{@chart_w} #{@chart_h}"}
+              preserveAspectRatio="none"
+              class="block w-full h-40"
+              aria-hidden="true"
             >
-              {tick.label}
-            </text>
-          </g>
-        </svg>
+              <line
+                :for={tick <- @y_ticks}
+                x1="0"
+                y1={tick.y}
+                x2={@chart_w}
+                y2={tick.y}
+                class="stroke-base-300"
+                stroke-width="1"
+                vector-effect="non-scaling-stroke"
+              />
+              <%= for col <- @columns do %>
+                <% gap = if col.episodes.height > 0 and col.movies.height > 0, do: @stack_gap, else: 0 %>
+                <rect
+                  :if={col.episodes.height > 0}
+                  x={col.x}
+                  y={col.episodes.y}
+                  width={col.width}
+                  height={max(col.episodes.height - gap / 2, 0)}
+                  class="fill-primary"
+                />
+                <rect
+                  :if={col.movies.height > 0}
+                  x={col.x}
+                  y={col.movies.y + gap / 2}
+                  width={col.width}
+                  height={max(col.movies.height - gap / 2, 0)}
+                  class="fill-secondary"
+                />
+                <rect x={col.x} y="0" width={col.width} height={@chart_h} fill="transparent">
+                  <title>
+                    {gettext("%{label}: %{movies}, %{episodes}",
+                      label: col.label,
+                      movies: ngettext("%{count} movie", "%{count} movies", col.movies.count),
+                      episodes: ngettext("%{count} episode", "%{count} episodes", col.episodes.count)
+                    )}
+                  </title>
+                </rect>
+              <% end %>
+            </svg>
+            <div id="plays-chart-x-axis" class="relative h-6 text-xs text-base-content/60">
+              <span
+                :for={{tick, index} <- Enum.with_index(@x_ticks)}
+                class={[
+                  "absolute top-1 -translate-x-1/2 whitespace-nowrap leading-none",
+                  rem(index, 2) == 1 && "max-sm:hidden"
+                ]}
+                style={"left: #{tick.x / @chart_w * 100}%"}
+              >{tick.label}</span>
+            </div>
+          </div>
+        </div>
         <div id="plays-chart-legend" class="flex flex-wrap gap-3 mt-2">
           <div class="flex items-center gap-1.5 text-xs text-base-content">
             <span class="inline-block w-2.5 h-2.5 rounded-sm bg-primary"></span>
