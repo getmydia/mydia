@@ -553,8 +553,10 @@ flash fails. Before each audit it asserts that the page content and the mobile
 dock have a box, so a blank or crashed page fails instead of passing every
 check.
 
-Results depend on the fonts the browser has: text widths, and so wrapping,
-overflow and clipping, can differ between CI's runner and a dev host. The
+Feature tests render with a pinned, DejaVu-only fontconfig from devenv
+(`MYDIA_FEATURE_TEST_FONTCONFIG`, exported as `FONTCONFIG_FILE` by
+`scripts/run-feature-tests.sh`), so text widths, and so the sweep's results,
+match CI; a sweep run outside `./dev feature-test` is not comparable. The
 `/changelog` page renders content compiled from `priv/changelog`, so a new
 release entry changes what it measures.
 
