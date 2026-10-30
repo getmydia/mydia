@@ -26,7 +26,7 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
 
   # Accepted violations: {route, width, check, selector, reason}. A failing
   # run's `accept with:` line pastes in as-is (an integer width); entries for
-  # the same defect at several widths may group them as a list, and known/1
+  # the same defect at several widths may group them as a list, and known/0
   # expands both forms. Selectors replace database ids with `*` (see
   # MobileLayout.audit/2). Grouped by route.
   @known [
@@ -45,50 +45,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/admin/indexers", @all, :small_target,
      "#cardigann-engine a.link.link-hover.text-xs.opacity-70",
      "standalone text-xs docs link is 16px tall"},
-    {"/admin/indexers", @all, :tiny_text, "#add-more-library-indexers",
-     "btn-xs text is under 12px"},
-    {"/admin/indexers", @all, :tiny_text, "#cardigann-engine-toggle",
-     "btn-xs text is under 12px"},
-    {"/admin/indexers", @all, :tiny_text, "#indexer-stats-window-day",
-     "btn-xs text is under 12px"},
-    {"/admin/indexers", @all, :tiny_text, "#indexer-stats-window-week",
-     "btn-xs text is under 12px"},
-
-    # /admin/remote-access
-    {"/admin/remote-access", @all, :tiny_text, "#admin-page-body span.badge.badge-xs.badge-ghost",
-     "badge-xs text is under 12px"},
-
-    # /admin/settings
-    {"/admin/settings", @all, :small_target, "#language-prefer-default-track",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-auth-local_enabled input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-auth-oidc_enabled input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-auth-oidc_link_by_email input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-crash_reporting-enabled input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-feedback-enabled input.toggle.toggle-primary.toggle-sm", "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-library-auto_repair_enabled input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :small_target,
-     "#setting-update_check-enabled input.toggle.toggle-primary.toggle-sm",
-     "toggle-sm is 20px tall"},
-    {"/admin/settings", @all, :tiny_text, "#admin-page-body span.badge.badge-ghost.badge-xs",
-     "badge-xs text is under 12px"},
-    {"/admin/settings", @all, :tiny_text, "#admin-page-body span.badge.badge-info.badge-xs",
-     "badge-xs text is under 12px"},
-    {"/admin/settings", @all, :tiny_text, "#admin-page-body span.badge.badge-primary.badge-xs",
-     "badge-xs text is under 12px"},
-    {"/admin/settings", @all, :tiny_text, "#admin-page-body span.badge.badge-xs.badge-secondary",
-     "badge-xs text is under 12px"},
 
     # /admin/status
     {"/admin/status", @all, :small_target, "#status-system a.link.link-hover",
@@ -97,16 +53,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     # /admin/subtitle-providers
     {"/admin/subtitle-providers", 320, :page_overflow, "html",
      "hidden tooltips on the provider rows' badges widen the page"},
-    {"/admin/subtitle-providers", @all, :small_target,
-     "#subtitle-provider-toggle-registry::gestdown", "toggle-sm is 20px tall"},
-    {"/admin/subtitle-providers", @all, :small_target,
-     "#subtitle-provider-toggle-registry::relay", "toggle-sm is 20px tall"},
-    {"/admin/subtitle-providers", @all, :tiny_text,
-     "#subtitle-provider-row-gestdown span.badge.badge-ghost.badge-xs.tooltip",
-     "badge-xs text is under 12px"},
-    {"/admin/subtitle-providers", @all, :tiny_text,
-     "#subtitle-provider-row-relay span.badge.badge-ghost.badge-xs.tooltip",
-     "badge-xs text is under 12px"},
 
     # /admin/users
     {"/admin/users", 320, :escapes_viewport, "#user-* div",
@@ -114,27 +60,15 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/admin/users", 320, :page_overflow, "html",
      "unbroken username and email do not wrap in the user card"},
 
-    # /calendar
-    {"/calendar", @all, :tiny_text, "#phx-* button.btn.btn-primary.btn-xs.ml-2",
-     "btn-xs text is under 12px"},
-
     # /collections/:id
     {"/collections/:id", 320, :escapes_viewport, "#phx-* div.dropdown.dropdown-end",
      "header actions menu is pushed past the edge by the long collection name"},
-
-    # /discover
-    {"/discover", @all, :small_target, "#discover-hide-owned", "toggle-sm is 20px tall"},
 
     # /downloads, Issues tab
     {"/downloads#issues", @all, :small_target, "#issue-open-*",
      "text-xs path button is 16px tall"},
     {"/downloads#issues", @all, :small_target, "#issues-* a.link.link-hover.font-medium.text-sm",
      "title link is 20px tall"},
-    {"/downloads#issues", @all, :small_target,
-     "#issues-* input.checkbox.checkbox-primary.checkbox-sm", "checkbox-sm is 20px"},
-
-    # /import
-    {"/import", @all, :small_target, "#auto-import-toggle", "toggle-sm is 20px tall"},
 
     # /media/:id, /movies/:id and /tv/:id share the detail header
     {"/media/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
@@ -145,20 +79,14 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "category badge button is 21px tall (still measured behind the dialog)"},
 
     # /movies, /sections/:id and /tv share the library grid (alphabet bar
-    # letters are added by known/1). Only letters with titles behind them are
+    # letters are added by known/0). Only letters with titles behind them are
     # buttons, so the #alpha-jump-q/t/w entries follow the seeded titles'
     # initials (MobileLayoutSeed) and move if those titles change.
     {"/movies", @all, :small_target, "#alpha-jump-q", "alphabet bar letter is 20x13"},
     {"/movies", @all, :small_target, "#alpha-jump-t", "alphabet bar letter is 20x13"},
-    {"/movies", @all, :tiny_text, "#grid-item-* span.badge.inline-flex.items-center.badge-xs",
-     "badge-xs text is under 12px"},
     {"/sections/:id", @all, :small_target, "#alpha-jump-q", "alphabet bar letter is 20x13"},
     {"/sections/:id", @all, :small_target, "#alpha-jump-t", "alphabet bar letter is 20x13"},
-    {"/sections/:id", @all, :tiny_text,
-     "#grid-item-* span.badge.inline-flex.items-center.badge-xs", "badge-xs text is under 12px"},
     {"/tv", @all, :small_target, "#alpha-jump-w", "alphabet bar letter is 20x13"},
-    {"/tv", @all, :tiny_text, "#grid-item-* span.badge.inline-flex.items-center.badge-xs",
-     "badge-xs text is under 12px"},
 
     # /requests
     {"/requests", 320, :escapes_viewport, "#phx-* a.btn.btn-primary",
@@ -180,9 +108,7 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "#episode-*-grid button.flex.items-center.gap-1.flex-shrink-0",
      "episode status button is 20px tall"},
     {"/tv/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
-     "category badge button is 21px tall"},
-    {"/tv/:id", @all, :small_target, "#monitor-new-seasons-toggle", "checkbox-xs is 16px"},
-    {"/tv/:id", @all, :tiny_text, "#segment-reanalyze-season-*", "btn-xs text is under 12px"}
+     "category badge button is 21px tall"}
   ]
 
   # The alphabet jump bar renders every letter on the library grids.
