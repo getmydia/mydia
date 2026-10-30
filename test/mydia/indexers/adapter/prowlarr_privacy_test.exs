@@ -114,7 +114,7 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacyTest do
     test "a marker left by a killed fetch is taken over once it is old" do
       key = key()
       old = System.monotonic_time(:millisecond) - :timer.minutes(1)
-      :ets.insert(@table, {{:in_flight, key}, old})
+      :ets.insert(@table, {{:in_flight, key}, {old, make_ref()}})
       {fetch, calls} = counting_fetch({:ok, %{7 => true}})
 
       assert ProwlarrPrivacy.lookup(key, fetch) == %{7 => true}
@@ -124,11 +124,33 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacyTest do
 
     test "a recent marker means a fetch is running, so no second one starts" do
       key = key()
-      :ets.insert(@table, {{:in_flight, key}, System.monotonic_time(:millisecond)})
+      :ets.insert(@table, {{:in_flight, key}, {System.monotonic_time(:millisecond), make_ref()}})
       {fetch, calls} = counting_fetch({:ok, %{7 => true}})
 
       assert ProwlarrPrivacy.lookup(key, fetch) == %{}
       assert calls.() == 0
+      :ets.delete(@table, {:in_flight, key})
+    end
+
+    test "a stalled fetch finishing after a takeover leaves the new owner alone" do
+      key = key()
+      {stalled, calls} = counting_fetch({:ok, %{7 => :stale}}, 200)
+
+      # The stalled fetch claims the key; the caller stops waiting at once.
+      assert ProwlarrPrivacy.lookup(key, stalled, 0) == %{}
+
+      # Another caller takes the marker over and caches a newer map.
+      newer = {System.monotonic_time(:millisecond), make_ref()}
+      :ets.insert(@table, {{:in_flight, key}, newer})
+      fresh_until = System.monotonic_time(:millisecond) + :timer.hours(1)
+      :ets.insert(@table, {key, %{7 => true}, fresh_until})
+
+      eventually(fn -> calls.() == 1 end)
+      # Let the stalled fetch run its store and cleanup.
+      Process.sleep(300)
+
+      assert :ets.lookup(@table, {:in_flight, key}) == [{{:in_flight, key}, newer}]
+      assert :ets.lookup(@table, key) == [{key, %{7 => true}, fresh_until}]
       :ets.delete(@table, {:in_flight, key})
     end
   end

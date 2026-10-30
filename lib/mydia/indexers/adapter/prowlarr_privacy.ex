@@ -19,8 +19,8 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacy do
       while the fetch finishes and fills the cache for the next search.
 
   Fetches are single-flight per connection: a caller that finds one already
-  running does not start another, so concurrent searches cost one
-  indexer-list read.
+  running does not start another (unless that fetch has held the key for 30
+  seconds, see `claim/1`), so concurrent searches cost one indexer-list read.
 
   Same shape as `Mydia.Downloads.ClientStatusCache`: the GenServer owns the
   named table and nothing else. Without the table (a unit test that never
@@ -69,16 +69,23 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacy do
   end
 
   defp refresh_in_background(key, fetch) do
-    if claim(key), do: Task.Supervisor.start_child(sup(), fn -> fetch_and_store(key, fetch) end)
+    if stamp = claim(key),
+      do: Task.Supervisor.start_child(sup(), fn -> fetch_and_store(key, fetch, stamp) end)
   end
 
   # Only the caller that claims the fetch starts it and waits; one that finds a
   # fetch already running carries on with an empty map.
   defp await_first(key, fetch, wait_ms) do
-    if claim(key),
-      do:
-        await(Task.Supervisor.async_nolink(sup(), fn -> fetch_and_store(key, fetch) end), wait_ms),
-      else: %{}
+    case claim(key) do
+      nil ->
+        %{}
+
+      stamp ->
+        await(
+          Task.Supervisor.async_nolink(sup(), fn -> fetch_and_store(key, fetch, stamp) end),
+          wait_ms
+        )
+    end
   end
 
   defp await(task, wait_ms) do
@@ -88,30 +95,50 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacy do
     end
   end
 
-  # The in-flight marker that makes fetches single-flight per key. The fetch
-  # task stores its result and clears the marker, so a caller that stops
-  # waiting loses nothing. A task killed before its `after` runs would leave
-  # the marker behind, so one older than @claim_ttl_ms (well past the fetch's
-  # own connect and receive timeouts) is taken over, atomically.
+  # The in-flight marker that makes fetches single-flight per key. It holds a
+  # stamp, `{claimed_at, ref}`, which claim/1 returns to its fetch (nil when
+  # another fetch holds the key). The fetch stores its result and clears the
+  # marker only while the marker is still its own, so a caller that stops
+  # waiting loses nothing.
+  #
+  # Req bounds connect and receive but not DNS or pool checkout, so a fetch can
+  # stall, and a task killed before its `after` runs leaves its marker behind.
+  # A marker older than @claim_ttl_ms is therefore taken over, atomically;
+  # until then the key reads as in flight and lookups get an empty map. A
+  # stalled fetch that finishes after a takeover neither overwrites the newer
+  # owner's cache entry nor clears its marker.
   defp claim(key) do
     now = System.monotonic_time(:millisecond)
     marker = {:in_flight, key}
+    stamp = {now, make_ref()}
 
-    :ets.insert_new(@table_name, {marker, now}) or
-      :ets.select_replace(@table_name, [
-        {{marker, :"$1"}, [{:<, :"$1", now - @claim_ttl_ms}], [{{{:const, marker}, now}}]}
-      ]) == 1
+    taken? =
+      :ets.insert_new(@table_name, {marker, stamp}) or
+        :ets.select_replace(@table_name, [
+          {{marker, {:"$1", :_}}, [{:<, :"$1", now - @claim_ttl_ms}],
+           [{{{:const, marker}, {:const, stamp}}}]}
+        ]) == 1
+
+    if taken?, do: stamp
   end
 
   defp sup, do: Mydia.TaskSupervisor
 
-  defp fetch_and_store(key, fetch) do
+  defp fetch_and_store(key, fetch, stamp) do
     {map, ttl} = run(fetch)
-    :ets.insert(@table_name, {key, map, System.monotonic_time(:millisecond) + ttl})
+
+    if owner?(key, stamp),
+      do: :ets.insert(@table_name, {key, map, System.monotonic_time(:millisecond) + ttl})
+
     map
   after
-    :ets.delete(@table_name, {:in_flight, key})
+    :ets.select_delete(@table_name, [
+      {{{:in_flight, key}, :"$1"}, [{:"=:=", :"$1", {:const, stamp}}], [true]}
+    ])
   end
+
+  defp owner?(key, stamp),
+    do: :ets.lookup(@table_name, {:in_flight, key}) == [{{:in_flight, key}, stamp}]
 
   defp run(fetch) do
     case fetch.() do
