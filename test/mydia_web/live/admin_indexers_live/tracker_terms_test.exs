@@ -72,6 +72,27 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
     assert [%{seed_ratio: 2.5, seed_time: 4320}] = TrackerRuleConfigs.list()
   end
 
+  test "an override can cap daily grabs and queries", %{conn: conn} do
+    seen("Velvet Lantern")
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    view |> element("#edit-tracker-rule-#{dom("velvet lantern")}") |> render_click()
+
+    view
+    |> form("#tracker-rule-form",
+      tracker_rule_config: %{tracker: "Velvet Lantern", grab_limit: "5", query_limit: "50"}
+    )
+    |> render_submit()
+
+    assert [%{grab_limit: 5, query_limit: 50}] = TrackerRuleConfigs.list()
+
+    assert has_element?(
+             view,
+             "#tracker-limits-#{dom("velvet lantern")}",
+             "5 grabs/day · 50 searches/day"
+           )
+  end
+
   test "an invalid override keeps the modal open", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 

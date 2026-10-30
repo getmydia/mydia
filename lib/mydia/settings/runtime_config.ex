@@ -455,7 +455,9 @@ defmodule Mydia.Settings.RuntimeConfig do
           tracker_key: key,
           seed_ratio: rule.seed_ratio,
           seed_time: rule.seed_time,
-          private: rule.private
+          private: rule.private,
+          grab_limit: rule.grab_limit,
+          query_limit: rule.query_limit
         }
       end)
     else

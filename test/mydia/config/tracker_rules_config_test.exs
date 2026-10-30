@@ -45,6 +45,53 @@ defmodule Mydia.Config.TrackerRulesConfigTest do
            ] = config.tracker_rules
   end
 
+  test "TRACKER_RULE_<N>_GRAB_LIMIT and _QUERY_LIMIT declare daily caps" do
+    System.put_env("TRACKER_RULE_1_TRACKER", "Velvet Lantern")
+    System.put_env("TRACKER_RULE_1_GRAB_LIMIT", "5")
+    System.put_env("TRACKER_RULE_1_QUERY_LIMIT", "50")
+
+    assert {:ok, config} = load_env()
+    assert [%{tracker: "Velvet Lantern", grab_limit: 5, query_limit: 50}] = config.tracker_rules
+  end
+
+  test "a negative limit is a config error" do
+    System.put_env("TRACKER_RULE_1_TRACKER", "Velvet Lantern")
+    System.put_env("TRACKER_RULE_1_GRAB_LIMIT", "-1")
+    assert {:error, %Ecto.Changeset{}} = load_env()
+
+    clear_env()
+    System.put_env("TRACKER_RULE_1_TRACKER", "Velvet Lantern")
+    System.put_env("TRACKER_RULE_1_QUERY_LIMIT", "-3")
+    assert {:error, %Ecto.Changeset{}} = load_env()
+  end
+
+  test "runtime rules and database rows carry the limits" do
+    original = Application.get_env(:mydia, :runtime_config)
+
+    on_exit(fn ->
+      if original,
+        do: Application.put_env(:mydia, :runtime_config, original),
+        else: Application.delete_env(:mydia, :runtime_config)
+    end)
+
+    System.put_env("TRACKER_RULE_1_TRACKER", "Velvet Lantern")
+    System.put_env("TRACKER_RULE_1_GRAB_LIMIT", "5")
+    {:ok, config} = load_env()
+    Application.put_env(:mydia, :runtime_config, config)
+
+    assert [%{grab_limit: 5, query_limit: nil}] =
+             Mydia.Settings.RuntimeConfig.get_runtime_tracker_rules()
+
+    {:ok, row} =
+      Mydia.Settings.TrackerRuleConfigs.create(%{
+        tracker: "Copper Reel",
+        grab_limit: 2,
+        query_limit: 20
+      })
+
+    assert %{grab_limit: 2, query_limit: 20} = Mydia.Repo.reload!(row)
+  end
+
   test "an unreadable number is a config error, not a silently dropped field" do
     System.put_env("TRACKER_RULE_1_TRACKER", "Velvet Lantern")
     System.put_env("TRACKER_RULE_1_SEED_RATIO", "one and a half")
