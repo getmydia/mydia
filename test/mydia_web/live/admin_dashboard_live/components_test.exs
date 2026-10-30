@@ -88,6 +88,20 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert html =~ "<rect"
     end
 
+    test "names the plot as a group and keeps its per-day titles exposed" do
+      days = [%{date: ~D[2026-09-01], movies: 2, episodes: 4}]
+
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
+      doc = LazyHTML.from_fragment(html)
+
+      assert [svg] = doc |> LazyHTML.query("#plays-chart svg") |> Enum.to_list()
+      assert LazyHTML.attribute(svg, "role") == ["group"]
+      assert [label] = LazyHTML.attribute(svg, "aria-label")
+      assert label != ""
+      assert LazyHTML.attribute(svg, "aria-hidden") == []
+      assert doc |> LazyHTML.query("#plays-chart svg title") |> Enum.count() > 0
+    end
+
     test "labels the y-axis with the peak play count" do
       days = [
         %{date: ~D[2026-09-01], movies: 2, episodes: 4},

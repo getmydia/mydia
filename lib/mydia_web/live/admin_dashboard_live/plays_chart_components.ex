@@ -60,7 +60,8 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
               viewBox={"0 0 #{@chart_w} #{@chart_h}"}
               preserveAspectRatio="none"
               class="block w-full h-40"
-              aria-hidden="true"
+              role="group"
+              aria-label={gettext("Plays per day")}
             >
               <line
                 :for={tick <- @y_ticks}
