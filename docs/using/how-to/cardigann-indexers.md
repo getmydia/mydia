@@ -235,7 +235,9 @@ A grab downloads the `.torrent` from the tracker with your session or key, and
 Mydia hands that file to your download client unchanged, so the tracker's own
 announce URL and your passkey stay in it. Grab log lines name the tracker's
 host, never the download link or the file's contents, so the passkey they carry
-stays out of the logs.
+stays out of the logs at the default log level. With `LOG_LEVEL=debug`, the
+database query log prints stored download links, passkey included, so keep debug
+logs private and do not paste them into public reports.
 
 ### What is covered
 
@@ -251,7 +253,7 @@ with features the built-in engine implements:
 | Posted credentials (`post`) | 65 |
 | No login | 2 |
 | Stops for an image captcha | 41 |
-| Stops for a 2FA code | 23 |
+| Stops for a 2FA code | 21 |
 
 "Implements" means the definition's login features are supported, not that a
 login to that tracker has been seen working. Mydia's tests run full journeys

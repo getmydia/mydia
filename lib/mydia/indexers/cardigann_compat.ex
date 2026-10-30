@@ -119,8 +119,10 @@ defmodule Mydia.Indexers.CardigannCompat do
     unsupported_logins =
       Enum.count(analyzed, fn r -> Enum.any?(r.missing_features, &login_feature?/1) end)
 
+    # Only a form login pauses for a person (Login.Form).
     by_login_feature =
       analyzed
+      |> Enum.filter(&(&1.login_method == "form"))
       |> Enum.flat_map(&Enum.filter(&1.required_features, fn f -> f in @person_features end))
       |> Enum.frequencies()
 
