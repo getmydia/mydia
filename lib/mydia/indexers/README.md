@@ -189,6 +189,46 @@ once a minute by its recorder, for the admin list. An override is stale when
 its tracker was neither seen nor grabbed in 30 days and it is not a row
 created within that window.
 
+## Tracker limits
+
+`tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24
+hours and optional. `TrackerLimits` applies them:
+
+- Searches: `search_all/2` runs each indexer's search through
+  `TrackerLimits.guard_query/2`. A rule applies to the Mydia indexer whose name
+  matches its tracker (a built-in Cardigann definition, or a Jackett or Torznab
+  feed for one tracker). A Prowlarr or aggregate Jackett connection sends one
+  search to trackers Mydia cannot see, so those rely on Prowlarr's limits.
+  Every attempt counts. At the cap the indexer is skipped with a
+  `:rate_limited` error, which manual search shows as the indexer's status.
+  Counts live in `RateLimiter`'s rolling windows (`check_window/3`,
+  `record_window/2`), in ETS, and reset on restart.
+- Grabs: counted from `downloads` rows whose `indexer` is the tracker and that
+  were inserted in the last 24 hours, failed grabs included and deleted rows
+  not. `background_search_opts/0` sets `skip_capped_trackers: true`, so
+  automatic searches drop a capped tracker's results before ranking. Manual
+  search keeps them, notes the reason on the row
+  (`MydiaWeb.MediaLive.Show.TrackerLimitNote`) and still allows the grab.
+
+## Download URLs carry credentials
+
+A release's `download_url` (and often its `guid`) can carry the searching
+account's passkey (`passkey=`, `torrent_pass=`, `apikey=`). Keep it on the
+server:
+
+- Search rows send `MydiaWeb.Live.SearchResultRef.ref/1`, and the LiveView
+  resolves the result it already holds. Never put the URL in a `phx-value-*`.
+- Anything rendered or logged goes through
+  `Mydia.Downloads.Client.Helpers.redact_url/1`. It redacts query parameters
+  and userinfo only; a passkey in the path (`/rss/<passkey>/`) survives it, so
+  prefer not rendering the URL at all.
+- Events carry the download id (`Downloads.Grabber` broadcasts
+  `%{download_id: id}`), never the URL.
+
+`test/mydia/no_raw_download_url_test.exs` fails on a `Logger` call or HEEx
+interpolation that mentions `download_url` without `redact_url(`. It reads
+source, so a URL renamed to `url` before logging slips past it.
+
 ## Limits vs preferences
 
 There is no minimum score before an automatic grab. A release that is only
