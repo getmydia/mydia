@@ -62,10 +62,20 @@ jobs:
           persist-credentials: false
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      # Cachix, not magic-nix-cache: the latter wrote ~2,200 .nar entries
+      # (1.1 GB) into the 10 GB Actions cache and pushed the Elixir caches out.
+      # Read-only: Dependabot runs cannot read CACHIX_AUTH_TOKEN.
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          extraPullNames: devenv
+          skipPush: true
 
       # rustup reads rust-toolchain.toml, as `Check / Generated Freshness` does.
       - name: Install the pinned Rust toolchain
