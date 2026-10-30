@@ -69,7 +69,11 @@ defmodule MydiaWeb.AdminIndexersLive.PrivateTrackerLoginTest do
     view |> element("#indexer-login-#{d.id}") |> render_click()
     render_async(view)
 
-    assert has_element?(view, "#indexer-login-captcha[src^='data:image/png;base64,']")
+    assert has_element?(
+             view,
+             "#indexer-login-captcha[src='data:image/png;base64,#{Base.encode64(Trackers.captcha_png())}']"
+           )
+
     assert has_element?(view, "#indexer-login-field-2facode")
 
     view

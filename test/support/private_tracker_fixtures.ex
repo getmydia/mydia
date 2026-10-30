@@ -34,6 +34,14 @@ defmodule Mydia.PrivateTrackerFixtures do
     harrow_passkey: "har-pass-c03b77e1d9"
   }
 
+  # A complete 1x1 PNG, so the captcha the login modal shows is a real image.
+  @captcha_png Base.decode64!(
+                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+               )
+
+  @doc "The captcha image the captcha tracker serves."
+  def captcha_png, do: @captcha_png
+
   @files %{unit3d: "emberline-api.yml", gazelle: "vellum.yml", captcha: "harrowgate.yml"}
 
   @doc "The credentials and keys the invented trackers accept."
@@ -217,9 +225,10 @@ defmodule Mydia.PrivateTrackerFixtures do
   defp gazelle_torrents(%{params: %{"action" => "download"} = params} = conn, ctx) do
     report(ctx, :download, %{method: conn.method, params: params, cookie: header(conn, "cookie")})
 
-    if params["torrent_pass"] == @secrets.passkey and params["authkey"] == @secrets.authkey,
-      do: torrent(conn, @secrets.passkey),
-      else: Plug.Conn.resp(conn, 403, "bad passkey")
+    if params["id"] == "201" and params["torrent_pass"] == @secrets.passkey and
+         params["authkey"] == @secrets.authkey,
+       do: torrent(conn, @secrets.passkey),
+       else: Plug.Conn.resp(conn, 403, "bad passkey")
   end
 
   defp gazelle_torrents(conn, ctx) do
@@ -290,7 +299,7 @@ defmodule Mydia.PrivateTrackerFixtures do
 
       conn
       |> Plug.Conn.put_resp_content_type("image/png", nil)
-      |> Plug.Conn.resp(200, <<137, 80, 78, 71, 1, 2, 3>>)
+      |> Plug.Conn.resp(200, @captcha_png)
     end)
 
     Bypass.stub(bypass, "POST", "/takelogin.php", fn conn ->
