@@ -21,5 +21,6 @@ defmodule MydiaWeb.MobileLayoutSeedTest do
     assert Enum.any?(downloads, &(&1.removal_error != nil))
     assert Enum.any?(downloads, &(&1.match_status == "unresolved_files"))
     assert Enum.any?(downloads, &(&1.import_failure_reason == "no_client"))
+    assert Enum.any?(downloads, &(&1.import_failure_reason == "path_mapping_mismatch"))
   end
 end

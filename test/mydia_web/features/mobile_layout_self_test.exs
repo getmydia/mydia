@@ -42,6 +42,16 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     {:clipped_text,
      ~s|<div style="overflow:hidden;text-overflow:ellipsis;width:60px">Considerablylongfictionalunbrokentoken</div>|,
      ~s|<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:60px">Considerablylongfictionalunbrokentoken</div>|},
+    # A flex container's text sits in an anonymous item, so its
+    # text-overflow: ellipsis never renders and the cut is bare.
+    {:clipped_text,
+     ~s|<div style="display:flex;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:60px">A considerably long fictional label</div>|,
+     ~s|<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:60px">A considerably long fictional label</div>|},
+    # overflow does not apply to an inline box: the block around it does the
+    # cutting (see also "an inline box never takes the blame for a cut").
+    {:clipped_text,
+     ~s|<div style="overflow:hidden;white-space:nowrap;width:60px"><span style="overflow:hidden">A considerably long fictional label</span></div>|,
+     ~s|<div style="overflow:hidden;white-space:nowrap;width:290px"><span style="overflow:hidden">A fictional label</span></div>|},
     # False positives found by the sweep. Each good fixture is the markup that
     # used to fire.
     #
@@ -137,6 +147,27 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     )
 
     assert :page_overflow in Enum.map(audit(session), & &1.check)
+  end
+
+  @tag :feature
+  test "an inline box never takes the blame for a cut", %{session: session} do
+    render_fixture(
+      session,
+      ~s|<div id="blk" style="overflow:hidden;white-space:nowrap;width:60px"><span id="inl" style="overflow:hidden">A considerably long fictional label</span></div>|
+    )
+
+    clipped = session |> audit(scope: "#mlx") |> Enum.filter(&(&1.check == :clipped_text))
+    assert Enum.map(clipped, & &1.selector) == ["#blk"]
+  end
+
+  @tag :feature
+  test "the scoped element itself is audited", %{session: session} do
+    render_fixture(
+      session,
+      ~s|<button id="lone" style="width:16px;height:16px;padding:0">x</button>|
+    )
+
+    assert [%{check: :small_target, selector: "#lone"}] = audit(session, scope: "#lone")
   end
 
   @tag :feature

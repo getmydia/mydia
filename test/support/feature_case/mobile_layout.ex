@@ -118,7 +118,8 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       for (var a = n.parentElement; a; a = a.parentElement) {
         var cs = getComputedStyle(a);
         var ov = axis === 'x' ? cs.overflowX : cs.overflowY;
-        if (ov === 'visible') continue;
+        // overflow does not apply to an inline box, so it cuts nothing.
+        if (ov === 'visible' || cs.display === 'inline') continue;
         var c = clientBox(a);
         if (axis === 'x' ? cutsX(q, c) : cutsY(q, c)) return a;
       }
@@ -145,10 +146,13 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
       return null;
     }
-    // text-overflow: ellipsis only shows on a block-level box whose text
-    // cannot wrap; with normal wrapping a long unbroken token is cut bare.
+    // text-overflow: ellipsis only shows on a block container whose text
+    // cannot wrap: not on an inline box, and not on a flex or grid container,
+    // whose text sits in anonymous items the ellipsis never reaches. With
+    // normal wrapping a long unbroken token is cut bare.
     function ellipsisRenders(s) {
-      if (s.textOverflow !== 'ellipsis' || s.display === 'inline') return false;
+      if (s.textOverflow !== 'ellipsis') return false;
+      if (/^(inline|flex|inline-flex|grid|inline-grid)$/.test(s.display)) return false;
       return /^(nowrap|pre)$/.test(s.whiteSpace) || s.textWrapMode === 'nowrap';
     }
     function within(inner, outer) {
@@ -260,8 +264,10 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       // 5. clipped_text
       if (el.textContent.trim() !== '' && !/^(IMG|VIDEO|SVG)$/.test(el.tagName.toUpperCase()) &&
           !/hero-/.test(String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className))) {
-        var clipX = /(hidden|clip)/.test(s.overflowX) && !ellipsisRenders(s);
-        var clipY = /(hidden|clip)/.test(s.overflowY) &&
+        // overflow does not apply to an inline box, whatever it computes to.
+        var clips = s.display !== 'inline';
+        var clipX = clips && /(hidden|clip)/.test(s.overflowX) && !ellipsisRenders(s);
+        var clipY = clips && /(hidden|clip)/.test(s.overflowY) &&
                     (s.webkitLineClamp === 'none' || !s.webkitLineClamp);
         var cut = (clipX || clipY) ? clippedText(el, clipX, clipY) : null;
         if (cut) push('clipped_text', el, cut);
