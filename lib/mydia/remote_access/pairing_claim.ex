@@ -106,8 +106,8 @@ defmodule Mydia.RemoteAccess.PairingClaim do
   Generates a random claim code.
 
   Six characters, which is roughly 30 bits. That is deliberate: the code is
-  typed by hand, and the entropy budget is documented in
-  docs/superpowers/specs/2026-08-19-e2e-pairing-design.md.
+  typed by hand, and those 30 bits are the whole security bound for the
+  sealed relay entry (see the cost parameters in `pairing_seal.rs`).
   """
   def generate_code do
     generate_code_string(@code_length)
@@ -119,9 +119,7 @@ defmodule Mydia.RemoteAccess.PairingClaim do
   # not a multiple of 31, so `rem(byte, 31)` would make the first eight
   # characters of the alphabet 12.5% more likely than the rest. That matters
   # here more than it usually would: the code's entropy IS the security bound
-  # for the sealed relay entry, documented in
-  # docs/superpowers/specs/2026-08-19-e2e-pairing-design.md, so any avoidable
-  # loss comes straight off it.
+  # for the sealed relay entry, so any avoidable loss comes straight off it.
   defp generate_code_string(length) do
     chars = String.graphemes(@code_chars)
     count = length(chars)

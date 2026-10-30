@@ -24,7 +24,7 @@ defmodule MydiaWeb.SegmentedControl do
   already a reasonable 1.226 there and stronger than `base-300` would be.
 
   Full measurements and method in
-  `docs/superpowers/specs/2026-09-01-segmented-control-design.md`.
+  `design/specs/2026-09-01-segmented-control-design.md`.
 
   ## Icon-only controls
 

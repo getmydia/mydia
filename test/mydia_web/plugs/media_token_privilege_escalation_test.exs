@@ -1,6 +1,6 @@
 defmodule MydiaWeb.MediaTokenPrivilegeEscalationTest do
   @moduledoc """
-  End-to-end regression coverage for T-108 (docs/superpowers/security-review):
+  End-to-end regression coverage for media-token privilege escalation:
   a media token must never reach an admin-gated operation or mint an API key.
 
   Before the fix, `:api_auth` mounted `MydiaWeb.Plugs.MediaAuth` with no
@@ -56,7 +56,7 @@ defmodule MydiaWeb.MediaTokenPrivilegeEscalationTest do
     %{admin: admin, device: device, token: token}
   end
 
-  describe "the admin config API (the config-mutation sink named in T-108)" do
+  describe "the admin config API (the config-mutation sink of the media-token privilege escalation)" do
     test "a media token cannot read the config list", %{conn: conn, token: token} do
       conn = get(conn, "/api/v1/config?token=#{token}")
 
@@ -71,7 +71,7 @@ defmodule MydiaWeb.MediaTokenPrivilegeEscalationTest do
     end
   end
 
-  describe "GraphQL createApiKey (the durable-credential sink named in T-108)" do
+  describe "GraphQL createApiKey (the durable-credential sink of the media-token privilege escalation)" do
     test "a media token cannot authenticate the request at all", %{conn: conn, token: token} do
       variables = %{"name" => "Escalated Key", "permissions" => ["read", "write", "admin"]}
 

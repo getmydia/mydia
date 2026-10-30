@@ -335,7 +335,7 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
     #
     # Deliberately unconditional, with no `UPDATE OF <columns>` list. Per the
     # design spec's "Trigger coverage > media_items" section
-    # (docs/superpowers/specs/2026-09-12-library-api-revision-polling-design.md),
+    # (design/specs/2026-09-12-library-api-revision-polling-design.md),
     # "insert and every update are observable", and false-positive delivery is
     # safe while a missed change is not. Sweep-only writes such as
     # `seasons_refreshed_at` (`Media.stamp_seasons_refreshed/1`) and
@@ -534,7 +534,7 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
 
     # Deliberately unconditional here too: see the matching comment on the
     # PostgreSQL parent trigger above for the spec section
-    # (docs/superpowers/specs/2026-09-12-library-api-revision-polling-design.md)
+    # (design/specs/2026-09-12-library-api-revision-polling-design.md)
     # and the reasoning. Sweep-only writes advance a revision on purpose, and a
     # missed consumer-visible change is worse than a redundant re-delivery.
     sqlite_trigger(

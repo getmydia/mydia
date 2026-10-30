@@ -6,7 +6,7 @@ defmodule MydiaWeb.Components.SegmentedControlTest do
   segments carry no colour class is that `btn-ghost` computes to `alpha=0`,
   which measures 1.000 contrast against the page in dark mode. That number
   came from a browser and any change to the treatment needs the same. See
-  docs/superpowers/specs/2026-09-01-segmented-control-design.md.
+  design/specs/2026-09-01-segmented-control-design.md.
   """
 
   use ExUnit.Case, async: true

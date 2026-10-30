@@ -16,7 +16,7 @@ defmodule Mydia.Downloads.Client.FailureCategory do
 
   Categories are deliberately *diagnostic only*. Nothing here influences
   whether a release is blacklisted or for how long — see the non-goals in
-  `docs/superpowers/specs/2026-07-29-debrid-failure-detail-design.md`.
+  `design/specs/2026-07-29-debrid-failure-detail-design.md`.
 
   `nil` is a valid input everywhere: it means "the client reported a failure
   but we could not classify it", which covers every non-debrid adapter today

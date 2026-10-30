@@ -335,8 +335,7 @@ defmodule MydiaWeb.DiscoverComponents do
                 text node from wrapping. "Add to Library" needs ~124px of button
                 width; a w-36 rail card gives the add half of the join 91px, so
                 it wrapped to two lines and spilled out of the pill. The full
-                wording stays as the accessible name and the tooltip. See
-                docs/superpowers/specs/2026-09-02-add-to-library-button-wrap-design.md --%>
+                wording stays as the accessible name and the tooltip. --%>
           <button
             phx-click={@add_event}
             phx-value-ref={@ref_param}
