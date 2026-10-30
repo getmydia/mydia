@@ -527,3 +527,55 @@ section's own page. `MediaLive.Index.build_query_opts/1` passes
 `:exclude_categories` only when `assigns[:section]` is `nil`. A section's own
 query already filters to `category in [...]`, so subtracting the same
 categories again there would empty the section out.
+
+## Mobile layout sweep
+
+`test/mydia_web/features/mobile_layout_sweep_test.exs` visits every `live`
+route at 320, 375 and 414px wide, in its default state and in the states
+listed for it in `test/support/mobile_layout_manifest.ex`, and fails on:
+
+| Check | Fails when |
+|---|---|
+| `page_overflow` | the document is wider than the viewport |
+| `inner_scroll` | an element scrolls sideways inside the page |
+| `escapes_viewport` | a visible element extends past the left or right edge (only the outermost one is reported) |
+| `small_target` | a button, link, input, select, summary, `role="button"` or `label[for]` is under 24x24px |
+| `overlapping_targets` | two tap targets overlap |
+| `clipped_text` | an `overflow: hidden` element cuts its text off without an ellipsis or line clamp |
+| `tiny_text` | text renders under 12px |
+
+All comparisons allow 1px. The audit hides scrollbars while it measures, so
+layout width equals the window width, as on a phone. Before each audit the
+sweep asserts that the page content and the mobile dock have a box, so a blank
+or crashed page fails instead of passing every check.
+
+The checks skip things that are not defects: links inside running text (by
+computed `display: inline`), the body of a closed `<details>`, the off-screen
+drawer panel while it is closed, and a small control laid over a much larger
+one (a select box on a poster card). A target inside a `position: fixed` layer
+such as the dock does not collide with page content scrolling under it; two
+fixed targets, or two flow targets, still can.
+
+A deliberate sideways carousel (poster rails, shelves) carries
+`data-scroll-rail` on its scrolling element, which `poster_rail/1` in
+`poster_card_components.ex` sets; the sweep skips `inner_scroll` and
+`escapes_viewport` inside it. Nothing else should carry it.
+
+A new `live` route fails `test/mydia_web/mobile_layout_manifest_test.exs`
+until it is added to the manifest, with its interactive states (tabs, open
+dialogs) if it has any, or excluded with a reason. `/review` (a redirect), the
+plugin pages, `/setup`, `/play/:type/:id` and the ErrorTracker dashboard are
+excluded. Every page must pass at 320px.
+
+Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`
+ids with `*`, so an entry matches across runs and adapters.
+
+`@known` in the sweep holds accepted violations. Each is
+`{route, widths, check, selector, reason}`, where `widths` is one integer or a
+list (`@all` is 320, 375 and 414). `@chrome` holds entries that apply to every
+route and state (the mobile dock), and the alphabet bar's letters on the
+library grids are added in code. The failure output prints the entry that would
+accept a new violation, with one width; it pastes in unchanged. Adding one is
+a review decision, not a fix. An entry that stops matching fails the sweep, so
+remove it when the page is fixed. The checker's own tests are in
+`test/mydia_web/features/mobile_layout_self_test.exs`.

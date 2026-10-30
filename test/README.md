@@ -138,6 +138,11 @@ Before trusting any feature-test result in a new worktree, run
 and confirm 1 test, 0 failures. That single run proves the tag filter, chromedriver and the asset build
 at once.
 
+The mobile layout sweep (`test/mydia_web/features/mobile_layout_sweep_test.exs`)
+measures computed layout, so it is only meaningful with built assets: rebuild
+them as above after changing any class string before trusting its result. What
+it checks is in `lib/mydia_web/components/README.md`, "Mobile layout sweep".
+
 ### After a rebase, a clean compile proves nothing
 
 Rebasing onto a master that has moved a long way can produce a semantic merge
