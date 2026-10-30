@@ -1,6 +1,8 @@
 defmodule Mydia.Indexers.Cardigann.AdapterSupportTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.SearchResult
 
@@ -21,17 +23,67 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupportTest do
     )
   end
 
-  describe "drop_invalid_releases/2 (Prowlarr's IsValidRelease)" do
+  describe "drop_invalid_releases/3 (Prowlarr's IsValidRelease)" do
+    # The suite runs at :warning. A process level cannot lower that (the higher
+    # of the two wins), but a module level overrides it, and only for
+    # AdapterSupport, so the global level stays put.
+    setup do
+      Logger.put_module_level(AdapterSupport, :debug)
+      on_exit(fn -> Logger.delete_module_level(AdapterSupport) end)
+    end
+
     test "drops a release with no category or no size outside an interactive search" do
       kept = release([])
       releases = [kept, release(category: nil), release(category: 0), release(size: 0)]
 
-      assert AdapterSupport.drop_invalid_releases(releases, []) == [kept]
+      capture_log(fn ->
+        assert AdapterSupport.drop_invalid_releases(releases, [], "Copper") == [kept]
+      end)
     end
 
     test "keeps them in an interactive search" do
       releases = [release(category: nil), release(size: 0)]
-      assert AdapterSupport.drop_invalid_releases(releases, interactive: true) == releases
+
+      assert AdapterSupport.drop_invalid_releases(releases, [interactive: true], "Copper") ==
+               releases
+    end
+
+    test "logs each dropped release and one warning counting the drops by reason" do
+      releases = [
+        release([]),
+        release(title: "Brass Comet", category: nil),
+        release(title: "Tin Harbor", size: 0)
+      ]
+
+      log =
+        capture_log([level: :debug], fn ->
+          AdapterSupport.drop_invalid_releases(releases, [], "Copper")
+        end)
+
+      assert log =~ ~s(Copper dropped "Brass Comet": no_category)
+      assert log =~ ~s(Copper dropped "Tin Harbor": no_size)
+      assert log =~ "[warning]"
+      assert log =~ "Copper dropped 2 of 3 releases (no_category: 1, no_size: 1)"
+      refute log =~ "category mappings may be stale"
+    end
+
+    test "warns that the category mappings may be stale when every release is dropped" do
+      releases = [release(category: 0), release(category: nil)]
+
+      log =
+        capture_log(fn -> AdapterSupport.drop_invalid_releases(releases, [], "Copper") end)
+
+      assert log =~ "Copper dropped all 2 releases (no_category: 2)"
+      assert log =~ "category mappings may be stale"
+    end
+
+    test "logs nothing when every release is valid" do
+      log =
+        capture_log([level: :debug], fn ->
+          AdapterSupport.drop_invalid_releases([release([])], [], "Copper")
+        end)
+
+      assert log == ""
     end
   end
 end
