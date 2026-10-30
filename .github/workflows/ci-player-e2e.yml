@@ -19,10 +19,9 @@ on:
   #
   # If backend PRs still feel slow, the next lever is NOT narrowing the
   # `relevant` filter, which the filter block explains would reintroduce two
-  # past bugs. It is warming the Rust build: roughly 6m20s of `mix compile` is
-  # mydia_p2p and mydia_subsync compiling in release mode from a cold
-  # target/, which no BuildKit cache backend can carry because it lives in a
-  # RUN --mount=type=cache. That needs a Dockerfile change.
+  # past bugs. The Rust build is already warmed: the Rustler NIFs build in the
+  # cached `nifs` Docker stage (see .github/ci.md, "The Docker image builds the
+  # NIFs in their own stage"), so `mix compile` no longer recompiles iroh.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   push:

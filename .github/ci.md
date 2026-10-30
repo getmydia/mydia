@@ -614,17 +614,23 @@ rather than running cargo. Before this, Rustler built them after `COPY lib`, and
 every Elixir change rebuilt iroh from scratch: `mix compile` took 5m20s of
 `ci-player-e2e.yml`'s image build on 2026-10-30, and 425.6s against 98.3s in a
 local `builder` build before and after. The stage is cached through the same
-`:buildcache-*` registry tags as the rest of the image. Its cargo target
+`:buildcache-*` registry tags as the rest of the image. `release.yml` writes
+those tags from amd64 only, so arm64 release builds compile the `nifs` stage
+cold, as they compiled the NIFs cold before. Its cargo target
 directories are BuildKit cache mounts, so the ~1 GB cargo target never enters
 the registry cache and only the ~23 MB of `.so` files land in the layer.
 
 cargo runs from each crate directory, not through Rustler, because each crate's
 `.cargo/config.toml` already turns `crt-static` off on musl. A probe after
 `mix compile` loads both modules and fails the image build if a NIF does not
-load. A new Rustler crate needs three edits: the `nifs` stage's COPY and loop,
-the `skip_compilation?` lines in `config/prod.exs`, and the probe's module list.
-Miss the first and `mix compile` fails because `priv/native/<crate>.so` is
-missing. Miss the second and the crate is silently built twice.
+load. A new `use Rustler` crate needs nothing to keep working: it builds through
+Rustler in `builder` as before, just slowly. To move it to the `nifs` stage, make
+all three edits together: the `nifs` COPY and loop, the `skip_compilation?` line
+in `config/prod.exs`, and the probe's module list. Adding the `skip_compilation?`
+line without the stage still passes `mix compile`, because Rustler then does
+nothing at compile time and nothing loads the `.so`. Only the probe catches it,
+and only if the module is in its list, which is why the list must grow in the
+same edit. Without it the image would build and fail at boot.
 
 ## Docker tags
 
