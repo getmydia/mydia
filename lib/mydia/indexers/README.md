@@ -167,7 +167,10 @@ ways, `doubleupload` an upload factor of 2. The adapter maps them back, and
 still reads `minimumRatio`, `downloadVolumeFactor` and the rest first in case a
 Prowlarr version adds them. Privacy comes from the indexer list, cached per
 connection by `Adapter.ProwlarrPrivacy` (an hour, five minutes after a
-failure). Test config turns that lookup off (`:prowlarr_privacy_lookup`) so a
+failure). Reads are single-flight per connection, an expired map is served
+while one background read replaces it, and a cold search waits at most three
+seconds before carrying on without privacy, so the lookup never eats the
+search task's deadline. Test config turns that lookup off (`:prowlarr_privacy_lookup`) so a
 Bypass search stub does not also need an indexer-list stub.
 
 Overrides are `tracker_rules` (YAML, `TRACKER_RULE_<N>_*`, and
