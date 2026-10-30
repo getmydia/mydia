@@ -25,6 +25,9 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     {:clipped_text,
      ~s|<div style="overflow:hidden;white-space:nowrap;width:60px">A considerably long fictional label</div>|,
      ~s|<div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:60px">A considerably long fictional label</div>|},
+    {:clipped_text,
+     ~s|<div style="overflow:hidden;white-space:nowrap;width:60px"><span>A considerably long fictional label</span></div>|,
+     ~s|<div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:60px"><span>A considerably long fictional label</span></div>|},
     {:tiny_text, ~s|<span style="font-size:10px">tiny</span>|,
      ~s|<span style="font-size:12px">fine</span>|}
   ]
@@ -52,16 +55,16 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     )
   end
 
-  for {check, bad, good} <- @cases do
+  for {{check, bad, good}, n} <- Enum.with_index(@cases) do
     @tag :feature
-    test "#{check} fires on the bad fixture", %{session: session} do
+    test "#{check} fires on the bad fixture (case #{n})", %{session: session} do
       render_fixture(session, unquote(bad))
       checks = session |> audit(scope: "#mlx") |> Enum.map(& &1.check)
       assert unquote(check) in checks
     end
 
     @tag :feature
-    test "#{check} stays quiet on the good fixture", %{session: session} do
+    test "#{check} stays quiet on the good fixture (case #{n})", %{session: session} do
       render_fixture(session, unquote(good))
       checks = session |> audit(scope: "#mlx") |> Enum.map(& &1.check)
       refute unquote(check) in checks
@@ -70,12 +73,21 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
 
   @tag :feature
   test "page_overflow fires when the document is wider than the viewport", %{session: session} do
+    refute :page_overflow in Enum.map(audit(session), & &1.check)
+
     render_fixture(
       session,
       ~s|<div style="position:absolute;left:0;width:600px;height:5px"></div>|
     )
 
     assert :page_overflow in Enum.map(audit(session), & &1.check)
+  end
+
+  @tag :feature
+  test "a scope that matches nothing raises", %{session: session} do
+    assert_raise RuntimeError, ~r/no element matched scope/, fn ->
+      audit(session, scope: "#does-not-exist")
+    end
   end
 
   @tag :feature

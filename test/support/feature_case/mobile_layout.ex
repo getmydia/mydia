@@ -8,7 +8,12 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
   measures rendered boxes and never compares screenshots.
 
   `:scope` (default `"body"`) limits element checks to a subtree; the
-  document-level `:page_overflow` check ignores it.
+  document-level `:page_overflow` check ignores it. A scope matching nothing
+  raises, so a typo cannot make a quiet test pass.
+
+  The audit hides scrollbars (an injected `#mobile-layout-audit-style` rule) to
+  measure the page as a phone lays it out: with overlay scrollbars, layout width
+  equals window width. The style stays on the page afterwards.
   """
 
   alias MydiaWeb.FeatureCase.MobileLayout.Violation
@@ -19,11 +24,15 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
   def audit(session, opts \\ []) do
     scope = Keyword.get(opts, :scope, "body")
 
-    session
-    |> MydiaWeb.FeatureCase.eval_js(script(), [scope])
-    |> Enum.map(fn %{"check" => check, "selector" => selector, "detail" => detail} ->
-      %Violation{check: to_check(check), selector: selector, detail: detail}
-    end)
+    case MydiaWeb.FeatureCase.eval_js(session, script(), [scope]) do
+      %{"missing_scope" => sel} ->
+        raise "audit: no element matched scope #{inspect(sel)}"
+
+      violations ->
+        Enum.map(violations, fn %{"check" => check, "selector" => selector, "detail" => detail} ->
+          %Violation{check: to_check(check), selector: selector, detail: detail}
+        end)
+    end
   end
 
   # Only the fixed list above is ever turned into an atom.
@@ -33,11 +42,18 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
   defp script do
     ~S"""
     var scopeSel = arguments[0];
+    // Phones overlay their scrollbars; hide the desktop ones so layout width
+    // equals window width.
+    if (!document.getElementById('mobile-layout-audit-style')) {
+      var st = document.createElement('style');
+      st.id = 'mobile-layout-audit-style';
+      st.textContent = '*{scrollbar-width:none !important}*::-webkit-scrollbar{display:none !important}';
+      document.head.appendChild(st);
+    }
+    void document.documentElement.offsetWidth;
     var root = document.querySelector(scopeSel);
-    // innerWidth, not clientWidth: the headless desktop browser reserves ~15px
-    // for a classic scrollbar, which phones overlay. The reported vw is the
-    // configured viewport width.
-    var vw = window.innerWidth;
+    if (!root) return {missing_scope: scopeSel};
+    var vw = document.documentElement.clientWidth;
     var out = [];
     var TOL = 1, MIN_TARGET = 24, MIN_FONT = 12;
 
@@ -95,10 +111,8 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
     // 1. page_overflow (document-level, ignores scope)
     var d = document.documentElement;
     if (d.scrollWidth > d.clientWidth + TOL) {
-      push('page_overflow', null, 'scrollWidth=' + d.scrollWidth + ' vw=' + d.clientWidth);
+      push('page_overflow', null, 'scrollWidth=' + d.scrollWidth + ' vw=' + vw);
     }
-
-    if (!root) return out;
 
     var targets = [];
     var all = root.querySelectorAll('*');
@@ -129,7 +143,8 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
 
       // 5. clipped_text
-      if (hasOwnText(el) && !/^(IMG|VIDEO|SVG)$/.test(el.tagName) && !/hero-/.test(String(el.className))) {
+      if (el.textContent.trim() !== '' && !/^(IMG|VIDEO|SVG)$/.test(el.tagName.toUpperCase()) &&
+          !/hero-/.test(String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className))) {
         var clipX = /(hidden|clip)/.test(s.overflowX);
         var clipY = /(hidden|clip)/.test(s.overflowY);
         if (clipX && el.scrollWidth > el.clientWidth + TOL && s.textOverflow !== 'ellipsis') {
