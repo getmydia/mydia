@@ -141,7 +141,9 @@ defmodule MydiaWeb.CollectionLive.Show do
             </.link>
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <h1 class="text-2xl font-bold break-words">{@collection.name}</h1>
+                <h1 class="text-2xl font-bold min-w-0 break-words max-sm:wrap-anywhere">
+                  {@collection.name}
+                </h1>
                 <%= if @collection.is_system do %>
                   <span class="badge badge-ghost gap-1">
                     <.icon name="hero-star" class="w-3 h-3" /> {gettext("System")}
