@@ -36,7 +36,7 @@ defmodule MydiaWeb.MobileLayoutManifest do
       "/sections/new" => page("/sections/new"),
       "/sections/:id" => %{path: &"/sections/#{&1.section}", states: []},
       "/import" => page("/import"),
-      "/review" => page("/review"),
+      "/review" => {:exclude, "redirects to /import for old bookmarks; /import is swept"},
       "/search" => page("/search"),
       "/downloads" => page("/downloads", [{"issues", [{:visit_query, "tab=issues"}]}]),
       "/calendar" => page("/calendar"),

@@ -8,6 +8,8 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
   use MydiaWeb.FeatureCase, async: false
 
   @moduletag :feature
+  # The /profile host page logs that no download client is configured.
+  @moduletag :capture_log
 
   # Each case: {check, bad_html, good_html}. The fixture is rendered inside
   # #mlx, a 300px-wide box at the top left of a 320px viewport.
@@ -29,7 +31,31 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
      ~s|<div style="overflow:hidden;white-space:nowrap;width:60px"><span>A considerably long fictional label</span></div>|,
      ~s|<div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:60px"><span>A considerably long fictional label</span></div>|},
     {:tiny_text, ~s|<span style="font-size:10px">tiny</span>|,
-     ~s|<span style="font-size:12px">fine</span>|}
+     ~s|<span style="font-size:12px">fine</span>|},
+    # False positives found by the sweep. Each good fixture is the markup that
+    # used to fire.
+    #
+    # The body of a closed <details> (the Changelog's entries) keeps a layout
+    # box at a meaningless position but is never painted.
+    {:escapes_viewport, ~s|<div style="width:500px;height:10px"></div>|,
+     ~s|<details><summary>v1</summary><div style="width:500px;height:10px"></div></details>|},
+    # Page content scrolls under a fixed dock or sticky header by design.
+    {:overlapping_targets,
+     ~s|<div style="position:relative;height:40px"><a href="#" style="position:absolute;left:0;display:block;width:200px;height:40px">a</a><a href="#" style="position:absolute;left:180px;display:block;width:40px;height:40px">b</a></div>|,
+     ~s|<a href="#" style="display:block;width:200px;height:40px">a</a><nav style="position:fixed;top:0;left:0"><a href="#" style="display:block;width:40px;height:40px">d</a></nav>|},
+    # A select box laid over a poster card's link sits wholly inside it.
+    {:overlapping_targets,
+     ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:130px;width:32px;height:32px">s</button></div>|,
+     ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:8px;width:32px;height:32px">s</button></div>|},
+    # A link inside a sentence of helper text in a <div> (Devices' "Remote
+    # access is turned off" note) is WCAG 2.5.8's inline exception.
+    {:small_target, ~s|<div style="font-size:12px"><a href="#">Enable it</a></div>|,
+     ~s|<div style="font-size:12px">Remote access is turned off. <a href="#">Enable it</a></div>|},
+    # Box overflow that hides no glyphs (a badge's padding, an unloaded lazy
+    # image's alt box) is not clipped text.
+    {:clipped_text,
+     ~s|<div style="overflow:hidden;height:30px;line-height:20px"><div>One line</div><div>Second line</div></div>|,
+     ~s|<div style="overflow:hidden;height:30px;line-height:20px"><div style="padding-bottom:30px">One line</div></div>|}
   ]
 
   setup %{session: session} do
@@ -96,5 +122,45 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     v = session |> audit(scope: "#mlx") |> Enum.find(&(&1.check == :escapes_viewport))
     assert v.selector == "#wide"
     assert v.detail =~ "vw=320"
+  end
+
+  @tag :feature
+  test "a selector drops database ids and LiveView's random ids", %{session: session} do
+    render_fixture(
+      session,
+      ~s|<div id="row-3f2a9c1e-1111-4222-8333-444455556666-7" style="width:500px;height:10px"></div>| <>
+        ~s|<div id="phx-GONVabc123XYZ"><p style="width:500px;height:10px"></p></div>|
+    )
+
+    selectors =
+      session
+      |> audit(scope: "#mlx")
+      |> Enum.filter(&(&1.check == :escapes_viewport))
+      |> Enum.map(& &1.selector)
+
+    assert selectors == ["#row-*-*", "#phx-* p"]
+  end
+
+  @tag :feature
+  test "escapes_viewport names only the outermost escaping element", %{session: session} do
+    render_fixture(
+      session,
+      ~s|<div id="outer" style="width:500px"><div style="width:480px;height:10px"><span style="display:block;width:400px">x</span></div></div>|
+    )
+
+    escapes = session |> audit(scope: "#mlx") |> Enum.filter(&(&1.check == :escapes_viewport))
+    assert Enum.map(escapes, & &1.selector) == ["#outer"]
+  end
+
+  @tag :feature
+  test "clipped_text names the box doing the cutting, not every clipping ancestor",
+       %{session: session} do
+    render_fixture(
+      session,
+      ~s|<div id="outer" style="overflow:hidden;width:200px"><div id="inner" style="overflow:hidden;white-space:nowrap;width:60px">A considerably long fictional label</div></div>|
+    )
+
+    clipped = session |> audit(scope: "#mlx") |> Enum.filter(&(&1.check == :clipped_text))
+    assert Enum.map(clipped, & &1.selector) == ["#inner"]
   end
 end

@@ -24,6 +24,7 @@ defmodule MydiaWeb.MobileLayoutSeed do
   @long_release "The.Quiet.Harbor.S01E01.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR10.H.265-FICTIONALGRP"
   @long_error String.duplicate("The remote client reported a fictional failure. ", 5)
   @long_client "fictional-qbittorrent-seedbox-under-the-salt-meridian-archive-basement"
+  @library_root "/fictional-mobile-layout-sweep-library"
   @long_path "/remote/very/long/path/to/the/fictional/downloads/directory/" <> @long_release
 
   @doc """
@@ -33,11 +34,23 @@ defmodule MydiaWeb.MobileLayoutSeed do
   the user the sweep logs in as, because collections are per user.
   """
   def insert!(admin) do
+    # The Issues tab suggests a path mapping by walking every mount that shares
+    # a top-level directory with a library path. The fixture's default library
+    # paths sit under System.tmp_dir!(), which is a real mount on some hosts,
+    # and walking it stalled the page for over a minute. A top-level directory
+    # that does not exist is never a mount, so nothing is walked.
+    movies_path =
+      SettingsFixtures.library_path_fixture(%{path: "#{@library_root}/movies", type: "movies"})
+
+    series_path =
+      SettingsFixtures.library_path_fixture(%{path: "#{@library_root}/series", type: "series"})
+
     movie = MediaFixtures.media_item_fixture(%{type: "movie", title: @long_movie, year: 2021})
 
     for n <- 1..3 do
       MediaFixtures.media_file_fixture(%{
         media_item_id: movie.id,
+        library_path_id: movies_path.id,
         relative_path: "Fictional/#{@long_release}.part#{n}.mkv"
       })
     end
@@ -53,7 +66,12 @@ defmodule MydiaWeb.MobileLayoutSeed do
           title: "An Unusually Long Fictional Episode Title Number #{season}x#{ep}"
         })
 
-      if ep == 1, do: MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+      if ep == 1,
+        do:
+          MediaFixtures.media_file_fixture(%{
+            episode_id: episode.id,
+            library_path_id: series_path.id
+          })
     end
 
     seed_downloads()
@@ -145,12 +163,18 @@ defmodule MydiaWeb.MobileLayoutSeed do
     })
 
     # Not @long_client: the orphaned-client download above must stay orphaned.
+    # Disabled, so no page polls it: the fixture's localhost:8080 can be a real
+    # service on the machine running the sweep.
     SettingsFixtures.download_client_config_fixture(%{
-      name: "fictional-transmission-seedbox-under-the-westmarch-lantern-archive"
+      name: "fictional-transmission-seedbox-under-the-westmarch-lantern-archive",
+      enabled: false
     })
 
+    # The Indexers page health-checks every indexer on mount. Port 1 refuses
+    # at once, so the row renders the same unhealthy badge on every machine.
     SettingsFixtures.indexer_config_fixture(%{
-      name: "Fictional Indexer Config With A Long Name"
+      name: "Fictional Indexer Config With A Long Name",
+      base_url: "http://127.0.0.1:1"
     })
 
     :ok

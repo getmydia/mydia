@@ -63,12 +63,20 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       c = String(c || '').trim();
       return c ? '.' + c.split(/\s+/).slice(0, 4).join('.') : '';
     }
-    function own(el) { return el.id ? '#' + el.id : el.tagName.toLowerCase() + cls(el); }
+    // Ids carry database keys (UUIDs, integers) and LiveView's random phx-
+    // ids, which differ between runs and adapters, so a selector names the
+    // kind of element, not the row.
+    function stableId(id) {
+      return '#' + id.replace(/^phx-[A-Za-z0-9_-]+$/, 'phx-*')
+                     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '*')
+                     .replace(/\d+/g, '*');
+    }
+    function own(el) { return el.id ? stableId(el.id) : el.tagName.toLowerCase() + cls(el); }
     function describe(el) {
-      if (el.id) return '#' + el.id;
+      if (el.id) return stableId(el.id);
       var a = el.parentElement;
       while (a && !a.id) a = a.parentElement;
-      return (a ? '#' + a.id + ' ' : '') + own(el);
+      return (a ? stableId(a.id) + ' ' : '') + own(el);
     }
     function push(check, el, detail) {
       out.push({check: check, selector: el ? describe(el) : 'html', detail: detail});
@@ -77,7 +85,65 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       if (r.width === 0 || r.height === 0) return false;
       if (s.display === 'none' || s.visibility === 'hidden') return false;
       if (el.closest('[aria-hidden="true"], .sr-only')) return false;
+      // The body of a closed <details> keeps a layout box but is never
+      // painted (content-visibility: hidden), so its rects are meaningless.
+      if (el.checkVisibility && !el.checkVisibility()) return false;
       return true;
+    }
+    // The fixed or sticky ancestor an element moves with, or null. Page
+    // content scrolls under a fixed dock or sticky header by design.
+    function layer(el) {
+      for (var a = el; a && a !== document.body; a = a.parentElement) {
+        var p = getComputedStyle(a).position;
+        if (p === 'fixed' || p === 'sticky') return a;
+      }
+      return null;
+    }
+    // Measures the glyphs, not scrollWidth: an unloaded lazy <img> showing its
+    // alt text, or a badge border, overflows a box without hiding any text.
+    // A text node counts only for its nearest clipping ancestor on that axis,
+    // so one cut is reported once, by the box doing the cutting (and a
+    // truncating child with an ellipsis stays its own, exempt, business).
+    function clipperX(n) {
+      for (var a = n.parentElement; a; a = a.parentElement) {
+        if (getComputedStyle(a).overflowX !== 'visible') return a;
+      }
+      return null;
+    }
+    function clipperY(n) {
+      for (var a = n.parentElement; a; a = a.parentElement) {
+        if (getComputedStyle(a).overflowY !== 'visible') return a;
+      }
+      return null;
+    }
+    function clippedText(el, clipX, clipY) {
+      var b = el.getBoundingClientRect();
+      var L = b.left + el.clientLeft, T = b.top + el.clientTop;
+      var R = L + el.clientWidth, B = T + el.clientHeight;
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      var range = document.createRange();
+      for (var n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.textContent.trim() === '') continue;
+        var cx = clipX && clipperX(n) === el, cy = clipY && clipperY(n) === el;
+        if (!cx && !cy) continue;
+        range.selectNodeContents(n);
+        var rs = range.getClientRects();
+        for (var k = 0; k < rs.length; k++) {
+          var q = rs[k];
+          if (q.width === 0 || q.height === 0) continue;
+          if (cx && (q.right > R + TOL || q.left < L - TOL)) {
+            return 'box=' + Math.round(L) + '..' + Math.round(R) + ' text=' + Math.round(q.left) + '..' + Math.round(q.right);
+          }
+          if (cy && (q.bottom > B + TOL || q.top < T - TOL)) {
+            return 'box=' + Math.round(T) + '..' + Math.round(B) + ' text=' + Math.round(q.top) + '..' + Math.round(q.bottom);
+          }
+        }
+      }
+      return null;
+    }
+    function within(inner, outer) {
+      return inner.left >= outer.left - TOL && inner.right <= outer.right + TOL &&
+             inner.top >= outer.top - TOL && inner.bottom <= outer.bottom + TOL;
     }
     function inRail(el) { return !!el.closest('[data-scroll-rail]'); }
     function hasOwnText(el) {
@@ -93,11 +159,13 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       if (t === 'LABEL') return el.hasAttribute('for');
       return el.getAttribute('role') === 'button';
     }
-    // WCAG 2.5.8 inline exception: a link inside a sentence.
+    // WCAG 2.5.8 inline exception: a link inside a sentence. The sentence's
+    // container can be any element (a <div> of helper text as often as a
+    // <p>), so this asks whether the link flows inline among its parent's text.
     function inlineLink(el) {
-      if (el.tagName !== 'A') return false;
+      if (el.tagName !== 'A' || getComputedStyle(el).display !== 'inline') return false;
       var p = el.parentElement;
-      if (!p || !/^(P|LI|SPAN|TD)$/.test(p.tagName)) return false;
+      if (!p) return false;
       for (var n = p.firstChild; n; n = n.nextSibling) {
         if (n.nodeType === 3 && n.textContent.trim() !== '') return true;
       }
@@ -115,6 +183,13 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
     }
 
     var targets = [];
+    var escaped = new Set();
+    function escapedAncestor(el) {
+      for (var a = el.parentElement; a; a = a.parentElement) {
+        if (escaped.has(a)) return true;
+      }
+      return false;
+    }
     var all = root.querySelectorAll('*');
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
@@ -130,7 +205,11 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
 
       // 3. escapes_viewport
-      if (!rail && (r.right > vw + TOL || r.left < -TOL) && !closedDrawer(el)) {
+      // Only the outermost escaping element: its descendants escape with it,
+      // and listing each would bury the one box that needs fixing.
+      if (!rail && (r.right > vw + TOL || r.left < -TOL) && !closedDrawer(el) &&
+          !escapedAncestor(el)) {
+        escaped.add(el);
         push('escapes_viewport', el, 'left=' + Math.round(r.left) + ' right=' + Math.round(r.right) + ' vw=' + vw);
       }
 
@@ -139,20 +218,17 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
         if (!inlineLink(el) && (r.width < MIN_TARGET - TOL || r.height < MIN_TARGET - TOL)) {
           push('small_target', el, Math.round(r.width) + 'x' + Math.round(r.height));
         }
-        targets.push({el: el, r: r});
+        targets.push({el: el, r: r, layer: layer(el)});
       }
 
       // 5. clipped_text
       if (el.textContent.trim() !== '' && !/^(IMG|VIDEO|SVG)$/.test(el.tagName.toUpperCase()) &&
           !/hero-/.test(String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className))) {
-        var clipX = /(hidden|clip)/.test(s.overflowX);
-        var clipY = /(hidden|clip)/.test(s.overflowY);
-        if (clipX && el.scrollWidth > el.clientWidth + TOL && s.textOverflow !== 'ellipsis') {
-          push('clipped_text', el, 'clientWidth=' + el.clientWidth + ' scrollWidth=' + el.scrollWidth);
-        } else if (clipY && el.scrollHeight > el.clientHeight + TOL &&
-                   (s.webkitLineClamp === 'none' || !s.webkitLineClamp)) {
-          push('clipped_text', el, 'clientHeight=' + el.clientHeight + ' scrollHeight=' + el.scrollHeight);
-        }
+        var clipX = /(hidden|clip)/.test(s.overflowX) && s.textOverflow !== 'ellipsis';
+        var clipY = /(hidden|clip)/.test(s.overflowY) &&
+                    (s.webkitLineClamp === 'none' || !s.webkitLineClamp);
+        var cut = (clipX || clipY) ? clippedText(el, clipX, clipY) : null;
+        if (cut) push('clipped_text', el, cut);
       }
 
       // 6. tiny_text
@@ -166,6 +242,10 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       for (var b = a + 1; b < targets.length; b++) {
         var A = targets[a], B = targets[b];
         if (A.el.contains(B.el) || B.el.contains(A.el)) continue;
+        if (A.layer !== B.layer) continue;
+        // A control laid over a card (select box, menu button) sits wholly
+        // inside the card's link: a deliberate overlay, not a collision.
+        if (within(A.r, B.r) || within(B.r, A.r)) continue;
         var w = Math.min(A.r.right, B.r.right) - Math.max(A.r.left, B.r.left);
         var h = Math.min(A.r.bottom, B.r.bottom) - Math.max(A.r.top, B.r.top);
         if (w > TOL && h > TOL) {
