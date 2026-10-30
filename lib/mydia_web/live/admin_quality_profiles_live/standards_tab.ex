@@ -245,6 +245,38 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
         </label>
       </div>
 
+      <div class="form-control">
+        <label class="label" for="quality-profile-freeleech-preference">
+          <span class="label-text font-semibold">{gettext("Freeleech")}</span>
+        </label>
+        <select
+          id="quality-profile-freeleech-preference"
+          name="quality_profile[quality_standards][freeleech_preference]"
+          class="select select-bordered w-full"
+        >
+          <option
+            :for={value <- Mydia.Settings.QualityProfile.FreeleechPreference.values()}
+            value={value}
+            selected={
+              value ==
+                (get_in(
+                   Ecto.Changeset.get_field(@form.source, :quality_standards, %{}),
+                   [:freeleech_preference]
+                 ) || "ignore")
+            }
+          >
+            {freeleech_label(value)}
+          </option>
+        </select>
+        <label class="label">
+          <span class="label-text-alt">
+            {gettext(
+              "A preference: among comparable releases, freeleech and half-leech torrents rank higher. It breaks ties and does not outweigh resolution."
+            )}
+          </span>
+        </label>
+      </div>
+
       <%!-- File Size Constraints --%>
       <div class="divider">{gettext("File Size Limits (MB)")}</div>
       <p id="size-limits-hint" class="text-xs text-base-content/70">
@@ -401,4 +433,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.StandardsTab do
     </div>
     """
   end
+
+  defp freeleech_label("prefer"), do: gettext("Prefer freeleech")
+  defp freeleech_label(_ignore), do: gettext("Ignore")
 end

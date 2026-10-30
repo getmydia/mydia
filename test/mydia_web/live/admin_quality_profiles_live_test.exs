@@ -353,5 +353,22 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       updated = Settings.get_quality_profile!(profile.id)
       assert updated.quality_standards[:require_hdr] == false
     end
+
+    test "choosing Prefer freeleech persists it", %{view: view, profile: profile} do
+      view
+      |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#quality-profile-freeleech-preference option[value=prefer]")
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{"quality_standards" => %{"freeleech_preference" => "prefer"}}
+      )
+      |> render_submit()
+
+      updated = Settings.get_quality_profile!(profile.id)
+      assert updated.quality_standards[:freeleech_preference] == "prefer"
+    end
   end
 end

@@ -5581,6 +5581,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:214
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:42
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:438
 #: lib/mydia_web/live/downloads_live/components.ex:95
 #: lib/mydia_web/live/downloads_live/components.ex:104
 #, elixir-autogen, elixir-format
@@ -13239,7 +13240,7 @@ msgstr ""
 msgid "Automatic (recommended)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:251
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:283
 #, elixir-autogen, elixir-format
 msgid "Automatic grabs and upgrades never go outside these. A season pack is judged per episode. Manual search still lists everything and marks what is outside."
 msgstr ""
@@ -13249,7 +13250,7 @@ msgstr ""
 msgid "Automatic grabs and upgrades never go outside these. Manual search still lists everything and marks what is outside."
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:396
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:428
 #, elixir-autogen, elixir-format
 msgid "Automatic grabs and upgrades skip releases without HDR in the name"
 msgstr ""
@@ -14822,7 +14823,7 @@ msgstr ""
 msgid "Environment (read-only)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:305
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:337
 #, elixir-autogen, elixir-format
 msgid "Episode File Sizes"
 msgstr ""
@@ -15242,7 +15243,7 @@ msgstr ""
 msgid "File Organization"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:249
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:281
 #, elixir-autogen, elixir-format
 msgid "File Size Limits (MB)"
 msgstr ""
@@ -16101,14 +16102,14 @@ msgstr ""
 msgid "Max Transcode Height"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:285
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:331
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:317
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:363
 #, elixir-autogen, elixir-format
 msgid "Max size (MB)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:297
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:343
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:329
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:375
 #, elixir-autogen, elixir-format
 msgid "Maximum"
 msgstr ""
@@ -16179,14 +16180,14 @@ msgstr ""
 msgid "Min post age (minutes)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:266
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:312
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:298
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:344
 #, elixir-autogen, elixir-format
 msgid "Min size (MB)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:278
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:324
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:310
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:356
 #, elixir-autogen, elixir-format
 msgid "Minimum"
 msgstr ""
@@ -16257,7 +16258,7 @@ msgstr ""
 msgid "More languages"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:259
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:291
 #, elixir-autogen, elixir-format
 msgid "Movie File Sizes"
 msgstr ""
@@ -17201,7 +17202,7 @@ msgstr ""
 msgid "Preferred Audio Codecs"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:355
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:387
 #, elixir-autogen, elixir-format
 msgid "Preferred HDR Formats"
 msgstr ""
@@ -17736,7 +17737,7 @@ msgstr ""
 msgid "Requested but not granted"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:394
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:426
 #, elixir-autogen, elixir-format
 msgid "Require HDR"
 msgstr ""
@@ -21304,6 +21305,8 @@ msgid "Override"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:173
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:46
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:49
 #, elixir-autogen, elixir-format
 msgid "Private tracker"
 msgstr ""
@@ -21381,4 +21384,44 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:26
 #, elixir-autogen, elixir-format
 msgid "Tracker terms"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:71
+#, elixir-autogen, elixir-format
+msgid "%{multiplier}x up"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:273
+#, elixir-autogen, elixir-format
+msgid "A preference: among comparable releases, freeleech and half-leech torrents rank higher. It breaks ties and does not outweigh resolution."
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:56
+#, elixir-autogen, elixir-format
+msgid "FL"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:250
+#, elixir-autogen, elixir-format
+msgid "Freeleech"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:57
+#, elixir-autogen, elixir-format
+msgid "Freeleech: the download does not count toward your ratio"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:63
+#, elixir-autogen, elixir-format
+msgid "Only %{percent}% of the download counts toward your ratio"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:437
+#, elixir-autogen, elixir-format
+msgid "Prefer freeleech"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:72
+#, elixir-autogen, elixir-format
+msgid "Uploads count %{multiplier} times toward your ratio"
 msgstr ""

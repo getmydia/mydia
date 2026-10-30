@@ -45,7 +45,10 @@ defmodule Mydia.Indexers.ProfileLimits do
 
   # min_ratio is a preference despite its name: it describes whether a download
   # will finish, not the file it produces, and StallDetector covers dead torrents.
+  # freeleech_preference is a property of the release, like seeders, and only
+  # adds a bonus in SearchScorer's combined score.
   @preference_keys [
+    :freeleech_preference,
     :preferred_video_codecs,
     :preferred_audio_codecs,
     :preferred_audio_channels,
