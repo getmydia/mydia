@@ -18,7 +18,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     FlareSolverrMessages,
     LoginFlow,
     Messages,
-    SearchStatsEvents
+    SearchStatsEvents,
+    TrackerTermsEvents
   }
 
   alias MydiaWeb.IndexerComponents
@@ -39,6 +40,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> maybe_load_flaresolverr_status()
      |> CardigannEngineEvents.attach()
      |> SearchStatsEvents.attach()
+     |> TrackerTermsEvents.attach()
      |> LoginFlow.attach()}
   end
 

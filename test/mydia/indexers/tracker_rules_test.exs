@@ -100,11 +100,12 @@ defmodule Mydia.Indexers.TrackerRulesTest do
           else: Application.delete_env(:mydia, :runtime_config)
       end)
 
-      runtime = %Mydia.Config.Schema{
-        tracker_rules: [
-          %Mydia.Config.Schema.TrackerRule{tracker: "Velvet Lantern", seed_ratio: 1.0},
-          %Mydia.Config.Schema.TrackerRule{tracker: "Copper Reel", seed_time: 120}
-        ]
+      runtime = %{
+        Mydia.Config.Schema.defaults()
+        | tracker_rules: [
+            %Mydia.Config.Schema.TrackerRule{tracker: "Velvet Lantern", seed_ratio: 1.0},
+            %Mydia.Config.Schema.TrackerRule{tracker: "Copper Reel", seed_time: 120}
+          ]
       }
 
       Application.put_env(:mydia, :runtime_config, runtime)
