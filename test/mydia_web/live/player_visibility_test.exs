@@ -29,20 +29,19 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     :ok
   end
 
-  test "the sidebar pill and dock tab render by default", %{conn: conn} do
+  test "the sidebar pill renders by default and the dock has no Player tab", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 
     assert has_element?(view, "#sidebar-player-link")
-    assert has_element?(view, "#dock-player-link")
+    refute has_element?(view, "#dock-player-link")
   end
 
-  test "hide_player removes the sidebar pill and dock tab", %{conn: conn, user: user} do
+  test "hide_player removes the sidebar pill", %{conn: conn, user: user} do
     :ok = hide_player(user)
 
     {:ok, view, _html} = live(conn, ~p"/")
 
     refute has_element?(view, "#sidebar-player-link")
-    refute has_element?(view, "#dock-player-link")
   end
 
   test "hide_player leaves the movie Play button alone", %{conn: conn, user: user} do
@@ -75,13 +74,12 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     refute has_element?(remounted, "#player-cta-banner")
   end
 
-  test "dismissing leaves the sidebar pill and dock tab in place", %{conn: conn} do
+  test "dismissing leaves the sidebar pill in place", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view |> element("#dismiss-player-banner") |> render_click()
 
     assert has_element?(view, "#sidebar-player-link")
-    assert has_element?(view, "#dock-player-link")
   end
 
   test "hide_player removes the banner even when it was never dismissed", %{
@@ -164,7 +162,6 @@ defmodule MydiaWeb.PlayerVisibilityTest do
       {:ok, view, _html} = live(conn, ~p"/")
 
       refute has_element?(view, "#sidebar-player-link")
-      refute has_element?(view, "#dock-player-link")
       refute has_element?(view, "#player-cta-banner")
       refute has_element?(view, ~s{a[href="/devices"]})
     end

@@ -185,17 +185,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/tv/:id", @all, :tiny_text, "#segment-reanalyze-season-*", "btn-xs text is under 12px"}
   ]
 
-  # On every swept page and state but those in @no_dock: the mobile dock.
-  # The open drawer hides the dock.
-  @no_dock ["/#drawer"]
-  @chrome [
-    {@all, :tiny_text, "#mobile-dock span.text-[10px].mt-0.5", "dock labels are text-[10px]"},
-    {@all, :tiny_text, "#dock-player-link span.text-[10px].mt-0.5.opacity-70",
-     "dock labels are text-[10px]"},
-    {[320], :escapes_viewport, "#dock-player-link",
-     "six min-w-[52px] dock items do not fit 320px"}
-  ]
-
   # The alphabet jump bar renders every letter on the library grids.
   @alphabet_routes ["/movies", "/sections/:id", "/tv"]
   @alphabet Enum.map(?a..?z, &<<&1>>) ++ ["hash"]
@@ -245,29 +234,17 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
         v
       end
 
-    {unexpected, stale} = Report.diff(violations, known(swept))
+    {unexpected, stale} = Report.diff(violations, known())
 
     assert unexpected == [] and stale == [],
            "Mobile layout sweep:\n\n" <> Report.format(unexpected, stale)
   end
 
-  # Report entries, one per width: the page-specific list, the dock on every
-  # swept page and state, and the alphabet bar's letters.
-  defp known(swept) do
-    route_keys =
-      for {route, %{states: states}} <- swept,
-          key <- [route | Enum.map(states, fn {name, _steps} -> route <> "#" <> name end)],
-          do: key
-
+  # Report entries, one per width: the page-specific list and the alphabet
+  # bar's letters.
+  defp known do
     page =
       for {route, widths, check, selector, reason} <- @known,
-          width <- List.wrap(widths),
-          do: {route, width, check, selector, reason}
-
-    chrome =
-      for route <- route_keys,
-          route not in @no_dock,
-          {widths, check, selector, reason} <- @chrome,
           width <- List.wrap(widths),
           do: {route, width, check, selector, reason}
 
@@ -277,7 +254,7 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
           letter <- @alphabet,
           do: {route, width, :tiny_text, "#alpha-jump-#{letter}", "alphabet bar letters are 10px"}
 
-    page ++ chrome ++ alphabet
+    page ++ alphabet
   end
 
   defp sweep_route(session, route, url, states) do

@@ -2,6 +2,15 @@ const DockNav = {
   mounted() {
     this.indicator = this.el.querySelector("#dock-indicator");
     this.moveIndicator(false);
+    // The indicator is position: fixed from measured pixels, so a resize or
+    // rotation would leave it where the active link used to be, even past the
+    // viewport edge.
+    this.onResize = () => this.moveIndicator(false);
+    window.addEventListener("resize", this.onResize);
+  },
+
+  destroyed() {
+    window.removeEventListener("resize", this.onResize);
   },
 
   updated() {
