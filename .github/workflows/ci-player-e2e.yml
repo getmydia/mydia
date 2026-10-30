@@ -204,24 +204,18 @@ jobs:
             echo "::notice::No player/relay/lib/native/config changes; skipping E2E build."
           fi
 
-      - name: Free up disk space
+      # The runner image now ships about 86 GB free (measured 2026-10-30), so
+      # the former cleanup (109s of rm and `docker image prune --all`) bought
+      # nothing. This only fails fast if a future image shrinks the disk.
+      - name: Check free disk space
         if: steps.should.outputs.run == 'true' && (github.event_name != 'pull_request' || steps.filter.outputs.server == 'true')
         run: |
-          echo "Disk before cleanup:"
           df -h /
-          # This step only runs when the server image is being built from source:
-          # on every push (master runs always build so they validate the real
-          # commit, not a stale pull) or on a pull request that touched server
-          # paths. The host's preinstalled toolchains are unused in that build,
-          # so remove them to avoid "No space left on device" while compiling
-          # the Rust p2p NIF and the Elixir release.
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
-            /usr/local/share/powershell /usr/local/share/chromium \
-            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
-          sudo docker image prune --all --force || true
-          echo "Disk after cleanup:"
-          df -h /
+          avail_gb=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          if [ "$avail_gb" -lt 30 ]; then
+            echo "::error::Only ${avail_gb} GB free; the server image build needs about 30 GB. Restore the cleanup step from git history."
+            exit 1
+          fi
 
       - name: Setup Docker Buildx
         if: steps.should.outputs.run == 'true'
