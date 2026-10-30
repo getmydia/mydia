@@ -217,6 +217,9 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsComponents do
 
   defp format_ratio(ratio), do: :erlang.float_to_binary(ratio * 1.0, [:short])
 
+  defp format_seed_time(seconds) when seconds < 60,
+    do: gettext("%{count}s", count: seconds)
+
   defp format_seed_time(seconds) when rem(seconds, 86_400) == 0 and seconds > 0,
     do: gettext("%{count}d", count: div(seconds, 86_400))
 

@@ -31,6 +31,15 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsEvents do
   @spec refresh(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def refresh(socket), do: assign(socket, :tracker_terms, TrackerSightings.list_trackers())
 
+  @doc """
+  Reloads the rows when the page reloads its indexers (Test, save, toggle, a
+  finished login), so sightings recorded since mount show up. A no-op before
+  `attach/1`, which loads them itself.
+  """
+  @spec reload(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def reload(%{assigns: %{tracker_terms: _}} = socket), do: refresh(socket)
+  def reload(socket), do: socket
+
   defp handle_event("new_tracker_rule", _params, socket),
     do: {:halt, open_modal(socket, :new, %TrackerRuleConfig{})}
 

@@ -7,6 +7,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
   alias Mydia.Indexers.TrackerSightings.Sighting
   alias Mydia.Repo
   alias Mydia.Settings.TrackerRuleConfigs
+  alias Mydia.Indexers.Structs.TrackerTerms
   alias MydiaWeb.AdminIndexersLive.TrackerTermsComponents
 
   setup %{conn: conn} do
@@ -104,5 +105,24 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
     {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
     assert has_element?(view, "#edit-tracker-rule-#{dom("copper reel")}[disabled]")
+  end
+
+  test "a tracker seen after mount appears when the page reloads its indexers", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    refute has_element?(view, "#tracker-#{dom("late reel")}")
+
+    seen("Late Reel")
+    send(view.pid, :reload_library_indexers)
+
+    assert has_element?(view, "#tracker-#{dom("late reel")}")
+  end
+
+  test "seed times format as seconds, minutes, hours or days" do
+    summary = &TrackerTermsComponents.terms_summary(%TrackerTerms{minimum_seed_time: &1})
+
+    assert summary.(30) == "Seed 30s"
+    assert summary.(90) == "Seed 1m"
+    assert summary.(7200) == "Seed 2h"
+    assert summary.(259_200) == "Seed 3d"
   end
 end

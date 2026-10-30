@@ -2089,7 +2089,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:202
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:221
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:224
 #: lib/mydia_web/live/downloads_live/format.ex:40
 #: lib/mydia_web/live/media_live/show/formatters.ex:47
 #, elixir-autogen, elixir-format
@@ -2103,7 +2103,7 @@ msgid "%{count}d ago"
 msgstr ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:201
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:224
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:227
 #: lib/mydia_web/live/downloads_live/format.ex:39
 #: lib/mydia_web/live/media_live/show/formatters.ex:46
 #, elixir-autogen, elixir-format
@@ -2117,7 +2117,7 @@ msgid "%{count}h ago"
 msgstr ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:200
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:226
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:229
 #: lib/mydia_web/live/downloads_live/format.ex:38
 #: lib/mydia_web/live/media_live/show/formatters.ex:45
 #, elixir-autogen, elixir-format
@@ -2135,6 +2135,7 @@ msgstr ""
 msgid "%{count}mo"
 msgstr ""
 
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:221
 #: lib/mydia_web/live/downloads_live/format.ex:37
 #, elixir-autogen, elixir-format
 msgid "%{count}s"
@@ -12367,7 +12368,7 @@ msgstr ""
 msgid "%{name} re-approved. Its newly requested capabilities are now granted."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:566
+#: lib/mydia_web/live/admin_indexers_live/index.ex:564
 #, elixir-autogen, elixir-format
 msgid "%{name} removed"
 msgstr ""
@@ -13299,7 +13300,7 @@ msgstr ""
 msgid "Base URL"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:301
+#: lib/mydia_web/live/admin_indexers_live/index.ex:299
 #, elixir-autogen, elixir-format
 msgid "Base URL and API Key are required to fetch indexers"
 msgstr ""
@@ -13762,7 +13763,7 @@ msgstr ""
 msgid "Configuration - Duplicates"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:31
+#: lib/mydia_web/live/admin_indexers_live/index.ex:29
 #, elixir-autogen, elixir-format
 msgid "Configuration - Indexers"
 msgstr ""
@@ -13822,12 +13823,12 @@ msgstr ""
 msgid "Configuration - Trash"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:662
+#: lib/mydia_web/live/admin_indexers_live/index.ex:660
 #, elixir-autogen, elixir-format
 msgid "Configuration saved for %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:901
+#: lib/mydia_web/live/admin_indexers_live/index.ex:899
 #, elixir-autogen, elixir-format
 msgid "Configuration saved successfully"
 msgstr ""
@@ -13959,7 +13960,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/index.ex:251
 #: lib/mydia_web/live/admin_download_clients_live/index.ex:331
-#: lib/mydia_web/live/admin_indexers_live/index.ex:405
+#: lib/mydia_web/live/admin_indexers_live/index.ex:403
 #, elixir-autogen, elixir-format
 msgid "Connection failed: %{error}"
 msgstr ""
@@ -13986,7 +13987,7 @@ msgid "Connection successful! RPC Version: %{version}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/index.ex:389
-#: lib/mydia_web/live/admin_indexers_live/index.ex:396
+#: lib/mydia_web/live/admin_indexers_live/index.ex:394
 #, elixir-autogen, elixir-format
 msgid "Connection successful! Version: %{version}"
 msgstr ""
@@ -14011,7 +14012,7 @@ msgstr ""
 msgid "Convert to database-managed"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:186
+#: lib/mydia_web/live/admin_indexers_live/index.ex:184
 #, elixir-autogen, elixir-format
 msgid "Converting runtime indexer to database-managed configuration"
 msgstr ""
@@ -14776,7 +14777,7 @@ msgstr ""
 msgid "Engine:"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:709
+#: lib/mydia_web/live/admin_indexers_live/index.ex:707
 #, elixir-autogen, elixir-format
 msgid "Enter a FlareSolverr URL to test."
 msgstr ""
@@ -15099,7 +15100,7 @@ msgstr ""
 msgid "Failed to reset password"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:777
+#: lib/mydia_web/live/admin_indexers_live/index.ex:775
 #, elixir-autogen, elixir-format
 msgid "Failed to save FlareSolverr settings"
 msgstr ""
@@ -15144,7 +15145,7 @@ msgstr ""
 msgid "Failed to start watched sync for %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:490
+#: lib/mydia_web/live/admin_indexers_live/index.ex:488
 #, elixir-autogen, elixir-format
 msgid "Failed to test connection: %{reason}"
 msgstr ""
@@ -15328,7 +15329,7 @@ msgstr ""
 msgid "Fix the cause, then switch to Built-in and back to Prowlarr-based to try again."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:416
+#: lib/mydia_web/live/admin_indexers_live/index.ex:414
 #, elixir-autogen, elixir-format
 msgid "Fix the highlighted errors before testing the connection"
 msgstr ""
@@ -15612,27 +15613,27 @@ msgstr ""
 msgid "Indexer Selection"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:446
+#: lib/mydia_web/live/admin_indexers_live/index.ex:444
 #, elixir-autogen, elixir-format
 msgid "Indexer connection failed: %{error}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:432
+#: lib/mydia_web/live/admin_indexers_live/index.ex:430
 #, elixir-autogen, elixir-format
 msgid "Indexer connection successful! Version: %{version}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:260
+#: lib/mydia_web/live/admin_indexers_live/index.ex:258
 #, elixir-autogen, elixir-format
 msgid "Indexer deleted successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:450
+#: lib/mydia_web/live/admin_indexers_live/index.ex:448
 #, elixir-autogen, elixir-format
 msgid "Indexer not found"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:239
+#: lib/mydia_web/live/admin_indexers_live/index.ex:237
 #, elixir-autogen, elixir-format
 msgid "Indexer saved successfully"
 msgstr ""
@@ -16392,7 +16393,7 @@ msgstr ""
 msgid "No Approved requests found."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:686
+#: lib/mydia_web/live/admin_indexers_live/index.ex:684
 #, elixir-autogen, elixir-format
 msgid "No FlareSolverr URL configured. Click Edit to set one."
 msgstr ""
@@ -17830,7 +17831,7 @@ msgstr ""
 msgid "Retest"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:117
+#: lib/mydia_web/live/admin_indexers_live/index.ex:115
 #, elixir-autogen, elixir-format
 msgid "Retest failed unexpectedly"
 msgstr ""
@@ -18555,7 +18556,7 @@ msgstr ""
 msgid "Sync failed: Unexpected HTTP status: %{status}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:859
+#: lib/mydia_web/live/admin_indexers_live/index.ex:857
 #, elixir-autogen, elixir-format
 msgid "Sync started - this may take a few minutes..."
 msgstr ""
@@ -18720,7 +18721,7 @@ msgstr ""
 msgid "Test connection"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:90
+#: lib/mydia_web/live/admin_indexers_live/index.ex:88
 #, elixir-autogen, elixir-format
 msgid "Test failed"
 msgstr ""
@@ -19212,7 +19213,7 @@ msgid "URL Scheme"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/index.ex:412
-#: lib/mydia_web/live/admin_indexers_live/index.ex:973
+#: lib/mydia_web/live/admin_indexers_live/index.ex:971
 #, elixir-autogen, elixir-format
 msgid "Unable to check health"
 msgstr ""
@@ -20107,8 +20108,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:494
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:527
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_messages.ex:32
-#: lib/mydia_web/live/admin_indexers_live/index.ex:389
-#: lib/mydia_web/live/admin_indexers_live/index.ex:426
+#: lib/mydia_web/live/admin_indexers_live/index.ex:387
+#: lib/mydia_web/live/admin_indexers_live/index.ex:424
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:285
 #, elixir-autogen, elixir-format
 msgid "unknown"
@@ -21266,7 +21267,7 @@ msgstr ""
 msgid "Edit override"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:90
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:99
 #, elixir-autogen, elixir-format
 msgid "Failed to remove the tracker override"
 msgstr ""
@@ -21352,7 +21353,7 @@ msgstr ""
 msgid "The tracker name as search results show it. Matching ignores case."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:114
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:123
 #, elixir-autogen, elixir-format
 msgid "This override is configured in the config file or environment and is read-only here."
 msgstr ""
@@ -21367,12 +21368,12 @@ msgstr ""
 msgid "Tracker"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:87
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:96
 #, elixir-autogen, elixir-format
 msgid "Tracker override removed"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:71
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:80
 #, elixir-autogen, elixir-format
 msgid "Tracker override saved"
 msgstr ""

@@ -950,8 +950,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         else: %{total: 0, enabled: 0, disabled: 0}
 
     socket
-    |> assign(:library_indexers, library_indexers)
-    |> assign(:library_indexer_stats, library_indexer_stats)
+    |> assign(library_indexers: library_indexers, library_indexer_stats: library_indexer_stats)
+    |> TrackerTermsEvents.reload()
     |> SearchStatsEvents.refresh()
   end
 
