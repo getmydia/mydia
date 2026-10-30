@@ -127,7 +127,11 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
               parse
             )
 
-          {:ok, rows |> drop_invalid_releases(opts, config.name) |> apply_search_filters(opts)}
+          {:ok,
+           rows
+           |> drop_invalid_releases(opts, config.name)
+           |> apply_search_filters(opts)
+           |> AdapterSupport.put_definition_privacy(definition.type)}
         end
       end
     else

@@ -142,7 +142,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
          session = stored_session(definition),
          {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
       if out.session_changed, do: persist_session(definition, out.session, session)
-      {:ok, apply_search_filters(out.releases, opts)}
+
+      {:ok,
+       out.releases
+       |> apply_search_filters(opts)
+       |> AdapterSupport.put_definition_privacy(definition.type)}
     end
   end
 

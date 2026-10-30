@@ -14,10 +14,36 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   alias Mydia.Indexers.{CardigannDefinition, CardigannHealthCheck}
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Repo
 
   # How many mirrors one search tries before giving up.
   @max_search_candidates 3
+
+  @doc """
+  Marks every result private or public from the definition's `type`:
+  `private` and `semi-private` are private, `public` is not, anything else
+  leaves the terms as they are. Both engines report volume factors per
+  release, but privacy belongs to the definition, so it is added here for
+  both.
+  """
+  @spec put_definition_privacy([SearchResult.t()], String.t() | nil) :: [SearchResult.t()]
+  def put_definition_privacy(results, type) do
+    case definition_private?(type) do
+      nil ->
+        results
+
+      private? ->
+        Enum.map(results, fn result ->
+          terms = result.terms || %TrackerTerms{}
+          %{result | terms: %{terms | private?: private?}}
+        end)
+    end
+  end
+
+  defp definition_private?(type) when type in ["private", "semi-private"], do: true
+  defp definition_private?("public"), do: false
+  defp definition_private?(_type), do: nil
 
   @doc "Loads the definition row named by `config.indexer_id`."
   @spec fetch_definition(map()) :: {:ok, CardigannDefinition.t()} | {:error, Error.t()}
