@@ -212,7 +212,7 @@ jobs:
         run: |
           df -h /
           avail_gb=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-          if [ "$avail_gb" -lt 30 ]; then
+          if [ "${avail_gb:-0}" -lt 30 ]; then
             echo "::error::Only ${avail_gb} GB free; the server image build needs about 30 GB. Restore the cleanup step from git history."
             exit 1
           fi

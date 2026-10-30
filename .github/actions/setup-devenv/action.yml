@@ -20,6 +20,19 @@ inputs:
     description: "'true' to restore and save native/*/target."
     default: 'true'
 
+# A PR that changes mix.lock, patches or native/ misses master's key prefix. The
+# caller saves once per PR (key = prefix + pr-N, only when nothing matched) so
+# later pushes of that PR restore it instead of compiling cold. A composite
+# step runs immediately, so the save must be a caller step at the end of the
+# job. PR-ref entries age out after 7 days.
+outputs:
+  build-cache-matched-key:
+    description: Key the _build restore matched, empty on a miss (always empty on push).
+    value: ${{ steps.build-restore.outputs.cache-matched-key }}
+  build-cache-key-prefix:
+    description: The _build key family prefix, ending in a dash.
+    value: ${{ steps.build-prefix.outputs.prefix }}
+
 runs:
   using: composite
   steps:
@@ -84,7 +97,15 @@ runs:
     # newly added export the whole module fails to load, and every caller
     # reports "module Mydia.P2p is not available" rather than anything
     # pointing at the cache.
+    - name: Compute build cache prefix
+      id: build-prefix
+      shell: bash
+      env:
+        PREFIX: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+      run: echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
     - name: Restore build cache
+      id: build-restore
       if: inputs.elixir-caches == 'true' && github.event_name != 'push'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:

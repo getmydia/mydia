@@ -315,6 +315,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -383,6 +384,16 @@ jobs:
           fi
           DEVENV
 
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
+
   # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
   # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
   # own runner with its own mydia_test.db, so SQLite still sees one writer.
@@ -407,6 +418,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -450,6 +462,16 @@ jobs:
           mix test --partitions 4 --warnings-as-errors
           DEVENV
 
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
+
   dialyzer:
     name: Dialyzer
     needs: changes
@@ -463,6 +485,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -508,6 +531,16 @@ jobs:
         with:
           path: priv/plts
           key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('priv/plts/*.plt') }}
+
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   rust:
     name: Rust
@@ -592,6 +625,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -652,6 +686,16 @@ jobs:
           mix test --partitions 3 --warnings-as-errors
           DEVENV
 
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
+
   test-e2e:
     name: Test / E2E Browser (run)
     needs: changes
@@ -663,6 +707,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -684,6 +729,16 @@ jobs:
           mix assets.deploy
           ./scripts/run-feature-tests.sh
           DEVENV
+
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
       - name: Upload screenshots on failure
         if: failure()
@@ -711,6 +766,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up devenv
+        id: devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -734,6 +790,16 @@ jobs:
             test/mydia/locale/catalog_test.exs \
             test/mydia_web/locale_integration_test.exs
           DEVENV
+
+      - name: Save build cache (PR, cold prefix)
+        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   # Required contexts live on these aggregators, never on gated jobs: a job
   # skipped by `if:` concludes `skipped`, and whether the ruleset counts that as
@@ -789,7 +855,7 @@ jobs:
   cache-prune:
     name: Cache prune
     needs: [lint, test-sqlite, test-postgres, dialyzer, test-e2e]
-    if: always() && github.event_name == 'push'
+    if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

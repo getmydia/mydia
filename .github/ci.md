@@ -419,8 +419,9 @@ Four gotchas around it:
 ### The Dialyzer job
 
 `ci.yml`'s `Dialyzer` job runs `mix dialyzer --format github` in `MIX_ENV=test`
-and fails on any finding. It shares the SQLite shards' `Cache build` key (the
-default `build-cache-prefix`), so it restores the same `_build/test` and
+and fails on any finding. It shares the SQLite shards' `_build` cache family (the
+default `build-cache-prefix`; restored by `Restore build cache` on PRs, saved by
+`Cache build` on master), so it restores the same `_build/test` and
 `priv/native`. The PLTs live in `priv/plts` under their own cache. Restore matches on
 `.elixir-version`, `.otp-version`, `patches/**` and `mix.lock` (in that order),
 falling back to the toolchain and patches prefix so a lock change rebuilds
@@ -547,6 +548,10 @@ a PR recompiles only what it changed. The `Cache prune` job keeps the newest
 two master entries per family. Before this, the key hashed `lib/` and `test/`,
 so every PR push saved a new ~75 MB entry: 103 of them (6.8 GB) on 2026-10-30,
 which evicted the deps, cargo and PLT caches and sent runs down the cold path.
+The one exception: a PR whose restore matched nothing (it changed `mix.lock`,
+`patches/` or `native/`, so it misses master's prefix) saves once, at the end of
+each job, under the same prefix plus `pr-<number>`, so its later pushes restore
+that instead of compiling cold. Those entries age out after 7 days.
 
 The Actions cache has a 10 GB limit per repository, and it is evicted least
 recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
