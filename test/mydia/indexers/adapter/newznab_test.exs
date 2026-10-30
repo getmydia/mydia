@@ -707,4 +707,29 @@ defmodule Mydia.Indexers.Adapter.NewznabTest do
       assert result.info_url == "https://indexer.example/details/42"
     end
   end
+
+  describe "tracker terms" do
+    test "reads volume factors, minimum ratio and seed time from newznab attrs" do
+      result =
+        newznab_search_one("""
+        <link>https://indexer.example/nzb/42</link>
+        <newznab:attr name="downloadvolumefactor" value="0.5"/>
+        <newznab:attr name="uploadvolumefactor" value="1"/>
+        <newznab:attr name="minimumratio" value="0.8"/>
+        <newznab:attr name="minimumseedtime" value="3600"/>
+        """)
+
+      assert %Mydia.Indexers.Structs.TrackerTerms{
+               download_volume_factor: 0.5,
+               upload_volume_factor: 1.0,
+               minimum_ratio: 0.8,
+               minimum_seed_time: 3600
+             } = result.terms
+    end
+
+    test "an item without the attrs reports no terms" do
+      result = newznab_search_one("<link>https://indexer.example/nzb/42</link>")
+      assert result.terms == nil
+    end
+  end
 end

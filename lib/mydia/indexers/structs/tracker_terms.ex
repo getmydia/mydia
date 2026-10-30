@@ -44,15 +44,18 @@ defmodule Mydia.Indexers.Structs.TrackerTerms do
   @doc """
   Builds terms from Torznab/Newznab attribute values keyed by attribute name
   (`downloadvolumefactor`, `uploadvolumefactor`, `minimumratio`,
-  `minimumseedtime`). Returns nil when none of them carries a value.
+  `minimumseedtime`), as strings or as the atoms an xpath spec produces.
+  Returns nil when none of them carries a value.
   """
-  @spec from_torznab(%{optional(String.t()) => String.t() | nil}) :: t() | nil
+  @spec from_torznab(%{optional(String.t() | atom()) => String.t() | nil}) :: t() | nil
   def from_torznab(attrs) when is_map(attrs) do
+    attr = fn name, atom -> Map.get(attrs, name) || Map.get(attrs, atom) end
+
     %__MODULE__{
-      download_volume_factor: parse_float(attrs["downloadvolumefactor"]),
-      upload_volume_factor: parse_float(attrs["uploadvolumefactor"]),
-      minimum_ratio: parse_float(attrs["minimumratio"]),
-      minimum_seed_time: parse_seconds(attrs["minimumseedtime"])
+      download_volume_factor: parse_float(attr.("downloadvolumefactor", :downloadvolumefactor)),
+      upload_volume_factor: parse_float(attr.("uploadvolumefactor", :uploadvolumefactor)),
+      minimum_ratio: parse_float(attr.("minimumratio", :minimumratio)),
+      minimum_seed_time: parse_seconds(attr.("minimumseedtime", :minimumseedtime))
     }
     |> nil_if_empty()
   end

@@ -393,4 +393,34 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert result.info_url == "https://tracker.example/t/42"
     end
   end
+
+  describe "tracker terms" do
+    test "reads volume factors, minimum ratio and seed time from torznab attrs" do
+      result =
+        search_one(
+          torznab_item("""
+          <link>https://tracker.example/download/42.torrent</link>
+          <torznab:attr name="downloadvolumefactor" value="0"/>
+          <torznab:attr name="uploadvolumefactor" value="2"/>
+          <torznab:attr name="minimumratio" value="1.0"/>
+          <torznab:attr name="minimumseedtime" value="259200"/>
+          """)
+        )
+
+      assert %Mydia.Indexers.Structs.TrackerTerms{
+               download_volume_factor: +0.0,
+               upload_volume_factor: 2.0,
+               minimum_ratio: 1.0,
+               minimum_seed_time: 259_200,
+               private?: nil
+             } = result.terms
+    end
+
+    test "an item without the attrs reports no terms" do
+      result =
+        search_one(torznab_item("<link>https://tracker.example/download/42.torrent</link>"))
+
+      assert result.terms == nil
+    end
+  end
 end
