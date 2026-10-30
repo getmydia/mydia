@@ -50,7 +50,7 @@ Both compute the hash with `prefetch-npm-deps` from the flake's pinned nixpkgs
 (`scripts/lib/npm-deps-hash.sh`) and compare strings. Never gate this by
 building `.#packages.x86_64-linux.default.npmDeps`. A fixed-output derivation's
 store path depends only on its declared hash, so an unbumped hash names the path
-master already built, magic-nix-cache substitutes it, nothing is fetched, and
+master already built, the binary cache substitutes it, nothing is fetched, and
 the build passes. `Check / Flutter Pin` ran exactly that step. It passed on #967,
 which changed the lockfile and left the hash, and master's `CI / Nix` went red
 on the merge. The hash had drifted twice before (`d1109d65c`, `f00681d22`, 15
@@ -419,13 +419,18 @@ Four gotchas around it:
 ### The Dialyzer job
 
 `ci.yml`'s `Dialyzer` job runs `mix dialyzer --format github` in `MIX_ENV=test`
-and fails on any finding. It shares the SQLite shards' `Cache build` key (the
-default `build-cache-prefix`), so it restores the same `_build/test` and
-`priv/native`. The PLTs live in `priv/plts`
-under their own cache, keyed on `.elixir-version`, `.otp-version`, `patches/**` and `mix.lock`
-(in that order), with a restore prefix on the toolchain and patches so a lock
-change rebuilds incrementally. A patch change never restores an older PLT, since
-dialyxir compares dependency versions, not beam contents.
+and fails on any finding. It shares the SQLite shards' `_build` cache family (the
+default `build-cache-prefix`; restored by `Restore build cache` on PRs, saved by
+`Cache build` on master), so it restores the same `_build/test` and
+`priv/native`. The PLTs live in `priv/plts` under their own cache. Restore matches on
+`.elixir-version`, `.otp-version`, `patches/**` and `mix.lock` (in that order),
+falling back to the toolchain and patches prefix so a lock change rebuilds
+incrementally. A patch change never restores an older PLT, since dialyxir
+compares dependency versions, not beam contents. Every run saves under a key
+ending in a hash of the PLT files, so only a changed PLT writes a new entry. A PLT
+dialyxir repaired on load is therefore saved as a new entry, and restore picks the newest. With an exact-match key, the
+repaired PLT was never re-saved and every run spent 3.7 minutes repairing the
+same stale file (2026-10-30).
 The `Lint` job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,
 and checks for a `.dialyzer_ignore.exs` file (Dialyxir loads it by default without any
 `mix.exs` setting). It fails if any of the three appears. The policy is in `CONTRIBUTING.md`.
@@ -537,6 +542,16 @@ key family, `build-v2-devenv-postgres`, because their compile differs from the
 SQLite one; every other job shares `build-v2-devenv`. The cargo target cache
 exists because a `_build` miss used to rebuild the iroh-based Rustler crates
 from scratch.
+Pull requests only restore `_build`; they never save it. Master saves under a
+key ending in the commit SHA, so restore always takes master's newest tree and
+a PR recompiles only what it changed. The `Cache prune` job keeps the newest
+two master entries per family. Before this, the key hashed `lib/` and `test/`,
+so every PR push saved a new ~75 MB entry: 103 of them (6.8 GB) on 2026-10-30,
+which evicted the deps, cargo and PLT caches and sent runs down the cold path.
+The one exception: a PR whose restore matched nothing (it changed `mix.lock`,
+`patches/` or `native/`, so it misses master's prefix) saves once, at the end of
+each job, under the same prefix plus `pr-<number>`, so its later pushes restore
+that instead of compiling cold. Those entries age out after 7 days.
 
 The Actions cache has a 10 GB limit per repository, and it is evicted least
 recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
@@ -565,6 +580,9 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
+- `ci-nix.yml` and `dependabot-fixup.yml` use Cachix, like the devenv jobs.
+  magic-nix-cache stored every store path as its own Actions cache entry
+  (2,226 entries, 1.1 GB on 2026-10-30).
 
 Check the budget with:
 

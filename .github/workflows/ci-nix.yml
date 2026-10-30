@@ -91,10 +91,20 @@ jobs:
           echo "OK: environment.flutter is '$expected'."
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      # Cachix, not magic-nix-cache: the latter wrote ~2,200 .nar entries
+      # (1.1 GB) into the 10 GB Actions cache and pushed the Mix build caches out.
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # The assertion lives in player/flutter-version.nix; this step only forces
       # evaluation. It builds nothing -- no SDK, no Android tooling -- so it costs
@@ -132,10 +142,18 @@ jobs:
         run: ./scripts/check-beam-pin.sh
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # beam-version.nix throws when this nixpkgs has no beam set for the
       # pinned OTP major, or no Elixir attribute for the pinned minor under it.
@@ -236,10 +254,18 @@ jobs:
       # check uses to recompute npmDeps.hash from assets/package-lock.json.
       # The cache only ever holds that tool, never the hash under test.
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # Guards the two ways a dependency bump ships a broken tree while every
       # check stays green: generated frb bindings left behind by a version pin
@@ -300,10 +326,21 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      # Read-only: these jobs only run on master and their closure (the NixOS VM,
+      # the mydia package and its vendored FODs) is large; pushing it to Cachix
+      # could evict the devenv paths every ci.yml job pulls.
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: true
 
       - name: Enable KVM access
         run: |
@@ -324,10 +361,21 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      # Read-only: these jobs only run on master and their closure (the NixOS VM,
+      # the mydia package and its vendored FODs) is large; pushing it to Cachix
+      # could evict the devenv paths every ci.yml job pulls.
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: true
 
       - name: Enable KVM access
         run: |
