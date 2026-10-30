@@ -135,7 +135,10 @@ form" is `HostHttp` flagging a request whose scheme, host, port and path match
 `login.path` or `login.submitpath`, rendered with the stored settings and
 resolved on each current link, through the ctx's `:login_watch`; the flag is
 reset before each mirror attempt. Only the rejected session is deleted, and
-`park/1` leaves the status alone when a session was stored meanwhile. The Indexers page's **Log in** always runs the built-in `Login`, on
+`park/1` writes `needs_login` first and reads the stored session after, so a
+session stored meanwhile (by `store/2`, which clears `needs_login` from the
+database row rather than the caller's struct) never stays parked; `park/1`
+then returns it. The Indexers page's **Log in** always runs the built-in `Login`, on
 either engine, and both engines read the session it stores. The guest's own
 `login/2` can return a captcha too, but nothing calls it from the UI.
 

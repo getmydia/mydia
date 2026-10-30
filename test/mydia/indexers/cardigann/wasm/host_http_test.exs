@@ -68,6 +68,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
 
       assert :atomics.get(hit, 1) == 0
 
+      # Same port and path, another host.
+      HostHttp.exchange(
+        %{ctx | login_watch: %{targets: [%{watched | host: "other.invalid"}], hit: hit}},
+        req("GET", base <> "/login.php")
+      )
+
+      assert :atomics.get(hit, 1) == 0
+
       HostHttp.exchange(ctx, req("GET", base <> "/login.php?returnto=%2F"))
       assert :atomics.get(hit, 1) == 1
     end

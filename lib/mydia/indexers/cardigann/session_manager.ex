@@ -10,6 +10,8 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
 
   require Logger
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.{LoggedOut, Login}
   alias Mydia.Indexers.Cardigann.Login.Session
@@ -51,7 +53,7 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
   def store(%CardigannDefinition{} = definition, %Session{} = session) do
     case CardigannAuth.store_session(definition.id, session.cookies, session.expires_at) do
       {:ok, _} ->
-        if definition.health_status == "needs_login", do: set_status(definition, "healthy")
+        clear_needs_login(definition)
 
       {:error, _changeset} ->
         Logger.warning("Cardigann #{definition.indexer_id}: could not save the login session")
@@ -127,33 +129,52 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
   Moves a definition to `needs_login` and returns the `:login_required` error
   searches report. For a login that needs a person; the wasm adapter calls it
   too, so both engines park such a definition the same way.
-  """
-  @spec park(CardigannDefinition.t()) :: {:error, Error.t()}
-  def park(%CardigannDefinition{} = definition) do
-    # A person may have logged in from the Indexers page while this search
-    # failed; parking now would hide that session until the next login.
-    unless match?({:ok, _}, CardigannAuth.get_stored_session(definition.id)),
-      do: set_status(definition, "needs_login")
 
-    {:error, needs_login_error(definition.name)}
+  A person may log in from the Indexers page while a search is failing. The
+  status is written first and the stored session read after, so whichever of
+  `park/1` and `store/2` runs last, a stored session never stays parked; when
+  one exists it is returned as the search's `user_config`.
+  """
+  @spec park(CardigannDefinition.t()) :: {:ok, map()} | {:error, Error.t()}
+  def park(%CardigannDefinition{} = definition) do
+    set_status(definition, "needs_login")
+
+    case CardigannAuth.get_stored_session(definition.id) do
+      {:ok, %{cookies: cookies}} ->
+        clear_needs_login(definition)
+        {:ok, %{cookies: cookies}}
+
+      {:error, _} ->
+        {:error, needs_login_error(definition.name)}
+    end
   end
+
+  @doc """
+  Moves a definition out of `needs_login` once a session is stored. Reads the
+  status from the database, not the caller's struct, which may be stale.
+  """
+  @spec clear_needs_login(CardigannDefinition.t()) :: :ok
+  def clear_needs_login(%CardigannDefinition{id: id}) do
+    {count, _} =
+      from(d in CardigannDefinition, where: d.id == ^id and d.health_status == "needs_login")
+      |> Repo.update_all(set: [health_status: "healthy", last_health_check_at: now()])
+
+    if count > 0,
+      do: Phoenix.PubSub.broadcast(@pubsub, @topic, {:cardigann_health_changed, id})
+
+    :ok
+  end
+
+  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   defp needs_login_error(name),
     do: Error.login_required("#{name} needs someone to log in from the Indexers page")
 
+  # By id, so a stale struct whose status already reads the target value still
+  # writes it.
   defp set_status(definition, status) do
-    attrs = %{
-      health_status: status,
-      last_health_check_at: DateTime.utc_now() |> DateTime.truncate(:second)
-    }
-
-    case definition |> CardigannDefinition.health_check_changeset(attrs) |> Repo.update() do
-      {:ok, _} ->
-        :ok
-
-      {:error, _} ->
-        Logger.warning("Cardigann #{definition.indexer_id}: could not set health status")
-    end
+    from(d in CardigannDefinition, where: d.id == ^definition.id)
+    |> Repo.update_all(set: [health_status: status, last_health_check_at: now()])
 
     Phoenix.PubSub.broadcast(@pubsub, @topic, {:cardigann_health_changed, definition.id})
   end

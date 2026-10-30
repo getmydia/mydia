@@ -90,7 +90,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   }
 
   alias Mydia.Indexers.Cardigann.SessionManager
-  alias Mydia.Repo
 
   import AdapterSupport,
     only: [apply_search_filters: 2, blank?: 1, fetch_definition: 1, setting: 2]
@@ -173,7 +172,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       )
 
       invalidate_rejected(definition, session.cookies)
-      SessionManager.park(definition)
+
+      # A session stored meanwhile from the Indexers page: the next search uses it.
+      with {:ok, _user_config} <- SessionManager.park(definition), do: :ok
     else
       :ok
     end
@@ -182,8 +183,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   defp check_swallowed_login(_watch, _out, _definition, _session), do: :ok
 
   # Deletes the stored session only while it is still the one the search sent;
-  # a session stored meanwhile from the Indexers page survives (and then keeps
-  # `SessionManager.park/1` from parking the definition).
+  # a session stored meanwhile from the Indexers page survives (and then
+  # `SessionManager.park/1` does not leave the definition parked).
   defp invalidate_rejected(definition, rejected) do
     with {:ok, %{cookies: stored}} <- CardigannAuth.get_stored_session(definition.id),
          true <- cookies_to_map(stored) == rejected do
@@ -661,32 +662,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     case CardigannAuth.store_session(definition.id, pairs, nil) do
       {:ok, _row} ->
-        clear_needs_login(definition)
+        SessionManager.clear_needs_login(definition)
 
       {:error, _changeset} ->
         Logger.warning("Cardigann #{definition.indexer_id}: could not save the login session")
         :ok
     end
   end
-
-  defp clear_needs_login(%CardigannDefinition{health_status: "needs_login"} = definition) do
-    definition
-    |> CardigannDefinition.health_check_changeset(%{
-      health_status: "healthy",
-      last_health_check_at: DateTime.utc_now() |> DateTime.truncate(:second)
-    })
-    |> Repo.update()
-
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      SessionManager.topic(),
-      {:cardigann_health_changed, definition.id}
-    )
-
-    :ok
-  end
-
-  defp clear_needs_login(_definition), do: :ok
 
   # Same gate the Elixir engine applies in `SessionManager.user_config/2`: a
   # definition with a login block that is waiting on a person is skipped, not
