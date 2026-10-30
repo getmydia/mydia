@@ -354,6 +354,14 @@ done | cut -d_ -f1 | sort | uniq -d
 - Monitor until CI checks complete and the PR is successfully merged into `master`.
 - Only clean up or delete the worktree after the merge is verified.
 
+### Design docs
+
+Specs and implementation plans go in `design/`, never under `docs/` (which
+publishes to docs.mydia.dev). Specs: `design/specs/YYYY-MM-DD-<topic>-design.md`.
+Plans: `design/plans/YYYY-MM-DD-<topic>.md`. Commit them in the same PR as the
+feature. Agent run scratch (briefs, ledgers, review packages) stays in the
+gitignored `.superpowers/`, and code never cites it.
+
 ### Where the deeper notes live
 
 Hard-won specifics live next to the code they describe rather than in this file.
@@ -376,6 +384,7 @@ Read the relevant one before working in that area:
 | `.github/ci.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
 | `player/docs/` | player workflow, testing, Riverpod, packaging |
 | `player/lib/core/sources/README.md` | Plex, Stash and Jellyfin sources: storage, connection race, credentials, playback seam |
+| `design/README.md` | specs, plans and planning notes: layout and naming |
 
 ### Phoenix v1.8 guidelines
 
