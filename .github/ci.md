@@ -426,9 +426,9 @@ default `build-cache-prefix`; restored by `Restore build cache` on PRs, saved by
 `.elixir-version`, `.otp-version`, `patches/**` and `mix.lock` (in that order),
 falling back to the toolchain and patches prefix so a lock change rebuilds
 incrementally. A patch change never restores an older PLT, since dialyxir
-compares dependency versions, not beam contents. Only master saves, under a key
-ending in a hash of the PLT files. A PLT dialyxir repaired on load is therefore
-saved as a new entry, and restore picks the newest. With an exact-match key, the
+compares dependency versions, not beam contents. Every run saves under a key
+ending in a hash of the PLT files, so only a changed PLT writes a new entry. A PLT
+dialyxir repaired on load is therefore saved as a new entry, and restore picks the newest. With an exact-match key, the
 repaired PLT was never re-saved and every run spent 3.7 minutes repairing the
 same stale file (2026-10-30).
 The `Lint` job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,

@@ -503,7 +503,7 @@ jobs:
       # on 2026-10-30) was thrown away and repaired again next time. The save
       # key now ends in a hash of the PLT itself: a repaired PLT is saved under
       # a new key, an unchanged one is a no-op, and restore takes the newest.
-      # Only master saves.
+      # Every run saves, but only a changed PLT writes a new entry; PR-scoped entries are small (about 18 MB) and age out after 7 days.
       - name: Restore Dialyzer PLTs
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -525,7 +525,7 @@ jobs:
           DEVENV
 
       - name: Save Dialyzer PLTs
-        if: github.event_name == 'push' && success()
+        if: success()
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
