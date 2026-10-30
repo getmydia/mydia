@@ -68,7 +68,7 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
     view |> element("a#alpha-jump-m") |> render_click()
     assert_patch(view, "/movies?letter=m")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
 
     assert hd(card_ids(view)) == card(first_m)
     assert has_element?(view, "#media-items-top-sentinel")
@@ -89,7 +89,7 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
     view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
     assert_patch(view, "/movies?letter=m")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
     assert hd(card_ids(view)) == card(first_m)
   end
 
@@ -102,11 +102,13 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
 
     view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
     assert_patch(view, "/movies?letter=m")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
     refute wrapper.() == before
 
+    # The letter is already in the URL, so the client is told which one to
+    # scroll to rather than to the list's top.
     view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "m"})
   end
 
   test "a letter without titles is ignored by the picker event", %{conn: conn} do
@@ -208,7 +210,7 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     refute_push_event(view, "alpha_jump:scroll_top", %{})
 
     render_patch(view, "/movies?letter=z")
-    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    assert_push_event(view, "alpha_jump:scroll_top", %{letter: "z"})
   end
 
   test "a letter with no titles starts at the next letter", %{conn: conn} do

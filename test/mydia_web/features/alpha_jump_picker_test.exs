@@ -61,7 +61,7 @@ defmodule MydiaWeb.Features.AlphaJumpPickerTest do
     # Same letter as the URL: the server scrolls instead of patching. Count it.
     eval_js(
       session,
-      "window.__scrolled = 0; window.addEventListener('phx:alpha_jump:scroll_top', function () { window.__scrolled += 1; }); return true;"
+      "window.__scrolled = 0; window.__letter = null; window.addEventListener('phx:alpha_jump:scroll_top', function (e) { window.__scrolled += 1; window.__letter = e.detail && e.detail.letter; }); return true;"
     )
 
     choose(session, "v")
@@ -69,5 +69,11 @@ defmodule MydiaWeb.Features.AlphaJumpPickerTest do
     wait_until("second pick of the same letter to jump", fn ->
       eval_js(session, "return window.__scrolled;") >= 1
     end)
+
+    # The push names the letter, so the client lands on its first card
+    # instead of the list's top, which load_previous may have moved. (The
+    # four-title fixture is too short to scroll, so the landing itself is not
+    # measurable here.)
+    assert eval_js(session, "return window.__letter;") == "v"
   end
 end

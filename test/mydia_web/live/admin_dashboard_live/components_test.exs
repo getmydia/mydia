@@ -99,7 +99,10 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert [label] = LazyHTML.attribute(svg, "aria-label")
       assert label != ""
       assert LazyHTML.attribute(svg, "aria-hidden") == []
-      assert doc |> LazyHTML.query("#plays-chart svg title") |> Enum.count() > 0
+      assert [title] = doc |> LazyHTML.query("#plays-chart svg title") |> Enum.to_list()
+      assert LazyHTML.text(title) =~ "Sep 01"
+      assert LazyHTML.text(title) =~ "2 movies"
+      assert LazyHTML.text(title) =~ "4 episodes"
     end
 
     test "labels the y-axis with the peak play count" do
@@ -115,6 +118,19 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
 
       assert "6" in labels
       assert "0" in labels
+
+      # Each label sits at its value's height: the peak at the top edge, zero
+      # at the bottom, the midpoint halfway.
+      tops =
+        doc
+        |> LazyHTML.query("#plays-chart-y-axis span")
+        |> Enum.map(fn span ->
+          [style] = LazyHTML.attribute(span, "style")
+          [_, pct] = Regex.run(~r/top:\s*([\d.]+)%/, style)
+          {LazyHTML.text(span), String.to_float(pct)}
+        end)
+
+      assert tops == [{"0", 100.0}, {"3", 50.0}, {"6", 0.0}]
     end
 
     test "marks the active range and offers the other two" do

@@ -949,8 +949,10 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp maybe_scroll_to_letter(socket, nil_or_false) when nil_or_false in [nil, false], do: socket
 
-  defp maybe_scroll_to_letter(socket, _letter),
-    do: push_event(socket, "alpha_jump:scroll_top", %{})
+  # The letter lets the client land on that letter's first card: after
+  # load_previous prepended earlier rows, the top of the list is no longer it.
+  defp maybe_scroll_to_letter(socket, letter),
+    do: push_event(socket, "alpha_jump:scroll_top", %{letter: letter})
 
   # The select is hidden below two options, where a chosen library could not
   # be cleared, so it is only honoured from two up.

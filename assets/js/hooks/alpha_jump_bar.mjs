@@ -143,8 +143,19 @@ export const AlphaJumpBar = {
     // re-render it and updated() never runs; and jumping from one letter to
     // another can leave the scroll position where it was, firing no scroll
     // event. So re-measure here, once the new rows have been laid out.
-    this.handleEvent("alpha_jump:scroll_top", () => {
-      document.getElementById("media-items")?.scrollIntoView({ block: "start" });
+    //
+    // A letter in the payload means the rows above it may have been loaded
+    // since (load_previous), so the list's top is not that letter: scroll to
+    // its first card. Without one, or with no such card (a letter with no
+    // titles starts at the next), scroll to the list's top.
+    this.handleEvent("alpha_jump:scroll_top", (payload) => {
+      const letter = payload?.letter;
+      const list = document.getElementById("media-items");
+      if (letter && list?.querySelector(`[data-initial="${CSS.escape(letter)}"]`)) {
+        this.scrollToLetter(letter);
+        return;
+      }
+      list?.scrollIntoView({ block: "start" });
       this.rehighlight();
     });
 

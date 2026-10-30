@@ -37,6 +37,12 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     {:tiny_text,
      ~s|<svg viewBox="0 0 600 100" style="width:300px;height:50px"><text x="0" y="40" font-size="12">scaled</text></svg>|,
      ~s|<svg viewBox="0 0 600 100" style="width:300px;height:50px"><text x="0" y="40" font-size="24">scaled</text></svg>|},
+    # With preserveAspectRatio="none" the axes scale apart, and the height of
+    # the glyphs follows the vertical scale: 12 units shown at 0.5 vertically
+    # is 6px, while 0.5 horizontally alone leaves them 12px tall.
+    {:tiny_text,
+     ~s|<svg viewBox="0 0 600 100" preserveAspectRatio="none" style="width:300px;height:50px"><text x="0" y="40" font-size="12">squashed</text></svg>|,
+     ~s|<svg viewBox="0 0 600 100" preserveAspectRatio="none" style="width:300px;height:100px"><text x="0" y="40" font-size="12">squashed</text></svg>|},
     # Text cut by an overflow: hidden box is reported even when a nearer
     # ancestor is a scroller that does not itself cut it.
     {:clipped_text,
