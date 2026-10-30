@@ -12,4 +12,14 @@ defmodule MydiaWeb.MobileLayoutSeedTest do
     assert Repo.aggregate(Mydia.Downloads.Download, :count) >= 7
     assert Repo.aggregate(Mydia.Media.Episode, :count) >= 6
   end
+
+  test "seeds one download per Issues kind" do
+    MydiaWeb.MobileLayoutSeed.insert!(admin_user_fixture())
+    downloads = Repo.all(Mydia.Downloads.Download)
+
+    assert Enum.count(downloads, &(&1.import_failed_at != nil)) >= 2
+    assert Enum.any?(downloads, &(&1.removal_error != nil))
+    assert Enum.any?(downloads, &(&1.match_status == "unresolved_files"))
+    assert Enum.any?(downloads, &(&1.import_failure_reason == "no_client"))
+  end
 end

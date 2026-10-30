@@ -32,6 +32,16 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
      ~s|<div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:60px"><span>A considerably long fictional label</span></div>|},
     {:tiny_text, ~s|<span style="font-size:10px">tiny</span>|,
      ~s|<span style="font-size:12px">fine</span>|},
+    # Text cut by an overflow: hidden box is reported even when a nearer
+    # ancestor is a scroller that does not itself cut it.
+    {:clipped_text,
+     ~s|<div style="overflow:hidden;width:60px"><div style="overflow-x:auto;width:max-content;white-space:nowrap">A considerably long fictional label</div></div>|,
+     ~s|<div style="overflow:hidden;width:290px"><div style="overflow-x:auto;width:max-content;white-space:nowrap">A fictional label</div></div>|},
+    # An ellipsis only renders where text cannot wrap: with normal wrapping a
+    # long unbroken token is cut bare.
+    {:clipped_text,
+     ~s|<div style="overflow:hidden;text-overflow:ellipsis;width:60px">Considerablylongfictionalunbrokentoken</div>|,
+     ~s|<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:60px">Considerablylongfictionalunbrokentoken</div>|},
     # False positives found by the sweep. Each good fixture is the markup that
     # used to fire.
     #
@@ -111,8 +121,9 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     @tag :feature
     test "#{check} stays quiet on the good fixture (case #{n})", %{session: session} do
       render_fixture(session, unquote(good))
-      checks = session |> audit(scope: "#mlx") |> Enum.map(& &1.check)
-      refute unquote(check) in checks
+      # Nothing at all, not merely nothing of this check: a good fixture that
+      # trips another rule would hide whether this one stays quiet.
+      assert audit(session, scope: "#mlx") == []
     end
   end
 

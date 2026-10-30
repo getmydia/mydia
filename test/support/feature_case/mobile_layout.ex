@@ -103,45 +103,53 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
     }
     // Measures the glyphs, not scrollWidth: an unloaded lazy <img> showing its
     // alt text, or a badge border, overflows a box without hiding any text.
-    // A text node counts only for its nearest clipping ancestor on that axis,
-    // so one cut is reported once, by the box doing the cutting (and a
-    // truncating child with an ellipsis stays its own, exempt, business).
-    function clipperX(n) {
-      for (var a = n.parentElement; a; a = a.parentElement) {
-        if (getComputedStyle(a).overflowX !== 'visible') return a;
-      }
-      return null;
+    // A cut glyph run counts only for the nearest ancestor whose box actually
+    // cuts it on that axis, so one cut is reported once, by the box doing the
+    // cutting. A truncating child with an ellipsis that cuts first stays its
+    // own, exempt, business; a scroller that cuts first can be scrolled.
+    function clientBox(a) {
+      var b = a.getBoundingClientRect();
+      var L = b.left + a.clientLeft, T = b.top + a.clientTop;
+      return {L: L, T: T, R: L + a.clientWidth, B: T + a.clientHeight};
     }
-    function clipperY(n) {
+    function cutsX(q, c) { return q.right > c.R + TOL || q.left < c.L - TOL; }
+    function cutsY(q, c) { return q.bottom > c.B + TOL || q.top < c.T - TOL; }
+    function cutter(n, q, axis) {
       for (var a = n.parentElement; a; a = a.parentElement) {
-        if (getComputedStyle(a).overflowY !== 'visible') return a;
+        var cs = getComputedStyle(a);
+        var ov = axis === 'x' ? cs.overflowX : cs.overflowY;
+        if (ov === 'visible') continue;
+        var c = clientBox(a);
+        if (axis === 'x' ? cutsX(q, c) : cutsY(q, c)) return a;
       }
       return null;
     }
     function clippedText(el, clipX, clipY) {
-      var b = el.getBoundingClientRect();
-      var L = b.left + el.clientLeft, T = b.top + el.clientTop;
-      var R = L + el.clientWidth, B = T + el.clientHeight;
+      var c = clientBox(el);
       var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
       var range = document.createRange();
       for (var n = walker.nextNode(); n; n = walker.nextNode()) {
         if (n.textContent.trim() === '') continue;
-        var cx = clipX && clipperX(n) === el, cy = clipY && clipperY(n) === el;
-        if (!cx && !cy) continue;
         range.selectNodeContents(n);
         var rs = range.getClientRects();
         for (var k = 0; k < rs.length; k++) {
           var q = rs[k];
           if (q.width === 0 || q.height === 0) continue;
-          if (cx && (q.right > R + TOL || q.left < L - TOL)) {
-            return 'box=' + Math.round(L) + '..' + Math.round(R) + ' text=' + Math.round(q.left) + '..' + Math.round(q.right);
+          if (clipX && cutsX(q, c) && cutter(n, q, 'x') === el) {
+            return 'box=' + Math.round(c.L) + '..' + Math.round(c.R) + ' text=' + Math.round(q.left) + '..' + Math.round(q.right);
           }
-          if (cy && (q.bottom > B + TOL || q.top < T - TOL)) {
-            return 'box=' + Math.round(T) + '..' + Math.round(B) + ' text=' + Math.round(q.top) + '..' + Math.round(q.bottom);
+          if (clipY && cutsY(q, c) && cutter(n, q, 'y') === el) {
+            return 'box=' + Math.round(c.T) + '..' + Math.round(c.B) + ' text=' + Math.round(q.top) + '..' + Math.round(q.bottom);
           }
         }
       }
       return null;
+    }
+    // text-overflow: ellipsis only shows on a block-level box whose text
+    // cannot wrap; with normal wrapping a long unbroken token is cut bare.
+    function ellipsisRenders(s) {
+      if (s.textOverflow !== 'ellipsis' || s.display === 'inline') return false;
+      return /^(nowrap|pre)$/.test(s.whiteSpace) || s.textWrapMode === 'nowrap';
     }
     function within(inner, outer) {
       return inner.left >= outer.left - TOL && inner.right <= outer.right + TOL &&
@@ -211,7 +219,10 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
       return false;
     }
-    var all = root.querySelectorAll('*');
+    // The scoped element is audited too. <body> is not: it is the page,
+    // which page_overflow already covers.
+    var all = Array.prototype.slice.call(root.querySelectorAll('*'));
+    if (root !== document.body) all.unshift(root);
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
       var s = getComputedStyle(el);
@@ -249,7 +260,7 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       // 5. clipped_text
       if (el.textContent.trim() !== '' && !/^(IMG|VIDEO|SVG)$/.test(el.tagName.toUpperCase()) &&
           !/hero-/.test(String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className))) {
-        var clipX = /(hidden|clip)/.test(s.overflowX) && s.textOverflow !== 'ellipsis';
+        var clipX = /(hidden|clip)/.test(s.overflowX) && !ellipsisRenders(s);
         var clipY = /(hidden|clip)/.test(s.overflowY) &&
                     (s.webkitLineClamp === 'none' || !s.webkitLineClamp);
         var cut = (clipX || clipY) ? clippedText(el, clipX, clipY) : null;

@@ -27,6 +27,18 @@ defmodule MydiaWeb.MobileLayoutManifestTest do
     end
   end
 
+  test "every swept entry has a :path function of the seed ids and a :states list" do
+    for {route, entry} <- Manifest.entries(), not match?({:exclude, _}, entry) do
+      assert is_map(entry),
+             "#{route}: expected a map or {:exclude, reason}, got #{inspect(entry)}"
+
+      assert is_function(Map.fetch!(entry, :path), 1),
+             "#{route}: :path must be a 1-arity function"
+
+      assert is_list(Map.fetch!(entry, :states)), "#{route}: :states must be a list"
+    end
+  end
+
   test "it sees the routes it should" do
     routes = Manifest.live_routes()
     assert "/downloads" in routes
