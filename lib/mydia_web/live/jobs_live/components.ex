@@ -15,6 +15,7 @@ defmodule MydiaWeb.JobsLive.Components do
   attr :has_more, :boolean, required: true
   attr :filter_worker, :any, required: true
   attr :filter_state, :any, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def jobs_tab(assigns) do
     ~H"""
@@ -36,7 +37,7 @@ defmodule MydiaWeb.JobsLive.Components do
           <%= if job.latest_job do %>
             <div>{format_relative_time(job.latest_job.attempted_at)}</div>
             <div class="text-xs text-base-content/60">
-              {format_datetime(job.latest_job.attempted_at)}
+              <.local_time at={job.latest_job.attempted_at} display={@display} />
             </div>
           <% else %>
             <span class="text-base-content/50">{gettext("Never")}</span>
@@ -46,7 +47,7 @@ defmodule MydiaWeb.JobsLive.Components do
           <%= if job.next_run do %>
             <div>{format_relative_time(job.next_run)}</div>
             <div class="text-xs text-base-content/60">
-              {format_datetime(job.next_run)}
+              <.local_time at={job.next_run} display={@display} />
             </div>
           <% else %>
             <span class="text-base-content/50">{gettext("N/A")}</span>
@@ -158,14 +159,14 @@ defmodule MydiaWeb.JobsLive.Components do
         <:col :let={{_id, job}} label={gettext("Attempted At")}>
           <div>{format_relative_time(job.attempted_at)}</div>
           <div class="text-xs text-base-content/60">
-            {format_datetime(job.attempted_at)}
+            <.local_time at={job.attempted_at} display={@display} />
           </div>
         </:col>
         <:col :let={{_id, job}} label={gettext("Completed At")}>
           <%= if job.completed_at do %>
             <div>{format_relative_time(job.completed_at)}</div>
             <div class="text-xs text-base-content/60">
-              {format_datetime(job.completed_at)}
+              <.local_time at={job.completed_at} display={@display} />
             </div>
           <% else %>
             <span class="text-base-content/50">-</span>
@@ -215,6 +216,7 @@ defmodule MydiaWeb.JobsLive.Components do
   end
 
   attr :job, :any, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def job_details_modal(assigns) do
     ~H"""
@@ -245,13 +247,17 @@ defmodule MydiaWeb.JobsLive.Components do
             <div class="text-sm font-semibold text-base-content/60">
               {gettext("Scheduled At")}
             </div>
-            <div>{format_datetime(@job.scheduled_at)}</div>
+            <div>
+              <.local_time at={@job.scheduled_at} format={:datetime_full} display={@display} />
+            </div>
           </div>
           <div>
             <div class="text-sm font-semibold text-base-content/60">
               {gettext("Attempted At")}
             </div>
-            <div>{format_datetime(@job.attempted_at)}</div>
+            <div>
+              <.local_time at={@job.attempted_at} format={:datetime_full} display={@display} />
+            </div>
           </div>
         </div>
 
@@ -260,7 +266,9 @@ defmodule MydiaWeb.JobsLive.Components do
             <div class="text-sm font-semibold text-base-content/60">
               {gettext("Completed At")}
             </div>
-            <div>{format_datetime(@job.completed_at)}</div>
+            <div>
+              <.local_time at={@job.completed_at} format={:datetime_full} display={@display} />
+            </div>
           </div>
           <div>
             <div class="text-sm font-semibold text-base-content/60">{gettext("Duration")}</div>
@@ -331,9 +339,6 @@ defmodule MydiaWeb.JobsLive.Components do
 
   defp format_relative_time(nil), do: gettext("Never")
   defp format_relative_time(%DateTime{} = dt), do: MydiaWeb.RelativeTime.from_now(dt)
-
-  defp format_datetime(nil), do: gettext("N/A")
-  defp format_datetime(%DateTime{} = dt), do: Timex.format!(dt, "{ISO:Extended}")
 
   defp format_job_duration(nil, _), do: gettext("N/A")
   defp format_job_duration(_, nil), do: gettext("N/A")

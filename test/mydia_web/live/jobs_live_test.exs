@@ -53,4 +53,53 @@ defmodule MydiaWeb.JobsLiveTest do
     render_click(view, "close_trigger_job_modal", %{})
     refute has_element?(view, "#trigger-job-modal")
   end
+
+  test "history timestamps render in the viewer's format, not raw ISO", %{conn: conn} do
+    attempted = ~U[2026-10-30 09:18:00.795827Z]
+    completed = ~U[2026-10-30 09:18:00.936772Z]
+
+    {:ok, done} = Oban.insert(Mydia.Jobs.LibraryScanner.new(%{}))
+
+    done
+    |> Ecto.Changeset.change(
+      state: "completed",
+      attempted_at: attempted,
+      completed_at: completed
+    )
+    |> Mydia.Repo.update!()
+
+    {:ok, view, html} = live(conn, ~p"/admin/jobs")
+
+    assert has_element?(
+             view,
+             ~s(tr#job-#{done.id} td[data-label="Attempted At"] time[datetime="2026-10-30T09:18:00.795827Z"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(tr#job-#{done.id} td[data-label="Completed At"] time[datetime="2026-10-30T09:18:00.936772Z"])
+           )
+
+    refute html =~ "795827+00:00"
+  end
+
+  test "the details modal shows full local timestamps", %{conn: conn} do
+    attempted = ~U[2026-10-30 09:18:00.795827Z]
+
+    {:ok, done} = Oban.insert(Mydia.Jobs.LibraryScanner.new(%{}))
+
+    done
+    |> Ecto.Changeset.change(state: "completed", attempted_at: attempted, completed_at: attempted)
+    |> Mydia.Repo.update!()
+
+    {:ok, view, _html} = live(conn, ~p"/admin/jobs")
+    view |> element("#job-details-#{done.id}") |> render_click()
+
+    assert has_element?(
+             view,
+             ~s(#job-details-modal time[datetime="2026-10-30T09:18:00.795827Z"])
+           )
+
+    refute render(view) =~ "795827+00:00"
+  end
 end

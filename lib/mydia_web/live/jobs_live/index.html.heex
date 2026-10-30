@@ -10,10 +10,11 @@
       has_more={@has_more}
       filter_worker={@filter_worker}
       filter_state={@filter_state}
+      display={@time_display}
     />
 
     <%= if @selected_job do %>
-      <MydiaWeb.JobsLive.Components.job_details_modal job={@selected_job} />
+      <MydiaWeb.JobsLive.Components.job_details_modal job={@selected_job} display={@time_display} />
     <% end %>
 
     <%= if @trigger_job_worker do %>
