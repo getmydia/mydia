@@ -14,8 +14,7 @@ defmodule MydiaWeb.Features.MediaFileRowWidthTest do
   1024px is the worst case on both, not the phone: the app drawer becomes
   permanent and the page rail widens to 20rem while the window grows by 124px,
   so the content column collapses from 584px to 312px. A `sm:` variant calls
-  that wide. See
-  docs/superpowers/specs/2026-09-02-media-file-rows-narrow-columns-design.md.
+  that wide.
   """
   use MydiaWeb.FeatureCase, async: false
 

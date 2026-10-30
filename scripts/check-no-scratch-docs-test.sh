@@ -62,6 +62,22 @@ do
   fi
 done
 
+# Design docs live outside docs/ and are committed.
+if ! run_in_repo bash -c '
+  mkdir -p design/specs
+  echo spec > design/specs/2026-01-01-example-design.md
+  git add design/specs/2026-01-01-example-design.md
+  ./check-no-scratch-docs.sh
+'; then
+  note_failure "staged design/ file should pass"
+fi
+
+# No ignore rule in this repo may hide design docs.
+if git -C "$root" check-ignore -q design/specs/example-design.md \
+  || git -C "$root" check-ignore -q docs/superpowers/specs/example-design.md; then
+  note_failure "design docs must not be gitignored"
+fi
+
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# Reject commits that stage local planning scratch under docs/.
+# Reject commits that stage planning docs under docs/.
 #
-# These directories are gitignored (.gitignore) and excluded from mkdocs
-# (mkdocs.yml exclude_docs), but git will still commit them once tracked or
-# force-added. This hook inspects the index on every commit.
+# docs/ is the mkdocs docs_dir, so anything committed there is published to
+# docs.mydia.dev. Specs, plans, brainstorms and research notes belong in
+# design/ at the repo root, which mkdocs never reads. mkdocs.yml exclude_docs
+# is the matching backstop for local builds.
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -12,7 +13,7 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 1
 }
 
-# Keep in sync with .gitignore and mkdocs.yml exclude_docs.
+# Keep in sync with mkdocs.yml exclude_docs.
 pattern='^docs/(superpowers|plans|brainstorms|solutions|research)/'
 
 offending="$(
@@ -24,9 +25,9 @@ if [ -z "$offending" ]; then
   exit 0
 fi
 
-echo "error: local planning scratch under docs/ must not be committed." >&2
-echo "       These paths are gitignored and would publish to docs.mydia.dev if tracked." >&2
-echo "       Move permanent reference material out of docs/ next to the code it documents." >&2
+echo "error: planning docs under docs/ must not be committed." >&2
+echo "       docs/ is published to docs.mydia.dev. Put specs and plans in design/" >&2
+echo "       (see design/README.md)." >&2
 echo >&2
 echo "$offending" | sed 's/^/  /' >&2
 exit 1

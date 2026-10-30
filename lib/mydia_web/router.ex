@@ -65,8 +65,7 @@ defmodule MydiaWeb.Router do
   # mutations like createApiKey). MediaAuth used to be mounted here with no
   # `permissions:` option, which made its permission check a structural
   # no-op and let a media token satisfy :require_admin and mint a
-  # permanent API key for whichever user paired the device (see
-  # docs/superpowers/security-review, finding T-108). Routes that
+  # permanent API key for whichever user paired the device. Routes that
   # genuinely need media-token compatibility (a URL a native player,
   # download manager, or cast receiver fetches without custom headers) get
   # their own narrowly-scoped pipeline below instead of a blanket accept

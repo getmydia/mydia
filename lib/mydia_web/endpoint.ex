@@ -32,8 +32,7 @@ defmodule MydiaWeb.Endpoint do
   # so trusting it here just handed conn.host to whatever value a client
   # cared to send. That previously fed
   # Ueberauth.Strategy.Helpers.full_url/2's host resolution for the OIDC
-  # redirect_uri whenever OIDC_REDIRECT_URI/:callback_url wasn't set (see
-  # docs/superpowers/security-review, findings T-007/T-019), and would do
+  # redirect_uri whenever OIDC_REDIRECT_URI/:callback_url wasn't set, and would do
   # the same for any future code that reads conn.host. That path is now
   # closed independently -- config/runtime.exs always configures a static
   # :callback_url for OIDC in production (see MydiaWeb.OidcRedirectUri) -- so

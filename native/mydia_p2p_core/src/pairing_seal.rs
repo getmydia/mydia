@@ -48,8 +48,7 @@ use sha2::Sha256;
 ///
 /// The p2p guess limiter does not help here; it bounds online guessing only.
 /// This bound is accepted deliberately for an honest-but-curious relay. Raising
-/// it needs a longer code or a PAKE, both considered and set aside in
-/// docs/superpowers/specs/2026-08-19-e2e-pairing-design.md.
+/// it needs a longer code or a PAKE; neither is implemented.
 const ARGON2_SALT: &[u8] = b"mydia-pairing-v1";
 const ARGON2_MEMORY_KIB: u32 = 65536;
 const ARGON2_ITERATIONS: u32 = 3;

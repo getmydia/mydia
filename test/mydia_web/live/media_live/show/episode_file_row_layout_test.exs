@@ -11,7 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
 
   These assertions are class-level and cheap. The widths themselves live in
   test/mydia_web/features/media_file_row_width_test.exs, which needs a real
-  browser. See docs/superpowers/specs/2026-09-02-media-file-rows-narrow-columns-design.md.
+  browser.
   """
   use MydiaWeb.ConnCase, async: true
 

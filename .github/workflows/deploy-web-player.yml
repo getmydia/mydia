@@ -7,9 +7,8 @@ name: Deploy Web Player
 # Deliberately not `push: branches: [master]`, which an earlier revision of
 # this file carried. There is one public player and no staging copy of it, so
 # a push trigger would put every intermediate master commit in front of every
-# viewer, and the browser matrix that qualifies this stack is per-release work
-# (docs/superpowers/sdd-web-player/MANUAL-VERIFICATION.md) rather than
-# something CI can stand in for.
+# viewer, and the browser matrix that qualifies this stack is a manual
+# per-release check rather than something CI can stand in for.
 #
 # The `ref` input exists because a release does not necessarily build master's
 # tip: release.yml pins its draft to a commit SHA and every job checks that

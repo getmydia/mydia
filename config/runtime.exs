@@ -545,9 +545,8 @@ oidc_callback_path = MydiaWeb.OidcRedirectUri.callback_path()
 # -- independently of Plug.RewriteOn, which does the same thing for
 # conn.host/conn.scheme elsewhere. Either header is client-suppliable, so an
 # attacker who can reach the origin could steer the redirect_uri sent to the
-# identity provider to a host they control (docs/superpowers/security-review,
-# findings T-007/T-019). `Dockerfile:274` exposes the app's own port
-# directly, and even the documented reverse-proxy config sets
+# identity provider to a host they control. `Dockerfile:274` exposes the app's
+# own port directly, and even the documented reverse-proxy config sets
 # X-Forwarded-Proto but never X-Forwarded-Host, so a client-supplied value
 # survives the "correctly configured" case too.
 #
@@ -575,7 +574,7 @@ if oidc_issuer && oidc_client_id && oidc_client_secret do
     # The redirect URI used to be derived from the incoming request, so OIDC
     # happened to work on an install that never set PHX_HOST. It is now
     # derived from configuration instead (that request-derived value was
-    # attacker-steerable -- T-007/T-019), which means such an install would
+    # attacker-steerable), which means such an install would
     # send the placeholder host to its identity provider and get back an
     # opaque "redirect_uri mismatch". Say so plainly at boot rather than
     # letting the operator debug it from the IdP's error page.
