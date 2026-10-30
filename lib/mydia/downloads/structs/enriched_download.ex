@@ -39,6 +39,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :downloaded,
     :uploaded,
     :ratio,
+    # Seconds seeded, when the client counts it. See DownloadStatus.
+    :seeding_time,
     :seeders,
     :leechers,
     :save_path,
@@ -147,6 +149,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           downloaded: integer(),
           uploaded: integer(),
           ratio: float(),
+          seeding_time: non_neg_integer() | nil,
           seeders: integer() | nil,
           leechers: integer() | nil,
           save_path: String.t() | nil,

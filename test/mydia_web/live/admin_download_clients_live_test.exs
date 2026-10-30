@@ -153,6 +153,22 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
              )
     end
 
+    test "says which clients receive tracker seeding limits", %{conn: conn} do
+      {:ok, _client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-seeding-note",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "#download-clients-seeding-note", "qBittorrent receives")
+      assert has_element?(view, "#download-clients-seeding-note", "rTorrent and rqbit")
+    end
+
     test "the delete confirmation is an error-toned shared modal", %{conn: conn} do
       {:ok, client} =
         Mydia.Settings.create_download_client_config(%{

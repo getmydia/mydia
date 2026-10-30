@@ -26,6 +26,18 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
         />
       </:row>
     </.admin_list>
+    <div
+      :if={@download_clients != []}
+      id="download-clients-seeding-note"
+      class="flex gap-2 mt-4 text-sm text-base-content/70"
+    >
+      <.icon name="hero-arrow-up-circle" class="size-4 shrink-0 mt-0.5" />
+      <p>
+        {gettext(
+          "When Mydia grabs a release from a tracker with seeding rules, qBittorrent receives the minimum ratio and seed time, and Transmission the minimum ratio. rTorrent and rqbit receive nothing. On every torrent client, Remove After Import waits until the tracker's rules are met."
+        )}
+      </p>
+    </div>
     """
   end
 

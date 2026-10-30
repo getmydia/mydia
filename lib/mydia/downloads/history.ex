@@ -713,6 +713,7 @@ defmodule Mydia.Downloads.History do
       downloaded: torrent_status.downloaded,
       uploaded: torrent_status.uploaded,
       ratio: torrent_status.ratio,
+      seeding_time: Map.get(torrent_status, :seeding_time),
       seeders: if(metadata, do: metadata.seeders, else: nil),
       leechers: if(metadata, do: metadata.leechers, else: nil),
       save_path: torrent_status.save_path,
@@ -794,8 +795,7 @@ defmodule Mydia.Downloads.History do
   end
 
   defp enrich_download_with_empty_status(download, in_client? \\ nil) do
-    # Download exists in DB but not in client
-    # Could be completed and removed, or manually deleted from client
+    # In the DB but not the client: completed and removed, or deleted by hand.
     status =
       cond do
         download.imported_at -> "imported"
