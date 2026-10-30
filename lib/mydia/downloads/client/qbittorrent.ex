@@ -211,13 +211,15 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     with_authenticated_session(config, fn req ->
       with {:ok, response} <-
              authed_request(req, :post, "/api/v2/torrents/setShareLimits", form: body) do
-        case response.status do
-          status when status in 200..299 -> :ok
-          status -> {:error, Error.api_error("Failed to set share limits", %{status: status})}
-        end
+        share_limits_result(response.status)
       end
     end)
   end
+
+  defp share_limits_result(status) when status in 200..299, do: :ok
+
+  defp share_limits_result(status),
+    do: {:error, Error.api_error("Failed to set share limits", %{status: status})}
 
   defp share_limit(nil), do: -1
   defp share_limit(value), do: value
