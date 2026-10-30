@@ -152,7 +152,7 @@ defmodule MydiaWeb.AdminUsersLive.Components do
           <% end %>
         </div>
       </div>
-      <div class="min-w-0 max-sm:wrap-anywhere">
+      <div class="max-sm:min-w-0 max-sm:wrap-anywhere">
         <div class="font-bold" id={"user-name-#{@user.id}"}>{User.label(@user)}</div>
         <div class="text-sm text-base-content/70">{@user.email}</div>
         <div
