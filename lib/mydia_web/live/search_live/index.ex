@@ -1074,7 +1074,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:results_empty?, true)
     |> stream(:search_results, [], reset: true)
     |> start_async(:search, fn ->
-      perform_search(query, min_seeders, indexer_ids, lv, search_id)
+      Indexers.ManualSearch.run(query, min_seeders, lv, search_id, indexer_ids)
     end)
   end
 
@@ -1104,19 +1104,9 @@ defmodule MydiaWeb.SearchLive.Index do
         send(lv, {:paused_retest, search_id, result})
       end
 
-      perform_search(query, min_seeders, [indexer_id], lv, search_id)
+      Indexers.ManualSearch.run(query, min_seeders, lv, search_id, [indexer_id])
     end)
   end
-
-  defp perform_search(query, min_seeders, indexer_ids, lv, search_id),
-    do:
-      MydiaWeb.MediaLive.Show.SearchHelpers.perform_search(
-        query,
-        min_seeders,
-        lv,
-        search_id,
-        indexer_ids
-      )
 
   defp apply_filters(socket) do
     # Re-filter the current results without re-searching

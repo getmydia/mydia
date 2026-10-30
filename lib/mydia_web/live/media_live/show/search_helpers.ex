@@ -127,33 +127,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     end
   end
 
-  @doc """
-  Run a manual search, streaming per-indexer progress back to `lv`.
-
-  `indexer_ids` scopes the search to a subset of the enabled indexers. It
-  defaults to `nil`, which searches all of them; the single-indexer retry
-  passes `[indexer_id]` so retrying one failed chip does not re-run (and
-  re-set to `:pending`) every other indexer. `Indexers.search_all/2` treats a
-  `nil` value the same as the option being absent.
-
-  It is `interactive`: the built-in Cardigann engine keeps releases Prowlarr's
-  validity rule would drop, as Prowlarr's interactive search does.
-  """
-  def perform_search(query, min_seeders, lv, search_id, indexer_ids \\ nil) do
-    opts = [
-      min_seeders: min_seeders,
-      deduplicate: true,
-      indexer_ids: indexer_ids,
-      report_paused: true,
-      interactive: true,
-      on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
-      on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
-    ]
-
-    {:ok, %{results: results, indexer_errors: indexer_errors}} = Indexers.search_all(query, opts)
-
-    {:ok, results, indexer_errors}
-  end
+  @doc "Runs a manual search, streaming per-indexer progress back to `lv`."
+  defdelegate perform_search(query, min_seeders, lv, search_id, indexer_ids \\ nil),
+    to: Mydia.Indexers.ManualSearch,
+    as: :run
 
   @doc """
   Folds one indexer's results into the accumulated set and re-ranks everything,

@@ -1,4 +1,4 @@
-defmodule MydiaWeb.MediaLive.Show.ManualSearchInteractiveTest do
+defmodule Mydia.Indexers.ManualSearchTest do
   # Mutates :persistent_term, the adapter registry and application env.
   use Mydia.DataCase, async: false
 
@@ -6,7 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchInteractiveTest do
 
   alias Mydia.Indexers
   alias Mydia.Indexers.Adapter.Registry
-  alias MydiaWeb.MediaLive.Show.SearchHelpers
+  alias Mydia.Indexers.ManualSearch
 
   @active_key {Mydia.Indexers.Cardigann.EngineSwitcher, :active}
 
@@ -26,8 +26,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchInteractiveTest do
   end
 
   test "a manual search tells the indexers it is interactive" do
-    assert {:ok, [], []} = SearchHelpers.perform_search("Copper Lantern", 0, self(), "s1")
+    assert {:ok, [], []} = ManualSearch.run("Copper Lantern", 0, self(), "s1")
     assert_received {:stub_cardigann_opts, opts}
     assert opts[:interactive] == true
+  end
+
+  test "reports its start and each indexer's progress to the caller" do
+    assert {:ok, [], []} = ManualSearch.run("Copper Lantern", 0, self(), "s2")
+    assert_received {:indexer_search_started, "s2", [_ | _]}
+    assert_received {:indexer_progress, "s2", _progress}
   end
 end
