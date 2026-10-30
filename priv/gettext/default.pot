@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
-#: lib/mydia_web/components/admin_list_components.ex:233
+#: lib/mydia_web/components/admin_list_components.ex:235
 #: lib/mydia_web/components/core_components.ex:332
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:196
 #: lib/mydia_web/live/admin_settings_live/components.ex:186
@@ -225,7 +225,7 @@ msgstr ""
 #: lib/mydia_web/live/import_media_live/components.ex:673
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:128
 #: lib/mydia_web/live/integrations_live/index.html.heex:99
-#: lib/mydia_web/live/jobs_live/components.ex:314
+#: lib/mydia_web/live/jobs_live/components.ex:322
 #: lib/mydia_web/live/library_move_component.ex:321
 #: lib/mydia_web/live/media_live/index.html.heex:1098
 #: lib/mydia_web/live/media_live/index.html.heex:1128
@@ -319,7 +319,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/issue_components.ex:307
 #: lib/mydia_web/live/downloads_live/issue_components.ex:385
 #: lib/mydia_web/live/import_media_live/components.ex:307
-#: lib/mydia_web/live/media_live/show.html.heex:319
+#: lib/mydia_web/live/media_live/show.html.heex:332
 #, elixir-autogen, elixir-format
 msgid "Dismiss"
 msgstr ""
@@ -424,7 +424,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/components.ex:257
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:143
 #: lib/mydia_web/live/media_live/index.html.heex:398
-#: lib/mydia_web/live/media_live/show.html.heex:260
+#: lib/mydia_web/live/media_live/show.html.heex:273
 #: lib/mydia_web/live/media_live/show/category_events.ex:171
 #: lib/mydia_web/live/media_live/show/components.ex:280
 #: lib/mydia_web/live/media_live/show/helpers.ex:599
@@ -1063,8 +1063,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:114
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:497
 #: lib/mydia_web/live/admin_users_live/components.ex:217
-#: lib/mydia_web/live/jobs_live/components.ex:42
-#: lib/mydia_web/live/jobs_live/components.ex:332
+#: lib/mydia_web/live/jobs_live/components.ex:43
+#: lib/mydia_web/live/jobs_live/components.ex:340
 #: lib/mydia_web/live/profile_live/index.ex:400
 #, elixir-autogen, elixir-format
 msgid "Never"
@@ -2250,7 +2250,7 @@ msgstr ""
 msgid "%{picked} of %{total} selected"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:118
+#: lib/mydia_web/live/media_live/show.html.heex:131
 #, elixir-autogen, elixir-format
 msgid "%{provider} (pinned)"
 msgstr ""
@@ -3492,7 +3492,7 @@ msgid_plural "Clearing %{count} completed downloads and deleting their files fro
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:249
+#: lib/mydia_web/live/media_live/show.html.heex:262
 #: lib/mydia_web/live/media_live/show/components.ex:264
 #, elixir-autogen, elixir-format
 msgid "Click to change category"
@@ -3538,7 +3538,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_requests_live/components.ex:276
 #: lib/mydia_web/live/components/trending_detail_modal.ex:111
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:241
-#: lib/mydia_web/live/jobs_live/components.ex:291
+#: lib/mydia_web/live/jobs_live/components.ex:299
 #: lib/mydia_web/live/media_live/show/find_file_components.ex:100
 #: lib/mydia_web/live/media_live/show/modals.ex:583
 #: lib/mydia_web/live/media_live/show/modals.ex:797
@@ -4247,7 +4247,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:100
 #: lib/mydia_web/live/downloads_live/index.html.heex:184
 #: lib/mydia_web/live/media_live/index.html.heex:1007
-#: lib/mydia_web/live/media_live/show.html.heex:197
+#: lib/mydia_web/live/media_live/show.html.heex:210
 #, elixir-autogen, elixir-format
 msgid "Delete"
 msgstr ""
@@ -4416,7 +4416,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/issue_components.ex:120
 #: lib/mydia_web/live/downloads_live/issue_components.ex:359
 #: lib/mydia_web/live/downloads_live/list_components.ex:384
-#: lib/mydia_web/live/jobs_live/components.ex:191
+#: lib/mydia_web/live/jobs_live/components.ex:192
 #, elixir-autogen, elixir-format
 msgid "Details"
 msgstr ""
@@ -4564,7 +4564,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/event_text.ex:46
 #: lib/mydia_web/live/downloads_live/issue_list.ex:30
-#: lib/mydia_web/live/media_live/show.html.heex:305
+#: lib/mydia_web/live/media_live/show.html.heex:318
 #, elixir-autogen, elixir-format
 msgid "Download failed"
 msgstr ""
@@ -4805,7 +4805,7 @@ msgid "Error: %{message}"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:185
-#: lib/mydia_web/live/jobs_live/components.ex:280
+#: lib/mydia_web/live/jobs_live/components.ex:288
 #, elixir-autogen, elixir-format
 msgid "Errors"
 msgstr ""
@@ -5289,13 +5289,13 @@ msgstr ""
 msgid "Finished"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:138
+#: lib/mydia_web/live/media_live/show.html.heex:151
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:29
 #, elixir-autogen, elixir-format
 msgid "Fix match"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:144
+#: lib/mydia_web/live/media_live/show.html.heex:157
 #, elixir-autogen, elixir-format
 msgid "Fix match: this is the wrong title"
 msgstr ""
@@ -5788,8 +5788,8 @@ msgid "Japanese animation, movies and series, out of Movies and TV."
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:296
-#: lib/mydia_web/live/jobs_live/components.ex:28
-#: lib/mydia_web/live/jobs_live/components.ex:152
+#: lib/mydia_web/live/jobs_live/components.ex:29
+#: lib/mydia_web/live/jobs_live/components.ex:153
 #, elixir-autogen, elixir-format
 msgid "Job"
 msgstr ""
@@ -6377,11 +6377,10 @@ msgstr ""
 
 #: lib/mydia_web/components/add_media_components.ex:246
 #: lib/mydia_web/components/media_request_components.ex:131
-#: lib/mydia_web/live/jobs_live/components.ex:52
-#: lib/mydia_web/live/jobs_live/components.ex:335
-#: lib/mydia_web/live/jobs_live/components.ex:338
-#: lib/mydia_web/live/jobs_live/components.ex:339
-#: lib/mydia_web/live/jobs_live/components.ex:353
+#: lib/mydia_web/live/jobs_live/components.ex:53
+#: lib/mydia_web/live/jobs_live/components.ex:343
+#: lib/mydia_web/live/jobs_live/components.ex:344
+#: lib/mydia_web/live/jobs_live/components.ex:358
 #: lib/mydia_web/live/media_live/index.ex:985
 #: lib/mydia_web/live/media_live/show/formatters.ex:13
 #, elixir-autogen, elixir-format
@@ -7683,8 +7682,8 @@ msgstr ""
 msgid "Re-scan complete! %{details}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:150
-#: lib/mydia_web/live/media_live/show.html.heex:161
+#: lib/mydia_web/live/media_live/show.html.heex:163
+#: lib/mydia_web/live/media_live/show.html.heex:174
 #, elixir-autogen, elixir-format
 msgid "Re-scan files"
 msgstr ""
@@ -7841,12 +7840,12 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:113
+#: lib/mydia_web/live/media_live/show.html.heex:126
 #, elixir-autogen, elixir-format
 msgid "Refresh keeps this show on this provider. Use Fix match to move it."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:129
+#: lib/mydia_web/live/media_live/show.html.heex:142
 #, elixir-autogen, elixir-format
 msgid "Refresh metadata"
 msgstr ""
@@ -8056,8 +8055,8 @@ msgstr ""
 msgid "Rename Files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:172
-#: lib/mydia_web/live/media_live/show.html.heex:178
+#: lib/mydia_web/live/media_live/show.html.heex:185
+#: lib/mydia_web/live/media_live/show.html.heex:191
 #, elixir-autogen, elixir-format
 msgid "Rename files"
 msgstr ""
@@ -8886,7 +8885,7 @@ msgstr ""
 msgid "Selected Release"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.html.heex:326
+#: lib/mydia_web/live/media_live/show.html.heex:339
 #, elixir-autogen, elixir-format
 msgid "Sending to download client"
 msgstr ""
@@ -9447,7 +9446,7 @@ msgstr ""
 #: lib/mydia_web/live/collection_live/show.ex:565
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:117
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:142
-#: lib/mydia_web/live/media_live/show.html.heex:261
+#: lib/mydia_web/live/media_live/show.html.heex:274
 #: lib/mydia_web/live/media_live/show/category_events.ex:174
 #: lib/mydia_web/live/media_live/show/components.ex:281
 #: lib/mydia_web/live/media_live/show/helpers.ex:607
@@ -11345,7 +11344,7 @@ msgid "Upcoming"
 msgstr ""
 
 #: lib/mydia_web/components/library_components.ex:95
-#: lib/mydia_web/live/jobs_live/components.ex:55
+#: lib/mydia_web/live/jobs_live/components.ex:56
 #, elixir-autogen, elixir-format
 msgctxt "list column"
 msgid "Status"
@@ -12008,7 +12007,7 @@ msgstr ""
 msgid "%{codec} (copy)"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:68
+#: lib/mydia_web/live/jobs_live/components.ex:69
 #, elixir-autogen, elixir-format
 msgid "%{completed} / %{total} runs"
 msgstr ""
@@ -12978,7 +12977,7 @@ msgstr ""
 msgid "Airs tomorrow"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:115
+#: lib/mydia_web/live/jobs_live/components.ex:116
 #, elixir-autogen, elixir-format
 msgid "All Jobs"
 msgstr ""
@@ -12988,7 +12987,7 @@ msgstr ""
 msgid "All Roles"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:128
+#: lib/mydia_web/live/jobs_live/components.ex:129
 #, elixir-autogen, elixir-format
 msgid "All States"
 msgstr ""
@@ -13129,7 +13128,7 @@ msgstr ""
 msgid "Are you sure you want to delete this subtitle provider?"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:274
+#: lib/mydia_web/live/jobs_live/components.ex:282
 #, elixir-autogen, elixir-format
 msgid "Arguments"
 msgstr ""
@@ -13159,14 +13158,14 @@ msgstr ""
 msgid "At least one filename names a different episode than the one it is attached to."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:182
-#: lib/mydia_web/live/jobs_live/components.ex:238
+#: lib/mydia_web/live/jobs_live/components.ex:183
+#: lib/mydia_web/live/jobs_live/components.ex:240
 #, elixir-autogen, elixir-format
 msgid "Attempt"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:158
-#: lib/mydia_web/live/jobs_live/components.ex:252
+#: lib/mydia_web/live/jobs_live/components.ex:159
+#: lib/mydia_web/live/jobs_live/components.ex:256
 #, elixir-autogen, elixir-format
 msgid "Attempted At"
 msgstr ""
@@ -13288,7 +13287,7 @@ msgstr ""
 msgid "Automatically search for downloads when items are added"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:74
+#: lib/mydia_web/live/jobs_live/components.ex:75
 #, elixir-autogen, elixir-format
 msgid "Avg: %{duration}"
 msgstr ""
@@ -13473,12 +13472,12 @@ msgstr ""
 msgid "Can see"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:199
+#: lib/mydia_web/live/jobs_live/components.ex:200
 #, elixir-autogen, elixir-format
 msgid "Cancel job"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:203
+#: lib/mydia_web/live/jobs_live/components.ex:204
 #, elixir-autogen, elixir-format
 msgid "Cancel this job?"
 msgstr ""
@@ -13730,8 +13729,8 @@ msgstr ""
 msgid "Compiling the Prowlarr-based engine"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:164
-#: lib/mydia_web/live/jobs_live/components.ex:261
+#: lib/mydia_web/live/jobs_live/components.ex:165
+#: lib/mydia_web/live/jobs_live/components.ex:267
 #, elixir-autogen, elixir-format
 msgid "Completed At"
 msgstr ""
@@ -14581,8 +14580,8 @@ msgstr ""
 msgid "Duplicates"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:174
-#: lib/mydia_web/live/jobs_live/components.ex:266
+#: lib/mydia_web/live/jobs_live/components.ex:175
+#: lib/mydia_web/live/jobs_live/components.ex:274
 #, elixir-autogen, elixir-format
 msgid "Duration"
 msgstr ""
@@ -15288,12 +15287,12 @@ msgstr ""
 msgid "Files whose names don't match their item start on %{review}."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:112
+#: lib/mydia_web/live/jobs_live/components.ex:113
 #, elixir-autogen, elixir-format
 msgid "Filter by Job"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:125
+#: lib/mydia_web/live/jobs_live/components.ex:126
 #, elixir-autogen, elixir-format
 msgid "Filter by Status"
 msgstr ""
@@ -15748,12 +15747,12 @@ msgstr ""
 msgid "Jellyfin/Kodi metadata files"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:224
+#: lib/mydia_web/live/jobs_live/components.ex:226
 #, elixir-autogen, elixir-format
 msgid "Job Details"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:102
+#: lib/mydia_web/live/jobs_live/components.ex:103
 #, elixir-autogen, elixir-format
 msgid "Job History"
 msgstr ""
@@ -15778,7 +15777,7 @@ msgstr ""
 msgid "Job triggered successfully and added to queue"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:310
+#: lib/mydia_web/live/jobs_live/components.ex:318
 #, elixir-autogen, elixir-format
 msgid "Job: %{name}"
 msgstr ""
@@ -15835,7 +15834,7 @@ msgstr ""
 msgid "Keys for the library API and automation"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:35
+#: lib/mydia_web/live/jobs_live/components.ex:36
 #, elixir-autogen, elixir-format
 msgid "Last Run"
 msgstr ""
@@ -15983,7 +15982,7 @@ msgstr ""
 msgid "Lists that add media automatically"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:210
+#: lib/mydia_web/live/jobs_live/components.ex:211
 #, elixir-autogen, elixir-format
 msgid "Load More"
 msgstr ""
@@ -16371,7 +16370,7 @@ msgstr ""
 msgid "Newznab endpoint path; usually remains /api."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:45
+#: lib/mydia_web/live/jobs_live/components.ex:46
 #, elixir-autogen, elixir-format
 msgid "Next Run"
 msgstr ""
@@ -16543,7 +16542,7 @@ msgstr ""
 msgid "No items found. Try a different filter or Sync the list to fetch items."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:206
+#: lib/mydia_web/live/jobs_live/components.ex:207
 #, elixir-autogen, elixir-format
 msgid "No job history found"
 msgstr ""
@@ -16666,7 +16665,7 @@ msgstr ""
 msgid "No results"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:96
+#: lib/mydia_web/live/jobs_live/components.ex:97
 #, elixir-autogen, elixir-format
 msgid "No scheduled jobs configured."
 msgstr ""
@@ -17895,7 +17894,7 @@ msgstr ""
 msgid "Rules that score releases"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:306
+#: lib/mydia_web/live/jobs_live/components.ex:314
 #, elixir-autogen, elixir-format
 msgid "Run it now, outside its schedule"
 msgstr ""
@@ -18026,17 +18025,17 @@ msgstr ""
 msgid "Scan for misfiled files"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:32
+#: lib/mydia_web/live/jobs_live/components.ex:33
 #, elixir-autogen, elixir-format
 msgid "Schedule"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:246
+#: lib/mydia_web/live/jobs_live/components.ex:248
 #, elixir-autogen, elixir-format
 msgid "Scheduled At"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:23
+#: lib/mydia_web/live/jobs_live/components.ex:24
 #, elixir-autogen, elixir-format
 msgid "Scheduled Jobs"
 msgstr ""
@@ -18383,8 +18382,8 @@ msgstr ""
 msgid "Start from a community-tested profile"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:177
-#: lib/mydia_web/live/jobs_live/components.ex:232
+#: lib/mydia_web/live/jobs_live/components.ex:178
+#: lib/mydia_web/live/jobs_live/components.ex:234
 #, elixir-autogen, elixir-format
 msgid "State"
 msgstr ""
@@ -18394,7 +18393,7 @@ msgstr ""
 msgid "Statistics"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:64
+#: lib/mydia_web/live/jobs_live/components.ex:65
 #, elixir-autogen, elixir-format
 msgid "Stats"
 msgstr ""
@@ -18459,7 +18458,7 @@ msgstr ""
 msgid "Subtitles switched on automatically for a show nobody has picked one for. Leave empty for none."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:66
+#: lib/mydia_web/live/jobs_live/components.ex:67
 #, elixir-autogen, elixir-format
 msgid "Success: %{rate}%"
 msgstr ""
@@ -19171,17 +19170,17 @@ msgstr[1] ""
 msgid "Trashing..."
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:305
+#: lib/mydia_web/live/jobs_live/components.ex:313
 #, elixir-autogen, elixir-format
 msgid "Trigger Job"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:322
+#: lib/mydia_web/live/jobs_live/components.ex:330
 #, elixir-autogen, elixir-format
 msgid "Trigger Now"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:84
+#: lib/mydia_web/live/jobs_live/components.ex:85
 #, elixir-autogen, elixir-format
 msgid "Trigger now"
 msgstr ""
@@ -19483,7 +19482,7 @@ msgstr ""
 msgid "Video"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:92
+#: lib/mydia_web/live/jobs_live/components.ex:93
 #, elixir-autogen, elixir-format
 msgid "View"
 msgstr ""
@@ -20392,85 +20391,85 @@ msgctxt "indexer type"
 msgid "Type"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:363
+#: lib/mydia_web/live/jobs_live/components.ex:368
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "available"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:359
+#: lib/mydia_web/live/jobs_live/components.ex:364
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "cancelled"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:356
+#: lib/mydia_web/live/jobs_live/components.ex:361
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "completed"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:358
+#: lib/mydia_web/live/jobs_live/components.ex:363
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "discarded"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:362
+#: lib/mydia_web/live/jobs_live/components.ex:367
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "executing"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:357
+#: lib/mydia_web/live/jobs_live/components.ex:362
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "failed"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:364
+#: lib/mydia_web/live/jobs_live/components.ex:369
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "pending"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:360
+#: lib/mydia_web/live/jobs_live/components.ex:365
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "retryable"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:361
+#: lib/mydia_web/live/jobs_live/components.ex:366
 #, elixir-autogen, elixir-format
 msgctxt "job state"
 msgid "scheduled"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:130
+#: lib/mydia_web/live/jobs_live/components.ex:131
 #, elixir-autogen, elixir-format
 msgctxt "job state filter"
 msgid "Completed"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:136
+#: lib/mydia_web/live/jobs_live/components.ex:137
 #, elixir-autogen, elixir-format
 msgctxt "job state filter"
 msgid "Discarded"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:142
+#: lib/mydia_web/live/jobs_live/components.ex:143
 #, elixir-autogen, elixir-format
 msgctxt "job state filter"
 msgid "Executing"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:133
+#: lib/mydia_web/live/jobs_live/components.ex:134
 #, elixir-autogen, elixir-format
 msgctxt "job state filter"
 msgid "Failed"
 msgstr ""
 
-#: lib/mydia_web/live/jobs_live/components.ex:139
+#: lib/mydia_web/live/jobs_live/components.ex:140
 #, elixir-autogen, elixir-format
 msgctxt "job state filter"
 msgid "Retryable"
@@ -20991,8 +20990,8 @@ msgstr ""
 
 #: lib/mydia_web/live/library_move_component.ex:292
 #: lib/mydia_web/live/media_live/index.html.heex:996
-#: lib/mydia_web/live/media_live/show.html.heex:183
-#: lib/mydia_web/live/media_live/show.html.heex:189
+#: lib/mydia_web/live/media_live/show.html.heex:196
+#: lib/mydia_web/live/media_live/show.html.heex:202
 #, elixir-autogen, elixir-format
 msgid "Move to library"
 msgstr ""
