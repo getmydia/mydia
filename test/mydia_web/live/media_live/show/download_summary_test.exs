@@ -89,8 +89,13 @@ defmodule MydiaWeb.MediaLive.Show.DownloadSummaryTest do
     assert DownloadSummary.for_episode(nil, "e2") == nil
   end
 
-  test "a season pack with episode_ids covers only those episodes" do
-    episodes = [episode("e1", 3, 1), episode("e2", 3, 2), episode("e3", 3, 3)]
+  test "a season pack with episode_ids covers only those episodes, aired or not" do
+    episodes = [
+      episode("e1", 3, 1),
+      episode("e2", 3, 2),
+      episode("e3", 3, 3, Date.add(Date.utc_today(), 7))
+    ]
+
     pack = pack(3, %{"episode_ids" => ["e2", "e3"]})
 
     assert Map.keys(DownloadSummary.build([pack], episodes).by_episode) == ["e2", "e3"]
