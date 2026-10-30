@@ -68,8 +68,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           from scrolling the page underneath. At @7xl none of the above
           applies: show.html.heex binds the grid to the viewport and every
           column scrolls on its own, so the column stretches to the row and
-          drops sticky and its max-height. --%>
-    <div class="md:sticky md:self-start md:overflow-y-auto md:overscroll-contain md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)] @7xl:static @7xl:self-stretch @7xl:max-h-none">
+          drops sticky and its max-height. Its px-2, pb-8 and stable gutter
+          there are shared with the other two columns; show.html.heex says
+          why. --%>
+    <div class="md:sticky md:self-start md:overflow-y-auto md:overscroll-contain md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)] @7xl:static @7xl:self-stretch @7xl:max-h-none @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]">
       <%!-- Poster - centered and smaller on mobile --%>
       <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full">
         <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-box">

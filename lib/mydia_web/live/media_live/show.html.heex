@@ -54,19 +54,32 @@
 
           At @7xl the grid is bound to the viewport and each column scrolls on
           its own (overflow-y-auto, overscroll-contain), instead of the side
-          columns riding the page scroll until they pin. 9rem is the vertical
-          chrome around the grid at that width: main's lg:p-8 top and bottom,
-          this wrapper's lg:pt-8 and pb-8, and the outer mb-4 (32 * 4 + 16), so
-          the page itself has nothing left to scroll. A changelog banner above
-          adds its own height, which the page then scrolls by. Below @7xl
-          nothing changes: the hero pins from md and History is a full-width
-          row. --%>
+          columns riding the page scroll until they pin. The grid runs to the
+          window's bottom edge: 4rem is the chrome above it (main's lg:p-8 top
+          plus this wrapper's lg:pt-8, measured grid top 64px), and -mb-20
+          cancels the 5rem below it (this wrapper's pb-8, the outer mb-4 and
+          main's lg:p-8 bottom, 32 + 16 + 32), so the page itself has nothing
+          left to scroll. Neither of those can be dropped from here instead:
+          this element cannot query its own size, and the outer div and <main>
+          have no container above them. A changelog banner above adds its own
+          height, which the page then scrolls by.
+
+          Before #1309 the grid stopped at that 5rem instead, so every column's
+          scrollport ended about 80px above the window and content scrolled
+          into an empty band. The breathing room now lives inside each column
+          as pb-8, below its last element. The columns also carry px-2 and a
+          stable scrollbar gutter: a scroll container clips its children's
+          rings and shadows at its edge (the current card in the franchise
+          strip lost the left side of its ring-2), and an overlay scrollbar
+          takes no layout width, so it painted over buttons at the right edge.
+          Below @7xl nothing changes: the hero pins from md and History is a
+          full-width row. --%>
     <div class="@container relative pt-5 sm:pt-4 md:pt-10 lg:pt-8 pb-8">
       <div
         id="page-grid"
         class={[
           "grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]",
-          "@7xl:h-[calc(100dvh-9rem)] @7xl:grid-rows-[minmax(0,1fr)]",
+          "@7xl:h-[calc(100dvh-4rem)] @7xl:-mb-20 @7xl:grid-rows-[minmax(0,1fr)]",
           if(@timeline_events == [],
             do: "@7xl:grid-cols-[20rem_minmax(0,1fr)]",
             else: "@7xl:grid-cols-[20rem_minmax(0,1fr)_20rem]"
@@ -95,7 +108,7 @@
               (see file_actions/1). --%>
         <div
           id="main-column"
-          class="min-w-0 @7xl:overflow-y-auto @7xl:overflow-x-hidden @7xl:overscroll-contain"
+          class="min-w-0 @7xl:overflow-y-auto @7xl:overflow-x-hidden @7xl:overscroll-contain @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]"
         >
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
@@ -430,7 +443,7 @@
         <aside
           :if={@timeline_events != []}
           id="history-rail"
-          class="md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1 @7xl:overflow-y-auto @7xl:overscroll-contain"
+          class="md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1 @7xl:overflow-y-auto @7xl:overscroll-contain @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]"
         >
           <Components.timeline_section
             timeline_events={@timeline_events}
