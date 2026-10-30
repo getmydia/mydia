@@ -11,6 +11,7 @@ defmodule Mydia.Config.Schema do
 
   alias Mydia.Config.Schema.DownloadClientChangeset
   alias Mydia.Config.Schema.PathMappingChangeset
+  alias Mydia.Config.Schema.TrackerRuleChangeset
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -71,7 +72,8 @@ defmodule Mydia.Config.Schema do
           plugin_settings: [__MODULE__.PluginSettingsDecl.t()],
           plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
           plugin_sources: [__MODULE__.PluginSourceDecl.t()],
-          path_mappings: [__MODULE__.PathMapping.t()]
+          path_mappings: [__MODULE__.PathMapping.t()],
+          tracker_rules: [__MODULE__.TrackerRule.t()]
         }
 
   embedded_schema do
@@ -464,6 +466,18 @@ defmodule Mydia.Config.Schema do
       field :remote_prefix, :string
       field :local_prefix, :string
     end
+
+    # Per-tracker overrides of the terms an indexer reports (see
+    # Mydia.Indexers.TrackerRules). `tracker` matches SearchResult.indexer
+    # case-insensitively; `seed_time` is in minutes. A nil field keeps what the
+    # tracker reports.
+    embeds_many :tracker_rules, TrackerRule, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
+      field :tracker, :string
+      field :seed_ratio, :float
+      field :seed_time, :integer
+      field :private, :boolean
+    end
   end
 
   @doc """
@@ -498,6 +512,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
     |> cast_embed(:path_mappings, with: &PathMappingChangeset.changeset/2)
+    |> cast_embed(:tracker_rules, with: &TrackerRuleChangeset.changeset/2)
     |> validate_configuration()
   end
 
@@ -1054,7 +1069,8 @@ defmodule Mydia.Config.Schema do
       plugin_settings: [],
       plugin_instances: [],
       plugin_sources: [],
-      path_mappings: []
+      path_mappings: [],
+      tracker_rules: []
     }
 
     # Run through changeset to apply defaults from field definitions

@@ -272,7 +272,8 @@ defmodule Mydia.Config.Loader do
       plugin_instances: load_plugin_instances_env(),
       plugin_sources: load_plugin_sources_env(),
       plugins: load_plugins_runtime_env(),
-      path_mappings: load_path_mappings_env()
+      path_mappings: load_path_mappings_env(),
+      tracker_rules: Mydia.Config.Env.TrackerRulesEnv.load()
     }
     |> remove_empty_maps()
   end
@@ -952,7 +953,8 @@ defmodule Mydia.Config.Loader do
           :plugin_settings,
           :plugin_instances,
           :plugin_sources,
-          :path_mappings
+          :path_mappings,
+          :tracker_rules
         ] and
           is_list(left_val) and
             is_list(right_val) ->
