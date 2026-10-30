@@ -118,6 +118,7 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
     end
 
     print_login_methods(report.by_login_method)
+    print_login_support(report)
 
     if report.parse_failures != [] do
       failures_to_show =
@@ -184,6 +185,16 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
     Mix.shell().info("")
   end
 
+  defp print_login_support(%{login_support: support, by_login_feature: features}) do
+    Mix.shell().info("Logins:")
+    Mix.shell().info(String.duplicate("-", 50))
+    Mix.shell().info("  Supported:              #{support.supported}")
+    Mix.shell().info("  Unsupported:            #{support.unsupported}")
+    Mix.shell().info("  Image captcha:          #{Map.get(features, :login_captcha, 0)}")
+    Mix.shell().info("  2FA code:               #{Map.get(features, :login_2fa, 0)}")
+    Mix.shell().info("")
+  end
+
   defp print_json_report(report) do
     json_data = %{
       summary: %{
@@ -195,6 +206,8 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       },
       by_feature: Map.new(report.by_feature),
       by_login_method: report.by_login_method,
+      login_support: report.login_support,
+      by_login_feature: report.by_login_feature,
       definitions:
         Enum.map(report.definitions, fn defn ->
           %{
