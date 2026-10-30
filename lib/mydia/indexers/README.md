@@ -125,6 +125,36 @@ a search parked the row cannot overwrite it. A check that passes while the track
 needs a captcha would hide the problem until the next search failed.
 Status changes broadcast on `SessionManager.topic/0` for the admin page.
 
+The Prowlarr-based engine parks the same definitions the same way. Prowlarr's
+search logs in by itself and swallows a failed login into an empty page, so
+for a definition where `Login.needs_person?/1` holds, `Wasm.Adapter` never
+calls the guest without a stored session (it calls `SessionManager.park/1`),
+and a search that reached the login form and came back empty parks it too.
+"Reached the login form" is `HostHttp` flagging a request to `login.path` or
+`login.submitpath` through the ctx's `:login_watch`; a templated path is not
+watched. The Indexers page's **Log in** always runs the built-in `Login`, on
+either engine, and both engines read the session it stores. The guest's own
+`login/2` can return a captcha too, but nothing calls it from the UI.
+
+### Private-tracker journeys
+
+`test/mydia/indexers/private_tracker_journey_test.exs` (built-in),
+`test/mydia/indexers/cardigann/wasm/private_tracker_journey_test.exs` (wasm,
+`:cardigann_wasm`) and
+`test/mydia_web/live/admin_indexers_live/private_tracker_login_test.exs` run
+whole journeys against three invented trackers in
+`Mydia.PrivateTrackerFixtures`: a UNIT3D API tracker (Bearer key, JSON rows
+under `attributes`, rsskey in the download path), a Gazelle form login (CSRF
+token from `selectorinputs`, `torrent_pass` links) and a captcha + 2FA form
+posting to a separate `submitpath`. They found three gaps, all fixed: search
+headers were sent unrendered (every UNIT3D definition sent
+`Bearer {{ .Config.apikey }}`), a JSON `rows.attribute` naming an object was
+ignored, and `TorrentFetch` logged release URLs and torrent bodies with the
+passkey in them. They assert at `:info`, the production default; at `:debug`
+Ecto's query log still prints `downloads.download_url`. That row keeps the raw
+URL on purpose: re-grab and duplicate detection match on it, and a redacted
+Gazelle URL cannot be rebuilt (the authkey is not a setting).
+
 ## Ranking has one path
 
 Every ranking decision ends in `QualityProfile.score_media_file/2`, and every
