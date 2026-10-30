@@ -189,6 +189,22 @@ once a minute by its recorder, for the admin list. An override is stale when
 its tracker was neither seen nor grabbed in 30 days and it is not a row
 created within that window.
 
+### Freeleech
+
+`freeleech_preference` is `"ignore"` (the default, and what a missing key
+means) or `"prefer"`. With `"prefer"`, `SearchScorer.score_freeleech/2` adds
+`(1 - download_volume_factor) * 10` to the combined score beside the
+availability score and title bonus: full freeleech adds 10, half leech 5, an
+unknown factor nothing. The upload factor is shown in manual search, not
+scored. The bonus never enters `score_quality/3` or
+`QualityProfile.score_media_file/2`, so it cannot move grab delay's
+`upgrade_until_score` check, create a file violation or trigger an upgrade.
+
+On score alone a full-freeleech release can outrank a slightly better one: a
+second-preference 720p trails a 1080p by less than 10. What keeps resolution
+first in automatic search is the `:preferred_qualities` sort key
+`RankingOptions` builds from the profile, which sits outside the score.
+
 ## Limits vs preferences
 
 There is no minimum score before an automatic grab. A release that is only
@@ -216,6 +232,7 @@ the release below every compliant one, and shows the reason.
 | `preferred_*`, `hdr_formats` | preference |
 | `min_ratio`, minimum seeders | preference: they describe whether a download will finish, not the file, and `StallDetector` handles dead torrents |
 | audio language | preference (outermost sort key) |
+| `freeleech_preference` | preference: a property of the release, like seeders, so it only adds a bonus to the combined score |
 
 Blocked tags, rejecting custom formats and identity mismatches are also hard
 removals, but they are not profile settings.
