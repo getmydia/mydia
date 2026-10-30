@@ -15,5 +15,6 @@ A doc records the decision at the time it was written. When the code moves
 on, the code and its tests win; update or delete the doc rather than citing
 a stale one. Code comments may cite a doc here by path.
 
-Never put these under `docs/`: a pre-commit hook rejects it, because anything
-there is published to docs.mydia.dev.
+Never put these under `docs/`: anything there is published to docs.mydia.dev.
+A pre-commit hook rejects the old planning paths (`docs/superpowers/`,
+`docs/plans/`, `docs/brainstorms/`, `docs/solutions/`, `docs/research/`).
