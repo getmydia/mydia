@@ -16,3 +16,12 @@ config :mydia, :generated_media_path, "/data/generated"
 
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.
+
+# The Docker image builds the Rustler NIFs in their own stage (see the `nifs`
+# stage in Dockerfile) and sets MYDIA_PREBUILT_NIFS so `mix compile` loads them
+# from priv/native/ instead of running cargo. Unset everywhere else (dev, test,
+# the Nix package), where Rustler builds them as usual.
+if System.get_env("MYDIA_PREBUILT_NIFS") == "1" do
+  config :mydia, Mydia.P2p, skip_compilation?: true
+  config :mydia, Mydia.Subsync, skip_compilation?: true
+end

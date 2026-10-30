@@ -41,6 +41,16 @@ Copy the config into a new crate as part of the same commit that creates its
 vendoring config, which is harmless because nix builds glibc, where neither block
 applies.
 
+## The Docker image does not build the NIFs through Rustler
+
+In the Docker image, cargo builds `mydia_p2p` and `mydia_subsync` in a separate
+`nifs` stage and `config/prod.exs` sets `skip_compilation?` so `mix compile`
+only loads the prebuilt `.so` files. A new `use Rustler` crate needs no Docker
+change: it builds through Rustler in the `builder` stage as before, only more
+slowly. Moving it into the `nifs` stage is optional and takes three edits made
+together. See "The Docker image builds the NIFs in their own stage" in
+`.github/ci.md`.
+
 ## The Host API blocks; wrap call sites in spawn_blocking
 
 `native/mydia_p2p_core`'s `Host` public API owns its own Tokio runtime and uses

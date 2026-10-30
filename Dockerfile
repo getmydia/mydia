@@ -105,7 +105,7 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # no docker ecosystem). ci-nix.yml's "Check / BEAM Pin" job asserts the tag's
 # Elixir minor, OTP major and Alpine minor against .elixir-version,
 # .otp-version and the runtime stage.
-FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911c234bfc9b346c391b2be7f9fd275e37d9bc5a049b6 AS deps
+FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911c234bfc9b346c391b2be7f9fd275e37d9bc5a049b6 AS toolchain
 
 # The official elixir image sets this and hexpm/elixir does not. Without it the
 # VM falls back to latin1 native filename encoding.
@@ -151,6 +151,38 @@ ENV HEX_HTTP_TIMEOUT=300000
 
 # Install Hex and Rebar
 RUN mix local.hex --force && mix local.rebar --force
+
+# ── nifs: the Rustler crates, built apart from lib/ ──────────────────────────
+# `mix compile` used to build these in `builder`, after `COPY lib`, so any
+# Elixir change rebuilt iroh from scratch (5m20s of the player E2E image build
+# on 2026-10-30). Built here from the crates alone, the layer stays cached in
+# the registry until native/ or the toolchain changes. Each crate's
+# .cargo/config.toml turns crt-static off on musl, the one flag Rustler's own
+# build would have needed, so cargo runs from the crate directory. The output
+# names match what Rustler copies to priv/native/ (no lib prefix).
+#
+# The target dirs are cache mounts, so only the two .so files in /out persist
+# in the layer. Left in the layer, target/ is about a GB that the mode=max
+# registry cache would push on every native/ change and pull on every cache
+# hit. The mounts also make local rebuilds after a native/ change incremental;
+# CI runners start them cold, and the registry layer cache still covers
+# unchanged crates.
+FROM toolchain AS nifs
+COPY native/mydia_p2p_core ./native/mydia_p2p_core
+COPY native/mydia_p2p ./native/mydia_p2p
+COPY native/mydia_subsync ./native/mydia_subsync
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/native/mydia_p2p/target,sharing=locked \
+    --mount=type=cache,target=/app/native/mydia_subsync/target,sharing=locked \
+    set -eu; mkdir -p /out; \
+    for crate in mydia_p2p mydia_subsync; do \
+      (cd "native/$crate" && cargo build --release --locked); \
+      cp "native/$crate/target/release/lib$crate.so" "/out/$crate.so"; \
+    done
+
+# ── deps: Hex dependencies on top of the toolchain ───────────────────────────
+FROM toolchain AS deps
 
 # Database type: sqlite (default) or postgres
 # This is a BUILD-TIME argument that determines which database adapter is compiled into the release
@@ -200,14 +232,13 @@ COPY patches/wasmex ./patches/wasmex
 RUN mix deps.patch
 
 # Compile dependencies
-# Cache cargo registry for Rust NIF compilation (mydia_p2p_core, wasmex).
+# Cache cargo registry for Rust NIF compilation (wasmex).
 # WASMEX_BUILD=1 makes rustler_precompiled build the patched NIF from source.
 # Set as ENV, not a prefix on the command: ci.yml anchors on a bare
 # `mix deps.compile` line.
 ENV WASMEX_BUILD=1
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
-    --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     --mount=type=cache,target=/app/deps/wasmex/native/wasmex/target,sharing=locked \
     mix deps.compile
 
@@ -222,7 +253,7 @@ RUN elixir -pa "_build/prod/lib/*/ebin" \
 RUN elixir --erl "+S 1:1" -pa _build/prod/lib/exqlite/ebin \
       -r patches/exqlite/destructor_probe.exs -e 'ExqliteDestructorProbe.assert_patched!()'
 
-# ── deps: everything above, reused by the cwasm stage below ──────────────────
+# ── builder: the application on top of deps (cwasm below also reuses deps) ───
 FROM deps AS builder
 
 # Copy application source
@@ -231,6 +262,11 @@ COPY priv ./priv
 COPY lib ./lib
 COPY assets ./assets
 COPY native ./native
+# Prebuilt in the `nifs` stage. MYDIA_PREBUILT_NIFS makes config/prod.exs set
+# Rustler's skip_compilation?, so `mix compile` loads these instead of
+# invoking cargo.
+COPY --from=nifs /out/mydia_p2p.so /out/mydia_subsync.so ./priv/native/
+ENV MYDIA_PREBUILT_NIFS=1
 # Bundled plugin guest sources — the :plugins compiler builds them to
 # priv/plugins/*.wasm during `mix compile` below (the .wasm is gitignored).
 COPY plugins ./plugins
@@ -264,12 +300,18 @@ ENV BUILD_VERSION=${BUILD_VERSION}
 ARG BUILD_COMMIT=""
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 
-# Compile application (includes building Rust NIFs via Rustler)
-# Cache cargo for Rust NIF compilation
+# Compile the application. The Rustler NIFs come from the `nifs` stage; cargo
+# still runs here for the wasm plugin guests (the :plugins compiler).
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
-    --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     mix compile
+
+# Prove the prebuilt NIFs load. Rustler's on_load fails the module load when
+# the .so is missing or built for the wrong libc, which would otherwise surface
+# only at boot as "module Mydia.P2p is not available".
+RUN elixir -pa "_build/prod/lib/*/ebin" -e ' \
+      for m <- [Mydia.P2p, Mydia.Subsync], do: {:module, ^m} = Code.ensure_loaded(m); \
+      IO.puts("prebuilt NIFs load")'
 
 # The Cardigann wasm guest is NOT in the image. Installs that opt in with
 # Prowlarr's engine (CARDIGANN_ENGINE=prowlarr, or the Indexers page) download it into their data directory on first boot,
