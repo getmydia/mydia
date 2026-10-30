@@ -68,7 +68,7 @@ jobs:
             experimental-features = nix-command flakes
 
       # Cachix, not magic-nix-cache: the latter wrote ~2,200 .nar entries
-      # (1.1 GB) into the 10 GB Actions cache and pushed the Elixir caches out.
+      # (1.1 GB) into the 10 GB Actions cache and pushed the Mix build caches out.
       # Read-only: Dependabot runs cannot read CACHIX_AUTH_TOKEN.
       - name: Setup Cachix
         uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
