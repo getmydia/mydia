@@ -189,6 +189,9 @@ defmodule Mydia.Application do
         # Indexer search metrics. After the repo for the same reason as the
         # events writer: terminate/2 writes a final batch.
         Mydia.Indexers.SearchStats.Recorder,
+        # Trackers seen in search results, for the Indexers page. After the
+        # repo for the same reason: terminate/2 writes the last batch.
+        Mydia.Indexers.TrackerSightings.Recorder,
         Mydia.Downloads.Client.Registry,
         # Owns the ETS table holding the derived set of client torrents Mydia
         # does not manage. init/1 only creates the table (no I/O), so unlike

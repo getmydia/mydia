@@ -26,6 +26,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.ResultDedup
+  alias Mydia.Indexers.TrackerSightings
   alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
@@ -316,6 +317,9 @@ defmodule Mydia.Indexers do
 
             {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
         end)
+
+      # Before dedup, so every tracker that returned a release counts as seen.
+      TrackerSightings.record(all_results)
 
       results = rank_and_dedupe(all_results, query, opts)
 
