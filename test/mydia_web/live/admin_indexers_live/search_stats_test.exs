@@ -124,6 +124,17 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     assert has_element?(view, "#indexer-stats-#{busy.id}-none-success.text-warning", "90%")
   end
 
+  test "a rate just under the healthy threshold is not rounded up to it", %{
+    conn: conn,
+    busy: busy
+  } do
+    for _ <- 1..35, do: insert!(busy, %{})
+    for _ <- 1..2, do: insert!(busy, %{outcome: "error", error_message: "boom"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-success.text-warning", "94%")
+  end
+
   test "a healthy indexer colors its success rate as success", %{conn: conn, busy: busy} do
     insert!(busy, %{})
     {:ok, view, _html} = live(conn, ~p"/admin/indexers")

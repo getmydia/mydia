@@ -49,7 +49,6 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
           id={stats_id(@indexer_id, summary)}
           class="stats stats-horizontal bg-base-200 rounded-box max-w-full overflow-x-auto text-left transition-colors hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           title={gettext("Show recent failures")}
-          aria-label={gettext("Recent failures for this indexer")}
           phx-click="show_search_failures"
           phx-value-id={@indexer_id}
         >
@@ -137,7 +136,7 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   defp engine_label(other), do: other
 
   defp format_rate(nil), do: gettext("n/a")
-  defp format_rate(rate), do: "#{round(rate * 100)}%"
+  defp format_rate(rate), do: "#{trunc(rate * 100)}%"
 
   defp format_ms(nil), do: gettext("n/a")
   defp format_ms(ms) when ms < 1_000, do: gettext("%{ms} ms", ms: ms)

@@ -12303,7 +12303,7 @@ msgstr ""
 msgid "%{minutes}m %{seconds}s"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:143
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:142
 #, elixir-autogen, elixir-format
 msgid "%{ms} ms"
 msgstr ""
@@ -12406,7 +12406,7 @@ msgstr ""
 msgid "%{retained} kept by a restore that found the library path occupied, %{orphaned} with no record behind them."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:144
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:143
 #, elixir-autogen, elixir-format
 msgid "%{seconds} s"
 msgstr ""
@@ -13406,7 +13406,7 @@ msgstr ""
 msgid "Built-in default. Saving an edit creates a database row."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:135
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:134
 #, elixir-autogen, elixir-format
 msgid "Built-in engine"
 msgstr ""
@@ -16462,7 +16462,7 @@ msgstr ""
 msgid "No extra memory"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:109
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:108
 #, elixir-autogen, elixir-format
 msgid "No failures in the last 14 days."
 msgstr ""
@@ -17312,7 +17312,7 @@ msgstr ""
 msgid "Provider not found"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:136
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:135
 #, elixir-autogen, elixir-format
 msgid "Prowlarr engine"
 msgstr ""
@@ -17446,12 +17446,7 @@ msgstr ""
 msgid "Recent Activity"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:52
-#, elixir-autogen, elixir-format
-msgid "Recent failures for this indexer"
-msgstr ""
-
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:107
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:106
 #, elixir-autogen, elixir-format
 msgid "Recent failures: %{name}"
 msgstr ""
@@ -19940,9 +19935,9 @@ msgstr ""
 msgid "match_type must be 'all' or 'any'"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:75
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:139
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:142
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:74
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:138
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:141
 #, elixir-autogen, elixir-format
 msgid "n/a"
 msgstr ""
@@ -21188,37 +21183,37 @@ msgctxt "tv"
 msgid "S%{season}E%{episode}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:65
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:64
 #, elixir-autogen, elixir-format
 msgid "%{ok} of %{attempts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:69
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:68
 #, elixir-autogen, elixir-format
 msgid "Latency"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:74
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:73
 #, elixir-autogen, elixir-format
 msgid "Results"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:57
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:56
 #, elixir-autogen, elixir-format
 msgid "Success"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:79
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:78
 #, elixir-autogen, elixir-format
 msgid "Timeouts"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:71
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:70
 #, elixir-autogen, elixir-format
 msgid "p90 %{p90}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:76
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:75
 #, elixir-autogen, elixir-format
 msgid "per search"
 msgstr ""
