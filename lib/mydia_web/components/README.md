@@ -593,9 +593,7 @@ ids with `*`, so an entry keeps matching between runs whose rows get new ids.
 
 `@known` in the sweep holds accepted violations. Each is
 `{route, widths, check, selector, reason}`, where `widths` is one integer or a
-list (`@all` is 320, 375 and 414). `@chrome` holds entries that apply to every
-route and state but those in `@no_dock` (the mobile dock, which the open
-drawer hides), and the alphabet bar's letters on the
+list (`@all` is 320, 375 and 414). The alphabet bar's letters on the
 library grids are added in code. The failure output prints the entry that would
 accept a new violation, with one width; it pastes in unchanged. Adding one is
 a review decision, not a fix. An entry that stops matching fails the sweep, so
