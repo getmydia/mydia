@@ -101,4 +101,31 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     render_hook(view, "close_search_failures", %{})
     refute has_element?(view, "#indexer-failures")
   end
+
+  test "a mostly failing indexer colors its success rate as an error", %{
+    conn: conn,
+    busy: busy
+  } do
+    insert!(busy, %{})
+    for _ <- 1..3, do: insert!(busy, %{outcome: "error", error_message: "boom"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-success.text-error", "25%")
+  end
+
+  test "a healthy indexer colors its success rate as success", %{conn: conn, busy: busy} do
+    insert!(busy, %{})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-success.text-success", "100%")
+    refute has_element?(view, "#indexer-stats-#{busy.id}-none-timeouts.text-warning")
+  end
+
+  test "timeouts are flagged as a warning", %{conn: conn, busy: busy} do
+    insert!(busy, %{})
+    insert!(busy, %{outcome: "timeout", error_message: "Cardigann call timed out"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-timeouts.text-warning", "1")
+  end
 end

@@ -8,6 +8,9 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   alias Mydia.Indexers.SearchStats.Summary
   alias Phoenix.LiveView.JS
 
+  @healthy_rate 0.95
+  @degraded_rate 0.80
+
   attr :window, :atom, required: true
 
   def window_toggle(assigns) do
@@ -33,43 +36,59 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
 
   def stats_strip(assigns) do
     ~H"""
-    <div
-      id={"indexer-stats-#{@indexer_id}"}
-      class="flex flex-col gap-1 text-xs text-base-content/70"
-    >
-      <span :if={@summaries == []}>{gettext("No searches yet")}</span>
-      <button
-        :for={summary <- @summaries}
-        type="button"
-        id={"indexer-stats-#{@indexer_id}-#{summary.engine || "none"}"}
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded text-left transition-colors hover:text-base-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        title={gettext("Show recent failures")}
-        aria-label={gettext("Recent failures for this indexer")}
-        phx-click="show_search_failures"
-        phx-value-id={@indexer_id}
-      >
+    <div id={"indexer-stats-#{@indexer_id}"} class="flex flex-col gap-1">
+      <span :if={@summaries == []} class="text-xs text-base-content/70">
+        {gettext("No searches yet")}
+      </span>
+      <div :for={summary <- @summaries} class="flex flex-col items-start gap-1 max-w-full">
         <span :if={summary.engine} class="badge badge-xs badge-ghost">
           {engine_label(summary.engine)}
         </span>
-        <span>
-          {gettext("%{rate} ok of %{attempts}",
-            rate: format_rate(Summary.success_rate(summary)),
-            attempts: summary.attempts
-          )}
-        </span>
-        <span :if={summary.timeouts > 0} class="text-warning">
-          {gettext("%{count} timed out", count: summary.timeouts)}
-        </span>
-        <span>
-          {gettext("p50 %{p50} / p90 %{p90}",
-            p50: format_ms(summary.p50_ms),
-            p90: format_ms(summary.p90_ms)
-          )}
-        </span>
-        <span :if={summary.avg_results}>
-          {gettext("%{avg} results avg", avg: summary.avg_results)}
-        </span>
-      </button>
+        <button
+          type="button"
+          id={stats_id(@indexer_id, summary)}
+          class="stats stats-horizontal bg-base-200 rounded-box max-w-full overflow-x-auto text-left transition-colors hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          title={gettext("Show recent failures")}
+          aria-label={gettext("Recent failures for this indexer")}
+          phx-click="show_search_failures"
+          phx-value-id={@indexer_id}
+        >
+          <div class="stat py-2 px-4">
+            <div class="stat-title text-xs">{gettext("Success")}</div>
+            <div
+              id={stats_id(@indexer_id, summary) <> "-success"}
+              class={["stat-value text-lg", rate_class(Summary.success_rate(summary))]}
+            >
+              {format_rate(Summary.success_rate(summary))}
+            </div>
+            <div class="stat-desc">
+              {gettext("%{ok} of %{attempts}", ok: summary.successes, attempts: summary.attempts)}
+            </div>
+          </div>
+          <div class="stat py-2 px-4">
+            <div class="stat-title text-xs">{gettext("Latency")}</div>
+            <div class="stat-value text-lg">{format_ms(summary.p50_ms)}</div>
+            <div class="stat-desc">{gettext("p90 %{p90}", p90: format_ms(summary.p90_ms))}</div>
+          </div>
+          <div class="stat py-2 px-4">
+            <div class="stat-title text-xs">{gettext("Results")}</div>
+            <div class="stat-value text-lg">{summary.avg_results || gettext("n/a")}</div>
+            <div class="stat-desc">{gettext("per search")}</div>
+          </div>
+          <div class="stat py-2 px-4">
+            <div class="stat-title text-xs">{gettext("Timeouts")}</div>
+            <div
+              id={stats_id(@indexer_id, summary) <> "-timeouts"}
+              class={[
+                "stat-value text-lg",
+                if(summary.timeouts > 0, do: "text-warning", else: "text-base-content/50")
+              ]}
+            >
+              {summary.timeouts}
+            </div>
+          </div>
+        </button>
+      </div>
     </div>
     """
   end
@@ -104,6 +123,14 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
     </.modal>
     """
   end
+
+  defp stats_id(indexer_id, summary),
+    do: "indexer-stats-#{indexer_id}-#{summary.engine || "none"}"
+
+  defp rate_class(nil), do: "text-base-content/50"
+  defp rate_class(rate) when rate >= @healthy_rate, do: "text-success"
+  defp rate_class(rate) when rate >= @degraded_rate, do: "text-warning"
+  defp rate_class(_rate), do: "text-error"
 
   defp engine_label("builtin"), do: gettext("Built-in engine")
   defp engine_label("prowlarr"), do: gettext("Prowlarr engine")
