@@ -78,7 +78,9 @@ defmodule MydiaWeb.FeatureCase do
 
   `MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`,
   `refute_clipped/2`, and `assert_same_height/4` are also auto-imported, via
-  the `using` block below.
+  the `using` block below. `MydiaWeb.FeatureCase.MobileLayout`'s `audit/1,2`
+  (the mobile layout checker, returning `Violation` structs) is imported the
+  same way.
 
   ## Wallaby DSL Reference
 
@@ -111,6 +113,7 @@ defmodule MydiaWeb.FeatureCase do
 
       import MydiaWeb.FeatureCase
       import MydiaWeb.FeatureCase.Geometry
+      import MydiaWeb.FeatureCase.MobileLayout, only: [audit: 1, audit: 2]
       import Mydia.Factory
 
       alias MydiaWeb.Router.Helpers, as: Routes
