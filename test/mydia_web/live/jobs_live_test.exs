@@ -83,22 +83,62 @@ defmodule MydiaWeb.JobsLiveTest do
     refute html =~ "795827+00:00"
   end
 
-  test "the details modal shows full local timestamps", %{conn: conn} do
-    attempted = ~U[2026-10-30 09:18:00.795827Z]
+  test "history timestamps follow the viewer's zone and clock preference", %{conn: conn} do
+    user = admin_user_fixture()
+
+    {:ok, _} =
+      user
+      |> Mydia.Accounts.get_user_preference!()
+      |> Mydia.Accounts.update_preference(%{
+        "time_zone" => "America/New_York",
+        "clock_format" => "12"
+      })
 
     {:ok, done} = Oban.insert(Mydia.Jobs.LibraryScanner.new(%{}))
 
     done
-    |> Ecto.Changeset.change(state: "completed", attempted_at: attempted, completed_at: attempted)
+    |> Ecto.Changeset.change(state: "completed", attempted_at: ~U[2026-10-30 09:18:00.795827Z])
+    |> Mydia.Repo.update!()
+
+    {:ok, view, _html} = live(log_in_user(conn, user), ~p"/admin/jobs")
+
+    text =
+      view
+      |> element(~s(tr#job-#{done.id} td[data-label="Attempted At"] time))
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.trim()
+
+    assert text == "Oct 30, 2026, 5:18 AM"
+  end
+
+  test "the details modal shows full local timestamps", %{conn: conn} do
+    scheduled = ~U[2026-10-30 09:15:00.111111Z]
+    attempted = ~U[2026-10-30 09:18:00.795827Z]
+    completed = ~U[2026-10-30 09:19:30.936772Z]
+
+    {:ok, done} = Oban.insert(Mydia.Jobs.LibraryScanner.new(%{}))
+
+    done
+    |> Ecto.Changeset.change(
+      state: "completed",
+      scheduled_at: scheduled,
+      attempted_at: attempted,
+      completed_at: completed
+    )
     |> Mydia.Repo.update!()
 
     {:ok, view, _html} = live(conn, ~p"/admin/jobs")
     view |> element("#job-details-#{done.id}") |> render_click()
 
-    assert has_element?(
-             view,
-             ~s(#job-details-modal time[datetime="2026-10-30T09:18:00.795827Z"])
-           )
+    for iso <- [
+          "2026-10-30T09:15:00.111111Z",
+          "2026-10-30T09:18:00.795827Z",
+          "2026-10-30T09:19:30.936772Z"
+        ] do
+      assert has_element?(view, ~s(#job-details-modal time[datetime="#{iso}"]))
+    end
 
     refute render(view) =~ "795827+00:00"
   end

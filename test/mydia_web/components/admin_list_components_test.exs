@@ -303,6 +303,7 @@ defmodule MydiaWeb.AdminListComponentsTest do
 
       # The td holds exactly one element child, and that child holds both lines.
       assert count(html, "#{cell} > *") == 1
+      assert count(html, ~s|#{cell}[class*="max-sm:flex"]|) == 1
       assert count(html, "#{cell} > div.min-w-0.break-words > div.rel") == 1
       assert count(html, "#{cell} > div.min-w-0.break-words > div.abs") == 1
     end
