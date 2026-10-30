@@ -1,7 +1,7 @@
 defmodule MydiaWeb.OidcRedirectUriHeaderTrustTest do
   @moduledoc """
-  Regression coverage for the fix half of T-007/T-019
-  (docs/superpowers/security-review): the redirect URI Mydia sends to the
+  Regression coverage for the fix half of the OIDC redirect host-injection
+  issue: the redirect URI Mydia sends to the
   identity provider must come from configuration, never from a client-
   suppliable request header.
 

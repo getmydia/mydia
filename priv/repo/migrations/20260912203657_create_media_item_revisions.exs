@@ -333,11 +333,9 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
     # Every parent update is observable: `MediaItemView` reads the parent row's
     # own columns directly.
     #
-    # Deliberately unconditional, with no `UPDATE OF <columns>` list. Per the
-    # design spec's "Trigger coverage > media_items" section
-    # (docs/superpowers/specs/2026-09-12-library-api-revision-polling-design.md),
-    # "insert and every update are observable", and false-positive delivery is
-    # safe while a missed change is not. Sweep-only writes such as
+    # Deliberately unconditional, with no `UPDATE OF <columns>` list. The
+    # contract is that insert and every update are observable, and
+    # false-positive delivery is safe while a missed change is not. Sweep-only writes such as
     # `seasons_refreshed_at` (`Media.stamp_seasons_refreshed/1`) and
     # `season_order` therefore advance a revision on purpose, and a new column
     # added to `MediaItemView.item_map/2` is covered without a migration change.
@@ -533,9 +531,7 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
     )
 
     # Deliberately unconditional here too: see the matching comment on the
-    # PostgreSQL parent trigger above for the spec section
-    # (docs/superpowers/specs/2026-09-12-library-api-revision-polling-design.md)
-    # and the reasoning. Sweep-only writes advance a revision on purpose, and a
+    # PostgreSQL parent trigger above for the reasoning. Sweep-only writes advance a revision on purpose, and a
     # missed consumer-visible change is worse than a redundant re-delivery.
     sqlite_trigger(
       "mydia_library_revision_media_items_update",

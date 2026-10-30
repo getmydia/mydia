@@ -9,9 +9,9 @@ copyright: >-
   This site sets no cookies. Visits are counted anonymously with
   <a href="https://plausible.io/data-policy">Plausible</a>.
 
-# Planning artifacts live under docs/ but must never be published.
-# MkDocs builds every .md in docs_dir regardless of nav, so excluding
-# them here is what keeps local builds matching CI.
+# Planning docs belong in design/ at the repo root, outside docs_dir.
+# MkDocs builds every .md in docs_dir regardless of nav, so these excludes
+# keep a stray local copy under docs/ from being published.
 exclude_docs: |
   plans/
   brainstorms/

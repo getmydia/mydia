@@ -1,7 +1,7 @@
 defmodule MydiaWeb.EndpointRewriteOnTest do
   @moduledoc """
-  Regression coverage for the `Plug.RewriteOn` half of T-007/T-019
-  (docs/superpowers/security-review): `MydiaWeb.Endpoint` must not rewrite
+  Regression coverage for the `Plug.RewriteOn` half of the OIDC redirect
+  host-injection fix: `MydiaWeb.Endpoint` must not rewrite
   `conn.host` from the client-suppliable `X-Forwarded-Host` header.
 
   Before the fix, `plug Plug.RewriteOn, [:x_forwarded_host, :x_forwarded_port,

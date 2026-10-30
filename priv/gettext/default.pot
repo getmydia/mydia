@@ -2593,8 +2593,8 @@ msgid "Add to Favorites"
 msgstr ""
 
 #: lib/mydia_web/components/add_media_components.ex:231
+#: lib/mydia_web/components/discover_components.ex:344
 #: lib/mydia_web/components/discover_components.ex:345
-#: lib/mydia_web/components/discover_components.ex:346
 #: lib/mydia_web/live/components/trending_detail_modal.ex:223
 #: lib/mydia_web/live/components/trending_detail_modal.ex:228
 #, elixir-autogen, elixir-format
@@ -2665,7 +2665,7 @@ msgstr ""
 msgid "Added to your library in the last 30 days."
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:350
+#: lib/mydia_web/components/discover_components.ex:349
 #: lib/mydia_web/live/components/disambiguation_modal_component.ex:86
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:121
 #: lib/mydia_web/live/downloads_live/components.ex:286
@@ -5419,14 +5419,14 @@ msgstr ""
 msgid "Getting Started"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:364
+#: lib/mydia_web/components/discover_components.ex:363
 #: lib/mydia_web/live/components/trending_detail_modal.ex:461
 #: lib/mydia_web/live/components/trending_detail_modal.ex:463
 #, elixir-autogen, elixir-format
 msgid "Go to Movie"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:364
+#: lib/mydia_web/components/discover_components.ex:363
 #: lib/mydia_web/live/components/trending_detail_modal.ex:462
 #, elixir-autogen, elixir-format
 msgid "Go to Show"
@@ -11034,7 +11034,7 @@ msgstr ""
 msgid "→ Local show"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:352
+#: lib/mydia_web/components/discover_components.ex:351
 #: lib/mydia_web/live/admin_import_lists_live/items_components.ex:157
 #: lib/mydia_web/live/components/trending_detail_modal.ex:227
 #, elixir-autogen, elixir-format

@@ -19,8 +19,7 @@ defmodule MydiaWeb.OidcRedirectUri do
   `conn.scheme` elsewhere. An attacker who can reach the origin (this app's
   own Dockerfile exposes its HTTP port directly, and the documented
   reverse-proxy config never strips `X-Forwarded-Host`) can steer that
-  `redirect_uri` to a host they control (see
-  docs/superpowers/security-review, findings T-007/T-019).
+  `redirect_uri` to a host they control.
 
   `PHX_HOST` is already required configuration for any Mydia deployment
   reachable at a real hostname -- both `MydiaWeb.Endpoint`'s own `url:` and
