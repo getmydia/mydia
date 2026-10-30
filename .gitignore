@@ -163,8 +163,11 @@ devenv.local.yaml
 # Subagent-driven-development scratch (ledger, briefs, review packages)
 .superpowers/
 
-# Agent / IDE local tooling (commands, skills, CLI state)
-.claude/
+# Agent / IDE local tooling (commands, skills, CLI state). The shared hook
+# config is the exception: it stops worktree devenvs when a session ends.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 .antigravitycli/
 player/ios/scripts/test-ci-signing.sh
 
