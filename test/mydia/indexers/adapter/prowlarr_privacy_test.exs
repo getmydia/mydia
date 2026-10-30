@@ -63,7 +63,9 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacyTest do
     {elapsed_us, result} = :timer.tc(fn -> ProwlarrPrivacy.lookup(key, fetch, 50) end)
 
     assert result == %{}
-    assert elapsed_us < 250_000
+    # wait_ms is 50 and the fetch takes 300; 150 leaves scheduler slack while
+    # still proving the caller did not wait for the fetch.
+    assert elapsed_us < 150_000
     eventually(fn -> ProwlarrPrivacy.lookup(key, fetch, 50) == %{7 => false} end)
     assert calls.() == 1
   end
@@ -79,12 +81,55 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacyTest do
     assert calls.() == 1
   end
 
-  test "a failed fetch caches an empty map" do
+  test "a failed fetch caches an empty map for five minutes, then fetches again" do
     key = key()
     {fetch, calls} = counting_fetch(:error)
 
     assert ProwlarrPrivacy.lookup(key, fetch) == %{}
     assert ProwlarrPrivacy.lookup(key, fetch) == %{}
     assert calls.() == 1
+
+    [{^key, %{}, expires_at}] = :ets.lookup(@table, key)
+    ttl = expires_at - System.monotonic_time(:millisecond)
+    assert ttl > :timer.minutes(5) - 5_000 and ttl <= :timer.minutes(5)
+
+    # Once that entry expires, the next lookup asks Prowlarr again.
+    :ets.insert(@table, {key, %{}, System.monotonic_time(:millisecond) - 1})
+    assert ProwlarrPrivacy.lookup(key, fetch) == %{}
+    eventually(fn -> calls.() == 2 end)
+  end
+
+  test "a successful fetch is cached for an hour" do
+    key = key()
+    {fetch, _calls} = counting_fetch({:ok, %{7 => true}})
+
+    ProwlarrPrivacy.lookup(key, fetch)
+
+    [{^key, _map, expires_at}] = :ets.lookup(@table, key)
+    ttl = expires_at - System.monotonic_time(:millisecond)
+    assert ttl > :timer.hours(1) - 5_000 and ttl <= :timer.hours(1)
+  end
+
+  describe "in-flight marker" do
+    test "a marker left by a killed fetch is taken over once it is old" do
+      key = key()
+      old = System.monotonic_time(:millisecond) - :timer.minutes(1)
+      :ets.insert(@table, {{:in_flight, key}, old})
+      {fetch, calls} = counting_fetch({:ok, %{7 => true}})
+
+      assert ProwlarrPrivacy.lookup(key, fetch) == %{7 => true}
+      assert calls.() == 1
+      eventually(fn -> :ets.lookup(@table, {:in_flight, key}) == [] end)
+    end
+
+    test "a recent marker means a fetch is running, so no second one starts" do
+      key = key()
+      :ets.insert(@table, {{:in_flight, key}, System.monotonic_time(:millisecond)})
+      {fetch, calls} = counting_fetch({:ok, %{7 => true}})
+
+      assert ProwlarrPrivacy.lookup(key, fetch) == %{}
+      assert calls.() == 0
+      :ets.delete(@table, {:in_flight, key})
+    end
   end
 end

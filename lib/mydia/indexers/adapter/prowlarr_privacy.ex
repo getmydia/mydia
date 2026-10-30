@@ -33,6 +33,7 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacy do
   @ttl_ms :timer.hours(1)
   @failure_ttl_ms :timer.minutes(5)
   @wait_ms 3_000
+  @claim_ttl_ms 30_000
 
   @type privacy_map :: %{integer() => boolean()}
 
@@ -89,8 +90,18 @@ defmodule Mydia.Indexers.Adapter.ProwlarrPrivacy do
 
   # The in-flight marker that makes fetches single-flight per key. The fetch
   # task stores its result and clears the marker, so a caller that stops
-  # waiting loses nothing.
-  defp claim(key), do: :ets.insert_new(@table_name, {{:in_flight, key}})
+  # waiting loses nothing. A task killed before its `after` runs would leave
+  # the marker behind, so one older than @claim_ttl_ms (well past the fetch's
+  # own connect and receive timeouts) is taken over, atomically.
+  defp claim(key) do
+    now = System.monotonic_time(:millisecond)
+    marker = {:in_flight, key}
+
+    :ets.insert_new(@table_name, {marker, now}) or
+      :ets.select_replace(@table_name, [
+        {{marker, :"$1"}, [{:<, :"$1", now - @claim_ttl_ms}], [{{{:const, marker}, now}}]}
+      ]) == 1
+  end
 
   defp sup, do: Mydia.TaskSupervisor
 
