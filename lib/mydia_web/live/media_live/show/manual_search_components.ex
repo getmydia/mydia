@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     only: [format_search_size: 1, format_relative_time_short: 1]
 
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
+  import MydiaWeb.MediaLive.Show.TrackerTermsBadges, only: [terms_badges: 1]
 
   alias Mydia.Indexers.SearchResult
 
@@ -208,6 +209,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
             {@result.seeders}
           <% end %>
         </span>
+        <%!-- Freeleech, upload multiplier and private tracker --%>
+        <.terms_badges id={"#{@id}-terms"} terms={@result.terms} />
         <%!-- Indexer badge (its own column from lg) --%>
         <span class="lg:hidden">
           <.indexer_badge result={@result} />
@@ -265,6 +268,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           score={@breakdown.seeders}
           weight={30}
         />
+        <div :if={@breakdown.freeleech > 0.0} id={"#{@id}-freeleech-score"}>
+          <.score_row
+            label={gettext("Freeleech bonus")}
+            value={nil}
+            score={@breakdown.freeleech}
+            max={10}
+          />
+        </div>
         <%= if @has_penalty do %>
           <div class="divider my-1 text-xs opacity-50">{gettext("Penalties")}</div>
           <%= if @breakdown.limit_violation do %>

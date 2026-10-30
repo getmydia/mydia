@@ -456,6 +456,49 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert badge_text == Integer.to_string(trunc(expected))
     end
 
+    test "a row shows its tracker terms badges" do
+      terms = %Mydia.Indexers.Structs.TrackerTerms{
+        download_volume_factor: 0.0,
+        upload_volume_factor: 2.0,
+        private?: true
+      }
+
+      doc = %{terms: terms} |> modal_html() |> LazyHTML.from_fragment()
+
+      for suffix <- ["freeleech", "upload", "private"] do
+        assert Enum.any?(LazyHTML.query(doc, "#search-result-00000-1-terms-#{suffix}"))
+      end
+    end
+
+    test "a profile preferring freeleech lists the bonus in the score breakdown" do
+      profile = %Mydia.Settings.QualityProfile{
+        id: Ecto.UUID.generate(),
+        name: "Freeleech Profile",
+        quality_standards: %{preferred_resolutions: ["1080p"], freeleech_preference: "prefer"}
+      }
+
+      media_item = %Mydia.Media.MediaItem{
+        title: "Some Movie",
+        type: "movie",
+        quality_profile_id: profile.id,
+        quality_profile: profile
+      }
+
+      title = "Some.Movie.2020.1080p.ENG.x264"
+
+      result_extra = %{
+        title: title,
+        quality: Mydia.Indexers.QualityParser.parse(title),
+        terms: %Mydia.Indexers.Structs.TrackerTerms{download_volume_factor: 0.5}
+      }
+
+      doc = result_extra |> modal_html(%{media_item: media_item}) |> LazyHTML.from_fragment()
+      row = LazyHTML.query(doc, "#search-result-00000-1-freeleech-score")
+
+      assert Enum.any?(row)
+      assert LazyHTML.text(row) =~ "5"
+    end
+
     test "without a quality profile, the row shows the seeders circle, no score badge, and the audio badge still renders" do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 12})
 
