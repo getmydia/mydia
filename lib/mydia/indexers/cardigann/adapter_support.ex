@@ -4,7 +4,7 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   `Mydia.Indexers.Adapter.Cardigann` (the Elixir engine) and
   `Mydia.Indexers.Cardigann.Wasm.Adapter` (Prowlarr's engine under Wasmex):
   definition lookup, the string-or-atom `setting/2` read, search-option
-  filters, and FlareSolverr options and marking.
+  filters, release validity, and FlareSolverr options and marking.
   """
 
   require Logger
@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.{CardigannDefinition, CardigannHealthCheck}
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.SearchResult
   alias Mydia.Repo
 
   # How many mirrors one search tries before giving up.
@@ -90,6 +91,69 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
 
   defp limit_results(results, nil), do: results
   defp limit_results(results, limit), do: Enum.take(results, limit)
+
+  @doc """
+  Prowlarr's `HttpIndexerBase.IsValidRelease`: outside an interactive search
+  (`interactive: true`, which the manual search UI passes), a release with no
+  category or no size is dropped. Prowlarr checks for a null size; the
+  built-in engine has 0 for an absent or unreadable one. A category of 0 is
+  the engine's unmapped value, not a Torznab id. The wasm engine's guest
+  already applies the rule, so only the built-in adapter calls this.
+
+  Each dropped release is logged at debug with its reason, and a search that
+  dropped anything logs one warning naming `indexer_name`. The health check
+  does not search through the adapter, so a definition whose site renumbered
+  its categories stays healthy while every automatic search comes back empty;
+  the warning is the only trace of that.
+  """
+  @spec drop_invalid_releases([SearchResult.t()], keyword(), String.t() | nil) ::
+          [SearchResult.t()]
+  def drop_invalid_releases(results, opts, indexer_name) do
+    if Keyword.get(opts, :interactive, false) do
+      results
+    else
+      {kept, dropped} =
+        Enum.split_with(results, fn result -> invalid_reason(result) == nil end)
+
+      log_dropped(dropped, length(results), indexer_name)
+      kept
+    end
+  end
+
+  defp invalid_reason(%{category: category}) when not is_integer(category) or category <= 0,
+    do: :no_category
+
+  defp invalid_reason(%{size: size}) when not is_integer(size) or size <= 0, do: :no_size
+  defp invalid_reason(_result), do: nil
+
+  defp log_dropped([], _total, _indexer_name), do: :ok
+
+  defp log_dropped(dropped, total, indexer_name) do
+    reasons =
+      Enum.map(dropped, fn result ->
+        reason = invalid_reason(result)
+        Logger.debug("#{indexer_name} dropped #{inspect(result.title)}: #{reason}")
+        reason
+      end)
+
+    counts =
+      reasons
+      |> Enum.frequencies()
+      |> Enum.sort()
+      |> Enum.map_join(", ", fn {reason, count} -> "#{reason}: #{count}" end)
+
+    Logger.warning(dropped_summary(length(dropped), total, indexer_name, counts))
+  end
+
+  defp dropped_summary(total, total, indexer_name, counts) do
+    "#{indexer_name} dropped all #{total} releases (#{counts}) as invalid outside a " <>
+      "manual search; the definition's category mappings may be stale"
+  end
+
+  defp dropped_summary(dropped, total, indexer_name, counts) do
+    "#{indexer_name} dropped #{dropped} of #{total} releases (#{counts}) as invalid " <>
+      "outside a manual search"
+  end
 
   @doc "FlareSolverr options for a definition."
   def build_flaresolverr_opts(%CardigannDefinition{} = definition) do

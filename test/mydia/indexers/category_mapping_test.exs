@@ -233,6 +233,23 @@ defmodule Mydia.Indexers.CategoryMappingTest do
     end
   end
 
+  describe "console and PC categories" do
+    test "map to Prowlarr's NewznabStandardCategory ids, case-insensitively" do
+      assert CategoryMapping.category_id_from_name("Console/NDS") == 1010
+      assert CategoryMapping.category_id_from_name("console/xbox 360") == 1050
+      assert CategoryMapping.category_id_from_name("Console/PS Vita") == 1120
+      assert CategoryMapping.category_id_from_name("PC") == 4000
+      assert CategoryMapping.category_id_from_name("PC/ISO") == 4020
+      assert CategoryMapping.category_id_from_name("PC/Games") == 4050
+    end
+
+    test "have names and are listed" do
+      assert CategoryMapping.category_name(1010) == "Console/NDS"
+      assert CategoryMapping.category_name(4020) == "PC/ISO"
+      assert %{id: 4050, name: "PC/Games", type: :other} in CategoryMapping.all_categories()
+    end
+  end
+
   describe "map_site_category_to_torznab/2" do
     test "maps site category ID to Torznab category using mappings" do
       # Example 1337x category mappings
@@ -297,6 +314,40 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       assert CategoryMapping.map_site_category_to_torznab("41", mappings) == 5040
       assert CategoryMapping.map_site_category_to_torznab("22", mappings) == 3010
       assert CategoryMapping.map_site_category_to_torznab("23", mappings) == 3040
+    end
+  end
+
+  describe "map_site_category_desc_to_torznab/2" do
+    @desc_mappings [
+      %{"id" => 2311, "cat" => "PC/ISO", "desc" => "Lantern Linux"},
+      %{"id" => 0, "cat" => "Other", "desc" => "Other"}
+    ]
+
+    test "matches desc case-insensitively" do
+      assert CategoryMapping.map_site_category_desc_to_torznab("lantern linux", @desc_mappings) ==
+               4020
+    end
+
+    test "is nil for an unknown, blank or missing desc" do
+      assert CategoryMapping.map_site_category_desc_to_torznab("Harbor OS", @desc_mappings) == nil
+      assert CategoryMapping.map_site_category_desc_to_torznab("  ", @desc_mappings) == nil
+      assert CategoryMapping.map_site_category_desc_to_torznab(nil, @desc_mappings) == nil
+    end
+
+    test "skips an entry that is not a map" do
+      mappings = ["garbage", %{"id" => 2311, "cat" => "PC/ISO", "desc" => "Lantern Linux"}]
+
+      assert CategoryMapping.map_site_category_desc_to_torznab("lantern linux", mappings) == 4020
+      assert CategoryMapping.map_site_category_desc_to_torznab("nothing", ["garbage"]) == nil
+    end
+  end
+
+  describe "map_site_category_to_torznab/2 with malformed entries" do
+    test "skips an entry that is not a map" do
+      mappings = ["garbage", %{"id" => 42, "cat" => "Movies/HD"}]
+
+      assert CategoryMapping.map_site_category_to_torznab("42", mappings) == 2040
+      assert CategoryMapping.map_site_category_to_torznab("7", ["garbage"]) == nil
     end
   end
 end

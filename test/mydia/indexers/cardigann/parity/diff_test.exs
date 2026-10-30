@@ -122,6 +122,31 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     assert %{divergences: []} = run([a], [b])
   end
 
+  test "magnets differing only in tr are equal, as download_url and as guid" do
+    base = "magnet:?xt=urn:btih:#{@hash_a}&dn=Lantern%20Harbor"
+    upper = "magnet:?xt=urn:btih:#{String.upcase(@hash_a)}&dn=Lantern%20Harbor"
+
+    a =
+      result("Lantern Harbor", @hash_a,
+        download_url: base <> "&tr=udp%3A%2F%2Fa.test",
+        guid: base <> "&tr=udp%3A%2F%2Fa.test"
+      )
+
+    b = %{
+      a
+      | download_url: upper <> "&tr=udp%3A%2F%2Fb.test",
+        guid: upper <> "&tr=udp%3A%2F%2Fc.test&tr=udp%3A%2F%2Fd.test"
+    }
+
+    assert %{divergences: []} = run([a], [b])
+  end
+
+  test "a guid magnet differing in dn still diverges" do
+    a = result("Lantern Harbor", @hash_a, guid: "magnet:?xt=urn:btih:#{@hash_a}&dn=one")
+    b = %{a | guid: "magnet:?xt=urn:btih:#{@hash_a}&dn=two"}
+    assert [%{field: :guid}] = run([a], [b]).divergences
+  end
+
   test "a size difference is a field divergence with both values" do
     a = result("Lantern Harbor", @hash_a, size: 1234)
 
@@ -173,5 +198,16 @@ defmodule Mydia.Indexers.Cardigann.Parity.DiffTest do
     a = result("Lantern Harbor", @hash_a, metadata: nil)
     b = %{a | download_url: "https://t.test/dl?id=1"}
     assert [%{kind: :field, field: :download_url}] = run([a], [b]).divergences
+  end
+
+  test "a native magnet equals a wasm link only through source_download_url" do
+    link = "https://t.test/torrent/download/1"
+    native = result("Lantern Harbor", @hash_a, metadata: %{source_download_url: link})
+    wasm = %{native | download_url: link, metadata: nil}
+
+    assert %{divergences: []} = run([native], [wasm])
+
+    other = %{native | metadata: %{source_download_url: "https://t.test/torrent/download/2"}}
+    assert [%{field: :download_url}] = run([other], [wasm]).divergences
   end
 end

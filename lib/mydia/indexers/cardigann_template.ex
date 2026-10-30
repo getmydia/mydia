@@ -848,7 +848,7 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   # Cardigann-specific functions
   defp call_function("re_replace", [value, pattern, replacement], _ctx) do
-    case Regex.compile(pattern) do
+    case Mydia.Indexers.Cardigann.DotnetRegex.compile(pattern) do
       {:ok, regex} -> Regex.replace(regex, to_string(value || ""), replacement)
       {:error, _} -> to_string(value || "")
     end

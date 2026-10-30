@@ -1074,7 +1074,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:results_empty?, true)
     |> stream(:search_results, [], reset: true)
     |> start_async(:search, fn ->
-      perform_search(query, min_seeders, indexer_ids, lv, search_id)
+      Indexers.ManualSearch.run(query, min_seeders, lv, search_id, indexer_ids)
     end)
   end
 
@@ -1104,23 +1104,8 @@ defmodule MydiaWeb.SearchLive.Index do
         send(lv, {:paused_retest, search_id, result})
       end
 
-      perform_search(query, min_seeders, [indexer_id], lv, search_id)
+      Indexers.ManualSearch.run(query, min_seeders, lv, search_id, [indexer_id])
     end)
-  end
-
-  defp perform_search(query, min_seeders, indexer_ids, lv, search_id) do
-    opts = [
-      min_seeders: min_seeders,
-      deduplicate: true,
-      indexer_ids: indexer_ids,
-      report_paused: true,
-      on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
-      on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
-    ]
-
-    {:ok, %{results: results, indexer_errors: indexer_errors}} = Indexers.search_all(query, opts)
-
-    {:ok, results, indexer_errors}
   end
 
   defp apply_filters(socket) do

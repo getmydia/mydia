@@ -7,6 +7,13 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   engines does not read as a field mismatch: first by info hash and
   normalised download URL together, then by either alone, then whatever is
   left by position.
+
+  Two magnets with the same btih compare equal whatever their `tr` parameters,
+  in `download_url` and `guid`; see `lib/mydia/indexers/README.md`, "Deliberate
+  differences".
+
+  A native magnet equals a wasm download link when the native result's
+  `metadata.source_download_url` normalises to it.
   """
 
   alias Mydia.Indexers.Cardigann.Parity.{Divergence, RequestKey}
@@ -75,7 +82,27 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
     end
   end
 
+  defp differs?(:download_url, native, wasm) do
+    not (equal?(:download_url, native.download_url, wasm.download_url) or
+           via_source_link?(native, wasm))
+  end
+
   defp differs?(field, a, b), do: not equal?(field, value(a, field), value(b, field))
+
+  # Native prefers a row's info hash and hands out a magnet where Prowlarr hands
+  # out the row's download link. They agree when that link is the one native
+  # passed over (metadata.source_download_url).
+  defp via_source_link?(%SearchResult{download_url: "magnet:" <> _} = native, %SearchResult{
+         download_url: url
+       })
+       when is_binary(url) do
+    source = metadata_value(native.metadata, :source_download_url)
+
+    not String.starts_with?(url, "magnet:") and is_binary(source) and
+      normalise_url(source) == normalise_url(url)
+  end
+
+  defp via_source_link?(_native, _wasm), do: false
 
   defp value(%SearchResult{} = r, field) when field in @metadata_fields,
     do: metadata_value(r.metadata, field)
@@ -90,7 +117,7 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
   defp equal?(:published_at, %DateTime{} = a, %DateTime{} = b),
     do: abs(DateTime.diff(a, b)) <= @date_tolerance_seconds
 
-  defp equal?(field, a, b) when field in [:download_url, :info_url],
+  defp equal?(field, a, b) when field in [:download_url, :info_url, :guid],
     do: normalise_url(a) == normalise_url(b)
 
   defp equal?(:info_hash, a, b), do: normalise_hash(a) == normalise_hash(b)
@@ -148,9 +175,10 @@ defmodule Mydia.Indexers.Cardigann.Parity.Diff do
       :magnet,
       hash,
       for({"dn", v} <- params, do: v),
-      params |> Enum.flat_map(fn {k, v} -> if k == "tr", do: [v], else: [] end) |> Enum.sort(),
-      # ws, x.pe and the rest change how a client gets the data, so they stay in
-      # the key, sorted but with repeats kept.
+      # tr is left out: native and Prowlarr add different public trackers to the
+      # same torrent (lib/mydia/indexers/README.md, "Deliberate differences"). ws,
+      # x.pe and the rest change how a client gets the data, so they stay in the
+      # key, sorted but with repeats kept.
       params |> Enum.reject(fn {k, _} -> k in ["xt", "dn", "tr"] end) |> Enum.sort()
     }
   end

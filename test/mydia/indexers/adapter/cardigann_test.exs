@@ -918,7 +918,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         <tr><td class="title"><a href="/t/1">Some Title</a></td>
         <td class="download"><a href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567">d</a></td>
         <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-        <td class="category">Movies</td></tr></table></body></html>
+        <td class="category">2000</td></tr></table></body></html>
         """)
       end)
 
@@ -961,7 +961,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
       assert context.keywords == "The Matrix"
       assert context.query.series == "The Matrix"
-      assert context.config == %{"sort" => "seeders"}
+      assert context.config == %{"sort" => "seeders", "sitelink" => "https://example.com/"}
     end
   end
 
@@ -987,7 +987,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
           <td class="download"><a href="magnet:?xt=urn:btih:#{hash(n)}">d</a></td>
           <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-          <td class="category">Movies</td></tr>
+          <td class="category">2000</td></tr>
           """
         end
 
@@ -1087,7 +1087,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
         <td class="download"><a href="/dl/#{n}.torrent">d</a></td>
         <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
-        <td class="category">Movies</td></tr></table></body></html>
+        <td class="category">2000</td></tr></table></body></html>
         """
       end
 
@@ -1100,6 +1100,34 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
                "#{live_url}/dl/1.torrent",
                "#{live_url}/dl/2.torrent"
              ]
+    end
+
+    test "row templates see the mirror that answered as .Config.sitelink", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      dead = Bypass.open()
+      Bypass.down(dead)
+
+      live_url = "http://localhost:#{bypass.port}"
+      dead_url = "http://localhost:#{dead.port}"
+
+      yaml =
+        sample_yaml(dead_url)
+        |> String.replace(
+          "links:\n  - #{dead_url}\n",
+          "links:\n  - #{dead_url}\n  - #{live_url}\n"
+        )
+        |> String.replace(
+          "    download:\n      selector: \"td.download a\"\n      attribute: href\n",
+          "    download:\n      text: \"{{ .Config.sitelink }}get/{{ .Result.title }}\"\n"
+        )
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+      serve(bypass, "/search/zq/", page([{"QuietHarbor", 1}]))
+
+      assert {:ok, [result]} = Cardigann.search(@config, "zq")
+      assert result.download_url == "#{live_url}/get/QuietHarbor"
     end
 
     test "only the paths whose categories match the query are requested", %{

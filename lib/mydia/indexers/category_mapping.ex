@@ -76,6 +76,36 @@ defmodule Mydia.Indexers.CategoryMapping do
   @other_misc 8010
   @other_hashed 8020
 
+  # Console (1000-1999) and PC (4000-4999), with Prowlarr's
+  # NewznabStandardCategory names and ids. They used to all map to 8000.
+  @console_and_pc %{
+    "Console" => 1000,
+    "Console/NDS" => 1010,
+    "Console/PSP" => 1020,
+    "Console/Wii" => 1030,
+    "Console/XBox" => 1040,
+    "Console/XBox 360" => 1050,
+    "Console/Wiiware" => 1060,
+    "Console/XBox 360 DLC" => 1070,
+    "Console/PS3" => 1080,
+    "Console/Other" => 1090,
+    "Console/3DS" => 1110,
+    "Console/PS Vita" => 1120,
+    "Console/WiiU" => 1130,
+    "Console/XBox One" => 1140,
+    "Console/PS4" => 1180,
+    "PC" => 4000,
+    "PC/0day" => 4010,
+    "PC/ISO" => 4020,
+    "PC/Mac" => 4030,
+    "PC/Mobile-Other" => 4040,
+    "PC/Games" => 4050,
+    "PC/Mobile-iOS" => 4060,
+    "PC/Mobile-Android" => 4070
+  }
+  @console_and_pc_ids Map.new(@console_and_pc, fn {name, id} -> {String.downcase(name), id} end)
+  @console_and_pc_names Map.new(@console_and_pc, fn {name, id} -> {id, name} end)
+
   @doc """
   Returns all category IDs for the given library type.
 
@@ -219,7 +249,7 @@ defmodule Mydia.Indexers.CategoryMapping do
       @other_misc -> "Other/Misc"
       @other_hashed -> "Other/Hashed"
       # Unknown
-      _ -> "Unknown (#{id})"
+      _ -> Map.get(@console_and_pc_names, id, "Unknown (#{id})")
     end
   end
 
@@ -378,25 +408,8 @@ defmodule Mydia.Indexers.CategoryMapping do
       "other/other" -> @other_misc
       "other/nulled script" -> @other_parent
       "other/audiobook" -> @audio_audiobook
-      # PC/Console categories (mapped to Other for now)
-      "pc" -> @other_parent
-      "pc/games" -> @other_parent
-      "pc/mac" -> @other_parent
-      "pc/mobile-android" -> @other_parent
-      "pc/mobile-ios" -> @other_parent
-      "pc/mobile-other" -> @other_parent
-      "console" -> @other_parent
-      "console/ps3" -> @other_parent
-      "console/ps4" -> @other_parent
-      "console/psp" -> @other_parent
-      "console/xbox" -> @other_parent
-      "console/xbox 360" -> @other_parent
-      "console/wii" -> @other_parent
-      "console/nds" -> @other_parent
-      "console/3ds" -> @other_parent
-      "console/other" -> @other_parent
       # Not found
-      _ -> nil
+      _ -> Map.get(@console_and_pc_ids, normalized)
     end
   end
 
@@ -433,9 +446,13 @@ defmodule Mydia.Indexers.CategoryMapping do
 
     # Find matching category mapping
     mapping =
-      Enum.find(category_mappings, fn mapping ->
-        mapping_id = Map.get(mapping, "id") || Map.get(mapping, :id)
-        to_string(mapping_id) == site_id_str || mapping_id == site_id_int
+      Enum.find(category_mappings, fn
+        mapping when is_map(mapping) ->
+          mapping_id = Map.get(mapping, "id") || Map.get(mapping, :id)
+          to_string(mapping_id) == site_id_str || mapping_id == site_id_int
+
+        _ ->
+          false
       end)
 
     case mapping do
@@ -448,6 +465,34 @@ defmodule Mydia.Indexers.CategoryMapping do
         category_id_from_name(cat_name)
     end
   end
+
+  @doc """
+  Maps a tracker's category description (a `categorydesc` field) to a Torznab
+  id through the mappings' `desc`, compared case-insensitively, as Prowlarr's
+  `MapTrackerCatDescToNewznab` does.
+  """
+  @spec map_site_category_desc_to_torznab(String.t() | nil, list()) :: integer() | nil
+  def map_site_category_desc_to_torznab(desc, mappings)
+      when is_binary(desc) and is_list(mappings) do
+    needle = desc |> String.trim() |> String.downcase()
+
+    if needle == "" do
+      nil
+    else
+      Enum.find_value(mappings, &category_for_desc(&1, needle))
+    end
+  end
+
+  def map_site_category_desc_to_torznab(_desc, _mappings), do: nil
+
+  defp category_for_desc(mapping, needle) when is_map(mapping) do
+    mapping_desc = Map.get(mapping, "desc") || Map.get(mapping, :desc)
+
+    if is_binary(mapping_desc) and String.downcase(String.trim(mapping_desc)) == needle,
+      do: category_id_from_name(Map.get(mapping, "cat") || Map.get(mapping, :cat))
+  end
+
+  defp category_for_desc(_mapping, _needle), do: nil
 
   defp parse_category_id(id) when is_integer(id), do: id
 
@@ -534,6 +579,6 @@ defmodule Mydia.Indexers.CategoryMapping do
       @other_parent,
       @other_misc,
       @other_hashed
-    ]
+    ] ++ Enum.sort(Map.values(@console_and_pc))
   end
 end

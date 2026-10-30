@@ -450,7 +450,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index.ex:134
 #: lib/mydia_web/live/search_live/index.ex:29
 #: lib/mydia_web/live/search_live/index.ex:1016
-#: lib/mydia_web/live/search_live/index.ex:1359
+#: lib/mydia_web/live/search_live/index.ex:1344
 #, elixir-autogen, elixir-format
 msgid "Movies"
 msgstr ""
@@ -685,7 +685,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/subtitle_components.ex:213
 #: lib/mydia_web/live/search_live/index.ex:771
 #: lib/mydia_web/live/search_live/index.ex:783
-#: lib/mydia_web/live/search_live/index.ex:1361
+#: lib/mydia_web/live/search_live/index.ex:1346
 #, elixir-autogen, elixir-format
 msgid "Unknown"
 msgstr ""
@@ -5350,7 +5350,7 @@ msgstr ""
 msgid "From %{year}"
 msgstr ""
 
-#: lib/mydia_web/live/search_live/index.ex:1364
+#: lib/mydia_web/live/search_live/index.ex:1349
 #, elixir-autogen, elixir-format
 msgid "From indexer category"
 msgstr ""
@@ -5469,7 +5469,7 @@ msgstr ""
 msgid "Grid density"
 msgstr ""
 
-#: lib/mydia_web/live/search_live/index.ex:1363
+#: lib/mydia_web/live/search_live/index.ex:1348
 #, elixir-autogen, elixir-format
 msgid "Guessed from release title"
 msgstr ""
@@ -9435,7 +9435,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index.html.heex:405
 #: lib/mydia_web/live/search_live/index.ex:30
 #: lib/mydia_web/live/search_live/index.ex:1017
-#: lib/mydia_web/live/search_live/index.ex:1360
+#: lib/mydia_web/live/search_live/index.ex:1345
 #, elixir-autogen, elixir-format
 msgid "TV Series"
 msgstr ""
@@ -10109,7 +10109,7 @@ msgstr ""
 msgid "Type at least 2 characters to search"
 msgstr ""
 
-#: lib/mydia_web/live/search_live/index.ex:1365
+#: lib/mydia_web/live/search_live/index.ex:1350
 #, elixir-autogen, elixir-format
 msgid "Type could not be detected"
 msgstr ""
@@ -11294,7 +11294,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/components.ex:475
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:99
-#: lib/mydia_web/live/search_live/index.ex:1352
+#: lib/mydia_web/live/search_live/index.ex:1337
 #, elixir-autogen, elixir-format
 msgctxt "indexer type"
 msgid "Public"

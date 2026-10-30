@@ -41,6 +41,39 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
   end
 
   describe "search_results/2" do
+    test "maps categorydesc through the mappings' desc when there is no category" do
+      ctx =
+        ctx(%{category_mappings: [%{"id" => 2311, "cat" => "PC/ISO", "desc" => "Lantern Linux"}]})
+
+      assert one(row(%{"category" => nil, "categorydesc" => "LANTERN LINUX"}), ctx).category ==
+               4020
+    end
+
+    test "a mapped category wins over categorydesc" do
+      ctx =
+        ctx(%{
+          category_mappings: [
+            %{"id" => 7, "cat" => "Movies/HD", "desc" => "HD"},
+            %{"id" => 8, "cat" => "PC/ISO", "desc" => "Lantern Linux"}
+          ]
+        })
+
+      assert one(row(%{"categorydesc" => "Lantern Linux"}), ctx).category == 2040
+    end
+
+    test "unmapped non-numeric category falls through to categorydesc" do
+      ctx =
+        ctx(%{category_mappings: [%{"id" => 8, "cat" => "PC/ISO", "desc" => "Lantern Linux"}]})
+
+      result = one(row(%{"category" => "lanterns", "categorydesc" => "Lantern Linux"}), ctx)
+      assert result.category == 4020
+    end
+
+    test "maps a PC site category to Prowlarr's Torznab id" do
+      ctx = ctx(%{category_mappings: [%{"id" => 1, "cat" => "PC/Games", "desc" => "Games"}]})
+      assert one(row(%{"category" => "1"}), ctx).category == 4050
+    end
+
     test "builds a result from a complete row" do
       result = one(row())
 
@@ -121,6 +154,17 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
 
     test "sets the guid to the resolved download link" do
       assert one(row()).guid == "https://lantern.invalid/download/1.torrent"
+    end
+
+    test "keeps the download link an info hash replaced" do
+      result = one(row(%{"infohash" => String.duplicate("c", 40)}))
+
+      assert "magnet:" <> _ = result.download_url
+      assert result.metadata.source_download_url == "https://lantern.invalid/download/1.torrent"
+    end
+
+    test "has no source link when no info hash replaced the download" do
+      assert one(row()).metadata == nil
     end
 
     test "keeps the download link as guid when the infohash supplies the download URL" do

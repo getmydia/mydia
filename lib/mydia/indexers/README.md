@@ -530,7 +530,8 @@ ratchet and this table together.
 
 `test/fixtures/cardigann/parity/known_divergences.exs` lists every divergence
 the built-in engine still has on the seed, one entry per definition, query,
-kind and field, each with a reason. There are 15 on the current seed.
+kind and field, each with a reason. The current seed has none; the built-in
+engine agrees with Prowlarr on every capture, up to the two rules below.
 `test/mydia/indexers/cardigann/parity_test.exs`
 replays every capture (one test per capture, tagged `cardigann_wasm`, so it runs
 wherever the guest is present) and fails when:
@@ -545,6 +546,28 @@ that produced it. When the cause is not known, the reason starts with
 
 To refresh the seed: `record`, then `seed` each definition, then
 `diff --seed --write-ratchet`, then annotate the new entries and run the test.
+
+### Deliberate differences
+
+Two magnet differences from Prowlarr are on purpose, and `Parity.Diff`
+compares through them rather than listing them in the ratchet:
+
+- **Trackers and hash case.** Native builds magnets with
+  `TorrentHash.build_magnet/2`, which the Prowlarr adapter and
+  `cardigann_download.ex` share: Mydia's eight trackers and a lowercase hash.
+  Prowlarr adds its own trackers. Two magnets with the same btih compare
+  equal without their `tr` parameters, in `download_url` and in `guid` (an
+  info-hash-only row's guid is that magnet in both engines). `dn`, `ws`,
+  `x.pe` and the rest still count.
+- **The info hash wins over the download link.** When a row has both, native
+  hands out the info-hash magnet, because some sites (YTS) answer the
+  download link with an HTML page. It keeps the link in
+  `metadata.source_download_url`, and a native magnet equals Prowlarr's link
+  only when that field names the same URL.
+
+Native also follows Prowlarr's `IsValidRelease`: automatic searches drop a
+release with no category or no size, and the manual search UI, which passes
+`interactive: true`, keeps it.
 
 ### What scrubbing guarantees, and what it does not
 
