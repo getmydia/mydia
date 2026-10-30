@@ -237,6 +237,15 @@ defmodule MydiaWeb.MediaLive.Index do
      |> load_media_items()}
   end
 
+  # The phone letter picker: the same patch the strip's links make, looked up
+  # in the server's own paths so the client cannot choose the destination.
+  def handle_event("jump_letter", %{"letter" => letter}, socket) do
+    case socket.assigns.letter_paths do
+      %{^letter => path} -> {:noreply, push_patch(socket, to: path, replace: true)}
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle_event("set_grid_density", %{"density" => density}, socket) do
     {:noreply, GridDensity.put(socket, density)}
   end

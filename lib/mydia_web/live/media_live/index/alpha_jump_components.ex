@@ -15,12 +15,33 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
     assigns = assign(assigns, :letters, LibraryListing.letters())
 
     ~H"""
+    <%!-- Phones get a picker instead of the strip: 26 letters in a 20px column
+          cannot be tapped reliably and are too small to read. --%>
+    <.form
+      for={%{}}
+      id="alpha-jump-picker"
+      phx-change="jump_letter"
+      class="sm:hidden fixed z-30 right-2 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))]"
+    >
+      <select
+        id="alpha-jump-select"
+        name="letter"
+        aria-label={gettext("Jump to letter")}
+        class="select select-sm bg-base-100/90 backdrop-blur shadow"
+      >
+        <option value="">{gettext("Jump to")}</option>
+        <%= for letter <- @letters, Map.has_key?(@paths, letter) do %>
+          <option value={letter}>{if letter == "#", do: "#", else: String.upcase(letter)}</option>
+        <% end %>
+      </select>
+    </.form>
+
     <nav
       id="alpha-jump-bar"
       phx-hook="AlphaJumpBar"
       aria-label={gettext("Jump to letter")}
       class={[
-        "fixed z-30 right-0.5 lg:right-1 flex flex-col items-center justify-between",
+        "hidden sm:flex fixed z-30 right-0.5 lg:right-1 flex-col items-center justify-between",
         "top-24 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))]",
         "lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:justify-center lg:gap-0.5",
         "rounded-full bg-base-100/70 backdrop-blur px-0.5 py-1 touch-none select-none"

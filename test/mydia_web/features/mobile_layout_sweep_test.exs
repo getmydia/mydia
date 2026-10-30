@@ -78,16 +78,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/movies/:id#manual-search", @all, :small_target, "#main-column button.group.cursor-pointer",
      "category badge button is 21px tall (still measured behind the dialog)"},
 
-    # /movies, /sections/:id and /tv share the library grid (alphabet bar
-    # letters are added by known/0). Only letters with titles behind them are
-    # buttons, so the #alpha-jump-q/t/w entries follow the seeded titles'
-    # initials (MobileLayoutSeed) and move if those titles change.
-    {"/movies", @all, :small_target, "#alpha-jump-q", "alphabet bar letter is 20x13"},
-    {"/movies", @all, :small_target, "#alpha-jump-t", "alphabet bar letter is 20x13"},
-    {"/sections/:id", @all, :small_target, "#alpha-jump-q", "alphabet bar letter is 20x13"},
-    {"/sections/:id", @all, :small_target, "#alpha-jump-t", "alphabet bar letter is 20x13"},
-    {"/tv", @all, :small_target, "#alpha-jump-w", "alphabet bar letter is 20x13"},
-
     # /requests
     {"/requests", 320, :escapes_viewport, "#phx-* a.btn.btn-primary",
      "Request Movie and Request Series buttons do not wrap"},
@@ -110,10 +100,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/tv/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
      "category badge button is 21px tall"}
   ]
-
-  # The alphabet jump bar renders every letter on the library grids.
-  @alphabet_routes ["/movies", "/sections/:id", "/tv"]
-  @alphabet Enum.map(?a..?z, &<<&1>>) ++ ["hash"]
 
   setup do
     # As admin_mobile_scroll_test.exs: keep the remote access page off the network.
@@ -166,21 +152,11 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
            "Mobile layout sweep:\n\n" <> Report.format(unexpected, stale)
   end
 
-  # Report entries, one per width: the page-specific list and the alphabet
-  # bar's letters.
+  # Report entries, one per width.
   defp known do
-    page =
-      for {route, widths, check, selector, reason} <- @known,
-          width <- List.wrap(widths),
-          do: {route, width, check, selector, reason}
-
-    alphabet =
-      for route <- @alphabet_routes,
-          width <- @all,
-          letter <- @alphabet,
-          do: {route, width, :tiny_text, "#alpha-jump-#{letter}", "alphabet bar letters are 10px"}
-
-    page ++ alphabet
+    for {route, widths, check, selector, reason} <- @known,
+        width <- List.wrap(widths),
+        do: {route, width, check, selector, reason}
   end
 
   defp sweep_route(session, route, url, states) do
