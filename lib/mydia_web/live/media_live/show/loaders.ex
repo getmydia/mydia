@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   alias Mydia.Subtitles
   alias Mydia.Library.MediaFile
   alias MydiaWeb.ActivityLive.EventText
+  alias MydiaWeb.MediaLive.Show.DownloadSummary
   alias MydiaWeb.MediaLive.Show.Helpers
 
   def load_media_item(scope, id) do
@@ -33,6 +34,18 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
       media_files: active_files_query,
       downloads: []
     ]
+  end
+
+  @doc """
+  Assigns `downloads` and the `DownloadSummary` derived from them. Call it
+  after `:media_item` is assigned: the summary reads its episodes.
+  """
+  def assign_downloads(socket, downloads) do
+    episodes = socket.assigns.media_item.episodes
+
+    socket
+    |> Phoenix.Component.assign(:downloads_with_status, downloads)
+    |> Phoenix.Component.assign(:download_summary, DownloadSummary.build(downloads, episodes))
   end
 
   def load_downloads_with_status(media_item) do

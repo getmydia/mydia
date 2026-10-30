@@ -143,9 +143,7 @@ defmodule MydiaWeb.MediaLive.Show.StorageSizeUiTest do
         render_component(&Components.hero_section/1,
           media_item: show,
           player_enabled: true,
-          auto_searching: false,
-          downloads_with_status: [],
-          quality_profiles: []
+          auto_searching: false
         )
 
       assert html =~ ~s{id="hero-size-on-disk"}
@@ -169,9 +167,7 @@ defmodule MydiaWeb.MediaLive.Show.StorageSizeUiTest do
         render_component(&Components.hero_section/1,
           media_item: movie,
           player_enabled: true,
-          auto_searching: false,
-          downloads_with_status: [],
-          quality_profiles: []
+          auto_searching: false
         )
 
       assert html =~ ~s{id="hero-size-on-disk"}
@@ -193,9 +189,7 @@ defmodule MydiaWeb.MediaLive.Show.StorageSizeUiTest do
         render_component(&Components.hero_section/1,
           media_item: movie,
           player_enabled: true,
-          auto_searching: false,
-          downloads_with_status: [],
-          quality_profiles: []
+          auto_searching: false
         )
 
       assert html =~ ~s{id="hero-size-on-disk"}

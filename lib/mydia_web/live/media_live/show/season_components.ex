@@ -11,6 +11,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   import MydiaWeb.MediaLive.Show.Helpers
 
   alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.DownloadComponents
+  alias MydiaWeb.MediaLive.Show.DownloadSummary
   alias MydiaWeb.MediaLive.Show.SegmentComponents
 
   @doc """
@@ -19,6 +21,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   """
   attr :season_number, :integer, required: true
   attr :episodes, :list, required: true
+  attr :download_summary, :any, default: nil
   attr :expanded?, :boolean, required: true
   attr :expanded_episodes, :any, required: true
   attr :expanded_chunks, :any, default: MapSet.new()
@@ -39,6 +42,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
       <.season_header
         season_number={@season_number}
         episodes={@episodes}
+        download_summary={@download_summary}
         expanded?={@expanded?}
         auto_searching_season={@auto_searching_season}
         rescanning_season={@rescanning_season}
@@ -61,6 +65,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
               <div class="bg-base-100 rounded-lg divide-y divide-base-200">
                 <.episode_rows
                   episodes={chunk_episodes}
+                  download_summary={@download_summary}
                   expanded_episodes={@expanded_episodes}
                   auto_searching_episode={@auto_searching_episode}
                   player_enabled={@player_enabled}
@@ -96,6 +101,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
               >
                 <.episode_rows
                   episodes={chunk_episodes}
+                  download_summary={@download_summary}
                   expanded_episodes={@expanded_episodes}
                   auto_searching_episode={@auto_searching_episode}
                   player_enabled={@player_enabled}
@@ -130,6 +136,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   # Shared between the unlabelled (single-chunk) and labelled-range branches of
   # season_section/1 so both render identical rows.
   attr :episodes, :list, required: true
+  attr :download_summary, :any, default: nil
   attr :expanded_episodes, :any, required: true
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
@@ -141,6 +148,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
     ~H"""
     <%= for episode <- @episodes do %>
       <% has_files = length(episode.media_files) > 0
+      active_download = DownloadSummary.for_episode(@download_summary, episode.id)
       is_expanded = MapSet.member?(@expanded_episodes, episode.id)
       status = get_episode_status(episode)
       quality = get_episode_quality_badge(episode) %>
@@ -262,19 +270,28 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     names it for assistive technology, since the icon is a masked
                     span and data-tip is CSS content, so neither carries text.
                     The tooltip wraps the chip from the outside, never a
-                    join-item. --%>
-              <div
-                class="tooltip tooltip-left @md/eprow:justify-self-end"
-                data-tip={episode_status_tooltip(episode)}
-              >
-                <span
-                  id={"episode-#{episode.id}-status"}
-                  class={["badge badge-xs", episode_status_color(status)]}
+                    join-item. While a download is running for an episode
+                    with no file, a progress ring takes the chip's place in
+                    the same 1.5rem column. --%>
+              <%= if active_download && !has_files do %>
+                <DownloadComponents.episode_download_ring
+                  episode_id={episode.id}
+                  download={active_download}
+                />
+              <% else %>
+                <div
+                  class="tooltip tooltip-left @md/eprow:justify-self-end"
+                  data-tip={episode_status_tooltip(episode)}
                 >
-                  <.icon name={episode_status_icon(status)} class="w-3 h-3 shrink-0" />
-                  <span class="sr-only">{episode_status_label(status)}</span>
-                </span>
-              </div>
+                  <span
+                    id={"episode-#{episode.id}-status"}
+                    class={["badge badge-xs", episode_status_color(status)]}
+                  >
+                    <.icon name={episode_status_icon(status)} class="w-3 h-3 shrink-0" />
+                    <span class="sr-only">{episode_status_label(status)}</span>
+                  </span>
+                </div>
+              <% end %>
 
               <%!-- One toolbar, not four loose squares. The divider rule lives on
                     the container because btn-ghost has no border of its own and
@@ -490,13 +507,28 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   """
   attr :season_number, :integer, required: true
   attr :episodes, :list, required: true
+  attr :download_summary, :any, default: nil
   attr :expanded?, :boolean, required: true
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
 
   def season_header(assigns) do
-    counts = season_episode_counts(assigns.episodes)
+    downloading =
+      Enum.filter(assigns.episodes, fn episode ->
+        episode.media_files == [] and
+          DownloadSummary.for_episode(assigns.download_summary, episode.id) != nil
+      end)
+
+    # An episode a season pack is fetching reads :missing to EpisodeStatus,
+    # which only sees the episode's own downloads. It is not missing.
+    pack_covered_missing = Enum.count(downloading, &(get_episode_status(&1).state == :missing))
+
+    counts =
+      assigns.episodes
+      |> season_episode_counts()
+      |> Map.update!(:missing, &(&1 - pack_covered_missing))
+
     season_state = Mydia.Media.season_monitoring_state(assigns.episodes)
     season_size = season_total_size(assigns.episodes)
 
@@ -523,6 +555,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
 
     assigns =
       assign(assigns, :counts, counts)
+      |> assign(:downloading_count, length(downloading))
       |> assign(:season_state, season_state)
       |> assign(:season_size, season_size)
       |> assign(:chip, chip)
@@ -551,6 +584,14 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           value={@counts.available}
           max={@counts.total}
         ></progress>
+        <span
+          :if={@downloading_count > 0}
+          id={"season-#{@season_number}-downloading"}
+          class="badge badge-info badge-soft gap-1"
+        >
+          <.icon name="hero-arrow-down-tray" class="size-3.5" />
+          {ngettext("%{count} downloading", "%{count} downloading", @downloading_count)}
+        </span>
         <%= if @chip do %>
           <span class={@chip.class}>{@chip.label}</span>
         <% end %>

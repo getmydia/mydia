@@ -80,8 +80,6 @@
           next_episode={@next_episode}
           next_episode_state={@next_episode_state}
           auto_searching={@auto_searching}
-          downloads_with_status={@downloads_with_status}
-          quality_profiles={@quality_profiles}
           default_quality_profile_name={@default_quality_profile_name}
           is_favorite={@is_favorite}
           item_collections={@item_collections}
@@ -291,10 +289,16 @@
               </a>
             </div>
           </div>
-          <%!-- Active Download / Grab Status --%>
-          <%= if download = get_download_status(@downloads_with_status) do %>
-            <%= cond do %>
-              <% download.status == "failed" -> %>
+          <%!-- Active Download / Grab Status. What is downloading wins; a grab
+                in flight or a failed grab shows only when nothing is. --%>
+          <%= if @download_summary do %>
+            <DownloadComponents.active_download_banner
+              media_item={@media_item}
+              summary={@download_summary}
+            />
+          <% else %>
+            <%= case get_grab_status(@downloads_with_status) do %>
+              <% %{status: "failed"} = download -> %>
                 <div class="alert alert-error mb-6" id="failed-grab-alert">
                   <.icon name="hero-exclamation-triangle" class="w-6 h-6" />
                   <div class="flex-1">
@@ -315,7 +319,7 @@
                     {gettext("Dismiss")}
                   </button>
                 </div>
-              <% download.status == "grabbing" -> %>
+              <% %{status: "grabbing"} = download -> %>
                 <div class="alert alert-info mb-6" id="grabbing-alert">
                   <span class="loading loading-spinner loading-sm"></span>
                   <div class="flex-1">
@@ -323,19 +327,7 @@
                     <div class="text-sm">{download.title}</div>
                   </div>
                 </div>
-              <% true -> %>
-                <div class="alert alert-info mb-6">
-                  <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
-                  <div class="flex-1">
-                    <h3 class="font-bold">{gettext("Downloading")}</h3>
-                    <div class="text-sm">
-                      {format_download_status(download.status)}
-                      <%= if download.progress do %>
-                        - {format_progress(download.progress)}%
-                      <% end %>
-                    </div>
-                  </div>
-                </div>
+              <% nil -> %>
             <% end %>
           <% end %>
           <%!-- Overview Section --%>
@@ -356,6 +348,7 @@
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
             media_item={@media_item}
+            download_summary={@download_summary}
             expanded_seasons={@expanded_seasons}
             expanded_episodes={@expanded_episodes}
             expanded_chunks={@expanded_chunks}

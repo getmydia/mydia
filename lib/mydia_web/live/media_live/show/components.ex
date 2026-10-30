@@ -26,8 +26,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :next_episode, :map, default: nil
   attr :next_episode_state, :atom, default: nil
   attr :auto_searching, :boolean, required: true
-  attr :downloads_with_status, :list, required: true
-  attr :quality_profiles, :list, required: true
   attr :default_quality_profile_name, :string, default: nil
   attr :target_library, :map, default: nil
   attr :target_reason, :atom, default: nil
@@ -134,7 +132,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             type="button"
             phx-click="auto_search_download"
             class="btn btn-primary"
-            disabled={@auto_searching || !can_auto_search?(@media_item, @downloads_with_status)}
+            disabled={@auto_searching || !can_auto_search?(@media_item)}
           >
             <%= if @auto_searching do %>
               <span class="loading loading-spinner loading-sm"></span> {gettext("Searching...")}
@@ -437,6 +435,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   `SeasonComponents.season_section/1`.
   """
   attr :media_item, :map, required: true
+  attr :download_summary, :any, default: nil
   attr :expanded_seasons, :any, required: true
   attr :expanded_episodes, :map, default: MapSet.new()
   attr :expanded_chunks, :any, default: MapSet.new()
@@ -529,6 +528,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <SeasonComponents.season_section
               season_number={season_num}
               episodes={episodes}
+              download_summary={@download_summary}
               expanded?={MapSet.member?(@expanded_seasons, season_num)}
               expanded_episodes={@expanded_episodes}
               expanded_chunks={@expanded_chunks}

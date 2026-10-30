@@ -16,7 +16,9 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     Calendar.strftime(date, "%b %d, %Y")
   end
 
-  def format_download_status("pending"), do: pgettext("download", "Queued")
+  def format_download_status(status) when status in ["pending", "queued"],
+    do: pgettext("download", "Queued")
+
   def format_download_status("downloading"), do: pgettext("download", "Downloading")
   def format_download_status("seeding"), do: pgettext("download", "Seeding")
   def format_download_status("checking"), do: pgettext("download", "Checking")
