@@ -160,12 +160,21 @@ RUN mix local.hex --force && mix local.rebar --force
 # .cargo/config.toml turns crt-static off on musl, the one flag Rustler's own
 # build would have needed, so cargo runs from the crate directory. The output
 # names match what Rustler copies to priv/native/ (no lib prefix).
+#
+# The target dirs are cache mounts, so only the two .so files in /out persist
+# in the layer. Left in the layer, target/ is about a GB that the mode=max
+# registry cache would push on every native/ change and pull on every cache
+# hit. The mounts also make local rebuilds after a native/ change incremental;
+# CI runners start them cold, and the registry layer cache still covers
+# unchanged crates.
 FROM toolchain AS nifs
 COPY native/mydia_p2p_core ./native/mydia_p2p_core
 COPY native/mydia_p2p ./native/mydia_p2p
 COPY native/mydia_subsync ./native/mydia_subsync
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/native/mydia_p2p/target,sharing=locked \
+    --mount=type=cache,target=/app/native/mydia_subsync/target,sharing=locked \
     set -eu; mkdir -p /out; \
     for crate in mydia_p2p mydia_subsync; do \
       (cd "native/$crate" && cargo build --release --locked); \
@@ -244,7 +253,7 @@ RUN elixir -pa "_build/prod/lib/*/ebin" \
 RUN elixir --erl "+S 1:1" -pa _build/prod/lib/exqlite/ebin \
       -r patches/exqlite/destructor_probe.exs -e 'ExqliteDestructorProbe.assert_patched!()'
 
-# ── deps: everything above, reused by the cwasm stage below ──────────────────
+# ── builder: the application on top of deps (cwasm below also reuses deps) ───
 FROM deps AS builder
 
 # Copy application source
