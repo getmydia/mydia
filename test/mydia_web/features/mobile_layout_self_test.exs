@@ -56,6 +56,16 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     {:overlapping_targets,
      ~s|<div style="position:relative;height:40px"><button style="position:absolute;top:0;left:0;width:40px;height:40px">a</button><button style="position:absolute;top:0;left:0;width:40px;height:40px">b</button></div>|,
      ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:8px;width:32px;height:32px">s</button></div>|},
+    # A span inside a truncating line (the manual search dialog's subtitle) is
+    # cut at the line's edge and escapes nothing.
+    {:escapes_viewport,
+     ~s|<p style="white-space:nowrap;width:200px"><span>A considerably long fictional subtitle for a fictional title that keeps going</span></p>|,
+     ~s|<p style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;width:200px"><span>A considerably long fictional subtitle for a fictional title that keeps going</span></p>|},
+    # A link scrolled out of its container (the drawer's nav, under the user
+    # menu pinned below it) is not under the finger.
+    {:overlapping_targets,
+     ~s|<div style="position:relative;height:120px"><div style="height:40px"><a href="#" style="display:block;height:40px">one</a><a href="#" style="display:block;height:40px">two</a></div><button style="position:absolute;top:40px;left:0;width:280px;height:40px">menu</button></div>|,
+     ~s|<div style="position:relative;height:120px"><div style="height:40px;overflow-y:auto"><a href="#" style="display:block;height:40px">one</a><a href="#" style="display:block;height:40px">two</a></div><button style="position:absolute;top:40px;left:0;width:280px;height:40px">menu</button></div>|},
     # A link inside a sentence of helper text in a <div> (Devices' "Remote
     # access is turned off" note) is WCAG 2.5.8's inline exception.
     {:small_target, ~s|<div style="font-size:12px"><a href="#">Enable it</a></div>|,

@@ -532,7 +532,8 @@ categories again there would empty the section out.
 
 `test/mydia_web/features/mobile_layout_sweep_test.exs` visits every `live`
 route at 320, 375 and 414px wide, in its default state and in the states
-listed for it in `test/support/mobile_layout_manifest.ex`, and fails on:
+listed for it in `test/support/mobile_layout_manifest.ex`, and fails on six
+defects, measured by seven checks:
 
 | Check | Fails when |
 |---|---|
@@ -545,35 +546,53 @@ listed for it in `test/support/mobile_layout_manifest.ex`, and fails on:
 | `tiny_text` | text renders under 12px |
 
 All comparisons allow 1px. The audit hides scrollbars while it measures, so
-layout width equals the window width, as on a phone. Before each audit the
-sweep asserts that the page content and the mobile dock have a box, so a blank
-or crashed page fails instead of passing every check.
+layout width equals the window width, as on a phone. After each load the sweep
+waits for CSS transitions to finish (a drawer sliding in is measured at rest)
+and asserts the browser is still on the visited path, so a redirect with a
+flash fails. Before each audit it asserts that the page content and the mobile
+dock have a box, so a blank or crashed page fails instead of passing every
+check.
+
+Results depend on the fonts the browser has: text widths, and so wrapping,
+overflow and clipping, can differ between CI's runner and a dev host. The
+`/changelog` page renders content compiled from `priv/changelog`, so a new
+release entry changes what it measures.
 
 The checks skip things that are not defects: links inside running text (by
 computed `display: inline`), the body of a closed `<details>`, the off-screen
-drawer panel while it is closed, and a small control laid over a much larger
-one (a select box on a poster card). A target inside a `position: fixed` layer
+drawer panel while it is closed, a small control laid over a much larger
+one (a select box on a poster card), and whatever an `overflow` ancestor cuts
+off (a span in a truncated line, a link scrolled out of its nav). A target inside a `position: fixed` layer
 such as the dock does not collide with page content scrolling under it; two
 fixed targets, or two flow targets, still can.
 
-A deliberate sideways carousel (poster rails, shelves) carries
-`data-scroll-rail` on its scrolling element, which `poster_rail/1` in
-`poster_card_components.ex` sets; the sweep skips `inner_scroll` and
-`escapes_viewport` inside it. Nothing else should carry it.
+A deliberate sideways carousel (poster rails, shelves, the manual search chip
+row) carries `data-scroll-rail` on its scrolling element: `poster_rail/1` in
+`poster_card_components.ex` and `chip_bar/1` in
+`media_live/show/manual_search_filters.ex` set it. The sweep skips
+`inner_scroll` and `escapes_viewport` inside it. Nothing else should carry it.
 
 A new `live` route fails `test/mydia_web/mobile_layout_manifest_test.exs`
-until it is added to the manifest, with its interactive states (tabs, open
-dialogs) if it has any, or excluded with a reason. `/review` (a redirect), the
-plugin pages, `/setup`, `/play/:type/:id` and the ErrorTracker dashboard are
-excluded. Every page must pass at 320px.
+until it is added to the manifest or excluded with a reason. `/review` (a
+redirect), `/plugins/:slug`, `/plugins/:slug/activity`, `/setup`,
+`/play/:type/:id` and the ErrorTracker dashboard (`/admin/errors` and its
+detail pages) are excluded. Every page must pass at 320px.
+
+A manifest state is a name and steps (reload with a query, click, wait for a
+selector). Its results are keyed `route#state`, for example
+`/downloads#issues`, in failures and in `@known`. Only three states are swept
+today: the Downloads Issues tab, the mobile drawer open on `/`, and the manual
+search dialog on `/movies/:id`. Adding states for other pages' tabs and
+dialogs is follow-up work.
 
 Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`
-ids with `*`, so an entry matches across runs and adapters.
+ids with `*`, so an entry keeps matching between runs whose rows get new ids.
 
 `@known` in the sweep holds accepted violations. Each is
 `{route, widths, check, selector, reason}`, where `widths` is one integer or a
 list (`@all` is 320, 375 and 414). `@chrome` holds entries that apply to every
-route and state (the mobile dock), and the alphabet bar's letters on the
+route and state but those in `@no_dock` (the mobile dock, which the open
+drawer hides), and the alphabet bar's letters on the
 library grids are added in code. The failure output prints the entry that would
 accept a new violation, with one width; it pastes in unchanged. Adding one is
 a review decision, not a fix. An entry that stops matching fails the sweep, so

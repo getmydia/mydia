@@ -1,6 +1,7 @@
 defmodule MydiaWeb.FeatureCase.MobileLayout do
   @moduledoc """
-  Measures the six mobile layout defects from
+  Measures the six mobile layout defects (seven checks: a small target and
+  overlapping targets are both target defects) from
   `lib/mydia_web/components/README.md`, "Mobile layout sweep", in one JS pass.
 
   Returns `MydiaWeb.FeatureCase.MobileLayout.Violation` structs naming the
@@ -146,6 +147,21 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       return inner.left >= outer.left - TOL && inner.right <= outer.right + TOL &&
              inner.top >= outer.top - TOL && inner.bottom <= outer.bottom + TOL;
     }
+    // The part of a target its scrolling or clipping ancestors let through,
+    // or null when none does. A sidebar link scrolled out of its nav is not
+    // under the finger, whatever its layout box overlaps.
+    function shownRect(el, r) {
+      var L = r.left, T = r.top, R = r.right, B = r.bottom;
+      for (var a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        var cs = getComputedStyle(a);
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+        var c = a.getBoundingClientRect();
+        L = Math.max(L, c.left); T = Math.max(T, c.top);
+        R = Math.min(R, c.right); B = Math.min(B, c.bottom);
+        if (R - L <= TOL || B - T <= TOL) return null;
+      }
+      return {left: L, top: T, right: R, bottom: B, width: R - L, height: B - T};
+    }
     function overlay(inner, outer) {
       return within(inner, outer) &&
              inner.width * inner.height < (outer.width * outer.height) / 2;
@@ -211,8 +227,11 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
 
       // 3. escapes_viewport
       // Only the outermost escaping element: its descendants escape with it,
-      // and listing each would bury the one box that needs fixing.
-      if (!rail && (r.right > vw + TOL || r.left < -TOL) && !closedDrawer(el) &&
+      // and listing each would bury the one box that needs fixing. Measured
+      // as clipped by its overflow ancestors: a span inside a truncating <p>
+      // is cut at the <p>'s edge, so only the <p> can escape.
+      var seen = (r.right > vw + TOL || r.left < -TOL) ? shownRect(el, r) : null;
+      if (!rail && seen && (seen.right > vw + TOL || seen.left < -TOL) && !closedDrawer(el) &&
           !escapedAncestor(el)) {
         escaped.add(el);
         push('escapes_viewport', el, 'left=' + Math.round(r.left) + ' right=' + Math.round(r.right) + ' vw=' + vw);
@@ -223,7 +242,8 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
         if (!inlineLink(el) && (r.width < MIN_TARGET - TOL || r.height < MIN_TARGET - TOL)) {
           push('small_target', el, Math.round(r.width) + 'x' + Math.round(r.height));
         }
-        targets.push({el: el, r: r, fixed: inFixed(el)});
+        var shown = shownRect(el, r);
+        if (shown) targets.push({el: el, r: shown, fixed: inFixed(el)});
       }
 
       // 5. clipped_text

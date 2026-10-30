@@ -1,8 +1,9 @@
 defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   @moduledoc """
   Every `live` route, at phone widths, in its default state and the states
-  listed in `MydiaWeb.MobileLayoutManifest`, audited for the six defects in
-  `lib/mydia_web/components/README.md`, "Mobile layout sweep".
+  listed in `MydiaWeb.MobileLayoutManifest`, audited for the six defects
+  (seven checks) in `lib/mydia_web/components/README.md`, "Mobile layout
+  sweep".
 
   `@known` lists accepted violations, each with a reason. A violation not on
   it fails, and so does an entry that no longer matches anything, so the list
@@ -52,10 +53,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "btn-xs text is under 12px"},
     {"/admin/indexers", @all, :tiny_text, "#indexer-stats-window-week",
      "btn-xs text is under 12px"},
-
-    # /admin/library-paths
-    {"/admin/library-paths", [320], :escapes_viewport, "#library-path-* span.font-mono",
-     "long library path in a font-mono span does not wrap"},
 
     # /admin/remote-access
     {"/admin/remote-access", @all, :tiny_text, "#admin-page-body span.badge.badge-xs.badge-ghost",
@@ -123,9 +120,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/discover", @all, :small_target, "#discover-hide-owned", "toggle-sm is 20px tall"},
 
     # /downloads, Issues tab
-    {"/downloads#issues", @all, :overlapping_targets,
-     "#issues-* input.checkbox.checkbox-primary.checkbox-sm",
-     "row checkbox overlaps the path button below it"},
     {"/downloads#issues", @all, :small_target, "#issue-open-*",
      "text-xs path button is 16px tall"},
     {"/downloads#issues", @all, :small_target, "#issues-* a.link.link-hover.font-medium.text-sm",
@@ -141,6 +135,8 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "category badge button is 21px tall"},
     {"/movies/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
      "category badge button is 21px tall"},
+    {"/movies/:id#manual-search", @all, :small_target, "#main-column button.group.cursor-pointer",
+     "category badge button is 21px tall (still measured behind the dialog)"},
 
     # /movies, /sections/:id and /tv share the library grid (alphabet bar
     # letters are added by known/1). Only letters with titles behind them are
@@ -177,7 +173,9 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     {"/tv/:id", @all, :tiny_text, "#segment-reanalyze-season-*", "btn-xs text is under 12px"}
   ]
 
-  # On every swept page: the mobile dock.
+  # On every swept page and state but those in @no_dock: the mobile dock.
+  # The open drawer hides the dock.
+  @no_dock ["/#drawer"]
   @chrome [
     {@all, :tiny_text, "#mobile-dock span.text-[10px].mt-0.5", "dock labels are text-[10px]"},
     {@all, :tiny_text, "#dock-player-link span.text-[10px].mt-0.5.opacity-70",
@@ -256,8 +254,9 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
 
     chrome =
       for route <- route_keys,
+          route not in @no_dock,
           {widths, check, selector, reason} <- @chrome,
-          width <- widths,
+          width <- List.wrap(widths),
           do: {route, width, check, selector, reason}
 
     alphabet =
@@ -270,12 +269,12 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   end
 
   defp sweep_route(session, route, url, states) do
-    default = audit_widths(session, route, nil, fn -> visit_at(session, url) end)
+    default = audit_widths(session, route, url, nil, fn -> visit_at(session, url) end)
 
     state_violations =
       for {name, steps} <- states,
           v <-
-            audit_widths(session, route, name, fn ->
+            audit_widths(session, route, url, name, fn ->
               visit_at(session, url)
               run_steps(session, url, steps)
             end),
@@ -285,10 +284,19 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   end
 
   # Loads once at the first width, audits, then resizes and audits again.
-  defp audit_widths(session, route, state, load) do
+  defp audit_widths(session, route, url, state, load) do
     {w, h} = @first
     Wallaby.Browser.resize_window(session, w, h)
     load.()
+
+    wait_for_settled(session)
+
+    # A redirect (with a flash) would otherwise audit the page it landed on.
+    expected = URI.parse(url).path
+    actual = Wallaby.Browser.current_path(session)
+
+    assert actual == expected,
+           "#{route}#{if state, do: "#" <> state}: expected the browser on #{expected}, it is on #{actual}"
 
     for {width, height} <- [@first | @resized],
         %Violation{} = v <- audit_at(session, route, state, width, height) do
@@ -333,6 +341,36 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     Enum.each(steps, fn
       {:visit_query, query} -> visit_liveview(session, url <> "?" <> query)
       {:click, css} -> Wallaby.Browser.click(session, Wallaby.Query.css(css))
+      {:wait, css} -> wait_for(session, css)
     end)
+  end
+
+  # Waits until no CSS transition is running, so a state step (the drawer
+  # sliding in) is audited where it comes to rest, not mid-flight. Keyframe
+  # animations (spinners, skeleton shimmer) may loop for good and are ignored.
+  @settled_js """
+  return document.getAnimations().every(function (a) {
+    return !(a instanceof CSSTransition) || a.playState !== 'running';
+  });
+  """
+
+  defp wait_for_settled(session) do
+    eventually(
+      fn -> if eval_js(session, @settled_js), do: {:ok, true}, else: :error end,
+      description: "CSS transitions to finish"
+    )
+  end
+
+  # Waits on the DOM rather than a Wallaby query, so the target may be a
+  # hidden element (the drawer's checkbox).
+  defp wait_for(session, css) do
+    eventually(
+      fn ->
+        if eval_js(session, "return !!document.querySelector(arguments[0]);", [css]),
+          do: {:ok, true},
+          else: :error
+      end,
+      description: css
+    )
   end
 end

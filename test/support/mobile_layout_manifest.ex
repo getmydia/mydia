@@ -4,6 +4,11 @@ defmodule MydiaWeb.MobileLayoutManifest do
   from `MydiaWeb.MobileLayoutSeed` ids) and the interactive states worth
   auditing, or an exclusion with its reason.
 
+  A state is `{name, steps}`, audited under the key `route#name`. Steps run in
+  order after the page loads: `{:visit_query, "tab=issues"}` reloads with a
+  query string, `{:click, css}` clicks, and `{:wait, css}` waits until `css`
+  matches (so the audit does not race a dialog opening).
+
   `test/mydia_web/mobile_layout_manifest_test.exs` fails when a route is
   missing, so a new page is swept from its first commit.
   """
@@ -26,11 +31,20 @@ defmodule MydiaWeb.MobileLayoutManifest do
 
   def entries do
     %{
-      "/" => page("/"),
+      "/" =>
+        page("/", [
+          {"drawer",
+           [{:click, "#mobile-header label[for='main-drawer']"}, {:wait, "#main-drawer:checked"}]}
+        ]),
       "/discover" => page("/discover"),
       "/media/:id" => %{path: &"/media/#{&1.movie}", states: []},
       "/movies" => page("/movies"),
-      "/movies/:id" => %{path: &"/movies/#{&1.movie}", states: []},
+      "/movies/:id" => %{
+        path: &"/movies/#{&1.movie}",
+        states: [
+          {"manual-search", [{:click, "#manual-search-button"}, {:wait, "#manual-search-modal"}]}
+        ]
+      },
       "/tv" => page("/tv"),
       "/tv/:id" => %{path: &"/tv/#{&1.show}", states: []},
       "/sections/new" => page("/sections/new"),
