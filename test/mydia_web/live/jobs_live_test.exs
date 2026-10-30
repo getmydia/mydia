@@ -97,20 +97,17 @@ defmodule MydiaWeb.JobsLiveTest do
     {:ok, done} = Oban.insert(Mydia.Jobs.LibraryScanner.new(%{}))
 
     done
-    |> Ecto.Changeset.change(state: "completed", attempted_at: ~U[2026-10-30 09:18:00.795827Z])
+    |> Ecto.Changeset.change(
+      state: "completed",
+      attempted_at: ~U[2026-10-30 09:18:00.795827Z],
+      completed_at: ~U[2026-10-30 10:30:00.000000Z]
+    )
     |> Mydia.Repo.update!()
 
     {:ok, view, _html} = live(log_in_user(conn, user), ~p"/admin/jobs")
 
-    text =
-      view
-      |> element(~s(tr#job-#{done.id} td[data-label="Attempted At"] time))
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.text()
-      |> String.trim()
-
-    assert text == "Oct 30, 2026, 5:18 AM"
+    assert cell_time_text(view, done, "Attempted At") == "Oct 30, 2026, 5:18 AM"
+    assert cell_time_text(view, done, "Completed At") == "Oct 30, 2026, 6:30 AM"
   end
 
   test "the details modal shows full local timestamps", %{conn: conn} do
@@ -141,5 +138,14 @@ defmodule MydiaWeb.JobsLiveTest do
     end
 
     refute render(view) =~ "795827+00:00"
+  end
+
+  defp cell_time_text(view, job, label) do
+    view
+    |> element(~s(tr#job-#{job.id} td[data-label="#{label}"] time))
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.text()
+    |> String.trim()
   end
 end
