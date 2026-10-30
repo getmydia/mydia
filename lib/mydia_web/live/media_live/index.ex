@@ -19,6 +19,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.PosterFields, as: PosterFieldsPref
   alias MydiaWeb.MediaLive.DiskRemovalFlash
+  alias MydiaWeb.MediaLive.Index.AlphaJump
   alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
   alias MydiaWeb.MediaLive.Index.Messages
@@ -67,8 +68,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> GridDensity.assign_current(session)
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
-     |> assign(:page_key, nil)
-     |> assign(:alpha_picker_version, 0)
+     |> assign(page_key: nil, alpha_picker_version: 0)
      |> assign(:remembered_listing, %{})
      |> assign(:library_options, [])
      |> assign(:loading?, true)
@@ -238,27 +238,8 @@ defmodule MydiaWeb.MediaLive.Index do
      |> load_media_items()}
   end
 
-  # The phone letter picker: the same patch the strip's links make, looked up
-  # in the server's own paths so the client cannot choose the destination.
-  def handle_event("jump_letter", %{"letter" => letter}, socket) do
-    case socket.assigns.letter_paths do
-      %{^letter => path} ->
-        # Rebuilding the select puts the placeholder back, so choosing the
-        # same letter again is a change and jumps again.
-        socket = update(socket, :alpha_picker_version, &(&1 + 1))
-
-        # A patch to the letter already in the URL changes nothing, so scroll
-        # back to it directly, as the strip's hook does.
-        if socket.assigns.letter == letter do
-          {:noreply, maybe_scroll_to_letter(socket, letter)}
-        else
-          {:noreply, push_patch(socket, to: path, replace: true)}
-        end
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
+  def handle_event("jump_letter", %{"letter" => letter}, socket),
+    do: AlphaJump.jump_letter(socket, letter)
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
     {:noreply, GridDensity.put(socket, density)}
@@ -929,7 +910,7 @@ defmodule MydiaWeb.MediaLive.Index do
     if force? or not ListingParams.same_listing?(parsed, current) do
       socket
       # Only an in-page jump scrolls; a mount or reconnect keeps the user's place.
-      |> maybe_scroll_to_letter(
+      |> AlphaJump.maybe_scroll_to_letter(
         not force? and parsed.letter != socket.assigns.letter and parsed.letter
       )
       # A letter jump moves through the same items, so a selection survives it.
@@ -946,13 +927,6 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp maybe_clear_selection(socket, true), do: assign(socket, :selected_ids, MapSet.new())
   defp maybe_clear_selection(socket, false), do: socket
-
-  defp maybe_scroll_to_letter(socket, nil_or_false) when nil_or_false in [nil, false], do: socket
-
-  # The letter lets the client land on that letter's first card: after
-  # load_previous prepended earlier rows, the top of the list is no longer it.
-  defp maybe_scroll_to_letter(socket, letter),
-    do: push_event(socket, "alpha_jump:scroll_top", %{letter: letter})
 
   # The select is hidden below two options, where a chosen library could not
   # be cleared, so it is only honoured from two up.
