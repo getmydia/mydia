@@ -416,7 +416,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok,
        %{
          query_params: build_query_params(definition, path, opts),
-         headers: build_headers(definition, opts),
+         headers: RequestHeaders.definition_headers(definition, opts),
          method: SearchRequest.method(path),
          follow_redirect: Map.get(path, :follow_redirect)
        }
@@ -803,46 +803,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       end
     end)
   end
-
-  # Header values are templates like inputs: UNIT3D API definitions send
-  # `Authorization: Bearer {{ .Config.apikey }}`. A value that does not render
-  # is dropped rather than sent as template source.
-  defp build_headers(%Parsed{search: search} = definition, opts) do
-    headers =
-      case Map.get(search, :headers) do
-        nil -> []
-        headers when is_map(headers) -> Map.to_list(headers)
-        headers when is_list(headers) -> headers
-      end
-
-    if headers == [] do
-      []
-    else
-      context = build_template_context(definition, opts)
-
-      for {name, value} <- headers,
-          {:ok, rendered} <- [render_header(value, context)],
-          do: {name, rendered}
-    end
-  end
-
-  defp render_header(values, context) when is_list(values) do
-    values
-    |> Enum.map(&render_header(&1, context))
-    |> Enum.reduce_while({:ok, []}, fn
-      {:ok, value}, {:ok, acc} -> {:cont, {:ok, acc ++ [value]}}
-      :error, _acc -> {:halt, :error}
-    end)
-  end
-
-  defp render_header(value, context) when is_binary(value) do
-    case CardigannTemplate.render(value, context, url_encode: false) do
-      {:ok, rendered} -> {:ok, rendered}
-      {:error, _} -> :error
-    end
-  end
-
-  defp render_header(value, _context), do: {:ok, value}
 
   defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
 

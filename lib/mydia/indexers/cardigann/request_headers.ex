@@ -9,7 +9,56 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
   whether a session may be sent at all and to build the rest of the Req options.
   """
 
+  alias Mydia.Indexers.Cardigann.TemplateContext
+  alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
+
+  @doc """
+  The definition's `search.headers`, rendered with the search's template
+  context (`opts` as `CardigannSearchEngine` passes them).
+
+  Header values are templates like inputs: UNIT3D API definitions send
+  `Authorization: Bearer {{ .Config.apikey }}`. A value that does not render is
+  dropped rather than sent as template source.
+  """
+  @spec definition_headers(Parsed.t(), keyword()) :: [{term(), term()}]
+  def definition_headers(%Parsed{search: search} = definition, opts) do
+    headers =
+      case Map.get(search, :headers) do
+        nil -> []
+        headers when is_map(headers) -> Map.to_list(headers)
+        headers when is_list(headers) -> headers
+      end
+
+    if headers == [] do
+      []
+    else
+      context = TemplateContext.build(definition, opts)
+
+      for {name, value} <- headers,
+          {:ok, rendered} <- [render_header(value, context)],
+          do: {name, rendered}
+    end
+  end
+
+  defp render_header(values, context) when is_list(values) do
+    Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->
+      case render_header(value, context) do
+        {:ok, rendered} -> {:cont, {:ok, acc ++ [rendered]}}
+        :error -> {:halt, :error}
+      end
+    end)
+  end
+
+  defp render_header(value, context) when is_binary(value) do
+    case CardigannTemplate.render(value, context, url_encode: false) do
+      {:ok, rendered} -> {:ok, rendered}
+      {:error, _} -> :error
+    end
+  end
+
+  defp render_header(value, _context), do: {:ok, value}
 
   # Req's own "req/x.y" user-agent is refused or served a different page by
   # some public trackers. Prowlarr's own default is "Prowlarr/<version> (<os>)",
