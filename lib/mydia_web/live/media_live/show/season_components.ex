@@ -218,7 +218,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   disclosure is reachable by keyboard. --%>
             <button
               type="button"
-              class="flex items-center gap-1 flex-shrink-0 @md/eprow:w-full cursor-pointer hover:text-primary max-sm:min-h-6"
+              class="flex items-center gap-1 flex-shrink-0 @md/eprow:w-full cursor-pointer hover:text-primary @max-md/eprow:min-h-6"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
               aria-expanded={to_string(is_expanded)}
@@ -237,7 +237,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   would break the title column. --%>
             <button
               type="button"
-              class="flex-1 min-w-0 cursor-pointer text-left max-sm:min-h-6"
+              class="flex-1 min-w-0 cursor-pointer text-left @max-md/eprow:min-h-6"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
               aria-expanded={to_string(is_expanded)}
