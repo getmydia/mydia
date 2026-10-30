@@ -284,6 +284,29 @@ defmodule MydiaWeb.AdminListComponentsTest do
   end
 
   describe "admin_table/1" do
+    test "a multi-element cell is one flex item beside its stacked label" do
+      assigns = %{rows: [%{id: 1, rel: "2 minutes ago", abs: "Oct 30, 2026, 09:18"}]}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_table id="t" rows={@rows} row_id={&"t-row-#{&1.id}"}>
+          <:col label="Job">job</:col>
+          <:col :let={r} label="Attempted At">
+            <div class="rel">{r.rel}</div>
+            <div class="abs">{r.abs}</div>
+          </:col>
+          <:empty>No rows.</:empty>
+        </AdminListComponents.admin_table>
+        """)
+
+      cell = ~s(#t-row-1 td[data-label="Attempted At"])
+
+      # The td holds exactly one element child, and that child holds both lines.
+      assert count(html, "#{cell} > *") == 1
+      assert count(html, "#{cell} > div.min-w-0.break-words > div.rel") == 1
+      assert count(html, "#{cell} > div.min-w-0.break-words > div.abs") == 1
+    end
+
     test "stacks rows into labelled cards below sm and scrolls only from sm up" do
       assigns = %{rows: [%{id: 1, name: "one", role: "admin"}]}
 

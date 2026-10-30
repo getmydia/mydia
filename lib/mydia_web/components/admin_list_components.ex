@@ -200,7 +200,9 @@ defmodule MydiaWeb.AdminListComponents do
 
   # Below sm a table row is a card: each cell is a label/value pair whose label
   # is drawn from data-label, and the first cell is the card's title with no
-  # label. From sm up these classes do nothing and the table is a table.
+  # label. From sm up these classes do nothing and the table is a table. The
+  # slot is wrapped in one min-w-0 element so a cell that renders several
+  # elements is still a single flex item beside its label (#1309).
   @stacked_cell ~w|
     max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3
     max-sm:px-0 max-sm:py-1 max-sm:text-right
@@ -240,7 +242,7 @@ defmodule MydiaWeb.AdminListComponents do
             class="max-sm:block max-sm:px-3 max-sm:py-2"
           >
             <td :for={col <- @col} data-label={col[:label]} class={[@stacked_cell, col[:class]]}>
-              {render_slot(col, row)}
+              <div class="min-w-0 break-words">{render_slot(col, row)}</div>
             </td>
             <td
               :if={@action != []}
