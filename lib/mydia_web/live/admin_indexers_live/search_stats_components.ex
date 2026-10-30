@@ -53,31 +53,31 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
           phx-click="show_search_failures"
           phx-value-id={@indexer_id}
         >
-          <div class="stat py-2 px-4">
-            <div class="stat-title text-xs">{gettext("Success")}</div>
-            <div
+          <span class="stat py-2 px-4">
+            <span class="stat-title text-xs">{gettext("Success")}</span>
+            <span
               id={stats_id(@indexer_id, summary) <> "-success"}
               class={["stat-value text-lg", rate_class(Summary.success_rate(summary))]}
             >
               {format_rate(Summary.success_rate(summary))}
-            </div>
-            <div class="stat-desc">
+            </span>
+            <span class="stat-desc">
               {gettext("%{ok} of %{attempts}", ok: summary.successes, attempts: summary.attempts)}
-            </div>
-          </div>
-          <div class="stat py-2 px-4">
-            <div class="stat-title text-xs">{gettext("Latency")}</div>
-            <div class="stat-value text-lg">{format_ms(summary.p50_ms)}</div>
-            <div class="stat-desc">{gettext("p90 %{p90}", p90: format_ms(summary.p90_ms))}</div>
-          </div>
-          <div class="stat py-2 px-4">
-            <div class="stat-title text-xs">{gettext("Results")}</div>
-            <div class="stat-value text-lg">{summary.avg_results || gettext("n/a")}</div>
-            <div class="stat-desc">{gettext("per search")}</div>
-          </div>
-          <div class="stat py-2 px-4">
-            <div class="stat-title text-xs">{gettext("Timeouts")}</div>
-            <div
+            </span>
+          </span>
+          <span class="stat py-2 px-4">
+            <span class="stat-title text-xs">{gettext("Latency")}</span>
+            <span class="stat-value text-lg">{format_ms(summary.p50_ms)}</span>
+            <span class="stat-desc">{gettext("p90 %{p90}", p90: format_ms(summary.p90_ms))}</span>
+          </span>
+          <span class="stat py-2 px-4">
+            <span class="stat-title text-xs">{gettext("Results")}</span>
+            <span class="stat-value text-lg">{summary.avg_results || gettext("n/a")}</span>
+            <span class="stat-desc">{gettext("per search")}</span>
+          </span>
+          <span class="stat py-2 px-4">
+            <span class="stat-title text-xs">{gettext("Timeouts")}</span>
+            <span
               id={stats_id(@indexer_id, summary) <> "-timeouts"}
               class={[
                 "stat-value text-lg",
@@ -85,8 +85,8 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
               ]}
             >
               {summary.timeouts}
-            </div>
-          </div>
+            </span>
+          </span>
         </button>
       </div>
     </div>
