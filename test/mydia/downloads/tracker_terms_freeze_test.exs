@@ -75,6 +75,25 @@ defmodule Mydia.Downloads.TrackerTermsFreezeTest do
              grab(result(%{})).metadata["tracker_terms"]
   end
 
+  test "a manual grab through Downloads.grab_async/2 freezes the terms" do
+    Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+    {:ok, _} = TrackerRuleConfigs.create(%{tracker: "Velvet Lantern", seed_time: 60})
+    movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie"})
+
+    {:ok, download} =
+      Mydia.Downloads.grab_async(result(%{terms: %TrackerTerms{private?: true}}),
+        media_item_id: movie.id,
+        manual: true
+      )
+
+    # No client is configured, so the background task fails the grab; wait for
+    # it so it does not outlive the test.
+    assert_receive {:grab_failed, %{download_id: id}} when id == download.id, 2_000
+
+    assert %{"private" => true, "minimum_seed_time" => 3600} =
+             Repo.get!(Download, download.id).metadata["tracker_terms"]
+  end
+
   test "no reported terms and no rule store no tracker terms" do
     refute Map.has_key?(grab(result(%{})).metadata, "tracker_terms")
   end
