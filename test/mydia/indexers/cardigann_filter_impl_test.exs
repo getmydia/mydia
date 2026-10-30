@@ -12,8 +12,13 @@ defmodule Mydia.Indexers.CardigannFilterImplTest do
     test "accepts a .NET \\u escape" do
       pattern = ~S"(\d{4}/\d{1,2}/\d{1,2}[\s\u00A0]+\d{1,2}:\d{2})"
 
-      assert {:ok, "2026/10/27 12:00"} =
-               apply_filter("2026/10/27 12:00 in four days", %{name: "regexp", args: [pattern]})
+      # The subject's separator is a real NBSP (U+00A0), so the match depends on
+      # the escape.
+      assert {:ok, "2026/10/27\u00A012:00"} =
+               apply_filter("2026/10/27\u00A012:00 in four days", %{
+                 name: "regexp",
+                 args: [pattern]
+               })
     end
 
     test "extracts first capture group" do
