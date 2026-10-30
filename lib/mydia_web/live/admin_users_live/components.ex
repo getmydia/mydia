@@ -152,9 +152,7 @@ defmodule MydiaWeb.AdminUsersLive.Components do
           <% end %>
         </div>
       </div>
-      <%!-- min-w-0 and wrap-anywhere: a long unbroken username or email
-           otherwise pushes the phone card, and the page, past the edge. --%>
-      <div class="min-w-0 wrap-anywhere">
+      <div>
         <div class="font-bold" id={"user-name-#{@user.id}"}>{User.label(@user)}</div>
         <div class="text-sm text-base-content/70">{@user.email}</div>
         <div

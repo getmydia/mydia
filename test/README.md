@@ -138,10 +138,11 @@ Before trusting any feature-test result in a new worktree, run
 and confirm 1 test, 0 failures. That single run proves the tag filter, chromedriver and the asset build
 at once.
 
-Feature tests render with a pinned, DejaVu-only fontconfig from devenv
-(`MYDIA_FEATURE_TEST_FONTCONFIG`, exported as `FONTCONFIG_FILE` by
-`scripts/run-feature-tests.sh` and logged as `Using pinned fontconfig`), so
-text widths, and so geometry results such as the mobile layout sweep's, match
+Feature tests render with a pinned fontconfig from devenv,
+`MYDIA_FEATURE_TEST_FONTCONFIG`, which `scripts/run-feature-tests.sh` exports as
+`FONTCONFIG_FILE` and logs as `Using pinned fontconfig`. Every sans font
+resolves to Liberation Sans, with DejaVu only as glyph fallback and for serif
+and monospace, so text widths, and so geometry results such as the mobile layout sweep's, match
 CI. A run outside `./dev feature-test` uses the host's fonts and is not
 comparable.
 

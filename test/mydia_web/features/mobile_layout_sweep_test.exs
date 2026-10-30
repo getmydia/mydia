@@ -31,19 +31,11 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   # MobileLayout.audit/2). Grouped by route.
   @known [
     # /activity
-    {"/activity", 320, :escapes_viewport, "#activity-date-filter",
-     "daisyUI join of date range buttons does not wrap"},
-    {"/activity", 375, :escapes_viewport,
+    {"/activity", 320, :escapes_viewport,
      "#activity-date-filter button.btn.join-item.btn-sm.gap-1.5",
      "daisyUI join of date range buttons does not wrap"},
     {"/activity", 320, :page_overflow, "html",
      "daisyUI join of date range buttons does not wrap"},
-
-    # /admin/duplicates
-    {"/admin/duplicates", 320, :escapes_viewport, "#duplicates-group-* div.join.shrink-0",
-     "shrink-0 join of group actions does not fit beside the title"},
-    {"/admin/duplicates", 320, :page_overflow, "html",
-     "shrink-0 join of group actions does not fit beside the title"},
 
     # /admin/dashboard
     {"/admin/dashboard", @all, :tiny_text, "#plays-chart text.fill-base-content/60",
@@ -65,11 +57,6 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     # /admin/remote-access
     {"/admin/remote-access", @all, :tiny_text, "#admin-page-body span.badge.badge-xs.badge-ghost",
      "badge-xs text is under 12px"},
-
-    # /admin/requests
-    {"/admin/requests", 320, :escapes_viewport, "#requests-status-filter",
-     "status filter row does not wrap"},
-    {"/admin/requests", 320, :page_overflow, "html", "status filter row does not wrap"},
 
     # /admin/settings
     {"/admin/settings", @all, :small_target, "#language-prefer-default-track",
@@ -121,14 +108,18 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "#subtitle-provider-row-relay span.badge.badge-ghost.badge-xs.tooltip",
      "badge-xs text is under 12px"},
 
+    # /admin/users
+    {"/admin/users", 320, :escapes_viewport, "#user-* div",
+     "unbroken username and email do not wrap in the user card"},
+    {"/admin/users", 320, :page_overflow, "html",
+     "unbroken username and email do not wrap in the user card"},
+
     # /calendar
     {"/calendar", @all, :tiny_text, "#phx-* button.btn.btn-primary.btn-xs.ml-2",
      "btn-xs text is under 12px"},
 
     # /collections/:id
     {"/collections/:id", 320, :escapes_viewport, "#phx-* div.dropdown.dropdown-end",
-     "header actions menu is pushed past the edge by the long collection name"},
-    {"/collections/:id", 320, :page_overflow, "html",
      "header actions menu is pushed past the edge by the long collection name"},
 
     # /discover

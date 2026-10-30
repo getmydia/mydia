@@ -274,11 +274,16 @@ in
   // lib.optionalAttrs pkgs.stdenv.isLinux {
     CHROME_PATH = "${pkgs.chromium}/bin/chromium";
     CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
-    # A fonts.conf that offers only DejaVu from the nix store. The mobile
-    # layout sweep measures text widths, and system fonts differ between dev
-    # hosts and the CI runner, so the same page wrapped and overflowed
-    # differently on each. scripts/run-feature-tests.sh exports it as
-    # FONTCONFIG_FILE for the test browser only.
+    # A fonts.conf that offers only Liberation and DejaVu from the nix store,
+    # with Liberation Sans as the sans-serif (and the stand-in for Inter,
+    # Arial, Helvetica and system-ui) and DejaVu kept for glyph fallback and
+    # the serif and monospace defaults. That is what Ubuntu's CI runner
+    # resolved the app's font stack to, and DejaVu Sans alone is wide enough
+    # to squeeze layouts the browser tests hold to a floor. The mobile layout
+    # sweep measures text widths, and system fonts differ between dev hosts
+    # and the CI runner, so the same page wrapped and overflowed differently
+    # on each. scripts/run-feature-tests.sh exports it as FONTCONFIG_FILE for
+    # the test browser only.
     #
     # Not pkgs.makeFontsConf: that also includes /etc/fonts/conf.d and the
     # host's font directories (/usr/share/fonts, ~/.nix-profile, xdg), so a
@@ -318,9 +323,25 @@ in
         <?xml version="1.0"?>
         <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
         <fontconfig>
+          <dir>${pkgs.liberation_ttf}/share/fonts</dir>
           <dir>${pkgs.dejavu_fonts}/share/fonts</dir>
           <cachedir prefix="xdg">mydia-feature-test-fontconfig</cachedir>
           ${lib.concatMapStrings (f: "<include ignore_missing=\"yes\">${confd}/${f}</include>\n") rules}
+          <!-- After the stock rules, which put DejaVu Sans first for
+               sans-serif and add sans-serif to any family they do not
+               know: every sans request resolves to Liberation Sans. -->
+          <match target="pattern">
+            <test name="family"><string>sans-serif</string></test>
+            <edit name="family" mode="prepend_first" binding="strong">
+              <string>Liberation Sans</string>
+            </edit>
+          </match>
+          <match target="pattern">
+            <test name="family"><string>system-ui</string></test>
+            <edit name="family" mode="prepend_first" binding="strong">
+              <string>Liberation Sans</string>
+            </edit>
+          </match>
         </fontconfig>
       ''}";
   }

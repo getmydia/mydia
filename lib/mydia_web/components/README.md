@@ -553,9 +553,10 @@ flash fails. Before each audit it asserts that the page content and the mobile
 dock have a box, so a blank or crashed page fails instead of passing every
 check.
 
-Feature tests render with a pinned, DejaVu-only fontconfig from devenv
-(`MYDIA_FEATURE_TEST_FONTCONFIG`, exported as `FONTCONFIG_FILE` by
-`scripts/run-feature-tests.sh`), so text widths, and so the sweep's results,
+Feature tests render with a pinned fontconfig from devenv,
+`MYDIA_FEATURE_TEST_FONTCONFIG`, which `scripts/run-feature-tests.sh` exports as
+`FONTCONFIG_FILE`. Every sans font resolves to Liberation Sans, with DejaVu
+only as glyph fallback and for serif and monospace, so text widths, and so the sweep's results,
 match CI; a sweep run outside `./dev feature-test` is not comparable. The
 `/changelog` page renders content compiled from `priv/changelog`, so a new
 release entry changes what it measures.
