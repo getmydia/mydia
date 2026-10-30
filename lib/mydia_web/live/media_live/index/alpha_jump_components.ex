@@ -15,27 +15,6 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
     assigns = assign(assigns, :letters, LibraryListing.letters())
 
     ~H"""
-    <%!-- Phones get a picker instead of the strip: 26 letters in a 20px column
-          cannot be tapped reliably and are too small to read. --%>
-    <.form
-      for={%{}}
-      id="alpha-jump-picker"
-      phx-change="jump_letter"
-      class="sm:hidden fixed z-30 right-2 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))]"
-    >
-      <select
-        id="alpha-jump-select"
-        name="letter"
-        aria-label={gettext("Jump to letter")}
-        class="select select-sm bg-base-100/90 backdrop-blur shadow"
-      >
-        <option value="">{gettext("Jump to")}</option>
-        <%= for letter <- @letters, Map.has_key?(@paths, letter) do %>
-          <option value={letter}>{if letter == "#", do: "#", else: String.upcase(letter)}</option>
-        <% end %>
-      </select>
-    </.form>
-
     <nav
       id="alpha-jump-bar"
       phx-hook="AlphaJumpBar"
@@ -71,6 +50,38 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
         </span>
       <% end %>
     </nav>
+    """
+  end
+
+  attr :paths, :map, required: true, doc: "as for alpha_jump_bar"
+
+  attr :version, :integer,
+    required: true,
+    doc: "bumped after each jump so the select is rebuilt and shows its placeholder again"
+
+  @doc """
+  Phones get this picker, in the toolbar, instead of the strip: 26 letters in a
+  20px column cannot be tapped reliably and are too small to read.
+  """
+  def alpha_jump_picker(assigns) do
+    assigns = assign(assigns, :letters, LibraryListing.letters())
+
+    ~H"""
+    <.form for={%{}} id="alpha-jump-picker" phx-change="jump_letter" class="sm:hidden">
+      <div id={"alpha-jump-picker-#{@version}"}>
+        <select
+          id="alpha-jump-select"
+          name="letter"
+          aria-label={gettext("Jump to letter")}
+          class="select select-sm select-bordered w-full"
+        >
+          <option value="">{gettext("Jump to letter")}</option>
+          <%= for letter <- @letters, Map.has_key?(@paths, letter) do %>
+            <option value={letter}>{String.upcase(letter)}</option>
+          <% end %>
+        </select>
+      </div>
+    </.form>
     """
   end
 

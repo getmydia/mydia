@@ -68,6 +68,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> PosterFieldsPref.assign_current()
      |> assign_listing_params(%ListingParams{})
      |> assign(:page_key, nil)
+     |> assign(:alpha_picker_version, 0)
      |> assign(:remembered_listing, %{})
      |> assign(:library_options, [])
      |> assign(:loading?, true)
@@ -241,8 +242,21 @@ defmodule MydiaWeb.MediaLive.Index do
   # in the server's own paths so the client cannot choose the destination.
   def handle_event("jump_letter", %{"letter" => letter}, socket) do
     case socket.assigns.letter_paths do
-      %{^letter => path} -> {:noreply, push_patch(socket, to: path, replace: true)}
-      _ -> {:noreply, socket}
+      %{^letter => path} ->
+        # Rebuilding the select puts the placeholder back, so choosing the
+        # same letter again is a change and jumps again.
+        socket = update(socket, :alpha_picker_version, &(&1 + 1))
+
+        # A patch to the letter already in the URL changes nothing, so scroll
+        # back to it directly, as the strip's hook does.
+        if socket.assigns.letter == letter do
+          {:noreply, maybe_scroll_to_letter(socket, letter)}
+        else
+          {:noreply, push_patch(socket, to: path, replace: true)}
+        end
+
+      _ ->
+        {:noreply, socket}
     end
   end
 

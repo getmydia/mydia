@@ -93,6 +93,22 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     assert hd(card_ids(view)) == card(first_m)
   end
 
+  test "the picker returns to its placeholder, so the same letter jumps again", %{conn: conn} do
+    library()
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    wrapper = fn -> view |> element("[id^=alpha-jump-picker-]") |> render() end
+    before = wrapper.()
+
+    view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
+    assert_patch(view, "/movies?letter=m")
+    assert_push_event(view, "alpha_jump:scroll_top", %{})
+    refute wrapper.() == before
+
+    view |> form("#alpha-jump-picker", %{"letter" => "m"}) |> render_change()
+    assert_push_event(view, "alpha_jump:scroll_top", %{})
+  end
+
   test "a letter without titles is ignored by the picker event", %{conn: conn} do
     library()
     {:ok, view, _html} = live(conn, ~p"/movies")
