@@ -155,6 +155,7 @@ defmodule Mydia.Indexers.PrivateTrackerJourneyTest do
 
   describe "grab" do
     @describetag :tmp_dir
+    @describetag :capture_log
 
     setup %{tmp_dir: tmp_dir} do
       Downloads.register_clients()
