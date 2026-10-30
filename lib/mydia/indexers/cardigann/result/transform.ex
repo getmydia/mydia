@@ -81,13 +81,20 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   end
 
   # `category` first, then `categorydesc`: Prowlarr unions them in field order
-  # and the first category is the one a release reports.
+  # and the first category is the one a release reports. An unmapped
+  # non-numeric category parses to 0, which is no category at all, so it must
+  # not shadow `categorydesc`; when that maps nothing either, the 0 stands.
   defp category(row, ctx) do
-    map_category(get_field(row, "category"), ctx.category_mappings) ||
-      CategoryMapping.map_site_category_desc_to_torznab(
-        get_field(row, "categorydesc"),
-        ctx.category_mappings
-      )
+    case map_category(get_field(row, "category"), ctx.category_mappings) do
+      category when is_integer(category) and category > 0 ->
+        category
+
+      unmapped ->
+        CategoryMapping.map_site_category_desc_to_torznab(
+          get_field(row, "categorydesc"),
+          ctx.category_mappings
+        ) || unmapped
+    end
   end
 
   # Maps a site-specific category to a Torznab category ID; a value with no

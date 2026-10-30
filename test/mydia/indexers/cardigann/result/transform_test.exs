@@ -61,6 +61,14 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
       assert one(row(%{"categorydesc" => "Lantern Linux"}), ctx).category == 2040
     end
 
+    test "unmapped non-numeric category falls through to categorydesc" do
+      ctx =
+        ctx(%{category_mappings: [%{"id" => 8, "cat" => "PC/ISO", "desc" => "Lantern Linux"}]})
+
+      result = one(row(%{"category" => "lanterns", "categorydesc" => "Lantern Linux"}), ctx)
+      assert result.category == 4020
+    end
+
     test "maps a PC site category to Prowlarr's Torznab id" do
       ctx = ctx(%{category_mappings: [%{"id" => 1, "cat" => "PC/Games", "desc" => "Games"}]})
       assert one(row(%{"category" => "1"}), ctx).category == 4050
