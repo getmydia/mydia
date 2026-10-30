@@ -394,6 +394,17 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert {"X-Plain", "fixed"} in params.headers
     end
 
+    test "a search header that does not render fails the request instead of being dropped" do
+      definition =
+        two_path_definition([%{path: "/s"}])
+        |> put_in([Access.key(:search), :headers], %{"Authorization" => ["Bearer {{ (( }}"]})
+
+      assert {:error, %Error{type: :search_failed, message: message}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert message =~ "Authorization"
+    end
+
     test "inherit_inputs false sends the path's inputs alone" do
       page2 = %{path: "/s", inputs: %{"page" => "2"}, inherit_inputs: false}
       definition = two_path_definition([%{path: "/s"}, page2])

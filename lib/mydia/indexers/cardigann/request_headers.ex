@@ -9,6 +9,7 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
   whether a session may be sent at all and to build the rest of the Req options.
   """
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -19,26 +20,51 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
   context (`opts` as `CardigannSearchEngine` passes them).
 
   Header values are templates like inputs: UNIT3D API definitions send
-  `Authorization: Bearer {{ .Config.apikey }}`. A value that does not render is
-  dropped rather than sent as template source.
+  `Authorization: Bearer {{ .Config.apikey }}`. A value that does not render
+  fails the request: dropping an Authorization header would turn the search
+  into an anonymous one.
   """
-  @spec definition_headers(Parsed.t(), keyword()) :: [{term(), term()}]
-  def definition_headers(%Parsed{search: search} = definition, opts) do
-    headers =
-      case Map.get(search, :headers) do
-        nil -> []
-        headers when is_map(headers) -> Map.to_list(headers)
-        headers when is_list(headers) -> headers
-      end
+  @spec definition_headers(Parsed.t(), keyword()) ::
+          {:ok, [{term(), term()}]} | {:error, Error.t()}
+  def definition_headers(%Parsed{} = definition, opts) do
+    case declared(definition) do
+      [] ->
+        {:ok, []}
 
-    if headers == [] do
-      []
-    else
-      context = TemplateContext.build(definition, opts)
+      headers ->
+        context = TemplateContext.build(definition, opts)
+        Enum.reduce_while(headers, {:ok, []}, &render_named(&1, &2, context))
+    end
+  end
 
-      for {name, value} <- headers,
-          {:ok, rendered} <- [render_header(value, context)],
-          do: {name, rendered}
+  defp render_named({name, value}, {:ok, acc}, context) do
+    case render_header(value, context) do
+      {:ok, rendered} ->
+        {:cont, {:ok, acc ++ [{name, rendered}]}}
+
+      :error ->
+        {:halt, {:error, Error.search_failed("Search header #{name} failed to render")}}
+    end
+  end
+
+  @doc """
+  True when the definition's own `cookie` header is built from the operator's
+  settings (`cookie: "{{ .Config.cookie }}"`). Such a header is a credential and
+  must not ride a redirect, like a session cookie.
+  """
+  @spec credential_cookie?(Parsed.t()) :: boolean()
+  def credential_cookie?(%Parsed{} = definition) do
+    Enum.any?(declared(definition), fn {name, value} ->
+      String.downcase(to_string(name)) == "cookie" and
+        value |> List.wrap() |> Enum.any?(&String.contains?(to_string(&1), ".Config"))
+    end)
+  end
+
+  defp declared(%Parsed{search: search}) do
+    case Map.get(search, :headers) do
+      nil -> []
+      headers when is_map(headers) -> Map.to_list(headers)
+      headers when is_list(headers) -> headers
     end
   end
 

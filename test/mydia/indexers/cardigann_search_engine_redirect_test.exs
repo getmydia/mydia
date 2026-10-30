@@ -187,6 +187,37 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
                )
     end
 
+    # A definition can put the operator's cookie in `search.headers`
+    # (`cookie: "{{ .Config.cookie }}"`); that header is a credential too.
+    test "a definition cookie header built from settings disables redirects" do
+      bypass = Bypass.open()
+      url = "http://localhost:#{bypass.port}/search"
+      ClearanceCache.delete(url)
+
+      definition =
+        put_in(
+          definition(bypass.port).search[:headers],
+          %{"cookie" => "{{ .Config.cookie }}"}
+        )
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        assert ["uid=1; pass=secret"] = Plug.Conn.get_req_header(conn, "cookie")
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "/files/e.torrent")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:ok, %{status: 302}} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 url,
+                 %{params() | headers: [{"cookie", "uid=1; pass=secret"}]},
+                 %{},
+                 %{}
+               )
+    end
+
     test "with no session and no clearance, follow_redirect: true still follows" do
       bypass = Bypass.open()
       url = "http://localhost:#{bypass.port}/search"

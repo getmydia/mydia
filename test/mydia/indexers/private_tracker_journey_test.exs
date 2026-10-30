@@ -244,6 +244,38 @@ defmodule Mydia.Indexers.PrivateTrackerJourneyTest do
       refute_secrets(log)
     end
 
+    # A definition with a `download:` block fetches the release through the
+    # engine's download request, which logs at :debug.
+    test "the engine's download request keeps the passkey out of debug logs", %{bypass: bypass} do
+      tracker =
+        bypass
+        |> Trackers.start_tracker(:gazelle)
+        |> configure(%{"username" => @secrets.username, "password" => @secrets.password})
+
+      {:ok, [result]} = search(tracker)
+
+      {:ok, parsed} =
+        Mydia.Indexers.CardigannParser.parse_definition(tracker.definition.definition)
+
+      params = %{query_params: %{}, headers: [], method: :get, decode_body: false}
+
+      Logger.configure(level: :debug)
+
+      log =
+        capture_log([level: :debug], fn ->
+          Mydia.Indexers.CardigannSearchEngine.execute_download_request(
+            parsed,
+            result.download_url,
+            params,
+            %{},
+            %{}
+          )
+        end)
+
+      assert log =~ "Cardigann download request"
+      refute_secrets(log)
+    end
+
     test "a failed grab records no passkey in the history row or logs", %{bypass: bypass} do
       tracker =
         bypass
