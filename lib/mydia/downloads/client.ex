@@ -319,7 +319,25 @@ defmodule Mydia.Downloads.Client do
   @callback list_files(config(), client_id :: String.t()) ::
               {:ok, [String.t()]} | {:error, :unsupported | Error.t() | term()}
 
-  @optional_callbacks list_files: 2
+  @typedoc """
+  A tracker's seeding goal for one torrent: the ratio and the seed time in
+  seconds. Either may be nil (no limit from Mydia).
+  """
+  @type share_limits :: %{ratio: float() | nil, seed_time: non_neg_integer() | nil}
+
+  @doc """
+  Sets per-torrent share limits, so the client stops seeding once the
+  tracker's goal is met.
+
+  Optional. Adapters for clients without per-torrent limits do not implement
+  it, and the facade reports `{:error, :unsupported}` for them. An adapter
+  that supports only part of the limits applies what it can and returns
+  `:ok`. Called best effort at grab by `Mydia.Downloads.SeedingLimits`.
+  """
+  @callback set_share_limits(config(), client_id :: String.t(), share_limits()) ::
+              :ok | {:error, Error.t()}
+
+  @optional_callbacks list_files: 2, set_share_limits: 3
 
   ## Convenience Functions
 
@@ -417,6 +435,21 @@ defmodule Mydia.Downloads.Client do
   def list_files(adapter, config, client_id) when is_atom(adapter) do
     if Code.ensure_loaded?(adapter) and function_exported?(adapter, :list_files, 2) do
       adapter.list_files(config, client_id)
+    else
+      {:error, :unsupported}
+    end
+  end
+
+  @doc """
+  Sets a torrent's share limits using the specified adapter, or returns
+  `{:error, :unsupported}` for adapters without the optional
+  `c:set_share_limits/3` callback.
+  """
+  def set_share_limits(nil, _config, _client_id, _limits), do: no_adapter_error()
+
+  def set_share_limits(adapter, config, client_id, limits) when is_atom(adapter) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :set_share_limits, 3) do
+      adapter.set_share_limits(config, client_id, limits)
     else
       {:error, :unsupported}
     end

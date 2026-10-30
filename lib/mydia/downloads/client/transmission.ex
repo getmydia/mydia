@@ -148,6 +148,7 @@ defmodule Mydia.Downloads.Client.Transmission do
       "downloadDir",
       "addedDate",
       "doneDate",
+      "secondsSeeding",
       # Kept in step with the list_torrents/2 field list. Without it a
       # single-torrent fetch reports categories: [] even for a labelled
       # torrent, so a caller could reasonably conclude it carries no category.
@@ -194,6 +195,7 @@ defmodule Mydia.Downloads.Client.Transmission do
       "downloadDir",
       "addedDate",
       "doneDate",
+      "secondsSeeding",
       "labels",
       "files"
     ]
@@ -258,6 +260,31 @@ defmodule Mydia.Downloads.Client.Transmission do
 
       {:ok, %{"result" => error_msg}} ->
         {:error, Error.api_error("Failed to remove torrent", %{result: error_msg})}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  # Transmission has a per-torrent ratio limit but no total seed time limit
+  # (`seedIdleLimit` counts idle minutes, which is not the same thing), so a
+  # seed time goal is left to the removal guard and only the ratio is sent.
+  @impl true
+  def set_share_limits(_config, _client_id, %{ratio: nil}), do: :ok
+
+  def set_share_limits(config, client_id, %{ratio: ratio}) do
+    arguments = %{
+      "ids" => [parse_torrent_id(client_id)],
+      "seedRatioLimit" => ratio,
+      "seedRatioMode" => 1
+    }
+
+    case rpc_call(config, "torrent-set", arguments) do
+      {:ok, %{"result" => "success"}} ->
+        :ok
+
+      {:ok, %{"result" => error_msg}} ->
+        {:error, Error.api_error("Failed to set share limits", %{result: error_msg})}
 
       {:error, _} = error ->
         error
@@ -472,6 +499,7 @@ defmodule Mydia.Downloads.Client.Transmission do
       files: resolve_torrent_files(download_dir, torrent["files"]),
       added_at: Helpers.parse_timestamp_unix(torrent["addedDate"]),
       completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"]),
+      seeding_time: Helpers.parse_non_negative_integer(torrent["secondsSeeding"]),
       categories: parse_labels(torrent["labels"])
     })
   end

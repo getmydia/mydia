@@ -312,6 +312,27 @@ def resume_torrent(config, client_id) do
 end
 ```
 
+### Optional callbacks
+
+Two callbacks are optional. The `Mydia.Downloads.Client` facade checks
+`function_exported?/3` and returns `{:error, :unsupported}` for an adapter that
+leaves one out, so callers never need to know which adapters have it.
+
+- `list_files/2`: a leaf-level listing of a torrent's files. See its `@doc`.
+- `set_share_limits/3`: per-torrent share limits, called best effort at grab by
+  `Mydia.Downloads.SeedingLimits` with
+  `%{ratio: float | nil, seed_time: seconds | nil}`. Apply what the client
+  supports and return `:ok`. qBittorrent takes both (`setShareLimits`, seed
+  time in minutes, `-1` for an unset limit); Transmission takes the ratio only
+  (`torrent-set` with `seedRatioLimit` and `seedRatioMode: 1`). rTorrent and
+  rqbit leave it out.
+
+Whatever the limits, `Mydia.Downloads.ClientRemoval` keeps a download in the
+client until its tracker's seeding goal is met, so a client that takes no
+limits is still safe. For that guard, fill `DownloadStatus.seeding_time`
+(seconds) in `get_status/2` when the client counts it; otherwise the guard
+falls back to the time since `completed_at`.
+
 ### Step 8: Register the Adapter
 
 The `Registry` is the **single source of truth** for `type -> adapter module`. Every

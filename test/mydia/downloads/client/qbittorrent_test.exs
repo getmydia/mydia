@@ -1084,6 +1084,69 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     end
   end
 
+  describe "seeding (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      stub_login(bypass)
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "reads seeding_time into the status", %{bypass: bypass, config: config} do
+      hash = "seedtime000000000000000000000000seedtime"
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash, state: "uploading", seeding_time: 7200)])
+      end)
+
+      assert {:ok, %{seeding_time: 7200}} = QBittorrent.get_status(config, hash)
+    end
+
+    test "set_share_limits posts the ratio and the seed time in minutes", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/api/v2/torrents/setShareLimits", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        assert URI.decode_query(body) == %{
+                 "hashes" => "abc123",
+                 "ratioLimit" => "1.5",
+                 "seedingTimeLimit" => "4320",
+                 "inactiveSeedingTimeLimit" => "-2"
+               }
+
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok =
+               QBittorrent.set_share_limits(config, "abc123", %{ratio: 1.5, seed_time: 259_200})
+    end
+
+    test "set_share_limits sends -1 for an unset limit and rounds minutes up", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/api/v2/torrents/setShareLimits", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = URI.decode_query(body)
+        assert query["ratioLimit"] == "-1"
+        assert query["seedingTimeLimit"] == "2"
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok = QBittorrent.set_share_limits(config, "abc123", %{ratio: nil, seed_time: 61})
+    end
+
+    test "set_share_limits reports a rejected call", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/api/v2/torrents/setShareLimits", fn conn ->
+        Plug.Conn.resp(conn, 400, "Bad Request")
+      end)
+
+      assert {:error, %Error{type: :api_error}} =
+               QBittorrent.set_share_limits(config, "abc123", %{ratio: 1.0, seed_time: nil})
+    end
+  end
+
   ## Helpers
 
   defp bypass_config(bypass) do

@@ -1,0 +1,138 @@
+defmodule Mydia.Downloads.SeedingGoal do
+  @moduledoc """
+  Whether a download has seeded enough for its tracker.
+
+  The goal comes from the tracker terms frozen on the download at grab
+  (`Download.metadata["tracker_terms"]`, see
+  `Mydia.Indexers.Structs.TrackerTerms`). It is met when the ratio reaches
+  `minimum_ratio` or the torrent has seeded for `minimum_seed_time` seconds,
+  whichever comes first (the *arr convention). With only one of the two set,
+  that one decides.
+
+  - No terms, or terms that ask for nothing and are not private: met, so
+    removal behaves as it did before trackers had terms.
+  - Private with no known ratio or seed time: never met. Keeping a file is
+    the safe wrong answer; the operator can still remove it by hand.
+
+  `Mydia.Downloads.ClientRemoval.terms_met?/2` applies this before automatic
+  removal, and the Downloads page shows `for_download/2`.
+  """
+
+  alias Mydia.Indexers.Structs.TrackerTerms
+
+  @type t :: %__MODULE__{
+          tracker: String.t() | nil,
+          private?: boolean() | nil,
+          required_ratio: float() | nil,
+          required_seed_time: non_neg_integer() | nil,
+          ratio: float() | nil,
+          seeding_time: non_neg_integer() | nil,
+          met?: boolean()
+        }
+
+  defstruct [
+    :tracker,
+    :private?,
+    :required_ratio,
+    :required_seed_time,
+    :ratio,
+    :seeding_time,
+    met?: false
+  ]
+
+  @doc "The terms frozen on a download (or any map with `:metadata`), or nil."
+  @spec terms(%{required(:metadata) => map() | nil, optional(atom()) => term()}) ::
+          TrackerTerms.t() | nil
+  def terms(%{metadata: metadata}) when is_map(metadata) do
+    (Map.get(metadata, "tracker_terms") || Map.get(metadata, :tracker_terms))
+    |> TrackerTerms.from_map()
+  end
+
+  def terms(_download), do: nil
+
+  @doc "True when the terms ask the download to keep seeding."
+  @spec applies?(TrackerTerms.t() | nil) :: boolean()
+  def applies?(%TrackerTerms{} = terms) do
+    terms.private? == true or not is_nil(terms.minimum_ratio) or
+      not is_nil(terms.minimum_seed_time)
+  end
+
+  def applies?(nil), do: false
+
+  @doc """
+  Whether `ratio` and `seeding_time` (seconds) meet the terms. Unknown
+  progress (nil) never meets a requirement.
+  """
+  @spec met?(TrackerTerms.t() | nil, number() | nil, non_neg_integer() | nil) :: boolean()
+  def met?(terms, ratio, seeding_time) do
+    if applies?(terms) do
+      reached?(ratio, terms.minimum_ratio) or reached?(seeding_time, terms.minimum_seed_time)
+    else
+      true
+    end
+  end
+
+  defp reached?(value, required) when is_number(value) and is_number(required),
+    do: value >= required
+
+  defp reached?(_value, _required), do: false
+
+  @doc """
+  Seconds a torrent has seeded: what the client reports, otherwise the time
+  since the client's completion, otherwise since the download's
+  `completed_at`, otherwise nil.
+  """
+  @spec seeding_time(
+          non_neg_integer() | nil,
+          DateTime.t() | nil,
+          DateTime.t() | nil,
+          DateTime.t()
+        ) :: non_neg_integer() | nil
+  def seeding_time(reported, client_completed_at, download_completed_at, now)
+
+  def seeding_time(reported, _client, _download, _now)
+      when is_integer(reported) and reported >= 0,
+      do: reported
+
+  def seeding_time(_reported, %DateTime{} = completed_at, _download, now),
+    do: since(completed_at, now)
+
+  def seeding_time(_reported, nil, %DateTime{} = completed_at, now),
+    do: since(completed_at, now)
+
+  def seeding_time(_reported, _client, _download, _now), do: nil
+
+  defp since(completed_at, now), do: max(DateTime.diff(now, completed_at, :second), 0)
+
+  @doc """
+  Progress toward the goal for a Downloads row (an enriched download, or any
+  map with `:metadata`, `:indexer`, `:ratio`, `:seeding_time`,
+  `:completed_at` and `:db_completed_at`). Nil when no goal applies.
+  """
+  @spec for_download(map(), DateTime.t()) :: t() | nil
+  def for_download(download, now \\ DateTime.utc_now()) do
+    terms = terms(download)
+
+    if applies?(terms) do
+      seeding_time =
+        seeding_time(
+          Map.get(download, :seeding_time),
+          Map.get(download, :completed_at),
+          Map.get(download, :db_completed_at),
+          now
+        )
+
+      ratio = Map.get(download, :ratio)
+
+      %__MODULE__{
+        tracker: Map.get(download, :indexer),
+        private?: terms.private?,
+        required_ratio: terms.minimum_ratio,
+        required_seed_time: terms.minimum_seed_time,
+        ratio: ratio,
+        seeding_time: seeding_time,
+        met?: met?(terms, ratio, seeding_time)
+      }
+    end
+  end
+end
