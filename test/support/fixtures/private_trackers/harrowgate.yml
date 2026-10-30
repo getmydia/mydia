@@ -1,0 +1,83 @@
+---
+# Invented NexusPHP-style tracker: an image captcha and an optional 2FA code on
+# the login form, which posts to a separate submitpath. Sessions are cookies
+# and expire whenever the tracker decides.
+id: harrowgate
+name: Harrowgate
+description: Invented captcha and 2FA private tracker for tests
+language: en-US
+type: private
+encoding: UTF-8
+links:
+  - https://harrowgate.invalid/
+
+caps:
+  categorymappings:
+    - {id: 401, cat: Movies, desc: "Movies"}
+    - {id: 402, cat: TV, desc: "TV Series"}
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+
+settings:
+  - name: username
+    type: text
+    label: Username
+  - name: password
+    type: password
+    label: Password
+  - name: 2facode
+    type: text
+    label: 2FA code
+
+login:
+  path: login.php
+  submitpath: takelogin.php
+  method: form
+  form: form#login
+  captcha:
+    type: image
+    selector: img[alt="CAPTCHA"]
+    input: imagestring
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+    two_step_code: "{{ .Config.2facode }}"
+  error:
+    - selector: td.embedded h2.failed
+  test:
+    path: index.php
+    selector: a[href="logout.php"]
+
+search:
+  paths:
+    - path: torrents.php
+  inputs:
+    search: "{{ .Keywords }}"
+    notnewword: 1
+
+  rows:
+    selector: table.torrents > tbody > tr.row
+
+  fields:
+    category:
+      selector: td.cat
+    title:
+      selector: a[href^="details.php?id="]
+    details:
+      selector: a[href^="details.php?id="]
+      attribute: href
+    download:
+      selector: a[href^="download.php?id="]
+      attribute: href
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seeders
+    leechers:
+      selector: td.leechers
+    downloadvolumefactor:
+      text: 1
+    uploadvolumefactor:
+      text: 1
