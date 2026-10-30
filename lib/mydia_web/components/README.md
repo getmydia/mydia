@@ -609,7 +609,9 @@ fixed. The checker's own tests are in
   `btn-xs` and `badge-xs` text is raised to 12px, and `toggle-sm`, `checkbox-sm`
   and `checkbox-xs` are raised to 24px, so they meet the sweep's `tiny_text` and
   `small_target` thresholds. Desktop sizes are unchanged. Use the daisyUI size
-  classes as usual; do not swap them per call site to satisfy the sweep.
+  classes as usual; do not swap them per call site to satisfy the sweep. The
+  block is unlayered, so below 640px it also outranks Tailwind text utilities
+  on `.badge-xs` and `.btn-xs`; a `text-[10px]` there does nothing on phones.
 - **Mobile dock: at most five items.** The dock labels are 12px and five items
   fit at 320px. Player lives in the drawer only. A sixth item would not fit, so
   put it in the drawer instead. The `DockNav` hook re-measures on resize.

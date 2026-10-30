@@ -1,6 +1,7 @@
 <Layouts.app {assigns}>
-  <%!-- Below lg the A-Z strip runs from under the header to the dock, beside
-       the toolbar as well as the cards, so the whole page makes room for it. --%>
+  <%!-- From sm to lg the A-Z strip runs from under the header to the dock,
+       beside the toolbar as well as the cards, so the whole page makes room
+       for it. Phones get the toolbar's letter picker instead. --%>
   <div
     class={["flex flex-col h-full", @letter_paths != %{} && "sm:max-lg:pr-5"]}
     phx-window-keydown="keydown"

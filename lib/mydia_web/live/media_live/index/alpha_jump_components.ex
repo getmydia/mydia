@@ -1,7 +1,8 @@
 defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
   @moduledoc """
   The library listing's A-Z strip: `#` then A to Z, pinned to the right edge.
-  Letters with titles are patch links; the rest are dimmed and inert.
+  Letters with titles are patch links; the rest are dimmed and inert. The strip
+  shows from `sm` up; phones get `alpha_jump_picker/1`, a select in the toolbar.
   """
   use MydiaWeb, :html
 
@@ -69,8 +70,11 @@ defmodule MydiaWeb.MediaLive.Index.AlphaJumpComponents do
     ~H"""
     <.form for={%{}} id="alpha-jump-picker" phx-change="jump_letter" class="sm:hidden">
       <div id={"alpha-jump-picker-#{@version}"}>
+        <%!-- The version is in the select's own id too: morphdom keeps a focused
+             select's value when it patches the same node, so only a fresh node
+             shows the placeholder again. --%>
         <select
-          id="alpha-jump-select"
+          id={"alpha-jump-select-#{@version}"}
           name="letter"
           aria-label={gettext("Jump to letter")}
           class="select select-sm select-bordered w-full"

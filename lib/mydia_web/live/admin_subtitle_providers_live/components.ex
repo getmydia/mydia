@@ -45,10 +45,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
           class="sm:tooltip"
           data-tip={gettext("Built-in default. Saving an edit creates a database row.")}
         >
-          <span
-            class="badge badge-ghost badge-xs"
-            title={gettext("Built-in default. Saving an edit creates a database row.")}
-          >
+          <span class="badge badge-ghost badge-xs">
             {gettext("Default")}
           </span>
         </span>

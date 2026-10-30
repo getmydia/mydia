@@ -49,7 +49,9 @@
    least 12px and tap targets of at least 24px, and daisyUI's xs/sm sizes
    fall under both. This is scoped to phones on purpose: desktop keeps
    daisyUI's sizes untouched. It sets the variables daisyUI reads instead of
-   forcing values, and sits unlayered so it outranks daisyUI's layers. */
+   forcing values, and sits unlayered so it outranks daisyUI's layers. For the
+   same reason it also outranks Tailwind text utilities (`text-[10px]` and the
+   like) on `.badge-xs` and `.btn-xs` below 640px. */
 @media (width < 40rem) {
   .btn-xs {
     --fontsize: 0.75rem;

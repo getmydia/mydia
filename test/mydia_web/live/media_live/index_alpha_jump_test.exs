@@ -78,9 +78,9 @@ defmodule MydiaWeb.MediaLive.IndexAlphaJumpTest do
     library()
     {:ok, view, _html} = live(conn, ~p"/movies")
 
-    assert has_element?(view, "#alpha-jump-select option[value=m]")
-    assert has_element?(view, "#alpha-jump-select option[value=z]")
-    refute has_element?(view, "#alpha-jump-select option[value=b]")
+    assert has_element?(view, "#alpha-jump-picker select option[value=m]")
+    assert has_element?(view, "#alpha-jump-picker select option[value=z]")
+    refute has_element?(view, "#alpha-jump-picker select option[value=b]")
   end
 
   test "choosing a letter in the picker jumps like its link", %{conn: conn} do

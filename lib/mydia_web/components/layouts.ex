@@ -587,7 +587,7 @@ defmodule MydiaWeb.Layouts do
       data-dock-link
       data-active={@active? && "true"}
       class={[
-        "flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 rounded-xl",
+        "flex flex-col items-center justify-center flex-1 min-w-0 sm:flex-none sm:min-w-[52px] py-1.5 rounded-xl",
         "transition-[color,opacity] duration-300 ease-in-out relative z-10",
         if(@active?,
           do: "text-primary opacity-100",
@@ -596,7 +596,7 @@ defmodule MydiaWeb.Layouts do
       ]}
     >
       <.icon name={@icon} class="size-5" />
-      <span class="text-xs mt-0.5">{@label}</span>
+      <span class="text-xs mt-0.5 max-w-full truncate">{@label}</span>
     </.link>
     """
   end
