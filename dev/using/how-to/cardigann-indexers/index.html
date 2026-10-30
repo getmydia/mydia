@@ -895,6 +895,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#which-option-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which option to use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#enabling-cardigann" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3528,6 +3539,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#which-option-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which option to use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#enabling-cardigann" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3766,21 +3788,77 @@
 
 <h1 id="cardigann-indexers">Cardigann Indexers</h1>
 <p>Mydia includes built-in Cardigann indexer support, allowing direct indexer connections without Prowlarr or Jackett.</p>
-<div class="admonition warning">
-<p class="admonition-title">Public indexers are covered, private ones are not</p>
-<p>Mydia's Cardigann engine is tested against public trackers, which are the
-ones it handles well. Private and semi-private trackers need a login, and
-several login mechanisms (CAPTCHA, selector-derived inputs, separate submit
-paths) are not implemented. Expect those to fail. If you hit a problem,
-please report it on GitHub.</p>
-</div>
+<h2 id="which-option-to-use">Which option to use</h2>
+<p>Mydia can search trackers three ways. The first two run inside Mydia; the third
+is a separate indexer manager Mydia connects to.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Built-in engine</th>
+<th>Prowlarr-based engine (experimental)</th>
+<th>Prowlarr or Jackett server</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Extra services</strong></td>
+<td>None</td>
+<td>None, runs inside Mydia</td>
+<td>One more container to run</td>
+</tr>
+<tr>
+<td><strong>Setup</strong></td>
+<td>On by default</td>
+<td>One switch under <strong>Configuration &gt; Indexers</strong>, then a 68 MB download on first use</td>
+<td>Run the server, then <a href="../connect-indexer/">add a connection</a></td>
+</tr>
+<tr>
+<td><strong>Matches Prowlarr's results</strong> (44 public trackers)</td>
+<td>28 of 44</td>
+<td>44 of 44</td>
+<td>It is Prowlarr</td>
+</tr>
+<tr>
+<td><strong>Private trackers</strong></td>
+<td>Login often fails (CAPTCHA, selector-derived inputs and separate submit paths are not implemented)</td>
+<td>Uses Prowlarr's login code, but untested</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td><strong>Trackers on your local network</strong></td>
+<td>Yes</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Extra memory</strong></td>
+<td>None</td>
+<td>About 65 MB idle, up to about 120 MB more while searching</td>
+<td>A separate process</td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Default; parsing regression-tested on <a href="#supported-indexers">12 trackers</a></td>
+<td>Built with an experimental toolchain</td>
+<td>Mature</td>
+</tr>
+<tr>
+<td><strong>Pick it when</strong></td>
+<td>You want zero setup and use mainstream public trackers</td>
+<td>You want Prowlarr's results without running Prowlarr</td>
+<td>You use private trackers, or reliability matters more than running fewer services</td>
+</tr>
+</tbody>
+</table>
+<p>The costs of the Prowlarr-based engine are detailed in
+<a href="#using-the-prowlarr-based-engine-experimental">Using the Prowlarr-based engine</a>.
+For why Mydia ships its own engine at all, see
+<a href="../../explanation/media-pipeline/#why-mydia-ships-its-own-indexer-implementation">Why Mydia ships its own indexer implementation</a>.
+If you hit a problem with either built-in option, please report it on GitHub.</p>
 <p>Cardigann is the community indexer definition format from Jackett, also used by
 Prowlarr. Mydia reads those definitions natively, so you can point it at trackers
 without running a separate indexer manager.</p>
-<p>For why Mydia ships its own engine and what that trades away, see
-<a href="../../explanation/media-pipeline/#why-mydia-ships-its-own-indexer-implementation">Why Mydia ships its own indexer implementation</a>.
-The short version: use Prowlarr or Jackett when reliability matters more than
-running fewer services.</p>
 <h2 id="enabling-cardigann">Enabling Cardigann</h2>
 <p>Cardigann is enabled by default:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">true</span>
