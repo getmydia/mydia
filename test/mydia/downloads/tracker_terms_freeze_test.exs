@@ -5,7 +5,7 @@ defmodule Mydia.Downloads.TrackerTermsFreezeTest do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Repo
-  alias Mydia.Settings
+  alias Mydia.Settings.TrackerRuleConfigs
 
   defp result(attrs) do
     struct!(
@@ -39,7 +39,7 @@ defmodule Mydia.Downloads.TrackerTermsFreezeTest do
 
   test "the effective terms, overrides applied, are frozen on the download" do
     {:ok, rule} =
-      Settings.create_tracker_rule_config(%{tracker: "velvet lantern", seed_ratio: 2.0})
+      TrackerRuleConfigs.create(%{tracker: "velvet lantern", seed_ratio: 2.0})
 
     download =
       grab(
@@ -63,13 +63,13 @@ defmodule Mydia.Downloads.TrackerTermsFreezeTest do
 
     assert download.metadata["tracker_terms"] == frozen
 
-    {:ok, _} = Settings.update_tracker_rule_config(rule, %{seed_ratio: 5.0, seed_time: 10})
+    {:ok, _} = TrackerRuleConfigs.update(rule, %{seed_ratio: 5.0, seed_time: 10})
 
     assert Repo.get!(Download, download.id).metadata["tracker_terms"] == frozen
   end
 
   test "a rule alone gives a tracker that reported nothing frozen terms" do
-    {:ok, _} = Settings.create_tracker_rule_config(%{tracker: "Velvet Lantern", private: true})
+    {:ok, _} = TrackerRuleConfigs.create(%{tracker: "Velvet Lantern", private: true})
 
     assert %{"private" => true, "minimum_ratio" => nil} =
              grab(result(%{})).metadata["tracker_terms"]

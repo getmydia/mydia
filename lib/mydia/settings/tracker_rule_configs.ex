@@ -2,7 +2,7 @@ defmodule Mydia.Settings.TrackerRuleConfigs do
   @moduledoc """
   Storage for per-tracker term overrides: database rows merged with the
   `tracker_rules` declared in YAML or env, a row shadowing a runtime rule whose
-  tracker matches case-insensitively. Reached through `Mydia.Settings`.
+  tracker matches case-insensitively.
 
   Rules are read at grab time straight from here, so a write needs no runtime
   config reload.

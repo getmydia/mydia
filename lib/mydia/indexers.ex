@@ -25,8 +25,7 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.ResultDedup
-  alias Mydia.Indexers.TrackerSightings
+  alias Mydia.Indexers.{ResultDedup, TrackerSightings}
   alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
@@ -318,10 +317,7 @@ defmodule Mydia.Indexers do
             {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
         end)
 
-      # Before dedup, so every tracker that returned a release counts as seen.
-      TrackerSightings.record(all_results)
-
-      results = rank_and_dedupe(all_results, query, opts)
+      results = all_results |> tap(&TrackerSightings.record/1) |> rank_and_dedupe(query, opts)
 
       total_time = System.monotonic_time(:millisecond) - start_time
 

@@ -9,9 +9,7 @@ defmodule Mydia.Config.Schema do
 
   require Logger
 
-  alias Mydia.Config.Schema.DownloadClientChangeset
-  alias Mydia.Config.Schema.PathMappingChangeset
-  alias Mydia.Config.Schema.TrackerRuleChangeset
+  alias Mydia.Config.Schema.{DownloadClientChangeset, PathMappingChangeset}
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -467,17 +465,7 @@ defmodule Mydia.Config.Schema do
       field :local_prefix, :string
     end
 
-    # Per-tracker overrides of the terms an indexer reports (see
-    # Mydia.Indexers.TrackerRules). `tracker` matches SearchResult.indexer
-    # case-insensitively; `seed_time` is in minutes. A nil field keeps what the
-    # tracker reports.
-    embeds_many :tracker_rules, TrackerRule, on_replace: :delete, primary_key: false do
-      @type t :: %__MODULE__{}
-      field :tracker, :string
-      field :seed_ratio, :float
-      field :seed_time, :integer
-      field :private, :boolean
-    end
+    embeds_many :tracker_rules, Mydia.Config.Schema.TrackerRule, on_replace: :delete
   end
 
   @doc """
@@ -512,7 +500,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
     |> cast_embed(:path_mappings, with: &PathMappingChangeset.changeset/2)
-    |> cast_embed(:tracker_rules, with: &TrackerRuleChangeset.changeset/2)
+    |> cast_embed(:tracker_rules)
     |> validate_configuration()
   end
 
@@ -1044,7 +1032,8 @@ defmodule Mydia.Config.Schema do
   Returns the default configuration as a map.
   """
   def defaults do
-    # Initialize with all embedded schemas set to their defaults
+    # Initialize with all embedded schemas set to their defaults. Every
+    # embeds_many list already defaults to [] in the struct.
     base_config = %__MODULE__{
       server: %__MODULE__.Server{},
       database: %__MODULE__.Database{},
@@ -1060,17 +1049,7 @@ defmodule Mydia.Config.Schema do
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
       cardigann: %__MODULE__.Cardigann{},
-      remote_access: %__MODULE__.RemoteAccess{},
-      download_clients: [],
-      indexers: [],
-      media_servers: [],
-      storage_backends: [],
-      library_paths: [],
-      plugin_settings: [],
-      plugin_instances: [],
-      plugin_sources: [],
-      path_mappings: [],
-      tracker_rules: []
+      remote_access: %__MODULE__.RemoteAccess{}
     }
 
     # Run through changeset to apply defaults from field definitions

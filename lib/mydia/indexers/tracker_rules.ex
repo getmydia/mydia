@@ -16,8 +16,7 @@ defmodule Mydia.Indexers.TrackerRules do
 
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.TrackerTerms
-  alias Mydia.Settings
-  alias Mydia.Settings.TrackerRuleConfig
+  alias Mydia.Settings.{TrackerRuleConfig, TrackerRuleConfigs}
 
   @doc "The case-insensitive key a tracker name is matched under."
   @spec key(String.t() | nil) :: String.t() | nil
@@ -25,7 +24,7 @@ defmodule Mydia.Indexers.TrackerRules do
 
   @doc "Every rule, database rows shadowing YAML/env rules for the same tracker."
   @spec list_rules() :: [TrackerRuleConfig.t()]
-  def list_rules, do: Settings.list_tracker_rule_configs()
+  def list_rules, do: TrackerRuleConfigs.list()
 
   @doc "The rule for `tracker`, or nil."
   @spec rule_for(String.t() | nil, [TrackerRuleConfig.t()]) :: TrackerRuleConfig.t() | nil

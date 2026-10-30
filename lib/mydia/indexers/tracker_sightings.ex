@@ -2,7 +2,8 @@ defmodule Mydia.Indexers.TrackerSightings do
   @moduledoc """
   Which trackers searches have returned, and what each one reported.
 
-  `Mydia.Indexers.search_all/2` hands every result set to `record/2`. One row
+  `Mydia.Indexers.search_all/2` hands every result set to `record/2` before
+  dedup, so every tracker that returned a release counts as seen. One row
   per tracker (matched case-insensitively) keeps the tracker-level terms it
   last reported and when it was last seen; a later sighting without a value
   never erases an earlier one. Writes go through
@@ -61,20 +62,23 @@ defmodule Mydia.Indexers.TrackerSightings do
 
     results
     |> Enum.filter(&match?(%SearchResult{indexer: indexer} when is_binary(indexer), &1))
-    |> Enum.reduce(%{}, fn result, acc ->
-      case TrackerRuleConfig.key(result.indexer) do
-        "" ->
-          acc
-
-        # Within one batch the first spelling of a name is kept; across
-        # batches the newest spelling wins (see merge_sightings/2).
-        key ->
-          new = sighting(key, result, seen_at)
-          new = if acc[key], do: %{new | tracker: acc[key].tracker}, else: new
-          merge_sightings(acc, %{key => new})
-      end
-    end)
+    |> Enum.reduce(%{}, &add_sighting(&1, &2, seen_at))
   end
+
+  # Within one batch the first spelling of a name is kept; across batches the
+  # newest spelling wins (see merge_sightings/2).
+  defp add_sighting(result, acc, seen_at) do
+    case TrackerRuleConfig.key(result.indexer) do
+      "" ->
+        acc
+
+      key ->
+        merge_sightings(acc, %{key => keep_spelling(sighting(key, result, seen_at), acc[key])})
+    end
+  end
+
+  defp keep_spelling(new, nil), do: new
+  defp keep_spelling(new, earlier), do: %{new | tracker: earlier.tracker}
 
   defp sighting(key, %SearchResult{indexer: indexer, terms: terms}, seen_at) do
     terms = terms || %TrackerTerms{}

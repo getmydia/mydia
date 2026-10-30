@@ -7,8 +7,7 @@ defmodule Mydia.Indexers.TrackerSightingsTest do
   alias Mydia.Indexers.TrackerSightings
   alias Mydia.Indexers.TrackerSightings.{Row, Sighting}
   alias Mydia.Repo
-  alias Mydia.Settings
-  alias Mydia.Settings.TrackerRuleConfig
+  alias Mydia.Settings.{TrackerRuleConfig, TrackerRuleConfigs}
 
   @now ~U[2031-06-01 12:00:00Z]
 
@@ -88,7 +87,7 @@ defmodule Mydia.Indexers.TrackerSightingsTest do
       seen("Faded Reel", 45)
 
       {:ok, _} =
-        Settings.create_tracker_rule_config(%{tracker: "Velvet Lantern", seed_ratio: 2.0})
+        TrackerRuleConfigs.create(%{tracker: "Velvet Lantern", seed_ratio: 2.0})
 
       rows = TrackerSightings.list_trackers(@now)
 
@@ -138,13 +137,13 @@ defmodule Mydia.Indexers.TrackerSightingsTest do
     end
 
     test "a rule added in the last 30 days is not stale yet" do
-      {:ok, _} = Settings.create_tracker_rule_config(%{tracker: "New Reel", seed_ratio: 1.0})
+      {:ok, _} = TrackerRuleConfigs.create(%{tracker: "New Reel", seed_ratio: 1.0})
       refute row(TrackerSightings.list_trackers(DateTime.utc_now()), "new reel").stale?
     end
   end
 
   defp old_rule(attrs) do
-    {:ok, rule} = Settings.create_tracker_rule_config(attrs)
+    {:ok, rule} = TrackerRuleConfigs.create(attrs)
     old = DateTime.add(@now, -60 * 86_400)
     rule |> Ecto.Changeset.change(inserted_at: old, updated_at: old) |> Repo.update!()
   end

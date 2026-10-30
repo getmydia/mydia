@@ -382,40 +382,6 @@ defmodule Mydia.Settings do
           {:ok, DownloadClientConfig.t()} | {:error, Ecto.Changeset.t()}
   defdelegate delete_download_client_config(config), to: Mydia.Settings.ServiceConfigs
 
-  # ── Tracker Rules ────────────────────────────────────────────────────
-
-  @doc """
-  Lists per-tracker term overrides from the database and YAML/env, a row
-  shadowing a runtime rule for the same tracker.
-  """
-  @spec list_tracker_rule_configs() :: [Mydia.Settings.TrackerRuleConfig.t()]
-  defdelegate list_tracker_rule_configs, to: Mydia.Settings.TrackerRuleConfigs, as: :list
-
-  @doc "Gets a tracker rule by database UUID or runtime identifier."
-  @spec get_tracker_rule_config!(binary()) :: Mydia.Settings.TrackerRuleConfig.t()
-  defdelegate get_tracker_rule_config!(id), to: Mydia.Settings.TrackerRuleConfigs, as: :get!
-
-  @doc "Creates a tracker rule."
-  @spec create_tracker_rule_config(map()) ::
-          {:ok, Mydia.Settings.TrackerRuleConfig.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate create_tracker_rule_config(attrs),
-    to: Mydia.Settings.TrackerRuleConfigs,
-    as: :create
-
-  @doc "Updates a tracker rule."
-  @spec update_tracker_rule_config(Mydia.Settings.TrackerRuleConfig.t(), map()) ::
-          {:ok, Mydia.Settings.TrackerRuleConfig.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate update_tracker_rule_config(config, attrs),
-    to: Mydia.Settings.TrackerRuleConfigs,
-    as: :update
-
-  @doc "Deletes a tracker rule."
-  @spec delete_tracker_rule_config(Mydia.Settings.TrackerRuleConfig.t()) ::
-          {:ok, Mydia.Settings.TrackerRuleConfig.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate delete_tracker_rule_config(config),
-    to: Mydia.Settings.TrackerRuleConfigs,
-    as: :delete
-
   # ── Path Mappings ────────────────────────────────────────────────────
 
   @doc """

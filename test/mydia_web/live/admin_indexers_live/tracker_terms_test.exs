@@ -6,7 +6,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
 
   alias Mydia.Indexers.TrackerSightings.Sighting
   alias Mydia.Repo
-  alias Mydia.Settings
+  alias Mydia.Settings.TrackerRuleConfigs
   alias MydiaWeb.AdminIndexersLive.TrackerTermsComponents
 
   setup %{conn: conn} do
@@ -43,7 +43,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
   end
 
   test "flags an override that matched nothing", %{conn: conn} do
-    {:ok, rule} = Settings.create_tracker_rule_config(%{tracker: "Ghost Reel", seed_ratio: 1.0})
+    {:ok, rule} = TrackerRuleConfigs.create(%{tracker: "Ghost Reel", seed_ratio: 1.0})
     old = DateTime.add(DateTime.utc_now(), -60 * 86_400) |> DateTime.truncate(:second)
     rule |> Ecto.Changeset.change(inserted_at: old) |> Repo.update!()
 
@@ -68,7 +68,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
     refute has_element?(view, "#tracker-rule-modal")
     assert has_element?(view, "#tracker-terms-#{dom("velvet lantern")}", "Ratio 2.5")
     assert has_element?(view, "#tracker-terms-#{dom("velvet lantern")}", "Seed 3d")
-    assert [%{seed_ratio: 2.5, seed_time: 4320}] = Settings.list_tracker_rule_configs()
+    assert [%{seed_ratio: 2.5, seed_time: 4320}] = TrackerRuleConfigs.list()
   end
 
   test "an invalid override keeps the modal open", %{conn: conn} do
@@ -83,7 +83,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsTest do
     |> render_submit()
 
     assert has_element?(view, "#tracker-rule-modal")
-    assert Settings.list_tracker_rule_configs() == []
+    assert TrackerRuleConfigs.list() == []
   end
 
   test "an override from the environment cannot be edited here", %{conn: conn} do

@@ -9,13 +9,13 @@ defmodule Mydia.Settings.TrackerRuleConfig do
   Runtime rules are represented with this struct too, with a `runtime::` id
   (see `Mydia.Settings.RuntimeConfig.get_runtime_tracker_rules/0`).
 
-  Validation is `Mydia.Config.Schema.TrackerRuleChangeset`, shared with the
+  Validation is `Mydia.Config.Schema.TrackerRule.changeset/2`, shared with the
   config schema so both layers accept the same values.
   """
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Mydia.Config.Schema.TrackerRuleChangeset
+  alias Mydia.Config.Schema.TrackerRule
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -52,7 +52,7 @@ defmodule Mydia.Settings.TrackerRuleConfig do
   @doc "Changeset for creating or updating a rule."
   def changeset(config, attrs) do
     config
-    |> TrackerRuleChangeset.changeset(attrs)
+    |> TrackerRule.changeset(attrs)
     |> cast(attrs, [:updated_by_id])
     |> put_tracker_key()
     |> unique_constraint(:tracker,

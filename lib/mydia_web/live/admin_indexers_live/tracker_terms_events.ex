@@ -17,7 +17,7 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsEvents do
   alias Mydia.Indexers.TrackerRules
   alias Mydia.Indexers.TrackerSightings
   alias Mydia.Settings
-  alias Mydia.Settings.TrackerRuleConfig
+  alias Mydia.Settings.{TrackerRuleConfig, TrackerRuleConfigs}
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
@@ -59,8 +59,8 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsEvents do
   defp handle_event("save_tracker_rule", %{"tracker_rule_config" => params}, socket) do
     result =
       case socket.assigns.tracker_rule_mode do
-        :new -> Settings.create_tracker_rule_config(params)
-        :edit -> Settings.update_tracker_rule_config(socket.assigns.editing_tracker_rule, params)
+        :new -> TrackerRuleConfigs.create(params)
+        :edit -> TrackerRuleConfigs.update(socket.assigns.editing_tracker_rule, params)
       end
 
     case result do
@@ -77,13 +77,13 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsEvents do
   end
 
   defp handle_event("delete_tracker_rule", %{"id" => id}, socket) do
-    rule = Settings.get_tracker_rule_config!(id)
+    rule = TrackerRuleConfigs.get!(id)
 
     cond do
       Settings.runtime_config?(rule) ->
         {:halt, put_flash(socket, :error, env_readonly_message())}
 
-      match?({:ok, _}, Settings.delete_tracker_rule_config(rule)) ->
+      match?({:ok, _}, TrackerRuleConfigs.delete(rule)) ->
         {:halt, socket |> put_flash(:info, gettext("Tracker override removed")) |> refresh()}
 
       true ->

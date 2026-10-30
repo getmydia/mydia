@@ -780,9 +780,7 @@ defmodule Mydia.Config.Loader do
   end
 
   defp load_path_mappings_env do
-    # Support environment variables for path mappings in the format:
-    # PATH_MAPPING_<N>_REMOTE, PATH_MAPPING_<N>_LOCAL
-    # where N is 1, 2, 3, etc.
+    # PATH_MAPPING_<N>_REMOTE and PATH_MAPPING_<N>_LOCAL, where N is 1, 2, 3, etc.
     env_vars = System.get_env()
 
     # Find all path mapping indices by looking for *_REMOTE vars

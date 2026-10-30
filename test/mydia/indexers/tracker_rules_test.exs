@@ -4,7 +4,7 @@ defmodule Mydia.Indexers.TrackerRulesTest do
   alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Indexers.TrackerRules
   alias Mydia.Settings
-  alias Mydia.Settings.TrackerRuleConfig
+  alias Mydia.Settings.{TrackerRuleConfig, TrackerRuleConfigs}
 
   defp rule(attrs), do: struct!(TrackerRuleConfig, Map.merge(%{tracker: "Velvet Lantern"}, attrs))
 
@@ -114,7 +114,7 @@ defmodule Mydia.Indexers.TrackerRulesTest do
 
     test "a database rule shadows a runtime rule for the same tracker in any case" do
       {:ok, _} =
-        Settings.create_tracker_rule_config(%{tracker: "velvet LANTERN", seed_ratio: 2.0})
+        TrackerRuleConfigs.create(%{tracker: "velvet LANTERN", seed_ratio: 2.0})
 
       rules = TrackerRules.list_rules()
 
@@ -130,17 +130,17 @@ defmodule Mydia.Indexers.TrackerRulesTest do
     end
 
     test "tracker names are unique case-insensitively in the database" do
-      {:ok, _} = Settings.create_tracker_rule_config(%{tracker: "Velvet Lantern"})
+      {:ok, _} = TrackerRuleConfigs.create(%{tracker: "Velvet Lantern"})
 
       assert {:error, changeset} =
-               Settings.create_tracker_rule_config(%{tracker: "VELVET LANTERN", seed_ratio: 1.0})
+               TrackerRuleConfigs.create(%{tracker: "VELVET LANTERN", seed_ratio: 1.0})
 
       assert %{tracker: [_]} = errors_on(changeset)
     end
 
     test "a rule needs a tracker and non-negative numbers" do
       assert {:error, changeset} =
-               Settings.create_tracker_rule_config(%{tracker: "", seed_ratio: -1, seed_time: -5})
+               TrackerRuleConfigs.create(%{tracker: "", seed_ratio: -1, seed_time: -5})
 
       errors = errors_on(changeset)
       assert errors.tracker

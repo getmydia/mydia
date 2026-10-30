@@ -1,12 +1,10 @@
 defmodule MydiaWeb.AdminIndexersLive.Index do
   use MydiaWeb, :live_view
 
-  alias Mydia.Settings
+  alias Mydia.{Indexers, Settings}
   alias Mydia.Settings.IndexerConfig
-  alias Mydia.Indexers
   alias Mydia.Indexers.Health, as: IndexerHealth
-  alias Mydia.Indexers.CardigannFeatureFlags
-  alias Mydia.Indexers.FlareSolverr
+  alias Mydia.Indexers.{CardigannFeatureFlags, FlareSolverr}
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
