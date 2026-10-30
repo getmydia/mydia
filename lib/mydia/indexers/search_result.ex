@@ -27,6 +27,11 @@ defmodule Mydia.Indexers.SearchResult do
     * `:guid` - Indexer-provided stable identifier for the release (optional).
       Used by the release blacklist (issue #123) to match repeat failures. When
       missing, the blacklist falls back to a SHA-256 of (indexer, title, size).
+    * `:terms` - the tracker's terms for this release (private flag, minimum
+      ratio and seed time, volume factors) as a
+      `Mydia.Indexers.Structs.TrackerTerms`, or nil when the indexer reports
+      none. These are what the tracker reported; overrides are applied by
+      `Mydia.Indexers.TrackerRules.effective/3`.
 
   ## Per-row display state
 
@@ -84,6 +89,7 @@ defmodule Mydia.Indexers.SearchResult do
 
   alias Mydia.Library.Structs.Quality
   alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Indexers.Structs.TrackerTerms
 
   @type t :: %__MODULE__{
           title: String.t(),
@@ -106,6 +112,7 @@ defmodule Mydia.Indexers.SearchResult do
           nzb_completion: float() | nil,
           nzb_grabs: non_neg_integer() | nil,
           guid: String.t() | nil,
+          terms: TrackerTerms.t() | nil,
           downloading: boolean(),
           downloaded: boolean(),
           duplicate: boolean(),
@@ -134,6 +141,7 @@ defmodule Mydia.Indexers.SearchResult do
     :nzb_completion,
     :nzb_grabs,
     :guid,
+    :terms,
     # Every tracker that returned this release, filled in by ResultDedup when
     # it merges copies from several trackers. Empty until then; read it
     # through indexers/1, which falls back to `indexer`.
