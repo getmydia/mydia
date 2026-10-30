@@ -22,9 +22,7 @@ defmodule MydiaWeb.SegmentedControl do
   `37,44,51`, a contrast of 1.075 in the wrong direction. `base-300` is a
   1.459 step and lightens. Light mode keeps daisyUI's default, which is
   already a reasonable 1.226 there and stronger than `base-300` would be.
-
-  Full measurements and method in
-  `design/specs/2026-09-01-segmented-control-design.md`.
+  All of these figures were measured in a browser, not derived from tokens.
 
   ## Icon-only controls
 
