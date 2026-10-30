@@ -185,7 +185,9 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       # state, so assert the file has none left rather than spot-checking.
       source = File.read!("lib/mydia_web/live/media_live/show/season_components.ex")
 
-      refute source =~ "sm:",
+      # `max-sm:` is a different mechanism: a phone-only tap-target floor
+      # that changes no layout, so only an unprefixed `sm:` counts.
+      refute source =~ ~r/(?<![\w-])sm:/,
              "season_components.ex still contains a viewport breakpoint"
     end
   end
