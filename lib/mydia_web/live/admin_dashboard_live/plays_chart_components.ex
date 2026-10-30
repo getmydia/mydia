@@ -68,7 +68,7 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
               y={tick.y + 3}
               text-anchor="end"
               font-size="9"
-              class="fill-base-content/60"
+              class="fill-base-content/60 max-sm:text-xs"
               phx-no-format
             >{tick.value}</text>
             <%= for col <- @columns do %>
@@ -105,7 +105,7 @@ defmodule MydiaWeb.AdminDashboardLive.PlaysChartComponents do
               y={@chart_h + 16}
               text-anchor="middle"
               font-size="9"
-              class="fill-base-content/60"
+              class="fill-base-content/60 max-sm:text-xs"
             >
               {tick.label}
             </text>

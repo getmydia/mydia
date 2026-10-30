@@ -22,55 +22,12 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   @first {375, 812}
   @resized [{320, 640}, {414, 896}]
 
-  @all [320, 375, 414]
-
   # Accepted violations: {route, width, check, selector, reason}. A failing
   # run's `accept with:` line pastes in as-is (an integer width); entries for
   # the same defect at several widths may group them as a list, and known/0
   # expands both forms. Selectors replace database ids with `*` (see
   # MobileLayout.audit/2). Grouped by route.
-  @known [
-    # /admin/dashboard
-    {"/admin/dashboard", @all, :tiny_text, "#plays-chart text.fill-base-content/60",
-     "chart axis labels are 10px SVG text"},
-
-    # /admin/indexers
-    {"/admin/indexers", @all, :small_target,
-     "#cardigann-engine a.link.link-hover.text-xs.opacity-70",
-     "standalone text-xs docs link is 16px tall"},
-
-    # /admin/status
-    {"/admin/status", @all, :small_target, "#status-system a.link.link-hover",
-     "version link in the stat value is 19px tall"},
-
-    # /downloads, Issues tab
-    {"/downloads#issues", @all, :small_target, "#issue-open-*",
-     "text-xs path button is 16px tall"},
-    {"/downloads#issues", @all, :small_target, "#issues-* a.link.link-hover.font-medium.text-sm",
-     "title link is 20px tall"},
-
-    # /media/:id, /movies/:id and /tv/:id share the detail header
-    {"/media/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
-     "category badge button is 21px tall"},
-    {"/movies/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
-     "category badge button is 21px tall"},
-    {"/movies/:id#manual-search", @all, :small_target, "#main-column button.group.cursor-pointer",
-     "category badge button is 21px tall (still measured behind the dialog)"},
-
-    # /profile
-    {"/profile", @all, :small_target, "#phx-* label.label",
-     "Theme label (for the picker) is 21px tall"},
-
-    # /tv/:id
-    {"/tv/:id", @all, :small_target,
-     "#episode-*-grid button.flex-1.min-w-0.cursor-pointer.text-left",
-     "episode title button is 20px tall"},
-    {"/tv/:id", @all, :small_target,
-     "#episode-*-grid button.flex.items-center.gap-1.flex-shrink-0",
-     "episode status button is 20px tall"},
-    {"/tv/:id", @all, :small_target, "#main-column button.group.cursor-pointer",
-     "category badge button is 21px tall"}
-  ]
+  @known []
 
   setup do
     # As admin_mobile_scroll_test.exs: keep the remote access page off the network.

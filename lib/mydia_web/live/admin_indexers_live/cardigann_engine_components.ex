@@ -53,7 +53,11 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         >
           {if @open?, do: gettext("Done"), else: gettext("Change")}
         </button>
-        <a href={@docs_url} target="_blank" class="link link-hover text-xs opacity-70 ml-auto">
+        <a
+          href={@docs_url}
+          target="_blank"
+          class="link link-hover text-xs opacity-70 ml-auto max-sm:inline-flex max-sm:items-center max-sm:min-h-6"
+        >
           {gettext("How they compare")}
         </a>
       </div>

@@ -591,9 +591,9 @@ dialogs is follow-up work.
 Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`
 ids with `*`, so an entry keeps matching between runs whose rows get new ids.
 
-`@known` in the sweep holds accepted violations. Each is
+`@known` in the sweep holds accepted violations, and is empty now. Each entry is
 `{route, widths, check, selector, reason}`, where `widths` is one integer or a
-list (`@all` is 320, 375 and 414). The failure output prints the entry that would
+list (such as `[320, 375, 414]`). The failure output prints the entry that would
 accept a new violation, with one width; it pastes in unchanged. Adding one is
 a review decision, not a fix. An entry that stops matching fails the sweep, so
 remove it when the page is fixed. The checker's own tests are in
