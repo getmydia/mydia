@@ -47,8 +47,8 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
   @behaviour Mydia.Indexers.Adapter
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
-  alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Structs.PausedIndexer
+  alias Mydia.Indexers.Adapter.{Error, ProwlarrPrivacy}
+  alias Mydia.Indexers.Structs.{PausedIndexer, TrackerTerms}
 
   require Logger
 
@@ -108,7 +108,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
            retry: false
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
-        parse_search_response(body, config.name)
+        parse_search_response(body, config.name, privacy_by_indexer_id(config, body))
 
       {:ok, %Req.Response{status: 401}} ->
         {:error, Error.connection_failed("Authentication failed")}
@@ -264,22 +264,111 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
 
   defp parse_indexer_id(_), do: :error
 
-  defp parse_search_response(body, indexer_name) when is_list(body) do
+  defp parse_search_response(body, indexer_name, privacy) when is_list(body) do
     results =
       body
       |> Enum.map(fn item ->
-        parse_result_item(item, indexer_name)
+        parse_result_item(item, indexer_name, privacy)
       end)
       |> Enum.reject(&is_nil/1)
 
     {:ok, results}
   end
 
-  defp parse_search_response(_body, _indexer_name) do
+  defp parse_search_response(_body, _indexer_name, _privacy) do
     {:error, Error.parse_error("Invalid response format - expected array")}
   end
 
-  defp parse_result_item(item, indexer_name) do
+  # Search results do not say whether a tracker is private; Prowlarr's indexer
+  # list does. Read through ProwlarrPrivacy, so at most once an hour per
+  # connection, and only when there are results to mark. Test config turns the
+  # lookup off (`:prowlarr_privacy_lookup`) so every Bypass search stub does
+  # not also need an indexer-list stub; `options.privacy_lookup` overrides it.
+  defp privacy_by_indexer_id(config, [_ | _]) do
+    if privacy_lookup?(config) do
+      key =
+        {config.host, config.port, get_in(config, [:options, :base_path]),
+         :erlang.phash2(config.api_key)}
+
+      ProwlarrPrivacy.lookup(key, fn -> fetch_privacy(config) end)
+    else
+      %{}
+    end
+  end
+
+  defp privacy_by_indexer_id(_config, _body), do: %{}
+
+  defp privacy_lookup?(config) do
+    case get_in(config, [:options, :privacy_lookup]) do
+      nil -> Application.get_env(:mydia, :prowlarr_privacy_lookup, true)
+      value -> value == true
+    end
+  end
+
+  defp fetch_privacy(config) do
+    case Req.get(build_url(config, "/api/v1/indexer"),
+           headers: build_headers(config),
+           receive_timeout: 5_000,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_list(body) ->
+        privacy =
+          for %{"id" => id, "privacy" => privacy} <- body,
+              is_integer(id),
+              privacy in ["public", "private", "semiPrivate"],
+              into: %{},
+              do: {id, privacy != "public"}
+
+        {:ok, privacy}
+
+      other ->
+        Logger.debug("Prowlarr indexer privacy lookup failed: #{inspect(other, limit: 3)}")
+        :error
+    end
+  end
+
+  # Prowlarr's search JSON carries no volume factors or seeding minimums, only
+  # the flags it derives from the factors (IndexerFlag.cs: freeleech is a
+  # download factor of 0, halfleech 0.5, neutralleech 0 both ways,
+  # doubleupload an upload factor of 2). The explicit keys are read first in
+  # case a Prowlarr version adds them.
+  defp prowlarr_terms(item, privacy) do
+    flags = item |> Map.get("indexerFlags") |> List.wrap() |> Enum.map(&flag_name/1)
+
+    %TrackerTerms{
+      private?: Map.get(privacy, item["indexerId"]),
+      minimum_ratio: TrackerTerms.parse_float(item["minimumRatio"]),
+      minimum_seed_time: TrackerTerms.parse_seconds(item["minimumSeedTime"]),
+      download_volume_factor:
+        TrackerTerms.parse_float(item["downloadVolumeFactor"]) || flag_download_factor(flags),
+      upload_volume_factor:
+        TrackerTerms.parse_float(item["uploadVolumeFactor"]) || flag_upload_factor(flags)
+    }
+    |> TrackerTerms.nil_if_empty()
+  end
+
+  defp flag_name(flag) when is_binary(flag), do: String.downcase(flag)
+  defp flag_name(%{"name" => name}) when is_binary(name), do: String.downcase(name)
+  defp flag_name(_flag), do: nil
+
+  defp flag_download_factor(flags) do
+    cond do
+      "freeleech" in flags or "neutralleech" in flags -> 0.0
+      "halfleech" in flags -> 0.5
+      true -> nil
+    end
+  end
+
+  defp flag_upload_factor(flags) do
+    cond do
+      "neutralleech" in flags -> 0.0
+      "doubleupload" in flags -> 2.0
+      true -> nil
+    end
+  end
+
+  defp parse_result_item(item, indexer_name, privacy) do
     try do
       # Extract required fields
       title = item["title"]
@@ -388,7 +477,8 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
         usenet_date: usenet_date,
         nzb_completion: nzb_completion,
         nzb_grabs: nzb_grabs,
-        guid: guid
+        guid: guid,
+        terms: prowlarr_terms(item, privacy)
       )
     rescue
       error ->

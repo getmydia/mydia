@@ -197,6 +197,9 @@ defmodule Mydia.Application do
         # Last status each download client answered with, read when a page's
         # bounded poll times out. Table-only init, safe in every environment.
         Mydia.Downloads.ClientStatusCache,
+        # Which Prowlarr indexers are private. Table-only init, like the
+        # status cache above.
+        Mydia.Indexers.Adapter.ProwlarrPrivacy,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
         Mydia.Indexers.FlareSolverr.Gate,
