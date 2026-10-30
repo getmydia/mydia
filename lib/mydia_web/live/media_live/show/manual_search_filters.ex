@@ -42,13 +42,18 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :indexer_filters, :list, default: []
   attr :min_seeders, :integer, default: 0
 
-  @doc "The Filters button and active chips, below `lg`."
+  @doc """
+  The Filters button and active chips, below `lg`. The row scrolls sideways
+  on purpose when the chips outgrow it, so it carries `data-scroll-rail` for
+  the mobile layout sweep.
+  """
   def chip_bar(assigns) do
     assigns = assign(assigns, :active, active_count(assigns))
 
     ~H"""
     <div
       id="manual-search-chip-bar"
+      data-scroll-rail
       class="flex items-center gap-2 overflow-x-auto border-b border-base-300 bg-base-200/50 px-3 py-2 lg:hidden"
     >
       <button

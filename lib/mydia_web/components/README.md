@@ -527,3 +527,77 @@ section's own page. `MediaLive.Index.build_query_opts/1` passes
 `:exclude_categories` only when `assigns[:section]` is `nil`. A section's own
 query already filters to `category in [...]`, so subtracting the same
 categories again there would empty the section out.
+
+## Mobile layout sweep
+
+`test/mydia_web/features/mobile_layout_sweep_test.exs` visits every `live`
+route at 320, 375 and 414px wide, in its default state and in the states
+listed for it in `test/support/mobile_layout_manifest.ex`, and fails on six
+defects, measured by seven checks:
+
+| Check | Fails when |
+|---|---|
+| `page_overflow` | the document is wider than the viewport |
+| `inner_scroll` | an element scrolls sideways inside the page |
+| `escapes_viewport` | a visible element extends past the left or right edge (only the outermost one is reported) |
+| `small_target` | a button, link, input, select, summary, `role="button"` or `label[for]` is under 24x24px |
+| `overlapping_targets` | two tap targets overlap |
+| `clipped_text` | an `overflow: hidden` element cuts its text off without an ellipsis or line clamp |
+| `tiny_text` | text renders under 12px |
+
+All comparisons allow 1px. The audit hides scrollbars while it measures, so
+layout width equals the window width, as on a phone. After each load the sweep
+waits for CSS transitions to finish (a drawer sliding in is measured at rest)
+and asserts the browser is still on the visited path, so a redirect with a
+flash fails. Before each audit it asserts that the page content and the mobile
+dock have a box, so a blank or crashed page fails instead of passing every
+check.
+
+Feature tests render with a pinned fontconfig from devenv,
+`MYDIA_FEATURE_TEST_FONTCONFIG`, which `scripts/run-feature-tests.sh` exports as
+`FONTCONFIG_FILE`. Every sans font resolves to Liberation Sans, with DejaVu
+only as glyph fallback and for serif and monospace, so text widths, and so the sweep's results,
+match CI; a sweep run outside `./dev feature-test` is not comparable. The
+`/changelog` page renders content compiled from `priv/changelog`, so a new
+release entry changes what it measures.
+
+The checks skip things that are not defects: links inside running text (by
+computed `display: inline`), the body of a closed `<details>`, the off-screen
+drawer panel while it is closed, a small control laid over a much larger
+one (a select box on a poster card), and whatever an `overflow` ancestor cuts
+off (a span in a truncated line, a link scrolled out of its nav). A target inside a `position: fixed` layer
+such as the dock does not collide with page content scrolling under it; two
+fixed targets, or two flow targets, still can.
+
+A deliberate sideways carousel (poster rails, shelves, the manual search chip
+row) carries `data-scroll-rail` on its scrolling element: `poster_rail/1` in
+`poster_card_components.ex` and `chip_bar/1` in
+`media_live/show/manual_search_filters.ex` set it. The sweep skips
+`inner_scroll` and `escapes_viewport` inside it. Nothing else should carry it.
+
+A new `live` route fails `test/mydia_web/mobile_layout_manifest_test.exs`
+until it is added to the manifest or excluded with a reason. `/review` (a
+redirect), `/plugins/:slug`, `/plugins/:slug/activity`, `/setup`,
+`/play/:type/:id` and the ErrorTracker dashboard (`/admin/errors` and its
+detail pages) are excluded. Every page must pass at 320px.
+
+A manifest state is a name and steps (reload with a query, click, wait for a
+selector). Its results are keyed `route#state`, for example
+`/downloads#issues`, in failures and in `@known`. Only three states are swept
+today: the Downloads Issues tab, the mobile drawer open on `/`, and the manual
+search dialog on `/movies/:id`. Adding states for other pages' tabs and
+dialogs is follow-up work.
+
+Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`
+ids with `*`, so an entry keeps matching between runs whose rows get new ids.
+
+`@known` in the sweep holds accepted violations. Each is
+`{route, widths, check, selector, reason}`, where `widths` is one integer or a
+list (`@all` is 320, 375 and 414). `@chrome` holds entries that apply to every
+route and state but those in `@no_dock` (the mobile dock, which the open
+drawer hides), and the alphabet bar's letters on the
+library grids are added in code. The failure output prints the entry that would
+accept a new violation, with one width; it pastes in unchanged. Adding one is
+a review decision, not a fix. An entry that stops matching fails the sweep, so
+remove it when the page is fixed. The checker's own tests are in
+`test/mydia_web/features/mobile_layout_self_test.exs`.

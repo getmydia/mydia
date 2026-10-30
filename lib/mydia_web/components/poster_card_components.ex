@@ -88,6 +88,10 @@ defmodule MydiaWeb.PosterCardComponents do
   either end, so scrolling down a page of rails never stalls on one. LiveView
   only mounts a hook on an element with an id, hence the required `id`.
 
+  `data-scroll-rail` tells the mobile layout sweep
+  (`test/mydia_web/features/mobile_layout_sweep_test.exs`) that this element
+  scrolls sideways on purpose.
+
   ## Example
 
       <.poster_rail id="my-rail">
@@ -105,6 +109,7 @@ defmodule MydiaWeb.PosterCardComponents do
     <div
       id={@id}
       phx-hook="RailWheel"
+      data-scroll-rail
       class={[
         "flex gap-3 overflow-x-auto snap-x scroll-smooth scroll-px-3 p-3 -mx-3 -mt-3 -mb-1",
         @class

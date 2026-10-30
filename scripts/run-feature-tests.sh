@@ -246,6 +246,15 @@ run_tests() {
     # Ensure headless mode
     export WALLABY_HEADLESS="${WALLABY_HEADLESS:-true}"
 
+    # Render with the pinned fontconfig from devenv (Liberation Sans for every
+    # sans font, DejaVu as glyph fallback), so text
+    # widths (and the mobile layout sweep's results) match on every host.
+    # Set here rather than in the shell so only the test browser is affected.
+    if [[ -n "${MYDIA_FEATURE_TEST_FONTCONFIG:-}" ]]; then
+        export FONTCONFIG_FILE="$MYDIA_FEATURE_TEST_FONTCONFIG"
+        log_info "Using pinned fontconfig: $FONTCONFIG_FILE"
+    fi
+
     # Setup database if needed
     if [[ "${SKIP_DB_SETUP:-}" != "true" ]]; then
         log_info "Setting up test database..."

@@ -105,8 +105,8 @@ red because `DashboardLive.Index` fires trending lookups on connected mount
 Two traps sit between a fresh worktree and a working Wallaby run, and both exit 0
 while doing nothing useful.
 
-A path argument drops the tag filter. `scripts/run-feature-tests.sh` around lines
-257-261 runs `mix test "${test_args[@]}"` with no `--only feature` when arguments
+A path argument drops the tag filter. `scripts/run-feature-tests.sh`'s
+`run_tests` runs `mix test "${test_args[@]}"` with no `--only feature` when arguments
 are present, so `./dev feature-test <path>` runs with `:feature` still excluded:
 0 tests, exit 0, printed as `All tests have been excluded.` Pass the tag
 yourself:
@@ -137,6 +137,19 @@ Before trusting any feature-test result in a new worktree, run
 
 and confirm 1 test, 0 failures. That single run proves the tag filter, chromedriver and the asset build
 at once.
+
+Feature tests render with a pinned fontconfig from devenv,
+`MYDIA_FEATURE_TEST_FONTCONFIG`, which `scripts/run-feature-tests.sh` exports as
+`FONTCONFIG_FILE` and logs as `Using pinned fontconfig`. Every sans font
+resolves to Liberation Sans, with DejaVu only as glyph fallback and for serif
+and monospace, so text widths, and so geometry results such as the mobile layout sweep's, match
+CI. A run outside `./dev feature-test` uses the host's fonts and is not
+comparable.
+
+The mobile layout sweep (`test/mydia_web/features/mobile_layout_sweep_test.exs`)
+measures computed layout, so it is only meaningful with built assets: rebuild
+them as above after changing any class string before trusting its result. What
+it checks is in `lib/mydia_web/components/README.md`, "Mobile layout sweep".
 
 ### After a rebase, a clean compile proves nothing
 
