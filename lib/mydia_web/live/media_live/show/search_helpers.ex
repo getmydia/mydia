@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Quality.Sources
   alias Mydia.Settings.CustomFormats
+  alias MydiaWeb.MediaLive.Show.TrackerLimitNote
 
   def generate_result_id(%SearchResult{} = result) do
     # Generate a unique ID based on the download URL and indexer
@@ -67,12 +68,16 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   def stream_prepared_results(socket, sorted_results) do
     states = Map.get(socket.assigns, :result_states, %{})
     prior_attempts = Map.get(socket.assigns, :prior_attempts, %{})
+    grab_caps = Map.get(socket.assigns, :grab_caps, %{})
 
     prepared =
       sorted_results
       |> prepare_for_stream()
       |> Enum.map(fn result ->
-        result = put_prior_attempt(result, prior_attempts)
+        result =
+          result
+          |> put_prior_attempt(prior_attempts)
+          |> TrackerLimitNote.put_limit_reason(grab_caps)
 
         case Map.get(states, result.download_url) do
           nil -> result

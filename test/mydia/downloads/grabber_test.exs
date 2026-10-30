@@ -94,8 +94,9 @@ defmodule Mydia.Downloads.GrabberTest do
                Grabber.run_grab(optimistic, sr, media_item_id: movie.id, manual: true)
 
       assert Repo.get(Download, optimistic.id) == nil
-      assert_receive {:grab_duplicate, %{download_url: url, reason: :duplicate_download}}
-      assert url == sr.download_url
+      assert_receive {:grab_duplicate, %{download_id: id, reason: :duplicate_download} = payload}
+      assert id == optimistic.id
+      refute Map.has_key?(payload, :download_url)
     end
 
     test "carries :already_have_files when files on disk are the blocker" do
@@ -159,8 +160,9 @@ defmodule Mydia.Downloads.GrabberTest do
       assert reloaded.download_client == client.name
       assert is_binary(reloaded.download_client_id)
 
-      assert_receive {:grab_completed, %{download_id: download_id}}
+      assert_receive {:grab_completed, %{download_id: download_id} = payload}
       assert download_id == optimistic.id
+      assert Map.keys(payload) == [:download_id]
     end
   end
 end

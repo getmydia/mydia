@@ -53,6 +53,9 @@ defmodule Mydia.Indexers.SearchResult do
       Unlike the four fields above it comes from the database rather than a
       grab in this dialog, and is written by
       `MydiaWeb.MediaLive.Show.SearchHelpers.put_prior_attempt/2`.
+    * `:limit_reason` - why this release's tracker is at its daily grab cap,
+      or `nil`; written by
+      `MydiaWeb.MediaLive.Show.TrackerLimitNote.put_limit_reason/2`.
 
   ## Quality Information
 
@@ -117,7 +120,8 @@ defmodule Mydia.Indexers.SearchResult do
           downloaded: boolean(),
           duplicate: boolean(),
           grab_failed: String.t() | nil,
-          prior_attempt: Mydia.Downloads.PriorAttempt.t() | nil
+          prior_attempt: Mydia.Downloads.PriorAttempt.t() | nil,
+          limit_reason: String.t() | nil
         }
 
   @enforce_keys [:title, :size, :seeders, :leechers, :download_url, :indexer]
@@ -154,7 +158,8 @@ defmodule Mydia.Indexers.SearchResult do
     downloaded: false,
     duplicate: false,
     grab_failed: nil,
-    prior_attempt: nil
+    prior_attempt: nil,
+    limit_reason: nil
   ]
 
   @info_url_schemes ~w(http https)

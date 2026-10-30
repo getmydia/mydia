@@ -18,6 +18,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Indexers.SearchResult
+  alias MydiaWeb.Live.SearchResultRef
+  alias MydiaWeb.MediaLive.Show.TrackerLimitNote
 
   # One grid template for the header row and every result row from `lg`, so
   # the columns line up. Below `lg` rows use daisyUI's default list-row flow
@@ -230,6 +232,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       <%= if reason = Map.get(@result, :grab_failed) || visible_prior_reason(@result) do %>
         <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
       <% end %>
+      <TrackerLimitNote.limit_note id={"#{@id}-limit"} reason={Map.get(@result, :limit_reason)} />
       <.score_panel :if={@profile?} id={"#{@id}-score-breakdown"}>
         <.score_row
           label={gettext("Resolution")}
@@ -353,13 +356,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           <button
             class="btn btn-primary max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
             phx-click="download_from_search"
-            phx-value-download-url={@result.download_url}
-            phx-value-title={@result.title}
-            phx-value-indexer={@result.indexer}
-            phx-value-size={@result.size}
-            phx-value-seeders={@result.seeders || 0}
-            phx-value-leechers={@result.leechers || 0}
-            phx-value-quality={get_search_quality_badge(@result)}
+            phx-value-ref={SearchResultRef.ref(@result)}
             title={gettext("Download this release")}
           >
             <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>
@@ -508,13 +505,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     <button
       class="btn btn-error max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
       phx-click="download_from_search"
-      phx-value-download-url={@result.download_url}
-      phx-value-title={@result.title}
-      phx-value-indexer={@result.indexer}
-      phx-value-size={@result.size}
-      phx-value-seeders={@result.seeders || 0}
-      phx-value-leechers={@result.leechers || 0}
-      phx-value-quality={get_search_quality_badge(@result)}
+      phx-value-ref={SearchResultRef.ref(@result)}
       title={retry_title(@blacklisted, @reason)}
     >
       <.icon name="hero-exclamation-triangle" class="w-4 h-4" />

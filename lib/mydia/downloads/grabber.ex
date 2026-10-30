@@ -10,9 +10,14 @@ defmodule Mydia.Downloads.Grabber do
 
   Outcomes are broadcast on the `"downloads"` PubSub topic:
 
-    * `{:grab_completed, %{download_id: id, download_url: url}}`
-    * `{:grab_failed, %{download_id: id, download_url: url, reason: reason}}`
-    * `{:grab_duplicate, %{download_url: url, reason: reason}}`
+    * `{:grab_completed, %{download_id: id}}`
+    * `{:grab_failed, %{download_id: id, reason: reason}}`
+    * `{:grab_duplicate, %{download_id: id, reason: reason}}`
+
+  Events carry the download id, never the URL: a release URL can carry the
+  tracker passkey, and PubSub reaches every subscriber. A duplicate's id
+  names a row that has already been deleted; subscribers use it only to find
+  the search row they started.
 
   The duplicate `reason` is `:duplicate_download` when a download is already in
   flight, or `:already_have_files` when the files are already on disk.
@@ -106,7 +111,7 @@ defmodule Mydia.Downloads.Grabber do
         # different things to an operator (something is in flight vs. we already
         # have the files), and collapsing them is what made the original
         # season-pack incident so hard to read.
-        broadcast({:grab_duplicate, %{download_url: download.download_url, reason: reason}})
+        broadcast({:grab_duplicate, %{download_id: download.id, reason: reason}})
 
         :duplicate
 
@@ -130,9 +135,7 @@ defmodule Mydia.Downloads.Grabber do
       {:ok, download} ->
         emit_initiated_event(download, opts)
 
-        broadcast(
-          {:grab_completed, %{download_id: download.id, download_url: download.download_url}}
-        )
+        broadcast({:grab_completed, %{download_id: download.id}})
 
         :ok
 
@@ -201,13 +204,14 @@ defmodule Mydia.Downloads.Grabber do
 
   defp fail_grab(download, reason) do
     message = format_error(reason)
-    Logger.warning("Grab failed for #{download.title}: #{inspect(reason)}")
+
+    Logger.warning("Grab failed for #{download.title}: #{inspect(reason)}",
+      download_id: download.id
+    )
+
     History.update_download(download, %{error_message: message})
 
-    broadcast(
-      {:grab_failed,
-       %{download_id: download.id, download_url: download.download_url, reason: message}}
-    )
+    broadcast({:grab_failed, %{download_id: download.id, reason: message}})
 
     :error
   end

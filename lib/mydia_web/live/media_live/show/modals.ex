@@ -746,7 +746,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 {gettext("Source URL")}
               </h4>
               <p class="text-xs font-mono bg-base-200 p-3 rounded-box break-all">
-                {@download_details.download_url}
+                {Mydia.Downloads.Client.Helpers.redact_url(@download_details.download_url)}
               </p>
             </div>
           <% end %>

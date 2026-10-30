@@ -9,7 +9,7 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Downloads
   alias Mydia.Settings
   alias Mydia.Media.AddDefaults
-  alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.{Helpers.MediaAddHelpers, SearchResultRef}
   alias MydiaWeb.OperationErrors
   alias MydiaWeb.SearchLive.{ReleaseAdd, ResultType}
 
@@ -388,8 +388,8 @@ defmodule MydiaWeb.SearchLive.Index do
   # Always opens, even when the type is known: the destination library is a
   # choice the user makes here, and skipping the modal would make it for them
   # (#1104).
-  def handle_event("show_download_modal", %{"download_url" => download_url}, socket) do
-    case Map.get(socket.assigns.search_results_map, download_url) do
+  def handle_event("show_download_modal", %{"ref" => ref}, socket) do
+    case SearchResultRef.find(socket.assigns.search_results_map, ref) do
       nil ->
         {:noreply, socket}
 
@@ -476,9 +476,9 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  def handle_event("show_detail", %{"download_url" => download_url}, socket) do
-    # Find the search result by download URL
-    selected_result = Map.get(socket.assigns.search_results_map, download_url)
+  def handle_event("show_detail", %{"ref" => ref}, socket) do
+    # Rows send a SearchResultRef; the URL can carry a tracker passkey.
+    selected_result = SearchResultRef.find(socket.assigns.search_results_map, ref)
 
     {:noreply,
      socket

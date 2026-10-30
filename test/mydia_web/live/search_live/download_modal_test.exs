@@ -11,6 +11,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Settings
+  alias MydiaWeb.Live.SearchResultRef
 
   @unparseable "invented readme"
 
@@ -92,11 +93,37 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     view
   end
 
+  test "rows and the detail modal never carry a passkey", %{conn: conn} do
+    r = %{
+      result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+      | download_url:
+          "https://tracker.example.test/dl/42?passkey=feedface0123&torrent_pass=cafe99",
+        indexer: "Velvet Lantern"
+    }
+
+    view = page_with(conn, [r])
+    refute render(view) =~ "feedface0123"
+
+    view |> element(~s(td[phx-click="show_detail"])) |> render_click()
+    html = render(view)
+
+    assert has_element?(
+             view,
+             ~s(button[phx-click="show_download_modal"][phx-value-ref="#{SearchResultRef.ref(r)}"])
+           )
+
+    refute html =~ "passkey="
+    refute html =~ "torrent_pass="
+
+    view |> element(~s(.modal button[phx-click="show_download_modal"])) |> render_click()
+    assert has_element?(view, "#download-modal")
+  end
+
   test "opens the modal even when the category is known", %{conn: conn, movies: movies} do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     assert has_element?(view, "#download-modal #download-config-form")
 
@@ -116,7 +143,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", nil)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     refute has_element?(view, ~s(option[value="#{series.id}"]))
 
@@ -137,7 +164,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     r = result(@unparseable, nil)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     assert has_element?(view, "#download-config-form")
     refute has_element?(view, ~s(#download-config-form input[name=media_type][checked]))
@@ -149,7 +176,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     assert has_element?(view, "#download-modal")
     refute has_element?(view, ~s(input[name="config[search_on_add]"]))
@@ -159,7 +186,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
     assert has_element?(view, "#download-modal")
     render_click(view, "close_download_modal", %{})
 
@@ -172,7 +199,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
     view = page_with(conn, [r])
 
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     assert has_element?(view, "#download-modal")
     refute has_element?(view, ~s(#download-config-form input[name=media_type][checked]))
