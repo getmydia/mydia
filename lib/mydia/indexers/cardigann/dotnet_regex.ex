@@ -16,8 +16,9 @@ defmodule Mydia.Indexers.Cardigann.DotnetRegex do
     pattern
     # An odd run of backslashes before u is an escape; an even one is literal.
     |> then(&Regex.replace(~r/(?<!\\)((?:\\\\)*)\\u([0-9A-Fa-f]{4})/, &1, "\\1\\\\x{\\2}"))
-    |> then(&Regex.replace(~r/\\p\{Is(\w+)\}/, &1, "\\p{\\1}"))
-    |> String.replace("(?P<", "(?<")
+    |> then(&Regex.replace(~r/(?<!\\)((?:\\\\)*)\\p\{Is(\w+)\}/, &1, "\\1\\\\p{\\2}"))
+    # An escaped paren (`\(?P<`) is literal text, not a group.
+    |> then(&Regex.replace(~r/(?<!\\)((?:\\\\)*)\(\?P</, &1, "\\1(?<"))
   end
 
   @spec compile(String.t()) :: {:ok, Regex.t()} | {:error, term()}

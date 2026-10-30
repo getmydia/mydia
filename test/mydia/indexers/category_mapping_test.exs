@@ -333,5 +333,21 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       assert CategoryMapping.map_site_category_desc_to_torznab("  ", @desc_mappings) == nil
       assert CategoryMapping.map_site_category_desc_to_torznab(nil, @desc_mappings) == nil
     end
+
+    test "skips an entry that is not a map" do
+      mappings = ["garbage", %{"id" => 2311, "cat" => "PC/ISO", "desc" => "Lantern Linux"}]
+
+      assert CategoryMapping.map_site_category_desc_to_torznab("lantern linux", mappings) == 4020
+      assert CategoryMapping.map_site_category_desc_to_torznab("nothing", ["garbage"]) == nil
+    end
+  end
+
+  describe "map_site_category_to_torznab/2 with malformed entries" do
+    test "skips an entry that is not a map" do
+      mappings = ["garbage", %{"id" => 42, "cat" => "Movies/HD"}]
+
+      assert CategoryMapping.map_site_category_to_torznab("42", mappings) == 2040
+      assert CategoryMapping.map_site_category_to_torznab("7", ["garbage"]) == nil
+    end
   end
 end

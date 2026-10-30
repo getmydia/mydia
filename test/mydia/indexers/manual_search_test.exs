@@ -36,4 +36,26 @@ defmodule Mydia.Indexers.ManualSearchTest do
     assert_received {:indexer_search_started, "s2", [_ | _]}
     assert_received {:indexer_progress, "s2", _progress}
   end
+
+  test "an indexer id scopes the search to that indexer" do
+    cardigann_definition_fixture(%{enabled: true, type: "public"})
+
+    assert {:ok, [], []} = ManualSearch.run("Copper Lantern", 0, self(), "s3")
+    ids = collect_searched_ids()
+    assert length(ids) == 2
+
+    [selected | _] = ids
+    assert {:ok, [], []} = ManualSearch.run("Copper Lantern", 0, self(), "s4", [selected])
+
+    assert collect_searched_ids() == [selected]
+  end
+
+  defp collect_searched_ids(acc \\ []) do
+    receive do
+      {:stub_cardigann_search, _query, id} -> collect_searched_ids([id | acc])
+      {:stub_cardigann_opts, _opts} -> collect_searched_ids(acc)
+    after
+      50 -> acc |> Enum.reverse() |> Enum.sort()
+    end
+  end
 end

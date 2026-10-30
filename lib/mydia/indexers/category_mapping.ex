@@ -446,9 +446,13 @@ defmodule Mydia.Indexers.CategoryMapping do
 
     # Find matching category mapping
     mapping =
-      Enum.find(category_mappings, fn mapping ->
-        mapping_id = Map.get(mapping, "id") || Map.get(mapping, :id)
-        to_string(mapping_id) == site_id_str || mapping_id == site_id_int
+      Enum.find(category_mappings, fn
+        mapping when is_map(mapping) ->
+          mapping_id = Map.get(mapping, "id") || Map.get(mapping, :id)
+          to_string(mapping_id) == site_id_str || mapping_id == site_id_int
+
+        _ ->
+          false
       end)
 
     case mapping do
@@ -481,12 +485,14 @@ defmodule Mydia.Indexers.CategoryMapping do
 
   def map_site_category_desc_to_torznab(_desc, _mappings), do: nil
 
-  defp category_for_desc(mapping, needle) do
+  defp category_for_desc(mapping, needle) when is_map(mapping) do
     mapping_desc = Map.get(mapping, "desc") || Map.get(mapping, :desc)
 
     if is_binary(mapping_desc) and String.downcase(String.trim(mapping_desc)) == needle,
       do: category_id_from_name(Map.get(mapping, "cat") || Map.get(mapping, :cat))
   end
+
+  defp category_for_desc(_mapping, _needle), do: nil
 
   defp parse_category_id(id) when is_integer(id), do: id
 
