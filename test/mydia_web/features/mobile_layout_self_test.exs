@@ -47,6 +47,15 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     {:overlapping_targets,
      ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:130px;width:32px;height:32px">s</button></div>|,
      ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:8px;width:32px;height:32px">s</button></div>|},
+    # The two exemptions above stay narrow: two targets in different fixed
+    # layers (a floating button over the dock) still collide...
+    {:overlapping_targets,
+     ~s|<div style="position:fixed;top:0;left:0"><button style="width:40px;height:40px">a</button></div><div style="position:fixed;top:0;left:20px"><button style="width:40px;height:40px">b</button></div>|,
+     ~s|<div style="position:fixed;top:0;left:0"><button style="width:40px;height:40px">a</button></div><div style="position:fixed;top:0;left:60px"><button style="width:40px;height:40px">b</button></div>|},
+    # ...and so do two stacked targets of the same size.
+    {:overlapping_targets,
+     ~s|<div style="position:relative;height:40px"><button style="position:absolute;top:0;left:0;width:40px;height:40px">a</button><button style="position:absolute;top:0;left:0;width:40px;height:40px">b</button></div>|,
+     ~s|<div style="position:relative;height:200px"><a href="#" style="display:block;width:150px;height:200px">card</a><button style="position:absolute;top:8px;left:8px;width:32px;height:32px">s</button></div>|},
     # A link inside a sentence of helper text in a <div> (Devices' "Remote
     # access is turned off" note) is WCAG 2.5.8's inline exception.
     {:small_target, ~s|<div style="font-size:12px"><a href="#">Enable it</a></div>|,

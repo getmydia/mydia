@@ -23,15 +23,17 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
 
   @all [320, 375, 414]
 
-  # Accepted violations: {route, widths, check, selector, reason}, expanded to
-  # one Report entry per width by known/1. Selectors replace database ids with
-  # `*` (see MobileLayout.audit/2). Grouped by route.
+  # Accepted violations: {route, width, check, selector, reason}. A failing
+  # run's `accept with:` line pastes in as-is (an integer width); entries for
+  # the same defect at several widths may group them as a list, and known/1
+  # expands both forms. Selectors replace database ids with `*` (see
+  # MobileLayout.audit/2). Grouped by route.
   @known [
     # /activity
-    {"/activity", [320], :escapes_viewport,
+    {"/activity", 320, :escapes_viewport,
      "#activity-date-filter button.btn.join-item.btn-sm.gap-1.5",
      "daisyUI join of date range buttons does not wrap"},
-    {"/activity", [320], :page_overflow, "html",
+    {"/activity", 320, :page_overflow, "html",
      "daisyUI join of date range buttons does not wrap"},
 
     # /admin/dashboard
@@ -141,7 +143,9 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
      "category badge button is 21px tall"},
 
     # /movies, /sections/:id and /tv share the library grid (alphabet bar
-    # letters are added by known/1)
+    # letters are added by known/1). Only letters with titles behind them are
+    # buttons, so the #alpha-jump-q/t/w entries follow the seeded titles'
+    # initials (MobileLayoutSeed) and move if those titles change.
     {"/movies", @all, :small_target, "#alpha-jump-q", "alphabet bar letter is 20x13"},
     {"/movies", @all, :small_target, "#alpha-jump-t", "alphabet bar letter is 20x13"},
     {"/movies", @all, :tiny_text, "#grid-item-* span.badge.inline-flex.items-center.badge-xs",
@@ -247,7 +251,7 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
 
     page =
       for {route, widths, check, selector, reason} <- @known,
-          width <- widths,
+          width <- List.wrap(widths),
           do: {route, width, check, selector, reason}
 
     chrome =
@@ -287,12 +291,12 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     load.()
 
     for {width, height} <- [@first | @resized],
-        %Violation{} = v <- audit_at(session, width, height) do
+        %Violation{} = v <- audit_at(session, route, state, width, height) do
       %Violation{v | route: route, width: width, state: state}
     end
   end
 
-  defp audit_at(session, width, height) do
+  defp audit_at(session, route, state, width, height) do
     Wallaby.Browser.resize_window(session, width, height)
     # One frame for layout to settle after the resize.
     eval_js(
@@ -300,7 +304,27 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
       "return new Promise(function (r) { requestAnimationFrame(function () { r(true); }); });"
     )
 
+    assert_rendered(session, route, state, width)
     audit(session)
+  end
+
+  # An empty or blank page has nothing to measure and would pass every check,
+  # so each audit first proves the layout's <main> holds a content box with
+  # height and the dock has a box. (The [data-phx-main] root itself can be
+  # display: contents, so its own rect says nothing.)
+  @rendered_js """
+  var main = document.querySelector("[data-phx-main] main");
+  var dock = document.getElementById("mobile-dock");
+  if (!main || !dock || dock.getBoundingClientRect().height === 0) return false;
+  for (var c = main.firstElementChild; c; c = c.nextElementSibling) {
+    if (c.getBoundingClientRect().height > 0) return true;
+  }
+  return false;
+  """
+
+  defp assert_rendered(session, route, state, width) do
+    assert eval_js(session, @rendered_js),
+           "#{route}#{if state, do: "#" <> state} @#{width}: the page content or the mobile dock has no box"
   end
 
   defp visit_at(session, url), do: visit_liveview(session, url)

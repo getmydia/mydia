@@ -90,14 +90,15 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       if (el.checkVisibility && !el.checkVisibility()) return false;
       return true;
     }
-    // The fixed or sticky ancestor an element moves with, or null. Page
-    // content scrolls under a fixed dock or sticky header by design.
-    function layer(el) {
+    // Whether an element sits in a position: fixed layer. Page content
+    // scrolls under a fixed dock by design, so a fixed target over a flow
+    // target is not a collision. Two fixed targets (a FAB over the dock) can
+    // collide, and so can sticky and flow content, so neither is exempt.
+    function inFixed(el) {
       for (var a = el; a && a !== document.body; a = a.parentElement) {
-        var p = getComputedStyle(a).position;
-        if (p === 'fixed' || p === 'sticky') return a;
+        if (getComputedStyle(a).position === 'fixed') return true;
       }
-      return null;
+      return false;
     }
     // Measures the glyphs, not scrollWidth: an unloaded lazy <img> showing its
     // alt text, or a badge border, overflows a box without hiding any text.
@@ -144,6 +145,10 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
     function within(inner, outer) {
       return inner.left >= outer.left - TOL && inner.right <= outer.right + TOL &&
              inner.top >= outer.top - TOL && inner.bottom <= outer.bottom + TOL;
+    }
+    function overlay(inner, outer) {
+      return within(inner, outer) &&
+             inner.width * inner.height < (outer.width * outer.height) / 2;
     }
     function inRail(el) { return !!el.closest('[data-scroll-rail]'); }
     function hasOwnText(el) {
@@ -218,7 +223,7 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
         if (!inlineLink(el) && (r.width < MIN_TARGET - TOL || r.height < MIN_TARGET - TOL)) {
           push('small_target', el, Math.round(r.width) + 'x' + Math.round(r.height));
         }
-        targets.push({el: el, r: r, layer: layer(el)});
+        targets.push({el: el, r: r, fixed: inFixed(el)});
       }
 
       // 5. clipped_text
@@ -242,10 +247,11 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       for (var b = a + 1; b < targets.length; b++) {
         var A = targets[a], B = targets[b];
         if (A.el.contains(B.el) || B.el.contains(A.el)) continue;
-        if (A.layer !== B.layer) continue;
+        if (A.fixed !== B.fixed) continue;
         // A control laid over a card (select box, menu button) sits wholly
-        // inside the card's link: a deliberate overlay, not a collision.
-        if (within(A.r, B.r) || within(B.r, A.r)) continue;
+        // inside a much larger card link: a deliberate overlay, not a
+        // collision. Two stacked targets of similar size still collide.
+        if (overlay(A.r, B.r) || overlay(B.r, A.r)) continue;
         var w = Math.min(A.r.right, B.r.right) - Math.max(A.r.left, B.r.left);
         var h = Math.min(A.r.bottom, B.r.bottom) - Math.max(A.r.top, B.r.top);
         if (w > TOL && h > TOL) {
