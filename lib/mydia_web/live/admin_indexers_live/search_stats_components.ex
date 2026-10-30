@@ -51,10 +51,12 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
           type="button"
           id={stats_id(@indexer_id, summary)}
           class="stats stats-horizontal bg-base-200 rounded-box max-w-full overflow-x-auto text-left transition-colors hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          data-scroll-ok="four stats scroll sideways on phones"
           title={gettext("Show recent failures")}
           phx-click="show_search_failures"
           phx-value-id={@indexer_id}
         >
+          <span :if={summary.engine} class="sr-only">{engine_label(summary.engine)}</span>
           <span class="stat py-2 px-4">
             <span class="stat-title text-xs">{gettext("Success")}</span>
             <span
