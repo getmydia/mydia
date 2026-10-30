@@ -116,12 +116,22 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
         {:ok, %{cookies: session.cookies}}
 
       {:needs_input, _challenge} ->
-        set_status(definition, "needs_login")
-        {:error, needs_login_error(definition.name)}
+        park(definition)
 
       {:error, _} = error ->
         error
     end
+  end
+
+  @doc """
+  Moves a definition to `needs_login` and returns the `:login_required` error
+  searches report. For a login that needs a person; the wasm adapter calls it
+  too, so both engines park such a definition the same way.
+  """
+  @spec park(CardigannDefinition.t()) :: {:error, Error.t()}
+  def park(%CardigannDefinition{} = definition) do
+    set_status(definition, "needs_login")
+    {:error, needs_login_error(definition.name)}
   end
 
   defp needs_login_error(name),

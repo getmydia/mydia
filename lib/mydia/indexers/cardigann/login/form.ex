@@ -231,6 +231,17 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
       else: url <> if(String.contains?(url, "?"), do: "&", else: "?") <> URI.encode_query(query)
   end
 
+  @doc """
+  True when a form login pauses for a person: an image captcha, or inputs that
+  read a one-time 2FA code. The same rule decides when `begin/1` returns a
+  `Challenge`.
+  """
+  @spec needs_person?(map() | nil) :: boolean()
+  def needs_person?(%{method: "form"} = login),
+    do: match?(%{type: "image"}, login[:captcha]) or twofa_key(login[:inputs] || %{}) != nil
+
+  def needs_person?(_login), do: false
+
   defp twofa_key(inputs) do
     Enum.find(@twofa_keys, fn key -> references_config?(inputs, key) end)
   end

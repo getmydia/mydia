@@ -58,7 +58,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           # parity harness: a Parity.Replay answering in place of the network
           optional(:replay) => pid(),
           # parity harness: a Parity.Recorder collecting the live exchanges
-          optional(:record) => pid()
+          optional(:record) => pid(),
+          # set to 1 when a request goes to one of these login paths
+          optional(:login_watch) => %{paths: [String.t()], hit: :atomics.atomics_ref()}
         }
 
   @type header :: %{name: String.t(), value: String.t()}
@@ -170,6 +172,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   end
 
   def exchange(ctx, req) do
+    note_login(ctx, req)
     :ok = RateLimiter.throttle(ctx.definition_id, ctx.request_delay_ms)
     started = System.monotonic_time(:microsecond)
 
@@ -191,6 +194,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   defp replay_error_kind(kind) when kind in [:timeout, :connect, :blocked], do: kind
   defp replay_error_kind(kind) when kind in [:closed, :econnrefused, :nxdomain], do: :connect
   defp replay_error_kind(_kind), do: :other
+
+  # Prowlarr's search swallows a failed login into an empty page. The adapter
+  # asks to be told when a call reached the login form (`:login_watch`), so it
+  # can tell "the session expired and the captcha stopped the login" from "no
+  # results".
+  defp note_login(%{login_watch: %{paths: paths, hit: hit}}, req) do
+    path = URI.parse(req.url).path || "/"
+    if Enum.any?(paths, &String.ends_with?(path, &1)), do: :atomics.put(hit, 1, 1)
+    :ok
+  end
+
+  defp note_login(_ctx, _req), do: :ok
 
   defp maybe_record(%{record: recorder}, req, result) when is_pid(recorder),
     do: Recorder.record(recorder, RequestKey.new(req.method, req.url, req.body), result)

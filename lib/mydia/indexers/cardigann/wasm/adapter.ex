@@ -62,6 +62,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   instead. `login/2` is where the failure surfaces
   (`{:error, %Error{type: :authentication_failed}}`).
 
+  A login that needs a person (an image captcha or a 2FA code, per
+  `Login.needs_person?/1`) is the exception, since its failure inside a search
+  is certain: with no stored session the definition is parked in `needs_login`
+  without calling the guest, and a search that reached the login form and came
+  back empty parks it too, as the built-in engine does. The Indexers page logs
+  in with the built-in login code, and the session it stores is the one this
+  adapter reads.
+
   Setting values are credentials and are never logged.
   """
 
@@ -70,7 +78,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.{AdapterSupport, Links}
+  alias Mydia.Indexers.Cardigann.{AdapterSupport, Links, Login}
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.Wasm.Engine
 
@@ -140,9 +148,61 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     with {:ok, definition, doc} <- load(config),
          :ok <- check_login_needed(definition, doc),
          session = stored_session(definition),
-         {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
+         parsed = parse_links(definition),
+         :ok <- check_person_login(parsed, definition, session),
+         watch = login_watch(parsed),
+         opts = if(watch, do: Keyword.put(opts, :login_watch, watch), else: opts),
+         {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts),
+         :ok <- check_swallowed_login(watch, out, definition) do
       if out.session_changed, do: persist_session(definition, out.session, session)
       {:ok, apply_search_filters(out.releases, opts)}
+    end
+  end
+
+  # ── Logins that need a person ─────────────────────────────────────────────
+
+  # Prowlarr's search logs in by itself and swallows a failed login into an
+  # empty page. For a login that needs a person (an image captcha, a one-time
+  # 2FA code) that failure is certain, so such a definition is handled as the
+  # built-in engine handles it: with no stored session it is never searched and
+  # is parked in `needs_login`, and a search that reached the login form and
+  # came back empty means the session expired and the login stopped at the
+  # captcha, which parks it too. A person then logs in from the Indexers page.
+  defp check_person_login(parsed, definition, %{cookies: cookies}) do
+    if person_login?(parsed) and map_size(cookies) == 0,
+      do: SessionManager.park(definition),
+      else: :ok
+  end
+
+  defp check_swallowed_login(%{hit: hit}, %{releases: []}, definition) do
+    if :atomics.get(hit, 1) == 1 do
+      Logger.info(
+        "Cardigann #{definition.indexer_id}: session rejected and the login needs a person"
+      )
+
+      CardigannAuth.invalidate_session(definition.id)
+      SessionManager.park(definition)
+    else
+      :ok
+    end
+  end
+
+  defp check_swallowed_login(_watch, _out, _definition), do: :ok
+
+  defp person_login?(nil), do: false
+  defp person_login?(parsed), do: Login.needs_person?(parsed)
+
+  # The login form's paths, for HostHttp to flag a request to. A templated path
+  # cannot be matched statically and is left out.
+  defp login_watch(parsed) do
+    if person_login?(parsed) do
+      paths =
+        [parsed.login.path, parsed.login.submitpath]
+        |> Enum.filter(&(is_binary(&1) and &1 != "" and not String.contains?(&1, "{{")))
+        |> Enum.map(&("/" <> (&1 |> String.split("?") |> hd() |> String.trim_leading("/"))))
+        |> Enum.reject(&(&1 == "/"))
+
+      if paths != [], do: %{paths: paths, hit: :atomics.new(1, [])}
     end
   end
 
@@ -434,10 +494,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   defp run(call, definition, config, doc, opts) do
     Engine.call(
       call,
-      ctx(definition, config, doc),
+      definition |> ctx(config, doc) |> put_login_watch(opts[:login_watch]),
       Keyword.get(opts, :timeout, @default_timeout_ms)
     )
   end
+
+  defp put_login_watch(ctx, nil), do: ctx
+  defp put_login_watch(ctx, watch), do: Map.put(ctx, :login_watch, watch)
 
   defp ctx(definition, config, doc) do
     %{
