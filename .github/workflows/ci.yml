@@ -475,12 +475,19 @@ jobs:
       # is up to date!" against the unpatched Wasmex and fail on functions the
       # patch adds. Hence the patches hash sits in the restore-keys prefix too.
       # v3 ensures no entry from the older key layouts can match.
-      - name: Cache Dialyzer PLTs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # The key that matched exactly never re-saved, so a PLT that dialyxir
+      # repaired on load (1 module removed, 149 added, 3.7 minutes, every run
+      # on 2026-10-30) was thrown away and repaired again next time. The save
+      # key now ends in a hash of the PLT itself: a repaired PLT is saved under
+      # a new key, an unchanged one is a no-op, and restore takes the newest.
+      # Only master saves.
+      - name: Restore Dialyzer PLTs
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: priv/plts
-          key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-restore
           restore-keys: |
+            ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-
             ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-
 
       - name: Dialyzer under devenv
@@ -493,6 +500,14 @@ jobs:
           mix deps.get
           mix dialyzer --format github
           DEVENV
+
+      - name: Save Dialyzer PLTs
+        if: github.event_name == 'push' && success()
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: priv/plts
+          key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('priv/plts/*.plt') }}
 
   rust:
     name: Rust
@@ -765,3 +780,35 @@ jobs:
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  # Master saves _build under a key ending in the commit SHA (see
+  # .github/actions/setup-devenv) and the PLT under a content hash. Without
+  # this job those entries pile up until the 10 GB budget evicts the deps and
+  # cargo caches. Keeps the newest two per family; restore always takes the
+  # newest, the second covers a run that started before this one finished.
+  cache-prune:
+    name: Cache prune
+    needs: [lint, test-sqlite, test-postgres, dialyzer, test-e2e]
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete all but the newest two entries per family
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # $1: key prefix. $2: a longer prefix to exclude ("" for none), so
+          # the build-v2-devenv- family does not also match -postgres-.
+          prune() {
+            gh cache list --ref refs/heads/master --key "$1" --sort created_at --order desc --limit 100 --json id,key \
+              | jq -r --arg x "$2" '[.[] | select($x == "" or (.key | startswith($x) | not))] | .[2:][] | .id' \
+              | while read -r id; do
+                  gh cache delete "$id" || echo "::warning::could not delete cache $id"
+                done
+          }
+          prune "${RUNNER_OS}-build-v2-devenv-postgres-" ""
+          prune "${RUNNER_OS}-build-v2-devenv-" "${RUNNER_OS}-build-v2-devenv-postgres-"
+          prune "${RUNNER_OS}-plts-v3-" ""

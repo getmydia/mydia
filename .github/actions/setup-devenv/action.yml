@@ -62,29 +62,49 @@ runs:
 
     # Jobs that share a build-cache-prefix share this key, so the Dialyzer job
     # restores the _build/test and priv/native the Test job saved.
-    - name: Cache build
-      if: inputs.elixir-caches == 'true'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    #
+    # PRs restore master's newest _build and never save, so a PR push no longer
+    # writes a ~75 MB entry (103 of them, 6.8 GB, on 2026-10-30, which evicted
+    # the deps, cargo and PLT caches). Master saves under a key ending in the
+    # commit SHA: it never matches exactly, so the post-step always writes and
+    # restore always takes the newest entry by prefix. ci.yml's `Cache prune`
+    # job keeps the newest two per family. The source hash left the key for the
+    # same reason: a PR recompiles what it changed on top of master's tree.
+    #
+    # priv/native travels with _build, not separately. Rustler writes the
+    # NIF to priv/native (gitignored) and records "built" in a manifest
+    # under _build. Caching only _build restores the manifest without the
+    # .so, so `mix compile` skips the crate and every caller then fails
+    # with "module Mydia.P2p is not available", which points nowhere near
+    # the cache.
+    #
+    # The native hash is part of the key AND the restore prefix. _build
+    # holds the compiled Rustler NIF, so restoring a tree built from
+    # different Rust sources yields a stale .so. When that .so lacks a
+    # newly added export the whole module fails to load, and every caller
+    # reports "module Mydia.P2p is not available" rather than anything
+    # pointing at the cache.
+    - name: Restore build cache
+      if: inputs.elixir-caches == 'true' && github.event_name != 'push'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        # priv/native travels with _build, not separately. Rustler writes the
-        # NIF to priv/native (gitignored) and records "built" in a manifest
-        # under _build. Caching only _build restores the manifest without the
-        # .so, so `mix compile` skips the crate and every caller then fails
-        # with "module Mydia.P2p is not available", which points nowhere near
-        # the cache.
         path: |
           _build
           priv/native
-        # The native hash is part of the key AND the restore prefix. _build
-        # holds the compiled Rustler NIF, so restoring a tree built from
-        # different Rust sources yields a stale .so. When that .so lacks a
-        # newly added export the whole module fails to load, and every caller
-        # reports "module Mydia.P2p is not available" rather than anything
-        # pointing at the cache.
-        key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+        key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
+    - name: Cache build
+      if: inputs.elixir-caches == 'true' && github.event_name == 'push'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          _build
+          priv/native
+        key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
     # Rustler builds native/mydia_p2p and native/mydia_subsync in release mode
     # during `mix compile`, into each crate's own target/. On a _build cache
     # miss that took minutes from scratch (2026-10-15, iroh dominates). The key
