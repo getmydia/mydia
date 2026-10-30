@@ -127,6 +127,12 @@ Spec: `design/specs/2026-10-30-private-trackers-roadmap-design.md`, "Spec 0".
 
 ### Task 4: Built-in Cardigann and WASM engine
 
+> As built: privacy is added once for both engines by
+> `AdapterSupport.put_definition_privacy/2` from the definition row's `type`,
+> called at the end of each adapter's `search/3`, instead of threading
+> `private?` through `Context` and the codec. Newznab reads `newznab:attr`
+> only (its feeds declare no Torznab namespace).
+
 **Files:** modify `cardigann/result/context.ex` (add `private?: nil`),
 `cardigann_result_parser.ex` (set it from `definition.type in ["private", "semi-private"]`, false for `"public"`),
 `cardigann/result/transform.ex` (terms from row fields `downloadvolumefactor`,
