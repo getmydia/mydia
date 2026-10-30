@@ -70,8 +70,15 @@ result already carries in `SearchResult.indexer`.
 - `SearchResult` gains `terms: TrackerTerms.t() | nil`.
 - Adapters:
   - Prowlarr: `minimumRatio`, `minimumSeedTime`, `downloadVolumeFactor`,
-    `uploadVolumeFactor`, and the indexer's privacy.
-  - Jackett and Newznab: the matching `torznab:attr` elements.
+    `uploadVolumeFactor`, and the indexer's privacy. As built: Prowlarr's
+    search JSON (`ReleaseResource.cs`) has none of the four, only
+    `indexerFlags`, so the factors come from the flags (`freeleech` 0,
+    `halfleech` 0.5, `neutralleech` 0 both ways, `doubleupload` upload 2),
+    the minimums stay unknown, and privacy comes from `GET /api/v1/indexer`,
+    cached per connection for an hour.
+  - Jackett and Newznab: the matching `torznab:attr` elements. As built:
+    neither says whether the tracker is private, so `private?` is unknown
+    there unless an override sets it.
   - Built-in Cardigann: the definition's `downloadvolumefactor` and
     `uploadvolumefactor` fields, and `private?` from the definition's `type`
     (`private` and `semi-private` are private).
@@ -89,6 +96,11 @@ result already carries in `SearchResult.indexer`.
   adds `grab_limit` and `query_limit` to the same entry.
 - Precedence per field: override, then the tracker's value for that release,
   then nil.
+- As built: `seed_time` is in minutes (the Prowlarr and *arr convention), and
+  database overrides live in a `tracker_rule_configs` table that shadows a
+  YAML or env rule for the same tracker, the path-mappings pattern. Recently
+  seen trackers come from a small `tracker_sightings` table (one row per
+  tracker) written from `search_all/2`.
 - The admin Indexers page lists trackers seen in recent results with their
   effective terms and an edit action, and flags overrides that matched nothing
   in 30 days (the usual cause is a tracker renamed in Prowlarr).
