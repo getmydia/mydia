@@ -114,7 +114,9 @@ defmodule Mydia.Indexers.TrackerLimits do
   end
 
   @doc "The grab cap `result`'s tracker has reached, or nil."
-  @spec cap_for(%{indexer: String.t() | nil}, %{String.t() => cap()}) :: cap() | nil
+  @spec cap_for(%{:indexer => String.t() | nil, optional(atom()) => any()}, %{
+          String.t() => cap()
+        }) :: cap() | nil
   def cap_for(%{indexer: indexer}, caps), do: indexer && Map.get(caps, TrackerRules.key(indexer))
 
   @doc """

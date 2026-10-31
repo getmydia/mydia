@@ -10,10 +10,11 @@ defmodule MydiaWeb.Live.SearchResultRef do
   """
 
   @doc "The reference for a result (anything with `:download_url` and `:indexer`)."
-  @spec ref(%{download_url: String.t() | nil, indexer: String.t() | nil}) :: String.t()
-  def ref(%{download_url: url, indexer: indexer}) do
+  # The title keeps two linkless results from one tracker apart.
+  @spec ref(map()) :: String.t()
+  def ref(%{download_url: url, indexer: indexer} = result) do
     :sha256
-    |> :crypto.hash([url || "", 0, indexer || ""])
+    |> :crypto.hash([url || "", 0, indexer || "", 0, Map.get(result, :title) || ""])
     |> binary_part(0, 12)
     |> Base.url_encode64(padding: false)
   end

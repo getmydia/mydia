@@ -463,6 +463,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_progress, %{})
     |> assign(:indexer_raw_results, %{})
     |> assign(:result_states, %{})
+    |> assign(:grab_rows, %{})
     |> assign(:prior_attempts, %{})
     |> assign(:prior_attempts_checked, MapSet.new())
     |> assign(:manual_search_blocking, [])
