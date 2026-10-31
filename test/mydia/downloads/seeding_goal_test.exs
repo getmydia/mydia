@@ -117,7 +117,7 @@ defmodule Mydia.Downloads.SeedingGoalTest do
         status: "missing",
         ratio: 0.0,
         seeding_time: nil,
-        completed_at: ~U[2031-05-01 00:00:00Z],
+        client_completed_at: ~U[2031-05-01 00:00:00Z],
         db_completed_at: ~U[2031-05-01 00:00:00Z]
       }
 
@@ -127,13 +127,53 @@ defmodule Mydia.Downloads.SeedingGoalTest do
                SeedingGoal.for_download(%{row | status: "seeding"}, @now)
     end
 
+    test "uses the seed time Mydia observed when the client reports none" do
+      row = %{
+        metadata: %{
+          "tracker_terms" => %{"minimum_seed_time" => 3 * 86_400},
+          "observed_seeding" => %{"seconds" => 4 * 86_400, "last_seen_at" => nil}
+        },
+        status: "completed",
+        ratio: 0.2,
+        seeding_time: nil
+      }
+
+      assert %SeedingGoal{seeding_time: 345_600, met?: true} = SeedingGoal.for_download(row, @now)
+    end
+
+    test "prefers the client's completion time over the download's, as removal does" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"minimum_seed_time" => 3600}},
+        status: "seeding",
+        seeding_time: nil,
+        client_completed_at: ~U[2031-05-10 10:00:00Z],
+        db_completed_at: ~U[2031-05-10 11:59:00Z]
+      }
+
+      assert %SeedingGoal{seeding_time: 7200, met?: true} = SeedingGoal.for_download(row, @now)
+    end
+
+    test "a row whose client does not hold the torrent has an unknown ratio" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"minimum_ratio" => 1.0}},
+        status: "unknown",
+        ratio: 0.0,
+        in_client?: nil
+      }
+
+      assert %SeedingGoal{ratio: nil, met?: false} = SeedingGoal.for_download(row, @now)
+
+      assert %SeedingGoal{ratio: 0.0} =
+               SeedingGoal.for_download(%{row | in_client?: true, status: "seeding"}, @now)
+    end
+
     test "summarizes progress toward the goal" do
       row = %{
         indexer: "Velvet Lantern",
         metadata: %{"tracker_terms" => %{"private" => true, "minimum_ratio" => 1.0}},
         ratio: 0.42,
         seeding_time: 3600,
-        completed_at: nil,
+        client_completed_at: nil,
         db_completed_at: nil
       }
 

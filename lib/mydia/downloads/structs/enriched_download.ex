@@ -52,6 +52,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # file list or hasn't resolved one yet.
     :files,
     :completed_at,
+    # The client's own completion time, when it reported one.
+    :client_completed_at,
     :error_message,
     # Client-reported failure detail. Deliberately SEPARATE from
     # `error_message`, which is bound to the database column: DownloadMonitor
@@ -155,6 +157,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           save_path: String.t() | nil,
           files: [String.t()] | nil,
           completed_at: DateTime.t() | nil,
+          client_completed_at: DateTime.t() | nil,
           error_message: String.t() | nil,
           client_failure_category: FailureCategory.t() | nil,
           client_error_detail: String.t() | nil,

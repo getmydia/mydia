@@ -369,6 +369,51 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       assert :removed = ClientRemoval.finish_pending_removal(download)
     end
 
+    test "blackhole keeps its pre-guard behaviour: removed as soon as it is complete" do
+      previous = Registry.lookup(:blackhole)
+      Registry.register(:blackhole, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:blackhole, previous) end)
+
+      client =
+        client!(
+          type: :blackhole,
+          remove_completed: true,
+          connection_settings: %{"watch_folder" => "/tmp/w", "completed_folder" => "/tmp/c"}
+        )
+
+      download = download!(client, terms: %{"private" => true, "minimum_seed_time" => 3600})
+      StubAdapter.put(status(:completed, download.download_client_id))
+
+      refute ClientRemoval.seeding_client_type?(:blackhole)
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "rTorrent stopped after seeding past its goal is removed on the time Mydia observed" do
+      previous = Registry.lookup(:rtorrent)
+      Registry.register(:rtorrent, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rtorrent, previous) end)
+
+      client = client!(type: :rtorrent, remove_completed: true)
+      download = download!(client, terms: %{"private" => true, "minimum_seed_time" => 3 * 86_400})
+      StubAdapter.put(status(:completed, download.download_client_id))
+
+      # Stopped, nothing observed: the seed time is unknown, so it stays.
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+
+      {:ok, observed} =
+        Downloads.update_download(download, %{
+          metadata:
+            Map.put(download.metadata, "observed_seeding", %{
+              "seconds" => 4 * 86_400,
+              "last_seen_at" => nil
+            })
+        })
+
+      assert :removed = ClientRemoval.finish_pending_removal(observed)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
     test "a paused torrent that reports no seed time does not count paused time" do
       previous = Registry.lookup(:rqbit)
       Registry.register(:rqbit, StubAdapter)

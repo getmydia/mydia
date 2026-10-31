@@ -11,11 +11,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   ## Missing Download Detection
 
-  When a download is manually removed from a download client (e.g., Transmission),
-  the job will detect this and mark the download as "missing" with an error message.
-  This preserves the download in the Issues tab so users can investigate why the
-  download was removed before import completed. Users can manually delete from
-  the Issues tab if desired.
+  A download removed from its client by hand before import is marked "missing"
+  and kept in the Issues tab, where the operator can investigate or delete it.
+  Seed time for clients that do not count it: `Mydia.Downloads.ObservedSeedTime`.
   """
 
   use Oban.Worker,
@@ -110,6 +108,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
     downloads =
       Downloads.list_downloads_with_status(filter: :all)
       |> Enum.reject(& &1.removal_requested_at)
+
+    Mydia.Downloads.ObservedSeedTime.record(downloads, now)
 
     # Re-adopt downloads whose client was renamed, deleted, or disabled but
     # whose torrent is still sitting in exactly one other configured client.

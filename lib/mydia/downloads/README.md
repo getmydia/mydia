@@ -51,15 +51,22 @@ removal as it was; a private tracker with no known ratio or seed time is never
 met, so its downloads are only ever removed by hand.
 
 **Guard.** `ClientRemoval.terms_met?/2` runs before the idle-state check in
-both `maybe_remove_after_import/1` and `finish_pending_removal/2`, for every
-client that seeds. That matters most for rqbit, which is not seed-aware and was
+both `maybe_remove_after_import/1` and `finish_pending_removal/2`, for the
+clients `ClientRemoval.seeding_client_type?/1` names: qBittorrent, Transmission,
+rTorrent and rqbit. That matters most for rqbit, which is not seed-aware and was
 removed right after import. A guarded row returns `:still_seeding` and stays in
-`list_pending_removals/1`. SABnzbd, NZBGet and debrid never seed and are not
-guarded. A torrent the client no longer has is still stamped removed.
+`list_pending_removals/1`. SABnzbd, NZBGet, debrid, blackhole (an external
+client with no ratio to read) and unknown types are not guarded. A torrent the
+client no longer has is still stamped removed.
 
 Seed time is `DownloadStatus.seeding_time` when the client counts it
-(qBittorrent `seeding_time`, Transmission `secondsSeeding`). Otherwise, and
-only while the client reports the torrent as seeding, it is the time since the
+(qBittorrent `seeding_time`, Transmission `secondsSeeding`). For rTorrent
+and rqbit, which count none, `Mydia.Downloads.ObservedSeedTime` adds up the time
+`DownloadMonitor` sees the torrent seeding between polls (one step capped at
+three cron intervals, so downtime is not counted) in
+`Download.metadata["observed_seeding"]`, and that total stands in for it, so a
+torrent that seeded past its goal and then stopped is removable. Without either,
+and only while the client reports the torrent as seeding, it is the time since the
 client's `completed_at`, else since `Download.completed_at`. A paused, stopped or
 missing torrent with no reported time has no known seed time, so wall-clock time
 it spent not seeding never meets a goal.

@@ -18,6 +18,7 @@ defmodule Mydia.Downloads.SeedingGoal do
   removal, and the Downloads page shows `for_download/2`.
   """
 
+  alias Mydia.Downloads.ObservedSeedTime
   alias Mydia.Indexers.Structs.TrackerTerms
 
   @type t :: %__MODULE__{
@@ -114,7 +115,8 @@ defmodule Mydia.Downloads.SeedingGoal do
   @doc """
   Progress toward the goal for a Downloads row (an enriched download, or any
   map with `:metadata`, `:indexer`, `:status`, `:ratio`, `:seeding_time`,
-  `:completed_at` and `:db_completed_at`). Nil when no goal applies.
+  `:client_completed_at`, `:db_completed_at` and `:in_client?`), read the same
+  way as `Mydia.Downloads.ClientRemoval.terms_met?/2`. Nil when no goal applies.
   """
   @spec for_download(map(), DateTime.t()) :: t() | nil
   def for_download(download, now \\ DateTime.utc_now()) do
@@ -123,14 +125,14 @@ defmodule Mydia.Downloads.SeedingGoal do
     if applies?(terms) do
       seeding_time =
         seeding_time(
-          Map.get(download, :seeding_time),
+          Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download),
           Map.get(download, :status) == "seeding",
-          Map.get(download, :completed_at),
+          Map.get(download, :client_completed_at),
           Map.get(download, :db_completed_at),
           now
         )
 
-      ratio = Map.get(download, :ratio)
+      ratio = known_ratio(download)
 
       %__MODULE__{
         tracker: Map.get(download, :indexer),
@@ -142,5 +144,12 @@ defmodule Mydia.Downloads.SeedingGoal do
         met?: met?(terms, ratio, seeding_time)
       }
     end
+  end
+
+  # A row whose client is unreachable or no longer holds the torrent carries a
+  # placeholder ratio of 0.0; nil says "unknown" instead. Rows without the key
+  # (plain maps, a bare Download) are taken at their word.
+  defp known_ratio(download) do
+    if Map.get(download, :in_client?, true) == true, do: Map.get(download, :ratio)
   end
 end

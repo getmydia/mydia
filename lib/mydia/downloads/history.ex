@@ -138,9 +138,8 @@ defmodule Mydia.Downloads.History do
     }
   end
 
-  # The terminal complement of `Download.occupying/1`, restricted to rows that
-  # were never imported: the client-side download failed, or the import failed
-  # with no further retries scheduled.
+  # The terminal complement of `Download.occupying/1` for never-imported rows:
+  # the client-side download failed, or the import failed with no retries left.
   defp failed_query do
     where(
       Download,
@@ -719,6 +718,7 @@ defmodule Mydia.Downloads.History do
       save_path: torrent_status.save_path,
       files: torrent_status.files,
       completed_at: download.completed_at || torrent_status.completed_at,
+      client_completed_at: torrent_status.completed_at,
       error_message: download.error_message,
       client_failure_category: torrent_status.failure_category,
       client_error_detail: torrent_status.failure_detail,

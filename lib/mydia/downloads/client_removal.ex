@@ -12,8 +12,8 @@ defmodule Mydia.Downloads.ClientRemoval do
   client) and any future type keep their source.
 
   Before either check, a download whose tracker terms set a seeding goal
-  (`Mydia.Downloads.SeedingGoal`) stays in any client that seeds, rqbit
-  included, until the goal is met. Manual removal is not guarded.
+  (`Mydia.Downloads.SeedingGoal`) stays in a seed-aware client or rqbit until
+  the goal is met. Manual removal is not guarded.
   """
 
   require Logger
@@ -25,6 +25,7 @@ defmodule Mydia.Downloads.ClientRemoval do
   alias Mydia.Downloads.Client.Error
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.ObservedSeedTime
   alias Mydia.Downloads.SeedingGoal
   alias Mydia.Downloads.Structs.DownloadStatus
   alias Mydia.Repo
@@ -37,6 +38,12 @@ defmodule Mydia.Downloads.ClientRemoval do
   @non_seeding ~w(sabnzbd nzbget debrid)a
 
   def non_seeding_type?(type) when is_atom(type), do: type in @non_seeding
+
+  @doc """
+  True for the clients the seeding guard applies to: the seed-aware ones and
+  rqbit, which seeds without a limit of its own.
+  """
+  def seeding_client_type?(type) when is_atom(type), do: seed_aware_type?(type) or type == :rqbit
 
   @doc """
   True when the download's client never seeds, so import may consume the
@@ -116,7 +123,7 @@ defmodule Mydia.Downloads.ClientRemoval do
       %DownloadStatus{} ->
         seeding_time =
           SeedingGoal.seeding_time(
-            status.seeding_time,
+            status.seeding_time || ObservedSeedTime.seconds(download),
             status.state == :seeding,
             status.completed_at,
             download.completed_at,
@@ -173,11 +180,13 @@ defmodule Mydia.Downloads.ClientRemoval do
     :deferred
   end
 
-  # The seeding guard runs before the state check, for every client that
-  # seeds. Non-seeding clients (Usenet, debrid) have no ratio to wait for.
+  # The seeding guard runs before the state check, only for clients known to
+  # seed (`seeding_client_type?/1`). Usenet, debrid, blackhole (an external
+  # client Mydia cannot read a ratio from) and unknown types keep their
+  # behaviour from before the guard.
   defp remove_when_ready(download, info, mode) do
     guarded? =
-      not non_seeding_type?(info.type) and SeedingGoal.applies?(SeedingGoal.terms(download))
+      seeding_client_type?(info.type) and SeedingGoal.applies?(SeedingGoal.terms(download))
 
     with {:ok, status} <- read_status(info, guarded? or seed_aware_type?(info.type)),
          :ok <- check_terms(download, status, guarded?),

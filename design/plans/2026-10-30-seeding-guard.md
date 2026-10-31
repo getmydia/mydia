@@ -21,7 +21,7 @@ shared `MydiaWeb.SeedingComponents`.
 
 | File | Change |
 |---|---|
-| `lib/mydia/downloads/seeding_goal.ex` | New: terms from metadata, `applies?/1`, `met?/3`, `seeding_time/4`, `for_download/2` |
+| `lib/mydia/downloads/seeding_goal.ex` | New: terms from metadata, `applies?/1`, `met?/3`, `seeding_time/5`, `for_download/2` |
 | `lib/mydia/downloads/client_removal.ex` | `terms_met?/2`; both removal paths flattened into one `remove_when_ready/3` |
 | `lib/mydia/jobs/media_import.ex` | Handle `:still_seeding` from `maybe_remove_after_import/1` |
 | `lib/mydia/downloads/structs/download_status.ex` | `seeding_time` field |
@@ -42,7 +42,7 @@ shared `MydiaWeb.SeedingComponents`.
 - [ ] Test `test/mydia/downloads/seeding_goal_test.exs`, truth table for
   `met?/3`: ratio only (below, at), time only (below, at), both (either one
   suffices), neither and not private (met), private without ratio or time
-  (never met), nil terms (met). `seeding_time/4` precedence: reported, then
+  (never met), nil terms (met). `seeding_time/5` precedence: reported, then
   client `completed_at`, then download `completed_at`, then nil.
 - [ ] Tests in `client_removal_test.exs`: guarded qBittorrent row paused but
   under ratio returns `:still_seeding` from both paths and removes nothing;

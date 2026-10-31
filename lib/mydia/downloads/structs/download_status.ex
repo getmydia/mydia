@@ -48,9 +48,10 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     :added_at,
     :completed_at,
     # Seconds spent seeding, when the client counts it (qBittorrent
-    # `seeding_time`, Transmission `secondsSeeding`). Nil otherwise;
-    # `Mydia.Downloads.SeedingGoal.seeding_time/4` then falls back to the time
-    # since `completed_at`.
+    # `seeding_time`, Transmission `secondsSeeding`). Nil otherwise; the guard
+    # then uses the time Mydia observed it seeding
+    # (`Mydia.Downloads.ObservedSeedTime`), and only while the torrent is seeding
+    # the time since `completed_at` (`Mydia.Downloads.SeedingGoal.seeding_time/5`).
     :seeding_time,
     # Why the client reported a terminal failure, in its own words. Both are
     # nil unless `state == :error`, and stay nil for adapters that don't yet
