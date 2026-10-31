@@ -44,9 +44,11 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
 
   defp option(id), do: "#library-move-form option[value='#{id}']"
 
+  # The move plan runs in the background and scans the library, which under CI
+  # load outlasts render_async/1's 100ms default and leaves the preview unrendered.
   defp open(view, button) do
     view |> element(button) |> render_click()
-    render_async(view)
+    render_async(view, 2_000)
   end
 
   # Starting a move reloads the page at its own URL. Returns that URL and the
