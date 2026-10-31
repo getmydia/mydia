@@ -39,6 +39,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
   @guarded_hash "1111111111111111111111111111111111111111"
   @met_hash "2222222222222222222222222222222222222222"
   @plain_hash "3333333333333333333333333333333333333333"
+  @unmet_hash "4444444444444444444444444444444444444444"
 
   @terms %{"private" => true, "minimum_ratio" => 1.0, "minimum_seed_time" => 3 * 86_400}
 
@@ -95,10 +96,17 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
 
     plain = download!(client, @plain_hash, imported_at: imported_at)
 
+    unmet =
+      download!(client, @unmet_hash,
+        metadata: %{"tracker_terms" => @terms},
+        imported_at: imported_at
+      )
+
     ListAdapter.put([
       status(@guarded_hash, :seeding, 0.42, 86_400),
       status(@met_hash, :seeding, 1.3, 3600),
-      status(@plain_hash, :seeding, 0.1, 60)
+      status(@plain_hash, :seeding, 0.1, 60),
+      status(@unmet_hash, :seeding, 0.42, 86_400)
     ])
 
     {:ok, view, _html} = live(conn, ~p"/downloads?view=all")
@@ -125,6 +133,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     refute has_element?(view, "#row-clear-#{met.id}[data-confirm*='hit-and-run']")
     assert has_element?(view, "#row-clear-#{met.id}[data-confirm]")
     refute has_element?(view, "#row-clear-#{plain.id}[data-confirm*='hit-and-run']")
+    assert has_element?(view, "#row-clear-#{unmet.id}[data-confirm*='hit-and-run']")
 
     view |> element("#row-cancel-#{guarded.id}") |> render_click()
     assert Mydia.Downloads.get_download!(guarded.id).removal_requested_at

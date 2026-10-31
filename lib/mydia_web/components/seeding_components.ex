@@ -160,11 +160,19 @@ defmodule MydiaWeb.SeedingComponents do
 
   defp format_time(nil), do: "?"
 
-  defp format_time(seconds) when seconds >= 86_400,
-    do: gettext("%{count}d", count: div(seconds, 86_400))
-
-  defp format_time(seconds) when seconds >= 3600,
-    do: gettext("%{count}h", count: div(seconds, 3600))
-
-  defp format_time(seconds), do: gettext("%{count}m", count: div(seconds, 60))
+  # Days, hours and minutes, leaving out empty parts, so a 90 minute goal
+  # reads "1h 30m" rather than rounding down to "1h". Only seconds are dropped.
+  defp format_time(seconds) do
+    [
+      {div(seconds, 86_400), fn n -> gettext("%{count}d", count: n) end},
+      {div(rem(seconds, 86_400), 3600), fn n -> gettext("%{count}h", count: n) end},
+      {div(rem(seconds, 3600), 60), fn n -> gettext("%{count}m", count: n) end}
+    ]
+    |> Enum.reject(fn {count, _label} -> count == 0 end)
+    |> Enum.map_join(" ", fn {count, label} -> label.(count) end)
+    |> case do
+      "" -> gettext("%{count}m", count: 0)
+      text -> text
+    end
+  end
 end
