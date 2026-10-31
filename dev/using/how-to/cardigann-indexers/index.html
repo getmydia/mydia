@@ -936,8 +936,85 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Supported Indexers">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#private-trackers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private trackers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Private trackers">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#username-and-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Username and password
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cookie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cookie
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#captcha-and-two-factor-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Captcha and two-factor codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grabs-and-your-passkey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grabs and your passkey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-covered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is covered
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#dead-and-moved-domains" class="md-nav__link">
@@ -3580,8 +3657,85 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Supported Indexers">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#private-trackers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private trackers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Private trackers">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#username-and-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Username and password
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cookie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cookie
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#captcha-and-two-factor-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Captcha and two-factor codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grabs-and-your-passkey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grabs and your passkey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-covered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is covered
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#dead-and-moved-domains" class="md-nav__link">
@@ -3821,8 +3975,8 @@ is a separate indexer manager Mydia connects to.</p>
 </tr>
 <tr>
 <td><strong>Private trackers</strong></td>
-<td>Login often fails (CAPTCHA, selector-derived inputs and separate submit paths are not implemented)</td>
-<td>Uses Prowlarr's login code, but untested</td>
+<td>API key, cookie and form logins, including captcha and 2FA (<a href="#private-trackers">details</a>); tested against simulated trackers</td>
+<td>Prowlarr's own login code; captcha and 2FA as on the built-in engine</td>
 <td>Supported</td>
 </tr>
 <tr>
@@ -3845,9 +3999,9 @@ is a separate indexer manager Mydia connects to.</p>
 </tr>
 <tr>
 <td><strong>Pick it when</strong></td>
-<td>You want zero setup and use mainstream public trackers</td>
+<td>You want zero setup</td>
 <td>You want Prowlarr's results without running Prowlarr</td>
-<td>You use private trackers, or reliability matters more than running fewer services</td>
+<td>You already run Prowlarr, or a tracker does not work with either built-in option</td>
 </tr>
 </tbody>
 </table>
@@ -3930,7 +4084,8 @@ and the built-in engine on 28.</p>
   trackers ended in one of these; Prowlarr could not search any of those 20 either.
   FlareSolverr still applies.</li>
 <li><strong>It cannot reach trackers on your local network</strong>, and it is only measured
-  against public trackers. Private-tracker logins are untested.</li>
+  against public trackers. Private-tracker logins are tested against simulated
+  trackers only; see <a href="#private-trackers">Private trackers</a>.</li>
 <li><strong>It is built with an experimental toolchain</strong> (a pre-release .NET compiled to
   WebAssembly). Expect rough edges, and report them.</li>
 </ul>
@@ -3964,13 +4119,119 @@ verified on every build.</p>
 </ul>
 <p><strong>Everything else:</strong></p>
 <p>The remaining definitions are included and may well work, but nothing pins their
-behaviour, so an upstream site change can break them silently. Private trackers
-in particular are likely to fail at login.</p>
+behaviour, so an upstream site change can break them silently. For private
+trackers, see <a href="#private-trackers">Private trackers</a>.</p>
 <p>To see what the engine actually supports against the current upstream
 catalogue, run the compatibility report:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mix<span class="w"> </span>mydia.cardigann_compat<span class="w"> </span>--type<span class="w"> </span>public
 </code></pre></div>
-<p>It lists, per unsupported feature, how many definitions that feature blocks.</p>
+<p>It lists, per unsupported feature, how many definitions that feature blocks,
+and how many logins it supports.</p>
+<h2 id="private-trackers">Private trackers</h2>
+<p>A private tracker needs an account, and Mydia logs in to it for you. Which
+settings an indexer asks for comes from its definition, so the form under
+<strong>Admin &gt; Configuration &gt; Indexers</strong> shows exactly the fields that tracker
+needs. Most use one of three kinds of login.</p>
+<h3 id="api-key">API key</h3>
+<p>Trackers with an API (many UNIT3D sites, whose definitions end in <code>-api</code>) ask
+for an <strong>API key</strong>. Generate one in your account settings on the tracker's
+website, usually under a "Security" or "API key" tab, and paste it in. Mydia
+sends it with every search. There is no session to expire; if the key is
+revoked, searches fail with an authentication error until you paste a new one.</p>
+<h3 id="username-and-password">Username and password</h3>
+<p>Most other trackers ask for a <strong>username</strong> and <strong>password</strong>. Mydia fetches the
+tracker's login page, fills in the form (including the hidden security token
+many sites put on it), submits it and keeps the session cookie the tracker
+hands back. That session is reused for every search and grab until the
+tracker stops accepting it. Then Mydia logs in again once, by itself, and
+repeats the search. Changing the indexer's settings drops the stored session,
+so new credentials get a fresh login.</p>
+<h3 id="cookie">Cookie</h3>
+<p>Some trackers block automated logins altogether, and their definitions ask for
+a <strong>cookie</strong> instead. Log in to the tracker in your browser, open the
+developer tools, copy the <code>Cookie</code> header of any request to the site, and
+paste the whole value into the indexer's cookie setting. When the tracker ends
+that browser session, searches fail until you paste a fresh cookie.</p>
+<h3 id="captcha-and-two-factor-codes">Captcha and two-factor codes</h3>
+<p>Some login forms show a captcha image or ask for a one-time two-factor (2FA)
+code. Mydia cannot answer those, so it asks you:</p>
+<ol>
+<li>The first search that needs a login stops, and the indexer shows
+   <strong>Needs login</strong> on the Indexers page. Searches skip it from then on rather
+   than fail over and over.</li>
+<li>Click the key icon (<strong>Log in</strong>) on that indexer. Mydia opens the tracker's
+   login page and shows its captcha image and a field for the 2FA code, if the
+   tracker asks for one. If the image is unreadable, <strong>New image</strong> fetches
+   another.</li>
+<li>Type the answers and press <strong>Log in</strong>. The indexer goes back to healthy and
+   searches resume on the session the tracker returned.</li>
+</ol>
+<p>The answers are used once and never stored. When the tracker ends the session
+later, the indexer shows <strong>Needs login</strong> again and you repeat these steps. If you leave the 2FA field empty, Mydia submits it empty, which is
+what trackers expect when 2FA is not turned on for your account.</p>
+<p>This works the same with the built-in and the Prowlarr-based engine: the
+<strong>Log in</strong> button always runs the built-in login, and both engines use the
+session it stores.</p>
+<h3 id="grabs-and-your-passkey">Grabs and your passkey</h3>
+<p>A grab downloads the <code>.torrent</code> from the tracker with your session or key, and
+Mydia hands that file to your download client unchanged, so the tracker's own
+announce URL and your passkey stay in it. Grab log lines name the tracker's
+host, never the download link or the file's contents, so the passkey they carry
+stays out of the logs at the default log level. With <code>LOG_LEVEL=debug</code>, the
+database query log prints stored download links, passkey included, so keep debug
+logs private and do not paste them into public reports.</p>
+<h3 id="what-is-covered">What is covered</h3>
+<p>Of the 440 private-tracker definitions in the upstream catalogue (counted on
+2026-10-30 with <code>mix mydia.cardigann_compat --type private</code>), all 440 log in
+with features the built-in engine implements:</p>
+<table>
+<thead>
+<tr>
+<th>Login</th>
+<th>Definitions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API or URL (<code>get</code>)</td>
+<td>142</td>
+</tr>
+<tr>
+<td>Pasted cookie (<code>cookie</code>)</td>
+<td>134</td>
+</tr>
+<tr>
+<td>Login form (<code>form</code>)</td>
+<td>97</td>
+</tr>
+<tr>
+<td>Posted credentials (<code>post</code>)</td>
+<td>65</td>
+</tr>
+<tr>
+<td>No login</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Stops for an image captcha</td>
+<td>41</td>
+</tr>
+<tr>
+<td>Stops for a 2FA code</td>
+<td>21</td>
+</tr>
+</tbody>
+</table>
+<p>"Implements" means the definition's login features are supported, not that a
+login to that tracker has been seen working. Mydia's tests run full journeys
+(log in, search, session expiry, captcha, grab) against simulated trackers built
+like the common tracker software (UNIT3D, Gazelle and captcha login forms), but
+nobody on the project has accounts on most real ones.</p>
+<p><strong>Please report what you find.</strong> If a private tracker works, or fails, open an
+issue or a discussion on GitHub with the tracker's name, which engine you use,
+and the error the Indexers page shows. Leave out your passkey, API key and
+cookies. Reports from real accounts are how private-tracker support gets
+verified.</p>
 <h3 id="dead-and-moved-domains">Dead and moved domains</h3>
 <p>Public trackers rotate domains often. Mydia probes every link a definition
 ships, including its historical ones, picks the first that responds, and stores
@@ -4014,7 +4275,8 @@ next candidate and remembers the new one. No configuration is involved.</p>
 <li>Some indexers may not parse results correctly</li>
 <li>Authentication may fail on some sites</li>
 <li>Rate limiting varies by indexer</li>
-<li>CAPTCHA challenges not supported</li>
+<li>Captcha and 2FA logins need you to log in from the Indexers page whenever the
+  tracker ends the session (see <a href="#captcha-and-two-factor-codes">Captcha and two-factor codes</a>)</li>
 </ul>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="search-returns-no-results">Search Returns No Results</h3>
@@ -4027,8 +4289,9 @@ next candidate and remembers the new one. No configuration is involved.</p>
 <h3 id="authentication-errors">Authentication Errors</h3>
 <ol>
 <li>Verify credentials are correct</li>
-<li>Some sites require manual cookie refresh</li>
-<li>Check if site requires 2FA (not supported)</li>
+<li>For a cookie login, paste a fresh cookie from your browser</li>
+<li>An indexer showing <strong>Needs login</strong> wants a captcha or 2FA code: use its
+   <strong>Log in</strong> button</li>
 </ol>
 <h3 id="rate-limiting">Rate Limiting</h3>
 <ol>
