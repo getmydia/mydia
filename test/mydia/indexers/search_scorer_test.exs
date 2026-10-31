@@ -477,6 +477,15 @@ defmodule Mydia.Indexers.SearchScorerTest do
       assert_in_delta score(freeleech, profile) - score(with_terms(nil), profile), 10.0, 0.11
     end
 
+    test "the breakdown shows the bonus after the zero-seeder multiplier" do
+      profile = freeleech_profile("prefer")
+
+      freeleech =
+        build_result(%{seeders: 0, terms: %TrackerTerms{download_volume_factor: 0.0}})
+
+      assert bonus(freeleech, profile) == 7.0
+    end
+
     test "half leech adds 5" do
       profile = freeleech_profile("prefer")
       assert bonus(with_terms(%TrackerTerms{download_volume_factor: 0.5}), profile) == 5.0

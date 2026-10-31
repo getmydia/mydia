@@ -56,19 +56,24 @@ defmodule MydiaWeb.MediaLive.Show.TrackerTermsBadges do
     """
   end
 
-  defp download_badge(factor) when is_number(factor) and factor <= 0,
+  # A negative factor is malformed, not "better than freeleech", and a factor
+  # that rounds to 100% is no discount worth a badge.
+  defp download_badge(factor) when factor == 0,
     do:
       {"badge-success", gettext("FL"),
        gettext("Freeleech: the download does not count toward your ratio")}
 
-  defp download_badge(factor) when is_number(factor) and factor < 1 do
-    percent = round(factor * 100)
-
-    {"badge-info", "#{percent}%",
-     gettext("Only %{percent}% of the download counts toward your ratio", percent: percent)}
-  end
+  defp download_badge(factor) when is_number(factor) and factor > 0,
+    do: partial_badge(round(factor * 100))
 
   defp download_badge(_factor), do: nil
+
+  defp partial_badge(percent) when percent < 100,
+    do:
+      {"badge-info", "#{percent}%",
+       gettext("Only %{percent}% of the download counts toward your ratio", percent: percent)}
+
+  defp partial_badge(_percent), do: nil
 
   defp upload_badge(factor) when is_number(factor) and factor > 1 do
     multiplier = format_multiplier(factor)

@@ -195,8 +195,10 @@ created within that window.
 means) or `"prefer"`. With `"prefer"`, `SearchScorer.score_freeleech/2` adds
 `(1 - download_volume_factor) * 10` to the combined score beside the
 availability score and title bonus: full freeleech adds 10, half leech 5, an
-unknown factor nothing. The upload factor is shown in manual search, not
-scored. The bonus never enters `score_quality/3` or
+unknown factor nothing. Being inside the sum, it takes the zero-seeder
+multiplier like everything else (7 for a freeleech release with no seeders),
+and the breakdown shows that scaled value. The upload factor is shown in manual
+search, not scored. The bonus never enters `score_quality/3` or
 `QualityProfile.score_media_file/2`, so it cannot move grab delay's
 `upgrade_until_score` check, create a file violation or trigger an upgrade.
 

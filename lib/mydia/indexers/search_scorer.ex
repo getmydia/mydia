@@ -109,7 +109,7 @@ defmodule Mydia.Indexers.SearchScorer do
       |> Map.put(:quality_score, Float.round(quality_score, 1))
       |> Map.put(:seeder_score, Float.round(availability_score, 1))
       |> Map.put(:title_bonus, Float.round(title_bonus, 1))
-      |> Map.put(:freeleech_bonus, Float.round(freeleech_bonus, 1))
+      |> Map.put(:freeleech_bonus, Float.round(freeleech_bonus * availability_penalty, 1))
       |> Map.put(:zero_seeder_penalty, availability_penalty)
 
     violations = violations ++ availability_violations
@@ -203,9 +203,14 @@ defmodule Mydia.Indexers.SearchScorer do
 
   @doc """
   The freeleech bonus: `(1 - download_volume_factor) * 10`, so full freeleech
-  adds 10 and half leech 5, the same scale as the title bonus. It breaks ties
-  among comparable releases and does not lift a lower resolution over a higher
-  one.
+  adds 10 and half leech 5, the same scale as the title bonus. Like the rest of
+  the combined score it is scaled by the zero-seeder multiplier, and the
+  breakdown's `:freeleech_bonus` records that scaled contribution.
+
+  On score alone it can lift a slightly worse release over a better one: a
+  second-preference 720p trails a 1080p by less than 10. Automatic search keeps
+  resolution first through `:preferred_qualities`, a `ReleaseRanker` sort key
+  outside the score.
 
   0.0 unless the profile's `freeleech_preference` is "prefer" and the tracker
   reported a download factor. The factor is clamped to 0..1, so a factor above 1

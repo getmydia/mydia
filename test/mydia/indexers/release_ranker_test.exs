@@ -2775,13 +2775,19 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
         }
       }
 
+      # On score alone the bonus inverts the pair: a second-preference 720p
+      # trails the 1080p by less than the full 10-point bonus.
+      score_opts = [media_type: :movie, quality_profile: profile]
+      total = &ReleaseRanker.explain(&1, score_opts).breakdown.total
+      plain_720 = %{fl_720 | terms: nil}
+
+      assert total.(hd) - total.(plain_720) < 10.0
+      assert total.(fl_720) > total.(hd)
+
       # Automatic searches build their options with RankingOptions, whose
-      # :preferred_qualities is a sort key outside the score. That key, not
-      # the score gap, is what keeps the 1080p first: second-preference 720p
-      # trails it by less than the full 10-point bonus.
-      opts =
-        [media_type: :movie, quality_profile: profile] ++
-          RankingOptions.build_quality_options(profile, :movie)
+      # :preferred_qualities is a sort key outside the score. That key is what
+      # keeps the 1080p first.
+      opts = score_opts ++ RankingOptions.build_quality_options(profile, :movie)
 
       assert [%{result: ^hd}, %{result: ^fl_720}] = ReleaseRanker.rank_all([fl_720, hd], opts)
     end

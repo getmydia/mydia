@@ -43,10 +43,12 @@ defmodule MydiaWeb.MediaLive.Show.TrackerTermsBadgesTest do
     assert present?(doc, "#row-private")
   end
 
-  test "normal or unknown terms render nothing" do
+  test "normal, unknown or malformed terms render nothing" do
     for terms <- [
           nil,
           %TrackerTerms{},
+          %TrackerTerms{download_volume_factor: -1.0},
+          %TrackerTerms{download_volume_factor: 0.996},
           %TrackerTerms{download_volume_factor: 1.0, upload_volume_factor: 1.0, private?: false}
         ] do
       doc = render_terms(terms)

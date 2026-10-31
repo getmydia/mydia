@@ -209,7 +209,9 @@ A quality profile's **Freeleech** setting is either *Ignore* (the default) or
 *Prefer freeleech*. Private trackers often mark a release as freeleech, meaning
 the download does not count against your ratio, or half leech, meaning only half
 of it does. With *Prefer freeleech*, a freeleech release gets 10 extra points
-and a half-leech one 5, the same size as the title-relevance bonus. That is
+and a half-leech one 5, the same size as the title-relevance bonus. A release
+with no seeders gets the same zero-seeder cut on these points as on the rest of
+its score. That is
 enough to choose between comparable releases and not enough to matter against
 your resolution preference, which is sorted ahead of the score. A release whose
 tracker says nothing about freeleech gets nothing.

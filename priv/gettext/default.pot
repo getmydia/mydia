@@ -21386,7 +21386,7 @@ msgstr ""
 msgid "Tracker terms"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:76
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:81
 #, elixir-autogen, elixir-format
 msgid "%{multiplier}x up"
 msgstr ""
@@ -21396,7 +21396,7 @@ msgstr ""
 msgid "A preference: among comparable releases, freeleech and half-leech torrents rank higher. It breaks ties and does not outweigh resolution."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:61
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:63
 #, elixir-autogen, elixir-format
 msgid "FL"
 msgstr ""
@@ -21406,12 +21406,12 @@ msgstr ""
 msgid "Freeleech"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:62
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:64
 #, elixir-autogen, elixir-format
 msgid "Freeleech: the download does not count toward your ratio"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:68
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:74
 #, elixir-autogen, elixir-format
 msgid "Only %{percent}% of the download counts toward your ratio"
 msgstr ""
@@ -21421,7 +21421,7 @@ msgstr ""
 msgid "Prefer freeleech"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:77
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:82
 #, elixir-autogen, elixir-format
 msgid "Uploads count %{multiplier} times toward your ratio"
 msgstr ""
