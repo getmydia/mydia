@@ -132,15 +132,17 @@ convention). With only one of the two set, that one decides.
 
 - `ClientRemoval.terms_met?/2` runs before the existing state check in
   `maybe_remove_after_import/1` and `finish_pending_removal/2`, for every
-  client type, including rqbit and rTorrent, which today remove without
-  waiting. A guarded row returns `:still_seeding` and stays pending.
-  As built: rTorrent was already seed-aware (it waited for paused or
-  completed); rqbit was the one removed right after import. The guard skips
-  SABnzbd, NZBGet and debrid, which never seed. `maybe_remove_after_import/1`
+  client that seeds, rqbit included; SABnzbd, NZBGet and debrid are skipped.
+  A guarded row returns `:still_seeding` and stays pending. rTorrent was
+  already seed-aware (it waited for paused or completed); rqbit was removed
+  right after import. `maybe_remove_after_import/1`
   also returns `:still_seeding`, and `MediaImport` keeps the row pending.
 - `DownloadStatus` gains `seeding_time` (seconds): qBittorrent `seeding_time`,
   Transmission `secondsSeeding`, otherwise time since the client's
   `completed_at`, falling back to `Download.completed_at`.
+  As built: the wall-clock fallback is used only while the client reports
+  the torrent as seeding, so a paused, stopped or missing torrent never meets
+  a seed time goal from time it did not seed.
 - Manual removal (queue delete, `Removal`, deleting media together with its
   download) stays possible while guarded. The confirm dialog names the tracker,
   the required and current ratio and seed time, and says that removing now
