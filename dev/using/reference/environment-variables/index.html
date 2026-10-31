@@ -4789,11 +4789,27 @@ torrent already seeding.</p>
 <td>Treat the tracker as private (<code>true</code>) or public (<code>false</code>)</td>
 <td><code>true</code></td>
 </tr>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_GRAB_LIMIT</code></td>
+<td>Most grabs per rolling 24 hours</td>
+<td><code>5</code></td>
+</tr>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_QUERY_LIMIT</code></td>
+<td>Most searches per rolling 24 hours</td>
+<td><code>50</code></td>
+</tr>
 </tbody>
 </table>
+<p>Both limits are optional. At the grab limit, automatic searches skip the
+tracker's releases and manual search marks them with the reason. The search
+limit applies to an indexer whose name matches the tracker, such as a built-in
+indexer or a Jackett feed for one tracker; trackers reached through Prowlarr
+rely on Prowlarr's own limits. Search counts reset when Mydia restarts.</p>
 <p>Overrides can also be added under <strong>Admin &gt; Configuration &gt; Indexers &gt; Tracker
-terms</strong>, which lists the trackers seen in recent searches. One added there
-replaces an environment rule for the same tracker. An override that matched no
+terms</strong>, which lists the trackers seen in recent searches. A value set there
+replaces the environment value for the same tracker; a field left empty there
+keeps the environment value. An override that matched no
 search result or grab in 30 days is flagged as stale; the usual cause is a
 tracker renamed in Prowlarr.</p>
 <h2 id="automatic-search">Automatic Search</h2>
