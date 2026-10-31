@@ -71,18 +71,24 @@ are external), so no source URL reaches the template without it.
 
 - **One source:** unchanged. A direct external link when the URL is usable, a
   plain badge otherwise.
-- **Several sources:** the badge becomes the trigger of a daisyUI `dropdown
-  dropdown-end` (end-anchored so the last grid column does not clip the menu).
-  The trigger shows the same truncated label (`Name +N`) with a chevron
-  instead of the external-link icon. The menu (`menu dropdown-content`) lists
-  one row per source: an external link (`target="_blank"`,
-  `rel="noopener noreferrer"`, link icon) when its URL is usable, and the
-  indexer name as muted, non-interactive text when it is not. The trigger is a
-  `<div tabindex="0" role="button">` per daisyUI's focus dropdown pattern, with
-  an `aria-label` naming the trackers.
+- **Several sources:** the badge becomes a `<button>` that opens a menu
+  listing every source. It shows the same truncated label (`Name +N`) with a
+  chevron instead of the external-link icon. The menu has one row per source:
+  an external link (`target="_blank"`, `rel="noopener noreferrer"`, link icon)
+  when its URL is usable, and the indexer name as muted, non-interactive text
+  when it is not.
+
+The menu is a native popover with CSS anchor positioning, the pattern
+`#downloads-more` and the Media Files card's file actions menu
+(`components.ex`) use, not an absolute `dropdown-content`. The results list
+scrolls inside the dialog, and an absolutely positioned menu is clipped by
+that scroll container (see `lib/mydia_web/components/README.md`); the top
+layer escapes it. `dropdown dropdown-end` positions it and
+`position-try-fallbacks: flip-block` opens it upward near the bottom edge.
 
 The badge renders twice per row (inline badge below `lg`, column from `lg`),
-so dropdown ids are prefixed by the caller's row id.
+so `indexer_badge/1` takes an `id` attr and the two call sites pass distinct
+ids derived from the row id; the popover id and anchor name derive from it.
 
 ### 3. Filter chips below the status card
 
@@ -128,5 +134,9 @@ dead link. A result that was never merged behaves exactly as today.
     chips);
   - the indexer badge's right edge does not pass the download button's left
     edge;
-  - opening the merged badge's dropdown shows a link per tracker, fully
-    inside the viewport.
+  - opening the merged badge's menu shows a link per tracker, fully inside
+    the viewport.
+
+  Results come from a Bypass-backed Prowlarr (`IndexerMock`), as in
+  `manual_search_info_link_test.exs`; four copies of one release share a
+  magnet URL so dedup merges them.
