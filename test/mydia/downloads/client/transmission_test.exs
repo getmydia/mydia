@@ -581,6 +581,48 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
     end)
   end
 
+  describe "seeding (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "reads secondsSeeding into the status", %{bypass: bypass, config: config} do
+      stub_torrent_get(bypass, transmission_payload(%{"secondsSeeding" => 5400}))
+
+      assert {:ok, %{seeding_time: 5400}} = Transmission.get_status(config, "abc123")
+    end
+
+    test "set_share_limits sets the ratio limit and switches the torrent to it", %{
+      bypass: bypass,
+      config: config
+    } do
+      stub_rpc(bypass, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        assert decoded["method"] == "torrent-set"
+
+        assert decoded["arguments"] == %{
+                 "ids" => ["abc123"],
+                 "seedRatioLimit" => 1.5,
+                 "seedRatioMode" => 1
+               }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"result" => "success"}))
+      end)
+
+      assert :ok =
+               Transmission.set_share_limits(config, "abc123", %{ratio: 1.5, seed_time: 3600})
+    end
+
+    test "set_share_limits sends nothing without a ratio", %{config: config} do
+      # No Bypass expectation: a request would fail the test.
+      assert :ok = Transmission.set_share_limits(config, "abc123", %{ratio: nil, seed_time: 3600})
+    end
+  end
+
   describe "label parsing (Bypass)" do
     setup do
       bypass = Bypass.open()

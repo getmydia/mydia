@@ -443,7 +443,7 @@ defmodule Mydia.Jobs.MediaImport do
                 download_id: download.id
               )
 
-            :deferred ->
+            result when result in [:deferred, :still_seeding] ->
               Logger.info("Keeping download in client until seeding finishes",
                 download_id: download.id
               )

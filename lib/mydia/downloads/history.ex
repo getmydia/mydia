@@ -138,9 +138,8 @@ defmodule Mydia.Downloads.History do
     }
   end
 
-  # The terminal complement of `Download.occupying/1`, restricted to rows that
-  # were never imported: the client-side download failed, or the import failed
-  # with no further retries scheduled.
+  # The terminal complement of `Download.occupying/1` for never-imported rows:
+  # the client-side download failed, or the import failed with no retries left.
   defp failed_query do
     where(
       Download,
@@ -713,11 +712,13 @@ defmodule Mydia.Downloads.History do
       downloaded: torrent_status.downloaded,
       uploaded: torrent_status.uploaded,
       ratio: torrent_status.ratio,
+      seeding_time: Map.get(torrent_status, :seeding_time),
       seeders: if(metadata, do: metadata.seeders, else: nil),
       leechers: if(metadata, do: metadata.leechers, else: nil),
       save_path: torrent_status.save_path,
       files: torrent_status.files,
       completed_at: download.completed_at || torrent_status.completed_at,
+      client_completed_at: torrent_status.completed_at,
       error_message: download.error_message,
       client_failure_category: torrent_status.failure_category,
       client_error_detail: torrent_status.failure_detail,
@@ -794,8 +795,7 @@ defmodule Mydia.Downloads.History do
   end
 
   defp enrich_download_with_empty_status(download, in_client? \\ nil) do
-    # Download exists in DB but not in client
-    # Could be completed and removed, or manually deleted from client
+    # In the DB but not the client: completed and removed, or deleted by hand.
     status =
       cond do
         download.imported_at -> "imported"

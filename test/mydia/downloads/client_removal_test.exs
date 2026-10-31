@@ -257,6 +257,182 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     assert is_nil(Downloads.get_download!(download.id).client_removed_at)
   end
 
+  describe "seeding guard" do
+    @private_ratio %{"private" => true, "minimum_ratio" => 1.0, "minimum_seed_time" => nil}
+
+    test "terms_met?/2 truth table" do
+      day = 86_400
+      paused = fn ratio, time -> %{status(:paused, "x") | ratio: ratio, seeding_time: time} end
+
+      with_terms = fn terms ->
+        %Mydia.Downloads.Download{metadata: %{"tracker_terms" => terms}}
+      end
+
+      # No terms and not private: unchanged.
+      assert ClientRemoval.terms_met?(%Mydia.Downloads.Download{metadata: %{}}, nil)
+
+      ratio_only = with_terms.(%{"minimum_ratio" => 1.0})
+      refute ClientRemoval.terms_met?(ratio_only, paused.(0.5, 10 * day))
+      assert ClientRemoval.terms_met?(ratio_only, paused.(1.0, 0))
+
+      time_only = with_terms.(%{"minimum_seed_time" => day})
+      refute ClientRemoval.terms_met?(time_only, paused.(9.0, day - 1))
+      assert ClientRemoval.terms_met?(time_only, paused.(0.0, day))
+
+      both = with_terms.(%{"minimum_ratio" => 1.0, "minimum_seed_time" => day})
+      refute ClientRemoval.terms_met?(both, paused.(0.5, 60))
+      assert ClientRemoval.terms_met?(both, paused.(0.5, day))
+      assert ClientRemoval.terms_met?(both, paused.(1.5, 60))
+
+      private_no_terms = with_terms.(%{"private" => true})
+      refute ClientRemoval.terms_met?(private_no_terms, paused.(99.0, 365 * day))
+      refute ClientRemoval.terms_met?(private_no_terms, nil)
+    end
+
+    test "a guarded download stays pending on a seed-aware client even when paused" do
+      client = client!(type: :qbittorrent, remove_completed: true)
+      download = download!(client, terms: @private_ratio)
+      StubAdapter.put(%{status(:paused, download.download_client_id) | ratio: 0.4})
+
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+      assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+      assert download.id in Enum.map(ClientRemoval.list_pending_removals(), & &1.id)
+    end
+
+    test "a download whose goal is met is removed once the client is idle" do
+      client = client!(type: :qbittorrent, remove_completed: true)
+      download = download!(client, terms: @private_ratio)
+      StubAdapter.put(%{status(:paused, download.download_client_id) | ratio: 1.2})
+
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "a private download with no known ratio or seed time is never removed automatically" do
+      client = client!(type: :qbittorrent, remove_completed: true)
+      download = download!(client, terms: %{"private" => true})
+
+      StubAdapter.put(%{
+        status(:completed, download.download_client_id)
+        | ratio: 50.0,
+          seeding_time: 400 * 86_400
+      })
+
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+    end
+
+    test "a torrent that left the client is stamped removed even when guarded" do
+      client = client!(type: :qbittorrent, remove_completed: true)
+      download = download!(client, terms: @private_ratio)
+      StubAdapter.put({:error, Error.not_found("gone")})
+
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+    end
+
+    test "rqbit waits for the goal, then removes without waiting for an idle state" do
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      client = client!(type: :rqbit, remove_completed: true)
+      download = download!(client, terms: %{"private" => true, "minimum_seed_time" => 3600})
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | seeding_time: 60})
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | seeding_time: 3600})
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "rqbit seeding time falls back to the download's completed_at" do
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      client = client!(type: :rqbit, remove_completed: true)
+      download = download!(client, terms: %{"minimum_seed_time" => 3600})
+
+      {:ok, download} =
+        Downloads.update_download(download, %{
+          completed_at: DateTime.add(DateTime.utc_now(), -7200, :second)
+        })
+
+      StubAdapter.put(status(:seeding, download.download_client_id))
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+    end
+
+    test "blackhole keeps its pre-guard behaviour: removed as soon as it is complete" do
+      previous = Registry.lookup(:blackhole)
+      Registry.register(:blackhole, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:blackhole, previous) end)
+
+      client =
+        client!(
+          type: :blackhole,
+          remove_completed: true,
+          connection_settings: %{"watch_folder" => "/tmp/w", "completed_folder" => "/tmp/c"}
+        )
+
+      download = download!(client, terms: %{"private" => true, "minimum_seed_time" => 3600})
+      StubAdapter.put(status(:completed, download.download_client_id))
+
+      refute ClientRemoval.seeding_client_type?(:blackhole)
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "rTorrent stopped after seeding past its goal is removed on the time Mydia observed" do
+      previous = Registry.lookup(:rtorrent)
+      Registry.register(:rtorrent, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rtorrent, previous) end)
+
+      client = client!(type: :rtorrent, remove_completed: true)
+      download = download!(client, terms: %{"private" => true, "minimum_seed_time" => 3 * 86_400})
+      StubAdapter.put(status(:completed, download.download_client_id))
+
+      # Stopped, nothing observed: the seed time is unknown, so it stays.
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+
+      {:ok, observed} =
+        Downloads.update_download(download, %{
+          metadata:
+            Map.put(download.metadata, "observed_seeding", %{
+              "seconds" => 4 * 86_400,
+              "last_seen_at" => nil
+            })
+        })
+
+      assert :removed = ClientRemoval.finish_pending_removal(observed)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "a paused torrent that reports no seed time does not count paused time" do
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      client = client!(type: :rqbit, remove_completed: true)
+      download = download!(client, terms: %{"minimum_seed_time" => 3600})
+
+      {:ok, download} =
+        Downloads.update_download(download, %{
+          completed_at: DateTime.add(DateTime.utc_now(), -30 * 86_400, :second)
+        })
+
+      StubAdapter.put(status(:paused, download.download_client_id))
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+    end
+  end
+
   defp client!(opts) do
     unique = System.unique_integer([:positive])
 
@@ -295,6 +471,12 @@ defmodule Mydia.Downloads.ClientRemovalTest do
         Map.put(attrs, :match_status, match_status)
       else
         attrs
+      end
+
+    attrs =
+      case Keyword.get(opts, :terms) do
+        nil -> attrs
+        terms -> Map.put(attrs, :metadata, %{"tracker_terms" => terms})
       end
 
     download_fixture(attrs)

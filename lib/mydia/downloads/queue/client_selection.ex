@@ -10,6 +10,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
+  alias Mydia.Downloads.SeedingLimits
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.{SearchResultMetadata, TrackerTerms}
@@ -172,6 +173,9 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
                opts_with_type
              ) do
           {:ok, client_id} ->
+            # Best effort; the removal guard applies whatever the client says.
+            terms = TrackerRules.for_result(search_result)
+            SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
             {:ok, client_config, client_id, final_download_type}
 
           {:error, _} = error ->

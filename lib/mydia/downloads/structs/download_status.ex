@@ -47,6 +47,12 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     :save_path,
     :added_at,
     :completed_at,
+    # Seconds spent seeding, when the client counts it (qBittorrent
+    # `seeding_time`, Transmission `secondsSeeding`). Nil otherwise; the guard
+    # then uses the time Mydia observed it seeding
+    # (`Mydia.Downloads.ObservedSeedTime`), and only while the torrent is seeding
+    # the time since `completed_at` (`Mydia.Downloads.SeedingGoal.seeding_time/5`).
+    :seeding_time,
     # Why the client reported a terminal failure, in its own words. Both are
     # nil unless `state == :error`, and stay nil for adapters that don't yet
     # classify their failures. See `Mydia.Downloads.Client.FailureCategory`.
@@ -110,6 +116,7 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           files: [String.t()] | nil,
           added_at: DateTime.t() | nil,
           completed_at: DateTime.t() | nil,
+          seeding_time: non_neg_integer() | nil,
           failure_category: FailureCategory.t() | nil,
           failure_detail: String.t() | nil,
           categories: [String.t()]

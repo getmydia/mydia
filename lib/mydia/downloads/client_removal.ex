@@ -10,6 +10,10 @@ defmodule Mydia.Downloads.ClientRemoval do
   time limit, so waiting would never end. `@non_seeding` answers the second
   question for import, and is an allowlist so blackhole (an unknown external
   client) and any future type keep their source.
+
+  Before either check, a download whose tracker terms set a seeding goal
+  (`Mydia.Downloads.SeedingGoal`) stays in a seed-aware client or rqbit until
+  the goal is met. Manual removal is not guarded.
   """
 
   require Logger
@@ -21,6 +25,9 @@ defmodule Mydia.Downloads.ClientRemoval do
   alias Mydia.Downloads.Client.Error
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.ObservedSeedTime
+  alias Mydia.Downloads.SeedingGoal
+  alias Mydia.Downloads.Structs.DownloadStatus
   alias Mydia.Repo
   alias Mydia.Settings
 
@@ -31,6 +38,12 @@ defmodule Mydia.Downloads.ClientRemoval do
   @non_seeding ~w(sabnzbd nzbget debrid)a
 
   def non_seeding_type?(type) when is_atom(type), do: type in @non_seeding
+
+  @doc """
+  True for the clients the seeding guard applies to: the seed-aware ones and
+  rqbit, which seeds without a limit of its own.
+  """
+  def seeding_client_type?(type) when is_atom(type), do: seed_aware_type?(type) or type == :rqbit
 
   @doc """
   True when the download's client never seeds, so import may consume the
@@ -97,126 +110,164 @@ defmodule Mydia.Downloads.ClientRemoval do
     {configs, list_pending_removals(configs)}
   end
 
-  def maybe_remove_after_import(%Download{} = download) do
-    if download.match_status == "unresolved_files" do
-      :skipped
-    else
-      case client_info(download) do
-        {:error, :missing_client} ->
-          # Leave pending: a rename/re-add/adoption may restore the client.
-          # Stamp only after remove_download :ok or a confirmed :not_found.
-          Logger.warning("Deferring client removal; download client not found",
-            download_id: download.id,
-            client: download.download_client
+  @doc """
+  Whether `download` has met its tracker's seeding goal, given the client's
+  current `status`. True for a download whose frozen terms ask for nothing,
+  so removal without terms behaves as before. See `Mydia.Downloads.SeedingGoal`.
+  """
+  @spec terms_met?(Download.t(), DownloadStatus.t() | nil) :: boolean()
+  def terms_met?(%Download{} = download, status) do
+    terms = SeedingGoal.terms(download)
+
+    case status do
+      %DownloadStatus{} ->
+        seeding_time =
+          SeedingGoal.seeding_time(
+            status.seeding_time || ObservedSeedTime.seconds(download),
+            status.state == :seeding,
+            status.completed_at,
+            download.completed_at,
+            DateTime.utc_now()
           )
 
-          :deferred
+        SeedingGoal.met?(terms, status.ratio, seeding_time)
 
-        {:ok, %{remove_completed: false}} ->
-          :skipped
-
-        {:ok, info} ->
-          if seed_aware_type?(info.type) do
-            case Client.get_status(info.adapter, info.config, info.client_id) do
-              {:ok, %{state: state}} ->
-                cond do
-                  removable_state?(state) ->
-                    remove_and_stamp(download, info)
-
-                  state == :seeding ->
-                    Logger.info("Deferring client removal until seeding finishes",
-                      download_id: download.id
-                    )
-
-                    :deferred
-
-                  state in [:downloading, :checking] ->
-                    Logger.info("Deferring client removal; torrent not idle yet",
-                      download_id: download.id,
-                      state: state
-                    )
-
-                    :deferred
-
-                  state == :error ->
-                    Logger.warning("Not auto-removing errored torrent after import",
-                      download_id: download.id
-                    )
-
-                    :deferred
-
-                  true ->
-                    Logger.info("Deferring client removal; torrent not idle yet",
-                      download_id: download.id,
-                      state: state
-                    )
-
-                    :deferred
-                end
-
-              {:error, error} ->
-                if not_found_error?(error) do
-                  case stamp(download) do
-                    :ok -> :removed
-                    {:error, _} = err -> err
-                  end
-                else
-                  Logger.warning("Could not read status for post-import removal",
-                    download_id: download.id,
-                    error: inspect(error)
-                  )
-
-                  :deferred
-                end
-            end
-          else
-            remove_and_stamp(download, info)
-          end
-      end
+      nil ->
+        SeedingGoal.met?(terms, nil, nil)
     end
   end
 
-  def finish_pending_removal(%Download{} = download, configs \\ nil) do
-    if download.match_status == "unresolved_files" do
-      :skipped
+  @doc """
+  Removes `download` from its client right after import when the client is
+  set to Remove After Import and nothing says to wait.
+
+  Returns `:removed`, `:skipped` (removal is off or files are unresolved),
+  `:still_seeding` (the tracker's seeding goal is not met yet), `:deferred`
+  (the client is missing, busy or unreadable) or `{:error, reason}`. Anything
+  but `:removed` and `:skipped` leaves the row for `finish_pending_removal/2`.
+  """
+  def maybe_remove_after_import(%Download{match_status: "unresolved_files"}), do: :skipped
+
+  def maybe_remove_after_import(%Download{} = download) do
+    case client_info(download) do
+      # Leave pending: a rename/re-add/adoption may restore the client.
+      # Stamp only after remove_download :ok or a confirmed :not_found.
+      {:error, :missing_client} -> missing_client(download)
+      {:ok, %{remove_completed: false}} -> :skipped
+      {:ok, info} -> remove_when_ready(download, info, :after_import)
+    end
+  end
+
+  def finish_pending_removal(download, configs \\ nil)
+
+  def finish_pending_removal(%Download{match_status: "unresolved_files"}, _configs),
+    do: :skipped
+
+  def finish_pending_removal(%Download{} = download, configs) do
+    case client_info(download, configs) do
+      {:error, :missing_client} -> missing_client(download)
+      {:ok, %{remove_completed: false}} -> :skipped
+      {:ok, info} -> remove_when_ready(download, info, :pending)
+    end
+  end
+
+  defp missing_client(download) do
+    Logger.warning("Deferring client removal; download client not found",
+      download_id: download.id,
+      client: download.download_client
+    )
+
+    :deferred
+  end
+
+  # The seeding guard runs before the state check, only for clients known to
+  # seed (`seeding_client_type?/1`). Usenet, debrid, blackhole (an external
+  # client Mydia cannot read a ratio from) and unknown types keep their
+  # behaviour from before the guard.
+  defp remove_when_ready(download, info, mode) do
+    guarded? =
+      seeding_client_type?(info.type) and SeedingGoal.applies?(SeedingGoal.terms(download))
+
+    with {:ok, status} <- read_status(info, guarded? or seed_aware_type?(info.type)),
+         :ok <- check_terms(download, status, guarded?),
+         :ok <- check_state(download, info, status, mode) do
+      remove_and_stamp(download, info)
     else
-      case client_info(download, configs) do
-        {:error, :missing_client} ->
-          Logger.warning("Deferring client removal; download client not found",
-            download_id: download.id,
-            client: download.download_client
-          )
+      :gone -> stamp_removed(download)
+      {:wait, result} -> result
+      {:status_error, error} -> status_error(download, error, mode)
+    end
+  end
 
-          :deferred
+  defp read_status(_info, false), do: {:ok, nil}
 
-        {:ok, info} ->
-          if info.remove_completed || false do
-            if seed_aware_type?(info.type) do
-              case Client.get_status(info.adapter, info.config, info.client_id) do
-                {:ok, %{state: state}} ->
-                  if removable_state?(state) do
-                    remove_and_stamp(download, info)
-                  else
-                    :still_seeding
-                  end
+  defp read_status(info, true) do
+    case Client.get_status(info.adapter, info.config, info.client_id) do
+      {:ok, status} -> {:ok, status}
+      {:error, error} -> if not_found_error?(error), do: :gone, else: {:status_error, error}
+    end
+  end
 
-                {:error, error} ->
-                  if not_found_error?(error) do
-                    case stamp(download) do
-                      :ok -> :removed
-                      {:error, _} = err -> err
-                    end
-                  else
-                    {:error, error}
-                  end
-              end
-            else
-              remove_and_stamp(download, info)
-            end
-          else
-            :skipped
-          end
-      end
+  defp check_terms(_download, _status, false), do: :ok
+
+  defp check_terms(download, status, true) do
+    if terms_met?(download, status) do
+      :ok
+    else
+      Logger.info("Keeping download in client until the tracker's seeding goal is met",
+        download_id: download.id
+      )
+
+      {:wait, :still_seeding}
+    end
+  end
+
+  defp check_state(download, info, %{state: state}, mode) do
+    cond do
+      not seed_aware_type?(info.type) -> :ok
+      removable_state?(state) -> :ok
+      true -> {:wait, not_idle(download, state, mode)}
+    end
+  end
+
+  defp check_state(_download, _info, nil, _mode), do: :ok
+
+  defp not_idle(_download, _state, :pending), do: :still_seeding
+
+  defp not_idle(download, :seeding, :after_import) do
+    Logger.info("Deferring client removal until seeding finishes", download_id: download.id)
+    :deferred
+  end
+
+  defp not_idle(download, :error, :after_import) do
+    Logger.warning("Not auto-removing errored torrent after import", download_id: download.id)
+    :deferred
+  end
+
+  defp not_idle(download, state, :after_import) do
+    Logger.info("Deferring client removal; torrent not idle yet",
+      download_id: download.id,
+      state: state
+    )
+
+    :deferred
+  end
+
+  defp status_error(download, error, :after_import) do
+    Logger.warning("Could not read status for post-import removal",
+      download_id: download.id,
+      error: inspect(error)
+    )
+
+    :deferred
+  end
+
+  defp status_error(_download, error, :pending), do: {:error, error}
+
+  defp stamp_removed(download) do
+    case stamp(download) do
+      :ok -> :removed
+      {:error, _} = err -> err
     end
   end
 
@@ -289,20 +340,10 @@ defmodule Mydia.Downloads.ClientRemoval do
            delete_files: true
          ) do
       :ok ->
-        case stamp(download) do
-          :ok -> :removed
-          {:error, _} = err -> err
-        end
+        stamp_removed(download)
 
       {:error, error} ->
-        if not_found_error?(error) do
-          case stamp(download) do
-            :ok -> :removed
-            {:error, _} = err -> err
-          end
-        else
-          {:error, error}
-        end
+        if not_found_error?(error), do: stamp_removed(download), else: {:error, error}
     end
   end
 

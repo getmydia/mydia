@@ -39,6 +39,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :downloaded,
     :uploaded,
     :ratio,
+    # Seconds seeded, when the client counts it. See DownloadStatus.
+    :seeding_time,
     :seeders,
     :leechers,
     :save_path,
@@ -50,6 +52,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # file list or hasn't resolved one yet.
     :files,
     :completed_at,
+    # The client's own completion time, when it reported one.
+    :client_completed_at,
     :error_message,
     # Client-reported failure detail. Deliberately SEPARATE from
     # `error_message`, which is bound to the database column: DownloadMonitor
@@ -147,11 +151,13 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           downloaded: integer(),
           uploaded: integer(),
           ratio: float(),
+          seeding_time: non_neg_integer() | nil,
           seeders: integer() | nil,
           leechers: integer() | nil,
           save_path: String.t() | nil,
           files: [String.t()] | nil,
           completed_at: DateTime.t() | nil,
+          client_completed_at: DateTime.t() | nil,
           error_message: String.t() | nil,
           client_failure_category: FailureCategory.t() | nil,
           client_error_detail: String.t() | nil,

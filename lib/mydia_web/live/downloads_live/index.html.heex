@@ -540,6 +540,10 @@
                     )}
                   </span>
                 <% end %>
+                <MydiaWeb.SeedingComponents.seeding_chip
+                  id={"download-seeding-#{download.id}"}
+                  download={download}
+                />
                 <ListComponents.client_chip
                   :if={download.download_client}
                   id={"download-client-#{download.id}"}

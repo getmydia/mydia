@@ -195,6 +195,37 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end)
   end
 
+  # qBittorrent takes the seed time in minutes; -1 is "no limit" and -2 "use
+  # the global setting". An unset limit is -1, not -2, so a global ratio
+  # cannot stop a torrent before a seed-time-only goal is met. The inactive
+  # limit is required since 4.6 and is left to the global setting.
+  @impl true
+  def set_share_limits(config, client_id, limits) do
+    body = %{
+      hashes: client_id,
+      ratioLimit: share_limit(limits[:ratio]),
+      seedingTimeLimit: share_limit(limits[:seed_time] && ceil_minutes(limits[:seed_time])),
+      inactiveSeedingTimeLimit: -2
+    }
+
+    with_authenticated_session(config, fn req ->
+      with {:ok, response} <-
+             authed_request(req, :post, "/api/v2/torrents/setShareLimits", form: body) do
+        share_limits_result(response.status)
+      end
+    end)
+  end
+
+  defp share_limits_result(status) when status in 200..299, do: :ok
+
+  defp share_limits_result(status),
+    do: {:error, Error.api_error("Failed to set share limits", %{status: status})}
+
+  defp share_limit(nil), do: -1
+  defp share_limit(value), do: value
+
+  defp ceil_minutes(seconds), do: div(seconds + 59, 60)
+
   @impl true
   def pause_torrent(config, client_id) do
     toggle_torrent(config, client_id, "/api/v2/torrents/pause", "/api/v2/torrents/stop")
@@ -568,6 +599,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
       files: content_files(save_path, torrent["content_path"]),
       added_at: Helpers.parse_timestamp_unix(torrent["added_on"]),
       completed_at: Helpers.parse_timestamp_unix(torrent["completion_on"]),
+      seeding_time: Helpers.parse_non_negative_integer(torrent["seeding_time"]),
       categories: parse_categories(torrent["category"])
     })
   end

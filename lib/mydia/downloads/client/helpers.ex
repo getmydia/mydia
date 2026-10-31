@@ -124,6 +124,14 @@ defmodule Mydia.Downloads.Client.Helpers do
   def parse_timestamp_unix(_), do: nil
 
   @doc """
+  A non-negative integer count (seconds, bytes) from a client field, or nil
+  for anything else. Clients send -1 for "not available".
+  """
+  @spec parse_non_negative_integer(term()) :: non_neg_integer() | nil
+  def parse_non_negative_integer(value) when is_integer(value) and value >= 0, do: value
+  def parse_non_negative_integer(_), do: nil
+
+  @doc """
   Extracts the per-client `priority_profile` map from a client config map.
 
   Looks at the top-level `:priority_profile` key first, then falls back to

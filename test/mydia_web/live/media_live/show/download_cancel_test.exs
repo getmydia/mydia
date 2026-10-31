@@ -31,6 +31,43 @@ defmodule MydiaWeb.MediaLive.Show.DownloadCancelTest do
     assert_enqueued(worker: Mydia.Jobs.RemoveDownload, args: %{"download_id" => download.id})
   end
 
+  test "the cancel dialog warns of a hit-and-run before the tracker's goal is met, and still cancels",
+       %{conn: conn} do
+    movie = media_item_fixture(%{type: "movie", title: "Fictional Copper Estuary", year: 2024})
+
+    guarded =
+      download_fixture(%{
+        media_item_id: movie.id,
+        indexer: "Velvet Lantern",
+        metadata: %{"tracker_terms" => %{"private" => true, "minimum_ratio" => 1.0}}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    render_click(view, "show_download_cancel_confirm", %{"download-id" => guarded.id})
+
+    assert has_element?(
+             view,
+             "#seeding-removal-warning",
+             "Velvet Lantern requires a ratio of 1.0"
+           )
+
+    assert has_element?(view, "#seeding-removal-warning", "hit-and-run")
+
+    render_click(view, "cancel_download", %{})
+    assert Repo.get!(Download, guarded.id).removal_kind == "cancel"
+  end
+
+  test "the cancel dialog has no seeding warning without tracker terms", %{conn: conn} do
+    movie = media_item_fixture(%{type: "movie", title: "Fictional Quiet Harbor", year: 2024})
+    download = download_fixture(%{media_item_id: movie.id})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_click(view, "show_download_cancel_confirm", %{"download-id" => download.id})
+
+    refute has_element?(view, "#seeding-removal-warning")
+  end
+
   test "cancelling a stalled download says the release is blocked", %{conn: conn} do
     movie = media_item_fixture(%{type: "movie", title: "Fictional Stalled Beacon", year: 2022})
 

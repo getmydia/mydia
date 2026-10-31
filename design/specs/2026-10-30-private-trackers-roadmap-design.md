@@ -131,23 +131,42 @@ convention). With only one of the two set, that one decides.
 ### Guard
 
 - `ClientRemoval.terms_met?/2` runs before the existing state check in
-  `maybe_remove_after_import/1` and `finish_pending_removal/2`, for every
-  client type, including rqbit and rTorrent, which today remove without
-  waiting. A guarded row returns `:still_seeding` and stays pending.
+  `maybe_remove_after_import/1` and `finish_pending_removal/2`, for
+  qBittorrent, Transmission, rTorrent and rqbit; SABnzbd, NZBGet, debrid,
+  blackhole and unknown types are skipped.
+  A guarded row returns `:still_seeding` and stays pending. rTorrent was
+  already seed-aware (it waited for paused or completed); rqbit was removed
+  right after import. `maybe_remove_after_import/1`
+  also returns `:still_seeding`, and `MediaImport` keeps the row pending.
 - `DownloadStatus` gains `seeding_time` (seconds): qBittorrent `seeding_time`,
   Transmission `secondsSeeding`, otherwise time since the client's
   `completed_at`, falling back to `Download.completed_at`.
+  As built: the wall-clock fallback is used only while the client reports
+  the torrent as seeding, so a paused, stopped or missing torrent never meets
+  a seed time goal from time it did not seed.
+  For rTorrent and rqbit, which report no seed time, `DownloadMonitor`
+  accumulates the time it observes the torrent seeding in
+  `Download.metadata["observed_seeding"]` (a gap over three cron
+  intervals credits nothing), which stands in for the reported value.
 - Manual removal (queue delete, `Removal`, deleting media together with its
   download) stays possible while guarded. The confirm dialog names the tracker,
   the required and current ratio and seed time, and says that removing now
   risks a hit-and-run.
+  As built: the dialogs are the Downloads page cancel and clear confirms and
+  the media page cancel dialog; `Removal` itself is unchanged and unguarded.
+  Deleting a media item never touches the client (its download rows cascade
+  away and the torrent keeps seeding), so it carries no warning. Batch delete
+  and Clear all completed carry none either.
 
 ### Pushed limits
 
 At grab, best effort; a failure is logged and the guard still applies.
 
 - qBittorrent: `setShareLimits` with `ratioLimit` and `seedingTimeLimit`
-  (minutes).
+  (minutes). As built: an optional `set_share_limits/3` adapter
+  callback; minutes round up, an unset limit is `-1` (none) rather than `-2`
+  (global), and `inactiveSeedingTimeLimit` is `-2`, which qBittorrent 4.6+
+  requires.
 - Transmission: `seedRatioLimit` with `seedRatioMode=1`. Transmission has no
   total seed time limit, so time relies on the guard.
 - rTorrent and rqbit: nothing pushed; the guard alone.

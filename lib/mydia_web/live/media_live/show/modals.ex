@@ -599,9 +599,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     <div class="modal modal-open">
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">{gettext("Cancel Download?")}</h3>
-        <p class="py-4">
-          {gettext("Are you sure you want to cancel this download?")}
-        </p>
+        <p class="py-4">{gettext("Are you sure you want to cancel this download?")}</p>
         <div class="bg-base-200 p-3 rounded-box mb-4">
           <p class="text-sm font-medium">{@download_to_cancel.title}</p>
           <%= if quality = @download_to_cancel.metadata["quality"] do %>
@@ -616,6 +614,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </p>
           <% end %>
         </div>
+        <MydiaWeb.SeedingComponents.removal_warning download={@download_to_cancel} />
         <p class="text-warning text-sm mb-4">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
           {gettext("The download will be stopped and marked as cancelled.")}
