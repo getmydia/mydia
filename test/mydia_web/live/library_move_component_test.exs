@@ -120,7 +120,7 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/movies/#{ctx.movie.id}")
       open(view, "#move-library-button")
       view |> form("#library-move-form", %{"target" => ctx.b.id}) |> render_change()
-      render_async(view)
+      render_async(view, 2_000)
 
       assert has_element?(view, "#library-move-skipped")
     end
