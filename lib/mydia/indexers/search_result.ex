@@ -281,7 +281,9 @@ defmodule Mydia.Indexers.SearchResult do
   @doc """
   Returns a URL safe to render as a link to the release's page on the indexer.
 
-  Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host.
+  Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host,
+  and also when it carries credentials (`redact_url/1` would change it): the
+  page must not hold a passkey, and a redacted link would not work.
 
   Indexers supply this value, and Cardigann definitions are fetched from an
   external repository, so the scheme allowlist is a security boundary: HEEx does
@@ -314,8 +316,10 @@ defmodule Mydia.Indexers.SearchResult do
     cond do
       trimmed == "" -> nil
       not linkable_scheme?(trimmed) -> nil
-      # The page renders it in an href; a details link needs no credentials.
-      true -> Mydia.Downloads.Client.Helpers.redact_url(trimmed)
+      # A redacted link would be dead, and the raw one would put the key in
+      # the page, so a link carrying credentials is not offered at all.
+      Mydia.Downloads.Client.Helpers.redact_url(trimmed) != trimmed -> nil
+      true -> trimmed
     end
   end
 

@@ -313,13 +313,13 @@ defmodule Mydia.Indexers.SearchResultTest do
   end
 
   describe "info_page_url/1" do
-    test "strips credentials from the link it renders" do
-      result =
-        search_result(info_url: "https://tracker.example/details.php?id=42&passkey=feedface0123")
-
-      link = SearchResult.info_page_url(result)
-      assert link =~ "https://tracker.example/details.php?id=42"
-      refute link =~ "feedface0123"
+    test "offers no link when the URL carries credentials" do
+      for url <- [
+            "https://tracker.example/details.php?id=42&passkey=feedface0123",
+            "https://tracker.example/torrent/download/48213.a1b2c3d4e5f60718293a4b5c6d7e8f90"
+          ] do
+        assert SearchResult.info_page_url(search_result(info_url: url)) == nil
+      end
     end
 
     test "returns an https URL unchanged" do

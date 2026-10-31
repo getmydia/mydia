@@ -189,33 +189,41 @@ defmodule Mydia.Downloads.Client.Helpers do
   end
 
   @doc """
-  Replaces every URL inside `term` (maps, lists and strings, nested) with its
-  origin, e.g. `"https://cdn.example/…"` or `"magnet:…"`, so stored metadata
-  such as resolved debrid links can be shown without the bearer tokens in
-  their paths. Display only.
+  Replaces every URL inside `term` (maps, lists, `URI` structs and strings,
+  nested, including URLs embedded in longer text) with its origin, e.g.
+  `"https://cdn.example/…"` or `"magnet:…"`, so stored metadata such as
+  resolved debrid links can be shown without the bearer tokens in their paths.
+  Display only.
   """
   @spec redact_urls_in(term()) :: term()
+  def redact_urls_in(%URI{} = uri), do: redact_urls_in(URI.to_string(uri))
+
   def redact_urls_in(map) when is_map(map) and not is_struct(map),
     do: Map.new(map, fn {key, value} -> {key, redact_urls_in(value)} end)
 
   def redact_urls_in(list) when is_list(list), do: Enum.map(list, &redact_urls_in/1)
 
   def redact_urls_in(string) when is_binary(string) do
-    case URI.parse(string) do
-      %URI{scheme: scheme, host: host} when is_binary(scheme) and host not in [nil, ""] ->
-        "#{scheme}://#{host}/…"
-
-      %URI{scheme: "magnet"} ->
-        "magnet:…"
-
-      _ ->
-        string
-    end
-  rescue
-    _ -> string
+    string
+    |> String.replace(~r{magnet:\?[^\s"'<>]+}i, "magnet:…")
+    |> String.replace(~r{\b([a-z][a-z0-9+.-]*)://([^/\s"'<>?#]+)[^\s"'<>]*}i, fn url ->
+      origin(url)
+    end)
   end
 
   def redact_urls_in(other), do: other
+
+  defp origin(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when is_binary(scheme) and host not in [nil, ""] ->
+        "#{scheme}://#{host}/…"
+
+      _ ->
+        "…"
+    end
+  rescue
+    _ -> "…"
+  end
 
   # A key, not an id or a slug: 24+ characters of [A-Za-z0-9_-] with both
   # letters and digits, and a run of 16+ letters and digits with no `-` or `_`
@@ -227,21 +235,50 @@ defmodule Mydia.Downloads.Client.Helpers do
   end
 
   @doc """
-  Redacts the values of credential parameters (`passkey`, `apikey`, ...) in a
-  map or a list of `{key, value}` pairs, for logging request parameters.
+  Redacts request parameters for a log line: in a map or a list of
+  `{key, value}` pairs, the value of any key that names a credential, and in
+  a form-encoded body the same keys' values.
+
+  A key counts when it contains `key`, `pass`, `secret`, `auth` or `token`
+  (case-insensitive), so a Cardigann input named `secret_key` or `pin_pass`
+  is caught too. Over-redacting a debug line costs nothing. Nested values are
+  redacted the same way.
   """
-  @spec redact_params(map() | list() | term()) :: map() | list() | term()
-  def redact_params(params) when is_map(params),
+  @spec redact_params(term()) :: term()
+  def redact_params(params) when is_map(params) and not is_struct(params),
     do: Map.new(params, &redact_param/1)
 
   def redact_params(params) when is_list(params), do: Enum.map(params, &redact_param/1)
+
+  def redact_params(body) when is_binary(body) do
+    if String.contains?(body, "=") do
+      body
+      |> String.split("&")
+      |> Enum.map_join("&", fn pair ->
+        [key | _] = String.split(pair, "=", parts: 2)
+        if credential_key?(key), do: key <> "=" <> @redacted_param_value, else: pair
+      end)
+    else
+      body
+    end
+  end
+
   def redact_params(other), do: other
 
-  defp redact_param({key, _value} = pair) when is_binary(key) or is_atom(key) do
-    if sensitive_param?(to_string(key)), do: {key, "[REDACTED]"}, else: pair
+  defp redact_param({key, value}) when is_binary(key) or is_atom(key) do
+    if credential_key?(to_string(key)),
+      do: {key, "[REDACTED]"},
+      else: {key, redact_params(value)}
   end
 
   defp redact_param(other), do: other
+
+  @credential_fragments ~w(key pass secret auth token)
+
+  defp credential_key?(key) do
+    key = String.downcase(key)
+    sensitive_param?(key) or Enum.any?(@credential_fragments, &String.contains?(key, &1))
+  end
 
   defp redact_query(query) do
     query

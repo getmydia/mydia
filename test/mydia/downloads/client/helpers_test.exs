@@ -11,6 +11,22 @@ defmodule Mydia.Downloads.Client.HelpersTest do
       assert Helpers.redact_params([{"apikey", "k1"}, {:cat, "2000"}]) ==
                [{"apikey", "[REDACTED]"}, {:cat, "2000"}]
     end
+
+    test "catches credential-like names beyond the URL list, nested maps and form bodies" do
+      assert Helpers.redact_params(%{
+               "secret_key" => "s1",
+               "api-key" => "s2",
+               "torrentpass" => "s3",
+               "nested" => %{"pin_pass" => "s4", "q" => "invented"}
+             }) == %{
+               "secret_key" => "[REDACTED]",
+               "api-key" => "[REDACTED]",
+               "torrentpass" => "[REDACTED]",
+               "nested" => %{"pin_pass" => "[REDACTED]", "q" => "invented"}
+             }
+
+      assert Helpers.redact_params("q=invented&secret=s5") == "q=invented&secret=%5BREDACTED%5D"
+    end
   end
 
   describe "redact_urls_in/1" do
@@ -30,6 +46,17 @@ defmodule Mydia.Downloads.Client.HelpersTest do
                "debrid_urls" => [%{"url" => "https://cdn.debrid.example.test/…"}],
                "source" => "magnet:…"
              }
+    end
+
+    test "redacts URLs embedded in text and URI structs" do
+      assert Helpers.redact_urls_in("see https://cdn.example.test/d/TOKEN99 here") ==
+               "see https://cdn.example.test/… here"
+
+      assert Helpers.redact_urls_in(URI.parse("https://cdn.example.test/d/TOKEN99")) ==
+               "https://cdn.example.test/…"
+
+      assert Helpers.redact_urls_in("Invented.Feature.2021 1080p") ==
+               "Invented.Feature.2021 1080p"
     end
   end
 
