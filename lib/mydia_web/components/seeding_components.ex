@@ -136,6 +136,15 @@ defmodule MydiaWeb.SeedingComponents do
         time: format_time(goal.required_seed_time)
       )
 
+  defp standing(%SeedingGoal{ratio: nil, seeding_time: nil}),
+    do: gettext("Mydia cannot read this download's ratio or seed time right now.")
+
+  defp standing(%SeedingGoal{ratio: nil} = goal),
+    do:
+      gettext("This download has seeded for %{time}; its ratio is unknown.",
+        time: format_time(goal.seeding_time)
+      )
+
   defp standing(%SeedingGoal{seeding_time: nil} = goal),
     do: gettext("This download is at a ratio of %{ratio}.", ratio: format_ratio(goal.ratio))
 
@@ -154,14 +163,18 @@ defmodule MydiaWeb.SeedingComponents do
   defp format_ratio(ratio) when is_number(ratio) and ratio > 0,
     do: :erlang.float_to_binary(ratio * 1.0, decimals: 2)
 
-  defp format_ratio(_ratio), do: "0.00"
+  defp format_ratio(nil), do: "?"
+  defp format_ratio(_zero_or_negative), do: "0.00"
 
   defp format_required_ratio(ratio), do: :erlang.float_to_binary(ratio * 1.0, [:short])
 
   defp format_time(nil), do: "?"
 
-  # Days, hours and minutes, leaving out empty parts, so a 90 minute goal
-  # reads "1h 30m" rather than rounding down to "1h". Only seconds are dropped.
+  # Under a minute in seconds, as on the Indexers page. Otherwise days, hours
+  # and minutes, leaving out empty parts, so a 90 minute goal reads "1h 30m"
+  # rather than rounding down to "1h".
+  defp format_time(seconds) when seconds < 60, do: gettext("%{count}s", count: seconds)
+
   defp format_time(seconds) do
     [
       {div(seconds, 86_400), fn n -> gettext("%{count}d", count: n) end},
@@ -170,9 +183,5 @@ defmodule MydiaWeb.SeedingComponents do
     ]
     |> Enum.reject(fn {count, _label} -> count == 0 end)
     |> Enum.map_join(" ", fn {count, label} -> label.(count) end)
-    |> case do
-      "" -> gettext("%{count}m", count: 0)
-      text -> text
-    end
   end
 end

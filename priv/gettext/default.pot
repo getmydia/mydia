@@ -2088,7 +2088,7 @@ msgid_plural "%{count} upcoming"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/seeding_components.ex:167
+#: lib/mydia_web/components/seeding_components.ex:180
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:202
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:224
 #: lib/mydia_web/live/downloads_live/format.ex:40
@@ -2103,7 +2103,7 @@ msgstr ""
 msgid "%{count}d ago"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:168
+#: lib/mydia_web/components/seeding_components.ex:181
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:201
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:227
 #: lib/mydia_web/live/downloads_live/format.ex:39
@@ -2118,8 +2118,7 @@ msgstr ""
 msgid "%{count}h ago"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:169
-#: lib/mydia_web/components/seeding_components.ex:174
+#: lib/mydia_web/components/seeding_components.ex:182
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:200
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:229
 #: lib/mydia_web/live/downloads_live/format.ex:38
@@ -2139,6 +2138,7 @@ msgstr ""
 msgid "%{count}mo"
 msgstr ""
 
+#: lib/mydia_web/components/seeding_components.ex:176
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:221
 #: lib/mydia_web/live/downloads_live/format.ex:37
 #, elixir-autogen, elixir-format
@@ -21432,17 +21432,17 @@ msgstr ""
 msgid "Seeding goal met"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:152
+#: lib/mydia_web/components/seeding_components.ex:161
 #, elixir-autogen, elixir-format
 msgid "The tracker"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:144
+#: lib/mydia_web/components/seeding_components.ex:153
 #, elixir-autogen, elixir-format
 msgid "This download is at a ratio of %{ratio} after %{time} of seeding."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:140
+#: lib/mydia_web/components/seeding_components.ex:149
 #, elixir-autogen, elixir-format
 msgid "This download is at a ratio of %{ratio}."
 msgstr ""
@@ -21450,4 +21450,14 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:36
 #, elixir-autogen, elixir-format
 msgid "When Mydia grabs a release from a tracker with seeding rules, qBittorrent receives the minimum ratio and seed time, and Transmission the minimum ratio. rTorrent and rqbit receive nothing. On every torrent client, Remove After Import waits until the tracker's rules are met."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:140
+#, elixir-autogen, elixir-format
+msgid "Mydia cannot read this download's ratio or seed time right now."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:144
+#, elixir-autogen, elixir-format
+msgid "This download has seeded for %{time}; its ratio is unknown."
 msgstr ""

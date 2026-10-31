@@ -40,6 +40,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
   @met_hash "2222222222222222222222222222222222222222"
   @plain_hash "3333333333333333333333333333333333333333"
   @unmet_hash "4444444444444444444444444444444444444444"
+  @stopped_hash "5555555555555555555555555555555555555555"
 
   @terms %{"private" => true, "minimum_ratio" => 1.0, "minimum_seed_time" => 3 * 86_400}
 
@@ -96,6 +97,17 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
 
     plain = download!(client, @plain_hash, imported_at: imported_at)
 
+    # A client that reports no seed time (rTorrent, rqbit), stopped: the chip
+    # shows the seed time Mydia counted while it was seeding.
+    stopped =
+      download!(client, @stopped_hash,
+        metadata: %{
+          "tracker_terms" => @terms,
+          "observed_seeding" => %{"seconds" => 2 * 86_400, "last_seen_at" => nil}
+        },
+        imported_at: imported_at
+      )
+
     unmet =
       download!(client, @unmet_hash,
         metadata: %{"tracker_terms" => @terms},
@@ -106,7 +118,8 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
       status(@guarded_hash, :seeding, 0.42, 86_400),
       status(@met_hash, :seeding, 1.3, 3600),
       status(@plain_hash, :seeding, 0.1, 60),
-      status(@unmet_hash, :seeding, 0.42, 86_400)
+      status(@unmet_hash, :seeding, 0.42, 86_400),
+      status(@stopped_hash, :paused, 0.1, nil)
     ])
 
     {:ok, view, _html} = live(conn, ~p"/downloads?view=all")
@@ -114,6 +127,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     assert has_element?(view, "#download-seeding-#{guarded.id}", "0.42 / 1.0 · 1d / 3d")
     assert has_element?(view, "#download-seeding-#{met.id}", "Seeding goal met")
     refute has_element?(view, "#download-seeding-#{plain.id}")
+    assert has_element?(view, "#download-seeding-#{stopped.id}", "0.10 / 1.0 · 2d / 3d")
 
     # In flight and under the goal: the cancel confirm names the tracker, the
     # goal and the standing, and warns. Removal stays possible.
