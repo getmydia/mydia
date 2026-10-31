@@ -85,8 +85,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :indexer_filters, :list, default: []
   attr :min_seeders, :integer, default: 0
   attr :class, :any, default: nil
-  # The dialog renders the chips twice (the chip bar below `lg`, beside the
-  # progress summary from `lg`), so each copy needs its own DOM ids.
+  # The dialog renders the chips twice (the chip bar below `lg`, beneath the
+  # indexer status card from `lg`), so each copy needs its own DOM ids.
   attr :id_prefix, :string, default: "manual-search-chip"
 
   @doc "One removable chip per active filter dimension."
@@ -350,9 +350,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   defp indexer_chip_label([_, _, _ | _] = names) do
     {shown, rest} = Enum.split(names, 2)
 
-    gettext("%{indexers} +%{count} more",
-      indexers: Enum.join(shown, ", "),
-      count: length(rest)
+    ngettext("%{indexers} +%{count} more", "%{indexers} +%{count} more", length(rest),
+      indexers: Enum.join(shown, ", ")
     )
   end
 

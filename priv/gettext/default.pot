@@ -4632,7 +4632,7 @@ msgid "Download started: %{title}"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:371
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:575
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:580
 #, elixir-autogen, elixir-format
 msgid "Download this release"
 msgstr ""
@@ -5172,12 +5172,12 @@ msgstr ""
 msgid "Failed to update the match."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:567
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:572
 #, elixir-autogen, elixir-format
 msgid "Failed — retry"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:573
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:578
 #, elixir-autogen, elixir-format
 msgid "Failed: %{reason} — click to retry"
 msgstr ""
@@ -10348,7 +10348,7 @@ msgstr ""
 msgid "View the status of your media requests"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:457
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:462
 #: lib/mydia_web/live/search_live/index.html.heex:373
 #: lib/mydia_web/live/search_live/index.html.heex:537
 #, elixir-autogen, elixir-format
@@ -11657,7 +11657,7 @@ msgid "Status"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/formatters.ex:44
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:597
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:602
 #, elixir-autogen, elixir-format
 msgctxt "relative time"
 msgid "now"
@@ -20709,60 +20709,60 @@ msgstr ""
 msgid "Blacklisted"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:520
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:525
 #, elixir-autogen, elixir-format
 msgid "New grabs for this episode are blocked until it finishes or is removed."
 msgid_plural "New grabs for this episode are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:536
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:541
 #, elixir-autogen, elixir-format
 msgid "New grabs for this movie are blocked until it finishes or is removed."
 msgid_plural "New grabs for this movie are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:528
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:533
 #, elixir-autogen, elixir-format
 msgid "New grabs for this season are blocked until it finishes or is removed."
 msgid_plural "New grabs for this season are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:505
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:510
 #, elixir-autogen, elixir-format
 msgid "and %{count} more are already downloading."
 msgid_plural "and %{count} more are already downloading."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:503
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:508
 #, elixir-autogen, elixir-format
 msgid "is already downloading."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:500
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:505
 #, elixir-autogen, elixir-format
 msgid "“%{title}”"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:599
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:604
 #, elixir-autogen, elixir-format
 msgid "Failed %{ago} ago"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:598
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:603
 #, elixir-autogen, elixir-format
 msgid "Failed just now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:570
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:575
 #, elixir-autogen, elixir-format
 msgid "Blacklisted: %{reason}. Click to grab it anyway."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:566
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:571
 #, elixir-autogen, elixir-format
 msgid "Grab anyway"
 msgstr ""
@@ -21537,12 +21537,14 @@ msgstr ""
 msgid "When Mydia grabs a release from a tracker with seeding rules, qBittorrent receives the minimum ratio and seed time, and Transmission the minimum ratio. rTorrent and rqbit receive nothing. On every torrent client, Remove After Import waits until the tracker's rules are met."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:431
-#, elixir-autogen, elixir-format
-msgid "Trackers for this release: %{indexers}"
-msgstr ""
-
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:353
 #, elixir-autogen, elixir-format
 msgid "%{indexers} +%{count} more"
+msgid_plural "%{indexers} +%{count} more"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:432
+#, elixir-autogen, elixir-format
+msgid "%{label}, trackers: %{indexers}"
 msgstr ""

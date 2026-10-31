@@ -592,10 +592,10 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html =
         modal_html(
           %{
-            indexer: "TorrentDay",
+            indexer: "Saltmarsh Mirror",
             sources:
               for(
-                name <- ["EZTV", "Nyaa", "TorrentDay"],
+                name <- ["Ashvale Commons", "Brinewater Exchange", "Saltmarsh Mirror"],
                 do: %Mydia.Indexers.SearchResult.Source{indexer: name}
               )
           },
@@ -604,8 +604,8 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       doc = LazyHTML.from_fragment(html)
 
-      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
-      assert html =~ ~s(title="EZTV, Nyaa, TorrentDay")
+      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "Saltmarsh Mirror +2"
+      assert html =~ ~s(title="Ashvale Commons, Brinewater Exchange, Saltmarsh Mirror")
     end
 
     test "a merged release lists each tracker's page in a popover menu" do
@@ -633,6 +633,35 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       # The tracker with an unusable URL is named but not linked.
       assert LazyHTML.text(menu) =~ "Brinewater Exchange"
       refute html =~ "javascript:alert"
+
+      # The inline copy (shown below lg) carries the same menu under its own ids.
+      inline = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-inline")
+
+      assert LazyHTML.attribute(inline, "popovertarget") ==
+               ["search-result-00000-1-indexer-badge-inline-menu"]
+
+      assert doc
+             |> LazyHTML.query("#search-result-00000-1-indexer-badge-inline-menu[popover]")
+             |> Enum.count() == 1
+    end
+
+    test "a merged release with no usable URL still names each tracker, without links" do
+      html =
+        modal_html(%{
+          indexer: "Saltmarsh Mirror",
+          sources: [
+            %Source{indexer: "Ashvale Commons", info_url: nil},
+            %Source{indexer: "Saltmarsh Mirror", info_url: "javascript:alert(1)"}
+          ]
+        })
+
+      doc = LazyHTML.from_fragment(html)
+      menu = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-menu[popover]")
+
+      assert Enum.count(menu) == 1
+      assert menu |> LazyHTML.query("a[href]") |> Enum.count() == 0
+      assert LazyHTML.text(menu) =~ "Ashvale Commons"
+      assert LazyHTML.text(menu) =~ "Saltmarsh Mirror"
     end
 
     test "a single-tracker release stays a direct link with a truncating label" do

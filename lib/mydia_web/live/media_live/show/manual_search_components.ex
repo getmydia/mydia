@@ -214,9 +214,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <%!-- Freeleech, upload multiplier and private tracker --%>
         <.terms_badges id={"#{@id}-terms"} terms={@result.terms} />
         <%!-- Indexer badge (its own column from lg) --%>
-        <span class="lg:hidden">
+        <div class="min-w-0 max-w-full lg:hidden">
           <.indexer_badge id={"#{@id}-indexer-badge-inline"} result={@result} />
-        </span>
+        </div>
         <%!-- Tried before: failed for this target or blacklisted --%>
         <%= if attempt = visible_prior_attempt(@result) do %>
           <span
@@ -412,7 +412,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
 
     assigns =
       assign(assigns,
-        info_page_url: SearchResult.info_page_url(assigns.result),
+        info_page_url: SearchResult.usable_info_url(hd(sources).info_url),
         links: Enum.map(sources, &{&1.indexer, SearchResult.usable_info_url(&1.info_url)}),
         merged?: length(sources) > 1,
         all_indexers: Enum.join(names, ", ")
@@ -428,7 +428,12 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           popovertarget={"#{@id}-menu"}
           style={"anchor-name:--#{@id}"}
           title={@all_indexers}
-          aria-label={gettext("Trackers for this release: %{indexers}", indexers: @all_indexers)}
+          aria-label={
+            gettext("%{label}, trackers: %{indexers}",
+              label: indexer_label(@result),
+              indexers: @all_indexers
+            )
+          }
         >
           <span class="truncate">{indexer_label(@result)}</span>
           <.icon name="hero-chevron-down" class="w-3 h-3 shrink-0" />
