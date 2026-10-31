@@ -36,6 +36,10 @@ defmodule Mydia.Indexers.Cardigann.Login do
     end
   end
 
+  @doc "True when logging in to `parsed` needs a person (an image captcha or a 2FA code)."
+  @spec needs_person?(Parsed.t()) :: boolean()
+  def needs_person?(%Parsed{login: login}), do: Form.needs_person?(login)
+
   @spec complete(Challenge.t(), %{String.t() => String.t()}) ::
           {:ok, Session.t()} | {:error, Error.t()}
   def complete(%Challenge{} = challenge, answers), do: Form.complete(challenge, answers)
