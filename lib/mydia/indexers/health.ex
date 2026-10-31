@@ -303,7 +303,7 @@ defmodule Mydia.Indexers.Health do
     - Status: Unhealthy
     - Consecutive Failures: #{failure_count}
     - Type: #{config.type}
-    - URL: #{config.base_url}
+    - URL: #{Mydia.Downloads.Client.Helpers.redact_url(config.base_url)}
     - Action Required: Manual intervention recommended
     """)
 

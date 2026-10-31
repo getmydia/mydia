@@ -102,6 +102,54 @@ defmodule Mydia.Indexers.RateLimiter do
   end
 
   @doc """
+  Checks a rolling-window counter: `{:ok, count}` while fewer than `limit`
+  events were recorded under `key` in the last `window_ms`, else
+  `{:error, :limited, count}`.
+
+  Unlike the per-minute limit above, the window is the caller's (the daily
+  tracker caps in `Mydia.Indexers.TrackerLimits` use 24 hours). Counts live in
+  ETS and reset when the application restarts.
+  """
+  @spec check_window(term(), non_neg_integer(), pos_integer()) ::
+          {:ok, non_neg_integer()} | {:error, :limited, non_neg_integer()}
+  def check_window(key, limit, window_ms) do
+    since = System.monotonic_time(:millisecond) - window_ms
+    spec = [{{{:window, key, :"$1", :_}, :_}, [{:>=, :"$1", since}], [true]}]
+    count = :ets.select_count(@table_name, spec)
+
+    if count < limit, do: {:ok, count}, else: {:error, :limited, count}
+  end
+
+  @doc """
+  Takes one slot under `key` if fewer than `limit` were taken in the last
+  `window_ms`: `:ok`, or `{:error, :limited, count}` without taking it.
+
+  The slot is inserted before counting and removed again when over the
+  limit, so concurrent callers can never all pass a check for the last slot.
+  At worst two racing callers both back off.
+
+  Each slot expires `window_ms` after it was taken, so every call on one
+  `key` must use the same window: a later check with a longer window would
+  miss slots already cleaned up.
+  """
+  @spec reserve_window(term(), non_neg_integer(), pos_integer()) ::
+          :ok | {:error, :limited, non_neg_integer()}
+  def reserve_window(key, limit, window_ms) do
+    now = System.monotonic_time(:millisecond)
+    slot = {:window, key, now, make_ref()}
+    :ets.insert(@table_name, {slot, now + window_ms})
+
+    case check_window(key, limit + 1, window_ms) do
+      {:ok, _count} ->
+        :ok
+
+      {:error, :limited, count} ->
+        :ets.delete(@table_name, slot)
+        {:error, :limited, min(count - 1, limit)}
+    end
+  end
+
+  @doc """
   Blocks until `delay_ms` has passed since the previous call for `indexer_id`.
 
   Slots are reserved atomically in ETS, so concurrent callers for one indexer
@@ -280,7 +328,12 @@ defmodule Mydia.Indexers.RateLimiter do
       {{{:_, :"$1"}, :_}, [{:<, :"$1", cutoff}], [true]}
     ]
 
-    deleted = :ets.select_delete(@table_name, match_spec)
+    # Rolling-window events carry their own expiry.
+    now = System.monotonic_time(:millisecond)
+    window_spec = [{{{:window, :_, :_, :_}, :"$1"}, [{:<, :"$1", now}], [true]}]
+
+    deleted =
+      :ets.select_delete(@table_name, match_spec) + :ets.select_delete(@table_name, window_spec)
 
     if deleted > 0 do
       Logger.debug("Cleaned up #{deleted} old rate limit entries")

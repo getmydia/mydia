@@ -25,7 +25,7 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.{ResultDedup, TrackerSightings}
+  alias Mydia.Indexers.{ResultDedup, TrackerLimits, TrackerSightings}
   alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
@@ -87,14 +87,12 @@ defmodule Mydia.Indexers do
   def search(config, query, opts \\ [])
 
   def search(%Settings.IndexerConfig{} = config, query, opts) do
-    # Check rate limit before making the request
     case RateLimiter.check_rate_limit(config.id, config.rate_limit) do
       :ok ->
         adapter_config = indexer_config_to_adapter_config(config)
-
         result = search(adapter_config, query, opts)
 
-        # Record the request if successful (even if search returned no results)
+        # Recorded on success, even with no results.
         case result do
           {:ok, _results} -> RateLimiter.record_request(config.id)
           {:error, _} -> :ok
@@ -113,7 +111,6 @@ defmodule Mydia.Indexers do
 
   def search(%{type: type, id: id, rate_limit: rate_limit} = config, query, opts)
       when is_atom(type) and is_binary(id) do
-    # Cardigann configs with id and rate_limit go through the rate limiter
     case RateLimiter.check_rate_limit(id, rate_limit) do
       :ok ->
         with {:ok, adapter} <- Adapter.Registry.get_adapter(type) do
@@ -180,6 +177,8 @@ defmodule Mydia.Indexers do
         completion order rather than input order. Runs in the caller's
         process, so a manual-search LiveView can `send/2` to itself from
         this callback without extra synchronization. Defaults to a no-op.
+      - `:skip_capped_trackers` - drop results from trackers at their daily
+        grab cap (`TrackerLimits.drop_capped/2`). Set for background searches.
 
   ## Examples
 
@@ -204,14 +203,9 @@ defmodule Mydia.Indexers do
     on_start = Keyword.get(opts, :on_start, fn _pending -> :ok end)
     on_indexer_result = Keyword.get(opts, :on_indexer_result, fn _progress -> :ok end)
 
-    # Get traditional indexers (Prowlarr, Jackett)
-    indexers = Settings.list_indexer_configs()
-    enabled_indexers = Enum.filter(indexers, & &1.enabled)
-
-    # Get enabled Cardigann definitions if feature is enabled
+    enabled_indexers = Enum.filter(Settings.list_indexer_configs(), & &1.enabled)
     cardigann_configs = get_enabled_cardigann_configs()
 
-    # Filter by specific indexer IDs if provided
     {enabled_indexers, cardigann_configs} =
       if indexer_ids do
         indexer_id_set = MapSet.new(indexer_ids)
@@ -317,7 +311,11 @@ defmodule Mydia.Indexers do
             {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
         end)
 
-      results = all_results |> tap(&TrackerSightings.record/1) |> rank_and_dedupe(query, opts)
+      results =
+        all_results
+        |> tap(&TrackerSightings.record/1)
+        |> TrackerLimits.drop_capped(opts)
+        |> rank_and_dedupe(query, opts)
 
       total_time = System.monotonic_time(:millisecond) - start_time
 
@@ -386,7 +384,7 @@ defmodule Mydia.Indexers do
     concurrency = config[:background_max_concurrency] || 2
     deadline_ms = config[:background_deadline_ms] || 60_000
 
-    [max_concurrency: concurrency, deadline_ms: deadline_ms]
+    [max_concurrency: concurrency, deadline_ms: deadline_ms, skip_capped_trackers: true]
   end
 
   @default_search_timeout_ms 100_000
@@ -653,7 +651,7 @@ defmodule Mydia.Indexers do
     SearchStats.Network.reset()
 
     {outcome, results, error_message} =
-      case search(config, query, opts) do
+      case TrackerLimits.guard_query(config, fn -> search(config, query, opts) end) do
         {:ok, results} ->
           # Per-indexer-config NZB min-post-age filter (#121). Applied here
           # rather than post-merge because `SearchResult.indexer` is the

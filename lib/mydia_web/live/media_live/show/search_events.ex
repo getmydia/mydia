@@ -12,10 +12,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias MydiaWeb.Live.Authorization
-  alias MydiaWeb.MediaLive.Show.ExistingFiles
+  alias MydiaWeb.Live.SearchResultRef
+  alias MydiaWeb.MediaLive.Show.{ExistingFiles, TrackerLimitNote}
 
   import MydiaWeb.MediaLive.Show.SearchHelpers
-  import MydiaWeb.MediaLive.Show.Helpers, only: [parse_int: 1, maybe_add_opt: 3]
+  import MydiaWeb.MediaLive.Show.Helpers, only: [maybe_add_opt: 3]
 
   require Logger
 
@@ -38,6 +39,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     # that only lived in the stream, so this is the assign those badges
     # actually survive in. See SearchHelpers.stream_prepared_results/2.
     |> assign(:result_states, %{})
+    # Download id => the download_url keying that row in :result_states. Grab
+    # events carry only the id (a URL can carry a tracker passkey), so this is
+    # how a :grab_completed finds the row this dialog started.
+    |> assign(:grab_rows, %{})
     # Releases that already failed for the searched target or are
     # blacklisted, keyed by download_url, plus every URL already looked up
     # (a release with no prior attempt is never a key in :prior_attempts).
@@ -46,6 +51,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:prior_attempts_checked, MapSet.new())
     # Downloads that would block any grab in the open manual search dialog.
     |> assign(:manual_search_blocking, [])
+    # Trackers at their daily grab cap, refreshed with :manual_search_blocking;
+    # see TrackerLimitNote.
+    |> assign(:grab_caps, %{})
   end
 
   def manual_search(_params, socket) do
@@ -426,7 +434,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # below call it whether or not it is open.
   defp assign_manual_search_blocking(socket) do
     if socket.assigns.show_manual_search_modal do
-      assign(socket, :manual_search_blocking, load_blocking_downloads(socket.assigns))
+      socket
+      |> assign(:manual_search_blocking, load_blocking_downloads(socket.assigns))
+      |> assign(:grab_caps, TrackerLimitNote.load_caps())
     else
       socket
     end
@@ -453,6 +463,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_progress, %{})
     |> assign(:indexer_raw_results, %{})
     |> assign(:result_states, %{})
+    |> assign(:grab_rows, %{})
     |> assign(:prior_attempts, %{})
     |> assign(:prior_attempts_checked, MapSet.new())
     |> assign(:manual_search_blocking, [])
@@ -479,91 +490,95 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     end
   end
 
-  def download_from_search(
-        %{
-          "download-url" => download_url,
-          "title" => title,
-          "indexer" => indexer,
-          "size" => size,
-          "seeders" => seeders,
-          "leechers" => leechers,
-          "quality" => quality
-        },
-        socket
-      ) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      media_item = socket.assigns.media_item
-      context = socket.assigns.manual_search_context
-
-      {media_item_id, episode_id, metadata} =
-        case context do
-          %{type: :episode, episode_id: ep_id} ->
-            {media_item.id, ep_id, nil}
-
-          %{type: :season, season_number: season_num} ->
-            # Tag the request as a season pack so duplicate detection and
-            # category routing are scoped to this season rather than the whole
-            # show. Without this, an active download for a *different* season
-            # falsely reports :duplicate_download.
-            {media_item.id, nil,
-             %SearchResultMetadata{season_pack: true, season_number: season_num}}
-
-          _ ->
-            {media_item.id, nil, nil}
-        end
-
-      search_result = %SearchResult{
-        download_url: download_url,
-        title: title,
-        indexer: indexer,
-        size: parse_int(size),
-        seeders: parse_int(seeders),
-        leechers: parse_int(leechers),
-        quality: quality,
-        metadata: metadata
-      }
-
-      opts =
-        [manual: true]
-        |> maybe_add_opt(:media_item_id, media_item_id)
-        |> maybe_add_opt(:episode_id, episode_id)
-
-      case Downloads.grab_async(search_result, opts) do
-        {:ok, _download} ->
-          socket =
-            socket
-            |> assign(:download_error, nil)
-            |> mark_result(download_url, %{
-              downloading: true,
-              downloaded: false,
-              grab_failed: nil,
-              duplicate: false
-            })
-
-          socket =
-            if socket.assigns.close_after_grab do
-              socket
-              |> reset_search_modal()
-              |> put_flash(
-                :info,
-                gettext("Grabbing \"%{title}\" — progress will appear on this page", title: title)
-              )
-            else
-              socket
-            end
-
-          {:noreply, socket}
-
-        {:error, _changeset} ->
-          {:noreply,
-           assign(
-             socket,
-             :download_error,
-             gettext("Could not start download for \"%{title}\"", title: title)
-           )}
-      end
+  # The row sends a SearchResultRef, never the URL (it can carry a tracker
+  # passkey), and the release is looked up among the results this dialog holds.
+  def download_from_search(%{"ref" => ref}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         %SearchResult{} = result <- find_search_result(socket, ref) do
+      grab_search_result(result, socket)
     else
-      {:unauthorized, socket} -> {:noreply, socket}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      nil ->
+        {:noreply,
+         assign(
+           socket,
+           :download_error,
+           gettext("That release is no longer in the results. Search again.")
+         )}
+    end
+  end
+
+  defp find_search_result(socket, ref) do
+    SearchResultRef.find(Map.get(socket.assigns, :raw_search_results, []), ref) ||
+      SearchResultRef.find(Map.get(socket.assigns, :indexer_raw_results, %{}), ref)
+  end
+
+  # Grabs the result as the indexer returned it, so the Download keeps its
+  # protocol, guid and tracker terms. Only `metadata` is replaced, as before:
+  # a season search tags the grab as that season's pack.
+  defp grab_search_result(
+         %SearchResult{download_url: download_url, title: title} = result,
+         socket
+       ) do
+    media_item = socket.assigns.media_item
+
+    {episode_id, metadata} =
+      case socket.assigns.manual_search_context do
+        %{type: :episode, episode_id: ep_id} ->
+          {ep_id, nil}
+
+        %{type: :season, season_number: season_num} ->
+          # Tag the request as a season pack so duplicate detection and
+          # category routing are scoped to this season rather than the whole
+          # show. Without this, an active download for a *different* season
+          # falsely reports :duplicate_download.
+          {nil, %SearchResultMetadata{season_pack: true, season_number: season_num}}
+
+        _ ->
+          {nil, nil}
+      end
+
+    opts =
+      [manual: true]
+      |> maybe_add_opt(:media_item_id, media_item.id)
+      |> maybe_add_opt(:episode_id, episode_id)
+
+    case Downloads.grab_async(%{result | metadata: metadata}, opts) do
+      {:ok, download} ->
+        socket =
+          socket
+          |> assign(:download_error, nil)
+          |> assign(:grab_rows, Map.put(socket.assigns.grab_rows, download.id, download_url))
+          |> mark_result(download_url, %{
+            downloading: true,
+            downloaded: false,
+            grab_failed: nil,
+            duplicate: false
+          })
+
+        socket =
+          if socket.assigns.close_after_grab do
+            socket
+            |> reset_search_modal()
+            |> put_flash(
+              :info,
+              gettext("Grabbing \"%{title}\" — progress will appear on this page", title: title)
+            )
+          else
+            socket
+          end
+
+        {:noreply, socket}
+
+      {:error, _changeset} ->
+        {:noreply,
+         assign(
+           socket,
+           :download_error,
+           gettext("Could not start download for \"%{title}\"", title: title)
+         )}
     end
   end
 
@@ -626,8 +641,13 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> prepare_for_stream()
     |> Enum.find(&(&1.download_url == download_url))
     |> case do
-      nil -> nil
-      item -> put_prior_attempt(item, Map.get(assigns, :prior_attempts, %{}))
+      nil ->
+        nil
+
+      item ->
+        item
+        |> put_prior_attempt(Map.get(assigns, :prior_attempts, %{}))
+        |> TrackerLimitNote.put_limit_reason(Map.get(assigns, :grab_caps, %{}))
     end
   end
 
@@ -691,24 +711,33 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # Grab pipeline PubSub handlers (topic "downloads", broadcast by
   # Mydia.Downloads.Grabber). Row lookup is a no-op when the modal is closed.
 
-  def handle_grab_completed(%{download_url: download_url}, socket) do
+  # Caps refresh first, so the re-streamed row shows a cap this grab reached.
+  def handle_grab_completed(%{download_id: id}, socket) do
     {:noreply,
      socket
-     |> mark_result(download_url, %{downloading: false, downloaded: true})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, downloaded: true})}
   end
 
-  def handle_grab_failed(%{download_url: download_url, reason: reason}, socket) do
+  def handle_grab_failed(%{download_id: id, reason: reason}, socket) do
     {:noreply,
      socket
-     |> mark_result(download_url, %{downloading: false, grab_failed: reason})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, grab_failed: reason})}
   end
 
-  def handle_grab_duplicate(%{download_url: download_url}, socket) do
+  def handle_grab_duplicate(%{download_id: id}, socket) do
     {:noreply,
      socket
-     |> mark_result(download_url, %{downloading: false, duplicate: true})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, duplicate: true})}
+  end
+
+  # A grab another page started has no row here.
+  defp mark_grab_row(socket, download_id, extra) do
+    case Map.get(Map.get(socket.assigns, :grab_rows, %{}), download_id) do
+      nil -> socket
+      download_url -> mark_result(socket, download_url, extra)
+    end
   end
 end

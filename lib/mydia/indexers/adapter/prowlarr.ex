@@ -57,6 +57,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
   # promptly and then take their time replying, which receive_timeout covers.
   @connect_timeout 10_000
 
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.TorrentHash
 
   @impl true
@@ -99,7 +100,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
     headers = build_headers(config)
     timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
-    Logger.debug("Prowlarr search: #{url}")
+    Logger.debug("Prowlarr search: #{Helpers.redact_url(url)}")
 
     case Req.get(url,
            headers: headers,

@@ -213,8 +213,10 @@ search task's deadline. Test config turns that lookup off (`:prowlarr_privacy_lo
 Bypass search stub does not also need an indexer-list stub.
 
 Overrides are `tracker_rules` (YAML, `TRACKER_RULE_<N>_*`, and
-`tracker_rule_configs` rows, a row shadowing a runtime rule for the same
-tracker). `TrackerRules.effective/3` applies them field by field: the rule's
+`tracker_rule_configs` rows). A row shadows the runtime rule for the same
+tracker field by field: a field the row leaves empty keeps the YAML or env
+value, so a row cannot clear a runtime value, only replace it.
+`TrackerRules.effective/3` applies them field by field: the rule's
 value, then what the tracker reported for that release, then nil. A rule's
 `seed_time` is in minutes. Volume factors are never overridden.
 
@@ -245,6 +247,55 @@ On score alone a full-freeleech release can outrank a slightly better one: a
 second-preference 720p trails a 1080p by less than 10. What keeps resolution
 first in automatic search is the `:preferred_qualities` sort key
 `RankingOptions` builds from the profile, which sits outside the score.
+
+## Tracker limits
+
+`tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24
+hours and optional. `TrackerLimits` applies them:
+
+- Searches: `search_all/2` runs each indexer's search through
+  `TrackerLimits.guard_query/2`. A rule applies to the Mydia indexer whose name
+  matches its tracker (a built-in Cardigann definition, or a Jackett or Torznab
+  feed for one tracker). A Prowlarr or aggregate Jackett connection sends one
+  search to trackers Mydia cannot see, so a per-tracker `query_limit` cannot
+  cap it: use Prowlarr's own limits, or one Jackett connection per tracker,
+  named after it.
+  Every attempt counts. At the cap the indexer is skipped with a
+  `:rate_limited` error, which manual search shows as the indexer's status.
+  Counts live in `RateLimiter`'s rolling windows, in ETS, and reset on
+  restart. `reserve_window/3` inserts the slot before counting and backs out
+  over the limit, so concurrent searches cannot all take the last slot.
+- Grabs: counted from `downloads` rows whose `indexer` is the tracker and that
+  were inserted in the last 24 hours, failed grabs included and deleted rows
+  not. `background_search_opts/0` sets `skip_capped_trackers: true`, so
+  automatic searches drop a capped tracker's results before ranking. Manual
+  search keeps them, notes the reason on the row
+  (`MydiaWeb.MediaLive.Show.TrackerLimitNote`) and still allows the grab.
+
+## Download URLs carry credentials
+
+A release's `download_url` (and often its `guid`) can carry the searching
+account's passkey (`passkey=`, `torrent_pass=`, `apikey=`). Keep it on the
+server:
+
+- Search rows send `MydiaWeb.Live.SearchResultRef.ref/1`, and the LiveView
+  resolves the result it already holds. Never put the URL in a `phx-value-*`.
+- Anything rendered or logged goes through
+  `Mydia.Downloads.Client.Helpers.redact_url/1`. It redacts credential query
+  parameters (Gazelle's `authkey`, `torrent_pass`), userinfo, and path parts
+  that look like keys (UNIT3D's `/torrent/download/<id>.<rsskey>`): 24+
+  characters of `[A-Za-z0-9_-]` with letters, digits and a 16-character run
+  without separators. Its result is for display and logs only, never a URL
+  to fetch.
+- Events carry the download id (`Downloads.Grabber` broadcasts
+  `%{download_id: id}`), never the URL.
+
+`test/mydia/no_raw_download_url_test.exs` fails on a `Logger` call that
+mentions any name ending in `url` or `urls` outside `redact_url/1`, a
+host-only helper or a `.host` access (files logging only credential-free URLs
+are allowlisted with a reason each), and on HEEx that renders `download_url`
+outside `redact_url(`. It reads source, so a URL bound to another name slips
+past it.
 
 ## Limits vs preferences
 

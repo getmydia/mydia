@@ -12,13 +12,34 @@ defmodule Mydia.Settings.TrackerRuleConfigs do
   alias Mydia.Settings.RuntimeConfig, as: RC
   alias Mydia.Settings.TrackerRuleConfig
 
-  @doc "Every rule, database rows first, sorted by tracker name."
+  # Fields a database row leaves to the runtime rule when it has no value.
+  @inherited [:seed_ratio, :seed_time, :private, :grab_limit, :query_limit]
+
+  @doc """
+  Every rule, sorted by tracker name. A database row shadows the runtime rule
+  for its tracker field by field: a field the row leaves empty keeps the
+  runtime value, so a YAML `grab_limit` survives a row that only sets terms.
+  """
   @spec list() :: [TrackerRuleConfig.t()]
   def list do
+    runtime = RC.get_runtime_tracker_rules()
+    runtime_by_key = Map.new(runtime, &{&1.tracker_key, &1})
+
     TrackerRuleConfig
     |> Repo.all()
-    |> RC.merge_with_runtime_config(&RC.get_runtime_tracker_rules/0, :tracker_key)
+    |> Enum.map(&inherit(&1, Map.get(runtime_by_key, &1.tracker_key)))
+    |> RC.merge_with_runtime_config(fn -> runtime end, :tracker_key)
     |> Enum.sort_by(&(&1.tracker_key || ""))
+  end
+
+  defp inherit(row, nil), do: row
+
+  defp inherit(row, runtime_rule) do
+    Enum.reduce(@inherited, row, fn field, acc ->
+      if is_nil(Map.get(acc, field)),
+        do: Map.put(acc, field, Map.get(runtime_rule, field)),
+        else: acc
+    end)
   end
 
   @doc "A rule by database UUID or runtime id. Raises when there is none."

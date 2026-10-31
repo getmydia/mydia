@@ -418,10 +418,19 @@ torrent already seeding.
 | `TRACKER_RULE_<N>_SEED_RATIO` | Minimum share ratio | `1.0` |
 | `TRACKER_RULE_<N>_SEED_TIME` | Minimum seed time in **minutes** | `4320` |
 | `TRACKER_RULE_<N>_PRIVATE` | Treat the tracker as private (`true`) or public (`false`) | `true` |
+| `TRACKER_RULE_<N>_GRAB_LIMIT` | Most grabs per rolling 24 hours | `5` |
+| `TRACKER_RULE_<N>_QUERY_LIMIT` | Most searches per rolling 24 hours | `50` |
+
+Both limits are optional. At the grab limit, automatic searches skip the
+tracker's releases and manual search marks them with the reason. The search
+limit applies to an indexer whose name matches the tracker, such as a built-in
+indexer or a Jackett feed for one tracker; trackers reached through Prowlarr
+rely on Prowlarr's own limits. Search counts reset when Mydia restarts.
 
 Overrides can also be added under **Admin > Configuration > Indexers > Tracker
-terms**, which lists the trackers seen in recent searches. One added there
-replaces an environment rule for the same tracker. An override that matched no
+terms**, which lists the trackers seen in recent searches. A value set there
+replaces the environment value for the same tracker; a field left empty there
+keeps the environment value. An override that matched no
 search result or grab in 30 days is flagged as stale; the usual cause is a
 tracker renamed in Prowlarr.
 

@@ -47,6 +47,7 @@ defmodule Mydia.Plugins.Index do
 
   require Logger
 
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Index.BrowseResult
   alias Mydia.Plugins.Index.CatalogItem
@@ -357,7 +358,10 @@ defmodule Mydia.Plugins.Index do
         [entry]
 
       {:error, error} ->
-        Logger.warning("dropping invalid catalog entry from #{source.url}: #{inspect(error)}")
+        Logger.warning(
+          "dropping invalid catalog entry from #{Helpers.redact_url(source.url)}: #{inspect(error)}"
+        )
+
         []
     end)
   end

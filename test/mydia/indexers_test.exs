@@ -433,7 +433,11 @@ defmodule Mydia.IndexersTest do
 
   describe "background_search_opts/0" do
     test "defaults to throttled concurrency and a bounded deadline" do
-      assert Indexers.background_search_opts() == [max_concurrency: 2, deadline_ms: 60_000]
+      assert Indexers.background_search_opts() == [
+               max_concurrency: 2,
+               deadline_ms: 60_000,
+               skip_capped_trackers: true
+             ]
     end
 
     # The deadline exists to stop an unattended sweep inheriting the 120s

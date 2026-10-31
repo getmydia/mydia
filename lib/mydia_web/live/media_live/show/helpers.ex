@@ -582,17 +582,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     "/player#/player/queue?items=#{queue_encoded}"
   end
 
-  def parse_int(value) when is_integer(value), do: value
-
-  def parse_int(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, _} -> int
-      :error -> 0
-    end
-  end
-
-  def parse_int(_), do: 0
-
   # Available categories by media type
   def available_categories_for("movie") do
     [

@@ -1,8 +1,8 @@
 defmodule Mydia.Config.Env.TrackerRulesEnv do
   @moduledoc """
   Reads the `tracker_rules` list of `Mydia.Config.Schema` from
-  `TRACKER_RULE_<N>_TRACKER`, `_SEED_RATIO`, `_SEED_TIME` (minutes) and
-  `_PRIVATE`.
+  `TRACKER_RULE_<N>_TRACKER`, `_SEED_RATIO`, `_SEED_TIME` (minutes),
+  `_PRIVATE`, `_GRAB_LIMIT` and `_QUERY_LIMIT` (per rolling 24 hours).
 
   Values are passed through as strings and cast by the schema, so a typo such
   as `TRACKER_RULE_1_SEED_RATIO=one` is a config error rather than a silently
@@ -17,7 +17,9 @@ defmodule Mydia.Config.Env.TrackerRulesEnv do
     tracker: "TRACKER",
     seed_ratio: "SEED_RATIO",
     seed_time: "SEED_TIME",
-    private: "PRIVATE"
+    private: "PRIVATE",
+    grab_limit: "GRAB_LIMIT",
+    query_limit: "QUERY_LIMIT"
   ]
 
   @spec load() :: [map()]
