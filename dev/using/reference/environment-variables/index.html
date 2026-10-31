@@ -1840,6 +1840,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tracker-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracker Rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#automatic-search" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3887,6 +3898,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tracker-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracker Rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#automatic-search" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4731,6 +4753,49 @@ see <a href="../../../plugins/how-to/publish-a-source/">Publish your own plugin 
 Mydia accepts the legacy value and treats it as <code>newznab</code>. New
 configurations should use <code>newznab</code>.</p>
 </div>
+<h2 id="tracker-rules">Tracker Rules</h2>
+<p>Override the seeding terms a tracker reports: its minimum ratio, minimum seed
+time and whether it is private. A rule names the tracker as search results show
+it (one Prowlarr or Jackett connection fronts many trackers), matched ignoring
+case. Leave a variable unset to keep what the tracker reports. Downloads keep
+the terms in force when they were grabbed, so a later change never affects a
+torrent already seeding.</p>
+<table>
+<thead>
+<tr>
+<th>Variable Pattern</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_TRACKER</code></td>
+<td>Tracker name, required</td>
+<td><code>Velvet Lantern</code></td>
+</tr>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_SEED_RATIO</code></td>
+<td>Minimum share ratio</td>
+<td><code>1.0</code></td>
+</tr>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_SEED_TIME</code></td>
+<td>Minimum seed time in <strong>minutes</strong></td>
+<td><code>4320</code></td>
+</tr>
+<tr>
+<td><code>TRACKER_RULE_&lt;N&gt;_PRIVATE</code></td>
+<td>Treat the tracker as private (<code>true</code>) or public (<code>false</code>)</td>
+<td><code>true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Overrides can also be added under <strong>Admin &gt; Configuration &gt; Indexers &gt; Tracker
+terms</strong>, which lists the trackers seen in recent searches. One added there
+replaces an environment rule for the same tracker. An override that matched no
+search result or grab in 30 days is flagged as stale; the usual cause is a
+tracker renamed in Prowlarr.</p>
 <h2 id="automatic-search">Automatic Search</h2>
 <table>
 <thead>
