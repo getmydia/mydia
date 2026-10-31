@@ -37,10 +37,10 @@ defmodule Mydia.Indexers.FlareSolverr.GateTest do
 
     test "a gate that was stopped returns :flaresolverr_busy" do
       name = :"stopped_gate_#{System.unique_integer([:positive])}"
-      # :temporary, or the test supervisor restarts the gate under the same
-      # name and the run below sometimes reaches the new one.
-      pid = start_supervised!({Gate, name: name}, id: name, restart: :temporary)
-      :ok = GenServer.stop(pid)
+      start_supervised!({Gate, name: name}, id: name)
+      # stop_supervised!, not GenServer.stop: the test supervisor restarts a
+      # stopped child under the same name, racing the call below.
+      :ok = stop_supervised!(name)
 
       assert {:error, :flaresolverr_busy} = Gate.run(fn -> :ran end, server: name)
     end
