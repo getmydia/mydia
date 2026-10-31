@@ -145,14 +145,6 @@ defmodule Mydia.Indexers.RateLimiter do
     end
   end
 
-  @doc "Records one event under `key` for `check_window/3`, kept for `window_ms`."
-  @spec record_window(term(), pos_integer()) :: :ok
-  def record_window(key, window_ms) do
-    now = System.monotonic_time(:millisecond)
-    :ets.insert(@table_name, {{:window, key, now, make_ref()}, now + window_ms})
-    :ok
-  end
-
   @doc """
   Blocks until `delay_ms` has passed since the previous call for `indexer_id`.
 

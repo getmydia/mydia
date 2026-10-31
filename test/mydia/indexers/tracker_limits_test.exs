@@ -21,19 +21,20 @@ defmodule Mydia.Indexers.TrackerLimitsTest do
   defp unique_tracker, do: "Velvet Lantern #{System.unique_integer([:positive])}"
 
   describe "RateLimiter rolling windows" do
-    test "counts events inside the window and refuses at the limit" do
+    test "reserves slots inside the window and refuses at the limit" do
       key = {:test_window, System.unique_integer()}
 
       assert {:ok, 0} = RateLimiter.check_window(key, 2, 60_000)
-      RateLimiter.record_window(key, 60_000)
-      RateLimiter.record_window(key, 60_000)
-      assert {:error, :limited, 2} = RateLimiter.check_window(key, 2, 60_000)
+      assert :ok = RateLimiter.reserve_window(key, 2, 60_000)
+      assert :ok = RateLimiter.reserve_window(key, 2, 60_000)
+      assert {:error, :limited, 2} = RateLimiter.reserve_window(key, 2, 60_000)
+      # A refused reservation takes no slot.
       assert {:ok, 2} = RateLimiter.check_window(key, 3, 60_000)
     end
 
-    test "events older than the window no longer count" do
+    test "slots older than the window no longer count" do
       key = {:test_window, System.unique_integer()}
-      RateLimiter.record_window(key, 60_000)
+      :ok = RateLimiter.reserve_window(key, 1, 60_000)
       Process.sleep(30)
 
       assert {:ok, 0} = RateLimiter.check_window(key, 1, 10)
@@ -63,21 +64,21 @@ defmodule Mydia.Indexers.TrackerLimitsTest do
       tracker = unique_tracker()
       {:ok, _} = TrackerRuleConfigs.create(%{tracker: tracker, query_limit: 3})
       config = %{name: tracker}
-      parent = self()
 
-      ran =
-        1..20
+      # One serial search takes a slot, so two remain for the racers.
+      assert {:ok, :ran} = TrackerLimits.guard_query(config, fn -> {:ok, :ran} end)
+
+      # Racers may all back off (losers free their own slot), so only the
+      # upper bound is an invariant.
+      raced =
+        1..19
         |> Enum.map(fn _ ->
-          Task.async(fn ->
-            Ecto.Adapters.SQL.Sandbox.allow(Mydia.Repo, parent, self())
-            TrackerLimits.guard_query(config, fn -> {:ok, :ran} end)
-          end)
+          Task.async(fn -> TrackerLimits.guard_query(config, fn -> {:ok, :ran} end) end)
         end)
         |> Task.await_many()
         |> Enum.count(&(&1 == {:ok, :ran}))
 
-      assert ran <= 3
-      assert ran >= 1
+      assert raced <= 2
     end
 
     test "a zero limit blocks every search" do
