@@ -46,6 +46,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
 
   alias Mydia.Indexers.{SearchResult, QualityParser, NewznabEndpoint}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Structs.TrackerTerms
 
   import SweetXml
 
@@ -298,6 +299,18 @@ defmodule Mydia.Indexers.Adapter.Newznab do
             |> add_namespace("newznab", @newznab_ns),
           completion:
             ~x"./newznab:attr[@name='completion']/@value"s
+            |> add_namespace("newznab", @newznab_ns),
+          downloadvolumefactor:
+            ~x"./newznab:attr[@name='downloadvolumefactor']/@value"s
+            |> add_namespace("newznab", @newznab_ns),
+          uploadvolumefactor:
+            ~x"./newznab:attr[@name='uploadvolumefactor']/@value"s
+            |> add_namespace("newznab", @newznab_ns),
+          minimumratio:
+            ~x"./newznab:attr[@name='minimumratio']/@value"s
+            |> add_namespace("newznab", @newznab_ns),
+          minimumseedtime:
+            ~x"./newznab:attr[@name='minimumseedtime']/@value"s
             |> add_namespace("newznab", @newznab_ns)
         )
         |> Enum.map(fn item ->
@@ -430,7 +443,8 @@ defmodule Mydia.Indexers.Adapter.Newznab do
           usenet_date: usenet_date,
           nzb_completion: nzb_completion,
           nzb_grabs: nzb_grabs,
-          guid: guid
+          guid: guid,
+          terms: TrackerTerms.from_torznab(item)
         )
       end
     rescue

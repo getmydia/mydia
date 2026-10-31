@@ -220,6 +220,11 @@ config :mydia, Mydia.Perf, enabled: false
 # instead of printing a warning nobody reads.
 config :phoenix_live_view, :test_warnings, :raise
 
+# Prowlarr searches also read /api/v1/indexer for tracker privacy. Off here so
+# every Bypass search stub does not need an indexer-list stub too; tests of
+# the lookup turn it on per config with `options: %{privacy_lookup: true}`.
+config :mydia, :prowlarr_privacy_lookup, false
+
 # Compiling the Cardigann guest takes seconds and a few hundred MB, so tests
 # compile it on the first call rather than at boot.
 config :mydia, :cardigann_wasm_eager, false

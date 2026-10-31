@@ -43,6 +43,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Structs.TrackerTerms
 
   import SweetXml
 
@@ -271,6 +272,18 @@ defmodule Mydia.Indexers.Adapter.Jackett do
             ~x"./torznab:attr[@name='tvdbid']/@value"s |> add_namespace("torznab", @torznab_ns),
           imdb_id:
             ~x"./torznab:attr[@name='imdbid']/@value"s |> add_namespace("torznab", @torznab_ns),
+          downloadvolumefactor:
+            ~x"./torznab:attr[@name='downloadvolumefactor']/@value"s
+            |> add_namespace("torznab", @torznab_ns),
+          uploadvolumefactor:
+            ~x"./torznab:attr[@name='uploadvolumefactor']/@value"s
+            |> add_namespace("torznab", @torznab_ns),
+          minimumratio:
+            ~x"./torznab:attr[@name='minimumratio']/@value"s
+            |> add_namespace("torznab", @torznab_ns),
+          minimumseedtime:
+            ~x"./torznab:attr[@name='minimumseedtime']/@value"s
+            |> add_namespace("torznab", @torznab_ns),
           tracker: ~x"./jackettindexer/text()"s
         )
         |> Enum.map(fn item ->
@@ -393,7 +406,10 @@ defmodule Mydia.Indexers.Adapter.Jackett do
           tmdb_id: tmdb_id,
           tvdb_id: tvdb_id,
           imdb_id: imdb_id,
-          guid: guid
+          guid: guid,
+          # Torznab items do not say whether the tracker is private, so only
+          # the per-release attributes are known here.
+          terms: TrackerTerms.from_torznab(item)
         )
       end
     rescue

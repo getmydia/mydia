@@ -421,3 +421,20 @@ indexers:
   #   connection_settings:
   #     # Optional; defaults to /api
   #     api_path: "/api"
+
+# Tracker Rules
+# -------------
+# Override the seeding terms a tracker reports. Terms belong to the tracker,
+# not to the Mydia indexer: one Prowlarr or Jackett connection fronts many
+# trackers, and `tracker` matches the tracker name search results show
+# (ignoring case). Each field is optional; an omitted one keeps what the
+# tracker reports. Downloads keep the terms in force when they were grabbed.
+# Also editable under Admin > Configuration > Indexers > Tracker terms.
+# tracker_rules:
+#   - tracker: "Velvet Lantern"
+#     # Minimum share ratio before the torrent may be removed
+#     seed_ratio: 1.0
+#     # Minimum seed time in minutes (4320 = 3 days)
+#     seed_time: 4320
+#     # Treat the tracker as private even if the indexer does not say so
+#     private: true
