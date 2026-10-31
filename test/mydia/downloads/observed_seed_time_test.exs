@@ -32,6 +32,18 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
       assert ObservedSeedTime.step(after_gap, true, at(481))["seconds"] == 120
     end
 
+    test "an out-of-order pass credits nothing and keeps the later timestamp" do
+      entry = ObservedSeedTime.step(ObservedSeedTime.step(nil, true, @t0), true, at(120))
+      assert entry["seconds"] == 120
+
+      # An overlapping pass that started earlier writes after the later one.
+      late = ObservedSeedTime.step(entry, true, at(60))
+      assert late == entry
+
+      # The next pass credits only the time since the latest one: no double credit.
+      assert ObservedSeedTime.step(late, true, at(240))["seconds"] == 240
+    end
+
     test "a pass that sees the torrent not seeding keeps the total and stops the clock" do
       entry = ObservedSeedTime.step(ObservedSeedTime.step(nil, true, @t0), true, at(120))
       stopped = ObservedSeedTime.step(entry, false, at(240))

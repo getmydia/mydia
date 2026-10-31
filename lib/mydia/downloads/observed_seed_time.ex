@@ -50,24 +50,35 @@ defmodule Mydia.Downloads.ObservedSeedTime do
     seconds = Map.get(entry, "seconds", 0)
 
     if seeding? do
-      %{"seconds" => seconds + elapsed(entry["last_seen_at"], now), "last_seen_at" => iso(now)}
+      seeding_step(seconds, last_seen(entry["last_seen_at"]), now)
     else
       %{"seconds" => seconds, "last_seen_at" => nil}
     end
   end
 
-  defp elapsed(last_seen_at, now) when is_binary(last_seen_at) do
-    case DateTime.from_iso8601(last_seen_at) do
-      {:ok, last, _offset} ->
-        gap = DateTime.diff(now, last, :second)
-        if gap in 0..@max_step_seconds, do: gap, else: 0
-
-      _invalid ->
-        0
+  # A pass whose `now` is not after the stored timestamp ran out of order (an
+  # overlapping monitor pass wrote late): it credits nothing and keeps the
+  # later timestamp, so the next pass cannot credit the same interval twice.
+  defp seeding_step(seconds, %DateTime{} = last, now) do
+    if DateTime.compare(now, last) == :gt do
+      gap = DateTime.diff(now, last, :second)
+      credit = if gap <= @max_step_seconds, do: gap, else: 0
+      %{"seconds" => seconds + credit, "last_seen_at" => iso(now)}
+    else
+      %{"seconds" => seconds, "last_seen_at" => iso(last)}
     end
   end
 
-  defp elapsed(_never_seen, _now), do: 0
+  defp seeding_step(seconds, nil, now), do: %{"seconds" => seconds, "last_seen_at" => iso(now)}
+
+  defp last_seen(last_seen_at) when is_binary(last_seen_at) do
+    case DateTime.from_iso8601(last_seen_at) do
+      {:ok, last, _offset} -> last
+      _invalid -> nil
+    end
+  end
+
+  defp last_seen(_never_seen), do: nil
 
   defp iso(now), do: now |> DateTime.truncate(:second) |> DateTime.to_iso8601()
 
