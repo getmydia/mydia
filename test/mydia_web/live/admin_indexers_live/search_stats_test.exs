@@ -151,6 +151,20 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     refute has_element?(view, "#indexer-stats-#{busy.id}-none-timeouts.text-warning")
   end
 
+  test "both engines of one indexer share a row, each labelled", %{conn: conn, busy: busy} do
+    insert!(busy, %{engine: "builtin"})
+    insert!(busy, %{engine: "prowlarr"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    row = "#indexer-stats-#{busy.id}"
+
+    assert has_element?(view, "#{row} > #indexer-stats-#{busy.id}-builtin")
+    assert has_element?(view, "#{row} > #indexer-stats-#{busy.id}-prowlarr")
+    assert has_element?(view, "#indexer-stats-#{busy.id}-builtin-engine", "Built-in")
+    assert has_element?(view, "#indexer-stats-#{busy.id}-prowlarr-engine", "Prowlarr")
+    refute has_element?(view, "#indexer-stats-#{busy.id}-none-engine")
+  end
+
   test "timeouts are flagged as a warning", %{conn: conn, busy: busy} do
     insert!(busy, %{})
     insert!(busy, %{outcome: "timeout", error_message: "Cardigann call timed out"})
