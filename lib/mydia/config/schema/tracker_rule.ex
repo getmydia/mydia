@@ -7,16 +7,18 @@ defmodule Mydia.Config.Schema.TrackerRule do
   in minutes. A nil field keeps what the tracker reports. Numbers must not be
   negative.
 
+  `grab_limit` and `query_limit` cap grabs and searches per rolling 24 hours
+  (see `Mydia.Indexers.TrackerLimits`); nil means no cap.
+
   `changeset/2` is shared with the database rows of
   `Mydia.Settings.TrackerRuleConfig`, so both layers accept exactly the same
-  values. Spec 4 of the private-tracker roadmap adds `grab_limit` and
-  `query_limit` here.
+  values.
   """
 
   use Ecto.Schema
   import Ecto.Changeset
 
-  @fields [:tracker, :seed_ratio, :seed_time, :private]
+  @fields [:tracker, :seed_ratio, :seed_time, :private, :grab_limit, :query_limit]
 
   @primary_key false
   embedded_schema do
@@ -24,6 +26,8 @@ defmodule Mydia.Config.Schema.TrackerRule do
     field :seed_ratio, :float
     field :seed_time, :integer
     field :private, :boolean
+    field :grab_limit, :integer
+    field :query_limit, :integer
   end
 
   @type t :: %__MODULE__{}
@@ -41,5 +45,7 @@ defmodule Mydia.Config.Schema.TrackerRule do
     |> validate_length(:tracker, max: 200)
     |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
     |> validate_number(:seed_time, greater_than_or_equal_to: 0)
+    |> validate_number(:grab_limit, greater_than_or_equal_to: 0)
+    |> validate_number(:query_limit, greater_than_or_equal_to: 0)
   end
 end

@@ -46,6 +46,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
 
   alias Mydia.Indexers.{SearchResult, QualityParser, NewznabEndpoint}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.Structs.TrackerTerms
 
   import SweetXml
@@ -65,7 +66,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
     with {:ok, url} <- build_endpoint(config) do
       full_url = "#{url}?#{query_string}"
 
-      Logger.debug("Newznab test connection: #{full_url}")
+      Logger.debug("Newznab test connection: #{Helpers.redact_url(full_url)}")
 
       case Req.get(full_url, receive_timeout: 10_000, retry: false) do
         {:ok, %Req.Response{status: 200, body: body}} ->
@@ -97,7 +98,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
     timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
     with {:ok, url} <- build_search_url(config, query, opts) do
-      Logger.debug("Newznab search: #{url}")
+      Logger.debug("Newznab search: #{Helpers.redact_url(url)}")
 
       case Req.get(url,
              receive_timeout: timeout,

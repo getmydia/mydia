@@ -83,6 +83,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   alias Mydia.Metadata.Provider.Registry
   alias Mydia.Repo
   alias Mydia.Settings
+  alias MydiaWeb.Live.SearchResultRef
   alias MydiaWeb.SearchLive.ReleaseAdd
   alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingFetchProvider
   alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider
@@ -169,7 +170,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   end
 
   defp open_and_submit(view, r, params) do
-    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
     view
     |> form("#download-config-form", Map.take(params, ["media_type"]))
@@ -253,7 +254,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     html = open_and_submit(view, b, params)
     assert html =~ "Another release is still being added"
     refute has_element?(view, "#download-modal")
-    refute has_element?(view, ~s(button[phx-value-download_url="#{b.download_url}"][disabled]))
+    refute has_element?(view, ~s(button[phx-value-ref="#{SearchResultRef.ref(b)}"][disabled]))
 
     send(task_pid, :release)
     render_async(view, 5_000)

@@ -20,8 +20,6 @@ defmodule MydiaWeb.SearchLive.InfoLinkTest do
 
   # movie_result/1 randomizes :magnet_url and ignores :info_url, so both are
   # overridden on the returned map, which is what build_search_result/1 reads.
-  # The predictable magnet is needed to trigger "show_detail", whose handler
-  # looks the result up by download_url in search_results_map.
   defp result_with_info_url(info_url) do
     IndexerMock.movie_result(%{title: "The Matrix", year: 1999})
     |> Map.put(:info_url, info_url)
@@ -86,7 +84,7 @@ defmodule MydiaWeb.SearchLive.InfoLinkTest do
   test "links the Source badge in the detail modal", %{conn: conn} do
     view = search_page(conn, [result_with_info_url(@info_url)])
 
-    render_click(view, "show_detail", %{"download_url" => @magnet})
+    view |> element("#search-results td[phx-click=show_detail]") |> render_click()
 
     assert has_element?(view, ~s(a[href="#{@info_url}"]))
   end

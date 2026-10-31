@@ -266,3 +266,17 @@ need the built-in engine instead of failing silently.
 
 Tests: LiveView pages render no `passkey=` or `torrent_pass=`, the static test,
 query cap and grab cap including the automatic-search skip.
+
+### As built
+
+- No GraphQL type exposes a download URL, and history, the blocklist page and
+  the activity feed render none, so the download details modal was the only
+  rendered URL to redact. The static test keeps it that way.
+- The query cap applies to the Mydia indexer whose name matches the rule's
+  tracker. A Prowlarr connection's trackers rely on Prowlarr's limits, since
+  Mydia cannot tell which trackers one Prowlarr search reaches. Query counts
+  are in memory and reset on restart; grab counts come from `downloads`.
+- At a grab cap manual search shows the reason on the row and still allows
+  the grab; background searches drop the tracker's results.
+- Media page grabs now use the server-side result instead of fields the row
+  sent, so they keep the release's protocol, guid and tracker terms.

@@ -21,6 +21,53 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     }
   end
 
+  describe "download_details_modal/1" do
+    test "shows the source URL without tracker credentials" do
+      html =
+        render_component(&Modals.download_details_modal/1,
+          display: @display,
+          download_details: %{
+            title: "Invented.Feature.2021.1080p",
+            status: "downloading",
+            metadata: %{},
+            progress: nil,
+            download_url:
+              "https://tracker.example.test/dl/42?passkey=feedface0123&torrent_pass=cafe99",
+            error_message: nil,
+            inserted_at: ~U[2026-10-30 12:00:00Z],
+            completed_at: nil
+          }
+        )
+
+      assert html =~ "tracker.example.test/dl/42"
+      refute html =~ "feedface0123"
+      refute html =~ "cafe99"
+    end
+
+    test "shows stored metadata without the resolved debrid links" do
+      html =
+        render_component(&Modals.download_details_modal/1,
+          display: @display,
+          download_details: %{
+            title: "Invented.Feature.2021.1080p",
+            status: "completed",
+            metadata: %{
+              "quality" => "1080p",
+              "debrid_urls" => [%{"url" => "https://cdn.debrid.example.test/d/Q7KZ19TOKEN/a.mkv"}]
+            },
+            progress: nil,
+            download_url: "magnet:?xt=urn:btih:abc",
+            error_message: nil,
+            inserted_at: ~U[2026-10-30 12:00:00Z],
+            completed_at: nil
+          }
+        )
+
+      assert html =~ "cdn.debrid.example.test"
+      refute html =~ "Q7KZ19TOKEN"
+    end
+  end
+
   describe "file_details_modal/1 HDR badge" do
     defp hdr_file(overrides) do
       Map.merge(

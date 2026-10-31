@@ -55,8 +55,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
 
   alias Mydia.Indexers.Cardigann.BlockPage
-  alias Mydia.Indexers.Cardigann.FlareSolverrFlow
-  alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Downloads.Client.Helpers
+  alias Mydia.Indexers.Cardigann.{FlareSolverrFlow, Links}
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.Parity.Seam
@@ -460,13 +460,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp do_execute_http_request(definition, url, request_params, user_config, config) do
     req_opts = build_request_options(definition, url, request_params, user_config, config)
 
-    Logger.debug("Cardigann search request: #{request_params.method} #{url}")
-    Logger.debug("Request params: #{inspect(request_params.query_params)}")
+    Logger.debug("Cardigann search request: #{request_params.method} #{Helpers.redact_url(url)}")
+    Logger.debug("Request params: #{inspect(Helpers.redact_params(request_params.query_params))}")
 
-    # Execute request based on method
-    result = safe_request(request_params.method, url, req_opts)
-
-    case result do
+    case safe_request(request_params.method, url, req_opts) do
       {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
         response = %{
           status: status,
@@ -613,7 +610,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     fun.(url, req_opts)
   rescue
     exception ->
-      Logger.error("Cardigann HTTP request raised for #{url}: #{Exception.message(exception)}")
+      Logger.error(
+        "Cardigann HTTP request raised for #{Helpers.redact_url(url)}: #{Exception.message(exception)}"
+      )
+
       {:error, exception}
   end
 

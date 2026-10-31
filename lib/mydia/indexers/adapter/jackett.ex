@@ -43,6 +43,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.Structs.TrackerTerms
 
   import SweetXml
@@ -85,7 +86,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
     url = build_search_url(config, query, opts)
     timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
-    Logger.debug("Jackett search: #{url}")
+    Logger.debug("Jackett search: #{Helpers.redact_url(url)}")
 
     case Req.get(url,
            receive_timeout: timeout,

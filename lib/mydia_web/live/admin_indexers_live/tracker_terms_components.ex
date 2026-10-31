@@ -68,6 +68,9 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsComponents do
       </:title>
       <:descriptor>
         <span id={"tracker-terms-#{@dom_key}"}>{terms_summary(@row.effective)}</span>
+        <span :if={limits_summary(@row.rule)} id={"tracker-limits-#{@dom_key}"}>
+          · {limits_summary(@row.rule)}
+        </span>
       </:descriptor>
       <:details :if={@row.stale?}>
         <span id={"tracker-stale-#{@dom_key}"} class="text-warning text-sm">
@@ -177,6 +180,27 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsComponents do
               {gettext("No"), "false"}
             ]}
           />
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <.input
+              field={@form[:grab_limit]}
+              type="number"
+              step="1"
+              min="0"
+              label={gettext("Grabs per day")}
+            />
+            <.input
+              field={@form[:query_limit]}
+              type="number"
+              step="1"
+              min="0"
+              label={gettext("Searches per day")}
+            />
+          </div>
+          <p class="text-xs text-base-content/60 -mt-3">
+            {gettext(
+              "Optional caps over a rolling 24 hours. At a cap, automatic search skips this tracker and manual search says why. Searches count only for an indexer named after the tracker; Prowlarr enforces its own limits for the trackers behind it."
+            )}
+          </p>
         </div>
 
         <.admin_modal_actions>
@@ -207,6 +231,22 @@ defmodule MydiaWeb.AdminIndexersLive.TrackerTermsComponents do
     |> Enum.reject(&is_nil/1)
     |> case do
       [] -> gettext("No seeding rules reported")
+      parts -> Enum.join(parts, " · ")
+    end
+  end
+
+  @doc "The rule's daily caps, e.g. \"5 grabs/day · 50 searches/day\", or nil."
+  @spec limits_summary(map() | nil) :: String.t() | nil
+  def limits_summary(nil), do: nil
+
+  def limits_summary(rule) do
+    [
+      rule.grab_limit && gettext("%{count} grabs/day", count: rule.grab_limit),
+      rule.query_limit && gettext("%{count} searches/day", count: rule.query_limit)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
       parts -> Enum.join(parts, " · ")
     end
   end

@@ -438,3 +438,9 @@ indexers:
 #     seed_time: 4320
 #     # Treat the tracker as private even if the indexer does not say so
 #     private: true
+#     # At most 5 grabs per rolling 24 hours; automatic search skips the
+#     # tracker at the cap
+#     grab_limit: 5
+#     # At most 50 searches per rolling 24 hours, for an indexer named after
+#     # this tracker (Prowlarr enforces its own limits)
+#     query_limit: 50

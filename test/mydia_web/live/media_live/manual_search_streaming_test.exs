@@ -30,6 +30,21 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     :sys.get_state(view.pid).socket.assigns.search_id
   end
 
+  # Sends the event Downloads.Grabber broadcasts for a grab of `result`. Grab
+  # events carry only the download id, so first record the id the way the
+  # dialog's own download_from_search/2 does when it starts the grab.
+  defp send_grab_event(view, {tag, payload}, result) do
+    id = Ecto.UUID.generate()
+
+    :sys.replace_state(view.pid, fn state ->
+      socket = state.socket
+      rows = Map.put(socket.assigns.grab_rows, id, result.download_url)
+      %{state | socket: Phoenix.Component.assign(socket, :grab_rows, rows)}
+    end)
+
+    send(view.pid, {tag, Map.put(payload, :download_id, id)})
+  end
+
   # Mirrors SearchHelpers.generate_positioned_id/1, which MediaLive.Show
   # installs as the :search_results stream's :dom_id, so tests can assert on
   # real result rows by element id instead of raw HTML text. `pos` defaults to
@@ -820,7 +835,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     # The same message Downloads.Grabber broadcasts on the "downloads" topic
     # when a grab lands, which is what flips the row to "Grabbed".
-    send(view.pid, {:grab_completed, %{download_url: dune.download_url}})
+    send_grab_event(view, {:grab_completed, %{}}, dune)
     render(view)
 
     row = "##{positioned_result_dom_id(dune)}"
@@ -883,10 +898,10 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     render(view)
 
-    send(
-      view.pid,
-      {:grab_failed,
-       %{download_url: vault.download_url, reason: "No download clients are configured"}}
+    send_grab_event(
+      view,
+      {:grab_failed, %{reason: "No download clients are configured"}},
+      vault
     )
 
     render(view)
@@ -1464,7 +1479,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
       row = "##{positioned_result_dom_id(release)}"
       assert has_element?(view, "#{row} .btn-error"), "precondition: retry button not shown"
 
-      send(view.pid, {:grab_completed, %{download_url: release.download_url}})
+      send_grab_event(view, {:grab_completed, %{}}, release)
       render(view)
 
       assert has_element?(view, "#{row} .btn-success")

@@ -270,7 +270,7 @@
                 <td
                   class="cursor-pointer max-w-0"
                   phx-click="show_detail"
-                  phx-value-download_url={result.download_url}
+                  phx-value-ref={SearchResultRef.ref(result)}
                 >
                   <div class="flex flex-col min-w-0 gap-1">
                     <div
@@ -403,7 +403,7 @@
                     <button
                       class="btn btn-sm btn-primary"
                       phx-click="show_download_modal"
-                      phx-value-download_url={result.download_url}
+                      phx-value-ref={SearchResultRef.ref(result)}
                       title={gettext("Download to library")}
                       disabled={is_downloading}
                     >
@@ -626,7 +626,7 @@
               <button
                 class="btn btn-primary"
                 phx-click="show_download_modal"
-                phx-value-download_url={@selected_result.download_url}
+                phx-value-ref={SearchResultRef.ref(@selected_result)}
               >
                 <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> {gettext("Download")}
               </button>

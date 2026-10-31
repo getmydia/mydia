@@ -1,11 +1,14 @@
 defmodule Mydia.Settings.TrackerRuleConfig do
   @moduledoc """
   A per-tracker override of the terms indexers report: minimum ratio, minimum
-  seed time (minutes) and whether the tracker is private.
+  seed time (minutes) and whether the tracker is private, plus optional daily
+  grab and query caps.
 
   Rules layer like the other service configs: `tracker_rules` in YAML or
   `TRACKER_RULE_<N>_*` env vars, or a row here edited from the admin Indexers
-  page. A row shadows a runtime rule whose tracker matches case-insensitively.
+  page. A row shadows a runtime rule whose tracker matches case-insensitively,
+  field by field: a field the row leaves nil keeps the runtime value (see
+  `Mydia.Settings.TrackerRuleConfigs.list/0`).
   Runtime rules are represented with this struct too, with a `runtime::` id
   (see `Mydia.Settings.RuntimeConfig.get_runtime_tracker_rules/0`).
 
@@ -27,6 +30,8 @@ defmodule Mydia.Settings.TrackerRuleConfig do
           seed_ratio: float() | nil,
           seed_time: non_neg_integer() | nil,
           private: boolean() | nil,
+          grab_limit: non_neg_integer() | nil,
+          query_limit: non_neg_integer() | nil,
           updated_by_id: binary() | nil,
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
@@ -38,6 +43,9 @@ defmodule Mydia.Settings.TrackerRuleConfig do
     field :seed_ratio, :float
     field :seed_time, :integer
     field :private, :boolean
+    # Per rolling 24 hours; nil is no cap. See Mydia.Indexers.TrackerLimits.
+    field :grab_limit, :integer
+    field :query_limit, :integer
 
     belongs_to :updated_by, Mydia.Accounts.User
 
