@@ -21,13 +21,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   Scoring is handled by `SearchScorer` with the following formula:
 
-      Combined Score = (quality_score * 0.6 + seeder_score + title_bonus) * zero_seeder_penalty
+      Combined Score = (quality_score * 0.6 + seeder_score + title_bonus + freeleech_bonus) * penalty
 
   Where:
   - `quality_score`: 0-100 based on QualityProfile scoring
   - `seeder_score`: log10(seeders + 1) * 10 (max ~30 pts)
   - `title_bonus`: title relevance bonus / 2 (0-10 pts)
-  - `zero_seeder_penalty`: 0.7 if seeders == 0, else 1.0
+  - `freeleech_bonus`: 0-10 pts, see `SearchScorer.score_freeleech/2`
+  - `penalty` (zero-seeder): 0.7 if seeders == 0, else 1.0
 
   ## Options
 
@@ -369,7 +370,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     sized_result = ProfileLimits.per_episode_sized(result, Keyword.get(opts, :episode_count))
     score_result = SearchScorer.score_result_with_breakdown(sized_result, scorer_opts)
 
-    # Extract individual components for the breakdown struct
     breakdown = score_result.breakdown
     quality_score = Map.get(breakdown, :quality_score, 0.0)
     seeder_score = Map.get(breakdown, :seeder_score, 0.0)
@@ -421,7 +421,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
       TOTAL: #{Float.round(total_score, 2)}
     """)
 
-    # Map to ScoreBreakdown struct
     breakdown =
       ScoreBreakdown.new(%{
         quality: round_score(quality_score),
@@ -434,6 +433,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
         total: round_score(total_score),
         seeder_penalty: round_score(seeder_penalty),
         identity_penalty: round_score(identity_penalty),
+        freeleech: round_score(Map.get(breakdown, :freeleech_bonus, 0.0)),
         limit_violation: ProfileLimits.violation(result, opts),
         language_rank: audio.language_rank,
         language_matches: audio.language_matches,

@@ -203,6 +203,28 @@ to. The difference between fifty and five hundred seeders is a handful of points
 comparable to a single codec preference. The one sharp effect is having zero
 seeders, which applies a multiplier to the entire score.
 
+### Freeleech
+
+A quality profile's **Freeleech** setting is either *Ignore* (the default) or
+*Prefer freeleech*. Private trackers often mark a release as freeleech, meaning
+the download does not count against your ratio, or half leech, meaning only half
+of it does. With *Prefer freeleech*, a freeleech release gets 10 extra points
+and a half-leech one 5, the same size as the title-relevance bonus. A release
+with no seeders gets the same zero-seeder cut on these points as on the rest of
+its score. That is
+enough to choose between comparable releases and not enough to matter against
+your resolution preference, which is sorted ahead of the score. A release whose
+tracker says nothing about freeleech gets nothing.
+
+Freeleech belongs to the release, not to the file you end up with, so it never
+counts toward the upgrade score. A freeleech copy does not make a file "good
+enough", and a file is never replaced just to get a freeleech copy of it.
+
+Manual search shows the tracker's terms on each row: `FL` for freeleech, a
+percentage such as `50%` when only part of the download counts, `2x up` when
+uploads count double, and a lock for a private tracker. Upload bonuses are
+shown for your information and do not change the score.
+
 ## So why did it take that one?
 
 In rough order of how often each is the real cause:
