@@ -238,7 +238,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/modals.ex:265
 #: lib/mydia_web/live/media_live/show/modals.ex:372
 #: lib/mydia_web/live/media_live/show/modals.ex:674
-#: lib/mydia_web/live/media_live/show/modals.ex:1174
+#: lib/mydia_web/live/media_live/show/modals.ex:1172
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:73
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:145
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:96
@@ -3307,7 +3307,7 @@ msgstr ""
 msgid "Category updated successfully"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1133
+#: lib/mydia_web/live/media_live/show/modals.ex:1131
 #, elixir-autogen, elixir-format
 msgid "Category was manually set and won't change on metadata refresh"
 msgstr ""
@@ -3322,7 +3322,7 @@ msgstr ""
 msgid "Change %{from} to %{to}?"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1116
+#: lib/mydia_web/live/media_live/show/modals.ex:1114
 #, elixir-autogen, elixir-format
 msgid "Change Category"
 msgstr ""
@@ -4165,7 +4165,7 @@ msgstr ""
 msgid "Curate items by hand, drag to reorder"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1120
+#: lib/mydia_web/live/media_live/show/modals.ex:1118
 #, elixir-autogen, elixir-format
 msgid "Current category:"
 msgstr ""
@@ -5977,7 +5977,7 @@ msgstr ""
 msgid "Loading titles"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1164
+#: lib/mydia_web/live/media_live/show/modals.ex:1162
 #, elixir-autogen, elixir-format
 msgid "Lock category"
 msgstr ""
@@ -6508,7 +6508,7 @@ msgstr ""
 msgid "No Files to Rename"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1043
+#: lib/mydia_web/live/media_live/show/modals.ex:1041
 #: lib/mydia_web/live/search_live/index.html.heex:219
 #, elixir-autogen, elixir-format
 msgid "No Results Found"
@@ -6865,7 +6865,7 @@ msgid "Not media (%{detail})"
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/components.ex:232
-#: lib/mydia_web/live/media_live/show/modals.ex:1127
+#: lib/mydia_web/live/media_live/show/modals.ex:1125
 #, elixir-autogen, elixir-format
 msgid "Not set"
 msgstr ""
@@ -7412,7 +7412,7 @@ msgstr ""
 msgid "Preparing pairing code..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1166
+#: lib/mydia_web/live/media_live/show/modals.ex:1164
 #, elixir-autogen, elixir-format
 msgid "Prevent auto-classification from changing this category"
 msgstr ""
@@ -8155,7 +8155,7 @@ msgstr ""
 msgid "Rescanned download clients"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1182
+#: lib/mydia_web/live/media_live/show/modals.ex:1180
 #, elixir-autogen, elixir-format
 msgid "Reset to Auto"
 msgstr ""
@@ -8340,7 +8340,7 @@ msgstr ""
 msgid "Same"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1186
+#: lib/mydia_web/live/media_live/show/modals.ex:1184
 #, elixir-autogen, elixir-format
 msgid "Save Category"
 msgstr ""
@@ -8645,7 +8645,7 @@ msgstr ""
 msgid "Searching"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1027
+#: lib/mydia_web/live/media_live/show/modals.ex:1025
 #, elixir-autogen, elixir-format
 msgid "Searching across indexers..."
 msgstr ""
@@ -8813,7 +8813,7 @@ msgstr ""
 msgid "Select All"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1146
+#: lib/mydia_web/live/media_live/show/modals.ex:1144
 #, elixir-autogen, elixir-format
 msgid "Select Category"
 msgstr ""
@@ -8828,7 +8828,7 @@ msgstr ""
 msgid "Select a Match"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1152
+#: lib/mydia_web/live/media_live/show/modals.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Select a category"
 msgstr ""
@@ -9823,7 +9823,7 @@ msgstr ""
 msgid "This may be a temporary issue. Would you like to try again?"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1030
+#: lib/mydia_web/live/media_live/show/modals.ex:1028
 #, elixir-autogen, elixir-format
 msgid "This may take a few seconds"
 msgstr ""
@@ -10098,7 +10098,7 @@ msgstr ""
 msgid "Try adjusting your search or filters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1052
+#: lib/mydia_web/live/media_live/show/modals.ex:1050
 #, elixir-autogen, elixir-format
 msgid "Try different keywords, adjusting filters, or checking your indexers."
 msgstr ""
@@ -10377,7 +10377,7 @@ msgstr ""
 msgid "Watch your library right here, no separate app needed."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1046
+#: lib/mydia_web/live/media_live/show/modals.ex:1044
 #, elixir-autogen, elixir-format
 msgid "We couldn't find any releases matching \"%{query}\""
 msgstr ""
@@ -21113,12 +21113,12 @@ msgstr ""
 msgid "Release"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1073
+#: lib/mydia_web/live/media_live/show/modals.ex:1071
 #, elixir-autogen, elixir-format
 msgid "Clear filters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/modals.ex:1065
+#: lib/mydia_web/live/media_live/show/modals.ex:1063
 #, elixir-autogen, elixir-format
 msgid "No releases match these filters"
 msgstr ""
