@@ -428,8 +428,9 @@ indexer or a Jackett feed for one tracker; trackers reached through Prowlarr
 rely on Prowlarr's own limits. Search counts reset when Mydia restarts.
 
 Overrides can also be added under **Admin > Configuration > Indexers > Tracker
-terms**, which lists the trackers seen in recent searches. One added there
-replaces an environment rule for the same tracker. An override that matched no
+terms**, which lists the trackers seen in recent searches. A value set there
+replaces the environment value for the same tracker; a field left empty there
+keeps the environment value. An override that matched no
 search result or grab in 30 days is flagged as stale; the usual cause is a
 tracker renamed in Prowlarr.
 

@@ -6,7 +6,9 @@ defmodule Mydia.Settings.TrackerRuleConfig do
 
   Rules layer like the other service configs: `tracker_rules` in YAML or
   `TRACKER_RULE_<N>_*` env vars, or a row here edited from the admin Indexers
-  page. A row shadows a runtime rule whose tracker matches case-insensitively.
+  page. A row shadows a runtime rule whose tracker matches case-insensitively,
+  field by field: a field the row leaves nil keeps the runtime value (see
+  `Mydia.Settings.TrackerRuleConfigs.list/0`).
   Runtime rules are represented with this struct too, with a `runtime::` id
   (see `Mydia.Settings.RuntimeConfig.get_runtime_tracker_rules/0`).
 

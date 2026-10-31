@@ -129,6 +129,28 @@ defmodule Mydia.Indexers.TrackerRulesTest do
       refute Settings.runtime_config?(velvet)
     end
 
+    test "a database rule keeps the runtime rule's value for every field it leaves empty" do
+      runtime = Application.get_env(:mydia, :runtime_config)
+
+      Application.put_env(:mydia, :runtime_config, %{
+        runtime
+        | tracker_rules: [
+            %Mydia.Config.Schema.TrackerRule{
+              tracker: "Velvet Lantern",
+              seed_ratio: 1.0,
+              grab_limit: 5
+            }
+          ]
+      })
+
+      {:ok, _} = TrackerRuleConfigs.create(%{tracker: "velvet lantern", seed_time: 4320})
+
+      assert [%TrackerRuleConfig{seed_time: 4320, seed_ratio: 1.0, grab_limit: 5} = velvet] =
+               TrackerRules.list_rules()
+
+      refute Settings.runtime_config?(velvet)
+    end
+
     test "tracker names are unique case-insensitively in the database" do
       {:ok, _} = TrackerRuleConfigs.create(%{tracker: "Velvet Lantern"})
 

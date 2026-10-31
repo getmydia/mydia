@@ -213,8 +213,10 @@ search task's deadline. Test config turns that lookup off (`:prowlarr_privacy_lo
 Bypass search stub does not also need an indexer-list stub.
 
 Overrides are `tracker_rules` (YAML, `TRACKER_RULE_<N>_*`, and
-`tracker_rule_configs` rows, a row shadowing a runtime rule for the same
-tracker). `TrackerRules.effective/3` applies them field by field: the rule's
+`tracker_rule_configs` rows). A row shadows the runtime rule for the same
+tracker field by field: a field the row leaves empty keeps the YAML or env
+value, so a row cannot clear a runtime value, only replace it.
+`TrackerRules.effective/3` applies them field by field: the rule's
 value, then what the tracker reported for that release, then nil. A rule's
 `seed_time` is in minutes. Volume factors are never overridden.
 
