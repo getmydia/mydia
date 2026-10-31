@@ -699,7 +699,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     test "the indexer filter matches any tracker that returned the release" do
       merged = %{
         filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "TorrentDay")
-        | indexers: ["Nyaa", "TorrentDay"]
+        | sources: [
+            %Mydia.Indexers.SearchResult.Source{indexer: "Nyaa"},
+            %Mydia.Indexers.SearchResult.Source{indexer: "TorrentDay"}
+          ]
       }
 
       other = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "EZTV")

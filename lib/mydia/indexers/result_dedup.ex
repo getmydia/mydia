@@ -56,14 +56,18 @@ defmodule Mydia.Indexers.ResultDedup do
       end)
 
     # The manual search indexer filter matches any tracker that returned the
-    # release, not only the one whose copy won.
-    indexers =
+    # release, and the indexer badge links each tracker's own page, so every
+    # copy's indexer and info URL is kept, one per tracker.
+    sources =
       duplicates
-      |> Enum.flat_map(&SearchResult.indexers/1)
-      |> Enum.uniq()
-      |> Enum.sort()
+      |> Enum.flat_map(&SearchResult.sources/1)
+      |> Enum.group_by(& &1.indexer)
+      |> Enum.map(fn {_indexer, [first | _] = copies} ->
+        Enum.find(copies, first, &SearchResult.usable_info_url(&1.info_url))
+      end)
+      |> Enum.sort_by(& &1.indexer)
 
-    %{best | indexers: indexers}
+    %{best | sources: sources}
   end
 
   defp has_complete_metadata?(%SearchResult{quality: quality}) do

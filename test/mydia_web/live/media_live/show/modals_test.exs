@@ -588,7 +588,19 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     end
 
     test "a release returned by several trackers names the winner and counts the rest" do
-      html = modal_html(%{indexer: "TorrentDay", indexers: ["EZTV", "Nyaa", "TorrentDay"]}, %{})
+      html =
+        modal_html(
+          %{
+            indexer: "TorrentDay",
+            sources:
+              for(
+                name <- ["EZTV", "Nyaa", "TorrentDay"],
+                do: %Mydia.Indexers.SearchResult.Source{indexer: name}
+              )
+          },
+          %{}
+        )
+
       doc = LazyHTML.from_fragment(html)
 
       assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
