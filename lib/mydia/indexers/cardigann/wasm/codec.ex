@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.TrackerTerms
 
   @type session :: %{cookies: %{String.t() => String.t()}, expires_at: DateTime.t() | nil}
   @type query :: %{
@@ -170,8 +171,26 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
       tvdb_id: release |> field(:"tvdb-id") |> unoption(),
       imdb_id: release |> field(:"imdb-id") |> unoption(),
       download_protocol: :torrent,
-      guid: field(release, :guid)
+      guid: field(release, :guid),
+      terms: decode_terms(release)
     )
+  end
+
+  # The guest emits Prowlarr's TorrentInfo factors and minimums as they are.
+  # Privacy is not a release property; the Cardigann adapters add it from the
+  # definition's type (AdapterSupport.put_definition_privacy/2).
+  defp decode_terms(release) do
+    %TrackerTerms{
+      download_volume_factor:
+        release |> field(:"download-volume-factor") |> unoption() |> TrackerTerms.parse_float(),
+      upload_volume_factor:
+        release |> field(:"upload-volume-factor") |> unoption() |> TrackerTerms.parse_float(),
+      minimum_ratio:
+        release |> field(:"minimum-ratio") |> unoption() |> TrackerTerms.parse_float(),
+      minimum_seed_time:
+        release |> field(:"minimum-seed-time") |> unoption() |> TrackerTerms.parse_seconds()
+    }
+    |> TrackerTerms.nil_if_empty()
   end
 
   defp leechers(seeders, peers) when is_integer(seeders) and is_integer(peers),

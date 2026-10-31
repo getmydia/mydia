@@ -189,6 +189,9 @@ defmodule Mydia.Application do
         # Indexer search metrics. After the repo for the same reason as the
         # events writer: terminate/2 writes a final batch.
         Mydia.Indexers.SearchStats.Recorder,
+        # Trackers seen in search results, for the Indexers page. After the
+        # repo for the same reason: terminate/2 writes the last batch.
+        Mydia.Indexers.TrackerSightings.Recorder,
         Mydia.Downloads.Client.Registry,
         # Owns the ETS table holding the derived set of client torrents Mydia
         # does not manage. init/1 only creates the table (no I/O), so unlike
@@ -197,6 +200,9 @@ defmodule Mydia.Application do
         # Last status each download client answered with, read when a page's
         # bounded poll times out. Table-only init, safe in every environment.
         Mydia.Downloads.ClientStatusCache,
+        # Which Prowlarr indexers are private. Table-only init, like the
+        # status cache above.
+        Mydia.Indexers.Adapter.ProwlarrPrivacy,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
         Mydia.Indexers.FlareSolverr.Gate,

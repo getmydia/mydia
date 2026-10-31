@@ -161,7 +161,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
   defp finish_search(:ok, out, definition, session, {_config, _query, opts, _retry?}) do
     if out.session_changed, do: persist_session(definition, out.session, session)
-    {:ok, apply_search_filters(out.releases, opts)}
+
+    {:ok,
+     out.releases
+     |> apply_search_filters(opts)
+     |> AdapterSupport.put_definition_privacy(definition.type)}
   end
 
   defp finish_search(

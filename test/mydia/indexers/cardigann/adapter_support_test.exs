@@ -86,4 +86,30 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupportTest do
       assert log == ""
     end
   end
+
+  describe "put_definition_privacy/2" do
+    alias Mydia.Indexers.Structs.TrackerTerms
+
+    test "private and semi-private definitions mark results private" do
+      for type <- ["private", "semi-private"] do
+        assert [%SearchResult{terms: %TrackerTerms{private?: true}}] =
+                 AdapterSupport.put_definition_privacy([release([])], type)
+      end
+    end
+
+    test "a public definition marks results public and keeps reported factors" do
+      reported = %TrackerTerms{download_volume_factor: 0.0}
+
+      assert [
+               %SearchResult{
+                 terms: %TrackerTerms{private?: false, download_volume_factor: +0.0}
+               }
+             ] = AdapterSupport.put_definition_privacy([release(terms: reported)], "public")
+    end
+
+    test "an unknown type leaves terms alone" do
+      assert [%SearchResult{terms: nil}] =
+               AdapterSupport.put_definition_privacy([release([])], nil)
+    end
+  end
 end

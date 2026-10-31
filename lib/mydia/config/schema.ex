@@ -9,8 +9,7 @@ defmodule Mydia.Config.Schema do
 
   require Logger
 
-  alias Mydia.Config.Schema.DownloadClientChangeset
-  alias Mydia.Config.Schema.PathMappingChangeset
+  alias Mydia.Config.Schema.{DownloadClientChangeset, PathMappingChangeset}
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -71,7 +70,8 @@ defmodule Mydia.Config.Schema do
           plugin_settings: [__MODULE__.PluginSettingsDecl.t()],
           plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
           plugin_sources: [__MODULE__.PluginSourceDecl.t()],
-          path_mappings: [__MODULE__.PathMapping.t()]
+          path_mappings: [__MODULE__.PathMapping.t()],
+          tracker_rules: [__MODULE__.TrackerRule.t()]
         }
 
   embedded_schema do
@@ -464,6 +464,8 @@ defmodule Mydia.Config.Schema do
       field :remote_prefix, :string
       field :local_prefix, :string
     end
+
+    embeds_many :tracker_rules, Mydia.Config.Schema.TrackerRule, on_replace: :delete
   end
 
   @doc """
@@ -498,6 +500,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
     |> cast_embed(:path_mappings, with: &PathMappingChangeset.changeset/2)
+    |> cast_embed(:tracker_rules)
     |> validate_configuration()
   end
 
@@ -1029,7 +1032,8 @@ defmodule Mydia.Config.Schema do
   Returns the default configuration as a map.
   """
   def defaults do
-    # Initialize with all embedded schemas set to their defaults
+    # Initialize with all embedded schemas set to their defaults. Every
+    # embeds_many list already defaults to [] in the struct.
     base_config = %__MODULE__{
       server: %__MODULE__.Server{},
       database: %__MODULE__.Database{},
@@ -1045,16 +1049,7 @@ defmodule Mydia.Config.Schema do
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
       cardigann: %__MODULE__.Cardigann{},
-      remote_access: %__MODULE__.RemoteAccess{},
-      download_clients: [],
-      indexers: [],
-      media_servers: [],
-      storage_backends: [],
-      library_paths: [],
-      plugin_settings: [],
-      plugin_instances: [],
-      plugin_sources: [],
-      path_mappings: []
+      remote_access: %__MODULE__.RemoteAccess{}
     }
 
     # Run through changeset to apply defaults from field definitions

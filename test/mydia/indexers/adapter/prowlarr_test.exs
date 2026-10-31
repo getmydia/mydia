@@ -885,4 +885,117 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert result.info_url == "https://tracker.example/t/42"
     end
   end
+
+  describe "tracker terms" do
+    alias Mydia.Indexers.Structs.TrackerTerms
+
+    defp terms_search(items, opts \\ []) do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(items))
+      end)
+
+      if indexers = opts[:indexers] do
+        Bypass.expect_once(bypass, "GET", "/api/v1/indexer", fn conn ->
+          case indexers do
+            :fail ->
+              Plug.Conn.resp(conn, 500, "boom")
+
+            list ->
+              conn
+              |> Plug.Conn.put_resp_content_type("application/json")
+              |> Plug.Conn.resp(200, Jason.encode!(list))
+          end
+        end)
+      end
+
+      lookup? = Keyword.has_key?(opts, :indexers)
+      config = put_in(build_config(bypass), [:options, :privacy_lookup], lookup?)
+      {:ok, results} = Prowlarr.search(config, "lantern")
+      results
+    end
+
+    defp release(fields) do
+      Map.merge(
+        %{
+          "title" => "Velvet.Orchard.2031.1080p.WEB-DL",
+          "size" => 1000,
+          "downloadUrl" => "https://prowlarr.example/download/1",
+          "protocol" => "torrent",
+          "indexer" => "Velvet Lantern",
+          "indexerId" => 7
+        },
+        fields
+      )
+    end
+
+    test "freeleech and halfleech flags become download volume factors" do
+      [free, half] =
+        terms_search([
+          release(%{"indexerFlags" => ["freeleech"]}),
+          release(%{"indexerFlags" => ["halfleech", "internal"]})
+        ])
+
+      assert %TrackerTerms{download_volume_factor: +0.0, upload_volume_factor: nil} = free.terms
+      assert %TrackerTerms{download_volume_factor: 0.5} = half.terms
+    end
+
+    test "neutralleech zeroes both factors and doubleupload doubles the upload" do
+      [neutral, double] =
+        terms_search([
+          release(%{"indexerFlags" => ["neutralleech"]}),
+          release(%{"indexerFlags" => ["doubleupload"]})
+        ])
+
+      assert %TrackerTerms{download_volume_factor: +0.0, upload_volume_factor: +0.0} =
+               neutral.terms
+
+      assert %TrackerTerms{download_volume_factor: nil, upload_volume_factor: 2.0} = double.terms
+    end
+
+    test "explicit factors and minimums win over flags" do
+      [result] =
+        terms_search([
+          release(%{
+            "indexerFlags" => ["freeleech"],
+            "downloadVolumeFactor" => 0.25,
+            "minimumRatio" => 1.0,
+            "minimumSeedTime" => 172_800
+          })
+        ])
+
+      assert %TrackerTerms{
+               download_volume_factor: 0.25,
+               minimum_ratio: 1.0,
+               minimum_seed_time: 172_800
+             } = result.terms
+    end
+
+    test "a release without flags reports no terms" do
+      [result] = terms_search([release(%{})])
+      assert result.terms == nil
+    end
+
+    test "privacy comes from the indexer list" do
+      [semi, public] =
+        terms_search(
+          [release(%{"indexerId" => 7}), release(%{"indexerId" => 8, "indexer" => "Open Reel"})],
+          indexers: [
+            %{"id" => 7, "name" => "Velvet Lantern", "privacy" => "semiPrivate"},
+            %{"id" => 8, "name" => "Open Reel", "privacy" => "public"}
+          ]
+        )
+
+      assert %TrackerTerms{private?: true} = semi.terms
+      assert %TrackerTerms{private?: false} = public.terms
+    end
+
+    test "a failed indexer lookup leaves privacy unknown and keeps the results" do
+      [result] = terms_search([release(%{})], indexers: :fail)
+      assert result.terms == nil
+    end
+  end
 end

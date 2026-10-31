@@ -1,12 +1,10 @@
 defmodule MydiaWeb.AdminIndexersLive.Index do
   use MydiaWeb, :live_view
 
-  alias Mydia.Settings
+  alias Mydia.{Indexers, Settings}
   alias Mydia.Settings.IndexerConfig
-  alias Mydia.Indexers
   alias Mydia.Indexers.Health, as: IndexerHealth
-  alias Mydia.Indexers.CardigannFeatureFlags
-  alias Mydia.Indexers.FlareSolverr
+  alias Mydia.Indexers.{CardigannFeatureFlags, FlareSolverr}
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
@@ -18,7 +16,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     FlareSolverrMessages,
     LoginFlow,
     Messages,
-    SearchStatsEvents
+    SearchStatsEvents,
+    TrackerTermsEvents
   }
 
   alias MydiaWeb.IndexerComponents
@@ -39,6 +38,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> maybe_load_flaresolverr_status()
      |> CardigannEngineEvents.attach()
      |> SearchStatsEvents.attach()
+     |> TrackerTermsEvents.attach()
      |> LoginFlow.attach()}
   end
 
@@ -950,8 +950,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         else: %{total: 0, enabled: 0, disabled: 0}
 
     socket
-    |> assign(:library_indexers, library_indexers)
-    |> assign(:library_indexer_stats, library_indexer_stats)
+    |> assign(library_indexers: library_indexers, library_indexer_stats: library_indexer_stats)
+    |> TrackerTermsEvents.reload()
     |> SearchStatsEvents.refresh()
   end
 

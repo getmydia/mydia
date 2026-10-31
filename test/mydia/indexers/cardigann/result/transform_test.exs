@@ -322,4 +322,31 @@ defmodule Mydia.Indexers.Cardigann.Result.TransformTest do
                ~U[2026-10-28 16:05:28Z]
     end
   end
+
+  describe "tracker terms" do
+    alias Mydia.Indexers.Structs.TrackerTerms
+
+    test "come from the volume factor and minimum fields" do
+      result =
+        one(
+          row(%{
+            "downloadvolumefactor" => "0",
+            "uploadvolumefactor" => "2",
+            "minimumratio" => "1.0",
+            "minimumseedtime" => "172800"
+          })
+        )
+
+      assert %TrackerTerms{
+               download_volume_factor: +0.0,
+               upload_volume_factor: 2.0,
+               minimum_ratio: 1.0,
+               minimum_seed_time: 172_800
+             } = result.terms
+    end
+
+    test "are nil when the definition declares none" do
+      assert one(row()).terms == nil
+    end
+  end
 end

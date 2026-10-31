@@ -11,7 +11,12 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
   alias Mydia.Indexers.CategoryMapping
   alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Indexers.Structs.{SearchResultMetadata, TrackerTerms}
+
+  # Cardigann field names match the Torznab attribute names, minimum seed time
+  # in seconds included. Privacy comes from the definition's type, added by
+  # AdapterSupport.put_definition_privacy/2.
+  @term_fields ~w(downloadvolumefactor uploadvolumefactor minimumratio minimumseedtime)
 
   @spec search_results([%{String.t() => String.t()}], Context.t()) :: [SearchResult.t()]
   def search_results(rows, %Context{} = ctx) do
@@ -43,7 +48,8 @@ defmodule Mydia.Indexers.Cardigann.Result.Transform do
         imdb_id: get_field(row, "imdbid"),
         download_protocol: detect_download_protocol(resolved_download_url),
         guid: release_guid(row, resolved_download_url, ctx),
-        metadata: source_metadata(row, resolved_download_url, ctx)
+        metadata: source_metadata(row, resolved_download_url, ctx),
+        terms: TrackerTerms.from_torznab(Map.take(row, @term_fields))
       }
     else
       _ -> nil

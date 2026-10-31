@@ -12,7 +12,8 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.Priority
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Indexers.Structs.{SearchResultMetadata, TrackerTerms}
+  alias Mydia.Indexers.TrackerRules
   alias Mydia.Settings
   alias Mydia.Media.MediaItem
   alias Mydia.Downloads.Queue.Duplicates
@@ -377,6 +378,16 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     |> DownloadMetadata.to_map()
     |> Map.put(:indexer, search_result.indexer)
     |> Map.put(:guid, Blacklists.release_guid(search_result))
+    |> put_tracker_terms(search_result)
+  end
+
+  # The terms in force at grab, overrides applied, are frozen on the download:
+  # a later override never changes the rules of a torrent already seeding.
+  defp put_tracker_terms(metadata, search_result) do
+    case TrackerRules.for_result(search_result) do
+      nil -> metadata
+      terms -> Map.put(metadata, :tracker_terms, TrackerTerms.to_map(terms))
+    end
   end
 
   defp create_download_record(search_result, client_config, client_id, opts) do

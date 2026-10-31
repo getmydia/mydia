@@ -188,6 +188,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:106
 #: lib/mydia_web/live/admin_indexers_live/login_components.ex:90
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:336
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:184
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:271
 #: lib/mydia_web/live/admin_media_servers_live/account_mapping_components.ex:100
 #: lib/mydia_web/live/admin_media_servers_live/media_server_modal_components.ex:190
@@ -662,8 +663,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:537
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:209
 #: lib/mydia_web/live/admin_import_lists_live/labels.ex:50
-#: lib/mydia_web/live/admin_indexers_live/components.ex:492
-#: lib/mydia_web/live/admin_indexers_live/components.ex:529
+#: lib/mydia_web/live/admin_indexers_live/components.ex:502
+#: lib/mydia_web/live/admin_indexers_live/components.ex:539
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:212
 #: lib/mydia_web/live/admin_system_live/index.ex:96
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:144
@@ -1082,6 +1083,7 @@ msgstr ""
 msgid "New recovery codes"
 msgstr ""
 
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:177
 #: lib/mydia_web/live/admin_system_live/components.ex:144
 #: lib/mydia_web/live/profile_live/index.html.heex:388
 #: lib/mydia_web/live/profile_live/index.html.heex:394
@@ -1161,7 +1163,7 @@ msgstr ""
 msgid "Quality profile"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:356
+#: lib/mydia_web/live/admin_indexers_live/components.ex:360
 #: lib/mydia_web/live/admin_plugins_live/components.ex:276
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:142
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:117
@@ -1426,6 +1428,7 @@ msgstr ""
 msgid "Works at %{site} · Added %{added} · Last used %{last_used}"
 msgstr ""
 
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:176
 #: lib/mydia_web/live/admin_system_live/components.ex:144
 #: lib/mydia_web/live/profile_live/index.html.heex:388
 #: lib/mydia_web/live/profile_live/index.html.heex:394
@@ -2086,6 +2089,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:202
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:224
 #: lib/mydia_web/live/downloads_live/format.ex:40
 #: lib/mydia_web/live/media_live/show/formatters.ex:47
 #, elixir-autogen, elixir-format
@@ -2099,6 +2103,7 @@ msgid "%{count}d ago"
 msgstr ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:201
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:227
 #: lib/mydia_web/live/downloads_live/format.ex:39
 #: lib/mydia_web/live/media_live/show/formatters.ex:46
 #, elixir-autogen, elixir-format
@@ -2112,6 +2117,7 @@ msgid "%{count}h ago"
 msgstr ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:200
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:229
 #: lib/mydia_web/live/downloads_live/format.ex:38
 #: lib/mydia_web/live/media_live/show/formatters.ex:45
 #, elixir-autogen, elixir-format
@@ -2129,6 +2135,7 @@ msgstr ""
 msgid "%{count}mo"
 msgstr ""
 
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:221
 #: lib/mydia_web/live/downloads_live/format.ex:37
 #, elixir-autogen, elixir-format
 msgid "%{count}s"
@@ -4226,7 +4233,7 @@ msgid "Default order"
 msgstr ""
 
 #: lib/mydia_web/components/plugin_instance_components.ex:252
-#: lib/mydia_web/live/admin_indexers_live/components.ex:489
+#: lib/mydia_web/live/admin_indexers_live/components.ex:499
 #, elixir-autogen, elixir-format
 msgid "Degraded"
 msgstr ""
@@ -4237,7 +4244,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:375
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:107
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:176
-#: lib/mydia_web/live/admin_indexers_live/components.ex:225
+#: lib/mydia_web/live/admin_indexers_live/components.ex:229
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:155
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:197
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:74
@@ -4658,7 +4665,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_custom_formats_live/components.ex:50
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:98
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:169
-#: lib/mydia_web/live/admin_indexers_live/components.ex:218
+#: lib/mydia_web/live/admin_indexers_live/components.ex:222
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:83
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:146
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:189
@@ -5493,8 +5500,8 @@ msgstr ""
 
 #: lib/mydia_web/components/plugin_instance_components.ex:251
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:207
-#: lib/mydia_web/live/admin_indexers_live/components.ex:488
-#: lib/mydia_web/live/admin_indexers_live/components.ex:527
+#: lib/mydia_web/live/admin_indexers_live/components.ex:498
+#: lib/mydia_web/live/admin_indexers_live/components.ex:537
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:209
 #: lib/mydia_web/live/admin_system_live/components.ex:97
 #, elixir-autogen, elixir-format
@@ -7418,6 +7425,7 @@ msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:331
 #: lib/mydia_web/components/collection_components.ex:721
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:214
 #: lib/mydia_web/live/collection_live/index.ex:218
 #: lib/mydia_web/live/collection_live/show.ex:390
 #, elixir-autogen, elixir-format
@@ -11292,7 +11300,7 @@ msgctxt "import band badge"
 msgid "ready"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:475
+#: lib/mydia_web/live/admin_indexers_live/components.ex:485
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:99
 #: lib/mydia_web/live/search_live/index.ex:1337
 #, elixir-autogen, elixir-format
@@ -12020,7 +12028,7 @@ msgid_plural "%{count} accounts found"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:194
+#: lib/mydia_web/live/admin_indexers_live/components.ex:198
 #, elixir-autogen, elixir-format
 msgid "%{count} consecutive failure"
 msgid_plural "%{count} consecutive failures"
@@ -12135,7 +12143,7 @@ msgid_plural "%{count} hours"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:405
+#: lib/mydia_web/live/admin_indexers_live/components.ex:409
 #, elixir-autogen, elixir-format
 msgid "%{count} indexer available"
 msgid_plural "%{count} indexers available"
@@ -12735,7 +12743,7 @@ msgstr ""
 msgid "Add Format"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:383
+#: lib/mydia_web/live/admin_indexers_live/components.ex:387
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Add Indexer"
@@ -12757,7 +12765,7 @@ msgstr ""
 msgid "Add Media Server"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:103
+#: lib/mydia_web/live/admin_indexers_live/components.ex:105
 #, elixir-autogen, elixir-format
 msgid "Add More"
 msgstr ""
@@ -13092,7 +13100,7 @@ msgstr ""
 msgid "Are you sure you want to delete this import list?"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:231
+#: lib/mydia_web/live/admin_indexers_live/components.ex:235
 #, elixir-autogen, elixir-format
 msgid "Are you sure you want to delete this indexer?"
 msgstr ""
@@ -13353,7 +13361,7 @@ msgstr ""
 msgid "Both also sync watched status in both directions, mapped separately for each account on the server so nobody inherits anyone else's history."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:403
+#: lib/mydia_web/live/admin_indexers_live/components.ex:407
 #, elixir-autogen, elixir-format
 msgid "Browse Indexer Library"
 msgstr ""
@@ -13373,7 +13381,7 @@ msgstr ""
 msgid "Browse and add indexers from the definition library"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:101
+#: lib/mydia_web/live/admin_indexers_live/components.ex:103
 #, elixir-autogen, elixir-format
 msgid "Browse and add more indexers from the library"
 msgstr ""
@@ -13501,7 +13509,7 @@ msgstr ""
 msgid "Cannot delete runtime-configured indexer. This indexer is configured via environment variables and is read-only in the UI."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:228
+#: lib/mydia_web/live/admin_indexers_live/components.ex:232
 #, elixir-autogen, elixir-format
 msgid "Cannot delete runtime-configured indexers"
 msgstr ""
@@ -13687,7 +13695,7 @@ msgstr ""
 msgid "Clients"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:304
+#: lib/mydia_web/live/admin_indexers_live/components.ex:308
 #, elixir-autogen, elixir-format
 msgid "Cloudflare bypass (recommended for this indexer)"
 msgstr ""
@@ -13755,7 +13763,7 @@ msgstr ""
 msgid "Configuration - Duplicates"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/index.ex:30
+#: lib/mydia_web/live/admin_indexers_live/index.ex:29
 #, elixir-autogen, elixir-format
 msgid "Configuration - Indexers"
 msgstr ""
@@ -13825,7 +13833,7 @@ msgstr ""
 msgid "Configuration saved successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:342
+#: lib/mydia_web/live/admin_indexers_live/components.ex:346
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:270
 #, elixir-autogen, elixir-format
 msgid "Configure"
@@ -13924,7 +13932,7 @@ msgstr ""
 msgid "Connect mobile apps from anywhere"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:391
+#: lib/mydia_web/live/admin_indexers_live/components.ex:395
 #, elixir-autogen, elixir-format
 msgid "Connect to Prowlarr/Jackett"
 msgstr ""
@@ -13999,7 +14007,7 @@ msgstr ""
 msgid "Connection trust is not verified (no host-key checking) — only connect to hosts you control."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:218
+#: lib/mydia_web/live/admin_indexers_live/components.ex:222
 #, elixir-autogen, elixir-format
 msgid "Convert to database-managed"
 msgstr ""
@@ -14391,26 +14399,26 @@ msgid "Direct URLs allow the app to bypass the relay when on the same network fo
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:110
-#: lib/mydia_web/live/admin_indexers_live/components.ex:283
+#: lib/mydia_web/live/admin_indexers_live/components.ex:287
 #, elixir-autogen, elixir-format
 msgid "Disable"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:113
-#: lib/mydia_web/live/admin_indexers_live/components.ex:293
+#: lib/mydia_web/live/admin_indexers_live/components.ex:297
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:75
 #, elixir-autogen, elixir-format
 msgid "Disable %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:325
+#: lib/mydia_web/live/admin_indexers_live/components.ex:329
 #, elixir-autogen, elixir-format
 msgid "Disable Cloudflare bypass for %{name}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:66
-#: lib/mydia_web/live/admin_indexers_live/components.ex:171
-#: lib/mydia_web/live/admin_indexers_live/components.ex:267
+#: lib/mydia_web/live/admin_indexers_live/components.ex:175
+#: lib/mydia_web/live/admin_indexers_live/components.ex:271
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:50
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:130
 #: lib/mydia_web/live/admin_settings_live/components.ex:224
@@ -14692,13 +14700,13 @@ msgid "Emptying..."
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:110
-#: lib/mydia_web/live/admin_indexers_live/components.ex:283
+#: lib/mydia_web/live/admin_indexers_live/components.ex:287
 #, elixir-autogen, elixir-format
 msgid "Enable"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:114
-#: lib/mydia_web/live/admin_indexers_live/components.ex:294
+#: lib/mydia_web/live/admin_indexers_live/components.ex:298
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:76
 #, elixir-autogen, elixir-format
 msgid "Enable %{name}"
@@ -14709,12 +14717,12 @@ msgstr ""
 msgid "Enable %{name}?"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:326
+#: lib/mydia_web/live/admin_indexers_live/components.ex:330
 #, elixir-autogen, elixir-format
 msgid "Enable Cloudflare bypass for %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:305
+#: lib/mydia_web/live/admin_indexers_live/components.ex:309
 #, elixir-autogen, elixir-format
 msgid "Enable Cloudflare bypass via FlareSolverr"
 msgstr ""
@@ -14747,7 +14755,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:66
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:207
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:198
-#: lib/mydia_web/live/admin_indexers_live/components.ex:171
+#: lib/mydia_web/live/admin_indexers_live/components.ex:175
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:50
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:133
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:74
@@ -15590,7 +15598,7 @@ msgstr ""
 msgid "Indexer"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:63
+#: lib/mydia_web/live/admin_indexers_live/components.ex:65
 #, elixir-autogen, elixir-format
 msgid "Indexer Connections"
 msgstr ""
@@ -15869,7 +15877,7 @@ msgstr ""
 msgid "Library API"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:84
+#: lib/mydia_web/live/admin_indexers_live/components.ex:86
 #, elixir-autogen, elixir-format
 msgid "Library Indexers"
 msgstr ""
@@ -16294,7 +16302,7 @@ msgstr ""
 msgid "Needs Attention"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:491
+#: lib/mydia_web/live/admin_indexers_live/components.ex:501
 #, elixir-autogen, elixir-format
 msgid "Needs login"
 msgstr ""
@@ -16476,7 +16484,7 @@ msgstr ""
 msgid "No import lists configured. Enable a preset above or create a custom list."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:76
+#: lib/mydia_web/live/admin_indexers_live/components.ex:78
 #, elixir-autogen, elixir-format
 msgid "No indexer connections."
 msgstr ""
@@ -16491,7 +16499,7 @@ msgstr ""
 msgid "No indexers configured"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:51
+#: lib/mydia_web/live/admin_indexers_live/components.ex:53
 #, elixir-autogen, elixir-format
 msgid "No indexers configured yet. Add a Prowlarr/Jackett connection or browse the indexer library to get started."
 msgstr ""
@@ -16531,7 +16539,7 @@ msgstr ""
 msgid "No job history found"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:117
+#: lib/mydia_web/live/admin_indexers_live/components.ex:119
 #, elixir-autogen, elixir-format
 msgid "No library indexers."
 msgstr ""
@@ -17603,7 +17611,7 @@ msgstr ""
 msgid "Remove %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:361
+#: lib/mydia_web/live/admin_indexers_live/components.ex:365
 #, elixir-autogen, elixir-format
 msgid "Remove %{name}? Its settings are kept if you add it again."
 msgstr ""
@@ -17818,7 +17826,7 @@ msgstr ""
 msgid "Results can differ from Prowlarr's on some trackers"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:161
+#: lib/mydia_web/live/admin_indexers_live/components.ex:165
 #, elixir-autogen, elixir-format
 msgid "Retest"
 msgstr ""
@@ -18683,7 +18691,7 @@ msgid "Test %{event} dispatched to %{slug}."
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:401
-#: lib/mydia_web/live/admin_indexers_live/components.ex:210
+#: lib/mydia_web/live/admin_indexers_live/components.ex:214
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:77
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:118
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:347
@@ -18911,7 +18919,7 @@ msgstr ""
 msgid "This indexer requires authentication to search and download torrents."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:275
+#: lib/mydia_web/live/admin_indexers_live/components.ex:279
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:230
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:231
 #, elixir-autogen, elixir-format
@@ -19221,8 +19229,8 @@ msgid "Undoing..."
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:208
-#: lib/mydia_web/live/admin_indexers_live/components.ex:490
-#: lib/mydia_web/live/admin_indexers_live/components.ex:528
+#: lib/mydia_web/live/admin_indexers_live/components.ex:500
+#: lib/mydia_web/live/admin_indexers_live/components.ex:538
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:210
 #: lib/mydia_web/live/admin_system_live/components.ex:98
 #, elixir-autogen, elixir-format
@@ -19365,7 +19373,7 @@ msgstr ""
 msgid "Use Cases"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:393
+#: lib/mydia_web/live/admin_indexers_live/components.ex:397
 #, elixir-autogen, elixir-format
 msgid "Use an existing indexer aggregator"
 msgstr ""
@@ -19441,7 +19449,7 @@ msgid "Verified on %{engine} only"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:80
-#: lib/mydia_web/live/admin_indexers_live/components.ex:185
+#: lib/mydia_web/live/admin_indexers_live/components.ex:189
 #, elixir-autogen, elixir-format
 msgid "Version: %{version}"
 msgstr ""
@@ -20347,13 +20355,13 @@ msgctxt "health status"
 msgid "Unknown"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:476
+#: lib/mydia_web/live/admin_indexers_live/components.ex:486
 #, elixir-autogen, elixir-format
 msgctxt "indexer type"
 msgid "Private"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:477
+#: lib/mydia_web/live/admin_indexers_live/components.ex:487
 #, elixir-autogen, elixir-format
 msgctxt "indexer type"
 msgid "Semi-Private"
@@ -20682,7 +20690,7 @@ msgctxt "tv"
 msgid "Episodes"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/components.ex:349
+#: lib/mydia_web/live/admin_indexers_live/components.ex:353
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:164
 #, elixir-autogen, elixir-format
 msgctxt "verb"
@@ -21222,4 +21230,155 @@ msgstr ""
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:64
 #, elixir-autogen, elixir-format
 msgid "Plays per day"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:134
+#, elixir-autogen, elixir-format
+msgid "Add Tracker Override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:36
+#, elixir-autogen, elixir-format
+msgid "Add override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:175
+#, elixir-autogen, elixir-format
+msgid "As reported"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:97
+#, elixir-autogen, elixir-format
+msgid "Cannot edit an override from the config file or environment"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:112
+#, elixir-autogen, elixir-format
+msgid "Cannot remove an override from the config file or environment"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:134
+#, elixir-autogen, elixir-format
+msgid "Edit Tracker Override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:93
+#, elixir-autogen, elixir-format
+msgid "Edit override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:99
+#, elixir-autogen, elixir-format
+msgid "Failed to remove the tracker override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:136
+#, elixir-autogen, elixir-format
+msgid "Leave a field empty to keep what the tracker reports."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:161
+#, elixir-autogen, elixir-format
+msgid "Minimum ratio"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:168
+#, elixir-autogen, elixir-format
+msgid "Minimum seed time (minutes)"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:198
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:209
+#, elixir-autogen, elixir-format
+msgid "No seeding rules reported"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:49
+#, elixir-autogen, elixir-format
+msgid "No trackers seen in search results yet."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:82
+#, elixir-autogen, elixir-format
+msgid "Override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:173
+#, elixir-autogen, elixir-format
+msgid "Private tracker"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:215
+#, elixir-autogen, elixir-format
+msgid "Public"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:203
+#, elixir-autogen, elixir-format
+msgid "Ratio %{ratio}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:107
+#, elixir-autogen, elixir-format
+msgid "Remove override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:117
+#, elixir-autogen, elixir-format
+msgid "Remove the override for this tracker?"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:188
+#, elixir-autogen, elixir-format
+msgid "Save Override"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:205
+#, elixir-autogen, elixir-format
+msgid "Seed %{time}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:40
+#, elixir-autogen, elixir-format
+msgid "Seeding rules each tracker reported in the last %{days} days. An override replaces what the tracker reports; downloads keep the terms in force when they were grabbed."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:85
+#, elixir-autogen, elixir-format
+msgid "Stale"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:154
+#, elixir-autogen, elixir-format
+msgid "The tracker name as search results show it. Matching ignores case."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:123
+#, elixir-autogen, elixir-format
+msgid "This override is configured in the config file or environment and is read-only here."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:74
+#, elixir-autogen, elixir-format
+msgid "This override matched no search result or grab in %{days} days. The tracker may have been renamed in Prowlarr or Jackett."
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:149
+#, elixir-autogen, elixir-format
+msgid "Tracker"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:96
+#, elixir-autogen, elixir-format
+msgid "Tracker override removed"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_events.ex:80
+#, elixir-autogen, elixir-format
+msgid "Tracker override saved"
+msgstr ""
+
+#: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:26
+#, elixir-autogen, elixir-format
+msgid "Tracker terms"
 msgstr ""

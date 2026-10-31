@@ -403,6 +403,28 @@ INDEXER_3_API_PATH=/api
     Mydia accepts the legacy value and treats it as `newznab`. New
     configurations should use `newznab`.
 
+## Tracker Rules
+
+Override the seeding terms a tracker reports: its minimum ratio, minimum seed
+time and whether it is private. A rule names the tracker as search results show
+it (one Prowlarr or Jackett connection fronts many trackers), matched ignoring
+case. Leave a variable unset to keep what the tracker reports. Downloads keep
+the terms in force when they were grabbed, so a later change never affects a
+torrent already seeding.
+
+| Variable Pattern | Description | Example |
+|------------------|-------------|---------|
+| `TRACKER_RULE_<N>_TRACKER` | Tracker name, required | `Velvet Lantern` |
+| `TRACKER_RULE_<N>_SEED_RATIO` | Minimum share ratio | `1.0` |
+| `TRACKER_RULE_<N>_SEED_TIME` | Minimum seed time in **minutes** | `4320` |
+| `TRACKER_RULE_<N>_PRIVATE` | Treat the tracker as private (`true`) or public (`false`) | `true` |
+
+Overrides can also be added under **Admin > Configuration > Indexers > Tracker
+terms**, which lists the trackers seen in recent searches. One added there
+replaces an environment rule for the same tracker. An override that matched no
+search result or grab in 30 days is flagged as stale; the usual cause is a
+tracker renamed in Prowlarr.
+
 ## Automatic Search
 
 | Variable | Description | Default |

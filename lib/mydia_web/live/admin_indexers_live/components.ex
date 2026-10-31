@@ -9,7 +9,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     CardigannEngineComponents,
     FlareSolverrComponents,
     LoginComponents,
-    SearchStatsComponents
+    SearchStatsComponents,
+    TrackerTermsComponents
   }
 
   alias MydiaWeb.IndexerComponents
@@ -36,6 +37,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :cardigann_engine_expanded, :boolean, default: false
   attr :search_stats, :map, default: %{}
   attr :search_stats_window, :atom, default: :day
+  attr :tracker_terms, :list, default: []
 
   def indexers_tab(assigns) do
     ~H"""
@@ -117,6 +119,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         <:empty>{gettext("No library indexers.")}</:empty>
       </.admin_list>
     </.admin_section>
+
+    <TrackerTermsComponents.tracker_terms_section rows={@tracker_terms} />
     """
   end
 
@@ -420,6 +424,12 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @doc "The page modals, shown from the LiveView assigns."
   def modals(assigns) do
     ~H"""
+    <%= if assigns[:show_tracker_rule_modal] do %>
+      <TrackerTermsComponents.tracker_rule_modal
+        form={@tracker_rule_form}
+        mode={@tracker_rule_mode}
+      />
+    <% end %>
     <%= if assigns[:show_flaresolverr_modal] do %>
       <MydiaWeb.AdminIndexersLive.FlareSolverrComponents.flaresolverr_modal
         form={@flaresolverr_form}

@@ -17,7 +17,8 @@ defmodule Mydia.Settings.RuntimeConfig do
     LibraryPath,
     PathMappingConfig,
     StorageBackend,
-    SubtitleProviderConfig
+    SubtitleProviderConfig,
+    TrackerRuleConfig
   }
 
   ## Configuration Settings (Database)
@@ -432,6 +433,31 @@ defmodule Mydia.Settings.RuntimeConfig do
 
     if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_instances) do
       runtime_config.plugin_instances
+    else
+      []
+    end
+  end
+
+  @doc """
+  Tracker rules declared in YAML/env, as `TrackerRuleConfig` structs with a
+  `runtime::tracker_rule::<key>` id so the admin UI can tell them from rows.
+  """
+  def get_runtime_tracker_rules do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :tracker_rules) do
+      Enum.map(runtime_config.tracker_rules || [], fn rule ->
+        key = TrackerRuleConfig.key(rule.tracker)
+
+        %TrackerRuleConfig{
+          id: build_runtime_id(:tracker_rule, key),
+          tracker: rule.tracker,
+          tracker_key: key,
+          seed_ratio: rule.seed_ratio,
+          seed_time: rule.seed_time,
+          private: rule.private
+        }
+      end)
     else
       []
     end

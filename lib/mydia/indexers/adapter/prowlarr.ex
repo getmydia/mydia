@@ -47,7 +47,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
   @behaviour Mydia.Indexers.Adapter
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
-  alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Adapter.{Error, Prowlarr.Terms}
   alias Mydia.Indexers.Structs.PausedIndexer
 
   require Logger
@@ -108,7 +108,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
            retry: false
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
-        parse_search_response(body, config.name)
+        parse_search_response(body, config.name, Terms.privacy_by_indexer_id(config, body))
 
       {:ok, %Req.Response{status: 401}} ->
         {:error, Error.connection_failed("Authentication failed")}
@@ -175,13 +175,15 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
   defp extract_error_message(body) when is_binary(body), do: body
   defp extract_error_message(body), do: inspect(body)
 
-  defp build_url(config, path) do
+  @doc false
+  def build_url(config, path) do
     scheme = if Map.get(config, :use_ssl, false), do: "https", else: "http"
     base_path = get_in(config, [:options, :base_path]) || ""
     "#{scheme}://#{config.host}:#{config.port}#{base_path}#{path}"
   end
 
-  defp build_headers(config) do
+  @doc false
+  def build_headers(config) do
     [
       {"X-Api-Key", config.api_key},
       {"Accept", "application/json"}
@@ -264,24 +266,23 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
 
   defp parse_indexer_id(_), do: :error
 
-  defp parse_search_response(body, indexer_name) when is_list(body) do
+  defp parse_search_response(body, indexer_name, privacy) when is_list(body) do
     results =
       body
       |> Enum.map(fn item ->
-        parse_result_item(item, indexer_name)
+        parse_result_item(item, indexer_name, privacy)
       end)
       |> Enum.reject(&is_nil/1)
 
     {:ok, results}
   end
 
-  defp parse_search_response(_body, _indexer_name) do
+  defp parse_search_response(_body, _indexer_name, _privacy) do
     {:error, Error.parse_error("Invalid response format - expected array")}
   end
 
-  defp parse_result_item(item, indexer_name) do
+  defp parse_result_item(item, indexer_name, privacy) do
     try do
-      # Extract required fields
       title = item["title"]
       size = item["size"] || 0
 
@@ -299,14 +300,12 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
       indexer = item["indexer"] || indexer_name
       category = item["categoryId"]
 
-      # Parse published date
       published_at =
         case item["publishDate"] do
           nil -> nil
           date_string -> parse_datetime(date_string)
         end
 
-      # Parse quality from title
       quality = QualityParser.parse(title)
 
       # Extract TMDB, TVDB, and IMDB IDs from indexerFlags or custom fields
@@ -315,7 +314,6 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
       tvdb_id = extract_tvdb_id(item)
       imdb_id = extract_imdb_id(item)
 
-      # Extract download protocol (torrent vs usenet)
       Logger.debug("Prowlarr item keys: #{inspect(Map.keys(item))}")
 
       download_protocol =
@@ -388,7 +386,8 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
         usenet_date: usenet_date,
         nzb_completion: nzb_completion,
         nzb_grabs: nzb_grabs,
-        guid: guid
+        guid: guid,
+        terms: Terms.terms(item, privacy)
       )
     rescue
       error ->

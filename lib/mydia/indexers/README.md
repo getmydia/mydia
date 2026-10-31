@@ -180,6 +180,54 @@ The manual search dialog gets a row's score, breakdown, detected values and
 violations from one `ReleaseRanker.explain/2` call, the same pipeline automatic
 search ranks with. Do not score a row a second way for display.
 
+## Tracker terms
+
+`SearchResult.terms` is a `Mydia.Indexers.Structs.TrackerTerms`: `private?`,
+`minimum_ratio`, `minimum_seed_time` (seconds) and the download and upload
+volume factors. Every field may be nil, meaning unknown, never "no
+requirement". Terms belong to the tracker named in `SearchResult.indexer`, not
+to the Mydia indexer config, since one Prowlarr or Jackett connection fronts
+many trackers.
+
+What each adapter can know:
+
+| Adapter | Volume factors | Ratio and seed time | Private |
+| --- | --- | --- | --- |
+| Jackett | `torznab:attr` | `minimumratio`, `minimumseedtime` attrs | unknown |
+| Newznab | `newznab:attr`, same names | same | unknown |
+| Prowlarr | from `indexerFlags` | unknown | `GET /api/v1/indexer` `privacy` |
+| Built-in Cardigann | definition fields of the same names | same | definition `type` |
+| WASM engine | the guest's release record | same | definition `type` |
+
+Prowlarr's `/api/v1/search` JSON carries no factors or minimums
+(`ReleaseResource.cs`), only flags it derives from the factors:
+`freeleech` is a download factor of 0, `halfleech` 0.5, `neutralleech` 0 both
+ways, `doubleupload` an upload factor of 2. The adapter maps them back, and
+still reads `minimumRatio`, `downloadVolumeFactor` and the rest first in case a
+Prowlarr version adds them. Privacy comes from the indexer list, cached per
+connection by `Adapter.ProwlarrPrivacy` (an hour, five minutes after a
+failure). Reads are single-flight per connection, an expired map is served
+while one background read replaces it, and a cold search waits at most three
+seconds before carrying on without privacy, so the lookup never eats the
+search task's deadline. Test config turns that lookup off (`:prowlarr_privacy_lookup`) so a
+Bypass search stub does not also need an indexer-list stub.
+
+Overrides are `tracker_rules` (YAML, `TRACKER_RULE_<N>_*`, and
+`tracker_rule_configs` rows, a row shadowing a runtime rule for the same
+tracker). `TrackerRules.effective/3` applies them field by field: the rule's
+value, then what the tracker reported for that release, then nil. A rule's
+`seed_time` is in minutes. Volume factors are never overridden.
+
+At grab, `Queue.build_download_metadata/1` freezes the effective terms into
+`Download.metadata["tracker_terms"]` (`TrackerTerms.to_map/1`; read back with
+`from_map/1`), so a later override never changes the rules of a torrent
+already seeding. A download with no known terms has no key.
+
+`TrackerSightings` keeps one row per tracker seen in search results, written
+once a minute by its recorder, for the admin list. An override is stale when
+its tracker was neither seen nor grabbed in 30 days and it is not a row
+created within that window.
+
 ## Limits vs preferences
 
 There is no minimum score before an automatic grab. A release that is only

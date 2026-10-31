@@ -189,4 +189,34 @@ defmodule Mydia.Indexers.Cardigann.Wasm.CodecTest do
     assert %{type: :engine_error} =
              Codec.decode_error({:internal, "System.NullReferenceException: ..."})
   end
+
+  test "a release keeps the guest's volume factors and seeding minimums" do
+    r =
+      release(%{
+        "download-volume-factor": {:some, 0.5},
+        "upload-volume-factor": {:some, 2.0},
+        "minimum-ratio": {:some, 1.0},
+        "minimum-seed-time": {:some, 3600}
+      })
+
+    assert %SearchResult{
+             terms: %Mydia.Indexers.Structs.TrackerTerms{
+               download_volume_factor: 0.5,
+               upload_volume_factor: 2.0,
+               minimum_ratio: 1.0,
+               minimum_seed_time: 3600,
+               private?: nil
+             }
+           } = Codec.decode_release(r, "X")
+  end
+
+  test "a release without terms decodes to nil terms" do
+    r =
+      release(%{
+        "download-volume-factor": :none,
+        "upload-volume-factor": :none
+      })
+
+    assert Codec.decode_release(r, "X").terms == nil
+  end
 end
