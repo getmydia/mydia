@@ -146,8 +146,8 @@ convention). With only one of the two set, that one decides.
   a seed time goal from time it did not seed.
   For rTorrent and rqbit, which report no seed time, `DownloadMonitor`
   accumulates the time it observes the torrent seeding in
-  `Download.metadata["observed_seeding"]` (steps capped at three cron
-  intervals), which stands in for the reported value.
+  `Download.metadata["observed_seeding"]` (a gap over three cron
+  intervals credits nothing), which stands in for the reported value.
 - Manual removal (queue delete, `Removal`, deleting media together with its
   download) stays possible while guarded. The confirm dialog names the tracker,
   the required and current ratio and seed time, and says that removing now

@@ -127,6 +127,18 @@ defmodule Mydia.Downloads.SeedingGoalTest do
                SeedingGoal.for_download(%{row | status: "seeding"}, @now)
     end
 
+    test "a stale snapshot showing seeding does not start the wall-clock fallback" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"minimum_seed_time" => 3600}},
+        status: "seeding",
+        status_as_of: ~U[2031-05-10 11:00:00Z],
+        seeding_time: nil,
+        client_completed_at: ~U[2031-05-01 00:00:00Z]
+      }
+
+      assert %SeedingGoal{seeding_time: nil, met?: false} = SeedingGoal.for_download(row, @now)
+    end
+
     test "uses the seed time Mydia observed when the client reports none" do
       row = %{
         metadata: %{

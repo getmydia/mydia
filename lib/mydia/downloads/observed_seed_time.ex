@@ -10,10 +10,12 @@ defmodule Mydia.Downloads.ObservedSeedTime do
 
       "observed_seeding" => %{"seconds" => 5400, "last_seen_at" => "2031-05-10T12:00:00Z"}
 
-  One step is capped at `@max_step_seconds` (three cron intervals), so time
-  Mydia was down or the client unreachable is never counted. A pass that sees
-  the torrent not seeding clears `last_seen_at` and adds nothing, so a
-  stopped torrent keeps what it seeded and paused time is not counted.
+  A gap between passes longer than `@max_step_seconds` (three cron
+  intervals) credits nothing: Mydia was down or the client unreachable, and
+  the torrent may have stopped in between. A pass that sees the torrent not
+  seeding, or only a stale snapshot of it, clears `last_seen_at` and adds
+  nothing, so a stopped torrent keeps what it seeded and paused time is not
+  counted. Recording never fails the monitor's poll.
 
   `seconds/1` feeds the total to `Mydia.Downloads.SeedingGoal` as the
   reported seed time. No migration: the total lives in the metadata JSON.
@@ -21,6 +23,9 @@ defmodule Mydia.Downloads.ObservedSeedTime do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
+  alias Mydia.DB
   alias Mydia.Downloads.{Download, SeedingGoal}
   alias Mydia.Repo
 
@@ -54,7 +59,8 @@ defmodule Mydia.Downloads.ObservedSeedTime do
   defp elapsed(last_seen_at, now) when is_binary(last_seen_at) do
     case DateTime.from_iso8601(last_seen_at) do
       {:ok, last, _offset} ->
-        DateTime.diff(now, last, :second) |> max(0) |> min(@max_step_seconds)
+        gap = DateTime.diff(now, last, :second)
+        if gap in 0..@max_step_seconds, do: gap, else: 0
 
       _invalid ->
         0
@@ -74,32 +80,44 @@ defmodule Mydia.Downloads.ObservedSeedTime do
   def record(rows, now \\ DateTime.utc_now()) do
     rows
     |> Enum.filter(&tracked?/1)
-    |> Enum.each(&record_row(&1, now))
+    |> Enum.each(&write(&1.id, SeedingGoal.currently_seeding?(&1), now))
+  rescue
+    exception ->
+      Logger.error("Recording observed seed time failed; the poll continues",
+        error: Exception.message(exception)
+      )
+
+      :ok
   end
 
   defp tracked?(row) do
     is_nil(Map.get(row, :seeding_time)) and SeedingGoal.applies?(SeedingGoal.terms(row)) and
-      (row.status == "seeding" or Map.has_key?(row.metadata, @key))
+      (SeedingGoal.currently_seeding?(row) or Map.has_key?(row.metadata, @key))
   end
 
-  defp record_row(row, now) do
-    previous = Map.get(row.metadata, @key)
-    entry = step(previous, row.status == "seeding", now)
-
-    if entry != previous, do: write(row.id, entry)
+  # The step is computed from the metadata read under the same transaction
+  # that writes it (locked on PostgreSQL, serialized writes on SQLite, as in
+  # `Mydia.Downloads.Removal`), so another writer's keys are kept. A plain
+  # update_all: this runs every poll, and update_download/2 would broadcast a
+  # Downloads page reload each time.
+  defp write(id, seeding?, now) do
+    Repo.transaction(fn -> id |> locked_row() |> Repo.one() |> step_row(seeding?, now) end)
   end
 
-  # Re-read the metadata right before writing so another writer's keys are
-  # kept. A plain update_all: this runs every poll, and update_download/2
-  # would broadcast a Downloads page reload each time.
-  defp write(id, entry) do
-    case Repo.get(Download, id) do
-      nil ->
-        :ok
-
-      %Download{metadata: metadata} ->
-        metadata = Map.put(metadata || %{}, @key, entry)
-        Repo.update_all(where(Download, [d], d.id == ^id), set: [metadata: metadata])
-    end
+  defp locked_row(id) do
+    query = where(Download, [d], d.id == ^id)
+    if DB.postgres?(), do: lock(query, "FOR UPDATE"), else: query
   end
+
+  defp step_row(nil, _seeding?, _now), do: :ok
+
+  defp step_row(%Download{id: id, metadata: metadata}, seeding?, now) do
+    metadata = metadata || %{}
+    previous = Map.get(metadata, @key)
+    entry = step(previous, seeding?, now)
+    if entry != previous, do: update_metadata(id, Map.put(metadata, @key, entry))
+  end
+
+  defp update_metadata(id, metadata),
+    do: Repo.update_all(where(Download, [d], d.id == ^id), set: [metadata: metadata])
 end

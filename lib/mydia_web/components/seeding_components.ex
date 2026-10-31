@@ -160,8 +160,9 @@ defmodule MydiaWeb.SeedingComponents do
 
   defp tracker(_goal), do: gettext("The tracker")
 
+  # Truncated, not rounded: an unmet 0.999 must not read as a reached 1.00.
   defp format_ratio(ratio) when is_number(ratio) and ratio > 0,
-    do: :erlang.float_to_binary(ratio * 1.0, decimals: 2)
+    do: :erlang.float_to_binary(trunc(Float.round(ratio * 100.0, 6)) / 100, decimals: 2)
 
   defp format_ratio(nil), do: "?"
   defp format_ratio(_zero_or_negative), do: "0.00"
@@ -170,16 +171,16 @@ defmodule MydiaWeb.SeedingComponents do
 
   defp format_time(nil), do: "?"
 
-  # Under a minute in seconds, as on the Indexers page. Otherwise days, hours
-  # and minutes, leaving out empty parts, so a 90 minute goal reads "1h 30m"
-  # rather than rounding down to "1h".
-  defp format_time(seconds) when seconds < 60, do: gettext("%{count}s", count: seconds)
+  # Days, hours, minutes and seconds, leaving out empty parts, so a 90 minute
+  # goal reads "1h 30m" and a 61 second one "1m 1s", never a rounded value.
+  defp format_time(0), do: gettext("%{count}s", count: 0)
 
   defp format_time(seconds) do
     [
       {div(seconds, 86_400), fn n -> gettext("%{count}d", count: n) end},
       {div(rem(seconds, 86_400), 3600), fn n -> gettext("%{count}h", count: n) end},
-      {div(rem(seconds, 3600), 60), fn n -> gettext("%{count}m", count: n) end}
+      {div(rem(seconds, 3600), 60), fn n -> gettext("%{count}m", count: n) end},
+      {rem(seconds, 60), fn n -> gettext("%{count}s", count: n) end}
     ]
     |> Enum.reject(fn {count, _label} -> count == 0 end)
     |> Enum.map_join(" ", fn {count, label} -> label.(count) end)

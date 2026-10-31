@@ -126,7 +126,7 @@ defmodule Mydia.Downloads.SeedingGoal do
       seeding_time =
         seeding_time(
           Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download),
-          Map.get(download, :status) == "seeding",
+          currently_seeding?(download),
           Map.get(download, :client_completed_at),
           Map.get(download, :db_completed_at),
           now
@@ -145,6 +145,15 @@ defmodule Mydia.Downloads.SeedingGoal do
       }
     end
   end
+
+  @doc """
+  True when a polled row shows its torrent seeding right now. A row whose
+  status comes from a stale snapshot (`:status_as_of` set, the client did not
+  answer this poll) does not count.
+  """
+  @spec currently_seeding?(map()) :: boolean()
+  def currently_seeding?(row),
+    do: Map.get(row, :status) == "seeding" and is_nil(Map.get(row, :status_as_of))
 
   # A row whose client is unreachable or no longer holds the torrent carries a
   # placeholder ratio of 0.0; nil says "unknown" instead. Rows without the key

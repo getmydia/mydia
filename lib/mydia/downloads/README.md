@@ -62,8 +62,8 @@ client no longer has is still stamped removed.
 Seed time is `DownloadStatus.seeding_time` when the client counts it
 (qBittorrent `seeding_time`, Transmission `secondsSeeding`). For rTorrent
 and rqbit, which count none, `Mydia.Downloads.ObservedSeedTime` adds up the time
-`DownloadMonitor` sees the torrent seeding between polls (one step capped at
-three cron intervals, so downtime is not counted) in
+`DownloadMonitor` sees the torrent seeding between polls (a gap longer than
+three cron intervals credits nothing, so downtime is not counted) in
 `Download.metadata["observed_seeding"]`, and that total stands in for it, so a
 torrent that seeded past its goal and then stopped is removable. Without either,
 and only while the client reports the torrent as seeding, it is the time since the

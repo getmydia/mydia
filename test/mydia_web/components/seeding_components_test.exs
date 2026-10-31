@@ -20,6 +20,13 @@ defmodule MydiaWeb.SeedingComponentsTest do
       assert SeedingComponents.chip_text(goal(25 * 3600, 36 * 3600)) == "1d 1h / 1d 12h"
     end
 
+    test "never rounds a ratio or a time up to the goal" do
+      assert SeedingComponents.chip_text(%SeedingGoal{required_ratio: 1.0, ratio: 0.999}) ==
+               "0.99 / 1.0"
+
+      assert SeedingComponents.chip_text(goal(60, 61)) == "1m / 1m 1s"
+    end
+
     test "shows whole units without empty parts" do
       assert SeedingComponents.chip_text(goal(86_400, 3 * 86_400)) == "1d / 3d"
       assert SeedingComponents.chip_text(goal(30, 86_400 + 30 * 60)) == "30s / 1d 30m"

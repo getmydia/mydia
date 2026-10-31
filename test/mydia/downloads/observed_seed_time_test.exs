@@ -23,9 +23,13 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
       assert third["seconds"] == 135
     end
 
-    test "caps one step so downtime is not counted" do
+    test "a gap longer than the cap credits nothing, so downtime is not counted" do
       entry = ObservedSeedTime.step(nil, true, @t0)
-      assert ObservedSeedTime.step(entry, true, at(6 * 3600))["seconds"] == 360
+      assert ObservedSeedTime.step(entry, true, at(360))["seconds"] == 360
+
+      after_gap = ObservedSeedTime.step(entry, true, at(361))
+      assert after_gap["seconds"] == 0
+      assert ObservedSeedTime.step(after_gap, true, at(481))["seconds"] == 120
     end
 
     test "a pass that sees the torrent not seeding keeps the total and stops the clock" do
@@ -86,6 +90,49 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
 
       refute Map.has_key?(metadata(reported), "observed_seeding")
       refute Map.has_key?(metadata(no_goal), "observed_seeding")
+    end
+
+    test "keeps metadata another writer added after the row was polled" do
+      download = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
+      polled = row(download, %{})
+
+      {:ok, _} =
+        Mydia.Downloads.update_download(download, %{
+          metadata: Map.put(download.metadata, "other_writer", true)
+        })
+
+      :ok = ObservedSeedTime.record([polled], @t0)
+
+      assert metadata(download)["other_writer"] == true
+      assert %{"seconds" => 0} = metadata(download)["observed_seeding"]
+    end
+
+    test "a stale snapshot of a seeding torrent does not count as seeding" do
+      download = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
+
+      :ok = ObservedSeedTime.record([row(download, %{status_as_of: @t0})], @t0)
+
+      refute Map.has_key?(metadata(download), "observed_seeding")
+    end
+
+    test "a failure is logged and does not raise" do
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok =
+                   ObservedSeedTime.record(
+                     [
+                       %{
+                         id: nil,
+                         status: "seeding",
+                         seeding_time: nil,
+                         metadata: %{"tracker_terms" => @terms}
+                       }
+                     ],
+                     @t0
+                   )
+        end)
+
+      assert log =~ "Recording observed seed time failed"
     end
 
     test "does not start counting for a torrent that is not seeding" do
