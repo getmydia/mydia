@@ -78,35 +78,42 @@ defmodule Mydia.Downloads.SeedingGoal do
   defp reached?(_value, _required), do: false
 
   @doc """
-  Seconds a torrent has seeded: what the client reports, otherwise the time
-  since the client's completion, otherwise since the download's
-  `completed_at`, otherwise nil.
+  Seconds a torrent has seeded: what the client reports, otherwise, while
+  the client says it is seeding (`seeding?`), the time since the client's
+  completion or else the download's `completed_at`. Nil otherwise.
+
+  The wall-clock fallback is only taken while seeding: for a paused, stopped,
+  missing or unreachable torrent it would count time spent not seeding, and
+  a seed time goal met that way would delete data the tracker still expects.
+  Time paused earlier and then resumed is still counted; clients that report
+  their own seed time (qBittorrent, Transmission) are exact.
   """
   @spec seeding_time(
           non_neg_integer() | nil,
+          boolean(),
           DateTime.t() | nil,
           DateTime.t() | nil,
           DateTime.t()
         ) :: non_neg_integer() | nil
-  def seeding_time(reported, client_completed_at, download_completed_at, now)
+  def seeding_time(reported, seeding?, client_completed_at, download_completed_at, now)
 
-  def seeding_time(reported, _client, _download, _now)
+  def seeding_time(reported, _seeding?, _client, _download, _now)
       when is_integer(reported) and reported >= 0,
       do: reported
 
-  def seeding_time(_reported, %DateTime{} = completed_at, _download, now),
+  def seeding_time(_reported, true, %DateTime{} = completed_at, _download, now),
     do: since(completed_at, now)
 
-  def seeding_time(_reported, nil, %DateTime{} = completed_at, now),
+  def seeding_time(_reported, true, nil, %DateTime{} = completed_at, now),
     do: since(completed_at, now)
 
-  def seeding_time(_reported, _client, _download, _now), do: nil
+  def seeding_time(_reported, _seeding?, _client, _download, _now), do: nil
 
   defp since(completed_at, now), do: max(DateTime.diff(now, completed_at, :second), 0)
 
   @doc """
   Progress toward the goal for a Downloads row (an enriched download, or any
-  map with `:metadata`, `:indexer`, `:ratio`, `:seeding_time`,
+  map with `:metadata`, `:indexer`, `:status`, `:ratio`, `:seeding_time`,
   `:completed_at` and `:db_completed_at`). Nil when no goal applies.
   """
   @spec for_download(map(), DateTime.t()) :: t() | nil
@@ -117,6 +124,7 @@ defmodule Mydia.Downloads.SeedingGoal do
       seeding_time =
         seeding_time(
           Map.get(download, :seeding_time),
+          Map.get(download, :status) == "seeding",
           Map.get(download, :completed_at),
           Map.get(download, :db_completed_at),
           now

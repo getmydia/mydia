@@ -117,6 +117,7 @@ defmodule Mydia.Downloads.ClientRemoval do
         seeding_time =
           SeedingGoal.seeding_time(
             status.seeding_time,
+            status.state == :seeding,
             status.completed_at,
             download.completed_at,
             DateTime.utc_now()

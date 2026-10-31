@@ -58,15 +58,22 @@ removed right after import. A guarded row returns `:still_seeding` and stays in
 guarded. A torrent the client no longer has is still stamped removed.
 
 Seed time is `DownloadStatus.seeding_time` when the client counts it
-(qBittorrent `seeding_time`, Transmission `secondsSeeding`), otherwise the time
-since the client's `completed_at`, otherwise since `Download.completed_at`.
+(qBittorrent `seeding_time`, Transmission `secondsSeeding`). Otherwise, and
+only while the client reports the torrent as seeding, it is the time since the
+client's `completed_at`, else since `Download.completed_at`. A paused, stopped or
+missing torrent with no reported time has no known seed time, so wall-clock time
+it spent not seeding never meets a goal.
 
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets
 `ratioLimit` and `seedingTimeLimit` (minutes, rounded up), with `-1` rather than
 `-2` for the unset one so a global limit cannot stop a torrent short of a
 seed-time goal. Transmission gets `seedRatioLimit` with `seedRatioMode=1`; it
-has no total seed time limit. rTorrent and rqbit get nothing. A failed push is
+has no total seed time limit, so a seed-time-only goal is left on the global
+ratio mode. Neither alternative is better: mode 1 needs a ratio, and mode 2
+(unlimited) never pauses, which keeps Remove After Import waiting forever. If
+the global ratio stops such a torrent early, the guard keeps it in the client.
+rTorrent and rqbit get nothing. A failed push is
 logged and the guard still applies.
 
 **Manual removal is never guarded.** The Downloads page's cancel and clear

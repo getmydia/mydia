@@ -76,22 +76,30 @@ defmodule Mydia.Downloads.SeedingGoalTest do
     end
   end
 
-  describe "seeding_time/4" do
+  describe "seeding_time/5" do
     @now ~U[2031-05-10 12:00:00Z]
 
-    test "prefers what the client reports" do
-      assert SeedingGoal.seeding_time(500, ~U[2031-05-10 11:00:00Z], nil, @now) == 500
+    test "prefers what the client reports, seeding or not" do
+      assert SeedingGoal.seeding_time(500, true, ~U[2031-05-10 11:00:00Z], nil, @now) == 500
+      assert SeedingGoal.seeding_time(500, false, ~U[2031-05-10 11:00:00Z], nil, @now) == 500
     end
 
-    test "falls back to the client's completion time, then the download's" do
-      assert SeedingGoal.seeding_time(nil, ~U[2031-05-10 11:00:00Z], nil, @now) == 3600
+    test "while seeding, falls back to the client's completion time, then the download's" do
+      assert SeedingGoal.seeding_time(nil, true, ~U[2031-05-10 11:00:00Z], nil, @now) == 3600
 
-      assert SeedingGoal.seeding_time(nil, nil, ~U[2031-05-10 11:30:00Z], @now) == 1800
+      assert SeedingGoal.seeding_time(nil, true, nil, ~U[2031-05-10 11:30:00Z], @now) == 1800
+    end
+
+    test "without a reported time, a torrent that is not seeding has no known seed time" do
+      # Paused, stopped, gone or unreachable: wall-clock time since completion
+      # would count time it did not seed.
+      assert SeedingGoal.seeding_time(nil, false, ~U[2031-05-01 00:00:00Z], nil, @now) == nil
+      assert SeedingGoal.seeding_time(nil, false, nil, ~U[2031-05-01 00:00:00Z], @now) == nil
     end
 
     test "is nil when nothing is known, and never negative" do
-      assert SeedingGoal.seeding_time(nil, nil, nil, @now) == nil
-      assert SeedingGoal.seeding_time(nil, ~U[2031-05-11 00:00:00Z], nil, @now) == 0
+      assert SeedingGoal.seeding_time(nil, true, nil, nil, @now) == nil
+      assert SeedingGoal.seeding_time(nil, true, ~U[2031-05-11 00:00:00Z], nil, @now) == 0
     end
   end
 
@@ -100,6 +108,23 @@ defmodule Mydia.Downloads.SeedingGoalTest do
 
     test "is nil when no goal applies" do
       assert SeedingGoal.for_download(%{metadata: %{}, ratio: 0.0}, @now) == nil
+    end
+
+    test "a row that is not seeding gets no seed time from its completion time" do
+      row = %{
+        indexer: "Velvet Lantern",
+        metadata: %{"tracker_terms" => %{"minimum_seed_time" => 3600}},
+        status: "missing",
+        ratio: 0.0,
+        seeding_time: nil,
+        completed_at: ~U[2031-05-01 00:00:00Z],
+        db_completed_at: ~U[2031-05-01 00:00:00Z]
+      }
+
+      assert %SeedingGoal{seeding_time: nil, met?: false} = SeedingGoal.for_download(row, @now)
+
+      assert %SeedingGoal{seeding_time: 820_800, met?: true} =
+               SeedingGoal.for_download(%{row | status: "seeding"}, @now)
     end
 
     test "summarizes progress toward the goal" do

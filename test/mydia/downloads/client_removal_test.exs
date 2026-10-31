@@ -368,6 +368,24 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       StubAdapter.put(status(:seeding, download.download_client_id))
       assert :removed = ClientRemoval.finish_pending_removal(download)
     end
+
+    test "a paused torrent that reports no seed time does not count paused time" do
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      client = client!(type: :rqbit, remove_completed: true)
+      download = download!(client, terms: %{"minimum_seed_time" => 3600})
+
+      {:ok, download} =
+        Downloads.update_download(download, %{
+          completed_at: DateTime.add(DateTime.utc_now(), -30 * 86_400, :second)
+        })
+
+      StubAdapter.put(status(:paused, download.download_client_id))
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+    end
   end
 
   defp client!(opts) do
