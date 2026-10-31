@@ -139,6 +139,34 @@ defmodule Mydia.Indexers.Cardigann.SessionManagerTest do
     assert Repo.get!(CardigannDefinition, d.id).health_status != "needs_login"
   end
 
+  test "park broadcasts once, after the final state is written" do
+    d = definition(%{"username" => "a"})
+    {:ok, _} = CardigannAuth.store_session(d.id, ["uid=fresh"])
+    long_ago = ~U[2020-01-01 00:00:00Z]
+
+    Repo.update_all(from(x in CardigannDefinition, where: x.id == ^d.id),
+      set: [updated_at: long_ago]
+    )
+
+    d_id = d.id
+    assert {:ok, _} = SessionManager.park(d)
+    assert_receive {:cardigann_health_changed, id} when id == d.id
+    refute_receive {:cardigann_health_changed, ^d_id}, 50
+
+    row = Repo.get!(CardigannDefinition, d.id)
+    assert row.health_status == "healthy"
+    assert DateTime.compare(row.updated_at, long_ago) == :gt
+  end
+
+  test "park of a definition that no longer exists broadcasts nothing" do
+    d = definition(%{"username" => "a"})
+    Repo.delete!(d)
+    d_id = d.id
+
+    assert {:error, %Error{type: :login_required}} = SessionManager.park(d)
+    refute_receive {:cardigann_health_changed, ^d_id}, 50
+  end
+
   test "park leaves no needs_login behind when the row already said needs_login" do
     d = definition(%{"username" => "a"}, %{health_status: "needs_login"})
     {:ok, _} = CardigannAuth.store_session(d.id, ["uid=fresh"])

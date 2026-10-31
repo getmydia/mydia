@@ -112,14 +112,17 @@ out, the error says so rather than looping.
 
 ### needs_login
 
-`health_status: "needs_login"` is set only when a login needs a person, that
-is when `Login.begin/2` returns a `Challenge`. While it is set,
+`health_status: "needs_login"` is set only when a login needs a person:
+`SessionManager.park/1`, called when `Login.begin/2` returns a `Challenge` or
+when the wasm engine's search stops at the login form. While it is set,
 `SessionManager.user_config/2` returns a `:login_required` error, so searches
 skip the indexer and the health check reports "Needs login" without writing
-anything or counting a failure. Two things clear it: a stored session
-(`SessionManager.store/2` moves the definition back to `healthy`) and saving a
-changed config, which resets it to `unknown` so new credentials get a fresh
-attempt. Do not clear it from a health check or a timer; the health check's
+anything or counting a failure. Two things clear it. A stored session:
+`SessionManager.clear_needs_login/1` is the one conditional writer, called by
+`store/2`, by the wasm adapter when it writes a session, and by `park/1` itself
+when it finds a session stored meanwhile; it reads the row, not the caller's
+struct. And saving a changed config, which resets it to `unknown` so new
+credentials get a fresh attempt. Do not clear it from a health check or a timer; the health check's
 status write skips rows that are `needs_login`, so a probe that was running when
 a search parked the row cannot overwrite it. A check that passes while the tracker still
 needs a captcha would hide the problem until the next search failed.
