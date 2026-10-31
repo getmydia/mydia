@@ -54,9 +54,8 @@ defmodule Mydia.Indexers.TrackerLimits do
   end
 
   defp guarded_search(config, key, limit, search_fun) do
-    case RateLimiter.check_window({:tracker_query, key}, limit, @window_ms) do
-      {:ok, _count} ->
-        RateLimiter.record_window({:tracker_query, key}, @window_ms)
+    case RateLimiter.reserve_window({:tracker_query, key}, limit, @window_ms) do
+      :ok ->
         search_fun.()
 
       {:error, :limited, count} ->

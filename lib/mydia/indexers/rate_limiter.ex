@@ -120,6 +120,31 @@ defmodule Mydia.Indexers.RateLimiter do
     if count < limit, do: {:ok, count}, else: {:error, :limited, count}
   end
 
+  @doc """
+  Takes one slot under `key` if fewer than `limit` were taken in the last
+  `window_ms`: `:ok`, or `{:error, :limited, count}` without taking it.
+
+  The slot is inserted before counting and removed again when over the
+  limit, so concurrent callers can never all pass a check for the last slot.
+  At worst two racing callers both back off.
+  """
+  @spec reserve_window(term(), non_neg_integer(), pos_integer()) ::
+          :ok | {:error, :limited, non_neg_integer()}
+  def reserve_window(key, limit, window_ms) do
+    now = System.monotonic_time(:millisecond)
+    slot = {:window, key, now, make_ref()}
+    :ets.insert(@table_name, {slot, now + window_ms})
+
+    case check_window(key, limit + 1, window_ms) do
+      {:ok, _count} ->
+        :ok
+
+      {:error, :limited, count} ->
+        :ets.delete(@table_name, slot)
+        {:error, :limited, min(count - 1, limit)}
+    end
+  end
+
   @doc "Records one event under `key` for `check_window/3`, kept for `window_ms`."
   @spec record_window(term(), pos_integer()) :: :ok
   def record_window(key, window_ms) do

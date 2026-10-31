@@ -59,6 +59,27 @@ defmodule Mydia.Indexers.TrackerLimitsTest do
       assert message == "daily query limit reached (2/2)"
     end
 
+    test "concurrent searches never take more than the last slot" do
+      tracker = unique_tracker()
+      {:ok, _} = TrackerRuleConfigs.create(%{tracker: tracker, query_limit: 3})
+      config = %{name: tracker}
+      parent = self()
+
+      ran =
+        1..20
+        |> Enum.map(fn _ ->
+          Task.async(fn ->
+            Ecto.Adapters.SQL.Sandbox.allow(Mydia.Repo, parent, self())
+            TrackerLimits.guard_query(config, fn -> {:ok, :ran} end)
+          end)
+        end)
+        |> Task.await_many()
+        |> Enum.count(&(&1 == {:ok, :ran}))
+
+      assert ran <= 3
+      assert ran >= 1
+    end
+
     test "a zero limit blocks every search" do
       tracker = unique_tracker()
       {:ok, _} = TrackerRuleConfigs.create(%{tracker: tracker, query_limit: 0})

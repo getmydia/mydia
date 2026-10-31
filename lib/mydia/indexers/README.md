@@ -242,8 +242,9 @@ hours and optional. `TrackerLimits` applies them:
   search to trackers Mydia cannot see, so those rely on Prowlarr's limits.
   Every attempt counts. At the cap the indexer is skipped with a
   `:rate_limited` error, which manual search shows as the indexer's status.
-  Counts live in `RateLimiter`'s rolling windows (`check_window/3`,
-  `record_window/2`), in ETS, and reset on restart.
+  Counts live in `RateLimiter`'s rolling windows, in ETS, and reset on
+  restart. `reserve_window/3` inserts the slot before counting and backs out
+  over the limit, so concurrent searches cannot all take the last slot.
 - Grabs: counted from `downloads` rows whose `indexer` is the tracker and that
   were inserted in the last 24 hours, failed grabs included and deleted rows
   not. `background_search_opts/0` sets `skip_capped_trackers: true`, so
