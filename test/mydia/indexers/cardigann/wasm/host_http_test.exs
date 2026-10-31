@@ -44,6 +44,42 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
                )
     end
 
+    test "a login watch flags only the login URL on the tracker's own host", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.stub(bypass, "GET", "/login.php", &Plug.Conn.resp(&1, 200, "form"))
+      Bypass.stub(bypass, "GET", "/browse/login.php", &Plug.Conn.resp(&1, 200, "rows"))
+
+      hit = :atomics.new(1, [])
+      watched = %{URI.parse(base) | path: "/login.php"}
+      other_host = %{watched | port: watched.port + 1}
+
+      ctx = Map.put(ctx, :login_watch, %{targets: [watched], hit: hit})
+
+      HostHttp.exchange(ctx, req("GET", base <> "/browse/login.php"))
+      assert :atomics.get(hit, 1) == 0
+
+      HostHttp.exchange(
+        %{ctx | login_watch: %{targets: [other_host], hit: hit}},
+        req("GET", base <> "/login.php")
+      )
+
+      assert :atomics.get(hit, 1) == 0
+
+      # Same port and path, another host.
+      HostHttp.exchange(
+        %{ctx | login_watch: %{targets: [%{watched | host: "other.invalid"}], hit: hit}},
+        req("GET", base <> "/login.php")
+      )
+
+      assert :atomics.get(hit, 1) == 0
+
+      HostHttp.exchange(ctx, req("GET", base <> "/login.php?returnto=%2F"))
+      assert :atomics.get(hit, 1) == 1
+    end
+
     test "never follows redirects", %{bypass: bypass, ctx: ctx, base: base} do
       Bypass.expect_once(bypass, "GET", "/a", fn conn ->
         conn |> Plug.Conn.put_resp_header("location", base <> "/b") |> Plug.Conn.resp(302, "")

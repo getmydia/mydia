@@ -36,63 +36,67 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
 
   def stats_strip(assigns) do
     ~H"""
-    <div id={"indexer-stats-#{@indexer_id}"} class="flex flex-col gap-1">
+    <div id={"indexer-stats-#{@indexer_id}"} class="flex flex-row flex-wrap gap-2">
       <span :if={@summaries == []} class="text-xs text-base-content/70">
         {gettext("No searches yet")}
       </span>
-      <div
+      <button
         :for={{summary, percent} <- Enum.map(@summaries, &{&1, success_percent(&1)})}
-        class="flex flex-col items-start gap-1 max-w-full"
+        type="button"
+        id={stats_id(@indexer_id, summary)}
+        class="stats stats-horizontal bg-base-200 rounded-box max-w-full overflow-x-auto text-left transition-colors hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        data-scroll-ok="a wide engine box scrolls sideways on phones"
+        title={gettext("Show recent failures")}
+        phx-click="show_search_failures"
+        phx-value-id={@indexer_id}
       >
-        <span :if={summary.engine} class="badge badge-xs badge-ghost">
-          {engine_label(summary.engine)}
-        </span>
-        <button
-          type="button"
-          id={stats_id(@indexer_id, summary)}
-          class="stats stats-horizontal bg-base-200 rounded-box max-w-full overflow-x-auto text-left transition-colors hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          data-scroll-ok="four stats scroll sideways on phones"
-          title={gettext("Show recent failures")}
-          phx-click="show_search_failures"
-          phx-value-id={@indexer_id}
+        <span
+          :if={summary.engine}
+          id={stats_id(@indexer_id, summary) <> "-engine"}
+          class="stat py-1 px-3 place-content-center"
         >
-          <span :if={summary.engine} class="sr-only">{engine_label(summary.engine)}</span>
-          <span class="stat py-2 px-4">
-            <span class="stat-title text-xs">{gettext("Success")}</span>
-            <span
-              id={stats_id(@indexer_id, summary) <> "-success"}
-              class={["stat-value text-lg", rate_class(percent)]}
-            >
-              {format_rate(percent)}
-            </span>
-            <span class="stat-desc">
-              {gettext("%{ok} of %{attempts}", ok: summary.successes, attempts: summary.attempts)}
-            </span>
-          </span>
-          <span class="stat py-2 px-4">
-            <span class="stat-title text-xs">{gettext("Latency")}</span>
-            <span class="stat-value text-lg">{format_ms(summary.p50_ms)}</span>
-            <span class="stat-desc">{gettext("p90 %{p90}", p90: format_ms(summary.p90_ms))}</span>
-          </span>
-          <span class="stat py-2 px-4">
-            <span class="stat-title text-xs">{gettext("Results")}</span>
-            <span class="stat-value text-lg">{summary.avg_results || gettext("n/a")}</span>
-            <span class="stat-desc">{gettext("per search")}</span>
-          </span>
-          <span class="stat py-2 px-4">
-            <span class="stat-title text-xs">{gettext("Timeouts")}</span>
-            <span
-              id={stats_id(@indexer_id, summary) <> "-timeouts"}
-              class={[
-                "stat-value text-lg",
-                if(summary.timeouts > 0, do: "text-warning", else: "text-base-content/50")
-              ]}
-            >
-              {summary.timeouts}
+          <span class="stat-title text-[11px]">{engine_label(summary.engine)}</span>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Success")}</span>
+          <span
+            id={stats_id(@indexer_id, summary) <> "-success"}
+            class={["stat-value text-sm font-semibold", rate_class(percent)]}
+          >
+            {format_rate(percent)}
+            <span class={suffix_class()}>
+              {gettext("%{ok}/%{attempts}", ok: summary.successes, attempts: summary.attempts)}
             </span>
           </span>
-        </button>
-      </div>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Latency")}</span>
+          <span class="stat-value text-sm font-semibold">
+            {format_ms(summary.p50_ms)}
+            <span class={suffix_class()}>
+              {gettext("p90 %{p90}", p90: format_ms(summary.p90_ms))}
+            </span>
+          </span>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Results")}</span>
+          <span class="stat-value text-sm font-semibold">
+            {summary.avg_results || gettext("n/a")}
+          </span>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Timeouts")}</span>
+          <span
+            id={stats_id(@indexer_id, summary) <> "-timeouts"}
+            class={[
+              "stat-value text-sm font-semibold",
+              if(summary.timeouts > 0, do: "text-warning", else: "text-base-content/50")
+            ]}
+          >
+            {summary.timeouts}
+          </span>
+        </span>
+      </button>
     </div>
     """
   end
@@ -140,8 +144,11 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   defp rate_class(pct) when pct >= @degraded_percent, do: "text-warning"
   defp rate_class(_pct), do: "text-error"
 
-  defp engine_label("builtin"), do: gettext("Built-in engine")
-  defp engine_label("prowlarr"), do: gettext("Prowlarr engine")
+  # Muted sub-number on a value line; stays muted inside a colored success value.
+  defp suffix_class, do: "text-xs font-normal text-base-content/60"
+
+  defp engine_label("builtin"), do: gettext("Built-in")
+  defp engine_label("prowlarr"), do: gettext("Prowlarr")
   defp engine_label(other), do: other
 
   defp format_rate(nil), do: gettext("n/a")
