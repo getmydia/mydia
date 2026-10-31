@@ -35,6 +35,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
     chip = indexer_chip(names)
 
     assert LazyHTML.text(chip) =~ "Ashvale Commons, Brinewater Exchange +1 more"
+    refute LazyHTML.text(chip) =~ "Saltmarsh Mirror"
     assert LazyHTML.attribute(chip, "title") == [Enum.join(names, ", ")]
   end
 
