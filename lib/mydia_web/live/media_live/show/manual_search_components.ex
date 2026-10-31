@@ -215,7 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <.terms_badges id={"#{@id}-terms"} terms={@result.terms} />
         <%!-- Indexer badge (its own column from lg) --%>
         <span class="lg:hidden">
-          <.indexer_badge result={@result} />
+          <.indexer_badge id={"#{@id}-indexer-badge-inline"} result={@result} />
         </span>
         <%!-- Tried before: failed for this target or blacklisted --%>
         <%= if attempt = visible_prior_attempt(@result) do %>
@@ -322,7 +322,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       {published_age(@result.published_at)}
     </div>
     <div id={"#{@id}-indexer"} class="hidden min-w-0 self-center truncate text-sm lg:block">
-      <.indexer_badge result={@result} />
+      <.indexer_badge id={"#{@id}-indexer-badge"} result={@result} />
     </div>
     <%!-- Download Action: icon-only on xs and in the lg column, where the
          title attribute is the label --%>
@@ -394,44 +394,82 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   defp published_age(%DateTime{} = published_at), do: format_relative_time_short(published_at)
   defp published_age(_published_at), do: nil
 
-  # Indexer badge, linking to the release's tracker page when usable. Names
-  # the winning tracker and counts the others; the title lists them all.
+  # Indexer badge. One tracker: a direct link to the release's page when
+  # usable, else a plain badge. Several (a dedup merge): a button opening a
+  # menu of every tracker's page. The label truncates so a long tracker name
+  # never runs into the download column; the title lists every tracker.
+  #
+  # The menu is a native popover with CSS anchor positioning (the
+  # #downloads-more pattern), not an absolute dropdown-content: the results
+  # list scrolls inside the dialog and would clip it. flip-block opens it
+  # upward near the bottom edge.
+  attr :id, :string, required: true
   attr :result, SearchResult, required: true
 
   defp indexer_badge(assigns) do
-    indexers = SearchResult.indexers(assigns.result)
+    sources = SearchResult.sources(assigns.result)
+    names = Enum.map(sources, & &1.indexer)
 
     assigns =
       assign(assigns,
         info_page_url: SearchResult.info_page_url(assigns.result),
-        single?: match?([_], indexers),
-        all_indexers: Enum.join(indexers, ", ")
+        links: Enum.map(sources, &{&1.indexer, SearchResult.usable_info_url(&1.info_url)}),
+        merged?: length(sources) > 1,
+        all_indexers: Enum.join(names, ", ")
       )
 
     ~H"""
-    <%= if @info_page_url do %>
-      <a
-        href={@info_page_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
-        title={
-          if(@single?,
-            do: gettext("View this release on %{indexer}", indexer: @result.indexer),
-            else: @all_indexers
-          )
-        }
-      >
-        {indexer_label(@result)}
-        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
-      </a>
-    <% else %>
-      <%!-- No usable URL: a plain badge. It used to hide on xs screens, since a
-           non-actionable badge earned no room in a dense mobile row; it now
-           always shows because it is the only place a row names its trackers. --%>
-      <span class="badge badge-outline badge-sm" title={@all_indexers}>
-        {indexer_label(@result)}
-      </span>
+    <%= cond do %>
+      <% @merged? -> %>
+        <button
+          id={@id}
+          type="button"
+          class="badge badge-outline badge-sm max-w-full min-w-0 cursor-pointer gap-1 hover:border-primary hover:text-primary transition-colors"
+          popovertarget={"#{@id}-menu"}
+          style={"anchor-name:--#{@id}"}
+          title={@all_indexers}
+          aria-label={gettext("Trackers for this release: %{indexers}", indexers: @all_indexers)}
+        >
+          <span class="truncate">{indexer_label(@result)}</span>
+          <.icon name="hero-chevron-down" class="w-3 h-3 shrink-0" />
+        </button>
+        <ul
+          id={"#{@id}-menu"}
+          popover
+          class="dropdown dropdown-end menu bg-base-100 rounded-box w-64 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
+          style={"position-anchor:--#{@id};position-try-fallbacks:flip-block"}
+        >
+          <li :for={{indexer, url} <- @links} class={[!url && "menu-disabled"]}>
+            <a :if={url} href={url} target="_blank" rel="noopener noreferrer" class="gap-2">
+              <span class="min-w-0 break-words">{indexer}</span>
+              <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3 shrink-0" />
+            </a>
+            <span :if={!url} class="break-words">{indexer}</span>
+          </li>
+        </ul>
+      <% @info_page_url -> %>
+        <a
+          id={@id}
+          href={@info_page_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="badge badge-outline badge-sm max-w-full min-w-0 gap-1 hover:border-primary hover:text-primary transition-colors"
+          title={gettext("View this release on %{indexer}", indexer: @result.indexer)}
+        >
+          <span class="truncate">{indexer_label(@result)}</span>
+          <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3 shrink-0" />
+        </a>
+      <% true -> %>
+        <%!-- No usable URL: a plain badge. It used to hide on xs screens, since a
+             non-actionable badge earned no room in a dense mobile row; it now
+             always shows because it is the only place a row names its trackers. --%>
+        <span
+          id={@id}
+          class="badge badge-outline badge-sm max-w-full min-w-0"
+          title={@all_indexers}
+        >
+          <span class="truncate">{indexer_label(@result)}</span>
+        </span>
     <% end %>
     """
   end

@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
   import Phoenix.LiveViewTest
 
+  alias Mydia.Indexers.SearchResult.Source
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.PickerModals
 
@@ -605,6 +606,43 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
       assert html =~ ~s(title="EZTV, Nyaa, TorrentDay")
+    end
+
+    test "a merged release lists each tracker's page in a popover menu" do
+      html =
+        modal_html(%{
+          indexer: "Saltmarsh Mirror",
+          sources: [
+            %Source{indexer: "Ashvale Commons", info_url: "https://a.example/details/1"},
+            %Source{indexer: "Brinewater Exchange", info_url: "javascript:alert(1)"},
+            %Source{indexer: "Saltmarsh Mirror", info_url: "https://s.example/details/2"}
+          ]
+        })
+
+      doc = LazyHTML.from_fragment(html)
+      badge = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge")
+
+      assert LazyHTML.attribute(badge, "popovertarget") ==
+               ["search-result-00000-1-indexer-badge-menu"]
+
+      menu = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-menu[popover]")
+
+      assert menu |> LazyHTML.query("a[href]") |> LazyHTML.attribute("href") ==
+               ["https://a.example/details/1", "https://s.example/details/2"]
+
+      # The tracker with an unusable URL is named but not linked.
+      assert LazyHTML.text(menu) =~ "Brinewater Exchange"
+      refute html =~ "javascript:alert"
+    end
+
+    test "a single-tracker release stays a direct link with a truncating label" do
+      html = modal_html(%{indexer: "Saltmarsh Mirror", info_url: "https://s.example/details/2"})
+      doc = LazyHTML.from_fragment(html)
+
+      link = LazyHTML.query(doc, "a#search-result-00000-1-indexer-badge")
+      assert LazyHTML.attribute(link, "href") == ["https://s.example/details/2"]
+      assert link |> LazyHTML.query("span.truncate") |> LazyHTML.text() == "Saltmarsh Mirror"
+      assert doc |> LazyHTML.query("[popover]") |> Enum.count() == 0
     end
 
     test "the desktop column header sorts by the clicked column" do
