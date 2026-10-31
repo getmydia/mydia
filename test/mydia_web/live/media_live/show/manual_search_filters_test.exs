@@ -24,6 +24,18 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
     assert LazyHTML.text(chip) =~ "Ashvale Commons, Brinewater Exchange +2 more"
     refute LazyHTML.text(chip) =~ "Westmarch Lantern"
     assert LazyHTML.attribute(chip, "title") == [Enum.join(names, ", ")]
+
+    # The remove button names every indexer, not the capped label.
+    assert chip |> LazyHTML.query("button") |> LazyHTML.attribute("aria-label") ==
+             ["Remove filter: " <> Enum.join(names, ", ")]
+  end
+
+  test "exactly three indexers name two and count one" do
+    names = ["Ashvale Commons", "Brinewater Exchange", "Saltmarsh Mirror"]
+    chip = indexer_chip(names)
+
+    assert LazyHTML.text(chip) =~ "Ashvale Commons, Brinewater Exchange +1 more"
+    assert LazyHTML.attribute(chip, "title") == [Enum.join(names, ", ")]
   end
 
   test "other dimensions keep joining every value" do
