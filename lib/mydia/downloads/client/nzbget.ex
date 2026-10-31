@@ -522,7 +522,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
   end
 
   defp fetch_nzb_from_url(url) do
-    Logger.debug("Fetching NZB from URL: #{url}")
+    Logger.debug("Fetching NZB from URL: #{Helpers.redact_url(url)}")
 
     # Configure Req with reasonable timeouts and no retries
     # to avoid test timeouts when connecting to unreachable hosts

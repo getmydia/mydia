@@ -11,26 +11,58 @@ defmodule Mydia.NoRawDownloadUrlTest do
   `MydiaWeb.Live.SearchResultRef` instead, and a page that shows a source URL
   shows `Mydia.Downloads.Client.Helpers.redact_url/1` of it.
 
+  Search and fetch URLs carry credentials too: an indexer's `apikey`, a
+  Prowlarr key, a tracker passkey in a Cardigann download link. So the log
+  rule covers every URL, not only `download_url`.
+
   This test reads the source rather than exercising code paths, so it covers
   pages and log lines no other test reaches:
 
-    * Every `Logger` call in `lib/` whose arguments mention `download_url` (a
-      variable, a field access or a `download_url:` key) outside a
-      `redact_url(...)` call.
+    * Every `Logger` call in `lib/` whose arguments mention a name ending in
+      `url` or `urls` (a variable such as `url` or `search_url`, a field access
+      such as `req.url`, or a `url:` key) outside a call that hides the secret:
+      `redact_url/1`, a host-only helper (`log_origin/1`, `url_host/1`) or a
+      `.host` access such as `URI.parse(url).host`. Module attributes are
+      compile-time constants and pass. Files that log URLs known to carry no
+      credentials are listed in `@allowed`, each with its reason.
     * Every HEEx interpolation, in `.heex` files and `~H` sigils, that mentions
       `download_url` without `redact_url(`. Block heads such as
       `<%= if @download.download_url do %>` decide what renders, not what is
       rendered, and are allowed.
 
   Like `no_varchar_columns_test.exs`, it only sees what the source spells out.
-  A URL renamed to `url` before logging slips past it.
+  A URL bound to a name that does not end in `url` slips past it.
   """
   use ExUnit.Case, async: true
 
   @logger_levels ~w(debug info notice warning warn error critical alert emergency log)a
   @block_heads ~w(if unless case cond for with)
+  @safe_calls [:redact_url, :log_origin, :url_host]
 
-  test "no Logger call or HEEx interpolation exposes a raw download_url" do
+  # Files whose logged URLs carry no credentials.
+  @allowed %{
+    # The upgrade notice links to the public docs site.
+    "lib/mydia/release.ex" => true,
+    # Plugin catalog and source URLs are public, operator-declared catalogs.
+    "lib/mydia/plugins.ex" => true,
+    "lib/mydia/plugins/index.ex" => true,
+    "lib/mydia/plugins/declared_sources.ex" => true,
+    "lib/mydia/plugins/runtime_instances.ex" => true,
+    # Cardigann definitions come from a public GitHub repository.
+    "lib/mydia/indexers/definition_sync.ex" => true,
+    # Relay and public-IP service URLs are Mydia's own or public endpoints.
+    "lib/mydia/p2p/server.ex" => true,
+    "lib/mydia/remote_access/direct_urls.ex" => true,
+    # The Flutter dev proxy points at a localhost dev server.
+    "lib/mydia_web/channels/player_dev_socket.ex" => true,
+    # Crash reports and subtitles go to metadata-relay, which takes no key in the URL.
+    "lib/mydia/crash_reporter/sender.ex" => true,
+    "lib/mydia/subtitles/client/metadata_relay.ex" => true,
+    # The Cardigann guest is downloaded from a public, pinned release URL.
+    "lib/mydia/indexers/cardigann/wasm/delivery.ex" => true
+  }
+
+  test "no Logger call or HEEx interpolation exposes a raw URL" do
     violations =
       "lib/**/*.{ex,heex}"
       |> Path.wildcard()
@@ -72,6 +104,26 @@ defmodule Mydia.NoRawDownloadUrlTest do
                """)
     end
 
+    test "flags any variable, field or key named like a URL" do
+      assert [_, _, _, _] =
+               source_violations(~S"""
+               Logger.debug("Jackett search: #{url}")
+               Logger.debug("Newznab test connection: #{full_url}")
+               Logger.info("Cardigann http #{req.url}")
+               Logger.warning("fetch failed", release_url: release_url)
+               """)
+    end
+
+    test "passes host-only helpers, .host and module attributes" do
+      assert [] =
+               source_violations(~S"""
+               Logger.info("Downloading file from #{log_origin(url)}")
+               Logger.debug("request: #{URI.parse(search_url).host}")
+               Logger.info("Back up first: #{@docs_url}")
+               Logger.debug("FlareSolverr #{url_host(url)}")
+               """)
+    end
+
     test "flags HEEx that renders download_url and passes redacted or block heads" do
       source = ~S'''
       def row(assigns) do
@@ -94,7 +146,7 @@ defmodule Mydia.NoRawDownloadUrlTest do
   defp file_violations(path) do
     source = File.read!(path)
 
-    if String.contains?(source, "download_url") do
+    if String.contains?(source, "url") and not Map.has_key?(@allowed, path) do
       source
       |> violations_in(path)
       |> Enum.map(&"#{path}:#{&1}")
@@ -125,7 +177,7 @@ defmodule Mydia.NoRawDownloadUrlTest do
         {{:., meta, [{:__aliases__, _, [:Logger]}, level]}, _, args} = node, acc
         when level in @logger_levels ->
           if raw_reference?(args),
-            do: {node, acc ++ ["#{meta[:line]}: Logger.#{level} with a raw download_url"]},
+            do: {node, acc ++ ["#{meta[:line]}: Logger.#{level} with a raw URL"]},
             else: {node, acc}
 
         node, acc ->
@@ -135,23 +187,41 @@ defmodule Mydia.NoRawDownloadUrlTest do
     acc
   end
 
-  # True when `ast` mentions download_url anywhere outside a redact_url call.
-  defp raw_reference?({:redact_url, _, args}) when is_list(args), do: false
-  defp raw_reference?({{:., _, [_, :redact_url]}, _, _}), do: false
-  defp raw_reference?({:download_url, _, ctx}) when is_atom(ctx), do: true
-  defp raw_reference?({{:., _, [_, :download_url]}, _, _}), do: true
-  defp raw_reference?({:download_url, value}), do: not redact_call?(value)
+  # True when `ast` mentions a URL-named value outside a call that hides it.
+  defp raw_reference?(ast) do
+    cond do
+      safe?(ast) -> false
+      url_reference?(ast) -> true
+      true -> raw_child_reference?(ast)
+    end
+  end
 
-  defp raw_reference?({left, _meta, args}) when is_list(args),
+  defp raw_child_reference?({key, value}) when is_atom(key),
+    do: if(url_name?(key), do: not safe?(value), else: raw_reference?(value))
+
+  defp raw_child_reference?({left, _meta, args}) when is_list(args),
     do: raw_reference?(left) or Enum.any?(args, &raw_reference?/1)
 
-  defp raw_reference?({left, right}), do: raw_reference?(left) or raw_reference?(right)
-  defp raw_reference?(list) when is_list(list), do: Enum.any?(list, &raw_reference?/1)
-  defp raw_reference?(_other), do: false
+  defp raw_child_reference?({left, right}), do: raw_reference?(left) or raw_reference?(right)
+  defp raw_child_reference?(list) when is_list(list), do: Enum.any?(list, &raw_reference?/1)
+  defp raw_child_reference?(_other), do: false
 
-  defp redact_call?({:redact_url, _, args}) when is_list(args), do: true
-  defp redact_call?({{:., _, [_, :redact_url]}, _, _}), do: true
-  defp redact_call?(_other), do: false
+  # A variable or a field access whose name ends in url/urls.
+  defp url_reference?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: url_name?(name)
+  defp url_reference?({{:., _, [_, field]}, _, []}) when is_atom(field), do: url_name?(field)
+  defp url_reference?(_other), do: false
+
+  # Calls that redact or keep only the host, `.host` accesses and module attributes.
+  defp safe?({name, _, args}) when name in @safe_calls and is_list(args), do: true
+  defp safe?({{:., _, [_, name]}, _, _}) when name in @safe_calls, do: true
+  defp safe?({{:., _, [_, :host]}, _, []}), do: true
+  defp safe?({:@, _, _}), do: true
+  defp safe?(_other), do: false
+
+  defp url_name?(name) do
+    name = Atom.to_string(name)
+    String.ends_with?(name, "url") or String.ends_with?(name, "urls")
+  end
 
   defp heex_violations(template, first_line) do
     template

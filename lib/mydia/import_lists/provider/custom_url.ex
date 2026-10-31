@@ -85,6 +85,8 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
 
   require Logger
 
+  alias Mydia.Downloads.Client.Helpers
+
   @allowed_schemes ~w(http https)
   @max_redirects 5
   # Req 0.7.1 has no `max_response_size` request option (see check_response_size/1
@@ -124,7 +126,7 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
   ## Private Functions
 
   defp fetch_from_url(url, media_type) do
-    Logger.info("[CustomURL] Fetching from URL", url: url)
+    Logger.info("[CustomURL] Fetching from URL", url: Helpers.redact_url(url))
 
     with {:ok, response} <- fetch_with_redirects(url, @max_redirects) do
       handle_response(response, media_type)
@@ -147,7 +149,11 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
        when status in [301, 302, 303, 307, 308] do
     with {:ok, location} <- get_redirect_location(response),
          {:ok, next_url} <- resolve_redirect_url(url, location) do
-      Logger.debug("[CustomURL] Following redirect", from: url, to: next_url)
+      Logger.debug("[CustomURL] Following redirect",
+        from: Helpers.redact_url(url),
+        to: Helpers.redact_url(next_url)
+      )
+
       fetch_with_redirects(next_url, redirects_remaining - 1)
     end
   end

@@ -51,6 +51,7 @@ defmodule Mydia.Indexers.FlareSolverr do
   - `sessions.destroy` - Destroy a session
   """
 
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.FlareSolverr.Gate
   alias Mydia.Indexers.FlareSolverr.Response
 
@@ -338,7 +339,7 @@ defmodule Mydia.Indexers.FlareSolverr do
       |> maybe_add_proxy(opts[:proxy])
       |> maybe_add_post_data(opts[:post_data])
 
-    Logger.debug("FlareSolverr request: #{cmd} #{url}")
+    Logger.debug("FlareSolverr request: #{cmd} #{Helpers.redact_url(url)}")
 
     request = fn -> post_to_flaresolverr(flaresolverr_url, body, receive_timeout, url) end
 
@@ -390,7 +391,7 @@ defmodule Mydia.Indexers.FlareSolverr do
         {:error, {:http_error, status, body}}
 
       {:error, %Req.TransportError{reason: :timeout}} ->
-        Logger.warning("FlareSolverr request timeout for #{url}")
+        Logger.warning("FlareSolverr request timeout for #{Helpers.redact_url(url)}")
         {:error, :timeout}
 
       {:error, %Req.TransportError{reason: reason}} ->
@@ -407,7 +408,11 @@ defmodule Mydia.Indexers.FlareSolverr do
     case Response.from_json(body) do
       {:ok, response} ->
         duration = Response.duration_ms(response)
-        Logger.info("FlareSolverr solved challenge for #{url} in #{duration}ms")
+
+        Logger.info(
+          "FlareSolverr solved challenge for #{Helpers.redact_url(url)} in #{duration}ms"
+        )
+
         {:ok, response}
 
       {:error, reason} ->
@@ -416,12 +421,15 @@ defmodule Mydia.Indexers.FlareSolverr do
   end
 
   defp handle_response(%{"status" => "error", "message" => message}, url) do
-    Logger.warning("FlareSolverr failed for #{url}: #{message}")
+    Logger.warning("FlareSolverr failed for #{Helpers.redact_url(url)}: #{message}")
     {:error, {categorize_error(message), summarize_message(message)}}
   end
 
   defp handle_response(body, url) do
-    Logger.error("FlareSolverr unexpected response for #{url}: #{inspect(body)}")
+    Logger.error(
+      "FlareSolverr unexpected response for #{Helpers.redact_url(url)}: #{inspect(body)}"
+    )
+
     {:error, {:unexpected_response, body}}
   end
 

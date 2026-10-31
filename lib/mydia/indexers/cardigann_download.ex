@@ -124,7 +124,8 @@ defmodule Mydia.Indexers.CardigannDownload do
         decode_body: false
       }
 
-      Logger.debug("Cardigann download before-request: #{url} #{inspect(inputs)}")
+      # Host only: the URL and its inputs can carry the account's passkey.
+      Logger.debug("Cardigann download before-request to #{URI.parse(url).host}")
 
       CardigannSearchEngine.execute_http_request(
         definition,
