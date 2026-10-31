@@ -257,7 +257,9 @@ hours and optional. `TrackerLimits` applies them:
   `TrackerLimits.guard_query/2`. A rule applies to the Mydia indexer whose name
   matches its tracker (a built-in Cardigann definition, or a Jackett or Torznab
   feed for one tracker). A Prowlarr or aggregate Jackett connection sends one
-  search to trackers Mydia cannot see, so those rely on Prowlarr's limits.
+  search to trackers Mydia cannot see, so a per-tracker `query_limit` cannot
+  cap it: use Prowlarr's own limits, or one Jackett connection per tracker,
+  named after it.
   Every attempt counts. At the cap the indexer is skipped with a
   `:rate_limited` error, which manual search shows as the indexer's status.
   Counts live in `RateLimiter`'s rolling windows, in ETS, and reset on

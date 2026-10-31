@@ -127,6 +127,10 @@ defmodule Mydia.Indexers.RateLimiter do
   The slot is inserted before counting and removed again when over the
   limit, so concurrent callers can never all pass a check for the last slot.
   At worst two racing callers both back off.
+
+  Each slot expires `window_ms` after it was taken, so every call on one
+  `key` must use the same window: a later check with a longer window would
+  miss slots already cleaned up.
   """
   @spec reserve_window(term(), non_neg_integer(), pos_integer()) ::
           :ok | {:error, :limited, non_neg_integer()}
