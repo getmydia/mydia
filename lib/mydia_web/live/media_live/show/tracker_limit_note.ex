@@ -14,6 +14,8 @@ defmodule MydiaWeb.MediaLive.Show.TrackerLimitNote do
 
   alias Mydia.Indexers.TrackerLimits
 
+  require Logger
+
   @doc "Sets `result.limit_reason` from `caps` (`TrackerLimits.grab_caps/1`)."
   @spec put_limit_reason(map(), map()) :: map()
   def put_limit_reason(result, caps) do
@@ -34,7 +36,9 @@ defmodule MydiaWeb.MediaLive.Show.TrackerLimitNote do
   def load_caps do
     TrackerLimits.grab_caps()
   rescue
-    _error -> %{}
+    error ->
+      Logger.warning("Tracker grab cap lookup failed: #{Exception.message(error)}")
+      %{}
   end
 
   attr :id, :string, required: true

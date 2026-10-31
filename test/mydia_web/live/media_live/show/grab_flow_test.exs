@@ -21,7 +21,8 @@ defmodule MydiaWeb.MediaLive.Show.GrabFlowTest do
     size: 1000,
     seeders: 5,
     leechers: 1,
-    download_protocol: :torrent
+    download_protocol: :torrent,
+    terms: %Mydia.Indexers.Structs.TrackerTerms{private?: true, minimum_ratio: 1.0}
   }
 
   setup %{conn: conn} do
@@ -86,6 +87,12 @@ defmodule MydiaWeb.MediaLive.Show.GrabFlowTest do
     assert download.media_item_id == movie.id
     assert download.download_url == @release.download_url
     assert download.indexer == "Velvet Lantern"
+    # The result's own fields survive, which a row-built result never carried.
+    assert download.metadata["guid"] == @release.guid
+    assert download.metadata["download_protocol"] in ["torrent", :torrent]
+
+    assert %{private?: true, minimum_ratio: 1.0} =
+             Mydia.Indexers.Structs.TrackerTerms.from_map(download.metadata["tracker_terms"])
 
     # The background task fails (no download clients configured) and says so.
     # Pinned: an earlier test's grab task can still broadcast on the topic.

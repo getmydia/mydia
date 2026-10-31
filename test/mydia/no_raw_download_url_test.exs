@@ -141,33 +141,58 @@ defmodule Mydia.NoRawDownloadUrlTest do
       assert first =~ "@result.download_url"
       assert second =~ "@download.download_url"
     end
+
+    test "flags a raw URL beside a redacted one in the same expression" do
+      source = ~S'''
+      def row(assigns) do
+        ~H"""
+        <p>{@d.download_url <> redact_url(@d.download_url)}</p>
+        """
+      end
+      '''
+
+      assert [_] = source_violations(source)
+    end
+
+    test "scans HEEx in a file allowlisted for logging" do
+      source = ~S'''
+      def row(assigns) do
+        Logger.info("docs at #{url}")
+        ~H"<p>{@d.download_url}</p>"
+      end
+      '''
+
+      assert [heex] = violations_in(source, "lib/mydia/release.ex", false)
+      assert heex =~ "HEEx renders"
+    end
   end
 
   defp file_violations(path) do
     source = File.read!(path)
 
-    if String.contains?(source, "url") and not Map.has_key?(@allowed, path) do
+    # The allowlist exempts Logger calls only; HEEx is scanned everywhere.
+    if String.contains?(source, "url") do
       source
-      |> violations_in(path)
+      |> violations_in(path, not Map.has_key?(@allowed, path))
       |> Enum.map(&"#{path}:#{&1}")
     else
       []
     end
   end
 
-  defp source_violations(source), do: violations_in(source, "snippet.ex")
+  defp source_violations(source), do: violations_in(source, "snippet.ex", true)
 
-  defp violations_in(source, path) do
+  defp violations_in(source, path, check_logs?) do
     if String.ends_with?(path, ".heex") do
       heex_violations(source, 1)
     else
       source
       |> Code.string_to_quoted!(columns: false, file: path)
-      |> ast_violations()
+      |> ast_violations(check_logs?)
     end
   end
 
-  defp ast_violations(ast) do
+  defp ast_violations(ast, check_logs?) do
     {_ast, acc} =
       Macro.prewalk(ast, [], fn
         {:sigil_H, meta, [{:<<>>, _, [template]}, _mods]} = node, acc
@@ -176,7 +201,7 @@ defmodule Mydia.NoRawDownloadUrlTest do
 
         {{:., meta, [{:__aliases__, _, [:Logger]}, level]}, _, args} = node, acc
         when level in @logger_levels ->
-          if raw_reference?(args),
+          if check_logs? and raw_reference?(args),
             do: {node, acc ++ ["#{meta[:line]}: Logger.#{level} with a raw URL"]},
             else: {node, acc}
 
@@ -227,14 +252,18 @@ defmodule Mydia.NoRawDownloadUrlTest do
     template
     |> heex_expressions()
     |> Enum.filter(fn {expr, _offset} ->
-      String.contains?(expr, "download_url") and not String.contains?(expr, "redact_url(") and
-        not block_head?(expr)
+      String.contains?(without_redacted(expr), "download_url") and not block_head?(expr)
     end)
     |> Enum.map(fn {expr, offset} ->
       line = first_line + count_newlines(binary_part(template, 0, offset))
       "#{line}: HEEx renders #{String.trim(expr)}"
     end)
   end
+
+  # The expression with every redact_url(...) call removed (one level of
+  # nested parentheses), so a raw URL beside a redacted one still shows.
+  defp without_redacted(expr),
+    do: String.replace(expr, ~r/redact_url\((?:[^()]|\([^()]*\))*\)/, "")
 
   defp block_head?(expr) do
     head = expr |> String.trim() |> String.split(~r/[\s(]/, parts: 2) |> hd()

@@ -711,25 +711,26 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # Grab pipeline PubSub handlers (topic "downloads", broadcast by
   # Mydia.Downloads.Grabber). Row lookup is a no-op when the modal is closed.
 
+  # Caps refresh first, so the re-streamed row shows a cap this grab reached.
   def handle_grab_completed(%{download_id: id}, socket) do
     {:noreply,
      socket
-     |> mark_grab_row(id, %{downloading: false, downloaded: true})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, downloaded: true})}
   end
 
   def handle_grab_failed(%{download_id: id, reason: reason}, socket) do
     {:noreply,
      socket
-     |> mark_grab_row(id, %{downloading: false, grab_failed: reason})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, grab_failed: reason})}
   end
 
   def handle_grab_duplicate(%{download_id: id}, socket) do
     {:noreply,
      socket
-     |> mark_grab_row(id, %{downloading: false, duplicate: true})
-     |> assign_manual_search_blocking()}
+     |> assign_manual_search_blocking()
+     |> mark_grab_row(id, %{downloading: false, duplicate: true})}
   end
 
   # A grab another page started has no row here.
