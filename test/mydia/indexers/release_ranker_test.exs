@@ -1,7 +1,8 @@
 defmodule Mydia.Indexers.ReleaseRankerTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Indexers.{QualityParser, ReleaseRanker, SearchResult}
+  alias Mydia.Indexers.{QualityParser, RankingOptions, ReleaseRanker, SearchResult}
+  alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Settings.QualityProfile
 
   # Test Fixtures
@@ -2712,6 +2713,83 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
 
       assert explained.detected.size_mb == Float.round(size / (1024 * 1024), 1)
       assert is_list(explained.violations)
+    end
+
+    test "lists the freeleech bonus in the breakdown and the total" do
+      title = "Quiet.Harbor.2031.1080p.BluRay.x264-GRP"
+
+      plain = %SearchResult{
+        title: title,
+        size: 8 * 1024 * 1024 * 1024,
+        seeders: 40,
+        leechers: 2,
+        download_url: "magnet:?xt=urn:btih:freeleech",
+        indexer: "TestIndexer",
+        quality: QualityParser.parse(title)
+      }
+
+      freeleech = %{plain | terms: %TrackerTerms{download_volume_factor: 0.0}}
+
+      profile = %QualityProfile{
+        name: "Freeleech",
+        quality_standards: %{preferred_resolutions: ["1080p"], freeleech_preference: "prefer"}
+      }
+
+      opts = [media_type: :movie, quality_profile: profile]
+      with_bonus = ReleaseRanker.explain(freeleech, opts).breakdown
+      without = ReleaseRanker.explain(plain, opts).breakdown
+
+      assert with_bonus.freeleech == 10.0
+      assert without.freeleech == 0.0
+      assert with_bonus.quality == without.quality
+      assert_in_delta with_bonus.total - without.total, 10.0, 0.11
+    end
+
+    test "freeleech does not lift a 720p over a 1080p" do
+      release = fn title, terms ->
+        %SearchResult{
+          title: title,
+          size: 4 * 1024 * 1024 * 1024,
+          seeders: 40,
+          leechers: 2,
+          download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+          indexer: "TestIndexer",
+          quality: QualityParser.parse(title),
+          terms: terms
+        }
+      end
+
+      hd = release.("Quiet.Harbor.2031.1080p.BluRay.x264-GRP", nil)
+
+      fl_720 =
+        release.(
+          "Quiet.Harbor.2031.720p.BluRay.x264-GRP",
+          %TrackerTerms{download_volume_factor: 0.0}
+        )
+
+      profile = %QualityProfile{
+        name: "Freeleech",
+        quality_standards: %{
+          preferred_resolutions: ["1080p", "720p"],
+          freeleech_preference: "prefer"
+        }
+      }
+
+      # On score alone the bonus inverts the pair: a second-preference 720p
+      # trails the 1080p by less than the full 10-point bonus.
+      score_opts = [media_type: :movie, quality_profile: profile]
+      total = &ReleaseRanker.explain(&1, score_opts).breakdown.total
+      plain_720 = %{fl_720 | terms: nil}
+
+      assert total.(hd) - total.(plain_720) < 10.0
+      assert total.(fl_720) > total.(hd)
+
+      # Automatic searches build their options with RankingOptions, whose
+      # :preferred_qualities is a sort key outside the score. That key is what
+      # keeps the 1080p first.
+      opts = score_opts ++ RankingOptions.build_quality_options(profile, :movie)
+
+      assert [%{result: ^hd}, %{result: ^fl_720}] = ReleaseRanker.rank_all([fl_720, hd], opts)
     end
   end
 end

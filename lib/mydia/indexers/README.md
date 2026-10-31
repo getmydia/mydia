@@ -230,6 +230,24 @@ once a minute by its recorder, for the admin list. An override is stale when
 its tracker was neither seen nor grabbed in 30 days and it is not a row
 created within that window.
 
+### Freeleech
+
+`freeleech_preference` is `"ignore"` (the default, and what a missing key
+means) or `"prefer"`. With `"prefer"`, `SearchScorer.score_freeleech/2` adds
+`(1 - download_volume_factor) * 10` to the combined score beside the
+availability score and title bonus: full freeleech adds 10, half leech 5, an
+unknown factor nothing. Being inside the sum, it takes the zero-seeder
+multiplier like everything else (7 for a freeleech release with no seeders),
+and the breakdown shows that scaled value. The upload factor is shown in manual
+search, not scored. The bonus never enters `score_quality/3` or
+`QualityProfile.score_media_file/2`, so it cannot move grab delay's
+`upgrade_until_score` check, create a file violation or trigger an upgrade.
+
+On score alone a full-freeleech release can outrank a slightly better one: a
+second-preference 720p trails a 1080p by less than 10. What keeps resolution
+first in automatic search is the `:preferred_qualities` sort key
+`RankingOptions` builds from the profile, which sits outside the score.
+
 ## Tracker limits
 
 `tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24
@@ -270,9 +288,12 @@ server:
 - Events carry the download id (`Downloads.Grabber` broadcasts
   `%{download_id: id}`), never the URL.
 
-`test/mydia/no_raw_download_url_test.exs` fails on a `Logger` call or HEEx
-interpolation that mentions `download_url` without `redact_url(`. It reads
-source, so a URL renamed to `url` before logging slips past it.
+`test/mydia/no_raw_download_url_test.exs` fails on a `Logger` call that
+mentions any name ending in `url` or `urls` outside `redact_url/1`, a
+host-only helper or a `.host` access (files logging only credential-free URLs
+are allowlisted with a reason each), and on HEEx that renders `download_url`
+outside `redact_url(`. It reads source, so a URL bound to another name slips
+past it.
 
 ## Limits vs preferences
 
@@ -301,6 +322,7 @@ the release below every compliant one, and shows the reason.
 | `preferred_*`, `hdr_formats` | preference |
 | `min_ratio`, minimum seeders | preference: they describe whether a download will finish, not the file, and `StallDetector` handles dead torrents |
 | audio language | preference (outermost sort key) |
+| `freeleech_preference` | preference: a property of the release, like seeders, so it only adds a bonus to the combined score |
 
 Blocked tags, rejecting custom formats and identity mismatches are also hard
 removals, but they are not profile settings.
