@@ -70,6 +70,22 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.JsonTest do
       assert Json.raw(doc, hd(rows), field(plan, "h")) == {:ok, "aa"}
     end
 
+    # UNIT3D's API: `rows: {selector: data, attribute: attributes}`, where each
+    # row's fields live in its `attributes` object.
+    test "attribute naming an object makes that object the row" do
+      plan =
+        plan(%{
+          rows: %{selector: "data", attribute: "attributes"},
+          fields: %{"n" => %{selector: "name"}, "i" => %{selector: "..id"}}
+        })
+
+      doc = %{"data" => [%{"id" => "101", "attributes" => %{"name" => "Lantern Harbor"}}]}
+
+      assert [row] = Json.rows(doc, plan.rows)
+      assert Json.raw(doc, row, field(plan, "n")) == {:ok, "Lantern Harbor"}
+      assert Json.raw(doc, row, field(plan, "i")) == {:ok, "101"}
+    end
+
     test "a selector the response's shape cannot satisfy is an error" do
       plan = plan(%{rows: %{selector: "data.items"}, fields: %{}})
       assert {:error, message} = Json.rows(%{"data" => "scalar"}, plan.rows)

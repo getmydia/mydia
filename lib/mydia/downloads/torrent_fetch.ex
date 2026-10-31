@@ -131,7 +131,7 @@ defmodule Mydia.Downloads.TorrentFetch do
   end
 
   defp download_torrent_file(url, indexer_name) do
-    Logger.info("Downloading file from URL: #{url}")
+    Logger.info("Downloading file from #{log_origin(url)}")
 
     # Get download config for the indexer (cookies and FlareSolverr setting)
     download_config = get_indexer_download_config(indexer_name)
@@ -141,6 +141,20 @@ defmodule Mydia.Downloads.TorrentFetch do
       download_via_flaresolverr(url, indexer_name, download_config.cookies)
     else
       download_direct(url, indexer_name, download_config.cookie_header)
+    end
+  end
+
+  # A release URL from a private tracker carries the member's credential:
+  # Gazelle puts `torrent_pass` and `authkey` in the query, UNIT3D puts the
+  # rsskey in the path (`/torrent/download/<id>.<rsskey>`). `redact_url/1` can
+  # only see the first, so log lines name the host and nothing after it.
+  defp log_origin(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host, port: port} when is_binary(scheme) and is_binary(host) ->
+        URI.to_string(%URI{scheme: scheme, host: host, port: port})
+
+      _ ->
+        "(unparseable URL)"
     end
   end
 
@@ -202,12 +216,8 @@ defmodule Mydia.Downloads.TorrentFetch do
 
         case Req.get(final_url, req_opts) do
           {:ok, %{status: 200, body: body}} when is_binary(body) ->
+            # No body preview: a private torrent's announce URL holds the passkey.
             Logger.info("Successfully downloaded file (#{byte_size(body)} bytes)")
-
-            Logger.info(
-              "Content preview (first 500 chars): #{inspect(String.slice(body, 0, 500))}"
-            )
-
             classify_body(body)
 
           {:ok, %{status: status, body: body}} ->
@@ -231,19 +241,19 @@ defmodule Mydia.Downloads.TorrentFetch do
         end
 
       {:error, :too_many_redirects} ->
-        Logger.error("Too many redirects when downloading from: #{url}")
+        Logger.error("Too many redirects when downloading from: #{log_origin(url)}")
         {:error, {:download_failed, "Too many redirects (maximum 10)"}}
 
       {:error, {:redirect_error, message}} ->
-        Logger.error("Redirect error for #{url}: #{message}")
+        Logger.error("Redirect error for #{log_origin(url)}: #{message}")
         {:error, {:download_failed, "Redirect error: #{message}"}}
 
       {:error, {:http_error, exception}} ->
-        Logger.error("HTTP error when downloading from #{url}: #{inspect(exception)}")
+        Logger.error("HTTP error when downloading from #{log_origin(url)}: #{inspect(exception)}")
         {:error, {:download_failed, "Connection failed: #{inspect(exception)}"}}
 
       {:error, {:unexpected_status, status}} ->
-        Logger.error("Unexpected HTTP status #{status} when downloading from: #{url}")
+        Logger.error("Unexpected HTTP status #{status} when downloading from: #{log_origin(url)}")
         {:error, {:download_failed, "Unexpected HTTP status: #{status}"}}
     end
   end
@@ -260,7 +270,7 @@ defmodule Mydia.Downloads.TorrentFetch do
         if cookies != [] and
              not Indexers.cardigann_download_credential_allowed?(indexer_name, url) do
           Logger.warning(
-            "Withholding indexer session cookies from #{url}: not a trusted origin for #{indexer_name}"
+            "Withholding indexer session cookies from #{log_origin(url)}: not a trusted origin for #{indexer_name}"
           )
 
           []
@@ -283,7 +293,7 @@ defmodule Mydia.Downloads.TorrentFetch do
             Logger.info("FlareSolverr downloaded file (#{byte_size(body)} bytes)")
             classify_body(body)
           else
-            Logger.error("FlareSolverr returned empty response for: #{url}")
+            Logger.error("FlareSolverr returned empty response for: #{log_origin(url)}")
             {:error, {:download_failed, "Empty response from FlareSolverr"}}
           end
 
@@ -326,7 +336,10 @@ defmodule Mydia.Downloads.TorrentFetch do
         # This is a redirect response
         case get_location_header(response.headers) do
           nil ->
-            Logger.error("Redirect (#{status}) missing Location header for URL: #{url}")
+            Logger.error(
+              "Redirect (#{status}) missing Location header for URL: #{log_origin(url)}"
+            )
+
             {:error, {:redirect_error, "Redirect missing Location header"}}
 
           location ->
@@ -360,7 +373,7 @@ defmodule Mydia.Downloads.TorrentFetch do
           end
 
         Logger.error(
-          "Unexpected HTTP status #{status} during redirect check for URL: #{url}, response: #{body_preview}"
+          "Unexpected HTTP status #{status} during redirect check for URL: #{log_origin(url)}, response: #{body_preview}"
         )
 
         {:error, {:unexpected_status, status}}
@@ -382,7 +395,10 @@ defmodule Mydia.Downloads.TorrentFetch do
         # This is a redirect response
         case get_location_header(response.headers) do
           nil ->
-            Logger.error("Redirect (#{status}) missing Location header for URL: #{url}")
+            Logger.error(
+              "Redirect (#{status}) missing Location header for URL: #{log_origin(url)}"
+            )
+
             {:error, {:redirect_error, "Redirect missing Location header"}}
 
           location ->
@@ -412,7 +428,7 @@ defmodule Mydia.Downloads.TorrentFetch do
           end
 
         Logger.error(
-          "Unexpected HTTP status #{status} during GET redirect check for URL: #{url}, response: #{body_preview}"
+          "Unexpected HTTP status #{status} during GET redirect check for URL: #{log_origin(url)}, response: #{body_preview}"
         )
 
         {:error, {:unexpected_status, status}}
@@ -437,7 +453,7 @@ defmodule Mydia.Downloads.TorrentFetch do
       cookie_header
     else
       Logger.warning(
-        "Withholding indexer session cookie from #{url}: not a trusted origin for #{indexer_name}"
+        "Withholding indexer session cookie from #{log_origin(url)}: not a trusted origin for #{indexer_name}"
       )
 
       ""
