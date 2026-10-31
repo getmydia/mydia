@@ -314,7 +314,8 @@ defmodule Mydia.Indexers.SearchResult do
     cond do
       trimmed == "" -> nil
       not linkable_scheme?(trimmed) -> nil
-      true -> trimmed
+      # The page renders it in an href; a details link needs no credentials.
+      true -> Mydia.Downloads.Client.Helpers.redact_url(trimmed)
     end
   end
 

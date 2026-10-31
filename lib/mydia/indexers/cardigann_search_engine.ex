@@ -461,7 +461,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     req_opts = build_request_options(definition, url, request_params, user_config, config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{Helpers.redact_url(url)}")
-    Logger.debug("Request params: #{inspect(request_params.query_params)}")
+    Logger.debug("Request params: #{inspect(Helpers.redact_params(request_params.query_params))}")
 
     case safe_request(request_params.method, url, req_opts) do
       {:ok, %Req.Response{status: status, body: body, headers: headers}} ->

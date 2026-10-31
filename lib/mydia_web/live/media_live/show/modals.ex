@@ -787,7 +787,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">
                 {gettext("Additional Metadata")}
               </h4>
-              <pre class="text-xs bg-base-200 p-3 rounded-box overflow-x-auto"><%= Jason.encode!(@download_details.metadata, pretty: true) %></pre>
+              <pre class="text-xs bg-base-200 p-3 rounded-box overflow-x-auto"><%= Jason.encode!(Mydia.Downloads.Client.Helpers.redact_urls_in(@download_details.metadata), pretty: true) %></pre>
             </div>
           <% end %>
         </div>

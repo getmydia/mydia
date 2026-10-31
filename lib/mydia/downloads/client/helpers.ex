@@ -177,9 +177,45 @@ defmodule Mydia.Downloads.Client.Helpers do
     |> Enum.map_join("/", fn segment ->
       segment
       |> String.split(".")
-      |> Enum.map_join(".", &if(secret_like?(&1), do: @redacted_param_value, else: &1))
+      |> Enum.map_join(".", &if(secret_like?(decode(&1)), do: @redacted_param_value, else: &1))
     end)
   end
+
+  # Matched decoded, so a key with needlessly escaped characters still matches.
+  defp decode(part) do
+    URI.decode(part)
+  rescue
+    ArgumentError -> part
+  end
+
+  @doc """
+  Replaces every URL inside `term` (maps, lists and strings, nested) with its
+  origin, e.g. `"https://cdn.example/…"` or `"magnet:…"`, so stored metadata
+  such as resolved debrid links can be shown without the bearer tokens in
+  their paths. Display only.
+  """
+  @spec redact_urls_in(term()) :: term()
+  def redact_urls_in(map) when is_map(map) and not is_struct(map),
+    do: Map.new(map, fn {key, value} -> {key, redact_urls_in(value)} end)
+
+  def redact_urls_in(list) when is_list(list), do: Enum.map(list, &redact_urls_in/1)
+
+  def redact_urls_in(string) when is_binary(string) do
+    case URI.parse(string) do
+      %URI{scheme: scheme, host: host} when is_binary(scheme) and host not in [nil, ""] ->
+        "#{scheme}://#{host}/…"
+
+      %URI{scheme: "magnet"} ->
+        "magnet:…"
+
+      _ ->
+        string
+    end
+  rescue
+    _ -> string
+  end
+
+  def redact_urls_in(other), do: other
 
   # A key, not an id or a slug: 24+ characters of [A-Za-z0-9_-] with both
   # letters and digits, and a run of 16+ letters and digits with no `-` or `_`
@@ -189,6 +225,23 @@ defmodule Mydia.Downloads.Client.Helpers do
     String.length(part) >= 24 and part =~ ~r/\A[A-Za-z0-9_-]+\z/ and part =~ ~r/[A-Za-z]/ and
       part =~ ~r/[0-9]/ and part =~ ~r/[A-Za-z0-9]{16,}/
   end
+
+  @doc """
+  Redacts the values of credential parameters (`passkey`, `apikey`, ...) in a
+  map or a list of `{key, value}` pairs, for logging request parameters.
+  """
+  @spec redact_params(map() | list() | term()) :: map() | list() | term()
+  def redact_params(params) when is_map(params),
+    do: Map.new(params, &redact_param/1)
+
+  def redact_params(params) when is_list(params), do: Enum.map(params, &redact_param/1)
+  def redact_params(other), do: other
+
+  defp redact_param({key, _value} = pair) when is_binary(key) or is_atom(key) do
+    if sensitive_param?(to_string(key)), do: {key, "[REDACTED]"}, else: pair
+  end
+
+  defp redact_param(other), do: other
 
   defp redact_query(query) do
     query

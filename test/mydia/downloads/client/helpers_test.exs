@@ -3,6 +3,36 @@ defmodule Mydia.Downloads.Client.HelpersTest do
 
   alias Mydia.Downloads.Client.Helpers
 
+  describe "redact_params/1" do
+    test "redacts credential values in a map or a pair list" do
+      assert Helpers.redact_params(%{"q" => "invented", "passkey" => "feedface"}) ==
+               %{"q" => "invented", "passkey" => "[REDACTED]"}
+
+      assert Helpers.redact_params([{"apikey", "k1"}, {:cat, "2000"}]) ==
+               [{"apikey", "[REDACTED]"}, {:cat, "2000"}]
+    end
+  end
+
+  describe "redact_urls_in/1" do
+    test "keeps only the origin of every URL in nested metadata" do
+      metadata = %{
+        "quality" => "1080p",
+        "seeders" => 12,
+        "debrid_urls" => [
+          %{"url" => "https://cdn.debrid.example.test/d/Q7KZ19/Invented.Feature.mkv"}
+        ],
+        "source" => "magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Fone.example"
+      }
+
+      assert Helpers.redact_urls_in(metadata) == %{
+               "quality" => "1080p",
+               "seeders" => 12,
+               "debrid_urls" => [%{"url" => "https://cdn.debrid.example.test/…"}],
+               "source" => "magnet:…"
+             }
+    end
+  end
+
   describe "redact_url/1" do
     test "strips credential-bearing query params" do
       redacted = Helpers.redact_url("https://example.com/f?token=ABC&safe=keep")
@@ -99,6 +129,14 @@ defmodule Mydia.Downloads.Client.HelpersTest do
     test "leaves a magnet byte for byte" do
       magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Invented"
       assert Helpers.redact_url(magnet) == magnet
+    end
+
+    test "redacts a path key whose characters were percent-encoded" do
+      url =
+        "https://tracker.example.test/torrent/download/48213.a1b2c3d4e5f6%30718293a4b5c6d7e8f90"
+
+      assert Helpers.redact_url(url) ==
+               "https://tracker.example.test/torrent/download/48213.%5BREDACTED%5D"
     end
 
     test "leaves free text without a host alone" do
