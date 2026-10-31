@@ -994,10 +994,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               blocking={@blocking}
               context_type={@manual_search_context && @manual_search_context.type}
             />
-            <%!-- Per-indexer search progress, then the active filters from lg.
-                 Stacked, not side by side: beside the status card the chips
-                 claimed their full width first and crushed the card to a
-                 sliver once several filters were active (#1311). --%>
+            <%!-- Search progress, then the lg filter chips. Stacked: beside the
+                 card, the chips crushed it to a sliver (#1311). --%>
             <div class="px-4 pt-3">
               <.indexer_search_status
                 progress={@indexer_progress}
