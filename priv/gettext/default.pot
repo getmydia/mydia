@@ -428,7 +428,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show.html.heex:273
 #: lib/mydia_web/live/media_live/show/category_events.ex:171
 #: lib/mydia_web/live/media_live/show/components.ex:280
-#: lib/mydia_web/live/media_live/show/helpers.ex:599
+#: lib/mydia_web/live/media_live/show/helpers.ex:588
 #: lib/mydia_web/status_labels.ex:226
 #, elixir-autogen, elixir-format
 msgid "Movie"
@@ -2739,7 +2739,7 @@ msgstr ""
 msgid "All"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:621
+#: lib/mydia_web/live/media_live/show/helpers.ex:610
 #, elixir-autogen, elixir-format
 msgid "All Episodes"
 msgstr ""
@@ -2882,13 +2882,13 @@ msgid "Animation"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/category_events.ex:172
-#: lib/mydia_web/live/media_live/show/helpers.ex:600
+#: lib/mydia_web/live/media_live/show/helpers.ex:589
 #, elixir-autogen, elixir-format
 msgid "Anime Movie"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/category_events.ex:175
-#: lib/mydia_web/live/media_live/show/helpers.ex:608
+#: lib/mydia_web/live/media_live/show/helpers.ex:597
 #, elixir-autogen, elixir-format
 msgid "Anime Series"
 msgstr ""
@@ -3260,13 +3260,13 @@ msgid "Cannot retry: missing release information"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/category_events.ex:173
-#: lib/mydia_web/live/media_live/show/helpers.ex:601
+#: lib/mydia_web/live/media_live/show/helpers.ex:590
 #, elixir-autogen, elixir-format
 msgid "Cartoon Movie"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/category_events.ex:176
-#: lib/mydia_web/live/media_live/show/helpers.ex:609
+#: lib/mydia_web/live/media_live/show/helpers.ex:598
 #, elixir-autogen, elixir-format
 msgid "Cartoon Series"
 msgstr ""
@@ -3941,7 +3941,7 @@ msgstr ""
 msgid "Could not save poster display settings"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:488
+#: lib/mydia_web/live/media_live/show/search_events.ex:489
 #, elixir-autogen, elixir-format
 msgid "Could not save preference"
 msgstr ""
@@ -3991,7 +3991,7 @@ msgstr ""
 msgid "Could not send this file to Review"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:579
+#: lib/mydia_web/live/media_live/show/search_events.ex:580
 #, elixir-autogen, elixir-format
 msgid "Could not start download for \"%{title}\""
 msgstr ""
@@ -4866,7 +4866,7 @@ msgstr ""
 msgid "Exact match"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:623
+#: lib/mydia_web/live/media_live/show/helpers.ex:612
 #, elixir-autogen, elixir-format
 msgid "Existing Episodes"
 msgstr ""
@@ -5373,7 +5373,7 @@ msgstr ""
 msgid "From: any"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:624
+#: lib/mydia_web/live/media_live/show/helpers.ex:613
 #, elixir-autogen, elixir-format
 msgid "Future Episodes"
 msgstr ""
@@ -5456,7 +5456,7 @@ msgstr ""
 msgid "Grabbed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:566
+#: lib/mydia_web/live/media_live/show/search_events.ex:567
 #, elixir-autogen, elixir-format
 msgid "Grabbing \"%{title}\" — progress will appear on this page"
 msgstr ""
@@ -6192,7 +6192,7 @@ msgstr ""
 msgid "Min seeders"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:622
+#: lib/mydia_web/live/media_live/show/helpers.ex:611
 #, elixir-autogen, elixir-format
 msgid "Missing Episodes"
 msgstr ""
@@ -6222,12 +6222,12 @@ msgstr ""
 msgid "Monitor active downloads and troubleshoot issues"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:632
+#: lib/mydia_web/live/media_live/show/helpers.ex:621
 #, elixir-autogen, elixir-format
 msgid "Monitor all episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:633
+#: lib/mydia_web/live/media_live/show/helpers.ex:622
 #, elixir-autogen, elixir-format
 msgid "Monitor season"
 msgstr ""
@@ -6492,7 +6492,7 @@ msgstr ""
 msgid "Next retry: %{time}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:625
+#: lib/mydia_web/live/media_live/show/helpers.ex:614
 #, elixir-autogen, elixir-format
 msgid "No Episodes"
 msgstr ""
@@ -8532,7 +8532,7 @@ msgid "Search failed"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:86
-#: lib/mydia_web/live/media_live/show/search_events.ex:707
+#: lib/mydia_web/live/media_live/show/search_events.ex:708
 #: lib/mydia_web/live/search_live/index.ex:711
 #, elixir-autogen, elixir-format
 msgid "Search failed unexpectedly"
@@ -8545,7 +8545,7 @@ msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:96
 #: lib/mydia_web/live/media_live/show/messages.ex:16
-#: lib/mydia_web/live/media_live/show/search_events.ex:698
+#: lib/mydia_web/live/media_live/show/search_events.ex:699
 #: lib/mydia_web/live/search_live/index.ex:702
 #: lib/mydia_web/live/search_live/index.ex:865
 #, elixir-autogen, elixir-format
@@ -9456,7 +9456,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show.html.heex:274
 #: lib/mydia_web/live/media_live/show/category_events.ex:174
 #: lib/mydia_web/live/media_live/show/components.ex:281
-#: lib/mydia_web/live/media_live/show/helpers.ex:607
+#: lib/mydia_web/live/media_live/show/helpers.ex:596
 #: lib/mydia_web/status_labels.ex:229
 #, elixir-autogen, elixir-format
 msgid "TV Show"
@@ -10185,7 +10185,7 @@ msgstr ""
 msgid "Unknown episode ordering: missing order parameter"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:631
+#: lib/mydia_web/live/media_live/show/helpers.ex:620
 #, elixir-autogen, elixir-format
 msgid "Unmonitor season"
 msgstr ""
@@ -11370,7 +11370,7 @@ msgctxt "media type"
 msgid "Type"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/helpers.ex:628
+#: lib/mydia_web/live/media_live/show/helpers.ex:617
 #, elixir-autogen, elixir-format
 msgctxt "monitoring"
 msgid "Custom"
@@ -21408,7 +21408,7 @@ msgstr ""
 msgid "Searches per day"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/search_events.ex:507
+#: lib/mydia_web/live/media_live/show/search_events.ex:508
 #, elixir-autogen, elixir-format
 msgid "That release is no longer in the results. Search again."
 msgstr ""
