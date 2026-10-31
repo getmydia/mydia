@@ -46,8 +46,13 @@ defmodule MydiaWeb.Live.LibraryMoveComponentTest do
 
   # The move plan runs in the background and scans the library, which under CI
   # load outlasts render_async/1's 100ms default and leaves the preview unrendered.
+  # The plan is a second task, started only once the load task's result is
+  # handled, and render_async/2 waits only on tasks that exist when it is called.
+  # The first wait drains the load (its result is handled before that render),
+  # the second the preview it started.
   defp open(view, button) do
     view |> element(button) |> render_click()
+    render_async(view, 2_000)
     render_async(view, 2_000)
   end
 
