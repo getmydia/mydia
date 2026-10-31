@@ -698,39 +698,45 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
 
     test "the indexer filter matches any tracker that returned the release" do
       merged = %{
-        filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "TorrentDay")
-        | indexers: ["Nyaa", "TorrentDay"]
+        filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "Saltmarsh Mirror")
+        | sources: [
+            %Mydia.Indexers.SearchResult.Source{indexer: "Brinewater Exchange"},
+            %Mydia.Indexers.SearchResult.Source{indexer: "Saltmarsh Mirror"}
+          ]
       }
 
-      other = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "EZTV")
+      other = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "Ashvale Commons")
 
       assert [^merged] =
                SearchHelpers.filter_search_results(
                  [merged, other],
-                 filter_assigns(%{indexer_filters: ["Nyaa"]})
+                 filter_assigns(%{indexer_filters: ["Brinewater Exchange"]})
                )
 
       assert [^merged, ^other] =
                SearchHelpers.filter_search_results(
                  [merged, other],
-                 filter_assigns(%{indexer_filters: ["Nyaa", "EZTV"]})
+                 filter_assigns(%{indexer_filters: ["Brinewater Exchange", "Ashvale Commons"]})
                )
 
       assert SearchHelpers.filter_options([merged, other], filter_assigns(%{})).indexers ==
-               [{"EZTV", 1}, {"Nyaa", 1}, {"TorrentDay", 1}]
+               [{"Ashvale Commons", 1}, {"Brinewater Exchange", 1}, {"Saltmarsh Mirror", 1}]
 
       assert SearchHelpers.known_indexers([merged, other]) ==
-               MapSet.new(["EZTV", "Nyaa", "TorrentDay"])
+               MapSet.new(["Ashvale Commons", "Brinewater Exchange", "Saltmarsh Mirror"])
     end
 
     test "indexer and source filters combine with AND" do
-      a = filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "Nyaa")
-      b = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "Nyaa")
+      a = filter_result("Glass.Harbor.2019.1080p.WEB-DL", "WEB-DL", "x264", "Brinewater Exchange")
+      b = filter_result("Glass.Harbor.2019.1080p.HDTV", "HDTV", "x264", "Brinewater Exchange")
 
       assert [^a] =
                SearchHelpers.filter_search_results(
                  [a, b],
-                 filter_assigns(%{indexer_filters: ["Nyaa"], source_filters: ["WEB-DL"]})
+                 filter_assigns(%{
+                   indexer_filters: ["Brinewater Exchange"],
+                   source_filters: ["WEB-DL"]
+                 })
                )
     end
   end

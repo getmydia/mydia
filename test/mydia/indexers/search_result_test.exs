@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.SearchResultTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.SearchResult.Source
   alias Mydia.Library.Structs.Quality
 
   defp search_result(attrs) do
@@ -464,6 +465,53 @@ defmodule Mydia.Indexers.SearchResultTest do
       # Untouched by the partial merge, so the earlier state survives.
       assert decorated.downloaded == false
       assert decorated.duplicate == false
+    end
+  end
+
+  describe "sources/1 and indexers/1" do
+    test "an unmerged result is its own single source" do
+      result = search_result(indexer: "Saltmarsh Mirror", info_url: "https://a.example/d/1")
+
+      assert SearchResult.sources(result) == [
+               %Source{indexer: "Saltmarsh Mirror", info_url: "https://a.example/d/1"}
+             ]
+
+      assert SearchResult.indexers(result) == ["Saltmarsh Mirror"]
+    end
+
+    test "a merged result reports every source and its indexer names" do
+      sources = [
+        %Source{indexer: "Ashvale Commons", info_url: "https://b.example/d/2"},
+        %Source{indexer: "Saltmarsh Mirror", info_url: nil}
+      ]
+
+      result = search_result(indexer: "Saltmarsh Mirror", sources: sources)
+
+      assert SearchResult.sources(result) == sources
+      assert SearchResult.indexers(result) == ["Ashvale Commons", "Saltmarsh Mirror"]
+    end
+  end
+
+  describe "usable_info_url/1" do
+    test "accepts http and https details pages" do
+      assert SearchResult.usable_info_url("https://tracker.example/details/42") ==
+               "https://tracker.example/details/42"
+
+      assert SearchResult.usable_info_url(" http://tracker.example/details/42 ") ==
+               "http://tracker.example/details/42"
+    end
+
+    test "rejects scripts, hostless, credential and feed URLs, blanks and nil" do
+      for url <- [
+            "javascript:alert(1)",
+            "https://",
+            "https://tracker.example/details/42?passkey=0123456789abcdef0123456789abcdef",
+            "https://tracker.example/rss/abc",
+            "",
+            nil
+          ] do
+        assert SearchResult.usable_info_url(url) == nil, "expected #{inspect(url)} to be refused"
+      end
     end
   end
 end

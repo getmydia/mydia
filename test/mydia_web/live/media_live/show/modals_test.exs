@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
   import Phoenix.LiveViewTest
 
+  alias Mydia.Indexers.SearchResult.Source
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.PickerModals
 
@@ -588,11 +589,89 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     end
 
     test "a release returned by several trackers names the winner and counts the rest" do
-      html = modal_html(%{indexer: "TorrentDay", indexers: ["EZTV", "Nyaa", "TorrentDay"]}, %{})
+      html =
+        modal_html(
+          %{
+            indexer: "Saltmarsh Mirror",
+            sources:
+              for(
+                name <- ["Ashvale Commons", "Brinewater Exchange", "Saltmarsh Mirror"],
+                do: %Mydia.Indexers.SearchResult.Source{indexer: name}
+              )
+          },
+          %{}
+        )
+
       doc = LazyHTML.from_fragment(html)
 
-      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "TorrentDay +2"
-      assert html =~ ~s(title="EZTV, Nyaa, TorrentDay")
+      assert doc |> LazyHTML.query("[id$='-indexer']") |> LazyHTML.text() =~ "Saltmarsh Mirror +2"
+      assert html =~ ~s(title="Ashvale Commons, Brinewater Exchange, Saltmarsh Mirror")
+    end
+
+    test "a merged release lists each tracker's page in a popover menu" do
+      html =
+        modal_html(%{
+          indexer: "Saltmarsh Mirror",
+          sources: [
+            %Source{indexer: "Ashvale Commons", info_url: "https://a.example/details/1"},
+            %Source{indexer: "Brinewater Exchange", info_url: "javascript:alert(1)"},
+            %Source{indexer: "Saltmarsh Mirror", info_url: "https://s.example/details/2"}
+          ]
+        })
+
+      doc = LazyHTML.from_fragment(html)
+      badge = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge")
+
+      assert LazyHTML.attribute(badge, "popovertarget") ==
+               ["search-result-00000-1-indexer-badge-menu"]
+
+      menu = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-menu[popover]")
+
+      assert menu |> LazyHTML.query("a[href]") |> LazyHTML.attribute("href") ==
+               ["https://a.example/details/1", "https://s.example/details/2"]
+
+      # The tracker with an unusable URL is named but not linked.
+      assert LazyHTML.text(menu) =~ "Brinewater Exchange"
+      refute html =~ "javascript:alert"
+
+      # The inline copy (shown below lg) carries the same menu under its own ids.
+      inline = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-inline")
+
+      assert LazyHTML.attribute(inline, "popovertarget") ==
+               ["search-result-00000-1-indexer-badge-inline-menu"]
+
+      assert doc
+             |> LazyHTML.query("#search-result-00000-1-indexer-badge-inline-menu[popover]")
+             |> Enum.count() == 1
+    end
+
+    test "a merged release with no usable URL still names each tracker, without links" do
+      html =
+        modal_html(%{
+          indexer: "Saltmarsh Mirror",
+          sources: [
+            %Source{indexer: "Ashvale Commons", info_url: nil},
+            %Source{indexer: "Saltmarsh Mirror", info_url: "javascript:alert(1)"}
+          ]
+        })
+
+      doc = LazyHTML.from_fragment(html)
+      menu = LazyHTML.query(doc, "#search-result-00000-1-indexer-badge-menu[popover]")
+
+      assert Enum.count(menu) == 1
+      assert menu |> LazyHTML.query("a[href]") |> Enum.count() == 0
+      assert LazyHTML.text(menu) =~ "Ashvale Commons"
+      assert LazyHTML.text(menu) =~ "Saltmarsh Mirror"
+    end
+
+    test "a single-tracker release stays a direct link with a truncating label" do
+      html = modal_html(%{indexer: "Saltmarsh Mirror", info_url: "https://s.example/details/2"})
+      doc = LazyHTML.from_fragment(html)
+
+      link = LazyHTML.query(doc, "a#search-result-00000-1-indexer-badge")
+      assert LazyHTML.attribute(link, "href") == ["https://s.example/details/2"]
+      assert link |> LazyHTML.query("span.truncate") |> LazyHTML.text() == "Saltmarsh Mirror"
+      assert doc |> LazyHTML.query("[popover]") |> Enum.count() == 0
     end
 
     test "the desktop column header sorts by the clicked column" do

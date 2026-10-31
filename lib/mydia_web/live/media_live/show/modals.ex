@@ -994,20 +994,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               blocking={@blocking}
               context_type={@manual_search_context && @manual_search_context.type}
             />
-            <%!-- Per-indexer search progress, and the active filters from lg --%>
-            <div class="px-4 pt-3 lg:flex lg:items-start lg:gap-3">
-              <div class="min-w-0 flex-1">
-                <.indexer_search_status
-                  progress={@indexer_progress}
-                  cardigann={@cardigann_summary}
-                  retry_event="retry_indexer"
-                  retest_paused_event="retest_paused"
-                />
-              </div>
+            <%!-- Search progress, then the lg filter chips. Stacked: beside the
+                 card, the chips crushed it to a sliver (#1311). --%>
+            <div class="px-4 pt-3">
+              <.indexer_search_status
+                progress={@indexer_progress}
+                cardigann={@cardigann_summary}
+                retry_event="retry_indexer"
+                retest_paused_event="retest_paused"
+              />
               <ManualSearchFilters.active_chips
                 :if={@filters_visible?}
                 id_prefix="manual-search-lg-chip"
-                class="hidden flex-wrap justify-end pt-2 lg:flex"
+                class="hidden flex-wrap pb-3 lg:flex"
                 quality_filters={@quality_filters}
                 source_filters={@source_filters}
                 codec_filters={@codec_filters}
