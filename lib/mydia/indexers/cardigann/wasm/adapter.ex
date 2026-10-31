@@ -143,18 +143,40 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     end
   end
 
-  defp run_search(config, query, opts) do
+  # `retry?` is whether a search that met a login wall may run once more on a
+  # session someone stored from the Indexers page meanwhile.
+  defp run_search(config, query, opts, retry? \\ true) do
     with {:ok, definition, doc} <- load(config),
          :ok <- check_login_needed(definition, doc),
          session = stored_session(definition),
          watch = definition |> parse_links() |> login_watch(definition),
-         opts = if(watch, do: Keyword.put(opts, :login_watch, watch), else: opts),
-         {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts),
-         :ok <- check_swallowed_login(watch, out, definition, session) do
-      if out.session_changed, do: persist_session(definition, out.session, session)
-      {:ok, apply_search_filters(out.releases, opts)}
+         watched_opts = if(watch, do: Keyword.put(opts, :login_watch, watch), else: opts),
+         {:ok, out} <-
+           search_with_failover(definition, config, doc, query, session, watched_opts) do
+      watch
+      |> check_swallowed_login(out, definition, session)
+      |> finish_search(out, definition, session, {config, query, opts, retry?})
     end
   end
+
+  defp finish_search(:ok, out, definition, session, {_config, _query, opts, _retry?}) do
+    if out.session_changed, do: persist_session(definition, out.session, session)
+    {:ok, apply_search_filters(out.releases, opts)}
+  end
+
+  defp finish_search(
+         {:fresh_session, _},
+         _out,
+         _definition,
+         _session,
+         {config, query, opts, true}
+       ),
+       do: run_search(config, query, opts, false)
+
+  defp finish_search({:fresh_session, _}, _out, definition, _session, _search),
+    do: {:error, SessionManager.needs_login_error(definition.name)}
+
+  defp finish_search({:error, _} = error, _out, _definition, _session, _search), do: error
 
   # ── Logins that need a person ─────────────────────────────────────────────
 
@@ -173,8 +195,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
       invalidate_rejected(definition, session.cookies)
 
-      # A session stored meanwhile from the Indexers page: the next search uses it.
-      with {:ok, _user_config} <- SessionManager.park(definition), do: :ok
+      # A session stored meanwhile from the Indexers page: run_search retries on it
+      # rather than report this search's empty page as "no results".
+      with {:ok, user_config} <- SessionManager.park(definition),
+           do: {:fresh_session, user_config}
     else
       :ok
     end

@@ -140,6 +140,34 @@ defmodule Mydia.Indexers.Cardigann.Wasm.PrivateTrackerJourneyTest do
     end
   end
 
+  describe "captcha tracker, a person logs in while a search fails" do
+    test "the search retries once on the new session instead of reporting no results", %{
+      bypass: bypass
+    } do
+      tracker =
+        Trackers.start_tracker(bypass, :captcha, %{
+          "username" => @secrets.username,
+          "password" => @secrets.password
+        })
+
+      built_in_login(tracker)
+      {:ok, %{cookies: valid}} = CardigannAuth.get_stored_session(tracker.definition.id)
+      {:ok, _} = CardigannAuth.store_session(tracker.definition.id, ["c_secure_uid=stale"])
+
+      # The guest's login stops at the captcha; meanwhile the Indexers page stores a session.
+      id = tracker.definition.id
+
+      Bypass.stub(bypass, "GET", "/image.php", fn conn ->
+        {:ok, _} = CardigannAuth.store_session(id, valid)
+        Plug.Conn.resp(conn, 200, Trackers.captcha_png())
+      end)
+
+      assert {:ok, [result]} = search(tracker)
+      assert result.title == "Fictional.Salt.Meadow.S02E04.1080p.WEB-DL-INVENTED"
+      assert status(tracker) == "healthy"
+    end
+  end
+
   describe "captcha tracker with templated login paths" do
     test "a captcha on re-login still parks the indexer", %{bypass: bypass} do
       tracker =
