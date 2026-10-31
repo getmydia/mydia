@@ -252,12 +252,7 @@ defmodule Mydia.Downloads.Client.Helpers do
 
   def redact_params(body) when is_binary(body) do
     if String.contains?(body, "=") do
-      body
-      |> String.split("&")
-      |> Enum.map_join("&", fn pair ->
-        [key | _] = String.split(pair, "=", parts: 2)
-        if credential_key?(key), do: key <> "=" <> @redacted_param_value, else: pair
-      end)
+      body |> String.split("&") |> Enum.map_join("&", &redact_form_pair/1)
     else
       body
     end
@@ -272,6 +267,11 @@ defmodule Mydia.Downloads.Client.Helpers do
   end
 
   defp redact_param(other), do: other
+
+  defp redact_form_pair(pair) do
+    [key | _] = String.split(pair, "=", parts: 2)
+    if credential_key?(key), do: key <> "=" <> @redacted_param_value, else: pair
+  end
 
   @credential_fragments ~w(key pass secret auth token)
 
