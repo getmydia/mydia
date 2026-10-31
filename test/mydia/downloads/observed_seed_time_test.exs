@@ -115,6 +115,25 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
       refute Map.has_key?(metadata(download), "observed_seeding")
     end
 
+    test "a failing row does not skip the rows after it" do
+      download = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
+
+      failing = %{
+        id: nil,
+        status: "seeding",
+        seeding_time: nil,
+        metadata: %{"tracker_terms" => @terms}
+      }
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ObservedSeedTime.record([failing, row(download, %{})], @t0)
+        end)
+
+      assert log =~ "Recording observed seed time failed"
+      assert %{"seconds" => 0, "last_seen_at" => _} = metadata(download)["observed_seeding"]
+    end
+
     test "a failure is logged and does not raise" do
       log =
         ExUnit.CaptureLog.capture_log(fn ->

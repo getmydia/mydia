@@ -80,10 +80,17 @@ defmodule Mydia.Downloads.ObservedSeedTime do
   def record(rows, now \\ DateTime.utc_now()) do
     rows
     |> Enum.filter(&tracked?/1)
-    |> Enum.each(&write(&1.id, SeedingGoal.currently_seeding?(&1), now))
+    |> Enum.each(&record_row(&1, now))
+  end
+
+  # Each row on its own: one failing row must not skip the rest, nor fail the
+  # monitor's poll.
+  defp record_row(row, now) do
+    write(row.id, SeedingGoal.currently_seeding?(row), now)
   rescue
     exception ->
       Logger.error("Recording observed seed time failed; the poll continues",
+        download_id: row.id,
         error: Exception.message(exception)
       )
 
