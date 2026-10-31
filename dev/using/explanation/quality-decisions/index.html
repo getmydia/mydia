@@ -2091,6 +2091,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What the score actually weighs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#freeleech" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freeleech
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3613,6 +3630,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What the score actually weighs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#freeleech" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freeleech
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3932,6 +3966,24 @@ separate mechanism covered further down this page.</p>
 to. The difference between fifty and five hundred seeders is a handful of points,
 comparable to a single codec preference. The one sharp effect is having zero
 seeders, which applies a multiplier to the entire score.</p>
+<h3 id="freeleech">Freeleech</h3>
+<p>A quality profile's <strong>Freeleech</strong> setting is either <em>Ignore</em> (the default) or
+<em>Prefer freeleech</em>. Private trackers often mark a release as freeleech, meaning
+the download does not count against your ratio, or half leech, meaning only half
+of it does. With <em>Prefer freeleech</em>, a freeleech release gets 10 extra points
+and a half-leech one 5, the same size as the title-relevance bonus. A release
+with no seeders gets the same zero-seeder cut on these points as on the rest of
+its score. That is
+enough to choose between comparable releases and not enough to matter against
+your resolution preference, which is sorted ahead of the score. A release whose
+tracker says nothing about freeleech gets nothing.</p>
+<p>Freeleech belongs to the release, not to the file you end up with, so it never
+counts toward the upgrade score. A freeleech copy does not make a file "good
+enough", and a file is never replaced just to get a freeleech copy of it.</p>
+<p>Manual search shows the tracker's terms on each row: <code>FL</code> for freeleech, a
+percentage such as <code>50%</code> when only part of the download counts, <code>2x up</code> when
+uploads count double, and a lock for a private tracker. Upload bonuses are
+shown for your information and do not change the score.</p>
 <h2 id="so-why-did-it-take-that-one">So why did it take that one?</h2>
 <p>In rough order of how often each is the real cause:</p>
 <ol>
