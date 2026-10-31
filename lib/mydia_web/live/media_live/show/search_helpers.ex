@@ -551,7 +551,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Returns a map with:
   - `:score` - The ranker total (may be deeply negative for identity mismatches)
   - `:breakdown` - The `ScoreBreakdown` struct (quality, seeders, size, age,
-    title_match, tag_bonus, and the size/seeder/identity penalties)
+    title_match, tag_bonus, freeleech, and the size/seeder/identity penalties)
   - `:detected` - Map of detected quality attributes (for value display)
   - `:violations` - List of constraint violations from the scorer
 

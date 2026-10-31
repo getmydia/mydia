@@ -200,7 +200,10 @@ upgrade.
 - `freeleech_bonus = (1 - download_volume_factor) * 10` when `prefer`; 0 when
   the factor is unknown or the setting is `ignore`. Full freeleech adds 10, half
   adds 5, the same scale as the title bonus: it breaks ties among comparable
-  releases and does not lift a 720p over a 1080p.
+  releases and does not lift a 720p over a 1080p. (As built: the score gap
+  between a second-preference 720p and a 1080p is under 10, so it is the
+  ranker's `:preferred_qualities` sort key, outside the score, that keeps the
+  1080p first. A test pins this.)
 - The upload factor is shown, not scored.
 - `ReleaseRanker.explain/2` lists the bonus in the breakdown, so the manual
   search dialog shows it without a second scoring path.

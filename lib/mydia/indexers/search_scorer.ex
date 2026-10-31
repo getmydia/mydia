@@ -7,13 +7,16 @@ defmodule Mydia.Indexers.SearchScorer do
 
   ## Scoring Algorithm
 
-  Combined Score = (quality_score * 0.6 + seeder_score + title_bonus) * zero_seeder_penalty
+  Combined Score =
+    (quality_score * 0.6 + seeder_score + title_bonus + freeleech_bonus) * zero_seeder_penalty
 
   Where:
   - quality_score: 0-100 (from QualityProfile.score_media_file/2, whose input
     is built by `release_attrs/2` from `Mydia.Quality.Attrs`, or fallback)
   - seeder_score: log10(seeders + 1) * 10 (max ~30 pts)
   - title_bonus: title_relevance_bonus / 2 (0-10 pts)
+  - freeleech_bonus: (1 - download_volume_factor) * 10 (0-10 pts) when the
+    profile's `freeleech_preference` is "prefer", else 0. See `score_freeleech/2`.
   - zero_seeder_penalty: 0.7 if seeders == 0, else 1.0
 
   ## Usage
@@ -27,10 +30,12 @@ defmodule Mydia.Indexers.SearchScorer do
 
   alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.Quality
   alias Mydia.Quality.Attrs
   alias Mydia.Settings.QualityProfile
+  alias Mydia.Settings.QualityProfile.FreeleechPreference
 
   @type score_opts :: [
           quality_profile: QualityProfile.t() | nil,
@@ -82,15 +87,19 @@ defmodule Mydia.Indexers.SearchScorer do
       score_quality(result, quality_profile, media_type)
 
     title_bonus = score_title_match(result.title, search_query)
+    freeleech_bonus = score_freeleech(result, quality_profile)
 
     # Branch on download protocol so NZB results aren't scored on torrent
     # seeders (which are always nil for Usenet).
     {availability_score, availability_penalty, availability_violations} =
       score_availability(result)
 
-    # Combined score: quality (60%) + availability (~30%) + title (10%)
+    # Combined score: quality (60%) + availability (~30%) + title (10%), plus
+    # the freeleech tiebreaker. Freeleech describes the release, not the file,
+    # so it stays out of score_quality/3 and the upgrade cutoff.
     combined_score =
-      (quality_score * 0.6 + availability_score + title_bonus) * availability_penalty
+      (quality_score * 0.6 + availability_score + title_bonus + freeleech_bonus) *
+        availability_penalty
 
     # Build full breakdown. Keep the historical key name :seeder_score for
     # downstream compatibility; for NZB it represents the equivalent
@@ -100,6 +109,7 @@ defmodule Mydia.Indexers.SearchScorer do
       |> Map.put(:quality_score, Float.round(quality_score, 1))
       |> Map.put(:seeder_score, Float.round(availability_score, 1))
       |> Map.put(:title_bonus, Float.round(title_bonus, 1))
+      |> Map.put(:freeleech_bonus, Float.round(freeleech_bonus * availability_penalty, 1))
       |> Map.put(:zero_seeder_penalty, availability_penalty)
 
     violations = violations ++ availability_violations
@@ -190,6 +200,34 @@ defmodule Mydia.Indexers.SearchScorer do
 
     {score_result.score, score_result.breakdown, score_result.violations}
   end
+
+  @doc """
+  The freeleech bonus: `(1 - download_volume_factor) * 10`, so full freeleech
+  adds 10 and half leech 5, the same scale as the title bonus. Like the rest of
+  the combined score it is scaled by the zero-seeder multiplier, and the
+  breakdown's `:freeleech_bonus` records that scaled contribution.
+
+  On score alone it can lift a slightly worse release over a better one: a
+  second-preference 720p trails a 1080p by less than 10. Automatic search keeps
+  resolution first through `:preferred_qualities`, a `ReleaseRanker` sort key
+  outside the score.
+
+  0.0 unless the profile's `freeleech_preference` is "prefer" and the tracker
+  reported a download factor. The factor is clamped to 0..1, so a factor above 1
+  never subtracts. The upload factor is not scored.
+  """
+  @spec score_freeleech(SearchResult.t(), QualityProfile.t() | nil) :: float()
+  def score_freeleech(
+        %SearchResult{terms: %TrackerTerms{download_volume_factor: factor}},
+        profile
+      )
+      when is_number(factor) do
+    if FreeleechPreference.prefer?(profile),
+      do: (1 - min(max(factor, 0), 1)) * 10.0,
+      else: 0.0
+  end
+
+  def score_freeleech(_result, _profile), do: 0.0
 
   @doc """
   Calculate seeder score using logarithmic scale.

@@ -8,6 +8,7 @@ defmodule Mydia.Settings.QualityProfile do
   alias Mydia.Quality.Attrs
   alias Mydia.Quality.Sources
   alias Mydia.Settings.JsonAtomMapType
+  alias Mydia.Settings.QualityProfile.FreeleechPreference
   alias Mydia.Settings.QualityProfile.LegacySources
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -32,30 +33,8 @@ defmodule Mydia.Settings.QualityProfile do
         }
 
   # Allowed values for quality standards validation
-  @valid_video_codecs [
-    "h264",
-    "h265",
-    "hevc",
-    "x264",
-    "x265",
-    "av1",
-    "vc1",
-    "mpeg2",
-    "xvid",
-    "divx"
-  ]
-  @valid_audio_codecs [
-    "aac",
-    "ac3",
-    "eac3",
-    "dts",
-    "dts-hd",
-    "truehd",
-    "atmos",
-    "flac",
-    "mp3",
-    "opus"
-  ]
+  @valid_video_codecs ~w(h264 h265 hevc x264 x265 av1 vc1 mpeg2 xvid divx)
+  @valid_audio_codecs ~w(aac ac3 eac3 dts dts-hd truehd atmos flac mp3 opus)
   @valid_audio_channels ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"]
   @valid_resolutions ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"]
   # No "BDRip" or "BRRip": the release parser folds them into "BluRay", so a
@@ -157,6 +136,7 @@ defmodule Mydia.Settings.QualityProfile do
 
     # Torrent source preferences
     min_ratio: 0.2,  # minimum seeder/leecher ratio for torrents
+    freeleech_preference: "ignore",  # or "prefer"; see FreeleechPreference
   }
   """
   def validate_quality_standards(changeset) do
@@ -176,6 +156,7 @@ defmodule Mydia.Settings.QualityProfile do
         |> validate_media_type_sizes(standards)
         |> validate_hdr_formats(standards)
         |> validate_min_ratio(standards)
+        |> FreeleechPreference.validate(standards)
 
       _ ->
         add_error(changeset, :quality_standards, "must be a map")

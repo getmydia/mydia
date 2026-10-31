@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.SearchScorerTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.{QualityParser, SearchResult, SearchScorer}
+  alias Mydia.Indexers.Structs.TrackerTerms
   alias Mydia.Quality.Attrs
   alias Mydia.Settings.QualityProfile
 
@@ -448,5 +449,79 @@ defmodule Mydia.Indexers.SearchScorerTest do
 
     # "dts-hd" is third of four in the fixture profile's audio list.
     assert breakdown.audio_codec > 25.0
+  end
+
+  describe "freeleech bonus" do
+    defp freeleech_profile(preference) do
+      build_quality_profile(%{
+        quality_standards: %{
+          preferred_resolutions: ["1080p", "720p"],
+          freeleech_preference: preference
+        }
+      })
+    end
+
+    defp with_terms(terms), do: build_result(%{terms: terms})
+
+    defp bonus(result, profile) do
+      SearchScorer.score_result_with_breakdown(result, quality_profile: profile).breakdown.freeleech_bonus
+    end
+
+    defp score(result, profile), do: SearchScorer.score_result(result, quality_profile: profile)
+
+    test "full freeleech adds 10 when the profile prefers it" do
+      profile = freeleech_profile("prefer")
+      freeleech = with_terms(%TrackerTerms{download_volume_factor: 0.0})
+
+      assert bonus(freeleech, profile) == 10.0
+      assert_in_delta score(freeleech, profile) - score(with_terms(nil), profile), 10.0, 0.11
+    end
+
+    test "the breakdown shows the bonus after the zero-seeder multiplier" do
+      profile = freeleech_profile("prefer")
+
+      freeleech =
+        build_result(%{seeders: 0, terms: %TrackerTerms{download_volume_factor: 0.0}})
+
+      assert bonus(freeleech, profile) == 7.0
+    end
+
+    test "half leech adds 5" do
+      profile = freeleech_profile("prefer")
+      assert bonus(with_terms(%TrackerTerms{download_volume_factor: 0.5}), profile) == 5.0
+    end
+
+    test "an unknown download factor adds nothing" do
+      profile = freeleech_profile("prefer")
+
+      assert bonus(with_terms(nil), profile) == 0.0
+      assert bonus(with_terms(%TrackerTerms{private?: true}), profile) == 0.0
+    end
+
+    test "ignore, no setting and no profile add nothing" do
+      freeleech = with_terms(%TrackerTerms{download_volume_factor: 0.0})
+
+      assert bonus(freeleech, freeleech_profile("ignore")) == 0.0
+      assert bonus(freeleech, build_quality_profile()) == 0.0
+      assert SearchScorer.score_freeleech(freeleech, nil) == 0.0
+    end
+
+    test "the upload factor is not scored" do
+      profile = freeleech_profile("prefer")
+      assert bonus(with_terms(%TrackerTerms{upload_volume_factor: 2.0}), profile) == 0.0
+    end
+
+    test "a factor above 1 never subtracts" do
+      profile = freeleech_profile("prefer")
+      assert bonus(with_terms(%TrackerTerms{download_volume_factor: 2.0}), profile) == 0.0
+    end
+
+    test "never changes the file-scale quality score" do
+      profile = freeleech_profile("prefer")
+      freeleech = with_terms(%TrackerTerms{download_volume_factor: 0.0})
+
+      assert SearchScorer.score_quality(freeleech, profile, :movie) ==
+               SearchScorer.score_quality(with_terms(nil), profile, :movie)
+    end
   end
 end

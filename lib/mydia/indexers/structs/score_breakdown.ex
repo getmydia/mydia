@@ -23,6 +23,9 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
   - `:seeder_penalty` - Penalty for low seeders / poor ratio
   - `:identity_penalty` - Penalty for episode/season identity mismatch or absence
 
+  `:freeleech` (0.0) is the freeleech bonus `Mydia.Indexers.SearchScorer` added
+  to `:total`, nonzero only when the profile prefers freeleech.
+
   `:limit_violation` (nil) is the first quality-profile limit the release breaks,
   as reported by `Mydia.Indexers.ProfileLimits.violation/2`. Automatic search
   removes such a release, so only manual search ever shows a non-nil value.
@@ -56,6 +59,7 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
     :total,
     seeder_penalty: 0.0,
     identity_penalty: 0.0,
+    freeleech: 0.0,
     limit_violation: nil,
     language_rank: 0,
     language_matches: 0,
@@ -74,6 +78,7 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
           total: float(),
           seeder_penalty: float(),
           identity_penalty: float(),
+          freeleech: float(),
           limit_violation: String.t() | nil,
           language_rank: non_neg_integer(),
           language_matches: non_neg_integer(),

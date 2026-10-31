@@ -902,7 +902,7 @@ msgstr ""
 msgid "Display Name"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:370
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:381
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:406
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:346
 #: lib/mydia_web/live/search_live/index.html.heex:631
@@ -1973,7 +1973,7 @@ msgid_plural "%{count} paused"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:263
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:266
 #, elixir-autogen, elixir-format
 msgid "%{count} peer"
 msgid_plural "%{count} peers"
@@ -2040,7 +2040,7 @@ msgstr[1] ""
 msgid "%{count} seasons of %{counts}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:156
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:157
 #, elixir-autogen, elixir-format
 msgid "%{count} seeder"
 msgid_plural "%{count} seeders"
@@ -2495,7 +2495,7 @@ msgid "Accounts"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/preset_components.ex:132
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:67
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:68
 #, elixir-autogen, elixir-format
 msgid "Action"
 msgstr ""
@@ -2710,7 +2710,7 @@ msgid "After"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:476
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:65
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:66
 #, elixir-autogen, elixir-format
 msgid "Age"
 msgstr ""
@@ -2823,8 +2823,8 @@ msgstr ""
 msgid "Allow once"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:329
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:333
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:340
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:344
 #, elixir-autogen, elixir-format
 msgid "Already downloading"
 msgstr ""
@@ -3100,7 +3100,7 @@ msgstr ""
 msgid "Automatically search for and download new releases"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:257
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:260
 #, elixir-autogen, elixir-format
 msgid "Availability"
 msgstr ""
@@ -4631,8 +4631,8 @@ msgstr ""
 msgid "Download started: %{title}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:363
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:535
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:374
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:546
 #, elixir-autogen, elixir-format
 msgid "Download this release"
 msgstr ""
@@ -5172,12 +5172,12 @@ msgstr ""
 msgid "Failed to update the match."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:527
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:538
 #, elixir-autogen, elixir-format
 msgid "Failed — retry"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:533
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:544
 #, elixir-autogen, elixir-format
 msgid "Failed: %{reason} — click to retry"
 msgstr ""
@@ -5218,7 +5218,7 @@ msgstr ""
 msgid "File Path"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:247
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:250
 #, elixir-autogen, elixir-format
 msgid "File Size"
 msgstr ""
@@ -5455,8 +5455,8 @@ msgid "Good pick, noted"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:355
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:320
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:324
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:331
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:335
 #, elixir-autogen, elixir-format
 msgid "Grabbed"
 msgstr ""
@@ -5466,8 +5466,8 @@ msgstr ""
 msgid "Grabbing \"%{title}\" — progress will appear on this page"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:338
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:342
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:349
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:353
 #, elixir-autogen, elixir-format
 msgid "Grabbing…"
 msgstr ""
@@ -5579,13 +5579,14 @@ msgid "Identifying files"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:488
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:282
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:293
 #, elixir-autogen, elixir-format
 msgid "Identity mismatch"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:226
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:42
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:438
 #: lib/mydia_web/live/downloads_live/components.ex:95
 #: lib/mydia_web/live/downloads_live/components.ex:104
 #, elixir-autogen, elixir-format
@@ -7135,7 +7136,7 @@ msgstr ""
 msgid "Original language (%{language})"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:272
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:283
 #, elixir-autogen, elixir-format
 msgid "Outside profile limits: %{violation}"
 msgstr ""
@@ -7205,7 +7206,7 @@ msgstr ""
 msgid "Penalized"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:269
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:280
 #, elixir-autogen, elixir-format
 msgid "Penalties"
 msgstr ""
@@ -8165,7 +8166,7 @@ msgstr ""
 msgid "Reset to default"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:235
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:238
 #: lib/mydia_web/live/media_live/show/modals.ex:460
 #, elixir-autogen, elixir-format
 msgid "Resolution"
@@ -8437,7 +8438,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.html.heex:310
 #: lib/mydia_web/live/activity_live/index.html.heex:417
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:60
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:61
 #, elixir-autogen, elixir-format
 msgid "Score"
 msgstr ""
@@ -8761,7 +8762,7 @@ msgid "See what is in cinemas and on your streaming services where you live."
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:487
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:278
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:289
 #, elixir-autogen, elixir-format
 msgid "Seeder penalty"
 msgstr ""
@@ -8769,7 +8770,7 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:474
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:152
 #: lib/mydia_web/live/downloads_live/index.html.heex:505
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:259
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:262
 #: lib/mydia_web/live/search_live/index.html.heex:557
 #, elixir-autogen, elixir-format
 msgid "Seeders"
@@ -8782,8 +8783,8 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.html.heex:311
 #: lib/mydia_web/live/activity_live/index.html.heex:418
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:60
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:64
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:61
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:65
 #, elixir-autogen, elixir-format
 msgid "Seeds"
 msgstr ""
@@ -9007,7 +9008,7 @@ msgstr ""
 msgid "Show on posters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:140
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:141
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:369
 #, elixir-autogen, elixir-format
 msgid "Show score breakdown"
@@ -9042,7 +9043,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/index.html.heex:493
 #: lib/mydia_web/live/downloads_live/index.html.heex:526
 #: lib/mydia_web/live/media_live/index.html.heex:453
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:63
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:64
 #: lib/mydia_web/live/media_live/show/modals.ex:471
 #: lib/mydia_web/live/search_live/index.html.heex:257
 #: lib/mydia_web/live/search_live/index.html.heex:500
@@ -9929,7 +9930,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:482
 #: lib/mydia_web/live/activity_live/index.ex:483
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:241
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:244
 #, elixir-autogen, elixir-format
 msgid "Title match"
 msgstr ""
@@ -10347,7 +10348,7 @@ msgstr ""
 msgid "View the status of your media requests"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:412
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:423
 #: lib/mydia_web/live/search_live/index.html.heex:373
 #: lib/mydia_web/live/search_live/index.html.heex:537
 #, elixir-autogen, elixir-format
@@ -11656,7 +11657,7 @@ msgid "Status"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/formatters.ex:44
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:557
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:568
 #, elixir-autogen, elixir-format
 msgctxt "relative time"
 msgid "now"
@@ -13244,7 +13245,7 @@ msgstr ""
 msgid "Automatic (recommended)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:251
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:283
 #, elixir-autogen, elixir-format
 msgid "Automatic grabs and upgrades never go outside these. A season pack is judged per episode. Manual search still lists everything and marks what is outside."
 msgstr ""
@@ -13254,7 +13255,7 @@ msgstr ""
 msgid "Automatic grabs and upgrades never go outside these. Manual search still lists everything and marks what is outside."
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:396
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:428
 #, elixir-autogen, elixir-format
 msgid "Automatic grabs and upgrades skip releases without HDR in the name"
 msgstr ""
@@ -14823,7 +14824,7 @@ msgstr ""
 msgid "Environment (read-only)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:305
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:337
 #, elixir-autogen, elixir-format
 msgid "Episode File Sizes"
 msgstr ""
@@ -15243,7 +15244,7 @@ msgstr ""
 msgid "File Organization"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:249
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:281
 #, elixir-autogen, elixir-format
 msgid "File Size Limits (MB)"
 msgstr ""
@@ -15593,7 +15594,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:52
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:66
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:67
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:184
 #, elixir-autogen, elixir-format
 msgid "Indexer"
@@ -16102,14 +16103,14 @@ msgstr ""
 msgid "Max Transcode Height"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:285
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:331
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:317
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:363
 #, elixir-autogen, elixir-format
 msgid "Max size (MB)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:297
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:343
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:329
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:375
 #, elixir-autogen, elixir-format
 msgid "Maximum"
 msgstr ""
@@ -16180,14 +16181,14 @@ msgstr ""
 msgid "Min post age (minutes)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:266
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:312
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:298
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:344
 #, elixir-autogen, elixir-format
 msgid "Min size (MB)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:278
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:324
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:310
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:356
 #, elixir-autogen, elixir-format
 msgid "Minimum"
 msgstr ""
@@ -16258,7 +16259,7 @@ msgstr ""
 msgid "More languages"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:259
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:291
 #, elixir-autogen, elixir-format
 msgid "Movie File Sizes"
 msgstr ""
@@ -17202,7 +17203,7 @@ msgstr ""
 msgid "Preferred Audio Codecs"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:355
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:387
 #, elixir-autogen, elixir-format
 msgid "Preferred HDR Formats"
 msgstr ""
@@ -17732,7 +17733,7 @@ msgstr ""
 msgid "Requested but not granted"
 msgstr ""
 
-#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:394
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:426
 #, elixir-autogen, elixir-format
 msgid "Require HDR"
 msgstr ""
@@ -20703,65 +20704,65 @@ msgstr ""
 msgid "Open Custom Formats"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:222
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:225
 #, elixir-autogen, elixir-format
 msgid "Blacklisted"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:474
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:485
 #, elixir-autogen, elixir-format
 msgid "New grabs for this episode are blocked until it finishes or is removed."
 msgid_plural "New grabs for this episode are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:490
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:501
 #, elixir-autogen, elixir-format
 msgid "New grabs for this movie are blocked until it finishes or is removed."
 msgid_plural "New grabs for this movie are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:482
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:493
 #, elixir-autogen, elixir-format
 msgid "New grabs for this season are blocked until it finishes or is removed."
 msgid_plural "New grabs for this season are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:459
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:470
 #, elixir-autogen, elixir-format
 msgid "and %{count} more are already downloading."
 msgid_plural "and %{count} more are already downloading."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:457
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:468
 #, elixir-autogen, elixir-format
 msgid "is already downloading."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:454
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:465
 #, elixir-autogen, elixir-format
 msgid "“%{title}”"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:559
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:570
 #, elixir-autogen, elixir-format
 msgid "Failed %{ago} ago"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:558
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:569
 #, elixir-autogen, elixir-format
 msgid "Failed just now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:530
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:541
 #, elixir-autogen, elixir-format
 msgid "Blacklisted: %{reason}. Click to grab it anyway."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:526
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:537
 #, elixir-autogen, elixir-format
 msgid "Grab anyway"
 msgstr ""
@@ -21102,12 +21103,12 @@ msgid_plural "Show %{count} results"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:37
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:38
 #, elixir-autogen, elixir-format
 msgid "%{indexer} +%{count}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:62
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:63
 #, elixir-autogen, elixir-format
 msgid "Release"
 msgstr ""
@@ -21134,9 +21135,9 @@ msgid_plural "≥ %{count} seeds"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:155
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:202
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:262
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:156
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:203
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:265
 #, elixir-autogen, elixir-format
 msgid "No seeder count (Usenet)"
 msgstr ""
@@ -21290,6 +21291,8 @@ msgid "Override"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:173
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:51
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:54
 #, elixir-autogen, elixir-format
 msgid "Private tracker"
 msgstr ""
@@ -21377,6 +21380,51 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:151
 #, elixir-autogen, elixir-format
 msgid "Prowlarr"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:81
+#, elixir-autogen, elixir-format
+msgid "%{multiplier}x up"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:273
+#, elixir-autogen, elixir-format
+msgid "A preference: among comparable releases, freeleech and half-leech torrents rank higher. It breaks ties and does not outweigh resolution."
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:63
+#, elixir-autogen, elixir-format
+msgid "FL"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:250
+#, elixir-autogen, elixir-format
+msgid "Freeleech"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:273
+#, elixir-autogen, elixir-format
+msgid "Freeleech bonus"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:64
+#, elixir-autogen, elixir-format
+msgid "Freeleech: the download does not count toward your ratio"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:74
+#, elixir-autogen, elixir-format
+msgid "Only %{percent}% of the download counts toward your ratio"
+msgstr ""
+
+#: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:437
+#, elixir-autogen, elixir-format
+msgid "Prefer freeleech"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/tracker_terms_badges.ex:82
+#, elixir-autogen, elixir-format
+msgid "Uploads count %{multiplier} times toward your ratio"
 msgstr ""
 
 #: lib/mydia_web/components/seeding_components.ex:113
