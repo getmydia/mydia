@@ -163,7 +163,7 @@ defmodule Mydia.Downloads.SeedingGoalTest do
 
       assert %SeedingGoal{ratio: nil, met?: false} = SeedingGoal.for_download(row, @now)
 
-      assert %SeedingGoal{ratio: 0.0} =
+      assert %SeedingGoal{ratio: +0.0} =
                SeedingGoal.for_download(%{row | in_client?: true, status: "seeding"}, @now)
     end
 
