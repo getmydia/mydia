@@ -175,5 +175,28 @@ defmodule Mydia.Indexers.CardigannCompatTest do
       assert CardigannCompat.build_report(results).by_login_method ==
                %{"none" => 1, "form" => 2, "oneurl" => 1}
     end
+
+    test "build_report splits logins into supported and unsupported, and counts captcha and 2FA" do
+      captcha = "  captcha: {type: image, selector: img, input: c}\n"
+      twofa = "  inputs: {code: \"{{ .Config.2facode }}\"}\n"
+
+      results =
+        for {yaml, name} <- [
+              {@base, "a.yml"},
+              {@base <> "login:\n  method: form\n  path: x\n" <> captcha <> twofa, "b.yml"},
+              {@base <> "login:\n  method: form\n  path: x\n" <> captcha, "c.yml"},
+              {@base <> "login: {method: oneurl, path: x}\n", "d.yml"},
+              # Only a form login stops for a person.
+              {@base <> "login:\n  method: post\n  path: x\n" <> captcha, "e.yml"},
+              {"not: valid: yaml: [", "f.yml"}
+            ] do
+          CardigannCompat.analyze_definition(yaml, name)
+        end
+
+      report = CardigannCompat.build_report(results)
+      assert report.parse_failed == 1
+      assert report.login_support == %{supported: 4, unsupported: 1}
+      assert report.by_login_feature == %{login_captcha: 2, login_2fa: 1}
+    end
   end
 end

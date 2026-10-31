@@ -1,0 +1,77 @@
+---
+# Invented UNIT3D-style tracker, shaped like the upstream *-api.yml definitions
+# for UNIT3D sites: the API key goes out as a Bearer header on every request,
+# the search is the JSON torrent filter API, and the download link the API
+# returns carries the member's rsskey in its path.
+id: emberline-api
+name: Emberline (API)
+description: Invented UNIT3D-style private tracker for tests
+language: en-US
+type: private
+encoding: UTF-8
+links:
+  - https://emberline.invalid/
+
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: "Movie"}
+    - {id: 2, cat: TV, desc: "TV"}
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+
+settings:
+  - name: apikey
+    type: text
+    label: APIKey
+
+login:
+  path: api/torrents
+  method: get
+  inputs: {}
+  error:
+    - selector: a[href*="/login"]
+      message:
+        text: "The API key was not accepted by {{ .Config.sitelink }}."
+
+search:
+  paths:
+    - path: api/torrents/filter
+      response:
+        type: json
+
+  headers:
+    Authorization: ["Bearer {{ .Config.apikey }}"]
+
+  inputs:
+    name: "{{ .Keywords }}"
+    perPage: 100
+
+  rows:
+    selector: data
+    attribute: attributes
+
+  fields:
+    category:
+      selector: category_id
+    title:
+      selector: name
+    details:
+      selector: details_link
+    download:
+      selector: download_link
+    seeders:
+      selector: seeders
+    leechers:
+      selector: leechers
+    grabs:
+      selector: times_completed
+    date:
+      selector: created_at
+    size:
+      selector: size
+    downloadvolumefactor:
+      text: 1
+    uploadvolumefactor:
+      text: 1

@@ -101,6 +101,11 @@ defmodule Mydia.Indexers.Cardigann.Result.Format.Json do
       sub_items when is_list(sub_items) ->
         for sub_item <- sub_items, is_map(sub_item), do: Map.put(sub_item, "__parent", parent)
 
+      # Prowlarr's row is `row.SelectToken(attribute)`: an object names the row
+      # itself (UNIT3D's `attributes`).
+      %{} = sub_item ->
+        [Map.put(sub_item, "__parent", parent)]
+
       _ ->
         [parent]
     end

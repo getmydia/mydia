@@ -16,6 +16,11 @@ defmodule Mydia.Indexers.CardigannCompat do
 
   @supported MapSet.new(Features.supported())
 
+  # Login features that make a login stop for a person (Login.needs_person?/1).
+  @person_features [:login_captcha, :login_2fa]
+
+  defp login_feature?(feature), do: feature |> Atom.to_string() |> String.starts_with?("login_")
+
   @doc """
   Runs a full compatibility analysis against all upstream definitions.
 
@@ -36,6 +41,10 @@ defmodule Mydia.Indexers.CardigannCompat do
   - `:partially_supported` - Uses at least one unsupported feature
   - `:by_feature` - Feature atom to count of definitions that feature blocks
   - `:by_login_method` - Login method (`"none"` when absent) to count of analyzed definitions
+  - `:login_support` - `%{supported: n, unsupported: n}`: analyzed definitions whose
+    login uses only implemented features, and the rest
+  - `:by_login_feature` - `:login_captcha` and `:login_2fa` to count of analyzed
+    definitions whose login stops for a person
   - `:definitions` - List of per-definition analysis results
   - `:parse_failures` - List of `{filename, reason}` tuples
   """
@@ -104,10 +113,18 @@ defmodule Mydia.Indexers.CardigannCompat do
       |> Enum.frequencies()
       |> Enum.sort_by(fn {_feature, count} -> -count end)
 
-    by_login_method =
-      results
-      |> Enum.filter(&(&1.status != :parse_failed))
-      |> Enum.frequencies_by(& &1.login_method)
+    analyzed = Enum.filter(results, &(&1.status != :parse_failed))
+    by_login_method = Enum.frequencies_by(analyzed, & &1.login_method)
+
+    unsupported_logins =
+      Enum.count(analyzed, fn r -> Enum.any?(r.missing_features, &login_feature?/1) end)
+
+    # Only a form login pauses for a person (Login.Form).
+    by_login_feature =
+      analyzed
+      |> Enum.filter(&(&1.login_method == "form"))
+      |> Enum.flat_map(&Enum.filter(&1.required_features, fn f -> f in @person_features end))
+      |> Enum.frequencies()
 
     parse_failures =
       results
@@ -122,6 +139,11 @@ defmodule Mydia.Indexers.CardigannCompat do
       partially_supported: partially_supported,
       by_feature: by_feature,
       by_login_method: by_login_method,
+      login_support: %{
+        supported: length(analyzed) - unsupported_logins,
+        unsupported: unsupported_logins
+      },
+      by_login_feature: by_login_feature,
       definitions: results,
       parse_failures: parse_failures
     }

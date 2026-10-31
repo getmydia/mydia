@@ -112,18 +112,57 @@ out, the error says so rather than looping.
 
 ### needs_login
 
-`health_status: "needs_login"` is set only when a login needs a person, that
-is when `Login.begin/2` returns a `Challenge`. While it is set,
+`health_status: "needs_login"` is set only when a login needs a person:
+`SessionManager.park/1`, called when `Login.begin/2` returns a `Challenge` or
+when the wasm engine's search stops at the login form. While it is set,
 `SessionManager.user_config/2` returns a `:login_required` error, so searches
 skip the indexer and the health check reports "Needs login" without writing
-anything or counting a failure. Two things clear it: a stored session
-(`SessionManager.store/2` moves the definition back to `healthy`) and saving a
-changed config, which resets it to `unknown` so new credentials get a fresh
-attempt. Do not clear it from a health check or a timer; the health check's
+anything or counting a failure. Two things clear it. A stored session:
+`SessionManager.clear_needs_login/1` is the one conditional writer, called by
+`store/2`, by the wasm adapter when it writes a session, and by `park/1` itself
+when it finds a session stored meanwhile; it reads the row, not the caller's
+struct. And saving a changed config, which resets it to `unknown` so new
+credentials get a fresh attempt. Do not clear it from a health check or a timer; the health check's
 status write skips rows that are `needs_login`, so a probe that was running when
 a search parked the row cannot overwrite it. A check that passes while the tracker still
 needs a captcha would hide the problem until the next search failed.
 Status changes broadcast on `SessionManager.topic/0` for the admin page.
+
+The Prowlarr-based engine parks the same definitions the same way. Prowlarr's
+search logs in by itself and swallows a failed login into an empty page, so
+for a definition where `Login.needs_person?/1` holds, `Wasm.Adapter` parks it
+(`SessionManager.park/1`) when a search reached the login form, came back
+empty and left the cookies unchanged (a login that went through changes them,
+so an honest empty page on a fresh login is not parked). "Reached the login
+form" is `HostHttp` flagging a request whose scheme, host, port and path match
+`login.path` or `login.submitpath`, rendered with the stored settings and
+resolved on each current link, through the ctx's `:login_watch`; the flag is
+reset before each mirror attempt. Only the rejected session is deleted, and
+`park/1` writes `needs_login` first and reads the stored session after, so a
+session stored meanwhile (by `store/2`, which clears `needs_login` from the
+database row rather than the caller's struct) never stays parked; `park/1`
+then returns it. The Indexers page's **Log in** always runs the built-in `Login`, on
+either engine, and both engines read the session it stores. The guest's own
+`login/2` can return a captcha too, but nothing calls it from the UI.
+
+### Private-tracker journeys
+
+`test/mydia/indexers/private_tracker_journey_test.exs` (built-in),
+`test/mydia/indexers/cardigann/wasm/private_tracker_journey_test.exs` (wasm,
+`:cardigann_wasm`) and
+`test/mydia_web/live/admin_indexers_live/private_tracker_login_test.exs` run
+whole journeys against three invented trackers in
+`Mydia.PrivateTrackerFixtures`: a UNIT3D API tracker (Bearer key, JSON rows
+under `attributes`, rsskey in the download path), a Gazelle form login (CSRF
+token from `selectorinputs`, `torrent_pass` links) and a captcha + 2FA form
+posting to a separate `submitpath`. They found three gaps, all fixed: search
+headers were sent unrendered (every UNIT3D definition sent
+`Bearer {{ .Config.apikey }}`), a JSON `rows.attribute` naming an object was
+ignored, and `TorrentFetch` logged release URLs and torrent bodies with the
+passkey in them. They assert at `:info`, the production default; at `:debug`
+Ecto's query log still prints `downloads.download_url`. That row keeps the raw
+URL on purpose: re-grab and duplicate detection match on it, and a redacted
+Gazelle URL cannot be rebuilt (the authkey is not a setting).
 
 ## Ranking has one path
 

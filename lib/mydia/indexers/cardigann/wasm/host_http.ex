@@ -58,7 +58,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           # parity harness: a Parity.Replay answering in place of the network
           optional(:replay) => pid(),
           # parity harness: a Parity.Recorder collecting the live exchanges
-          optional(:record) => pid()
+          optional(:record) => pid(),
+          # set to 1 when a request goes to one of these login URLs
+          optional(:login_watch) => %{targets: [URI.t()], hit: :atomics.atomics_ref()}
         }
 
   @type header :: %{name: String.t(), value: String.t()}
@@ -170,6 +172,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   end
 
   def exchange(ctx, req) do
+    note_login(ctx, req)
     :ok = RateLimiter.throttle(ctx.definition_id, ctx.request_delay_ms)
     started = System.monotonic_time(:microsecond)
 
@@ -191,6 +194,25 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   defp replay_error_kind(kind) when kind in [:timeout, :connect, :blocked], do: kind
   defp replay_error_kind(kind) when kind in [:closed, :econnrefused, :nxdomain], do: :connect
   defp replay_error_kind(_kind), do: :other
+
+  # Prowlarr's search swallows a failed login into an empty page. The adapter
+  # asks to be told when a call reached the login form (`:login_watch`), so it
+  # can tell "the session expired and the captcha stopped the login" from "no
+  # results".
+  defp note_login(%{login_watch: %{targets: targets, hit: hit}}, req) do
+    uri = URI.parse(req.url)
+
+    if Enum.any?(targets, &same_endpoint?(&1, uri)), do: :atomics.put(hit, 1, 1)
+    :ok
+  end
+
+  defp note_login(_ctx, _req), do: :ok
+
+  # Scheme, host, port and path; the query is ignored (`login.php?returnto=`).
+  defp same_endpoint?(%URI{} = target, %URI{} = uri) do
+    target.scheme == uri.scheme and target.host == uri.host and target.port == uri.port and
+      (target.path || "/") == (uri.path || "/")
+  end
 
   defp maybe_record(%{record: recorder}, req, result) when is_pid(recorder),
     do: Recorder.record(recorder, RequestKey.new(req.method, req.url, req.body), result)

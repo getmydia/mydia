@@ -62,6 +62,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   instead. `login/2` is where the failure surfaces
   (`{:error, %Error{type: :authentication_failed}}`).
 
+  A login that needs a person (an image captcha or a 2FA code, per
+  `Login.needs_person?/1`) is the exception: a search that reached the login
+  form, came back empty and left the cookies unchanged parks the definition in
+  `needs_login`, as the built-in engine does. The Indexers page logs
+  in with the built-in login code, and the session it stores is the one this
+  adapter reads.
+
   Setting values are credentials and are never logged.
   """
 
@@ -70,7 +77,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.{AdapterSupport, Links}
+  alias Mydia.Indexers.Cardigann.{AdapterSupport, Links, Login}
+  alias Mydia.Indexers.Cardigann.Login.Inputs, as: LoginInputs
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.Wasm.Engine
 
@@ -82,7 +90,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   }
 
   alias Mydia.Indexers.Cardigann.SessionManager
-  alias Mydia.Repo
 
   import AdapterSupport,
     only: [apply_search_filters: 2, blank?: 1, fetch_definition: 1, setting: 2]
@@ -136,17 +143,108 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     end
   end
 
-  defp run_search(config, query, opts) do
+  # `retry?` is whether a search that met a login wall may run once more on a
+  # session someone stored from the Indexers page meanwhile.
+  defp run_search(config, query, opts, retry? \\ true) do
     with {:ok, definition, doc} <- load(config),
          :ok <- check_login_needed(definition, doc),
          session = stored_session(definition),
-         {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
-      if out.session_changed, do: persist_session(definition, out.session, session)
+         watch = definition |> parse_links() |> login_watch(definition),
+         watched_opts = if(watch, do: Keyword.put(opts, :login_watch, watch), else: opts),
+         {:ok, out} <-
+           search_with_failover(definition, config, doc, query, session, watched_opts) do
+      watch
+      |> check_swallowed_login(out, definition, session)
+      |> finish_search(out, definition, session, {config, query, opts, retry?})
+    end
+  end
 
-      {:ok,
-       out.releases
-       |> apply_search_filters(opts)
-       |> AdapterSupport.put_definition_privacy(definition.type)}
+  defp finish_search(:ok, out, definition, session, {_config, _query, opts, _retry?}) do
+    if out.session_changed, do: persist_session(definition, out.session, session)
+
+    {:ok,
+     out.releases
+     |> apply_search_filters(opts)
+     |> AdapterSupport.put_definition_privacy(definition.type)}
+  end
+
+  defp finish_search(
+         {:fresh_session, _},
+         _out,
+         _definition,
+         _session,
+         {config, query, opts, true}
+       ),
+       do: run_search(config, query, opts, false)
+
+  defp finish_search({:fresh_session, _}, _out, definition, _session, _search),
+    do: {:error, SessionManager.needs_login_error(definition.name)}
+
+  defp finish_search({:error, _} = error, _out, _definition, _session, _search), do: error
+
+  # ── Logins that need a person ─────────────────────────────────────────────
+
+  # Prowlarr's search logs in by itself and swallows a failed login into an
+  # empty page. For a login that needs a person (an image captcha, a one-time
+  # 2FA code), a search that reached the login form, came back empty and left
+  # the cookies as they were means the login stopped at the captcha or the
+  # code. The definition is then parked in `needs_login`, as the built-in
+  # engine parks it, and a person logs in from the Indexers page. A login that
+  # went through changes the cookies, so an honest empty result is not parked.
+  defp check_swallowed_login(%{hit: hit}, %{releases: []} = out, definition, session) do
+    if :atomics.get(hit, 1) == 1 and out.session.cookies == session.cookies do
+      Logger.info(
+        "Cardigann #{definition.indexer_id}: the login stopped for a captcha or 2FA code"
+      )
+
+      invalidate_rejected(definition, session.cookies)
+
+      # A session stored meanwhile from the Indexers page: run_search retries on it
+      # rather than report this search's empty page as "no results".
+      with {:ok, user_config} <- SessionManager.park(definition),
+           do: {:fresh_session, user_config}
+    else
+      :ok
+    end
+  end
+
+  defp check_swallowed_login(_watch, _out, _definition, _session), do: :ok
+
+  # Deletes the stored session only while it is still the one the search sent;
+  # a session stored meanwhile from the Indexers page survives (and then
+  # `SessionManager.park/1` does not leave the definition parked).
+  defp invalidate_rejected(definition, rejected) do
+    with {:ok, %{cookies: stored}} <- CardigannAuth.get_stored_session(definition.id),
+         true <- cookies_to_map(stored) == rejected do
+      CardigannAuth.invalidate_session(definition.id, stored)
+    end
+  end
+
+  # Every URL the login form can be fetched or posted at: `login.path` and
+  # `login.submitpath`, rendered with the stored settings, on each of the
+  # definition's current links. HostHttp flags a request to one of them.
+  defp login_watch(nil, _definition), do: nil
+
+  defp login_watch(parsed, definition) do
+    if Login.needs_person?(parsed) do
+      context = LoginInputs.context(parsed, definition.config || %{})
+
+      bases =
+        [definition.active_link | Links.current(parsed)]
+        |> Enum.filter(&is_binary/1)
+        |> Enum.map(&String.trim_trailing(&1, "/"))
+        |> Enum.uniq()
+
+      targets =
+        for template <- [parsed.login.path, parsed.login.submitpath],
+            {:ok, path} <- [LoginInputs.render(template, context)],
+            path != "",
+            base <- bases,
+            uri = URI.parse(LoginInputs.resolve(base, path)),
+            uniq: true,
+            do: %{uri | query: nil, fragment: nil}
+
+      if targets != [], do: %{targets: targets, hit: :atomics.new(1, [])}
     end
   end
 
@@ -233,6 +331,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     attempt = fn base_url ->
       remaining = max(deadline - System.monotonic_time(:millisecond), 1)
+      # Only the answering mirror's requests decide whether the login was reached.
+      with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
 
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}
@@ -438,10 +538,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   defp run(call, definition, config, doc, opts) do
     Engine.call(
       call,
-      ctx(definition, config, doc),
+      definition |> ctx(config, doc) |> put_login_watch(opts[:login_watch]),
       Keyword.get(opts, :timeout, @default_timeout_ms)
     )
   end
+
+  defp put_login_watch(ctx, nil), do: ctx
+  defp put_login_watch(ctx, watch), do: Map.put(ctx, :login_watch, watch)
 
   defp ctx(definition, config, doc) do
     %{
@@ -587,32 +690,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     case CardigannAuth.store_session(definition.id, pairs, nil) do
       {:ok, _row} ->
-        clear_needs_login(definition)
+        SessionManager.clear_needs_login(definition)
 
       {:error, _changeset} ->
         Logger.warning("Cardigann #{definition.indexer_id}: could not save the login session")
         :ok
     end
   end
-
-  defp clear_needs_login(%CardigannDefinition{health_status: "needs_login"} = definition) do
-    definition
-    |> CardigannDefinition.health_check_changeset(%{
-      health_status: "healthy",
-      last_health_check_at: DateTime.utc_now() |> DateTime.truncate(:second)
-    })
-    |> Repo.update()
-
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      SessionManager.topic(),
-      {:cardigann_health_changed, definition.id}
-    )
-
-    :ok
-  end
-
-  defp clear_needs_login(_definition), do: :ok
 
   # Same gate the Elixir engine applies in `SessionManager.user_config/2`: a
   # definition with a login block that is waiting on a person is skipped, not

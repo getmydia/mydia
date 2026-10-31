@@ -412,11 +412,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   @spec build_request_params(Parsed.t(), search_opts()) ::
           {:ok, map()} | {:error, Error.t()}
   def build_request_params(%Parsed{} = definition, opts) do
-    with {:ok, path} <- select_search_path(definition, opts) do
+    with {:ok, path} <- select_search_path(definition, opts),
+         {:ok, headers} <- RequestHeaders.definition_headers(definition, opts) do
       {:ok,
        %{
          query_params: build_query_params(definition, path, opts),
-         headers: build_headers(definition),
+         headers: headers,
          method: SearchRequest.method(path),
          follow_redirect: Map.get(path, :follow_redirect)
        }
@@ -536,7 +537,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       |> build_request_options(url, request_params, user_config, config)
       |> Keyword.put(:redirect, false)
 
-    Logger.debug("Cardigann download request: #{request_params.method} #{url}")
+    # The host only: a release link carries the passkey in its query or path.
+    Logger.debug("Cardigann download request: #{request_params.method} #{URI.parse(url).host}")
 
     case safe_request(request_params.method, url, req_opts) do
       {:ok, %Req.Response{status: status, headers: headers}} when status in 300..399 ->
@@ -804,14 +806,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end)
   end
 
-  defp build_headers(%Parsed{search: search}) do
-    case Map.get(search, :headers) do
-      nil -> []
-      headers when is_map(headers) -> Map.to_list(headers)
-      headers when is_list(headers) -> headers
-    end
-  end
-
   defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
 
   defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}, request_params)
@@ -854,11 +848,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       connect_options: [timeout: SearchRequest.connect_timeout(request_params)],
       # Neither a session cookie nor a clearance cookie (cf_clearance) may ride
       # a redirect to another host: Req carries a manual cookie header across
-      # it (see the note on session_cookie_pairs/4). Definition cookies are not
-      # credentials, so they alone do not disable redirects.
+      # it (see the note on session_cookie_pairs/4). A definition cookie is a
+      # credential only when built from the operator's settings.
       redirect:
         SearchRequest.follow_redirect?(definition, request_params) and not session_attached? and
-          not clearance_attached?,
+          not clearance_attached? and not RequestHeaders.credential_cookie?(definition),
       retry: false
     ]
 

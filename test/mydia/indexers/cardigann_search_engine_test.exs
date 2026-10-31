@@ -375,6 +375,36 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert params.query_params == %{"q" => "Ubuntu", "sort" => "date", "page" => "2"}
     end
 
+    # UNIT3D API definitions send the key as `Authorization: Bearer {{ .Config.apikey }}`.
+    test "search headers are rendered with the operator's settings" do
+      definition =
+        two_path_definition([%{path: "/s"}])
+        |> put_in(
+          [Access.key(:search), :headers],
+          %{"Authorization" => ["Bearer {{ .Config.apikey }}"], "X-Plain" => "fixed"}
+        )
+
+      assert {:ok, params} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "x",
+                 config: %{"apikey" => "k-123"}
+               )
+
+      assert {"Authorization", ["Bearer k-123"]} in params.headers
+      assert {"X-Plain", "fixed"} in params.headers
+    end
+
+    test "a search header that does not render fails the request instead of being dropped" do
+      definition =
+        two_path_definition([%{path: "/s"}])
+        |> put_in([Access.key(:search), :headers], %{"Authorization" => ["Bearer {{ (( }}"]})
+
+      assert {:error, %Error{type: :search_failed, message: message}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert message =~ "Authorization"
+    end
+
     test "inherit_inputs false sends the path's inputs alone" do
       page2 = %{path: "/s", inputs: %{"page" => "2"}, inherit_inputs: false}
       definition = two_path_definition([%{path: "/s"}, page2])

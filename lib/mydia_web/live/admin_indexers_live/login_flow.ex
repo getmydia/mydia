@@ -98,8 +98,8 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
   end
 
   defp handle_result(socket, {:ok, session}) do
-    # store/2 only clears needs_login if the struct it gets still says so.
-    definition = Indexers.get_cardigann_definition!(socket.assigns.login_definition.id)
+    # store/2 clears needs_login from the database row; the struct only names it.
+    definition = socket.assigns.login_definition
     SessionManager.store(definition, session)
     send(self(), :reload_library_indexers)
 

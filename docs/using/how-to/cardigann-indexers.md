@@ -12,11 +12,11 @@ is a separate indexer manager Mydia connects to.
 | **Extra services** | None | None, runs inside Mydia | One more container to run |
 | **Setup** | On by default | One switch under **Configuration > Indexers**, then a 68 MB download on first use | Run the server, then [add a connection](connect-indexer.md) |
 | **Matches Prowlarr's results** (44 public trackers) | 28 of 44 | 44 of 44 | It is Prowlarr |
-| **Private trackers** | Login often fails (CAPTCHA, selector-derived inputs and separate submit paths are not implemented) | Uses Prowlarr's login code, but untested | Supported |
+| **Private trackers** | API key, cookie and form logins, including captcha and 2FA ([details](#private-trackers)); tested against simulated trackers | Prowlarr's own login code; captcha and 2FA as on the built-in engine | Supported |
 | **Trackers on your local network** | Yes | No | Yes |
 | **Extra memory** | None | About 65 MB idle, up to about 120 MB more while searching | A separate process |
 | **Maturity** | Default; parsing regression-tested on [12 trackers](#supported-indexers) | Built with an experimental toolchain | Mature |
-| **Pick it when** | You want zero setup and use mainstream public trackers | You want Prowlarr's results without running Prowlarr | You use private trackers, or reliability matters more than running fewer services |
+| **Pick it when** | You want zero setup | You want Prowlarr's results without running Prowlarr | You already run Prowlarr, or a tracker does not work with either built-in option |
 
 The costs of the Prowlarr-based engine are detailed in
 [Using the Prowlarr-based engine](#using-the-prowlarr-based-engine-experimental).
@@ -116,7 +116,8 @@ It is opt-in because it costs something. Read this before turning it on:
   trackers ended in one of these; Prowlarr could not search any of those 20 either.
   FlareSolverr still applies.
 - **It cannot reach trackers on your local network**, and it is only measured
-  against public trackers. Private-tracker logins are untested.
+  against public trackers. Private-tracker logins are tested against simulated
+  trackers only; see [Private trackers](#private-trackers).
 - **It is built with an experimental toolchain** (a pre-release .NET compiled to
   WebAssembly). Expect rough edges, and report them.
 
@@ -159,8 +160,8 @@ verified on every build.
 **Everything else:**
 
 The remaining definitions are included and may well work, but nothing pins their
-behaviour, so an upstream site change can break them silently. Private trackers
-in particular are likely to fail at login.
+behaviour, so an upstream site change can break them silently. For private
+trackers, see [Private trackers](#private-trackers).
 
 To see what the engine actually supports against the current upstream
 catalogue, run the compatibility report:
@@ -169,7 +170,102 @@ catalogue, run the compatibility report:
 mix mydia.cardigann_compat --type public
 ```
 
-It lists, per unsupported feature, how many definitions that feature blocks.
+It lists, per unsupported feature, how many definitions that feature blocks,
+and how many logins it supports.
+
+## Private trackers
+
+A private tracker needs an account, and Mydia logs in to it for you. Which
+settings an indexer asks for comes from its definition, so the form under
+**Admin > Configuration > Indexers** shows exactly the fields that tracker
+needs. Most use one of three kinds of login.
+
+### API key
+
+Trackers with an API (many UNIT3D sites, whose definitions end in `-api`) ask
+for an **API key**. Generate one in your account settings on the tracker's
+website, usually under a "Security" or "API key" tab, and paste it in. Mydia
+sends it with every search. There is no session to expire; if the key is
+revoked, searches fail with an authentication error until you paste a new one.
+
+### Username and password
+
+Most other trackers ask for a **username** and **password**. Mydia fetches the
+tracker's login page, fills in the form (including the hidden security token
+many sites put on it), submits it and keeps the session cookie the tracker
+hands back. That session is reused for every search and grab until the
+tracker stops accepting it. Then Mydia logs in again once, by itself, and
+repeats the search. Changing the indexer's settings drops the stored session,
+so new credentials get a fresh login.
+
+### Cookie
+
+Some trackers block automated logins altogether, and their definitions ask for
+a **cookie** instead. Log in to the tracker in your browser, open the
+developer tools, copy the `Cookie` header of any request to the site, and
+paste the whole value into the indexer's cookie setting. When the tracker ends
+that browser session, searches fail until you paste a fresh cookie.
+
+### Captcha and two-factor codes
+
+Some login forms show a captcha image or ask for a one-time two-factor (2FA)
+code. Mydia cannot answer those, so it asks you:
+
+1. The first search that needs a login stops, and the indexer shows
+   **Needs login** on the Indexers page. Searches skip it from then on rather
+   than fail over and over.
+2. Click the key icon (**Log in**) on that indexer. Mydia opens the tracker's
+   login page and shows its captcha image and a field for the 2FA code, if the
+   tracker asks for one. If the image is unreadable, **New image** fetches
+   another.
+3. Type the answers and press **Log in**. The indexer goes back to healthy and
+   searches resume on the session the tracker returned.
+
+The answers are used once and never stored. When the tracker ends the session
+later, the indexer shows **Needs login** again and you repeat these steps. If you leave the 2FA field empty, Mydia submits it empty, which is
+what trackers expect when 2FA is not turned on for your account.
+
+This works the same with the built-in and the Prowlarr-based engine: the
+**Log in** button always runs the built-in login, and both engines use the
+session it stores.
+
+### Grabs and your passkey
+
+A grab downloads the `.torrent` from the tracker with your session or key, and
+Mydia hands that file to your download client unchanged, so the tracker's own
+announce URL and your passkey stay in it. Grab log lines name the tracker's
+host, never the download link or the file's contents, so the passkey they carry
+stays out of the logs at the default log level. With `LOG_LEVEL=debug`, the
+database query log prints stored download links, passkey included, so keep debug
+logs private and do not paste them into public reports.
+
+### What is covered
+
+Of the 440 private-tracker definitions in the upstream catalogue (counted on
+2026-10-30 with `mix mydia.cardigann_compat --type private`), all 440 log in
+with features the built-in engine implements:
+
+| Login | Definitions |
+| --- | --- |
+| API or URL (`get`) | 142 |
+| Pasted cookie (`cookie`) | 134 |
+| Login form (`form`) | 97 |
+| Posted credentials (`post`) | 65 |
+| No login | 2 |
+| Stops for an image captcha | 41 |
+| Stops for a 2FA code | 21 |
+
+"Implements" means the definition's login features are supported, not that a
+login to that tracker has been seen working. Mydia's tests run full journeys
+(log in, search, session expiry, captcha, grab) against simulated trackers built
+like the common tracker software (UNIT3D, Gazelle and captcha login forms), but
+nobody on the project has accounts on most real ones.
+
+**Please report what you find.** If a private tracker works, or fails, open an
+issue or a discussion on GitHub with the tracker's name, which engine you use,
+and the error the Indexers page shows. Leave out your passkey, API key and
+cookies. Reports from real accounts are how private-tracker support gets
+verified.
 
 ### Dead and moved domains
 
@@ -225,7 +321,8 @@ See [Environment Variables](../reference/environment-variables.md#flaresolverr) 
 - Some indexers may not parse results correctly
 - Authentication may fail on some sites
 - Rate limiting varies by indexer
-- CAPTCHA challenges not supported
+- Captcha and 2FA logins need you to log in from the Indexers page whenever the
+  tracker ends the session (see [Captcha and two-factor codes](#captcha-and-two-factor-codes))
 
 ## Troubleshooting
 
@@ -239,8 +336,9 @@ See [Environment Variables](../reference/environment-variables.md#flaresolverr) 
 ### Authentication Errors
 
 1. Verify credentials are correct
-2. Some sites require manual cookie refresh
-3. Check if site requires 2FA (not supported)
+2. For a cookie login, paste a fresh cookie from your browser
+3. An indexer showing **Needs login** wants a captcha or 2FA code: use its
+   **Log in** button
 
 ### Rate Limiting
 
