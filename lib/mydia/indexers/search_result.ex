@@ -282,8 +282,9 @@ defmodule Mydia.Indexers.SearchResult do
   Returns a URL safe to render as a link to the release's page on the indexer.
 
   Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host,
-  and also when it carries credentials (`redact_url/1` would change it): the
-  page must not hold a passkey, and a redacted link would not work.
+  and also when it carries credentials (`redact_url/1` would change it, or the
+  path is a feed or download path such as `/rss/...` or `/torrent/download/...`):
+  the page must not hold a passkey, and a redacted link would not work.
 
   Indexers supply this value, and Cardigann definitions are fetched from an
   external repository, so the scheme allowlist is a security boundary: HEEx does
@@ -319,6 +320,9 @@ defmodule Mydia.Indexers.SearchResult do
       # A redacted link would be dead, and the raw one would put the key in
       # the page, so a link carrying credentials is not offered at all.
       Mydia.Downloads.Client.Helpers.redact_url(trimmed) != trimmed -> nil
+      # Feed and download paths carry the account key even when it is too
+      # short to look like one (UNIT3D /rss/<key>, /torrent/download/<id>.<key>).
+      credential_path?(trimmed) -> nil
       true -> trimmed
     end
   end
@@ -326,6 +330,15 @@ defmodule Mydia.Indexers.SearchResult do
   def info_page_url(%__MODULE__{}), do: nil
 
   # Private helpers
+
+  @credential_segments ~w(rss download dl passkey rsskey torrent_pass authkey)
+
+  defp credential_path?(url) do
+    (URI.parse(url).path || "")
+    |> String.downcase()
+    |> String.split(["/", "."])
+    |> Enum.any?(&(&1 in @credential_segments))
+  end
 
   defp linkable_scheme?(url) do
     case URI.parse(url) do

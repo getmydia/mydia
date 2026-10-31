@@ -45,7 +45,6 @@ defmodule Mydia.NoRawDownloadUrlTest do
     "lib/mydia/release.ex" => true,
     # Plugin catalog and source URLs are public, operator-declared catalogs.
     "lib/mydia/plugins.ex" => true,
-    "lib/mydia/plugins/index.ex" => true,
     "lib/mydia/plugins/declared_sources.ex" => true,
     "lib/mydia/plugins/runtime_instances.ex" => true,
     # Cardigann definitions come from a public GitHub repository.
@@ -111,6 +110,14 @@ defmodule Mydia.NoRawDownloadUrlTest do
                Logger.debug("Newznab test connection: #{full_url}")
                Logger.info("Cardigann http #{req.url}")
                Logger.warning("fetch failed", release_url: release_url)
+               """)
+    end
+
+    test "flags a serialised URI unless it is redacted" do
+      assert [_] =
+               source_violations(~S"""
+               Logger.debug("request: #{URI.to_string(req)}")
+               Logger.debug("request: #{redact_url(URI.to_string(req))}")
                """)
     end
 
@@ -231,7 +238,9 @@ defmodule Mydia.NoRawDownloadUrlTest do
   defp raw_child_reference?(list) when is_list(list), do: Enum.any?(list, &raw_reference?/1)
   defp raw_child_reference?(_other), do: false
 
-  # A variable or a field access whose name ends in url/urls.
+  # A variable or a field access whose name ends in url/urls, or a URI
+  # serialised whatever its name (URI.to_string(req)).
+  defp url_reference?({{:., _, [{:__aliases__, _, [:URI]}, :to_string]}, _, _}), do: true
   defp url_reference?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: url_name?(name)
   defp url_reference?({{:., _, [_, field]}, _, []}) when is_atom(field), do: url_name?(field)
   defp url_reference?(_other), do: false

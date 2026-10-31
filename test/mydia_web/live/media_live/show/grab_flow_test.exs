@@ -16,7 +16,8 @@ defmodule MydiaWeb.MediaLive.Show.GrabFlowTest do
   @release %SearchResult{
     title: "Some.Movie.2020.1080p",
     download_url: "https://tracker.example.test/dl/42?passkey=feedface0123&torrent_pass=cafe99",
-    guid: "https://tracker.example.test/details/42",
+    # Carries the passkey too, so the page assertions also cover the guid.
+    guid: "https://tracker.example.test/details/42?passkey=feedface0123",
     indexer: "Velvet Lantern",
     size: 1000,
     seeders: 5,

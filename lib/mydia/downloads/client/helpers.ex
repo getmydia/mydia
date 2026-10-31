@@ -175,11 +175,15 @@ defmodule Mydia.Downloads.Client.Helpers do
     path
     |> String.split("/")
     |> Enum.map_join("/", fn segment ->
-      segment
-      |> String.split(".")
-      |> Enum.map_join(".", &if(secret_like?(decode(&1)), do: @redacted_param_value, else: &1))
+      # Split on literal and encoded dots, keeping each separator as written.
+      ~r/\.|%2[eE]/
+      |> Regex.split(segment, include_captures: true)
+      |> Enum.map_join(&redact_path_part/1)
     end)
   end
+
+  defp redact_path_part(part),
+    do: if(secret_like?(decode(part)), do: @redacted_param_value, else: part)
 
   # Matched decoded, so a key with needlessly escaped characters still matches.
   defp decode(part) do
@@ -266,6 +270,7 @@ defmodule Mydia.Downloads.Client.Helpers do
       else: {key, redact_params(value)}
   end
 
+  defp redact_param(map) when is_map(map) and not is_struct(map), do: redact_params(map)
   defp redact_param(other), do: other
 
   defp redact_form_pair(pair) do

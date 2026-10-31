@@ -26,6 +26,9 @@ defmodule Mydia.Downloads.Client.HelpersTest do
              }
 
       assert Helpers.redact_params("q=invented&secret=s5") == "q=invented&secret=%5BREDACTED%5D"
+
+      assert Helpers.redact_params([%{"passkey" => "s6", "q" => "invented"}]) ==
+               [%{"passkey" => "[REDACTED]", "q" => "invented"}]
     end
   end
 
@@ -164,6 +167,14 @@ defmodule Mydia.Downloads.Client.HelpersTest do
 
       assert Helpers.redact_url(url) ==
                "https://tracker.example.test/torrent/download/48213.%5BREDACTED%5D"
+    end
+
+    test "redacts a path key behind an encoded dot" do
+      url =
+        "https://tracker.example.test/torrent/download/48213%2Ea1b2c3d4e5f60718293a4b5c6d7e8f90"
+
+      assert Helpers.redact_url(url) ==
+               "https://tracker.example.test/torrent/download/48213%2E%5BREDACTED%5D"
     end
 
     test "leaves free text without a host alone" do
