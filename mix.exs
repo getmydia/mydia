@@ -232,7 +232,7 @@ defmodule Mydia.MixProject do
       {:ymlr, "~> 5.1"},
       {:sweet_xml, "~> 0.7"},
       {:floki, "~> 0.36"},
-      {:codepagex, "== 0.1.13"},
+      {:codepagex, "== 0.2.0"},
       {:nimble_parsec, "~> 1.4"},
       {:eqrcode, "~> 0.2.1"},
       {:earmark, "~> 1.4"},
