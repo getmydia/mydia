@@ -185,6 +185,7 @@ value a card can claim:
 | Layer | z-index |
 | --- | --- |
 | Card badges | 10 |
+| Admin page header (`#admin-page-header`) | 25 |
 | Sticky mobile header | 30 |
 | Sidebar `div.drawer-side` | 40 |
 | Mobile dock `nav#mobile-dock` | 50 |
@@ -232,6 +233,13 @@ the same column and uses the same pattern for the same reason.
 shows the probe trap too: `refute_covered/2`'s 3x3 grid fell between the
 25px-tall badges and passed with the bug present, so the test hit-tests the
 centre of each overlap instead.
+
+Menus in an admin page's `<:actions>` sit in `#admin-page-header`, which
+`admin_page/1` lifts to `z-[25]` so they clear the hub tab strip (`z-10`) and the
+page switcher (`z-20`) that follow it in the DOM. Before that, the strip took the
+clicks across the middle of the Library Paths Export menu at `xl`, and on phones,
+where the menu opens left-aligned, the switcher did (#1317).
+`test/mydia_web/features/admin_header_menu_stacking_test.exs` guards it.
 
 ## .menu is fit-content, so truncate inflates instead of clipping
 
