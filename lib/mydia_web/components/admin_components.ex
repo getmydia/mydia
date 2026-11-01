@@ -154,9 +154,12 @@ defmodule MydiaWeb.AdminComponents do
       )
 
     ~H"""
+    <%!-- relative z-[25] lifts header action menus (Export on Library Paths)
+          over the tab strip (z-10) and the switcher (z-20) that follow it,
+          while staying under the sticky mobile header (z-30). #1317 --%>
     <div
       id="admin-page-header"
-      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
+      class="relative z-[25] flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
     >
       <h1 id="admin-page-title" class="text-3xl font-bold">{@hub_label}</h1>
       <div :if={@actions != []} id="admin-page-actions" class="flex flex-wrap items-center gap-2">
