@@ -42,13 +42,12 @@ The filter matches the badge exactly, for movies and shows alike:
 ## Tests
 
 - `test/mydia_web/live/media_live/listing_params_test.exs`: `progress=downloading`
-  parses to `:downloading` and round-trips through `to_query/1`.
+  parses to `:downloading` and round-trips through `to_query/1`. Remembered
+  filters are restored through `parse/2`, so this also covers a saved
+  `downloading` filter.
 - `test/mydia_web/live/media_live/index_test.exs`: with one downloading movie
   and one missing movie, `?progress=downloading` renders only the downloading
   movie's card (asserted by element id).
-- `test/mydia/accounts/library_listing_preference_test.exs` (or the LiveView
-  test that covers remembered filters): a saved `downloading` progress filter
-  is restored on a bare visit.
 
 ## Out of scope
 
