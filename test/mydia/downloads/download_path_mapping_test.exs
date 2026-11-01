@@ -43,15 +43,27 @@ defmodule Mydia.Downloads.DownloadPathMappingTest do
   describe "path_mapping_suggestion/1" do
     test "builds the map when both prefixes are stored" do
       assert Download.path_mapping_suggestion(%Download{
+               import_failure_reason: "path_mapping_mismatch",
                path_mapping_remote_prefix: "/r",
                path_mapping_local_prefix: "/l"
              }) == %{remote_prefix: "/r", local_prefix: "/l"}
     end
 
+    test "is nil for a non-mismatch reason even with both prefixes stored" do
+      assert Download.path_mapping_suggestion(%Download{
+               import_failure_reason: "no_files",
+               path_mapping_remote_prefix: "/r",
+               path_mapping_local_prefix: "/l"
+             }) == nil
+    end
+
     test "is nil when either prefix is missing" do
       assert Download.path_mapping_suggestion(%Download{}) == nil
 
-      assert Download.path_mapping_suggestion(%Download{path_mapping_remote_prefix: "/r"}) ==
+      assert Download.path_mapping_suggestion(%Download{
+               import_failure_reason: "path_mapping_mismatch",
+               path_mapping_remote_prefix: "/r"
+             }) ==
                nil
     end
   end

@@ -74,9 +74,9 @@ defmodule Mydia.Library.PathMapping do
     reported_path |> suggest(roots) |> searched_attrs()
   rescue
     error ->
-      Logger.warning("Path-mapping suggestion search failed",
-        reported_path: reported_path,
-        error: Exception.message(error)
+      Logger.warning(
+        "Path-mapping suggestion search failed for #{inspect(reported_path)}: " <>
+          Exception.message(error)
       )
 
       searched_attrs(:none)
@@ -211,6 +211,14 @@ defmodule Mydia.Library.PathMapping do
   defp scan_entries([], _dir, _name, _depth, budget, found), do: {:ok, found, budget}
 
   defp scan_entries([entry | rest], dir, name, depth, budget, found) do
+    if System.monotonic_time(:millisecond) >= budget.deadline do
+      :exhausted
+    else
+      scan_entry(entry, rest, dir, name, depth, budget, found)
+    end
+  end
+
+  defp scan_entry(entry, rest, dir, name, depth, budget, found) do
     full = Path.join(dir, entry)
 
     if File.dir?(full) do

@@ -257,8 +257,9 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
 
   # Why a path-mapping failure happened and how to fix it: the suggested
   # mapping with a one-click apply when one was found, a link to the Path
-  # Mappings page otherwise. `path_mapping_suggestion` is set by the Index's
-  # enrichment, which runs for every non-external drawer.
+  # Mappings page otherwise. `path_mapping_suggestion` is stored on the
+  # download when the import fails and arrives via the history builders; the
+  # Index only sets `path_mapping_affected_count`.
   attr :download, :map, required: true
 
   defp path_mapping_block(assigns) do

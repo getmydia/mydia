@@ -161,16 +161,19 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     end
 
     test "the drawer shows the stored mapping", %{conn: conn} do
-      download =
-        mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E04", %{
-          path_mapping_remote_prefix: "/downloads/complete",
-          path_mapping_local_prefix: "/data/torrents/complete",
-          path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
-        })
+      stored = %{
+        path_mapping_remote_prefix: "/downloads/complete",
+        path_mapping_local_prefix: "/data/torrents/complete",
+        path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      }
+
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E04", stored)
+      mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E05", stored)
 
       {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
 
       assert has_element?(view, "#drawer-path-mapping", "/data/torrents/complete")
+      assert has_element?(view, "#drawer-path-mapping", "Retries 2 downloads")
     end
   end
 
