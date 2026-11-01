@@ -85,6 +85,10 @@ defmodule Mydia.Application do
         # convention DatabaseHealthCheck.run/0 and StartupSync.sync_all/0
         # already follow in this same block.
         Mydia.Jobs.HdrBackfill.enqueue_once()
+        # One-shot: stored path-mapping suggestions for downloads that failed
+        # with a mount mismatch before suggestions were stored (#1315).
+        # Idempotent by row state; enqueue_once/0 never raises.
+        Mydia.Jobs.PathMappingSuggestionBackfill.enqueue_once()
         # One-shot repair for items the metadata enricher silently re-monitored
         # before #653 was fixed. Idempotent by item state plus its own decision
         # event, but unlike HdrBackfill there is no stamp column: every boot
