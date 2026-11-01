@@ -493,7 +493,8 @@ defmodule MydiaWeb.MediaLive.IndexTest do
              )
     end
 
-    test "progress filter excludes movies with an active download from missing", %{conn: conn} do
+    test "progress filter puts movies with an active download under downloading, not missing",
+         %{conn: conn} do
       _missing_movie =
         media_item_fixture(%{
           title: "Progress Grabbing Missing",
@@ -537,6 +538,17 @@ defmodule MydiaWeb.MediaLive.IndexTest do
                view,
                "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
              )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloading"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloading'][data-stream-count='1']"
+             )
+
+      assert has_element?(view, "#media_items-#{downloading_movie.id}")
     end
 
     test "progress filter includes unmonitored items on their real availability", %{conn: conn} do

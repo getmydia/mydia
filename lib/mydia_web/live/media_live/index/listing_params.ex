@@ -21,6 +21,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @progress %{
     "missing" => :missing,
     "partial" => :partial,
+    "downloading" => :downloading,
     "downloaded" => :downloaded,
     "upcoming" => :upcoming
   }
@@ -40,7 +41,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @type t :: %__MODULE__{
           search: String.t(),
           library: binary() | nil,
-          progress: :missing | :partial | :downloaded | :upcoming | nil,
+          progress: :missing | :partial | :downloading | :downloaded | :upcoming | nil,
           monitored: boolean() | nil,
           quality: String.t() | nil,
           sort: String.t(),
