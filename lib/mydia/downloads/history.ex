@@ -723,21 +723,13 @@ defmodule Mydia.Downloads.History do
       client_failure_category: torrent_status.failure_category,
       client_error_detail: torrent_status.failure_detail,
       db_completed_at: download.completed_at,
-      imported_at: download.imported_at,
-      import_retry_count: download.import_retry_count,
-      import_last_error: download.import_last_error,
-      import_failure_reason: download.import_failure_reason,
-      import_reported_path: download.import_reported_path,
-      path_mapping_suggestion: Download.path_mapping_suggestion(download),
-      import_next_retry_at: download.import_next_retry_at,
-      import_failed_at: download.import_failed_at,
-      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       last_observed_at: download.last_observed_at,
       stalled_since: download.stalled_since,
       in_client?: true
     })
+    |> struct!(EnrichedDownload.import_state(download))
   end
 
   defp enrich_download_with_unknown_status(download) do
@@ -774,15 +766,6 @@ defmodule Mydia.Downloads.History do
       completed_at: download.completed_at,
       error_message: download.error_message,
       db_completed_at: download.completed_at,
-      imported_at: download.imported_at,
-      import_retry_count: download.import_retry_count,
-      import_last_error: download.import_last_error,
-      import_failure_reason: download.import_failure_reason,
-      import_reported_path: download.import_reported_path,
-      path_mapping_suggestion: Download.path_mapping_suggestion(download),
-      import_next_retry_at: download.import_next_retry_at,
-      import_failed_at: download.import_failed_at,
-      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       # Carry the persisted stall state through an outage. The soft-stall badge
@@ -794,6 +777,7 @@ defmodule Mydia.Downloads.History do
       # Client unreachable — presence indeterminate.
       in_client?: nil
     })
+    |> struct!(EnrichedDownload.import_state(download))
   end
 
   defp enrich_download_with_empty_status(download, in_client? \\ nil) do
@@ -848,21 +832,13 @@ defmodule Mydia.Downloads.History do
       error_message: error_message,
       # Preserve database completed_at for tracking if we've already processed it
       db_completed_at: download.completed_at,
-      imported_at: download.imported_at,
-      import_retry_count: download.import_retry_count,
-      import_last_error: download.import_last_error,
-      import_failure_reason: download.import_failure_reason,
-      import_reported_path: download.import_reported_path,
-      path_mapping_suggestion: Download.path_mapping_suggestion(download),
-      import_next_retry_at: download.import_next_retry_at,
-      import_failed_at: download.import_failed_at,
-      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       last_observed_at: download.last_observed_at,
       stalled_since: download.stalled_since,
       in_client?: in_client?
     })
+    |> struct!(EnrichedDownload.import_state(download))
   end
 
   # No client assignment at all — the grab pipeline hasn't handed this record
