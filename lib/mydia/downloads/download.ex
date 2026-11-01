@@ -25,6 +25,9 @@ defmodule Mydia.Downloads.Download do
           import_last_error: String.t() | nil,
           import_failure_reason: String.t() | nil,
           import_reported_path: String.t() | nil,
+          path_mapping_remote_prefix: String.t() | nil,
+          path_mapping_local_prefix: String.t() | nil,
+          path_mapping_searched_at: DateTime.t() | nil,
           import_next_retry_at: DateTime.t() | nil,
           import_failed_at: DateTime.t() | nil,
           client_removed_at: DateTime.t() | nil,
@@ -63,9 +66,17 @@ defmodule Mydia.Downloads.Download do
     # Structured failure classification (e.g. "path_mapping_mismatch") so the
     # Issues tab can filter without parsing the human `import_last_error` string.
     field :import_failure_reason, :string
-    # The client-reported path Mydia could not see, persisted so the Issues tab
-    # can compute a path-mapping suggestion after the job has finished.
+    # The client-reported path Mydia could not see. The backfill reads it to
+    # compute a path-mapping suggestion for rows that failed before suggestions
+    # were stored.
     field :import_reported_path, :string
+    # The suggested remote-to-local mapping for a path_mapping_mismatch,
+    # computed once by Mydia.Jobs.MediaImport.Failure (or the backfill) so the
+    # Issues tab never walks mounts. Both prefixes are set or both are nil.
+    # path_mapping_searched_at is set whenever the search ran, match or not.
+    field :path_mapping_remote_prefix, :string
+    field :path_mapping_local_prefix, :string
+    field :path_mapping_searched_at, :utc_datetime
     field :import_next_retry_at, :utc_datetime
     field :import_failed_at, :utc_datetime
     field :client_removed_at, :utc_datetime
@@ -147,6 +158,55 @@ defmodule Mydia.Downloads.Download do
   end
 
   @doc """
+  The stored path-mapping suggestion as `%{remote_prefix:, local_prefix:}`, or
+  nil when none was found (or the search has not run).
+
+  Only a `path_mapping_mismatch` failure carries a suggestion: stale prefix
+  columns left on any other row (a backfill race, a later successful import)
+  are ignored.
+  """
+  @spec path_mapping_suggestion(t()) ::
+          %{remote_prefix: String.t(), local_prefix: String.t()} | nil
+  def path_mapping_suggestion(%__MODULE__{
+        import_failure_reason: "path_mapping_mismatch",
+        path_mapping_remote_prefix: remote,
+        path_mapping_local_prefix: local
+      })
+      when is_binary(remote) and is_binary(local),
+      do: %{remote_prefix: remote, local_prefix: local}
+
+  def path_mapping_suggestion(%__MODULE__{}), do: nil
+
+  @doc "Attrs that drop a stored path-mapping suggestion."
+  @spec cleared_path_mapping_attrs() :: map()
+  def cleared_path_mapping_attrs do
+    %{
+      path_mapping_remote_prefix: nil,
+      path_mapping_local_prefix: nil,
+      path_mapping_searched_at: nil
+    }
+  end
+
+  @doc """
+  Attrs that reset every import-failure field, for re-running an import. Kept
+  in one place so a field added later cannot be missed by one of the callers.
+  """
+  @spec cleared_import_failure_attrs() :: map()
+  def cleared_import_failure_attrs do
+    Map.merge(
+      %{
+        import_retry_count: 0,
+        import_last_error: nil,
+        import_failure_reason: nil,
+        import_reported_path: nil,
+        import_next_retry_at: nil,
+        import_failed_at: nil
+      },
+      cleared_path_mapping_attrs()
+    )
+  end
+
+  @doc """
   Changeset for creating or updating a download.
   """
   def changeset(download, attrs) do
@@ -169,6 +229,9 @@ defmodule Mydia.Downloads.Download do
       :import_last_error,
       :import_failure_reason,
       :import_reported_path,
+      :path_mapping_remote_prefix,
+      :path_mapping_local_prefix,
+      :path_mapping_searched_at,
       :import_next_retry_at,
       :import_failed_at,
       :client_removed_at,

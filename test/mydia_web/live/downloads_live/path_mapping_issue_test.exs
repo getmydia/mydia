@@ -66,7 +66,13 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     end
 
     test "applying a mapping persists it and re-runs every affected mismatch", %{conn: conn} do
-      a = mismatch_download("/downloads/complete/A")
+      a =
+        mismatch_download("/downloads/complete/A", %{
+          path_mapping_remote_prefix: "/downloads/complete",
+          path_mapping_local_prefix: "/data/torrents/complete",
+          path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
       b = mismatch_download("/downloads/complete/B")
       # a non-failed download under the same prefix must NOT be touched
       untouched =
@@ -87,6 +93,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
       assert mapping.local_prefix == "/data/torrents/complete"
 
       assert is_nil(Downloads.get_download!(a.id).import_failed_at)
+      assert is_nil(Downloads.get_download!(a.id).path_mapping_remote_prefix)
       assert is_nil(Downloads.get_download!(b.id).import_failed_at)
       # untouched was never failed, so its (nil) state is unchanged and no job runs
       refute is_nil(Downloads.get_download!(untouched.id))
@@ -116,6 +123,57 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
 
       assert html =~ "already exists"
       assert length(Settings.list_path_mapping_configs()) == 1
+    end
+  end
+
+  describe "stored suggestion" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "the Issues tab offers the stored mapping with its affected count", %{conn: conn} do
+      stored = %{
+        path_mapping_remote_prefix: "/downloads/complete",
+        path_mapping_local_prefix: "/data/torrents/complete",
+        path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      }
+
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E01", stored)
+      mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E02", stored)
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_patch(view, ~p"/downloads?tab=issues")
+
+      assert has_element?(
+               view,
+               "#apply-mapping-#{download.id}[phx-value-local_prefix='/data/torrents/complete']"
+             )
+    end
+
+    test "a mismatch with no stored suggestion offers a plain retry", %{conn: conn} do
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E03")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_patch(view, ~p"/downloads?tab=issues")
+
+      assert has_element?(view, "#retry-import-#{download.id}")
+      refute has_element?(view, "#apply-mapping-#{download.id}")
+    end
+
+    test "the drawer shows the stored mapping", %{conn: conn} do
+      stored = %{
+        path_mapping_remote_prefix: "/downloads/complete",
+        path_mapping_local_prefix: "/data/torrents/complete",
+        path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      }
+
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E04", stored)
+      mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E05", stored)
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(view, "#drawer-path-mapping", "/data/torrents/complete")
+      assert has_element?(view, "#drawer-path-mapping", "Retries 2 downloads")
     end
   end
 

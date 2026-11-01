@@ -93,6 +93,11 @@ config :mydia,
 # Disable search delay in tests (production uses 3000ms to throttle API calls)
 config :mydia, :episode_monitor, search_delay_ms: 0
 
+# Mydia.Library.PathMapping searches these roots instead of the machine's real
+# mounts, so an import failure in a test never walks /tmp (#1315). Tests that
+# need a search pass roots explicitly.
+config :mydia, :path_mapping_roots, []
+
 # Guardian JWT configuration for tests
 config :mydia, Mydia.Auth.Guardian,
   issuer: "mydia",

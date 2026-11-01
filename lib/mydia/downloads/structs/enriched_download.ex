@@ -10,6 +10,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
   """
 
   alias Mydia.Downloads.Client.FailureCategory
+  alias Mydia.Downloads.Download
 
   @enforce_keys [:id, :title, :download_client, :status]
 
@@ -74,7 +75,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # Set once DownloadMonitor has enumerated this torrent's files for the
     # pre-completion content check. Nil means not yet evaluated.
     :content_checked_at,
-    # Issues-tab path-mapping enrichment (computed in the LiveView; nil otherwise)
+    # Path-mapping suggestion stored on the download row when the import failed
+    # (nil when none was found); the affected count is computed by the Issues tab.
     :path_mapping_suggestion,
     :path_mapping_affected_count,
     # Stall-detection / progress tracking (mirrored from Download DB row)
@@ -204,5 +206,27 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
   """
   def new(attrs) when is_map(attrs) or is_list(attrs) do
     struct(__MODULE__, attrs)
+  end
+
+  @doc """
+  The import-tracking fields every builder copies straight from the
+  `%Download{}` row, as a map for `struct!/2`.
+
+  `path_mapping_suggestion` is read from the stored value on the row; the
+  affected count is computed later by the Issues tab.
+  """
+  @spec import_state(Download.t()) :: map()
+  def import_state(%Download{} = download) do
+    %{
+      imported_at: download.imported_at,
+      import_retry_count: download.import_retry_count,
+      import_last_error: download.import_last_error,
+      import_failure_reason: download.import_failure_reason,
+      import_reported_path: download.import_reported_path,
+      path_mapping_suggestion: Download.path_mapping_suggestion(download),
+      import_next_retry_at: download.import_next_retry_at,
+      import_failed_at: download.import_failed_at,
+      content_checked_at: download.content_checked_at
+    }
   end
 end
