@@ -1436,7 +1436,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         [download] =
           [download]
           |> Rows.annotate()
-          |> enrich_path_mapping_suggestions()
+          |> enrich_path_mapping_counts()
 
         assign(socket, :drawer_download, download)
     end
@@ -1503,10 +1503,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp refresh_issue_rows(socket, _ids), do: socket
 
-  # The mapping suggestion is a query, so it runs only for the rows on screen.
+  # The affected count is a query, so it runs only for the rows on screen.
   defp enrich_issue_path_mappings(issues) do
     downloads = for %Issue{download: d} <- issues, d, do: d
-    by_id = downloads |> enrich_path_mapping_suggestions() |> Map.new(&{&1.id, &1})
+    by_id = downloads |> enrich_path_mapping_counts() |> Map.new(&{&1.id, &1})
 
     Enum.map(issues, fn
       %Issue{download: %{id: id}} = issue -> %{issue | download: Map.fetch!(by_id, id)}
@@ -1599,55 +1599,33 @@ defmodule MydiaWeb.DownloadsLive.Index do
     length(downloads)
   end
 
-  # For downloads classified as a path-mapping mismatch, compute a suggested
-  # remote→local mapping (from the persisted reported path) and the number of
-  # downloads a one-click apply would re-run. Mount roots are detected once for
-  # the whole batch.
-  defp enrich_path_mapping_suggestions(downloads) do
-    if Enum.any?(downloads, &(&1.import_failure_reason == "path_mapping_mismatch")) do
-      roots = Mydia.Library.MountRoots.detect()
+  # The suggestion itself is computed when the import fails
+  # (Mydia.Jobs.MediaImport.Failure) and arrives on the row, so rendering never
+  # touches the filesystem (#1315). This only counts how many downloads a
+  # one-click apply would re-run, once per remote prefix.
+  defp enrich_path_mapping_counts(downloads) do
+    {enriched, _counts} =
+      Enum.map_reduce(downloads, %{}, fn
+        %{path_mapping_suggestion: %{remote_prefix: prefix}} = d, counts ->
+          {count, counts} =
+            Map.get_and_update(counts, prefix, fn
+              nil ->
+                count =
+                  prefix |> Downloads.list_path_mapping_mismatches_under_prefix() |> length()
 
-      {enriched, _affected_cache} =
-        Enum.map_reduce(downloads, %{}, fn d, affected_cache ->
-          if d.import_failure_reason == "path_mapping_mismatch" and
-               is_binary(d.import_reported_path) do
-            suggestion =
-              case Mydia.Library.PathMapping.suggest(d.import_reported_path, roots) do
-                {:ok, mapping} -> mapping
-                :none -> nil
-              end
+                {count, count}
 
-            {affected, affected_cache} =
-              if suggestion do
-                Map.get_and_update(affected_cache, suggestion.remote_prefix, fn
-                  nil ->
-                    count =
-                      length(
-                        Downloads.list_path_mapping_mismatches_under_prefix(
-                          suggestion.remote_prefix
-                        )
-                      )
+              count ->
+                {count, count}
+            end)
 
-                    {count, count}
+          {%{d | path_mapping_affected_count: count}, counts}
 
-                  count ->
-                    {count, count}
-                end)
-              else
-                {nil, affected_cache}
-              end
+        d, counts ->
+          {d, counts}
+      end)
 
-            {%{d | path_mapping_suggestion: suggestion, path_mapping_affected_count: affected},
-             affected_cache}
-          else
-            {d, affected_cache}
-          end
-        end)
-
-      enriched
-    else
-      downloads
-    end
+    enriched
   end
 
   defp submit_match(socket, media_item_id, episode_id) do

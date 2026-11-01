@@ -126,6 +126,54 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     end
   end
 
+  describe "stored suggestion" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "the Issues tab offers the stored mapping with its affected count", %{conn: conn} do
+      stored = %{
+        path_mapping_remote_prefix: "/downloads/complete",
+        path_mapping_local_prefix: "/data/torrents/complete",
+        path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      }
+
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E01", stored)
+      mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E02", stored)
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_patch(view, ~p"/downloads?tab=issues")
+
+      assert has_element?(
+               view,
+               "#apply-mapping-#{download.id}[phx-value-local_prefix='/data/torrents/complete']"
+             )
+    end
+
+    test "a mismatch with no stored suggestion offers a plain retry", %{conn: conn} do
+      download = mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E03")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_patch(view, ~p"/downloads?tab=issues")
+
+      assert has_element?(view, "#retry-import-#{download.id}")
+      refute has_element?(view, "#apply-mapping-#{download.id}")
+    end
+
+    test "the drawer shows the stored mapping", %{conn: conn} do
+      download =
+        mismatch_download("/downloads/complete/Fictional.Salt.Meridian.S01E04", %{
+          path_mapping_remote_prefix: "/downloads/complete",
+          path_mapping_local_prefix: "/data/torrents/complete",
+          path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(view, "#drawer-path-mapping", "/data/torrents/complete")
+    end
+  end
+
   describe "authorization" do
     test "a non-admin user cannot apply a mapping", %{conn: conn} do
       mismatch_download("/downloads/complete/A")
