@@ -46,8 +46,10 @@ The filter matches the badge exactly, for movies and shows alike:
   filters are restored through `parse/2`, so this also covers a saved
   `downloading` filter.
 - `test/mydia_web/live/media_live/index_test.exs`: with one downloading movie
-  and one missing movie, `?progress=downloading` renders only the downloading
-  movie's card (asserted by element id).
+  and one missing movie, choosing Downloading in the filter form (a
+  `render_change` with `progress: "downloading"`) renders only the downloading
+  movie's card (asserted by element id). URL parsing of the same value is
+  covered by the `ListingParams` test above.
 
 ## Out of scope
 
