@@ -222,6 +222,9 @@
           <option value="partial" selected={@filter_progress == :partial}>
             {pgettext("library progress", "Partial")}
           </option>
+          <option value="downloading" selected={@filter_progress == :downloading}>
+            {pgettext("library progress", "Downloading")}
+          </option>
           <option value="downloaded" selected={@filter_progress == :downloaded}>
             {pgettext("library progress", "Downloaded")}
           </option>
