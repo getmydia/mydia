@@ -44,7 +44,7 @@ defmodule MydiaWeb.Features.AdminHeaderMenuStackingTest do
 
   The Library Paths Export menu was `z-10`, the same as `#admin-page-tabs`,
   which comes later in the DOM and won, so the strip took the clicks across
-  the middle of the open menu. Below `xl` the switcher (`z-20`) did the same.
+  the middle of the open menu. On phones the switcher (`z-20`) did the same.
   Only `elementFromPoint` over the open menu can see that.
   """
   use MydiaWeb.FeatureCase, async: false
@@ -88,9 +88,11 @@ defmodule MydiaWeb.Features.AdminHeaderMenuStackingTest do
     )
   end
 
-  # 1440 shows the lifted tab strip (xl and up); 1024 hides it and shows the
-  # page switcher instead.
-  for {width, height} <- [{1440, 900}, {1024, 768}] do
+  # 1440 shows the lifted tab strip (xl and up), which covered CSV. Below xl the
+  # page switcher replaces it, but only below md does the menu open
+  # left-aligned over it (it is `md:dropdown-end`), so 375 is the width where
+  # the switcher covered JSON; at 768 and 1024 the menu clears it.
+  for {width, height} <- [{1440, 900}, {375, 812}] do
     @tag :feature
     test "every Export menu item takes clicks at #{width}x#{height}", %{session: session} do
       login_as_admin(session)
@@ -113,7 +115,11 @@ Run:
 devenv shell -- bash -c 'mix assets.setup && mix assets.build'
 ./dev feature-test test/mydia_web/features/admin_header_menu_stacking_test.exs --only feature
 ```
-Expected: `Including tags: [:feature]`, 2 tests, both FAIL with a non-empty list naming `#library-export-json` and/or `#library-export-csv` covered by an element inside `#admin-page-tabs` (1440) or `#admin-page-switcher` (1024).
+Expected: `Including tags: [:feature]`, 2 tests, both FAIL with a non-empty list naming `#library-export-json` and/or `#library-export-csv` covered by an element inside `#admin-page-tabs` (1440) or `#admin-page-switcher` (375).
+
+The first draft of this plan used 1024 for the switcher case. Execution found the
+test passing there: from `md` up the menu opens right-aligned and clears the
+switcher, so the switcher only overlaps it on phones. 375 replaced it.
 
 If either test passes, stop: the cause in the spec is wrong for that width. Report the actual hit elements instead of continuing.
 
