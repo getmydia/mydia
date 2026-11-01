@@ -12279,8 +12279,8 @@ msgstr ""
 msgid "%{hours}h %{minutes}m"
 msgstr ""
 
-#: lib/mydia_web/components/admin_components.ex:175
-#: lib/mydia_web/components/admin_components.ex:201
+#: lib/mydia_web/components/admin_components.ex:178
+#: lib/mydia_web/components/admin_components.ex:204
 #, elixir-autogen, elixir-format
 msgid "%{hub} pages"
 msgstr ""
