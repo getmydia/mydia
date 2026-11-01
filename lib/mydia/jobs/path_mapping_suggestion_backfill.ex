@@ -6,7 +6,8 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfill do
 
   Selection is by row state, so the worker is idempotent: it takes mismatch
   rows whose `path_mapping_searched_at` is nil, and every outcome stamps it,
-  including a search that found nothing.
+  including a search that found nothing. The stamp is a conditional write, so a
+  row that changed during the search is left alone.
 
   Runs on `:maintenance` so a slow mount search can never delay an import.
   The uniqueness setup and the self-reschedule follow `Mydia.Jobs.HdrBackfill`;
@@ -26,7 +27,6 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfill do
 
   require Logger
 
-  alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Library.PathMapping
   alias Mydia.Repo
@@ -80,43 +80,37 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfill do
         roots = PathMapping.search_roots()
         Enum.each(ids, &backfill_one(&1, roots))
 
-        # Every row in the batch was written or, if the write failed, stamped
-        # by backfill_one/2, so none stays pending and the next batch is new
-        # rows. That is what makes this reschedule terminate.
+        # Every selected row was either stamped by backfill_one/2 or changed
+        # under it (retried, or re-failed and searched by MediaImport.Failure),
+        # so it is no longer pending and the next batch is new rows. That is
+        # what makes this reschedule terminate.
         %{} |> new(schedule_in: 5, unique: [states: @reschedule_unique_states]) |> Oban.insert()
         :ok
     end
   end
 
-  defp backfill_one(id, roots) do
+  # The search runs for up to seconds, so the row can change under it: a retry
+  # clears the suggestion, a new failure gets its own search from
+  # MediaImport.Failure. The write is therefore conditional on the row still
+  # being pending for the path that was searched. Zero rows updated means the
+  # row is no longer this job's business.
+  @doc false
+  def backfill_one(id, roots) do
     case Repo.get(Download, id) do
-      %Download{import_reported_path: path} = download when is_binary(path) ->
-        case Downloads.update_download(download, PathMapping.suggestion_attrs(path, roots)) do
-          {:ok, _download} ->
-            :ok
-
-          {:error, changeset} ->
-            Logger.warning(
-              "Path-mapping suggestion backfill: could not store suggestion for download " <>
-                "#{id}: #{inspect(changeset.errors)}; marking it searched"
-            )
-
-            stamp_searched(id)
-        end
+      %Download{import_reported_path: path} when is_binary(path) ->
+        write_suggestion(id, path, PathMapping.suggestion_attrs(path, roots))
 
       _gone ->
         :ok
     end
   end
 
-  # Bypasses the changeset so a row that cannot validate still leaves the
-  # pending set.
-  defp stamp_searched(id) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
-
+  @doc false
+  def write_suggestion(id, path, attrs) do
     Download
-    |> where([d], d.id == ^id)
-    |> Repo.update_all(set: [path_mapping_searched_at: now])
+    |> where([d], d.id == ^id and d.import_reported_path == ^path)
+    |> where([d], is_nil(d.path_mapping_searched_at))
+    |> Repo.update_all(set: Map.to_list(attrs))
 
     :ok
   end

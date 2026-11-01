@@ -5,7 +5,6 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfillTest do
   use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.DownloadsFixtures
-  import ExUnit.CaptureLog
   import Mydia.MediaFixtures
 
   alias Mydia.Downloads
@@ -88,6 +87,7 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfillTest do
 
     assert Downloads.get_download!(searched.id).path_mapping_searched_at == searched_at
     assert Downloads.get_download!(other.id).path_mapping_searched_at == nil
+    refute_enqueued(worker: PathMappingSuggestionBackfill)
   end
 
   test "reschedules itself while a batch did work, and stops when drained" do
@@ -100,19 +100,26 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfillTest do
     assert PathMappingSuggestionBackfill.pending_ids(10) == []
   end
 
-  test "stamps a row whose write fails validation so it cannot loop" do
+  test "does not overwrite a row that changed while it was being searched" do
     d = mismatch("/downloads/complete/Fictional.Salt.Meridian.S01E01")
+    attrs = Mydia.Library.PathMapping.suggestion_attrs(d.import_reported_path)
 
+    # A retry or a new failure lands between the read and the write.
     Mydia.Repo.update_all(
       from(x in Mydia.Downloads.Download, where: x.id == ^d.id),
-      set: [title: ""]
+      set: [import_reported_path: "/downloads/other/Fictional.Copper.Lantern.S02E03"]
     )
 
-    log = capture_log(fn -> assert :ok = perform_job(PathMappingSuggestionBackfill, %{}) end)
+    assert :ok =
+             PathMappingSuggestionBackfill.write_suggestion(
+               d.id,
+               "/downloads/complete/Fictional.Salt.Meridian.S01E01",
+               attrs
+             )
 
-    assert log =~ d.id
-    assert %DateTime{} = Downloads.get_download!(d.id).path_mapping_searched_at
-    assert PathMappingSuggestionBackfill.pending_ids(10) == []
+    stored = Downloads.get_download!(d.id)
+    assert stored.path_mapping_searched_at == nil
+    assert stored.path_mapping_remote_prefix == nil
   end
 
   test "enqueue_once/0 does not stack a second job" do

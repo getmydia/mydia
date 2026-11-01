@@ -18,6 +18,7 @@ defmodule Mydia.Library.PathMapping do
   @max_scan_depth 6
   @max_scan_dirs 20_000
   @max_scan_ms 5_000
+  @scan_timeout_margin_ms 1_000
 
   @doc """
   Suggests a remote→local prefix mapping for a reported path Mydia couldn't see.
@@ -66,12 +67,50 @@ defmodule Mydia.Library.PathMapping do
   `reported_path`: both prefixes on a match, both nil otherwise, and
   `path_mapping_searched_at` set either way.
 
-  Never raises. An import failure must still be recorded when the search
-  crashes, so a crash is logged and stored as "searched, nothing found".
+  Never raises and never blocks past the wall-clock bound. An import failure
+  must still be recorded when the search crashes or hangs, so either is logged
+  and stored as "searched, nothing found".
+
+  The walk checks its budget only between directory operations, so one
+  `File.ls/1` on a hung network mount could block forever. The search therefore
+  runs in a task that is killed after the walk budget plus a margin. The walk
+  uses non-raw `File` calls, which are gen_server calls into `file_server_2`,
+  so the task process is killable (see `Mydia.Library.MountRoots.reachable_dirs/2`).
+
+  Options (for tests): `:timeout_ms` overrides the wall-clock bound and
+  `:search_fun` (arity 2, `(path, roots)`) replaces `suggest/2`.
   """
-  @spec suggestion_attrs(String.t(), [String.t()] | nil) :: map()
-  def suggestion_attrs(reported_path, roots \\ nil) do
-    reported_path |> suggest(roots) |> searched_attrs()
+  @spec suggestion_attrs(String.t(), [String.t()] | nil, keyword()) :: map()
+  def suggestion_attrs(reported_path, roots \\ nil, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout_ms, @max_scan_ms + @scan_timeout_margin_ms)
+    search_fun = Keyword.get(opts, :search_fun, &suggest/2)
+
+    task = Task.async(fn -> safe_search(search_fun, reported_path, roots) end)
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} ->
+        searched_attrs(result)
+
+      {:exit, reason} ->
+        Logger.warning(
+          "Path-mapping suggestion search exited for #{inspect(reported_path)}: " <>
+            inspect(reason)
+        )
+
+        searched_attrs(:none)
+
+      nil ->
+        Logger.warning(
+          "Path-mapping suggestion search for #{inspect(reported_path)} " <>
+            "timed out after #{timeout}ms; recording it as searched"
+        )
+
+        searched_attrs(:none)
+    end
+  end
+
+  defp safe_search(search_fun, reported_path, roots) do
+    search_fun.(reported_path, roots)
   rescue
     error ->
       Logger.warning(
@@ -79,7 +118,7 @@ defmodule Mydia.Library.PathMapping do
           Exception.message(error)
       )
 
-      searched_attrs(:none)
+      :none
   end
 
   defp searched_attrs(result) do

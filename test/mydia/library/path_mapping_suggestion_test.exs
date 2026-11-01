@@ -83,6 +83,19 @@ defmodule Mydia.Library.PathMappingSuggestionTest do
     end
   end
 
+  test "falls back to the walk when the ambiguous suffix lies beyond its reach", %{tmp: tmp} do
+    tail = Path.join(~w(c1 c2 c3 c4 c5 c6 c7 Show.S01E01))
+    root_a = Path.join(tmp, "a")
+    root_b = Path.join(tmp, "b")
+    root_c = Path.join(tmp, "c")
+    File.mkdir_p!(Path.join(root_a, tail))
+    File.mkdir_p!(Path.join(root_b, tail))
+    File.mkdir_p!(Path.join(root_c, "Show.S01E01"))
+
+    assert {:ok, %{remote_prefix: "/downloads/c1/c2/c3/c4/c5/c6/c7", local_prefix: ^root_c}} =
+             PathMapping.suggest("/downloads/" <> tail, [root_a, root_b, root_c])
+  end
+
   describe "walk budgets" do
     setup %{tmp: tmp} do
       root = Path.join(tmp, "data")
@@ -119,6 +132,25 @@ defmodule Mydia.Library.PathMappingSuggestionTest do
       assert attrs.path_mapping_remote_prefix == "/downloads/complete"
       assert attrs.path_mapping_local_prefix == Path.join(root, "complete")
       assert %DateTime{} = attrs.path_mapping_searched_at
+    end
+
+    test "cuts off a search that blocks and records it as searched" do
+      blocker = fn _path, _roots -> Process.sleep(:infinity) end
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          attrs =
+            PathMapping.suggestion_attrs("/downloads/Hung.Show", ["/x"],
+              timeout_ms: 50,
+              search_fun: blocker
+            )
+
+          assert attrs.path_mapping_remote_prefix == nil
+          assert attrs.path_mapping_local_prefix == nil
+          assert %DateTime{} = attrs.path_mapping_searched_at
+        end)
+
+      assert log =~ "/downloads/Hung.Show"
     end
 
     test "stamps the search with null prefixes when nothing matches", %{tmp: tmp} do
