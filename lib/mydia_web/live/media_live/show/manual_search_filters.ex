@@ -85,8 +85,8 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :indexer_filters, :list, default: []
   attr :min_seeders, :integer, default: 0
   attr :class, :any, default: nil
-  # The dialog renders the chips twice (the chip bar below `lg`, beside the
-  # progress summary from `lg`), so each copy needs its own DOM ids.
+  # The dialog renders the chips twice (the chip bar below `lg`, beneath the
+  # indexer status card from `lg`), so each copy needs its own DOM ids.
   attr :id_prefix, :string, default: "manual-search-chip"
 
   @doc "One removable chip per active filter dimension."
@@ -96,9 +96,10 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     ~H"""
     <div :if={@chips != []} class={["flex items-center gap-2", @class]}>
       <span
-        :for={{dimension, label} <- @chips}
+        :for={{dimension, label, title} <- @chips}
         id={"#{@id_prefix}-#{dimension}"}
         class="badge badge-soft badge-primary shrink-0 gap-1 whitespace-nowrap"
+        title={title}
       >
         {label}
         <button
@@ -106,7 +107,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
           class="cursor-pointer opacity-70 hover:opacity-100"
           phx-click="remove_search_filter"
           phx-value-dimension={dimension}
-          aria-label={gettext("Remove filter: %{filter}", filter: label)}
+          aria-label={gettext("Remove filter: %{filter}", filter: title || label)}
         >
           <.icon name="hero-x-mark" class="w-3 h-3" />
         </button>
@@ -326,7 +327,12 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
       {"codec", assigns.codec_filters}
     ]
     |> Enum.reject(fn {_dimension, values} -> values == [] end)
-    |> Enum.map(fn {dimension, values} -> {dimension, Enum.join(values, ", ")} end)
+    |> Enum.map(fn
+      # Indexer names are long and a user may tick many, so the chip names two
+      # and counts the rest; the title lists them all.
+      {"indexer", names} -> {"indexer", indexer_chip_label(names), Enum.join(names, ", ")}
+      {dimension, values} -> {dimension, Enum.join(values, ", "), nil}
+    end)
     |> then(fn chips ->
       if assigns.min_seeders > 0,
         do:
@@ -335,9 +341,19 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               {"min_seeders",
                ngettext("≥ %{count} seed", "≥ %{count} seeds", assigns.min_seeders,
                  count: assigns.min_seeders
-               )}
+               ), nil}
             ],
         else: chips
     end)
   end
+
+  defp indexer_chip_label([_, _, _ | _] = names) do
+    {shown, rest} = Enum.split(names, 2)
+
+    ngettext("%{indexers} +%{count} more", "%{indexers} +%{count} more", length(rest),
+      indexers: Enum.join(shown, ", ")
+    )
+  end
+
+  defp indexer_chip_label(names), do: Enum.join(names, ", ")
 end
