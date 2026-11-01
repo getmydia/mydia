@@ -1,55 +1,33 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-config
+  name: grafana-datasources
   namespace: monitoring
-  labels:
-    app.kubernetes.io/name: grafana
-    app.kubernetes.io/component: observability
 data:
-  grafana.ini: |
-    [server]
-    root_url = https://grafana.mydia.dev
-
-    [security]
-    admin_user = admin
-
-    [users]
-    allow_sign_up = true
-    auto_assign_org_role = Editor
-
-    [auth.anonymous]
-    enabled = false
-
-    [auth.proxy]
-    enabled = true
-    header_name = X-Auth-Request-Email
-    header_property = email
-    auto_sign_up = true
-    headers = Email:X-Auth-Request-Email
-
-    [dashboards]
-    default_home_dashboard_path = /var/lib/grafana/dashboards/iroh-relay.json
-
-  datasource.yaml: |
+  datasources.yaml: |
     apiVersion: 1
     datasources:
-      - name: Prometheus
+      - name: VictoriaMetrics
         type: prometheus
+        url: http://victoria-metrics.monitoring.svc:8428
         access: proxy
-        url: http://prometheus.monitoring.svc.cluster.local:9090
         isDefault: true
         editable: false
-
-  dashboard-provider.yaml: |
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
     apiVersion: 1
     providers:
-      - name: default
+      - name: 'default'
         orgId: 1
-        folder: ""
+        folder: ''
         type: file
         disableDeletion: false
         editable: true
         options:
           path: /var/lib/grafana/dashboards
-          foldersFromFilesStructure: false
