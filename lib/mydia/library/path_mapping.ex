@@ -109,6 +109,9 @@ defmodule Mydia.Library.PathMapping do
     end
   end
 
+  # The task is linked to the caller, so anything that ends it abnormally (a
+  # raise, but also an exit or a throw) would take the import job down with it.
+  # Catch all three here and record the search as finding nothing.
   defp safe_search(search_fun, reported_path, roots) do
     search_fun.(reported_path, roots)
   rescue
@@ -116,6 +119,14 @@ defmodule Mydia.Library.PathMapping do
       Logger.warning(
         "Path-mapping suggestion search failed for #{inspect(reported_path)}: " <>
           Exception.message(error)
+      )
+
+      :none
+  catch
+    kind, reason ->
+      Logger.warning(
+        "Path-mapping suggestion search #{kind} for #{inspect(reported_path)}: " <>
+          inspect(reason)
       )
 
       :none

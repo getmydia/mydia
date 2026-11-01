@@ -153,6 +153,26 @@ defmodule Mydia.Library.PathMappingSuggestionTest do
       assert log =~ "/downloads/Hung.Show"
     end
 
+    test "records a search that exits or throws as searched, without crashing the caller" do
+      for {label, search_fun} <- [
+            {"exit", fn _path, _roots -> exit(:mount_gone) end},
+            {"throw", fn _path, _roots -> throw(:mount_gone) end}
+          ] do
+        path = "/downloads/Fictional.Copper.Lantern.#{label}"
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            attrs = PathMapping.suggestion_attrs(path, ["/x"], search_fun: search_fun)
+
+            assert attrs.path_mapping_remote_prefix == nil
+            assert attrs.path_mapping_local_prefix == nil
+            assert %DateTime{} = attrs.path_mapping_searched_at
+          end)
+
+        assert log =~ path
+      end
+    end
+
     test "stamps the search with null prefixes when nothing matches", %{tmp: tmp} do
       attrs = PathMapping.suggestion_attrs("/downloads/complete/Release", [tmp])
 
