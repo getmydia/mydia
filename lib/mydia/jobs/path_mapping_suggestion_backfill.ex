@@ -80,7 +80,9 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfill do
         roots = PathMapping.search_roots()
         Enum.each(ids, &backfill_one(&1, roots))
 
-        # Every row in the batch was stamped, so the next batch is new rows.
+        # Every row in the batch was written or, if the write failed, stamped
+        # by backfill_one/2, so none stays pending and the next batch is new
+        # rows. That is what makes this reschedule terminate.
         %{} |> new(schedule_in: 5, unique: [states: @reschedule_unique_states]) |> Oban.insert()
         :ok
     end
@@ -89,10 +91,33 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfill do
   defp backfill_one(id, roots) do
     case Repo.get(Download, id) do
       %Download{import_reported_path: path} = download when is_binary(path) ->
-        Downloads.update_download(download, PathMapping.suggestion_attrs(path, roots))
+        case Downloads.update_download(download, PathMapping.suggestion_attrs(path, roots)) do
+          {:ok, _download} ->
+            :ok
+
+          {:error, changeset} ->
+            Logger.warning(
+              "Path-mapping suggestion backfill: could not store suggestion for download " <>
+                "#{id}: #{inspect(changeset.errors)}; marking it searched"
+            )
+
+            stamp_searched(id)
+        end
 
       _gone ->
         :ok
     end
+  end
+
+  # Bypasses the changeset so a row that cannot validate still leaves the
+  # pending set.
+  defp stamp_searched(id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Download
+    |> where([d], d.id == ^id)
+    |> Repo.update_all(set: [path_mapping_searched_at: now])
+
+    :ok
   end
 end

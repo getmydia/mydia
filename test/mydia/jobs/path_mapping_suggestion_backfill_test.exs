@@ -5,6 +5,7 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfillTest do
   use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.DownloadsFixtures
+  import ExUnit.CaptureLog
   import Mydia.MediaFixtures
 
   alias Mydia.Downloads
@@ -96,6 +97,21 @@ defmodule Mydia.Jobs.PathMappingSuggestionBackfillTest do
     assert_enqueued(worker: PathMappingSuggestionBackfill)
 
     Oban.drain_queue(queue: :maintenance)
+    assert PathMappingSuggestionBackfill.pending_ids(10) == []
+  end
+
+  test "stamps a row whose write fails validation so it cannot loop" do
+    d = mismatch("/downloads/complete/Fictional.Salt.Meridian.S01E01")
+
+    Mydia.Repo.update_all(
+      from(x in Mydia.Downloads.Download, where: x.id == ^d.id),
+      set: [title: ""]
+    )
+
+    log = capture_log(fn -> assert :ok = perform_job(PathMappingSuggestionBackfill, %{}) end)
+
+    assert log =~ d.id
+    assert %DateTime{} = Downloads.get_download!(d.id).path_mapping_searched_at
     assert PathMappingSuggestionBackfill.pending_ids(10) == []
   end
 
