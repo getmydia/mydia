@@ -800,6 +800,7 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert updated.import_last_error =~ "can't access the download path"
       assert updated.import_failure_reason == "path_mapping_mismatch"
       assert updated.import_reported_path == "/no/such/path/exists"
+      assert %DateTime{} = updated.path_mapping_searched_at
     end
 
     @tag :tmp_dir

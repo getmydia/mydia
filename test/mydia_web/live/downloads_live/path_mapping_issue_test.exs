@@ -66,7 +66,13 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     end
 
     test "applying a mapping persists it and re-runs every affected mismatch", %{conn: conn} do
-      a = mismatch_download("/downloads/complete/A")
+      a =
+        mismatch_download("/downloads/complete/A", %{
+          path_mapping_remote_prefix: "/downloads/complete",
+          path_mapping_local_prefix: "/data/torrents/complete",
+          path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
       b = mismatch_download("/downloads/complete/B")
       # a non-failed download under the same prefix must NOT be touched
       untouched =
@@ -87,6 +93,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
       assert mapping.local_prefix == "/data/torrents/complete"
 
       assert is_nil(Downloads.get_download!(a.id).import_failed_at)
+      assert is_nil(Downloads.get_download!(a.id).path_mapping_remote_prefix)
       assert is_nil(Downloads.get_download!(b.id).import_failed_at)
       # untouched was never failed, so its (nil) state is unchanged and no job runs
       refute is_nil(Downloads.get_download!(untouched.id))

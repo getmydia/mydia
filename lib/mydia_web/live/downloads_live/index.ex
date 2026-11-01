@@ -1574,14 +1574,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
     downloads = Downloads.list_path_mapping_mismatches_under_prefix(remote_prefix)
 
     Enum.each(downloads, fn download ->
-      case Downloads.update_download(download, %{
-             import_retry_count: 0,
-             import_last_error: nil,
-             import_failure_reason: nil,
-             import_reported_path: nil,
-             import_next_retry_at: nil,
-             import_failed_at: nil
-           }) do
+      case Downloads.update_download(
+             download,
+             Mydia.Downloads.Download.cleared_import_failure_attrs()
+           ) do
         {:ok, updated} ->
           %{
             "download_id" => updated.id,

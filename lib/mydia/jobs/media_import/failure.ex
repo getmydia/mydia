@@ -3,7 +3,9 @@ defmodule Mydia.Jobs.MediaImport.Failure do
 
   require Logger
   alias Mydia.Downloads
+  alias Mydia.Downloads.Download
   alias Mydia.Jobs.MediaImport
+  alias Mydia.Library.PathMapping
 
   # Exponential backoff schedule in seconds
   # 1 min, 5 min, 15 min, 1 hour, 4 hours, 12 hours, 24 hours, then 24 hours indefinitely
@@ -76,14 +78,16 @@ defmodule Mydia.Jobs.MediaImport.Failure do
     error_message = format_import_error(reason, download)
     import_failed_at = download.import_failed_at || DateTime.utc_now()
 
-    attrs = %{
-      import_retry_count: attempt,
-      import_last_error: error_message,
-      import_failure_reason: failure_reason_tag(reason),
-      import_reported_path: failure_reported_path(reason),
-      import_next_retry_at: next_retry_at,
-      import_failed_at: import_failed_at
-    }
+    attrs =
+      %{
+        import_retry_count: attempt,
+        import_last_error: error_message,
+        import_failure_reason: failure_reason_tag(reason),
+        import_reported_path: failure_reported_path(reason),
+        import_next_retry_at: next_retry_at,
+        import_failed_at: import_failed_at
+      }
+      |> Map.merge(path_mapping_attrs(reason))
 
     case update_retry_metadata(download, attrs) do
       {:ok, _updated} ->
@@ -149,6 +153,14 @@ defmodule Mydia.Jobs.MediaImport.Failure do
   defp failure_reported_path({:partial_import, _reason}), do: nil
   defp failure_reported_path({_tag, path}) when is_binary(path), do: path
   defp failure_reported_path(_), do: nil
+
+  # A mount mismatch searches for the directory Mydia can see once, here in the
+  # background job, so the Issues tab only reads the result (#1315). Any other
+  # failure drops a suggestion an earlier mismatch left behind.
+  defp path_mapping_attrs({:path_mapping_mismatch, path}) when is_binary(path),
+    do: PathMapping.suggestion_attrs(path)
+
+  defp path_mapping_attrs(_reason), do: Download.cleared_path_mapping_attrs()
 
   # Format error messages with actionable context for users
   defp format_import_error(:no_client, download) do

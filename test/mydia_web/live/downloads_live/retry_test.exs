@@ -41,7 +41,10 @@ defmodule MydiaWeb.DownloadsLive.RetryTest do
           import_failed_at: now(),
           import_last_error: "path mismatch",
           import_failure_reason: "path_mapping_mismatch",
-          import_reported_path: "/remote/downloads/x"
+          import_reported_path: "/remote/downloads/x",
+          path_mapping_remote_prefix: "/downloads/complete",
+          path_mapping_local_prefix: "/data/torrents/complete",
+          path_mapping_searched_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
       assert {:ok, _job} = Retry.requeue_import(failed)
@@ -50,6 +53,9 @@ defmodule MydiaWeb.DownloadsLive.RetryTest do
       assert is_nil(reloaded.import_failure_reason)
       assert is_nil(reloaded.import_reported_path)
       assert is_nil(reloaded.import_last_error)
+      assert reloaded.path_mapping_remote_prefix == nil
+      assert reloaded.path_mapping_local_prefix == nil
+      assert reloaded.path_mapping_searched_at == nil
     end
   end
 end
