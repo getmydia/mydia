@@ -24,7 +24,7 @@ spec:
     spec:
       initContainers:
         - name: plausible-init
-          image: ghcr.io/plausible/community-edition:v3.2.0
+          image: ghcr.io/plausible/community-edition:v3.2.1
           command:
             - /bin/sh
             - -c
@@ -36,7 +36,7 @@ spec:
                 name: plausible-secrets
       containers:
         - name: plausible
-          image: ghcr.io/plausible/community-edition:v3.2.0
+          image: ghcr.io/plausible/community-edition:v3.2.1
           ports:
             - name: http
               containerPort: 8000
