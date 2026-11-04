@@ -36,15 +36,46 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   """
   def toggle_drawer(js \\ %JS{}), do: JS.dispatch(js, "click", to: "##{@toggle_id}")
 
+  @filters_button "#manual-search-filters-button"
+  @results_pane "#manual-search-results-pane"
+
   @doc """
   Opens the drawer and moves focus into the panel. The panel comes after every
   result row in the DOM, so without this a keyboard user would tab through all
   of them to reach the form.
+
+  It also sets `aria-expanded="true"` on the Filters button and makes the
+  results pane `inert`, so from `sm` up (where the results stay on screen
+  behind the overlay) they leave the tab order and the accessibility tree.
+  LiveView's JS attribute commands survive patches, so a filter change while
+  the drawer is open does not undo them.
   """
-  def open_drawer, do: JS.focus_first(toggle_drawer(), to: "#manual-search-filter-sheet")
+  def open_drawer do
+    toggle_drawer()
+    |> JS.set_attribute({"aria-expanded", "true"}, to: @filters_button)
+    |> JS.set_attribute({"inert", ""}, to: @results_pane)
+    |> JS.focus_first(to: "#manual-search-filter-sheet")
+  end
 
   @doc "Closes the drawer and returns focus to the Filters button."
-  def close_drawer, do: JS.focus(toggle_drawer(), to: "#manual-search-filters-button")
+  def close_drawer, do: after_close(toggle_drawer())
+
+  @doc """
+  What the drawer's overlay does on click, besides the toggle. The overlay is a
+  `<label for>`, so the browser already unchecks the toggle; dispatching
+  another click here would reopen it. This only undoes what `open_drawer/0`
+  set and returns focus to the Filters button.
+  """
+  def overlay_close, do: after_close(%JS{})
+
+  # The state every close path shares: collapsed button, live results, focus
+  # back where the drawer was opened from.
+  defp after_close(js) do
+    js
+    |> JS.set_attribute({"aria-expanded", "false"}, to: @filters_button)
+    |> JS.remove_attribute("inert", to: @results_pane)
+    |> JS.focus(to: @filters_button)
+  end
 
   attr :quality_filters, :list, default: []
   attr :source_filters, :list, default: []
@@ -72,6 +103,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         class="btn btn-sm btn-primary shrink-0"
         phx-click={open_drawer()}
         aria-controls="manual-search-filter-sheet"
+        aria-expanded="false"
       >
         <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
         {gettext("Filters")}
@@ -122,6 +154,65 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     """
   end
 
+  attr :visible?, :boolean, required: true
+  attr :quality_filters, :list, default: []
+  attr :source_filters, :list, default: []
+  attr :codec_filters, :list, default: []
+  attr :indexer_filters, :list, default: []
+  attr :filter_options, :map, default: %{sources: [], codecs: [], indexers: []}
+  attr :quality_options, :list, default: []
+  attr :min_seeders, :integer, default: 0
+  attr :close_after_grab, :boolean, default: false
+  attr :result_count, :integer, default: 0
+  slot :inner_block, required: true, doc: "The results pane, wrapped in the drawer's content."
+
+  @doc """
+  The dialog's `#manual-search-drawer`: the toggle, the content holding the
+  slot (the results pane) and the `filter_panel/1` as the side. The root and
+  the content always render; the toggle and the side only when `visible?` is
+  true, which is when the Filters button exists.
+  """
+  def filter_drawer(assigns) do
+    ~H"""
+    <div
+      id="manual-search-drawer"
+      class="drawer drawer-end relative min-h-0 flex-1 grid-rows-[minmax(0,1fr)]"
+    >
+      <input
+        :if={@visible?}
+        id={toggle_id()}
+        type="checkbox"
+        class="drawer-toggle peer"
+        tabindex="-1"
+        phx-update="ignore"
+        aria-label={gettext("Show filters")}
+      />
+      <%!-- Phones only: the sheet covers nearly the whole dialog, so once it has
+           slid in (the visibility flip waits out the transition) the
+           results pane is hidden and its controls leave the tab order. From
+           `sm` up the results stay visible, dimmed behind the overlay. --%>
+      <div class={[
+        "drawer-content flex min-h-0 flex-col",
+        "max-sm:transition-[visibility] max-sm:duration-300 max-sm:peer-checked:invisible"
+      ]}>
+        {render_slot(@inner_block)}
+      </div>
+      <.filter_panel
+        :if={@visible?}
+        quality_filters={@quality_filters}
+        source_filters={@source_filters}
+        codec_filters={@codec_filters}
+        indexer_filters={@indexer_filters}
+        filter_options={@filter_options}
+        quality_options={@quality_options}
+        min_seeders={@min_seeders}
+        close_after_grab={@close_after_grab}
+        result_count={@result_count}
+      />
+    </div>
+    """
+  end
+
   attr :quality_filters, :list, default: []
   attr :source_filters, :list, default: []
   attr :codec_filters, :list, default: []
@@ -146,7 +237,12 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
       "drawer-side absolute! inset-0! h-full! z-30 col-start-1!",
       "peer-checked:[transition:opacity_.2s_ease-out_.1s,visibility_0s]"
     ]}>
-      <label for={toggle_id()} class="drawer-overlay" aria-label={gettext("Close filters")}></label>
+      <label
+        for={toggle_id()}
+        class="drawer-overlay"
+        aria-label={gettext("Close filters")}
+        phx-click={overlay_close()}
+      ></label>
       <aside
         id="manual-search-filter-sheet"
         aria-label={gettext("Filters")}

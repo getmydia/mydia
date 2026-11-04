@@ -60,6 +60,14 @@ Replace both with one daisyUI `drawer drawer-end` inside the dialog body:
   the panel.
 - `toggle_sheet/1` and `#manual-search-filter-backdrop` are deleted.
 
+Open state is mirrored with LiveView JS attribute commands, which survive
+patches. Opening sets `aria-expanded="true"` on `#manual-search-filters-button`
+and `inert` on `#manual-search-results-pane`; every close path (the close
+button, Show results and the overlay) sets `aria-expanded="false"`, removes
+`inert` and returns focus to the Filters button. The overlay's `phx-click` does
+this without dispatching a click on the toggle, because the label's native
+activation already unchecks it.
+
 The drawer is closed at every breakpoint, so the results always get the full
 dialog width. Phones get a side drawer instead of the bottom sheet, which keeps
 one behaviour across sizes.
@@ -106,17 +114,21 @@ wide screens rows stay one line. The existing `title` hover attribute stays.
 
 ### 5. Compact seeder counts
 
-New `format_seeders/1` in `manual_search_components.ex`:
+New `format_seeders/1` in `MydiaWeb.MediaLive.Show.Formatters`, imported by
+`manual_search_components.ex`:
 
 | input | output |
 | --- | --- |
 | `nil` | unchanged (`—` / "Usenet" handling stays at the call sites) |
 | `< 10_000` | exact, e.g. `9999` |
-| `10_000..999_999` | one decimal `k`, trailing `.0` dropped: `12.3k`, `123k` |
-| `>= 1_000_000` | one decimal `M`, same rule: `1.2M` |
+| `10_000..99_999` | one truncated decimal `k`, trailing `.0` dropped: `12.3k` |
+| `100_000..999_999` | whole thousands: `123k` |
+| `1_000_000..9_999_999` | one truncated decimal `M`, trailing `.0` dropped: `1.2M` |
+| `>= 10_000_000` | whole millions: `12M` |
 
-Values at or above 100k drop the decimal (`123k`, not `123.4k`) so the
-string is at most five characters (`12.3k`). Used at all three render sites: the
+Values at or above 100k drop the decimal (`123k`, not `123.4k`), and so do
+those at or above 10M (`12M`, not `12.3M`), so the string is at most five
+characters (`12.3k`, `9.9M`). Used at all three render sites: the
 no-profile score badge, the mobile badge and the `lg` Seeds column. Each
 badge gets a `title` with the exact count via the existing
 `ngettext("%{count} seeder", ...)`. `seeder_tone/1` keeps using the raw

@@ -279,6 +279,51 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
     assert box > 1152, "at 2560px the dialog was only #{box}px wide"
   end
 
+  # Where the filter sheet is and whether it is showing, measured against the
+  # dialog box.
+  defp panel_state(session) do
+    eval_js(
+      session,
+      rect_js() <>
+        """
+        var box = r(document.querySelector("#manual-search-modal .modal-box"));
+        var el = document.getElementById("manual-search-filter-sheet");
+        var p = r(el);
+        var shown = p.w > 0 && getComputedStyle(el.parentElement).visibility !== "hidden";
+        return {shown: shown,
+                inside: p.l >= box.l - 1 && p.r <= box.r + 1 && p.t >= box.t - 1 && p.b <= box.b + 1};
+        """
+    )
+  end
+
+  # The drawer's accessibility state: the toggle, the Filters button's
+  # `aria-expanded`, whether the results pane is `inert`, and the focused id.
+  defp drawer_state(session) do
+    eval_js(session, """
+    var btn = document.getElementById("manual-search-filters-button");
+    return {
+      checked: document.getElementById("manual-search-filter-toggle").checked,
+      expanded: btn.getAttribute("aria-expanded"),
+      inert: document.getElementById("manual-search-results-pane").hasAttribute("inert"),
+      focus: document.activeElement && document.activeElement.id
+    };
+    """)
+  end
+
+  defp open_drawer_settled(session) do
+    js_click(session, "#manual-search-filters-button")
+
+    eventually(
+      fn ->
+        case panel_state(session) do
+          %{"shown" => true, "inside" => true} -> {:ok, true}
+          _ -> :error
+        end
+      end,
+      description: "the filter drawer to open and settle inside the dialog"
+    )
+  end
+
   for {w, h} <- [{1143, 800}, {1440, 900}, {390, 844}] do
     @tag :feature
     test "filters start closed and open inside the dialog at #{w}px", %{
@@ -287,22 +332,12 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
     } do
       open_dialog(session, movie, {unquote(w), unquote(h)})
 
-      panel = fn ->
-        eval_js(
-          session,
-          rect_js() <>
-            """
-            var box = r(document.querySelector("#manual-search-modal .modal-box"));
-            var el = document.getElementById("manual-search-filter-sheet");
-            var p = r(el);
-            var shown = p.w > 0 && getComputedStyle(el.parentElement).visibility !== "hidden";
-            return {shown: shown,
-                    inside: p.l >= box.l - 1 && p.r <= box.r + 1 && p.t >= box.t - 1 && p.b <= box.b + 1};
-            """
-        )
-      end
+      panel = fn -> panel_state(session) end
 
       assert %{"shown" => false} = panel.()
+
+      assert %{"checked" => false, "expanded" => "false", "inert" => false} =
+               drawer_state(session)
 
       js_click(session, "#manual-search-filters-button")
 
@@ -326,6 +361,13 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       )
 
       assert %{"inside" => true} = panel.()
+      assert %{"checked" => true, "expanded" => "true", "inert" => true} = drawer_state(session)
+
+      # A filter change patches the results behind the open drawer. The patch
+      # must neither close it nor strip the JS-set `inert`.
+      tick(session, "quality", "1080p", "quality", "1080")
+      assert %{"shown" => true, "inside" => true} = panel.()
+      assert %{"checked" => true, "expanded" => "true", "inert" => true} = drawer_state(session)
 
       # From `sm` up the sheet covers only part of the dialog, so the results
       # stay visible (dimmed) behind the overlay. Waits out the 300ms a phone
@@ -361,10 +403,33 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       )
 
       # Closing hands focus back to the button that opened the drawer.
-      assert eval_js(
-               session,
-               "return document.activeElement && document.activeElement.id;"
-             ) == "manual-search-filters-button"
+      assert %{"checked" => false, "expanded" => "false", "inert" => false} =
+               state = drawer_state(session)
+
+      assert state["focus"] == "manual-search-filters-button"
+    end
+
+    @tag :feature
+    test "the overlay closes the drawer and restores its state at #{w}px", %{
+      session: session,
+      movie: movie
+    } do
+      open_dialog(session, movie, {unquote(w), unquote(h)})
+      open_drawer_settled(session)
+      assert %{"checked" => true, "expanded" => "true", "inert" => true} = drawer_state(session)
+
+      # The overlay is a `<label for>`: its native activation unchecks the
+      # toggle, and its `phx-click` does the rest.
+      js_click(session, ".drawer-overlay")
+
+      eventually(fn -> if panel_state(session)["shown"], do: :error, else: {:ok, true} end,
+        description: "the filter drawer to close"
+      )
+
+      assert %{"checked" => false, "expanded" => "false", "inert" => false} =
+               state = drawer_state(session)
+
+      assert state["focus"] == "manual-search-filters-button"
     end
   end
 

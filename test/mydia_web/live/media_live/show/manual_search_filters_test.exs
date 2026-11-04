@@ -63,6 +63,11 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
       # the button and the panel.
       assert click =~ "focus_first"
       assert click =~ "#manual-search-filter-sheet"
+      # Opening marks the button expanded and makes the results inert.
+      assert click =~ "aria-expanded"
+      assert click =~ "inert"
+      assert click =~ "#manual-search-results-pane"
+      assert LazyHTML.attribute(button, "aria-expanded") == ["false"]
       assert button |> LazyHTML.query(".badge") |> LazyHTML.text() =~ "1"
     end
   end
@@ -95,7 +100,23 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
         assert click =~ "#manual-search-filter-toggle"
         assert click =~ "#manual-search-filters-button"
         assert click =~ "focus"
+        assert click =~ "remove_attr"
+        assert click =~ "inert"
       end
+
+      # The overlay is a `<label for>`: the browser unchecks the toggle, so
+      # its click must not dispatch another one, only undo the open state.
+      overlay_click =
+        doc
+        |> LazyHTML.query(".drawer-overlay")
+        |> LazyHTML.attribute("phx-click")
+        |> hd()
+
+      refute overlay_click =~ "dispatch"
+      assert overlay_click =~ "remove_attr"
+      assert overlay_click =~ "inert"
+      assert overlay_click =~ "aria-expanded"
+      assert overlay_click =~ "#manual-search-filters-button"
 
       assert doc |> LazyHTML.query("#manual-search-show-results") |> LazyHTML.text() =~
                "Show 3 results"
