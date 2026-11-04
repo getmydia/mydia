@@ -200,9 +200,10 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
   end
 
   # Ticks one checkbox of the filter form and waits until the server has
-  # answered with a chip naming it. The drawer stays closed: the checkbox is
-  # clicked by script, which does not need it on screen. Each tick round-trips through `filter_search`, and a click
-  # landing before the previous diff could be undone by it, so waiting only
+  # answered with a chip naming it. The checkbox is clicked by script, so it
+  # works whether the drawer is open or closed. Each tick round-trips through
+  # `filter_search`, and a click landing before the previous diff could be
+  # undone by it, so waiting only
   # for the chip to exist (true from the first indexer on) is not enough.
   defp tick(session, field, value, dimension, shows) do
     js_click(
