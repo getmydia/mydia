@@ -234,7 +234,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               max="50"
               step="1"
               value={@min_seeders}
-              class="range range-primary range-sm"
+              class="range range-primary"
               phx-debounce="200"
             />
           </fieldset>

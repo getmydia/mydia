@@ -972,11 +972,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             :if={@filters_visible?}
             id={ManualSearchFilters.toggle_id()}
             type="checkbox"
-            class="drawer-toggle"
+            class="drawer-toggle peer"
             phx-update="ignore"
             aria-label={gettext("Show filters")}
           />
-          <div class="drawer-content flex min-h-0 flex-col">
+          <%!-- Hidden once the sheet has slid in (the visibility flip waits out
+               the transition), so the results pane's controls leave the tab
+               order while the sheet covers them. --%>
+          <div class="drawer-content flex min-h-0 flex-col transition-[visibility] duration-300 peer-checked:invisible">
             <div id="manual-search-results-pane" class="min-h-0 flex-1 overflow-y-auto">
               <%!-- Inline Download Error --%>
               <%= if @download_error do %>

@@ -343,8 +343,14 @@
    getBoundingClientRect() of the active link on every LiveView patch to place
    #dock-indicator, and a display:none rect is all zeros, which would strand the
    indicator in the viewport corner. */
-#main-drawer:checked ~ .drawer-content #mobile-dock {
+#main-drawer:checked ~ .drawer-content #mobile-dock,
+body:has(#manual-search-modal) #mobile-dock {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
 }
+
+/* The manual search dialog is full screen on phones and sits above the dock
+   (z-999 against z-50), so the dock is already invisible there. Taking it out
+   of layout interaction also keeps the dialog's bottom button (Show results)
+   from colliding with it in the tap target audit and the tab order. */
