@@ -14,6 +14,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/subtitle_stream_index.dart';
+import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
@@ -92,9 +93,20 @@ class _MpvLikePlayer extends PlatformPlayer implements SelectedMpvSubtitle {
     _publish();
   }
 
+  /// When set, the next `sub-add` lands in mpv (entry listed, `sid` and the
+  /// current track moved) and then the call waits on it before returning,
+  /// so another pick can run in between.
+  Completer<void>? holdNextSubAdd;
+  bool subAddHeld = false;
+
+  /// A `sub-add` mpv rejects: media_kit only logs it, so the list and `sid`
+  /// stay as they were.
+  bool failSubAdd = false;
+
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     subtitleTracks.add(track);
+    if ((track.data || track.uri) && failSubAdd) return;
     if (track.data || track.uri) {
       final nextId = [...containerSubtitles, ..._subtitles]
               .map((t) => int.tryParse(t.id) ?? 0)
@@ -114,6 +126,14 @@ class _MpvLikePlayer extends PlatformPlayer implements SelectedMpvSubtitle {
     }
     state = state.copyWith(track: state.track.copyWith(subtitle: track));
     trackController.add(state.track);
+    // media_kit has finished its work (and released its lock) by here; only
+    // the caller's continuation is still to run.
+    final hold = (track.data || track.uri) ? holdNextSubAdd : null;
+    if (hold != null) {
+      holdNextSubAdd = null;
+      subAddHeld = true;
+      await hold.future;
+    }
   }
 
   /// What mpv reports once a frame has decoded; the embedded preference's
@@ -182,19 +202,26 @@ class _Server extends ScriptedMydiaTransport {
 _Server _server({
   required Map<String, dynamic> file,
   String? subtitleContent = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi\n',
+  bool withPreference = true,
 }) {
   return _Server((request, index) {
     switch (request.operation) {
       case 'SubtitleContent':
         return {
           '__typename': 'RootQueryType',
-          'subtitleContent': subtitleContent,
+          // A body of its own per track: media_kit compares data tracks
+          // by their body.
+          'subtitleContent': subtitleContent == null
+              ? null
+              : '$subtitleContent\nNOTE ${request.variables.values.join(' ')}\n',
         };
       case 'MovieDetail':
         return movieDetailResponse(positionSeconds: 0, files: [file]);
       case 'MovieSubtitlePreference':
         return subtitlePreferenceResponse(preferences: {
-          'file-1': preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+          'file-1': withPreference
+              ? preferredSubtitleObject(mode: 'TRACK', language: 'eng')
+              : null,
         });
       case 'MovieSegments':
         return movieSegmentsResponse();
@@ -579,6 +606,113 @@ void main() {
 
         expect(binding.describe(0).selectedSubtitle, 'mk_1');
         expect(toasts.skip(toastsBefore), isNot(contains(_notCarried)));
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+  });
+
+  group("recording a sub-added file under mpv's sid", () {
+    /// Direct play of a file whose container carries one Japanese track, and
+    /// whose server lists English and French copies of embedded streams and
+    /// a German sidecar.
+    Map<String, dynamic> serverTracks() {
+      final file = mediaFileWithSubtitle(
+        trackId: '3',
+        language: 'eng',
+        title: 'English',
+        url: null,
+        embedded: true,
+      );
+      List<dynamic> track(Map<String, dynamic> other) =>
+          other['subtitles'] as List;
+      return {
+        ...file,
+        'subtitles': [
+          ...track(file),
+          ...track(mediaFileWithSubtitle(
+            trackId: '4',
+            language: 'fre',
+            title: 'French',
+            url: null,
+            embedded: true,
+          )),
+          ...track(mediaFileWithSubtitle(
+            trackId: '5',
+            language: 'ger',
+            title: 'German',
+            url: '/api/player/v1/subtitles/file/file-1/5?format=vtt',
+          )),
+        ],
+      };
+    }
+
+    testWidgets(
+        'a pick superseded while mpv adds its file does not record the newer '
+        "pick's entry as its own", (tester) async {
+      await mockHttpResponse(() async {
+        final player = _MpvLikePlayer(containerSubtitles: const [
+          SubtitleTrack('1', 'Japanese', 'jpn'),
+        ]);
+        final server = _server(file: serverTracks(), withPreference: false);
+        final binding = await _mount(tester, server, player);
+
+        // Picked before mpv's probe, while the server's embedded copies are
+        // the list on screen. English is added (mpv entry 2), and its call
+        // is still returning when French is picked and added (entry 3, now
+        // mpv's sid).
+        player.holdNextSubAdd = Completer<void>();
+        final english = player.holdNextSubAdd!;
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => player.subAddHeld);
+        unawaited(binding.selectTrack(TrackKind.subtitle, '4'));
+        await pumpUntil(tester, () => player.subtitleTracks.length == 2);
+        await tester.pump(const Duration(milliseconds: 100));
+        english.complete();
+        await tester.pump(const Duration(milliseconds: 100));
+        player.probe();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(binding.describe(0).selectedSubtitle, '4');
+        final offered = binding.describe(0).subtitleTracks.map((t) => t.id);
+        expect(offered, contains('4'),
+            reason: "mpv's entry 3 is the French file and is listed as it");
+        expect(offered, isNot(contains('3')),
+            reason: 'the superseded English pick must not claim entry 3');
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets('a sub-add mpv rejected hides no container track',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final player = _MpvLikePlayer(containerSubtitles: const [
+          SubtitleTrack('1', 'Japanese', 'jpn'),
+        ]);
+        final server = _server(file: serverTracks(), withPreference: false);
+        final binding = await _mount(tester, server, player);
+        player.probe();
+        await tester.pump();
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, 'mk_1'));
+        await pumpUntil(tester, () => player.selectedSubtitleId == '1');
+
+        // mpv rejects the German sidecar, so its sid stays on the
+        // container's track.
+        player.failSubAdd = true;
+        unawaited(binding.selectTrack(TrackKind.subtitle, '5'));
+        await pumpUntil(tester, () => player.subtitleTracks.length == 2);
+        await tester.pump(const Duration(milliseconds: 100));
+        player.publishTrackList();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(player.selectedSubtitleId, '1');
+        expect(binding.describe(0).subtitleTracks.map((t) => t.id),
+            contains('mk_1'),
+            reason: "the container's own track is not the rejected file");
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump();

@@ -4099,7 +4099,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// server track it copies (null for Off and mpv's own tracks), and the list
   /// derived again in case mpv published first. When mpv cannot say which
   /// entry it is, nothing is recorded, so no listed track is ever hidden on
-  /// a guess.
+  /// a guess: not when `sid` did not move (media_kit only logs a failed
+  /// `sub-add`, leaving whatever was selected), and not when a newer pick
+  /// was issued meanwhile. [_switchGate] does not serialise two picks, so
+  /// the newer one's `sub-add` can land before this reads `sid`.
   Future<bool> _setSubtitleTrack(
     int generation,
     SubtitleTrack track, {
@@ -4108,15 +4111,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _switchGate.pass(() => _canApplySubtitleSelection(generation), () async {
         final player = _player;
         if (player == null) return;
+        bool stillThisPick() =>
+            _canApplySubtitleSelection(generation) &&
+            identical(_player, player);
+        final subAdd = track.data || track.uri;
+        final sidBefore = subAdd ? await selectedMpvSubtitleId(player) : null;
+        if (subAdd && !stillThisPick()) return;
         _monitor?.noteInterruption();
         await player.setSubtitleTrack(track);
-        if (!(track.data || track.uri) ||
-            !mounted ||
-            !identical(_player, player)) {
-          return;
-        }
+        if (!subAdd || !stillThisPick()) return;
         final sid = await selectedMpvSubtitleId(player);
-        if (sid == null || !mounted || !identical(_player, player)) return;
+        if (sid == null || sid == sidBefore || !stillThisPick()) return;
         _subAddedSubtitles.add((mpvId: 'mk_$sid', serverId: serverId));
         _refreshSubtitleTracks();
       });
