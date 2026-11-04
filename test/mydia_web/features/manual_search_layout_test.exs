@@ -130,7 +130,7 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
             if (!chip) return false;
             return (chip.textContent + " " + (chip.title || "")).indexOf(arguments[1]) !== -1;
             """,
-            ["manual-search-lg-chip-#{dimension}", shows]
+            ["manual-search-chip-#{dimension}", shows]
           )
 
         if named, do: {:ok, true}, else: :error

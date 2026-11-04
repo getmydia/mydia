@@ -375,6 +375,24 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       render_component(&Modals.manual_search_modal/1, assigns)
     end
 
+    test "filters live in a closed drawer and the chips render once" do
+      html = modal_html(%{}, %{quality_filters: ["1080p"], raw_results_empty?: false})
+      doc = LazyHTML.from_fragment(html)
+
+      toggle =
+        LazyHTML.query(
+          doc,
+          "#manual-search-drawer > input#manual-search-filter-toggle.drawer-toggle"
+        )
+
+      assert [_] = Enum.to_list(toggle)
+      assert LazyHTML.attribute(toggle, "checked") == []
+      assert LazyHTML.attribute(toggle, "phx-update") == ["ignore"]
+
+      assert [_] = doc |> LazyHTML.query("#manual-search-chip-quality") |> Enum.to_list()
+      assert [] = doc |> LazyHTML.query("[id^='manual-search-lg-chip']") |> Enum.to_list()
+    end
+
     test "shows the existing file name with its full name on hover" do
       existing = %MydiaWeb.MediaLive.Show.ExistingFiles{
         kind: :file,

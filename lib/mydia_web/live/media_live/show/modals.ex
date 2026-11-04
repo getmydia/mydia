@@ -964,11 +964,121 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           indexer_filters={@indexer_filters}
           min_seeders={@min_seeders}
         />
-        <div class={[
-          "flex min-h-0 flex-1 flex-col",
-          @filters_visible? &&
-            "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]"
-        ]}>
+        <div
+          id="manual-search-drawer"
+          class="drawer drawer-end relative min-h-0 flex-1 grid-rows-[minmax(0,1fr)]"
+        >
+          <input
+            :if={@filters_visible?}
+            id={ManualSearchFilters.toggle_id()}
+            type="checkbox"
+            class="drawer-toggle"
+            phx-update="ignore"
+            aria-label={gettext("Show filters")}
+          />
+          <div class="drawer-content flex min-h-0 flex-col">
+            <div id="manual-search-results-pane" class="min-h-0 flex-1 overflow-y-auto">
+              <%!-- Inline Download Error --%>
+              <%= if @download_error do %>
+                <div class="alert alert-error mx-4 mt-3 mb-1">
+                  <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
+                  <span class="text-sm">{@download_error}</span>
+                </div>
+              <% end %>
+              <.blocking_banner
+                :if={@blocking != []}
+                blocking={@blocking}
+                context_type={@manual_search_context && @manual_search_context.type}
+              />
+              <%!-- Search progress --%>
+              <div class="px-4 pt-3">
+                <.indexer_search_status
+                  progress={@indexer_progress}
+                  cardigann={@cardigann_summary}
+                  retry_event="retry_indexer"
+                  retest_paused_event="retest_paused"
+                />
+              </div>
+              <%!-- Loading State --%>
+              <%= if @searching && @results_empty? do %>
+                <div
+                  id="manual-search-loading-state"
+                  class="flex flex-col items-center justify-center py-16"
+                >
+                  <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+                  <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                    {gettext("Searching across indexers...")}
+                  </h3>
+                  <p class="text-base-content/50">
+                    {gettext("This may take a few seconds")}
+                  </p>
+                </div>
+              <% end %>
+              <%!-- Empty State: nothing found, or filtered down to nothing --%>
+              <%= if @results_empty? && !@searching do %>
+                <%= if @raw_results_empty? do %>
+                  <div class="flex flex-col items-center justify-center py-16 text-center px-4">
+                    <.icon
+                      name="hero-exclamation-circle"
+                      class="w-16 h-16 text-base-content/20 mb-4"
+                    />
+                    <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                      {gettext("No Results Found")}
+                    </h3>
+                    <p class="text-base-content/50 max-w-sm mb-4">
+                      {gettext("We couldn't find any releases matching \"%{query}\"",
+                        query: @manual_search_query
+                      )}
+                    </p>
+                    <div class="text-sm text-base-content/60">
+                      <p>
+                        {gettext(
+                          "Try different keywords, adjusting filters, or checking your indexers."
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                <% else %>
+                  <div
+                    id="manual-search-empty-filtered"
+                    class="flex flex-col items-center justify-center px-4 py-16 text-center"
+                  >
+                    <.icon name="hero-funnel" class="mb-4 h-14 w-14 text-base-content/20" />
+                    <h3 class="mb-2 text-lg font-semibold text-base-content/70">
+                      {gettext("No releases match these filters")}
+                    </h3>
+                    <button
+                      type="button"
+                      id="manual-search-empty-clear"
+                      class="btn btn-primary btn-sm"
+                      phx-click="clear_search_filters"
+                    >
+                      {gettext("Clear filters")}
+                    </button>
+                  </div>
+                <% end %>
+              <% end %>
+              <%!-- Results List --%>
+              <%= if !@results_empty? do %>
+                <.results_header
+                  sort_by={@sort_by}
+                  profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
+                />
+                <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
+                  <li
+                    :for={{id, result} <- @streams.search_results}
+                    id={id}
+                    class={[
+                      "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
+                      row_grid()
+                    ]}
+                  >
+                    <.release_row id={id} result={result} manual_ranking_opts={@manual_ranking_opts} />
+                  </li>
+                </ul>
+              <% end %>
+            </div>
+          </div>
           <ManualSearchFilters.filter_panel
             :if={@filters_visible?}
             quality_filters={@quality_filters}
@@ -981,118 +1091,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             close_after_grab={@close_after_grab}
             result_count={@result_count}
           />
-          <div id="manual-search-results-pane" class="min-h-0 flex-1 overflow-y-auto">
-            <%!-- Inline Download Error --%>
-            <%= if @download_error do %>
-              <div class="alert alert-error mx-4 mt-3 mb-1">
-                <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
-                <span class="text-sm">{@download_error}</span>
-              </div>
-            <% end %>
-            <.blocking_banner
-              :if={@blocking != []}
-              blocking={@blocking}
-              context_type={@manual_search_context && @manual_search_context.type}
-            />
-            <%!-- Search progress, then the lg filter chips. Stacked: beside the
-                 card, the chips crushed it to a sliver (#1311). --%>
-            <div class="px-4 pt-3">
-              <.indexer_search_status
-                progress={@indexer_progress}
-                cardigann={@cardigann_summary}
-                retry_event="retry_indexer"
-                retest_paused_event="retest_paused"
-              />
-              <ManualSearchFilters.active_chips
-                :if={@filters_visible?}
-                id_prefix="manual-search-lg-chip"
-                class="hidden flex-wrap pb-3 lg:flex"
-                quality_filters={@quality_filters}
-                source_filters={@source_filters}
-                codec_filters={@codec_filters}
-                indexer_filters={@indexer_filters}
-                min_seeders={@min_seeders}
-              />
-            </div>
-            <%!-- Loading State --%>
-            <%= if @searching && @results_empty? do %>
-              <div
-                id="manual-search-loading-state"
-                class="flex flex-col items-center justify-center py-16"
-              >
-                <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-                <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                  {gettext("Searching across indexers...")}
-                </h3>
-                <p class="text-base-content/50">
-                  {gettext("This may take a few seconds")}
-                </p>
-              </div>
-            <% end %>
-            <%!-- Empty State: nothing found, or filtered down to nothing --%>
-            <%= if @results_empty? && !@searching do %>
-              <%= if @raw_results_empty? do %>
-                <div class="flex flex-col items-center justify-center py-16 text-center px-4">
-                  <.icon
-                    name="hero-exclamation-circle"
-                    class="w-16 h-16 text-base-content/20 mb-4"
-                  />
-                  <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                    {gettext("No Results Found")}
-                  </h3>
-                  <p class="text-base-content/50 max-w-sm mb-4">
-                    {gettext("We couldn't find any releases matching \"%{query}\"",
-                      query: @manual_search_query
-                    )}
-                  </p>
-                  <div class="text-sm text-base-content/60">
-                    <p>
-                      {gettext(
-                        "Try different keywords, adjusting filters, or checking your indexers."
-                      )}
-                    </p>
-                  </div>
-                </div>
-              <% else %>
-                <div
-                  id="manual-search-empty-filtered"
-                  class="flex flex-col items-center justify-center px-4 py-16 text-center"
-                >
-                  <.icon name="hero-funnel" class="mb-4 h-14 w-14 text-base-content/20" />
-                  <h3 class="mb-2 text-lg font-semibold text-base-content/70">
-                    {gettext("No releases match these filters")}
-                  </h3>
-                  <button
-                    type="button"
-                    id="manual-search-empty-clear"
-                    class="btn btn-primary btn-sm"
-                    phx-click="clear_search_filters"
-                  >
-                    {gettext("Clear filters")}
-                  </button>
-                </div>
-              <% end %>
-            <% end %>
-            <%!-- Results List --%>
-            <%= if !@results_empty? do %>
-              <.results_header
-                sort_by={@sort_by}
-                profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
-              />
-              <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
-                <li
-                  :for={{id, result} <- @streams.search_results}
-                  id={id}
-                  class={[
-                    "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
-                    row_grid()
-                  ]}
-                >
-                  <.release_row id={id} result={result} manual_ranking_opts={@manual_ranking_opts} />
-                </li>
-              </ul>
-            <% end %>
-          </div>
         </div>
       </div>
       <div class="modal-backdrop" phx-click="close_manual_search_modal"></div>

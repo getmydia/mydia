@@ -1,8 +1,9 @@
 defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   @moduledoc """
-  The manual search dialog's filter controls: the chip bar of active filters,
-  the filter panel (a bottom sheet below `lg`, a sidebar from `lg`) and the
-  sort menu. `MydiaWeb.MediaLive.Show` handles their events.
+  The manual search dialog's filter controls: the toolbar of active filters,
+  the filter panel (a daisyUI drawer inside the dialog, closed until the
+  Filters button opens it) and the sort menu. `MydiaWeb.MediaLive.Show`
+  handles their events.
   """
   use Phoenix.Component
   use Gettext, backend: MydiaWeb.Gettext
@@ -22,19 +23,18 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     ]
   end
 
+  @toggle_id "manual-search-filter-toggle"
+
+  @doc "The id of the drawer's `drawer-toggle` checkbox, rendered by the dialog."
+  def toggle_id, do: @toggle_id
+
   @doc """
-  Opens or closes the filter sheet below `lg`. Client-side only, and LiveView
-  keeps the toggled classes across patches. From `lg` the panel is a sidebar
-  and the backdrop never shows.
+  Opens or closes the filter drawer by clicking its daisyUI `drawer-toggle`
+  checkbox. Client-side only; the checkbox is `phx-update="ignore"`, so
+  LiveView patches never reset it. Buttons use this rather than a bare
+  `<label for>` so they stay keyboard-operable.
   """
-  def toggle_sheet(js \\ %JS{}) do
-    js
-    |> JS.toggle_class("max-lg:hidden", to: "#manual-search-filter-sheet")
-    |> JS.toggle_class("hidden", to: "#manual-search-filter-backdrop")
-    |> JS.toggle_attribute({"aria-expanded", "true", "false"},
-      to: "#manual-search-filters-button"
-    )
-  end
+  def toggle_drawer(js \\ %JS{}), do: JS.dispatch(js, "click", to: "##{@toggle_id}")
 
   attr :quality_filters, :list, default: []
   attr :source_filters, :list, default: []
@@ -43,9 +43,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :min_seeders, :integer, default: 0
 
   @doc """
-  The Filters button and active chips, below `lg`. The row scrolls sideways
-  on purpose when the chips outgrow it, so it carries `data-scroll-rail` for
-  the mobile layout sweep.
+  The Filters button and active chips, at every breakpoint. The row scrolls
+  sideways on purpose when the chips outgrow it, so it carries
+  `data-scroll-rail` for the mobile layout sweep.
   """
   def chip_bar(assigns) do
     assigns = assign(assigns, :active, active_count(assigns))
@@ -54,15 +54,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     <div
       id="manual-search-chip-bar"
       data-scroll-rail
-      class="flex items-center gap-2 overflow-x-auto border-b border-base-300 bg-base-200/50 px-3 py-2 lg:hidden"
+      class="flex items-center gap-2 overflow-x-auto border-b border-base-300 bg-base-200/50 px-3 py-2"
     >
       <button
         type="button"
         id="manual-search-filters-button"
         class="btn btn-sm btn-primary shrink-0"
-        phx-click={toggle_sheet()}
+        phx-click={toggle_drawer()}
         aria-controls="manual-search-filter-sheet"
-        aria-expanded="false"
       >
         <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
         {gettext("Filters")}
@@ -85,9 +84,6 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :indexer_filters, :list, default: []
   attr :min_seeders, :integer, default: 0
   attr :class, :any, default: nil
-  # The dialog renders the chips twice (the chip bar below `lg`, beneath the
-  # indexer status card from `lg`), so each copy needs its own DOM ids.
-  attr :id_prefix, :string, default: "manual-search-chip"
 
   @doc "One removable chip per active filter dimension."
   def active_chips(assigns) do
@@ -97,7 +93,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
     <div :if={@chips != []} class={["flex items-center gap-2", @class]}>
       <span
         :for={{dimension, label, title} <- @chips}
-        id={"#{@id_prefix}-#{dimension}"}
+        id={"manual-search-chip-#{dimension}"}
         class="badge badge-soft badge-primary shrink-0 gap-1 whitespace-nowrap"
         title={title}
       >
@@ -127,146 +123,147 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   attr :result_count, :integer, default: 0
 
   @doc """
-  The filter form. Below `lg` a bottom sheet anchored to the dialog box
-  (hidden until the Filters button opens it); from `lg` a sidebar. The modal
-  box must be `relative` for the sheet to anchor to it.
+  The filter form, as the `drawer-side` of the dialog's `#manual-search-drawer`.
+  Closed until the toggle is checked; the overlay, the close button and Show
+  results close it.
   """
   def filter_panel(assigns) do
     ~H"""
-    <div
-      id="manual-search-filter-backdrop"
-      class="hidden lg:hidden absolute inset-0 z-20 bg-base-300/60"
-      phx-click={toggle_sheet()}
-      aria-hidden="true"
-    >
-    </div>
-    <aside
-      id="manual-search-filter-sheet"
-      aria-label={gettext("Filters")}
-      class={[
-        "flex flex-col bg-base-100",
-        "max-lg:hidden max-lg:absolute max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30",
-        "max-lg:max-h-[75%] max-lg:rounded-t-box max-lg:shadow-2xl",
-        "lg:min-h-0 lg:border-r lg:border-base-300 lg:bg-base-200/40"
-      ]}
-    >
-      <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-base-content/20 lg:hidden"></div>
-      <div class="flex shrink-0 items-center justify-between px-4 pt-3 pb-1">
-        <h4 class="font-semibold">{gettext("Filters")}</h4>
-        <button
-          type="button"
-          id="manual-search-clear-filters"
-          class="btn btn-ghost btn-xs"
-          phx-click="clear_search_filters"
-        >
-          {gettext("Reset")}
-        </button>
-      </div>
-      <form
-        id="manual-search-filter-form"
-        phx-change="filter_search"
-        class="min-h-0 flex-1 overflow-y-auto px-4 pb-3"
+    <div class="drawer-side absolute! inset-0! h-full! z-30 col-start-1!">
+      <label for={toggle_id()} class="drawer-overlay" aria-label={gettext("Close filters")}></label>
+      <aside
+        id="manual-search-filter-sheet"
+        aria-label={gettext("Filters")}
+        class="flex h-full w-80 max-w-[85%] flex-col bg-base-100 shadow-2xl"
       >
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Quality")}</legend>
-          <div class="filter flex-wrap gap-1">
-            <input
-              :for={quality <- @quality_options}
-              type="checkbox"
-              class="btn btn-sm"
-              name="quality[]"
-              value={quality}
-              aria-label={quality_label(quality)}
-              checked={quality in @quality_filters}
-            />
+        <div class="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-1">
+          <h4 class="font-semibold">{gettext("Filters")}</h4>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              id="manual-search-clear-filters"
+              class="btn btn-ghost btn-xs"
+              phx-click="clear_search_filters"
+            >
+              {gettext("Reset")}
+            </button>
+            <button
+              type="button"
+              id="manual-search-filter-close"
+              class="btn btn-ghost btn-sm btn-square"
+              phx-click={toggle_drawer()}
+              aria-label={gettext("Close filters")}
+            >
+              <.icon name="hero-x-mark" class="w-4 h-4" />
+            </button>
           </div>
-        </fieldset>
-        <fieldset :if={@filter_options.indexers != []} class="fieldset">
-          <legend class="fieldset-legend">{gettext("Indexer")}</legend>
-          <ul class="menu menu-sm w-full p-0">
-            <li :for={{name, count} <- @filter_options.indexers}>
-              <label class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-sm checkbox-primary"
-                  name="indexer[]"
-                  value={name}
-                  checked={name in @indexer_filters}
-                />
-                <span class="flex-1 truncate">{name}</span>
-                <span class="text-xs text-base-content/60">{count}</span>
-              </label>
-            </li>
-          </ul>
-        </fieldset>
-        <fieldset :if={@filter_options.sources != []} class="fieldset">
-          <legend class="fieldset-legend">{gettext("Source")}</legend>
-          <div class="filter flex-wrap gap-1">
+        </div>
+        <form
+          id="manual-search-filter-form"
+          phx-change="filter_search"
+          class="min-h-0 flex-1 overflow-y-auto px-4 pb-3"
+        >
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">{gettext("Quality")}</legend>
+            <div class="filter flex-wrap gap-1">
+              <input
+                :for={quality <- @quality_options}
+                type="checkbox"
+                class="btn btn-sm"
+                name="quality[]"
+                value={quality}
+                aria-label={quality_label(quality)}
+                checked={quality in @quality_filters}
+              />
+            </div>
+          </fieldset>
+          <fieldset :if={@filter_options.indexers != []} class="fieldset">
+            <legend class="fieldset-legend">{gettext("Indexer")}</legend>
+            <ul class="menu menu-sm w-full p-0">
+              <li :for={{name, count} <- @filter_options.indexers}>
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm checkbox-primary"
+                    name="indexer[]"
+                    value={name}
+                    checked={name in @indexer_filters}
+                  />
+                  <span class="flex-1 truncate">{name}</span>
+                  <span class="text-xs text-base-content/60">{count}</span>
+                </label>
+              </li>
+            </ul>
+          </fieldset>
+          <fieldset :if={@filter_options.sources != []} class="fieldset">
+            <legend class="fieldset-legend">{gettext("Source")}</legend>
+            <div class="filter flex-wrap gap-1">
+              <input
+                :for={source <- @filter_options.sources}
+                type="checkbox"
+                class="btn btn-sm"
+                name="source[]"
+                value={source}
+                aria-label={source}
+                checked={source in @source_filters}
+              />
+            </div>
+          </fieldset>
+          <fieldset :if={@filter_options.codecs != []} class="fieldset">
+            <legend class="fieldset-legend">{gettext("Codec")}</legend>
+            <div class="filter flex-wrap gap-1">
+              <input
+                :for={codec <- @filter_options.codecs}
+                type="checkbox"
+                class="btn btn-sm"
+                name="codec[]"
+                value={codec}
+                aria-label={codec}
+                checked={codec in @codec_filters}
+              />
+            </div>
+          </fieldset>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">
+              {gettext("Minimum seeders: %{count}", count: @min_seeders)}
+            </legend>
             <input
-              :for={source <- @filter_options.sources}
-              type="checkbox"
-              class="btn btn-sm"
-              name="source[]"
-              value={source}
-              aria-label={source}
-              checked={source in @source_filters}
+              type="range"
+              name="min_seeders"
+              min="0"
+              max="50"
+              step="1"
+              value={@min_seeders}
+              class="range range-primary range-sm"
+              phx-debounce="200"
             />
-          </div>
-        </fieldset>
-        <fieldset :if={@filter_options.codecs != []} class="fieldset">
-          <legend class="fieldset-legend">{gettext("Codec")}</legend>
-          <div class="filter flex-wrap gap-1">
-            <input
-              :for={codec <- @filter_options.codecs}
-              type="checkbox"
-              class="btn btn-sm"
-              name="codec[]"
-              value={codec}
-              aria-label={codec}
-              checked={codec in @codec_filters}
-            />
-          </div>
-        </fieldset>
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">
-            {gettext("Minimum seeders: %{count}", count: @min_seeders)}
-          </legend>
+          </fieldset>
+        </form>
+        <label
+          class="label shrink-0 cursor-pointer justify-between gap-2 border-t border-base-300 px-4 py-2"
+          id="close-after-grab-toggle"
+          title={gettext("Close this dialog as soon as a release is grabbed")}
+        >
+          <span class="text-sm">{gettext("Close after grabbing")}</span>
           <input
-            type="range"
-            name="min_seeders"
-            min="0"
-            max="50"
-            step="1"
-            value={@min_seeders}
-            class="range range-primary range-sm"
-            phx-debounce="200"
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+            checked={@close_after_grab}
+            phx-click="toggle_close_after_grab"
           />
-        </fieldset>
-      </form>
-      <label
-        class="label shrink-0 cursor-pointer justify-between gap-2 border-t border-base-300 px-4 py-2"
-        id="close-after-grab-toggle"
-        title={gettext("Close this dialog as soon as a release is grabbed")}
-      >
-        <span class="text-sm">{gettext("Close after grabbing")}</span>
-        <input
-          type="checkbox"
-          class="toggle toggle-sm toggle-primary"
-          checked={@close_after_grab}
-          phx-click="toggle_close_after_grab"
-        />
-      </label>
-      <div class="shrink-0 border-t border-base-300 p-3 lg:hidden">
-        <button
-          type="button"
-          id="manual-search-show-results"
-          class="btn btn-primary btn-block"
-          phx-click={toggle_sheet()}
-        >
-          {ngettext("Show %{count} result", "Show %{count} results", @result_count)}
-        </button>
-      </div>
-    </aside>
+        </label>
+        <div class="shrink-0 border-t border-base-300 p-3">
+          <button
+            type="button"
+            id="manual-search-show-results"
+            class="btn btn-primary btn-block"
+            phx-click={toggle_drawer()}
+          >
+            {ngettext("Show %{count} result", "Show %{count} results", @result_count)}
+          </button>
+        </div>
+      </aside>
+    </div>
     """
   end
 

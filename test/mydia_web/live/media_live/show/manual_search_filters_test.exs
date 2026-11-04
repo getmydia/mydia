@@ -45,4 +45,53 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
 
     assert html =~ "REMUX, BluRay"
   end
+
+  describe "chip_bar/1" do
+    test "shows at every breakpoint with a Filters button that opens the drawer" do
+      doc =
+        render_component(&ManualSearchFilters.chip_bar/1, quality_filters: ["1080p"])
+        |> LazyHTML.from_fragment()
+
+      [bar] = doc |> LazyHTML.query("#manual-search-chip-bar") |> Enum.to_list()
+      refute bar |> LazyHTML.attribute("class") |> hd() =~ "lg:hidden"
+
+      button = LazyHTML.query(doc, "#manual-search-filters-button")
+      assert LazyHTML.attribute(button, "aria-controls") == ["manual-search-filter-sheet"]
+      assert button |> LazyHTML.attribute("phx-click") |> hd() =~ "#manual-search-filter-toggle"
+      assert button |> LazyHTML.query(".badge") |> LazyHTML.text() =~ "1"
+    end
+  end
+
+  describe "filter_panel/1" do
+    defp panel_doc do
+      render_component(&ManualSearchFilters.filter_panel/1, result_count: 3)
+      |> LazyHTML.from_fragment()
+    end
+
+    test "is a daisyUI drawer side with an overlay bound to the toggle" do
+      doc = panel_doc()
+
+      assert [_] =
+               doc |> LazyHTML.query(".drawer-side #manual-search-filter-sheet") |> Enum.to_list()
+
+      assert doc
+             |> LazyHTML.query(".drawer-side > label.drawer-overlay")
+             |> LazyHTML.attribute("for") ==
+               ["manual-search-filter-toggle"]
+
+      assert [] = doc |> LazyHTML.query("#manual-search-filter-backdrop") |> Enum.to_list()
+    end
+
+    test "close and show-results controls dispatch to the toggle" do
+      doc = panel_doc()
+
+      for id <- ["#manual-search-filter-close", "#manual-search-show-results"] do
+        assert doc |> LazyHTML.query(id) |> LazyHTML.attribute("phx-click") |> hd() =~
+                 "#manual-search-filter-toggle"
+      end
+
+      assert doc |> LazyHTML.query("#manual-search-show-results") |> LazyHTML.text() =~
+               "Show 3 results"
+    end
+  end
 end

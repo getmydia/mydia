@@ -77,9 +77,12 @@ the reason in the module doc.
 `ManualSearchFilters.chip_bar/1` drops `lg:hidden` and becomes the only place
 filters are summarised:
 
-- A `label.btn.btn-sm` "Filters" `for="manual-search-filter-toggle"`, wrapped
-  in an `indicator` with an `indicator-item badge badge-primary badge-sm`
-  showing the active filter count when it is non-zero.
+- A `btn btn-sm btn-primary` "Filters" button that clicks the drawer's
+  `#manual-search-filter-toggle` checkbox (a button rather than a bare
+  `label for`, so it stays keyboard-operable). The active filter count is an
+  inline `badge badge-sm` inside the button, shown when it is non-zero. A
+  daisyUI `indicator` badge would sit outside the button's box, and the
+  toolbar's `overflow-x-auto` would clip it.
 - The removable active chips after it, as now.
 
 The second chip copy rendered from `lg` under the indexer status card
