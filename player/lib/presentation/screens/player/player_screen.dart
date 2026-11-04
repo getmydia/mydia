@@ -4083,7 +4083,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             mounted &&
             identical(_player, player)) {
           _subAddedSubtitles.add((
-            title: track.title ?? 'external',
+            title: track.title ??
+                'external', // l10n-ignore: media_kit's sub-add default, matched not shown
             language: track.language ?? 'auto',
             // Bodies are cached by server track id; see
             // [_resolveMediaKitSubtitleTrack].
