@@ -13,7 +13,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     only: [get_search_quality_badge: 1, profile_score_breakdown: 2]
 
   import MydiaWeb.MediaLive.Show.Formatters,
-    only: [format_search_size: 1, format_relative_time_short: 1]
+    only: [format_search_size: 1, format_relative_time_short: 1, format_seeders: 1]
 
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
   import MydiaWeb.MediaLive.Show.TrackerTermsBadges, only: [terms_badges: 1]
@@ -153,17 +153,13 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           seeder_tone(@result.seeders) == :mid && "bg-warning/20 text-warning",
           seeder_tone(@result.seeders) in [:low, :none] && "bg-base-300 text-base-content/70"
         ]}
-        title={
-          if is_nil(@result.seeders),
-            do: gettext("No seeder count (Usenet)"),
-            else: ngettext("%{count} seeder", "%{count} seeders", @result.seeders)
-        }
+        title={seeders_title(@result.seeders)}
       >
         <%= if is_nil(@result.seeders) do %>
           —
         <% else %>
           <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-          {@result.seeders}
+          {format_seeders(@result.seeders)}
         <% end %>
       </div>
     <% end %>
@@ -202,13 +198,13 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
             seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
             seeder_tone(@result.seeders) == :none && "badge-ghost"
           ]}
-          title={if is_nil(@result.seeders), do: gettext("No seeder count (Usenet)")}
+          title={seeders_title(@result.seeders)}
         >
           <%= if is_nil(@result.seeders) do %>
             —
           <% else %>
             <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
-            {@result.seeders}
+            {format_seeders(@result.seeders)}
           <% end %>
         </span>
         <%!-- Freeleech, upload multiplier and private tracker --%>
@@ -304,17 +300,20 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       {format_search_size(@result)}
     </div>
     <div id={"#{@id}-seeds"} class="hidden self-center lg:block">
-      <span class={[
-        "badge badge-sm",
-        seeder_tone(@result.seeders) == :high && "badge-success",
-        seeder_tone(@result.seeders) == :mid && "badge-warning",
-        seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
-        seeder_tone(@result.seeders) == :none && "badge-ghost"
-      ]}>
+      <span
+        class={[
+          "badge badge-sm",
+          seeder_tone(@result.seeders) == :high && "badge-success",
+          seeder_tone(@result.seeders) == :mid && "badge-warning",
+          seeder_tone(@result.seeders) == :low && "badge-error badge-outline",
+          seeder_tone(@result.seeders) == :none && "badge-ghost"
+        ]}
+        title={seeders_title(@result.seeders)}
+      >
         <%= if is_nil(@result.seeders) do %>
           —
         <% else %>
-          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />{@result.seeders}
+          <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />{format_seeders(@result.seeders)}
         <% end %>
       </span>
     </div>
@@ -388,6 +387,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   defp seeder_tone(n) when n >= 50, do: :high
   defp seeder_tone(n) when n >= 10, do: :mid
   defp seeder_tone(_n), do: :low
+
+  defp seeders_title(nil), do: gettext("No seeder count (Usenet)")
+  defp seeders_title(n), do: ngettext("%{count} seeder", "%{count} seeders", n)
 
   # Only a DateTime has a relative age here; a missing or naive timestamp
   # renders nothing rather than a guess.

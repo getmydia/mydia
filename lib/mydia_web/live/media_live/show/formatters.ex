@@ -151,4 +151,25 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     {init, [last]} = Enum.split(counts, -1)
     gettext("%{init} and %{last}", init: Enum.join(init, ", "), last: last)
   end
+
+  @doc """
+  A seeder count short enough for the manual search Seeds column: exact below
+  10,000, then `12.3k`, `123k`, `1.2M`, `12M`. Truncates rather than rounds,
+  so the label never claims more peers than the tracker reported. Callers
+  render `nil` (no seeder concept, e.g. Usenet) themselves.
+  """
+  def format_seeders(n) when is_integer(n) and n < 10_000, do: Integer.to_string(n)
+  def format_seeders(n) when is_integer(n) and n < 100_000, do: tenths(n, 1_000, "k")
+  def format_seeders(n) when is_integer(n) and n < 1_000_000, do: "#{div(n, 1_000)}k"
+  def format_seeders(n) when is_integer(n) and n < 10_000_000, do: tenths(n, 1_000_000, "M")
+  def format_seeders(n) when is_integer(n), do: "#{div(n, 1_000_000)}M"
+
+  defp tenths(n, unit, suffix) do
+    tenths = div(n, div(unit, 10))
+
+    case rem(tenths, 10) do
+      0 -> "#{div(tenths, 10)}#{suffix}"
+      frac -> "#{div(tenths, 10)}.#{frac}#{suffix}"
+    end
+  end
 end

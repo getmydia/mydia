@@ -575,6 +575,19 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ ~s(id="search-result-00000-1")
     end
 
+    test "large seeder counts render compactly with the exact count on hover" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 123_456})
+      doc = LazyHTML.from_fragment(html)
+
+      cell = LazyHTML.query(doc, "[id$='-seeds'] .badge")
+      assert cell |> LazyHTML.text() |> String.trim() == "123k"
+      assert LazyHTML.attribute(cell, "title") == ["123456 seeders"]
+
+      # The mobile badge and the no-profile circle say the same.
+      refute html =~ ">123456<"
+      assert html =~ ~s(title="123456 seeders")
+    end
+
     test "nil seeders render a placeholder, not 0, in the seeds cell" do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
 
