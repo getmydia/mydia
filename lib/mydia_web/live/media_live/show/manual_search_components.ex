@@ -167,7 +167,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     <div class="list-col-grow flex-1 min-w-0">
       <%!-- Release Title --%>
       <div
-        class="font-medium text-sm leading-tight mb-2 line-clamp-2 lg:line-clamp-1"
+        class="font-medium text-sm leading-tight mb-2 wrap-anywhere"
         title={@result.title}
       >
         {@result.title}

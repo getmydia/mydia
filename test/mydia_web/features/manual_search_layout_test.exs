@@ -18,6 +18,7 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
   @moduletag :feature
 
   @title "Glass.Harbor.2019.1080p.BluRay.x264-GROUP"
+  @long "Glass.Harbor.2019.Directors.Extended.Remastered.1080p.BluRay.REMUX.AVC.DTS-HD.MA.7.1-LONGRELEASEGROUP"
   @magnet "magnet:?xt=urn:btih:" <> String.duplicate("ab", 20)
 
   # Fictional trackers; the winner (most seeders) has the long name.
@@ -51,6 +52,12 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
           seeders: 20,
           indexer: "Saltmarsh Mirror",
           info_url: "https://tracker1.example/details/99"
+        },
+        %{
+          title: @long,
+          seeders: 99_999,
+          indexer: "Ashvale Commons",
+          info_url: "https://tracker3.example/details/77"
         }
       ]
   end
@@ -83,6 +90,49 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       return el ? Math.round(el.getBoundingClientRect().width) : -1;
       """,
       [selector]
+    )
+  end
+
+  defp rect_js do
+    """
+    var r = function (el) { var b = el.getBoundingClientRect();
+      return {l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width}; };
+    """
+  end
+
+  defp open_dialog(session, movie, {w, h}) do
+    login_as_admin(session)
+
+    session
+    |> resize_window(w, h)
+    |> visit_liveview("/media/#{movie.id}")
+
+    js_click(session, "#manual-search-button")
+    assert Wallaby.Browser.has_css?(session, "#indexer-search-status[aria-busy='false']")
+    session
+  end
+
+  # The row whose title contains `needle`, as {title_fits, seeds_overflow_px}.
+  defp row_fit(session, needle) do
+    eval_js(
+      session,
+      rect_js() <>
+        """
+        var needle = arguments[0];
+        var t = Array.from(document.querySelectorAll("#manual-search-results-pane [title]"))
+          .find(function (el) {
+            return el.getAttribute("title") === needle && el.textContent.trim() === needle;
+          });
+        if (!t) return null;
+        var row = t.closest("[id^='search-result-']");
+        var seeds = row.querySelector("[id$='-seeds'] .badge");
+        var cell = seeds.parentElement;
+        return {
+          title_fits: t.scrollHeight <= t.clientHeight + 1 && t.scrollWidth <= t.clientWidth + 1,
+          seeds_overflow: Math.round(r(seeds).r - r(cell).r)
+        };
+        """,
+      [needle]
     )
   end
 
@@ -178,6 +228,74 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       assert %{"links" => 4, "inside" => true} = open_menu(session),
              "at #{unquote(w)}px the merged badge's menu did not open fully on screen " <>
                "with a link per tracker"
+    end
+  end
+
+  @tag :feature
+  test "the dialog uses large screens", %{session: session, movie: movie} do
+    open_dialog(session, movie, {2560, 1440})
+    box = width_of(session, "#manual-search-modal .modal-box")
+    assert box > 1152, "at 2560px the dialog was only #{box}px wide"
+  end
+
+  for {w, h} <- [{1143, 800}, {1440, 900}, {390, 844}] do
+    @tag :feature
+    test "filters start closed and open inside the dialog at #{w}px", %{
+      session: session,
+      movie: movie
+    } do
+      open_dialog(session, movie, {unquote(w), unquote(h)})
+
+      panel = fn ->
+        eval_js(
+          session,
+          rect_js() <>
+            """
+            var box = r(document.querySelector("#manual-search-modal .modal-box"));
+            var el = document.getElementById("manual-search-filter-sheet");
+            var p = r(el);
+            var shown = p.w > 0 && getComputedStyle(el.parentElement).visibility !== "hidden";
+            return {shown: shown,
+                    inside: p.l >= box.l - 1 && p.r <= box.r + 1 && p.t >= box.t - 1 && p.b <= box.b + 1};
+            """
+        )
+      end
+
+      assert %{"shown" => false} = panel.()
+
+      js_click(session, "#manual-search-filters-button")
+
+      # The sheet slides in, so it is measured only once it has settled.
+      eventually(
+        fn ->
+          case panel.() do
+            %{"shown" => true, "inside" => true} -> {:ok, true}
+            _ -> :error
+          end
+        end,
+        description: "the filter drawer to open and settle inside the dialog"
+      )
+
+      assert %{"inside" => true} = panel.()
+
+      js_click(session, "#manual-search-show-results")
+
+      eventually(fn -> if panel.()["shown"], do: :error, else: {:ok, true} end,
+        description: "the filter drawer to close"
+      )
+    end
+  end
+
+  for {w, h} <- [{1143, 800}, {2560, 1440}] do
+    @tag :feature
+    test "a long release name shows in full and 99,999 seeders fit at #{w}px", %{
+      session: session,
+      movie: movie
+    } do
+      open_dialog(session, movie, {unquote(w), unquote(h)})
+
+      assert %{"title_fits" => true, "seeds_overflow" => overflow} = row_fit(session, @long)
+      assert overflow <= 0, "the seeds badge ran #{overflow}px past its column"
     end
   end
 end

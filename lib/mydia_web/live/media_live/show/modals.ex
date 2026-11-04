@@ -857,7 +857,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       <div class={[
         "modal-box relative flex flex-col overflow-hidden p-0",
         "max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none",
-        "sm:h-[90vh] sm:max-w-4xl lg:max-w-6xl"
+        "sm:h-[90vh] sm:max-w-4xl lg:max-w-6xl xl:max-w-[min(120rem,92vw)]"
       ]}>
         <%!-- Header --%>
         <div class="navbar min-h-0 shrink-0 gap-2 border-b border-base-300 px-3 py-2 sm:px-4">
