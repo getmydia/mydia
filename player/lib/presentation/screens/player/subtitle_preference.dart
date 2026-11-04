@@ -23,6 +23,7 @@ import 'subtitle_track_builder.dart'
         RestoreUnavailable,
         SubtitleNotice,
         SubtitleRestore,
+        isMpvNativeSubtitleTrackId,
         nativeTwinOf;
 
 export '../../../core/language/language_equivalents.dart'
@@ -216,6 +217,41 @@ bool shouldApplySubtitlePreference({
   if (viewerChose || switchInFlight || intentPending) return false;
   if (alreadyApplied || !hasTracks || awaitingPlayerTracks) return false;
   return true;
+}
+
+/// How long after the first frame an embedded preference in native direct
+/// play waits for mpv to list its subtitles before fetching the server's copy
+/// instead. See [preferenceWaitsForMpv].
+const embeddedPreferenceBackstop = Duration(seconds: 5);
+
+/// Whether a preference that resolved to [target] should hold off for mpv's
+/// next track-list revision rather than apply now.
+///
+/// The track cap in the open path (`awaitRealTracks`) only bounds how long
+/// playback waits to start. A slow device can pass it before mpv has read the
+/// container's subtitle streams, and the list on screen is then the server's
+/// fallback. Selecting an **embedded** server track there makes the server
+/// extract a stream with ffmpeg that mpv is about to list itself, for free.
+/// So, in native direct play, while mpv has listed no subtitles
+/// ([mpvListedSubtitles] counts mpv's own entries, not auto/no), an embedded
+/// server [target] waits.
+///
+/// Everything else applies at once: a sidecar, which mpv never lists; mpv's
+/// own track; Off (a null [target]); any streamed source, whose subtitles
+/// always come from the server. Once mpv has listed subtitles and the target
+/// is still the server's copy, mpv does not carry it, so waiting longer buys
+/// nothing. [backstopExpired] ([embeddedPreferenceBackstop] after the first
+/// frame) ends the wait, so a preference is delayed, never dropped.
+bool preferenceWaitsForMpv({
+  required bool nativeDirectPlay,
+  required bool mpvListedSubtitles,
+  required bool backstopExpired,
+  required SubtitleTrack? target,
+}) {
+  if (!nativeDirectPlay || mpvListedSubtitles || backstopExpired) return false;
+  return target != null &&
+      target.embedded &&
+      !isMpvNativeSubtitleTrackId(target.id);
 }
 
 /// The `preferredSubtitle` for [fileId] in either root's generated shape.

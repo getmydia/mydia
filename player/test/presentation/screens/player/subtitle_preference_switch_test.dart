@@ -105,6 +105,10 @@ class _MpvLikePlayer extends PlatformPlayer {
     trackController.add(state.track);
   }
 
+  /// What mpv reports once a frame has decoded; the embedded preference's
+  /// backstop is timed from it.
+  void emitFirstFrame() => widthController.add(1920);
+
   /// mpv publishes its revised list, with any `sub-add`ed file in it. mpv's
   /// observer reports it after the command has returned, so a test calls
   /// this once the selection has landed.
@@ -294,8 +298,17 @@ void main() {
       final binding = await _mount(tester, server, player);
       final toasts = _recordToasts(tester);
 
-      // mpv listed no subtitles, so the preference matched the server's list
-      // and is fetching the embedded track's body.
+      // mpv listed no subtitles, so the preference waits for it, until the
+      // backstop five seconds after the first frame; then it matches the
+      // server's list and fetches the embedded track's body. (On the iPad
+      // this came straight at the track cap, before the backstop existed.)
+      //
+      // Still loading meanwhile, as the iPad was: a subtitle switch once
+      // playback has run starts the policy's interruption grace, which would
+      // swallow the stalls that drive the fallback below.
+      player.buffering(true);
+      player.emitFirstFrame();
+      await tester.pump(const Duration(seconds: 5));
       await pumpUntil(tester, () => server.subtitleContentHeld);
       expect(server.subtitleContentHeld, isTrue);
 
@@ -330,6 +343,7 @@ void main() {
       expect(offered, contains(binding.describe(0).selectedSubtitle),
           reason: 'the selected subtitle is a row the viewer sees checked');
 
+      player.buffering(false);
       await _fallBackToTranscode(tester, player);
       await pumpUntil(tester, () => player.subtitleTracks.length == 2);
 

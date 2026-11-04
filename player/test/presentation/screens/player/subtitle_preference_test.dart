@@ -235,6 +235,61 @@ void main() {
     });
   });
 
+  group('preferenceWaitsForMpv', () {
+    const embedded =
+        SubtitleTrack(id: '3', language: 'eng', embedded: true, url: null);
+    const sidecar = SubtitleTrack(
+      id: 'side-1',
+      language: 'eng',
+      url: '/api/player/v1/subtitles/file/file-1/side-1?format=vtt',
+    );
+    const mpvOwn = SubtitleTrack(id: 'mk_1', language: 'eng', embedded: true);
+
+    bool waits({
+      bool nativeDirectPlay = true,
+      bool mpvListedSubtitles = false,
+      bool backstopExpired = false,
+      SubtitleTrack? target = embedded,
+    }) =>
+        preferenceWaitsForMpv(
+          nativeDirectPlay: nativeDirectPlay,
+          mpvListedSubtitles: mpvListedSubtitles,
+          backstopExpired: backstopExpired,
+          target: target,
+        );
+
+    test('an embedded server track waits while mpv has listed nothing', () {
+      expect(waits(), isTrue);
+    });
+
+    test('mpv having listed subtitles ends the wait', () {
+      expect(waits(mpvListedSubtitles: true), isFalse,
+          reason: 'mpv listed its tracks and the preferred one is not among '
+              "them by stream index, so the server's copy is the only one");
+    });
+
+    test('the backstop ends the wait', () {
+      expect(waits(backstopExpired: true), isFalse);
+    });
+
+    test('a sidecar has nothing to wait for', () {
+      expect(waits(target: sidecar), isFalse);
+    });
+
+    test("mpv's own track and Off apply at once", () {
+      expect(waits(target: mpvOwn), isFalse);
+      expect(waits(target: null), isFalse);
+    });
+
+    test('a streamed source never waits', () {
+      expect(waits(nativeDirectPlay: false), isFalse);
+    });
+
+    test('the backstop is five seconds', () {
+      expect(embeddedPreferenceBackstop, const Duration(seconds: 5));
+    });
+  });
+
   group('preferredSubtitleJsonForFile', () {
     // The generated shape of `subtitle_preference.graphql`: a root field, its
     // files, and each file's `preferredSubtitle`. Written as raw JSON because

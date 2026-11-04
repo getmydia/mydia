@@ -682,11 +682,110 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool get _awaitingPlayerTracks =>
       !kIsWeb && _isDirectPlay && !_playerTracksSettled;
 
+  /// Whether mpv's latest track list, for the file now open, has any
+  /// subtitle of its own (auto/no excluded). Rewritten by every
+  /// [_applySubtitleTracks]. See [preferenceWaitsForMpv].
+  bool _mpvListedSubtitles = false;
+
+  /// Whether [embeddedPreferenceBackstop] has run out since the first frame
+  /// of the open now on screen. Reset with the settle gate on every open.
+  bool _embeddedPreferenceBackstopExpired = false;
+
+  /// Watches the open now on screen for its first frame, to start
+  /// [_embeddedPreferenceBackstopTimer]. Separate from
+  /// [_firstFrameSubscription], which only `_openPlayerAndStart` arms and
+  /// which belongs to the startup timeline: a switch landing on direct play
+  /// needs the backstop too.
+  StreamSubscription<int?>? _backstopFirstFrameSubscription;
+  Timer? _embeddedPreferenceBackstopTimer;
+
+  /// Whether an embedded preference is holding off for mpv right now, so the
+  /// backstop only logs when it actually released something.
+  bool _preferenceWaitingForMpv = false;
+
+  /// Whether [_restoreSubtitleIntent] held a carried preference back for mpv
+  /// (see [preferenceWaitsForMpv]) and has to run again on mpv's next
+  /// revision or at the backstop. Only that restore is re-run from there: an
+  /// ordinary carried track keeps its existing one-shot restore.
+  bool _preferenceRestoreDeferred = false;
+
+  bool get _nativeDirectPlay => !kIsWeb && _isDirectPlay;
+
   /// Closes the gate for a new open and returns the token its own wait must
   /// carry to be allowed to reopen it. See [_tracksSettleEpoch].
   int _beginTracksSettle() {
     _playerTracksSettled = false;
+    _cancelEmbeddedPreferenceBackstop();
+    _embeddedPreferenceBackstopExpired = false;
+    _preferenceWaitingForMpv = false;
+    // A restore held back for the previous file is that file's: a switch
+    // landing here runs its own restore for the intent it carries.
+    _preferenceRestoreDeferred = false;
     return ++_tracksSettleEpoch;
+  }
+
+  void _cancelEmbeddedPreferenceBackstop() {
+    unawaited(_backstopFirstFrameSubscription?.cancel());
+    _backstopFirstFrameSubscription = null;
+    _embeddedPreferenceBackstopTimer?.cancel();
+    _embeddedPreferenceBackstopTimer = null;
+  }
+
+  /// Starts [embeddedPreferenceBackstop] at [player]'s first frame for the
+  /// open [epoch] belongs to. Call right after `open()`, once
+  /// [_beginTracksSettle] has handed out [epoch].
+  ///
+  /// When it runs out, a preference still waiting for mpv falls back to the
+  /// server's copy, as it did before the wait existed. If no frame ever
+  /// arrives, nothing fires: the preference keeps waiting for mpv's list,
+  /// which a file that never decodes a frame has no use for anyway.
+  void _armEmbeddedPreferenceBackstop(Player player, int epoch) {
+    if (kIsWeb) return;
+    _cancelEmbeddedPreferenceBackstop();
+    _backstopFirstFrameSubscription = player.stream.width.listen((width) {
+      if (width == null || width <= 0) return;
+      unawaited(_backstopFirstFrameSubscription?.cancel());
+      _backstopFirstFrameSubscription = null;
+      _embeddedPreferenceBackstopTimer = Timer(embeddedPreferenceBackstop, () {
+        _embeddedPreferenceBackstopTimer = null;
+        if (!mounted || !identical(_player, player)) return;
+        if (epoch != _tracksSettleEpoch) return;
+        _embeddedPreferenceBackstopExpired = true;
+        if (_preferenceWaitingForMpv) {
+          debugPrint('[PlayerScreen] mpv listed no subtitles '
+              '${embeddedPreferenceBackstop.inSeconds}s after the first '
+              "frame; applying the subtitle preference from the server");
+        }
+        _resumePreferenceWaitingForMpv();
+      });
+    });
+  }
+
+  /// Gives a preference held back by [preferenceWaitsForMpv] its next
+  /// chance: on mpv's next revision, and at the backstop.
+  void _resumePreferenceWaitingForMpv() {
+    if (_preferenceRestoreDeferred) {
+      _preferenceRestoreDeferred = false;
+      unawaited(_restoreSubtitleIntent());
+    }
+    unawaited(_applySubtitlePreference());
+  }
+
+  /// Whether a preference resolved to [target] holds off for mpv now; logs
+  /// the first time it does for this open.
+  bool _preferenceWaitsForMpv(app_models.SubtitleTrack? target) {
+    final waits = preferenceWaitsForMpv(
+      nativeDirectPlay: _nativeDirectPlay,
+      mpvListedSubtitles: _mpvListedSubtitles,
+      backstopExpired: _embeddedPreferenceBackstopExpired,
+      target: target,
+    );
+    if (waits && !_preferenceWaitingForMpv) {
+      debugPrint('[PlayerScreen] Subtitle preference waits for mpv to list '
+          'embedded ${target?.title ?? target?.language}');
+    }
+    _preferenceWaitingForMpv = waits;
+    return waits;
   }
 
   /// Reopens the gate for the open [epoch] was handed by
@@ -2146,6 +2245,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final tracksSettleEpoch = _beginTracksSettle();
     _subAddedSubtitles.clear();
     await player.open(opening.media, play: false);
+    _armEmbeddedPreferenceBackstop(player, tracksSettleEpoch);
     _detectTracks();
     if (opening.seekAfterOpen) await player.seek(playerTarget);
     await player.play();
@@ -2351,6 +2451,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             tracks: _subtitleTracks,
             streamIndexByMpvId: indices,
           );
+    // The same wait the preference keeps on a fresh open: a switch landing
+    // on direct play reaches here before mpv has listed the new file's
+    // subtitles. The intent stays pending, and mpv's next revision or the
+    // backstop runs this again.
+    if (intent is IntentPreference &&
+        restore is RestoreTrack &&
+        _preferenceWaitsForMpv(restore.track)) {
+      _preferenceRestoreDeferred = true;
+      return;
+    }
     final generation = await _applySubtitleSelection(
       restore is RestoreTrack ? restore.track : null,
       keepNudge: true,
@@ -2428,6 +2538,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // Nothing to select, and nothing to say about it here; see the
         // dartdoc above for why this stays quiet.
         if (target == null) {
+          _preferenceAppliedForPlayback = false;
+          return;
+        }
+        // Past the track cap with mpv still silent, an embedded match is the
+        // server's copy of a stream mpv is about to list itself. Wait for
+        // that list, or the backstop; both call back in here.
+        if (_preferenceWaitsForMpv(target)) {
           _preferenceAppliedForPlayback = false;
           return;
         }
@@ -2903,6 +3020,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     await player.open(opening.media, play: false);
     _playTimeline?.mark('opened');
+    _armEmbeddedPreferenceBackstop(player, tracksSettleEpoch);
 
     // Watches for the first real frame, marks it and logs the timeline's one
     // summary line, then cancels itself -- an explicit subscription rather
@@ -3410,6 +3528,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       mpvTracks.add(appTrack);
       mpvById[appTrack.id] = mkTrack;
     }
+    _mpvListedSubtitles = mpvTracks.isNotEmpty;
 
     // mpv's entries for the server tracks this playback fetched and added
     // are those server tracks, selected as such, so they are listed as them.
@@ -3447,7 +3566,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // complete never produces a second changed one -- so gating this on the
     // comparison, as the rebuild is gated, is a preference that silently never
     // applies. [_applySubtitlePreference] is idempotent past its own flag.
-    unawaited(_applySubtitlePreference());
+    // A carried preference held back for mpv (see [preferenceWaitsForMpv])
+    // gets its next chance here too.
+    _resumePreferenceWaitingForMpv();
   }
 
   /// Re-derive [_subtitleTracks] after the *server's* list changed, against
@@ -5177,6 +5298,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _nowPlayingSubscription?.cancel();
     unawaited(_cancelMediaSessionSubscriptions());
     _firstFrameSubscription?.cancel();
+    _cancelEmbeddedPreferenceBackstop();
     // Flush whatever marks this load reached; a no-op if a first frame (or
     // `_disposePlayer`) already logged the one summary line for this timeline.
     _playTimeline?.logOnce();
@@ -5617,6 +5739,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the next `_initializePlayer` run, and only those flush it.
     await _firstFrameSubscription?.cancel();
     _firstFrameSubscription = null;
+    _cancelEmbeddedPreferenceBackstop();
     _progressService?.stopSync();
     _stopStatsCollector();
 
