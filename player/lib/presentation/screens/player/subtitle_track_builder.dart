@@ -101,15 +101,18 @@ List<SubtitleTrack> resolveSubtitleTracks({
 
 /// A subtitle file this player handed mpv with `sub-add`, as mpv was told to
 /// label it: media_kit passes the track's title, or `external`, and its
-/// language, or `auto`.
-typedef SubAddedSubtitle = ({String title, String language});
+/// language, or `auto`. [serverId] is the server track the file is a copy
+/// of, or null when the player cannot say.
+typedef SubAddedSubtitle = ({String title, String language, String? serverId});
 
-/// The ids of the entries in [mpvTracks] that are files this playback
-/// `sub-add`ed to the file now loaded, [added] in the order they were added.
+/// The entries in [mpvTracks] that are files this playback `sub-add`ed to
+/// the file now loaded, by mpv track id, [added] in the order they were
+/// added.
 ///
 /// Such an entry is a server track the player fetched, already selected as
 /// that server track, so it must not be offered again as a subtitle of its
-/// own. media_kit reports no `external` flag, so the entries are found the
+/// own (see [presentSubAddedAsServerTracks]). media_kit reports no
+/// `external` flag, so the entries are found the
 /// way mpv lays them out: it appends every `sub-add` after what the file
 /// carries, so the added files are the trailing entries, labelled as they
 /// were added. Matched from the end, stopping at the first entry that does
@@ -117,22 +120,58 @@ typedef SubAddedSubtitle = ({String title, String language});
 /// listed. The one gap: a list mpv publishes after a `sub-add` is recorded
 /// but before mpv lists that file can hide the container's last track if
 /// the labels agree, until the next revision corrects it.
-Set<String> subAddedMpvTrackIds({
+Map<String, SubAddedSubtitle> subAddedMpvTracks({
   required List<SubtitleTrack> mpvTracks,
   required List<SubAddedSubtitle> added,
 }) {
-  final ids = <String>{};
+  final byId = <String, SubAddedSubtitle>{};
   var i = mpvTracks.length - 1;
   var j = added.length - 1;
   while (i >= 0 && j >= 0) {
     final entry = mpvTracks[i];
     final file = added[j];
     if (entry.title != file.title || entry.language != file.language) break;
-    ids.add(entry.id);
+    byId[entry.id] = file;
     i--;
     j--;
   }
-  return ids;
+  return byId;
+}
+
+/// [mpvTracks] with each entry for a `sub-add`ed file ([subAddedMpvTracks])
+/// shown as the server track it is a copy of, so the track selected as that
+/// server track is a row of the list rather than missing from it.
+///
+/// An embedded server track takes the entry's place, once even when it was
+/// added more than once. A sidecar's entry is dropped instead:
+/// [resolveSubtitleTracks] already lists every deliverable sidecar beside
+/// mpv's tracks. An entry whose server track is unknown is dropped too,
+/// since offering it would list the same subtitle under a second name.
+///
+/// Empty when every entry is an added file: mpv has listed nothing of the
+/// file's own yet, and [resolveSubtitleTracks] should keep falling back to
+/// the server's list, which offers the added track as itself.
+List<SubtitleTrack> presentSubAddedAsServerTracks({
+  required List<SubtitleTrack> mpvTracks,
+  required List<SubAddedSubtitle> added,
+  required List<SubtitleTrack> serverTracks,
+}) {
+  final addedById = subAddedMpvTracks(mpvTracks: mpvTracks, added: added);
+  if (addedById.length == mpvTracks.length) return const [];
+  final shown = <String>{};
+  final result = <SubtitleTrack>[];
+  for (final entry in mpvTracks) {
+    final file = addedById[entry.id];
+    if (file == null) {
+      result.add(entry);
+      continue;
+    }
+    final server = serverTracks.where((t) => t.id == file.serverId).firstOrNull;
+    if (server != null && server.embedded && shown.add(server.id)) {
+      result.add(server);
+    }
+  }
+  return result;
 }
 
 /// Whether an in-flight subtitle selection's result should still be applied

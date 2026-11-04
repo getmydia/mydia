@@ -778,8 +778,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   final Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
   /// The subtitle files `sub-add`ed to the file now loaded, oldest first, so
-  /// mpv's entries for them are not offered as subtitles of their own; see
-  /// [subAddedMpvTrackIds]. Emptied on every open, since mpv drops them when
+  /// mpv's entries for them are listed as the server tracks they copy; see
+  /// [presentSubAddedAsServerTracks]. Emptied on every open, since mpv drops them when
   /// it loads a new file.
   final List<SubAddedSubtitle> _subAddedSubtitles = [];
 
@@ -3412,16 +3412,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     // mpv's entries for the server tracks this playback fetched and added
-    // are those server tracks, already selectable and selected as such.
-    final added = subAddedMpvTrackIds(
-      mpvTracks: mpvTracks,
-      added: _subAddedSubtitles,
-    );
-    mpvTracks.removeWhere((t) => added.contains(t.id));
-
+    // are those server tracks, selected as such, so they are listed as them.
     final derived = resolveSubtitleTracks(
       serverTracks: _serverSubtitleTracks,
-      mpvTracks: mpvTracks,
+      mpvTracks: presentSubAddedAsServerTracks(
+        mpvTracks: mpvTracks,
+        added: _subAddedSubtitles,
+        serverTracks: _serverSubtitleTracks,
+      ),
       isDirectPlay: _isDirectPlay,
       imageSidecars: !kIsWeb,
     );
@@ -3966,6 +3964,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           _subAddedSubtitles.add((
             title: track.title ?? 'external',
             language: track.language ?? 'auto',
+            // Bodies are cached by server track id; see
+            // [_resolveMediaKitSubtitleTrack].
+            serverId: _mediaKitSubtitleTrackMap.entries
+                .where((e) =>
+                    !isMpvNativeSubtitleTrackId(e.key) && e.value == track)
+                .firstOrNull
+                ?.key,
           ));
           _refreshSubtitleTracks();
         }

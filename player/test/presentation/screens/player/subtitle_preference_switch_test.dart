@@ -318,12 +318,17 @@ void main() {
       expect(binding.describe(0).selectedSubtitle, '3',
           reason: "after mpv lists the added file, the selection is still the "
               "server's track, not mpv's entry for the added file or nothing");
+      // `subtitleTracks` is `_subtitleTracks`, the list the subtitle sheet is
+      // built from, so this is also the sheet's rows.
+      final offered = binding.describe(0).subtitleTracks.map((t) => t.id);
       expect(
-        binding.describe(0).subtitleTracks.map((t) => t.id),
-        ['mk_1', 'mk_2'],
-        reason: "mpv's entry for the added file is the server's track, not a "
-            'subtitle of its own to offer',
+        offered,
+        ['mk_1', 'mk_2', '3'],
+        reason: "mpv's entry for the added file is listed as the server's "
+            'track it copies, in its place, and not as a subtitle of its own',
       );
+      expect(offered, contains(binding.describe(0).selectedSubtitle),
+          reason: 'the selected subtitle is a row the viewer sees checked');
 
       await _fallBackToTranscode(tester, player);
       await pumpUntil(tester, () => player.subtitleTracks.length == 2);

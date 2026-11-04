@@ -864,36 +864,34 @@ void main() {
     });
   });
 
-  group('subAddedMpvTrackIds', () {
+  group('subAddedMpvTracks', () {
     const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
     const signs = SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Signs');
     const fetchedFull =
         SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full');
+    const addedFull = (title: 'Full', language: 'eng', serverId: '4');
 
     test('the trailing entries labelled as added are the added files', () {
       expect(
-        subAddedMpvTrackIds(
+        subAddedMpvTracks(
           mpvTracks: const [full, signs, fetchedFull],
-          added: const [(title: 'Full', language: 'eng')],
+          added: const [addedFull],
         ),
-        {'mk_3'},
+        {'mk_3': addedFull},
       );
     });
 
-    test('a container track sharing the label is not hidden', () {
+    test('a container track sharing the label is not taken for one', () {
       // Nothing was added, or mpv has not listed the added file yet and its
       // last container entry carries another label.
       expect(
-        subAddedMpvTrackIds(
-          mpvTracks: const [full, signs],
-          added: const [],
-        ),
+        subAddedMpvTracks(mpvTracks: const [full, signs], added: const []),
         isEmpty,
       );
       expect(
-        subAddedMpvTrackIds(
+        subAddedMpvTracks(
           mpvTracks: const [full, signs],
-          added: const [(title: 'Full', language: 'eng')],
+          added: const [addedFull],
         ),
         isEmpty,
       );
@@ -902,15 +900,88 @@ void main() {
     test('several added files are matched newest last', () {
       const fetchedSigns =
           SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Signs');
+      const addedSigns = (title: 'Signs', language: 'eng', serverId: '5');
       expect(
-        subAddedMpvTrackIds(
+        subAddedMpvTracks(
           mpvTracks: const [full, signs, fetchedFull, fetchedSigns],
-          added: const [
-            (title: 'Full', language: 'eng'),
-            (title: 'Signs', language: 'eng'),
+          added: const [addedFull, addedSigns],
+        ).keys,
+        unorderedEquals(['mk_3', 'mk_4']),
+      );
+    });
+  });
+
+  group('presentSubAddedAsServerTracks', () {
+    const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
+    const signs = SubtitleTrack(id: 'mk_2', language: 'jpn', title: 'Signs');
+    const serverFull =
+        SubtitleTrack(id: '4', language: 'eng', title: 'Full', embedded: true);
+    const serverSidecar =
+        SubtitleTrack(id: 'side-1', language: 'eng', title: 'Fan');
+    const serverTracks = [serverFull, serverSidecar];
+
+    test("an embedded server track takes its added file's row", () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            signs,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full'),
           ],
+          added: const [(title: 'Full', language: 'eng', serverId: '4')],
+          serverTracks: serverTracks,
         ),
-        {'mk_3', 'mk_4'},
+        [full, signs, serverFull],
+      );
+    });
+
+    test('a track added twice is listed once', () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full'),
+            SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
+          ],
+          added: const [
+            (title: 'Full', language: 'eng', serverId: '4'),
+            (title: 'Full', language: 'eng', serverId: '4'),
+          ],
+          serverTracks: serverTracks,
+        ),
+        [full, serverFull],
+      );
+    });
+
+    test('a sidecar or an unknown copy is dropped, not listed twice', () {
+      // `resolveSubtitleTracks` lists every deliverable sidecar already.
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Fan'),
+            SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
+          ],
+          added: const [
+            (title: 'Fan', language: 'eng', serverId: 'side-1'),
+            (title: 'Full', language: 'eng', serverId: null),
+          ],
+          serverTracks: serverTracks,
+        ),
+        [full],
+      );
+    });
+
+    test('only added files means mpv has listed nothing of its own', () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full'),
+          ],
+          added: const [(title: 'Full', language: 'eng', serverId: '4')],
+          serverTracks: serverTracks,
+        ),
+        isEmpty,
       );
     });
   });
