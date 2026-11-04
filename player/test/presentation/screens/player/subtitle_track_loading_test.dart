@@ -755,6 +755,37 @@ void main() {
       );
     });
 
+    test('carries the preference when it, not the viewer, chose', () {
+      // Whatever it landed on: nothing a revision left selected, a server
+      // track, or an mpv track with no index to map it by.
+      for (final selected in [null, serverEnglish, mpvEnglish]) {
+        expect(
+          subtitleIntentBeforeSwitch(
+            selected: selected,
+            viewerChose: false,
+            selectedStreamIndex: null,
+            serverTracks: serverList,
+            preferenceApplied: true,
+          ),
+          isA<IntentPreference>(),
+          reason: 'selected: ${selected?.id}',
+        );
+      }
+    });
+
+    test("a viewer's pick wins over an applied preference", () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: null,
+          viewerChose: true,
+          selectedStreamIndex: null,
+          serverTracks: serverList,
+          preferenceApplied: true,
+        ),
+        isA<IntentOff>(),
+      );
+    });
+
     test('carries a server track as itself', () {
       for (final track in [sidecar, serverEnglish]) {
         expect(
@@ -829,6 +860,130 @@ void main() {
           serverTracks: serverList,
         ),
         isA<IntentTrack>().having((i) => i.track, 'track', serverEnglish),
+      );
+    });
+  });
+
+  group('subAddedMpvTracks', () {
+    const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
+    const signs = SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Signs');
+    const fetchedFull =
+        SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full');
+    const addedFull = (mpvId: 'mk_3', serverId: '4');
+
+    test("the entries mpv selected for each sub-add are the added files", () {
+      expect(
+        subAddedMpvTracks(
+          mpvTracks: const [full, signs, fetchedFull],
+          added: const [addedFull],
+        ),
+        {'mk_3': addedFull},
+      );
+    });
+
+    test('a container track is never taken for one, whatever its label', () {
+      // mpv has not listed the added file yet, and the container's last
+      // track carries the very label the added file was given.
+      const fullLast =
+          SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Full');
+      expect(
+        subAddedMpvTracks(
+          mpvTracks: const [signs, fullLast],
+          added: const [addedFull],
+        ),
+        isEmpty,
+      );
+      expect(
+        subAddedMpvTracks(mpvTracks: const [full, signs], added: const []),
+        isEmpty,
+      );
+    });
+
+    test('several added files are each matched by their own id', () {
+      const fetchedSigns =
+          SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Signs');
+      const addedSigns = (mpvId: 'mk_4', serverId: '5');
+      expect(
+        subAddedMpvTracks(
+          mpvTracks: const [full, signs, fetchedFull, fetchedSigns],
+          added: const [addedFull, addedSigns],
+        ),
+        {'mk_3': addedFull, 'mk_4': addedSigns},
+      );
+    });
+  });
+
+  group('presentSubAddedAsServerTracks', () {
+    const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
+    const signs = SubtitleTrack(id: 'mk_2', language: 'jpn', title: 'Signs');
+    const serverFull =
+        SubtitleTrack(id: '4', language: 'eng', title: 'Full', embedded: true);
+    const serverSidecar =
+        SubtitleTrack(id: 'side-1', language: 'eng', title: 'Fan');
+    const serverTracks = [serverFull, serverSidecar];
+
+    test("an embedded server track takes its added file's row", () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            signs,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full'),
+          ],
+          added: const [(mpvId: 'mk_3', serverId: '4')],
+          serverTracks: serverTracks,
+        ),
+        [full, signs, serverFull],
+      );
+    });
+
+    test('a track added twice is listed once', () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full'),
+            SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
+          ],
+          added: const [
+            (mpvId: 'mk_3', serverId: '4'),
+            (mpvId: 'mk_4', serverId: '4'),
+          ],
+          serverTracks: serverTracks,
+        ),
+        [full, serverFull],
+      );
+    });
+
+    test('a sidecar or an unknown copy is dropped, not listed twice', () {
+      // `resolveSubtitleTracks` lists every deliverable sidecar already.
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            full,
+            SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Fan'),
+            SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
+          ],
+          added: const [
+            (mpvId: 'mk_3', serverId: 'side-1'),
+            (mpvId: 'mk_4', serverId: null),
+          ],
+          serverTracks: serverTracks,
+        ),
+        [full],
+      );
+    });
+
+    test('only added files means mpv has listed nothing of its own', () {
+      expect(
+        presentSubAddedAsServerTracks(
+          mpvTracks: const [
+            SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full'),
+          ],
+          added: const [(mpvId: 'mk_1', serverId: '4')],
+          serverTracks: serverTracks,
+        ),
+        isEmpty,
       );
     });
   });
@@ -947,6 +1102,18 @@ void main() {
       expect(
         resolveSubtitleIntent(
           intent: const IntentUnmappable(),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>()
+            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+      );
+    });
+
+    test('a carried preference with no preference to match is reported', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentPreference(),
           tracks: streamingList,
           streamIndexByMpvId: const {},
         ),

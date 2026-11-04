@@ -8,14 +8,23 @@
 /// Deliberately separate from `subtitle_track_builder.dart`, which reconciles
 /// two track lists and carries a choice across a source switch. Those are a
 /// different problem, and keeping this file free of the player lets it be
-/// tested without one. It borrows only [nativeTwinOf] from there, to find a
-/// server track on mpv's list.
+/// tested without one. It borrows [nativeTwinOf] from there, to find a
+/// server track on mpv's list, and that file's restore types, to say what a
+/// preference carried across a switch comes to on the new source.
 library;
 
 import '../../../core/language/language_equivalents.dart';
 import '../../../domain/models/subtitle_track.dart';
 
-import 'subtitle_track_builder.dart' show nativeTwinOf;
+import 'subtitle_track_builder.dart'
+    show
+        RestoreOff,
+        RestoreTrack,
+        RestoreUnavailable,
+        SubtitleNotice,
+        SubtitleRestore,
+        isMpvNativeSubtitleTrackId,
+        nativeTwinOf;
 
 export '../../../core/language/language_equivalents.dart'
     show subtitlePreferenceLanguageEquals;
@@ -146,6 +155,38 @@ SubtitleTrack? preferenceTarget({
   return matchSubtitlePreference(pref, tracks);
 }
 
+/// What a preference carried across a source switch (`IntentPreference`)
+/// applies on the source that just landed.
+///
+/// The same matching the preference used when the playback opened
+/// ([preferenceTarget]), against the new source's [tracks]. A preference that
+/// matches nothing there is [SubtitleNotice.notCarried], not the silence
+/// [preferenceTarget]'s caller keeps on a fresh open: here a subtitle was
+/// showing a moment ago, and it must not disappear without a word. A null
+/// [pref] is the same answer, since there is nothing left to match with.
+SubtitleRestore carriedPreferenceRestore({
+  required SubtitlePreference? pref,
+  required List<SubtitleTrack> serverTracks,
+  required List<SubtitleTrack> tracks,
+  required Map<String, int> streamIndexByMpvId,
+}) {
+  const notCarried = RestoreUnavailable(SubtitleNotice.notCarried);
+  switch (pref) {
+    case null:
+      return notCarried;
+    case PreferOff():
+      return const RestoreOff();
+    case PreferTrack():
+      final target = preferenceTarget(
+        pref: pref,
+        serverTracks: serverTracks,
+        tracks: tracks,
+        streamIndexByMpvId: streamIndexByMpvId,
+      );
+      return target == null ? notCarried : RestoreTrack(target);
+  }
+}
+
 /// Whether the stored preference may be applied to the playback right now.
 ///
 /// Every input blocks for its own reason, and the check has to be all of them
@@ -177,6 +218,58 @@ bool shouldApplySubtitlePreference({
   if (alreadyApplied || !hasTracks || awaitingPlayerTracks) return false;
   return true;
 }
+
+/// How long after the first frame an embedded preference in native direct
+/// play waits for mpv to list its subtitles before fetching the server's copy
+/// instead. See [preferenceWaitsForMpv].
+const embeddedPreferenceBackstop = Duration(seconds: 5);
+
+/// Whether a preference that resolved to [target] should hold off for mpv's
+/// next track-list revision rather than apply now.
+///
+/// The track cap in the open path (`awaitRealTracks`) only bounds how long
+/// playback waits to start. A slow device can pass it before mpv has read the
+/// container's subtitle streams, and the list on screen is then the server's
+/// fallback. Selecting an **embedded** server track there makes the server
+/// extract a stream with ffmpeg that mpv is about to list itself, for free.
+/// So, in native direct play, while mpv has listed no subtitles
+/// ([mpvListedSubtitles] counts mpv's own entries, not auto/no), an embedded
+/// server [target] waits.
+///
+/// Everything else applies at once: a sidecar, which mpv never lists; mpv's
+/// own track; Off (a null [target]); any streamed source, whose subtitles
+/// always come from the server. Once mpv has listed subtitles and the target
+/// is still the server's copy, mpv does not carry it, so waiting longer buys
+/// nothing. [backstopExpired] ([embeddedPreferenceBackstop] after the first
+/// frame) ends the wait, so a preference is delayed, never dropped.
+bool preferenceWaitsForMpv({
+  required bool nativeDirectPlay,
+  required bool mpvListedSubtitles,
+  required bool backstopExpired,
+  required SubtitleTrack? target,
+}) {
+  if (!mpvMayStillListSubtitles(
+    nativeDirectPlay: nativeDirectPlay,
+    mpvListedSubtitles: mpvListedSubtitles,
+    backstopExpired: backstopExpired,
+  )) {
+    return false;
+  }
+  return target != null &&
+      target.embedded &&
+      !isMpvNativeSubtitleTrackId(target.id);
+}
+
+/// Whether mpv may still list subtitles the list on screen lacks: native
+/// direct play, mpv has listed none yet, and the backstop has not run out.
+/// The window [preferenceWaitsForMpv] waits in, and the one in which a
+/// carried preference that matches nothing yet is not known to be missing.
+bool mpvMayStillListSubtitles({
+  required bool nativeDirectPlay,
+  required bool mpvListedSubtitles,
+  required bool backstopExpired,
+}) =>
+    nativeDirectPlay && !mpvListedSubtitles && !backstopExpired;
 
 /// The `preferredSubtitle` for [fileId] in either root's generated shape.
 ///

@@ -17,3 +17,25 @@ import 'subtitle_stream_index_stub.dart'
 /// index means "cannot match", never an error.
 Future<Map<String, int>> subtitleStreamIndices(Player player) =>
     platform.subtitleStreamIndices(player);
+
+/// A media_kit platform that is not mpv but can say which mpv subtitle track
+/// is selected, as [selectedMpvSubtitleId] reads it. The seam a widget test's
+/// player implements to stand in for mpv's `sid`.
+abstract interface class SelectedMpvSubtitle {
+  /// mpv's id for the selected subtitle track, or null for none.
+  String? get selectedSubtitleId;
+}
+
+/// mpv's id for the subtitle track selected right now (its `sid`), in the
+/// form media_kit reports on a `SubtitleTrack`. Read straight after a
+/// `sub-add ... select`, it is the id mpv gave the file just added.
+///
+/// Null on web, where there is no mpv, when nothing is selected, and on any
+/// failed read.
+Future<String?> selectedMpvSubtitleId(Player player) async {
+  final source = player.platform;
+  if (source is SelectedMpvSubtitle) {
+    return (source as SelectedMpvSubtitle).selectedSubtitleId;
+  }
+  return platform.selectedMpvSubtitleId(player);
+}

@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'android_codec_capabilities.dart';
 import 'device_profile.dart';
+import 'ios_codec_capabilities.dart';
 
 /// What libmpv is built with on every desktop and mobile target Mydia ships.
 ///
@@ -104,6 +105,11 @@ const DeviceProfile _staticNativeProfile = DeviceProfile(
 /// perfectly well.
 Future<DeviceProfile> detectDeviceProfile() async {
   final profile = await _probeMpvProfile();
+
+  // iOS: same idea as the MediaCodec pass below, but all it can say is which of
+  // HEVC, VP9 and AV1 have a hardware decoder, so it removes codecs rather
+  // than adding conditions. No-op everywhere else.
+  if (Platform.isIOS) return applyIosHardwareDecode(profile);
 
   if (!Platform.isAndroid) return profile;
 

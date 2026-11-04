@@ -99,6 +99,68 @@ List<SubtitleTrack> resolveSubtitleTracks({
   );
 }
 
+/// A subtitle file this player handed mpv with `sub-add`. [mpvId] is the
+/// entry mpv gave it, as listed on screen (`mk_<sid>`): `sub-add ... select`
+/// makes the new track mpv's `sid`, which the player reads as soon as the
+/// command returns. [serverId] is the server track the file is a copy of,
+/// or null when the player cannot say.
+typedef SubAddedSubtitle = ({String mpvId, String? serverId});
+
+/// The entries in [mpvTracks] that are files this playback `sub-add`ed to
+/// the file now loaded, by mpv track id.
+///
+/// Such an entry is a server track the player fetched, already selected as
+/// that server track, so it must not be offered again as a subtitle of its
+/// own (see [presentSubAddedAsServerTracks]). Matched by the id mpv itself
+/// assigned, never by label or position, so a container track is never
+/// taken for an added file, even one mpv has not listed yet.
+Map<String, SubAddedSubtitle> subAddedMpvTracks({
+  required List<SubtitleTrack> mpvTracks,
+  required List<SubAddedSubtitle> added,
+}) {
+  final listed = {for (final entry in mpvTracks) entry.id};
+  return {
+    for (final file in added)
+      if (listed.contains(file.mpvId)) file.mpvId: file,
+  };
+}
+
+/// [mpvTracks] with each entry for a `sub-add`ed file ([subAddedMpvTracks])
+/// shown as the server track it is a copy of, so the track selected as that
+/// server track is a row of the list rather than missing from it.
+///
+/// An embedded server track takes the entry's place, once even when it was
+/// added more than once. A sidecar's entry is dropped instead:
+/// [resolveSubtitleTracks] already lists every deliverable sidecar beside
+/// mpv's tracks. An entry whose server track is unknown is dropped too,
+/// since offering it would list the same subtitle under a second name.
+///
+/// Empty when every entry is an added file: mpv has listed nothing of the
+/// file's own yet, and [resolveSubtitleTracks] should keep falling back to
+/// the server's list, which offers the added track as itself.
+List<SubtitleTrack> presentSubAddedAsServerTracks({
+  required List<SubtitleTrack> mpvTracks,
+  required List<SubAddedSubtitle> added,
+  required List<SubtitleTrack> serverTracks,
+}) {
+  final addedById = subAddedMpvTracks(mpvTracks: mpvTracks, added: added);
+  if (addedById.length == mpvTracks.length) return const [];
+  final shown = <String>{};
+  final result = <SubtitleTrack>[];
+  for (final entry in mpvTracks) {
+    final file = addedById[entry.id];
+    if (file == null) {
+      result.add(entry);
+      continue;
+    }
+    final server = serverTracks.where((t) => t.id == file.serverId).firstOrNull;
+    if (server != null && server.embedded && shown.add(server.id)) {
+      result.add(server);
+    }
+  }
+  return result;
+}
+
 /// Whether an in-flight subtitle selection's result should still be applied
 /// to the player, once its async work (a media_kit "Off" call, or a
 /// `SubtitleContent` fetch) finishes.
@@ -334,6 +396,17 @@ final class IntentUnmappable extends SubtitleIntent {
   const IntentUnmappable();
 }
 
+/// The stored per-show preference chose what is showing, not the viewer, so
+/// the new source applies the preference again against its own list.
+///
+/// Carries no payload: the preference belongs to the file, which a switch
+/// does not change, and the screen still holds it. It is resolved by
+/// `carriedPreferenceRestore` in `subtitle_preference.dart`, with the same
+/// matching the preference used on the source being left.
+final class IntentPreference extends SubtitleIntent {
+  const IntentPreference();
+}
+
 /// What to carry across a source switch, given the latest pick.
 ///
 /// [selected] is the pending selection (a pick still resolving counts). Null
@@ -341,6 +414,12 @@ final class IntentUnmappable extends SubtitleIntent {
 /// playback, and the answer is null: nothing to carry, so mpv keeps its own
 /// defaults exactly as on a fresh open. Forcing Off there would hide a
 /// forced or default track mpv shows on a fresh open at Original.
+///
+/// [preferenceApplied] with [viewerChose] false means the stored preference
+/// made the selection, and the answer is [IntentPreference] whatever is
+/// selected. Carrying the track it landed on instead loses it in two ways:
+/// a server track `sub-add`ed in direct play is selected on no list mpv
+/// reports, and an mpv-native one often has no stream index to map it by.
 ///
 /// An mpv-native [selected] is translated through [selectedStreamIndex],
 /// its `ff-index`, read while its file was still loaded; the server's
@@ -351,7 +430,9 @@ SubtitleIntent? subtitleIntentBeforeSwitch({
   required bool viewerChose,
   required int? selectedStreamIndex,
   required List<SubtitleTrack> serverTracks,
+  bool preferenceApplied = false,
 }) {
+  if (!viewerChose && preferenceApplied) return const IntentPreference();
   if (selected == null) return viewerChose ? const IntentOff() : null;
   if (!isMpvNativeSubtitleTrackId(selected.id)) return IntentTrack(selected);
   if (selectedStreamIndex == null) return const IntentUnmappable();
@@ -432,7 +513,9 @@ SubtitleRestore resolveSubtitleIntent({
   switch (intent) {
     case IntentOff():
       return const RestoreOff();
-    case IntentUnmappable():
+    // Resolved by `carriedPreferenceRestore`, which has the preference to
+    // match with. Reaching here means there is none, so nothing is carried.
+    case IntentUnmappable() || IntentPreference():
       return const RestoreUnavailable(SubtitleNotice.notCarried);
     case IntentTrack(:final track):
       final same = tracks.where((t) => t.id == track.id).firstOrNull;
