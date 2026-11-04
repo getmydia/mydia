@@ -973,10 +973,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             id={ManualSearchFilters.toggle_id()}
             type="checkbox"
             class="drawer-toggle peer"
+            tabindex="-1"
             phx-update="ignore"
             aria-label={gettext("Show filters")}
           />
-          <%!-- Phones only: the sheet covers the whole dialog, so once it has
+          <%!-- Phones only: the sheet covers nearly the whole dialog, so once it has
                slid in (the visibility flip waits out the transition) the
                results pane is hidden and its controls leave the tab order. From
                `sm` up the results stay visible, dimmed behind the overlay. --%>

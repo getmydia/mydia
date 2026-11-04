@@ -147,6 +147,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     <% else %>
       <%!-- No profile - just show seeders count (sorted by most seeders) --%>
       <div
+        id={"#{@id}-seeders-circle"}
         class={[
           "flex items-center justify-center w-12 h-12 rounded-full font-bold text-sm",
           seeder_tone(@result.seeders) == :high && "bg-success/20 text-success",
@@ -191,6 +192,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         />
         <%!-- Seeders badge (its own column from lg) --%>
         <span
+          id={"#{@id}-seeds-inline"}
           class={[
             "badge badge-sm lg:hidden",
             seeder_tone(@result.seeders) == :high && "badge-success",

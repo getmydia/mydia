@@ -388,6 +388,8 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert [_] = Enum.to_list(toggle)
       assert LazyHTML.attribute(toggle, "checked") == []
       assert LazyHTML.attribute(toggle, "phx-update") == ["ignore"]
+      # Not a tab stop; the Filters button drives it.
+      assert LazyHTML.attribute(toggle, "tabindex") == ["-1"]
 
       assert [_] = doc |> LazyHTML.query("#manual-search-chip-quality") |> Enum.to_list()
       assert [] = doc |> LazyHTML.query("[id^='manual-search-lg-chip']") |> Enum.to_list()
@@ -597,13 +599,17 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 123_456})
       doc = LazyHTML.from_fragment(html)
 
-      cell = LazyHTML.query(doc, "[id$='-seeds'] .badge")
-      assert cell |> LazyHTML.text() |> String.trim() == "123k"
-      assert LazyHTML.attribute(cell, "title") == ["123456 seeders"]
-
-      # The mobile badge and the no-profile circle say the same.
-      refute html =~ ">123456<"
-      assert html =~ ~s(title="123456 seeders")
+      # The lg column badge, the mobile badge and the no-profile circle.
+      for selector <- [
+            "#search-result-00000-1-seeds .badge",
+            "#search-result-00000-1-seeds-inline",
+            "#search-result-00000-1-seeders-circle"
+          ] do
+        site = LazyHTML.query(doc, selector)
+        assert [_] = Enum.to_list(site), "#{selector} did not render"
+        assert site |> LazyHTML.text() |> String.trim() == "123k", selector
+        assert LazyHTML.attribute(site, "title") == ["123456 seeders"], selector
+      end
     end
 
     test "nil seeders render a placeholder, not 0, in the seeds cell" do

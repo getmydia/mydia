@@ -591,9 +591,10 @@ detail pages) are excluded. Every page must pass at 320px.
 
 A manifest state is a name and steps (reload with a query, click, wait for a
 selector). Its results are keyed `route#state`, for example
-`/downloads#issues`, in failures and in `@known`. Only three states are swept
+`/downloads#issues`, in failures and in `@known`. Only four states are swept
 today: the Downloads Issues tab, the mobile drawer open on `/`, and the manual
-search dialog on `/movies/:id`. Adding states for other pages' tabs and
+search dialog on `/movies/:id`, closed and with its filter drawer open
+(`manual-search` and `manual-search-filters`). Adding states for other pages' tabs and
 dialogs is follow-up work.
 
 Selectors in a failure replace database ids, UUIDs and LiveView's `#phx-*`

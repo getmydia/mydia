@@ -116,7 +116,7 @@ New `format_seeders/1` in `manual_search_components.ex`:
 | `>= 1_000_000` | one decimal `M`, same rule: `1.2M` |
 
 Values at or above 100k drop the decimal (`123k`, not `123.4k`) so the
-string is at most four characters. Used at all three render sites: the
+string is at most five characters (`12.3k`). Used at all three render sites: the
 no-profile score badge, the mobile badge and the `lg` Seeds column. Each
 badge gets a `title` with the exact count via the existing
 `ngettext("%{count} seeder", ...)`. `seeder_tone/1` keeps using the raw

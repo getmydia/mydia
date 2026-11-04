@@ -136,15 +136,54 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
     )
   end
 
+  # A selector for the lg column's indexer badge of the row titled `@title`,
+  # the merged one, so the checks do not depend on how the rows sort.
+  defp title_row_badge(session) do
+    id =
+      eval_js(
+        session,
+        """
+        var needle = arguments[0];
+        var t = Array.from(document.querySelectorAll("#manual-search-results-pane [title]"))
+          .find(function (el) {
+            return el.getAttribute("title") === needle && el.textContent.trim() === needle;
+          });
+        if (!t) return null;
+        var badge = t.closest("[id^='search-result-']").querySelector("[id$='-indexer-badge']");
+        return badge ? badge.id : null;
+        """,
+        [@title]
+      )
+
+    assert is_binary(id), "no indexer badge in the row titled #{@title}"
+    ~s([id="#{id}"])
+  end
+
   # How far the lg column's indexer badge runs past the right edge of its
   # grid cell; positive is overflow into the download button.
-  defp badge_overflow_px(session) do
-    eval_js(session, """
-    var badge = document.querySelector("[id$='-indexer-badge']");
-    if (!badge) return null;
-    var cell = badge.parentElement.getBoundingClientRect();
-    return Math.round(badge.getBoundingClientRect().right - cell.right);
-    """)
+  defp badge_overflow_px(session, badge_selector) do
+    eval_js(
+      session,
+      """
+      var badge = document.querySelector(arguments[0]);
+      if (!badge) return null;
+      var cell = badge.parentElement.getBoundingClientRect();
+      return Math.round(badge.getBoundingClientRect().right - cell.right);
+      """,
+      [badge_selector]
+    )
+  end
+
+  # Whether the focused element is inside the element matching `selector`.
+  defp focus_in?(session, selector) do
+    eval_js(
+      session,
+      """
+      var root = document.querySelector(arguments[0]);
+      return !!root && root.contains(document.activeElement);
+      """,
+      [selector]
+    )
   end
 
   defp open_menu(session) do
@@ -160,8 +199,9 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
     """)
   end
 
-  # Ticks one sidebar checkbox and waits until the server has answered with a
-  # chip naming it. Each tick round-trips through `filter_search`, and a click
+  # Ticks one checkbox of the filter form and waits until the server has
+  # answered with a chip naming it. The drawer stays closed: the checkbox is
+  # clicked by script, which does not need it on screen. Each tick round-trips through `filter_search`, and a click
   # landing before the previous diff could be undone by it, so waiting only
   # for the chip to exist (true from the first indexer on) is not enough.
   defp tick(session, field, value, dimension, shows) do
@@ -218,12 +258,13 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       assert summary >= @readable_px,
              "at #{unquote(w)}px the indexer status summary was #{summary}px wide"
 
-      overflow = badge_overflow_px(session)
+      badge = title_row_badge(session)
+      overflow = badge_overflow_px(session, badge)
 
       assert is_integer(overflow) and overflow <= 0,
              "at #{unquote(w)}px the indexer badge ran #{inspect(overflow)}px past its column"
 
-      js_click(session, "[id$='-indexer-badge']")
+      js_click(session, badge)
 
       assert %{"links" => 4, "inside" => true} = open_menu(session),
              "at #{unquote(w)}px the merged badge's menu did not open fully on screen " <>
@@ -265,6 +306,14 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
 
       js_click(session, "#manual-search-filters-button")
 
+      # Opening moves keyboard focus into the panel, not past every result row.
+      eventually(
+        fn ->
+          if focus_in?(session, "#manual-search-filter-sheet"), do: {:ok, true}, else: :error
+        end,
+        description: "focus to move into the filter panel"
+      )
+
       # The sheet slides in, so it is measured only once it has settled.
       eventually(
         fn ->
@@ -288,6 +337,21 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
                  session,
                  "return getComputedStyle(document.getElementById('manual-search-results-pane')).visibility;"
                ) == "visible"
+      else
+        # On a phone the sheet nearly fills the dialog, so the results leave
+        # the tab order once it has slid in.
+        eventually(
+          fn ->
+            visibility =
+              eval_js(
+                session,
+                "return getComputedStyle(document.getElementById('manual-search-results-pane')).visibility;"
+              )
+
+            if visibility == "hidden", do: {:ok, true}, else: :error
+          end,
+          description: "the results pane to be hidden behind the sheet"
+        )
       end
 
       js_click(session, "#manual-search-show-results")
@@ -295,6 +359,12 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       eventually(fn -> if panel.()["shown"], do: :error, else: {:ok, true} end,
         description: "the filter drawer to close"
       )
+
+      # Closing hands focus back to the button that opened the drawer.
+      assert eval_js(
+               session,
+               "return document.activeElement && document.activeElement.id;"
+             ) == "manual-search-filters-button"
     end
   end
 
@@ -309,5 +379,29 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
       assert %{"title_fits" => true, "seeds_overflow" => overflow} = row_fit(session, @long)
       assert overflow <= 0, "the seeds badge ran #{overflow}px past its column"
     end
+  end
+
+  # The no-profile seeders circle holds the arrow and the count; its contents
+  # must stay inside the circle. Returns widths so a failure shows the margin.
+  @tag :feature
+  test "the seeders circle holds a five-character count", %{session: session, movie: movie} do
+    open_dialog(session, movie, {390, 844})
+
+    assert %{"content" => content, "circle" => circle, "text" => text} =
+             eval_js(session, """
+             var c = document.querySelector("[id$='-seeders-circle']");
+             if (!c) return null;
+             var range = document.createRange();
+             range.selectNodeContents(c);
+             var inner = range.getBoundingClientRect();
+             var cb = c.getBoundingClientRect();
+             return {content: Math.round(inner.width * 10) / 10,
+                     circle: Math.round(cb.width * 10) / 10,
+                     text: c.textContent.trim()};
+             """),
+           "no seeders circle rendered; the fixture has a quality profile"
+
+    assert content <= circle - 4,
+           "#{inspect(text)} and its arrow are #{content}px wide in a #{circle}px circle"
   end
 end

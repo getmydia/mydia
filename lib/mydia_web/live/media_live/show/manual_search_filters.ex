@@ -36,6 +36,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   """
   def toggle_drawer(js \\ %JS{}), do: JS.dispatch(js, "click", to: "##{@toggle_id}")
 
+  @doc """
+  Opens the drawer and moves focus into the panel. The panel comes after every
+  result row in the DOM, so without this a keyboard user would tab through all
+  of them to reach the form.
+  """
+  def open_drawer, do: JS.focus_first(toggle_drawer(), to: "#manual-search-filter-sheet")
+
+  @doc "Closes the drawer and returns focus to the Filters button."
+  def close_drawer, do: JS.focus(toggle_drawer(), to: "#manual-search-filters-button")
+
   attr :quality_filters, :list, default: []
   attr :source_filters, :list, default: []
   attr :codec_filters, :list, default: []
@@ -60,7 +70,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         type="button"
         id="manual-search-filters-button"
         class="btn btn-sm btn-primary shrink-0"
-        phx-click={toggle_drawer()}
+        phx-click={open_drawer()}
         aria-controls="manual-search-filter-sheet"
       >
         <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
@@ -129,7 +139,13 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   """
   def filter_panel(assigns) do
     ~H"""
-    <div class="drawer-side absolute! inset-0! h-full! z-30 col-start-1!">
+    <%!-- daisyUI delays the `visibility` flip by 100ms, and `focus()` on a
+         hidden element does nothing, so when the toggle is checked the flip is
+         immediate. Closing keeps the delay and the slide-out. --%>
+    <div class={[
+      "drawer-side absolute! inset-0! h-full! z-30 col-start-1!",
+      "peer-checked:[transition:opacity_.2s_ease-out_.1s,visibility_0s]"
+    ]}>
       <label for={toggle_id()} class="drawer-overlay" aria-label={gettext("Close filters")}></label>
       <aside
         id="manual-search-filter-sheet"
@@ -151,7 +167,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               type="button"
               id="manual-search-filter-close"
               class="btn btn-ghost btn-sm btn-square"
-              phx-click={toggle_drawer()}
+              phx-click={close_drawer()}
               aria-label={gettext("Close filters")}
             >
               <.icon name="hero-x-mark" class="w-4 h-4" />
@@ -257,7 +273,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
             type="button"
             id="manual-search-show-results"
             class="btn btn-primary btn-block"
-            phx-click={toggle_drawer()}
+            phx-click={close_drawer()}
           >
             {ngettext("Show %{count} result", "Show %{count} results", @result_count)}
           </button>

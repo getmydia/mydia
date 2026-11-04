@@ -57,7 +57,12 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
 
       button = LazyHTML.query(doc, "#manual-search-filters-button")
       assert LazyHTML.attribute(button, "aria-controls") == ["manual-search-filter-sheet"]
-      assert button |> LazyHTML.attribute("phx-click") |> hd() =~ "#manual-search-filter-toggle"
+      click = button |> LazyHTML.attribute("phx-click") |> hd()
+      assert click =~ "#manual-search-filter-toggle"
+      # Opening moves focus into the panel; the DOM puts the results between
+      # the button and the panel.
+      assert click =~ "focus_first"
+      assert click =~ "#manual-search-filter-sheet"
       assert button |> LazyHTML.query(".badge") |> LazyHTML.text() =~ "1"
     end
   end
@@ -82,12 +87,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFiltersTest do
       assert [] = doc |> LazyHTML.query("#manual-search-filter-backdrop") |> Enum.to_list()
     end
 
-    test "close and show-results controls dispatch to the toggle" do
+    test "close and show-results controls dispatch to the toggle and return focus" do
       doc = panel_doc()
 
       for id <- ["#manual-search-filter-close", "#manual-search-show-results"] do
-        assert doc |> LazyHTML.query(id) |> LazyHTML.attribute("phx-click") |> hd() =~
-                 "#manual-search-filter-toggle"
+        click = doc |> LazyHTML.query(id) |> LazyHTML.attribute("phx-click") |> hd()
+        assert click =~ "#manual-search-filter-toggle"
+        assert click =~ "#manual-search-filters-button"
+        assert click =~ "focus"
       end
 
       assert doc |> LazyHTML.query("#manual-search-show-results") |> LazyHTML.text() =~
