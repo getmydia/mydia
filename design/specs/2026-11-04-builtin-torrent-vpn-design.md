@@ -82,15 +82,23 @@ is enabled:
   runs as group `mydia-torrent` with no capabilities and `--bind-device` set
   to gluetun's tunnel interface. The group switch comes from the binary
   itself: the image installs `rqbit` setgid `mydia-torrent`, because the BEAM
-  holds only `NET_ADMIN` and granting it `CAP_SETGID` would let it take any
-  group. Inherited capabilities are cleared on exec. It registers as a
+  runs with no capabilities and granting it `CAP_SETGID` would let it take
+  any group. It registers as a
   synthetic download client of type `rqbit` with `managed: true`; grab,
   monitor, import, the seeding guard and removal all go through the existing
   `Rqbit` adapter.
-- **`Vpn`**: started only when the VPN is configured. Runs the patched gluetun
-  binary as a port-supervised child with `SPLIT_TUNNEL_GID` set, forwards its
-  log to Mydia's logger, and polls its control server on `127.0.0.1:8000`
-  every 10 seconds for VPN status, public IP and forwarded port.
+- **`Vpn`**: started only when the VPN is configured. Gluetun itself is
+  started by the entrypoint as root (see Data flow), because its own traffic
+  (provider API calls, DNS upstream, public IP lookup) must be tunneled and
+  the split rules match it by uid 0; a process the BEAM spawned would carry
+  the BEAM's uid and need capabilities the BEAM should not hold. `Vpn` reads
+  the entrypoint's preflight file `/config/gluetun/preflight` and the
+  generated control-server API key `/config/gluetun/apikey`, and polls the
+  control server on `127.0.0.1:8000` (`X-API-Key` header) every 10 seconds:
+  `GET /v1/vpn/status` (`{"status":"running"}`), `GET /v1/publicip/ip`
+  (`{"public_ip":...}`), `GET /v1/portforward` (`{"port":N}`). Gluetun's log
+  goes to `/config/gluetun/gluetun.log`; the last error line is shown with
+  `:vpn_down`.
 - **`LeakCheck`**: once per tunnel start, requests the public IP as the torrent
   group (`torrent-curl`, a copy of `curl` installed setgid `mydia-torrent`)
   and as Mydia (`Req`), using an IP echo endpoint on
@@ -107,11 +115,15 @@ is enabled:
 ## Data flow
 
 1. Boot: the entrypoint sees `MYDIA_VPN_SERVICE_PROVIDER`, checks for
-   `NET_ADMIN` and `/dev/net/tun`, and starts the BEAM with `NET_ADMIN` as an ambient capability via `setpriv`.
-   A missing capability or device is recorded in a status file for `Vpn` to
-   report, never a boot failure. Without the variable the entrypoint behaves
-   exactly as today.
-2. `Vpn` starts gluetun and waits for `running`. `LeakCheck` runs.
+   `NET_ADMIN` and `/dev/net/tun`, and writes the result to the preflight
+   file. If both are present it generates the API key, then starts gluetun as
+   root in a restart loop in the background with the prefix-stripped
+   variables plus `SPLIT_TUNNEL_GID`, `HTTP_CONTROL_SERVER_ADDRESS` and
+   `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`. A missing capability or device is
+   never a boot failure. It then drops to the `mydia` user as today; the BEAM
+   holds no capabilities. Without the variable the entrypoint behaves exactly
+   as today.
+2. `Vpn` waits for gluetun to report `running`. `LeakCheck` runs.
 3. `Engine` starts only after a passed leak check, with the forwarded port if
    gluetun has one, else `MYDIA_TORRENT_PORT`.
 4. A changed forwarded port restarts the engine with the new port. The session
@@ -126,23 +138,28 @@ is enabled:
 and a README describing each patch and how to rebase onto a new release. The
 patches add `SPLIT_TUNNEL_GID=<gid>`. When set:
 
-- **Routing**: an nftables rule marks packets whose socket gid is the torrent
-  group; an `ip rule` sends only that mark to the VPN table. The main table is
-  untouched. Gluetun's own provider traffic (PIA token, `getSignature`,
-  `bindPort`, NAT-PMP to the gateway) still goes through the tunnel.
-- **Firewall**: the kill switch drops marked packets leaving on any interface
-  but `lo` and the tunnel. Unmarked traffic is not filtered. The forwarded port
-  is allowed inbound on the tunnel only.
-- **DNS**: `resolv.conf` is left alone and gluetun's DNS server is not bound
-  for the container. Marked DNS traffic (port 53, TCP and UDP) is redirected
-  to gluetun's resolver through the tunnel.
+- **Marking**: iptables `mangle OUTPUT` marks packets from sockets owned by
+  gid `SPLIT_TUNNEL_GID` or uid 0 (gluetun and its OpenVPN child), except
+  packets to the VPN server endpoint, which must leave on the physical
+  interface. Kernel WireGuard's own socket has no owner and is never marked.
+- **Routing**: in place of WireGuard's inverted "not fwmark 51820" rule and
+  OpenVPN's pushed `redirect-gateway`, an `ip rule` sends only the split mark
+  to the VPN table, which holds the default route through the tunnel and an
+  `unreachable` default at a higher metric. The main table is untouched.
+- **Firewall**: chain policies stay `ACCEPT`. Marked packets leaving on any
+  interface but `lo` and the tunnel are dropped. Inbound on the tunnel only
+  established traffic and the forwarded port are accepted, so Mydia's web UI
+  is never reachable from the VPN side.
+- **DNS**: `resolv.conf` is left alone. Gluetun's DNS server listens on
+  `127.0.0.1:53` only, and `nat OUTPUT` redirects marked port 53 traffic to
+  it; its upstream queries come from uid 0 and are tunneled.
 - **Health and restarts**: unchanged.
 
 A Go test in the patch series asserts the rules generated in split mode.
 
 Docker gets a `gluetun` stage (`golang:alpine`, apply patches, `go build`); the
-runtime stage copies the binary and adds `openvpn`, `iptables`/`nftables`,
-`iproute2`, `curl` and `setpriv`, and creates the `mydia-torrent` group with
+runtime stage copies the binary and adds `openvpn`, `iptables`, `iproute2`
+and `curl`, and creates the `mydia-torrent` group with
 the setgid `rqbit` and `torrent-curl`. The `rqbit` binary is built from a
 pinned version in the existing cargo stage for musl and both architectures.
 The IP echo endpoint is added to metadata-relay in the same PR.
