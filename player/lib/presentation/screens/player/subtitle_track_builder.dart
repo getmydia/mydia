@@ -99,43 +99,30 @@ List<SubtitleTrack> resolveSubtitleTracks({
   );
 }
 
-/// A subtitle file this player handed mpv with `sub-add`, as mpv was told to
-/// label it: media_kit passes the track's title, or `external`, and its
-/// language, or `auto`. [serverId] is the server track the file is a copy
-/// of, or null when the player cannot say.
-typedef SubAddedSubtitle = ({String title, String language, String? serverId});
+/// A subtitle file this player handed mpv with `sub-add`. [mpvId] is the
+/// entry mpv gave it, as listed on screen (`mk_<sid>`): `sub-add ... select`
+/// makes the new track mpv's `sid`, which the player reads as soon as the
+/// command returns. [serverId] is the server track the file is a copy of,
+/// or null when the player cannot say.
+typedef SubAddedSubtitle = ({String mpvId, String? serverId});
 
 /// The entries in [mpvTracks] that are files this playback `sub-add`ed to
-/// the file now loaded, by mpv track id, [added] in the order they were
-/// added.
+/// the file now loaded, by mpv track id.
 ///
 /// Such an entry is a server track the player fetched, already selected as
 /// that server track, so it must not be offered again as a subtitle of its
-/// own (see [presentSubAddedAsServerTracks]). media_kit reports no
-/// `external` flag, so the entries are found the
-/// way mpv lays them out: it appends every `sub-add` after what the file
-/// carries, so the added files are the trailing entries, labelled as they
-/// were added. Matched from the end, stopping at the first entry that does
-/// not line up, so a container track sharing a fetched track's label stays
-/// listed. The one gap: a list mpv publishes after a `sub-add` is recorded
-/// but before mpv lists that file can hide the container's last track if
-/// the labels agree, until the next revision corrects it.
+/// own (see [presentSubAddedAsServerTracks]). Matched by the id mpv itself
+/// assigned, never by label or position, so a container track is never
+/// taken for an added file, even one mpv has not listed yet.
 Map<String, SubAddedSubtitle> subAddedMpvTracks({
   required List<SubtitleTrack> mpvTracks,
   required List<SubAddedSubtitle> added,
 }) {
-  final byId = <String, SubAddedSubtitle>{};
-  var i = mpvTracks.length - 1;
-  var j = added.length - 1;
-  while (i >= 0 && j >= 0) {
-    final entry = mpvTracks[i];
-    final file = added[j];
-    if (entry.title != file.title || entry.language != file.language) break;
-    byId[entry.id] = file;
-    i--;
-    j--;
-  }
-  return byId;
+  final listed = {for (final entry in mpvTracks) entry.id};
+  return {
+    for (final file in added)
+      if (listed.contains(file.mpvId)) file.mpvId: file,
+  };
 }
 
 /// [mpvTracks] with each entry for a `sub-add`ed file ([subAddedMpvTracks])

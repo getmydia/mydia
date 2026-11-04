@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/subtitle_stream_index.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
@@ -34,9 +35,13 @@ const _loadFailed = 'Could not load that subtitle track. Try again.';
 /// (a `sub-add`) appends an external entry to mpv's list, titled and tagged
 /// as media_kit asks mpv to tag it. `open` starts a new file, so it drops
 /// those entries and resets the current track to `auto`.
-class _MpvLikePlayer extends PlatformPlayer {
+class _MpvLikePlayer extends PlatformPlayer implements SelectedMpvSubtitle {
   _MpvLikePlayer({required this.containerSubtitles})
       : super(configuration: const PlayerConfiguration());
+
+  /// mpv's `sid`: a `sub-add ... select` makes it the new entry's id.
+  @override
+  String? selectedSubtitleId;
 
   /// What mpv reads out of the direct-play container once [probe] runs.
   final List<SubtitleTrack> containerSubtitles;
@@ -66,6 +71,7 @@ class _MpvLikePlayer extends PlatformPlayer {
   Future<void> open(Playable playable, {bool play = true}) async {
     opened.add(playable as Media);
     _subtitles = const [];
+    selectedSubtitleId = null;
     state = state.copyWith(
       duration: const Duration(seconds: 90),
       position: playable.start ?? Duration.zero,
@@ -90,7 +96,7 @@ class _MpvLikePlayer extends PlatformPlayer {
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     subtitleTracks.add(track);
     if (track.data || track.uri) {
-      final nextId = _subtitles
+      final nextId = [...containerSubtitles, ..._subtitles]
               .map((t) => int.tryParse(t.id) ?? 0)
               .fold<int>(0, (a, b) => a > b ? a : b) +
           1;
@@ -102,6 +108,9 @@ class _MpvLikePlayer extends PlatformPlayer {
           track.language ?? 'auto',
         ),
       ];
+      selectedSubtitleId = '$nextId';
+    } else {
+      selectedSubtitleId = int.tryParse(track.id) == null ? null : track.id;
     }
     state = state.copyWith(track: state.track.copyWith(subtitle: track));
     trackController.add(state.track);

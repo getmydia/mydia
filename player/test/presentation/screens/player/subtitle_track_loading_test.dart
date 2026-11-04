@@ -869,9 +869,9 @@ void main() {
     const signs = SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Signs');
     const fetchedFull =
         SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full');
-    const addedFull = (title: 'Full', language: 'eng', serverId: '4');
+    const addedFull = (mpvId: 'mk_3', serverId: '4');
 
-    test('the trailing entries labelled as added are the added files', () {
+    test("the entries mpv selected for each sub-add are the added files", () {
       expect(
         subAddedMpvTracks(
           mpvTracks: const [full, signs, fetchedFull],
@@ -881,32 +881,34 @@ void main() {
       );
     });
 
-    test('a container track sharing the label is not taken for one', () {
-      // Nothing was added, or mpv has not listed the added file yet and its
-      // last container entry carries another label.
-      expect(
-        subAddedMpvTracks(mpvTracks: const [full, signs], added: const []),
-        isEmpty,
-      );
+    test('a container track is never taken for one, whatever its label', () {
+      // mpv has not listed the added file yet, and the container's last
+      // track carries the very label the added file was given.
+      const fullLast =
+          SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Full');
       expect(
         subAddedMpvTracks(
-          mpvTracks: const [full, signs],
+          mpvTracks: const [signs, fullLast],
           added: const [addedFull],
         ),
         isEmpty,
       );
+      expect(
+        subAddedMpvTracks(mpvTracks: const [full, signs], added: const []),
+        isEmpty,
+      );
     });
 
-    test('several added files are matched newest last', () {
+    test('several added files are each matched by their own id', () {
       const fetchedSigns =
           SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Signs');
-      const addedSigns = (title: 'Signs', language: 'eng', serverId: '5');
+      const addedSigns = (mpvId: 'mk_4', serverId: '5');
       expect(
         subAddedMpvTracks(
           mpvTracks: const [full, signs, fetchedFull, fetchedSigns],
           added: const [addedFull, addedSigns],
-        ).keys,
-        unorderedEquals(['mk_3', 'mk_4']),
+        ),
+        {'mk_3': addedFull, 'mk_4': addedSigns},
       );
     });
   });
@@ -928,7 +930,7 @@ void main() {
             signs,
             SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full'),
           ],
-          added: const [(title: 'Full', language: 'eng', serverId: '4')],
+          added: const [(mpvId: 'mk_3', serverId: '4')],
           serverTracks: serverTracks,
         ),
         [full, signs, serverFull],
@@ -944,8 +946,8 @@ void main() {
             SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
           ],
           added: const [
-            (title: 'Full', language: 'eng', serverId: '4'),
-            (title: 'Full', language: 'eng', serverId: '4'),
+            (mpvId: 'mk_3', serverId: '4'),
+            (mpvId: 'mk_4', serverId: '4'),
           ],
           serverTracks: serverTracks,
         ),
@@ -963,8 +965,8 @@ void main() {
             SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Full'),
           ],
           added: const [
-            (title: 'Fan', language: 'eng', serverId: 'side-1'),
-            (title: 'Full', language: 'eng', serverId: null),
+            (mpvId: 'mk_3', serverId: 'side-1'),
+            (mpvId: 'mk_4', serverId: null),
           ],
           serverTracks: serverTracks,
         ),
@@ -978,7 +980,7 @@ void main() {
           mpvTracks: const [
             SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full'),
           ],
-          added: const [(title: 'Full', language: 'eng', serverId: '4')],
+          added: const [(mpvId: 'mk_1', serverId: '4')],
           serverTracks: serverTracks,
         ),
         isEmpty,

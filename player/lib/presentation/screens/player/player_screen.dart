@@ -4095,31 +4095,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// A data or uri track reaches mpv as a `sub-add`, which gives it an entry
   /// of its own in mpv's list; that is recorded in [_subAddedSubtitles] once
-  /// the call returns, and the list derived again in case mpv published
-  /// first.
-  Future<bool> _setSubtitleTrack(int generation, SubtitleTrack track) =>
+  /// the call returns, under the id mpv selected for it and [serverId], the
+  /// server track it copies (null for Off and mpv's own tracks), and the list
+  /// derived again in case mpv published first. When mpv cannot say which
+  /// entry it is, nothing is recorded, so no listed track is ever hidden on
+  /// a guess.
+  Future<bool> _setSubtitleTrack(
+    int generation,
+    SubtitleTrack track, {
+    String? serverId,
+  }) =>
       _switchGate.pass(() => _canApplySubtitleSelection(generation), () async {
         final player = _player;
         if (player == null) return;
         _monitor?.noteInterruption();
         await player.setSubtitleTrack(track);
-        if ((track.data || track.uri) &&
-            mounted &&
-            identical(_player, player)) {
-          _subAddedSubtitles.add((
-            title: track.title ??
-                'external', // l10n-ignore: media_kit's sub-add default, matched not shown
-            language: track.language ?? 'auto',
-            // Bodies are cached by server track id; see
-            // [_resolveMediaKitSubtitleTrack].
-            serverId: _mediaKitSubtitleTrackMap.entries
-                .where((e) =>
-                    !isMpvNativeSubtitleTrackId(e.key) && e.value == track)
-                .firstOrNull
-                ?.key,
-          ));
-          _refreshSubtitleTracks();
+        if (!(track.data || track.uri) ||
+            !mounted ||
+            !identical(_player, player)) {
+          return;
         }
+        final sid = await selectedMpvSubtitleId(player);
+        if (sid == null || !mounted || !identical(_player, player)) return;
+        _subAddedSubtitles.add((mpvId: 'mk_$sid', serverId: serverId));
+        _refreshSubtitleTracks();
       });
 
   /// Hands the browser the cues of whatever was just applied, or stops it
@@ -4457,7 +4456,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // _restartLocalPlayback landing during *this specific* call is exactly
       // as possible as during the fetch above, and `setState` after unmount
       // throws just as surely as calling into a disposed `Player` does.
-      if (!await _setSubtitleTrack(generation, mkTrack) ||
+      if (!await _setSubtitleTrack(
+            generation,
+            mkTrack,
+            serverId:
+                isMpvNativeSubtitleTrackId(selected.id) ? null : selected.id,
+          ) ||
           !_canApplySubtitleSelection(generation)) {
         _resetPendingSubtitleSelection(generation);
         return generation;

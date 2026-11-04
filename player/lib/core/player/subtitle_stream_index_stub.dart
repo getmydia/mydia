@@ -8,3 +8,5 @@ library;
 import 'package:media_kit/media_kit.dart';
 
 Future<Map<String, int>> subtitleStreamIndices(Player player) async => const {};
+
+Future<String?> selectedMpvSubtitleId(Player player) async => null;
