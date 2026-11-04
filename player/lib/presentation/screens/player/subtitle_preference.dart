@@ -248,11 +248,28 @@ bool preferenceWaitsForMpv({
   required bool backstopExpired,
   required SubtitleTrack? target,
 }) {
-  if (!nativeDirectPlay || mpvListedSubtitles || backstopExpired) return false;
+  if (!mpvMayStillListSubtitles(
+    nativeDirectPlay: nativeDirectPlay,
+    mpvListedSubtitles: mpvListedSubtitles,
+    backstopExpired: backstopExpired,
+  )) {
+    return false;
+  }
   return target != null &&
       target.embedded &&
       !isMpvNativeSubtitleTrackId(target.id);
 }
+
+/// Whether mpv may still list subtitles the list on screen lacks: native
+/// direct play, mpv has listed none yet, and the backstop has not run out.
+/// The window [preferenceWaitsForMpv] waits in, and the one in which a
+/// carried preference that matches nothing yet is not known to be missing.
+bool mpvMayStillListSubtitles({
+  required bool nativeDirectPlay,
+  required bool mpvListedSubtitles,
+  required bool backstopExpired,
+}) =>
+    nativeDirectPlay && !mpvListedSubtitles && !backstopExpired;
 
 /// The `preferredSubtitle` for [fileId] in either root's generated shape.
 ///

@@ -788,6 +788,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return waits;
   }
 
+  /// Whether a carried preference that matches nothing on the list now on
+  /// screen holds off for mpv; see [mpvMayStillListSubtitles].
+  bool _preferenceMatchWaitsForMpv() {
+    final waits = mpvMayStillListSubtitles(
+      nativeDirectPlay: _nativeDirectPlay,
+      mpvListedSubtitles: _mpvListedSubtitles,
+      backstopExpired: _embeddedPreferenceBackstopExpired,
+    );
+    if (waits && !_preferenceWaitingForMpv) {
+      debugPrint('[PlayerScreen] Carried subtitle preference matches nothing '
+          'yet; waiting for mpv to list subtitles');
+    }
+    _preferenceWaitingForMpv = waits;
+    return waits;
+  }
+
   /// Reopens the gate for the open [epoch] was handed by
   /// [_beginTracksSettle], and reports whether it did.
   ///
@@ -2454,16 +2470,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // The same wait the preference keeps on a fresh open: a switch landing
     // on direct play reaches here before mpv has listed the new file's
     // subtitles. The intent stays pending, and mpv's next revision or the
-    // backstop runs this again.
+    // backstop runs this again. A preference that matches nothing yet waits
+    // too, since mpv's list may still bring the match (a bitmap stream
+    // direct play only offers from mpv); the toast waits for that answer.
     if (intent is IntentPreference &&
-        restore is RestoreTrack &&
-        _preferenceWaitsForMpv(restore.track)) {
+        switch (restore) {
+          RestoreTrack(:final track) => _preferenceWaitsForMpv(track),
+          RestoreUnavailable() => _preferenceMatchWaitsForMpv(),
+          _ => false,
+        }) {
       _preferenceRestoreDeferred = true;
       return;
     }
     final generation = await _applySubtitleSelection(
       restore is RestoreTrack ? restore.track : null,
       keepNudge: true,
+      loadFailedNotice: intent is IntentPreference
+          ? SubtitleNotice.notCarried
+          : SubtitleNotice.loadFailed,
     );
     if (generation != _subtitleSelectionGeneration) return;
 
@@ -4261,12 +4285,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [keepNudge] passes through to `SubtitleDelayController.onTrackChanged`;
   /// only the restore after a source switch sets it.
   ///
+  /// [loadFailedNotice] is what a failed fetch says in place of
+  /// [SubtitleNotice.loadFailed]. A carried preference passes
+  /// [SubtitleNotice.notCarried]: the viewer never picked that track at this
+  /// quality, so "try again" offers them nothing to retry.
+  ///
   /// The returned generation equals [_subtitleSelectionGeneration] afterwards
   /// exactly when nothing superseded this call, which is how
   /// [_restoreSubtitleIntent] tells a finished restore from a cancelled one.
   Future<int> _applySubtitleSelection(
     app_models.SubtitleTrack? selected, {
     bool keepNudge = false,
+    SubtitleNotice loadFailedNotice = SubtitleNotice.loadFailed,
   }) async {
     // Recorded before anything else below, including the no-player bailout
     // right after: this is what makes a tap whose target matches an
@@ -4408,7 +4438,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // so it cannot itself prove `context` is safe to use here. This
         // repeats the same check directly so it can.
         if (!mounted) return generation;
-        final failure = resolved.failure;
+        final failure = resolved.failure == SubtitleNotice.loadFailed
+            ? loadFailedNotice
+            : resolved.failure;
         if (failure != null) {
           showToast(context, context.l10n.subtitleNoticeText(failure),
               kind: ToastKind.error);

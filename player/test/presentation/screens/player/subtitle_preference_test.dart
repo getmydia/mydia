@@ -349,6 +349,27 @@ void main() {
     });
   });
 
+  group('mpvMayStillListSubtitles', () {
+    test('only in native direct play, before mpv lists, inside the backstop',
+        () {
+      bool may({
+        bool nativeDirectPlay = true,
+        bool mpvListedSubtitles = false,
+        bool backstopExpired = false,
+      }) =>
+          mpvMayStillListSubtitles(
+            nativeDirectPlay: nativeDirectPlay,
+            mpvListedSubtitles: mpvListedSubtitles,
+            backstopExpired: backstopExpired,
+          );
+
+      expect(may(), isTrue);
+      expect(may(nativeDirectPlay: false), isFalse);
+      expect(may(mpvListedSubtitles: true), isFalse);
+      expect(may(backstopExpired: true), isFalse);
+    });
+  });
+
   group('preferenceTarget', () {
     // The server's list: flags known. Stream indices 4 and 5 are both
     // English; only 5 is SDH.
