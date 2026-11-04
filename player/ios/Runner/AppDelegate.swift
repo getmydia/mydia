@@ -1,6 +1,8 @@
 import Flutter
 import UIKit
 import AVFoundation
+import CoreMedia
+import VideoToolbox
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -49,9 +51,45 @@ import AVFoundation
         }
     }
 
+    // Which of HEVC, VP9 and AV1 this device decodes in hardware. The Dart
+    // profile drops the ones reported false so the server transcodes them
+    // instead of mpv software-decoding on an A8-class iPad. Kept inline rather
+    // than in its own file so the Xcode project needs no new file reference.
+    if let codecRegistrar = registry.registrar(forPlugin: "CodecCapabilities") {
+      FlutterMethodChannel(name: "dev.mydia.player/codecs",
+                           binaryMessenger: codecRegistrar.messenger())
+        .setMethodCallHandler { call, result in
+          guard call.method == "hardwareVideoDecoders" else {
+            result(FlutterMethodNotImplemented)
+            return
+          }
+          result(AppDelegate.hardwareVideoDecoders())
+        }
+    }
+
     if let tabBarRegistrar = registry.registrar(forPlugin: "NativeTabBarPlugin") {
       nativeTabBarPlugin = NativeTabBarPlugin(messenger: tabBarRegistrar.messenger())
     }
+  }
+
+  /// `VTIsHardwareDecodeSupported` per codec. The VP9 and AV1 codec constants
+  /// only exist from iOS 14 and 17; below that the codec cannot be decoded in
+  /// hardware, so it reports false. The deployment target is iOS 15, so the
+  /// iOS 14 check is always true but is kept to match the constant's API.
+  private static func hardwareVideoDecoders() -> [String: Bool] {
+    var vp9 = false
+    if #available(iOS 14.0, *) {
+      vp9 = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9)
+    }
+    var av1 = false
+    if #available(iOS 17.0, *) {
+      av1 = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
+    }
+    return [
+      "hevc": VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC),
+      "vp9": vp9,
+      "av1": av1,
+    ]
   }
 
   private func configureAudioSession() {
