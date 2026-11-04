@@ -1,4 +1,4 @@
-/// Which of HEVC, VP9 and AV1 this iOS device decodes in hardware.
+/// Which of HEVC and AV1 this iOS device decodes in hardware.
 ///
 /// libmpv's `decoder-list` is libavcodec's build configuration, so it claims
 /// `hevc` on every iOS device. An iPad capped at iOS 15 (A8/A8X) has no HEVC
@@ -21,9 +21,12 @@ import 'device_profile.dart';
 const MethodChannel _channel = MethodChannel('dev.mydia.player/codecs');
 
 /// Every spelling of a codec the static profile and the server's casts use.
+///
+/// VP9 is not probed: iOS does not expose VP9 hardware decode to third-party
+/// apps, so a probe would report false on nearly every device and force a
+/// transcode for content mpv software-decodes fine. It stays claimed.
 const Map<String, List<String>> _aliases = {
   'hevc': ['hevc', 'h265', 'h.265', 'hvc1'],
-  'vp9': ['vp9', 'vp09'],
   'av1': ['av1', 'av01'],
 };
 
@@ -66,7 +69,6 @@ Future<DeviceProfile> applyIosHardwareDecode(
   debugPrint(
     '[DeviceProfile] ios hardware decode: '
     'hevc=${support['hevc'] ?? true} '
-    'vp9=${support['vp9'] ?? true} '
     'av1=${support['av1'] ?? true}',
   );
 

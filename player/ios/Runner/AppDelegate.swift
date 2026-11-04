@@ -51,7 +51,7 @@ import VideoToolbox
         }
     }
 
-    // Which of HEVC, VP9 and AV1 this device decodes in hardware. The Dart
+    // Which of HEVC and AV1 this device decodes in hardware. The Dart
     // profile drops the ones reported false so the server transcodes them
     // instead of mpv software-decoding on an A8-class iPad. Kept inline rather
     // than in its own file so the Xcode project needs no new file reference.
@@ -72,22 +72,17 @@ import VideoToolbox
     }
   }
 
-  /// `VTIsHardwareDecodeSupported` per codec. The VP9 and AV1 codec constants
-  /// only exist from iOS 14 and 17; below that the codec cannot be decoded in
-  /// hardware, so it reports false. The deployment target is iOS 15, so the
-  /// iOS 14 check is always true but is kept to match the constant's API.
+  /// `VTIsHardwareDecodeSupported` per codec. The AV1 constant only exists
+  /// from iOS 17; below that it reports false. VP9 is deliberately not probed:
+  /// iOS does not expose VP9 hardware decode to third-party apps, so the probe
+  /// would report false everywhere and force transcodes mpv handles in software.
   private static func hardwareVideoDecoders() -> [String: Bool] {
-    var vp9 = false
-    if #available(iOS 14.0, *) {
-      vp9 = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9)
-    }
     var av1 = false
     if #available(iOS 17.0, *) {
       av1 = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
     }
     return [
       "hevc": VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC),
-      "vp9": vp9,
       "av1": av1,
     ]
   }

@@ -81,20 +81,22 @@ bullets under "Testing".
    `player/lib/core/player/android_codec_capabilities.dart`, e.g.
    `ios_codec_capabilities.dart`) calling method `hardwareVideoDecoders` on
    the existing `dev.mydia.player/codecs` channel, returning which of hevc,
-   vp9, av1 have hardware decode. `detectDeviceProfile` in
+   av1 have hardware decode. VP9 is not probed (iOS does not expose VP9
+   hardware decode to third-party apps, so it would drop VP9 everywhere); a
+   `vp9` key in the answer is ignored. `detectDeviceProfile` in
    `device_profile_native.dart` applies it on iOS only, removing every alias
    of an unsupported codec from `videoCodecs` (hevc: `hevc`, `h265`, `h.265`,
-   `hvc1`; vp9: `vp9`, `vp09`; av1: `av1`, `av01`), and logs
-   `[DeviceProfile] ios hardware decode: hevc=<bool> vp9=<bool> av1=<bool>`.
+   `hvc1`; av1: `av1`, `av01`), and logs
+   `[DeviceProfile] ios hardware decode: hevc=<bool> av1=<bool>`.
    A failed, empty or missing-plugin probe leaves the profile unchanged. Make
    the platform check injectable so tests can cover iOS and non-iOS. Tests
    with a fake channel, modelled on `android_codec_capabilities_test.dart`.
 2. Swift side: a handler for `dev.mydia.player/codecs` registered in
    `player/ios/Runner/AppDelegate.swift` (follow how the other channels there
    are registered), answering `hardwareVideoDecoders` with
-   `{"hevc": Bool, "vp9": Bool, "av1": Bool}` from
-   `VTIsHardwareDecodeSupported`. VP9 needs iOS 14 and AV1 iOS 17 for
-   `kCMVideoCodecType_VP9` / `kCMVideoCodecType_AV1`; below that report false.
+   `{"hevc": Bool, "av1": Bool}` from
+   `VTIsHardwareDecodeSupported`. AV1 needs iOS 17 for
+   `kCMVideoCodecType_AV1`; below that report false.
    Unknown methods return `FlutterMethodNotImplemented`. If an iOS build is not
    possible on this Linux host, say so in the report; do not fake it.
 3. Run the device profile and codec test files plus `./dev flutter analyze`.

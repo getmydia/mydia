@@ -87,12 +87,14 @@ One PR, three parts.
 
 - iOS gains a handler for the existing `dev.mydia.player/codecs` channel,
   registered in `AppDelegate.swift`. A new method `hardwareVideoDecoders`
-  returns, for HEVC, VP9 and AV1, whether `VTIsHardwareDecodeSupported`
-  reports true. VP9 needs iOS 14 and AV1 needs iOS 17 for their codec
-  constants; below that, the codec reports false.
+  returns, for HEVC and AV1, whether `VTIsHardwareDecodeSupported` reports
+  true. AV1 needs iOS 17 for its codec constant; below that it reports false.
+  VP9 is not probed: iOS does not expose VP9 hardware decode to third-party
+  apps, so the probe would report false on nearly every device and force a
+  server transcode for VP9 that mpv software-decodes fine. VP9 stays claimed.
 - `detectDeviceProfile`, on iOS only, removes from the mpv-derived
   `videoCodecs` every alias of a codec reported as unsupported (`hevc`,
-  `h265`, `h.265`, `hvc1`; `vp9`, `vp09`; `av1`, `av01`). The server then
+  `h265`, `h.265`, `hvc1`; `av1`, `av01`). The server then
   transcodes those files from the first second. Decided: no software-decode
   allowance, for the reason `android_codec_capabilities.dart` gives. On weak
   hardware software decoding is stutter, not a rescue. Newer iPhones without
@@ -101,7 +103,7 @@ One PR, three parts.
   these in software without trouble, matching the existing desktop rule.
 - A failed or empty probe leaves the claims unconstrained, as the Android
   probe does.
-- One log line, `[DeviceProfile] ios hardware decode: hevc=<bool> vp9=<bool>
+- One log line, `[DeviceProfile] ios hardware decode: hevc=<bool>
   av1=<bool>`, so the next uploaded log shows what the device advertised.
 
 ## Testing

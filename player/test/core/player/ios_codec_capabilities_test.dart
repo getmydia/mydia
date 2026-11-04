@@ -49,7 +49,7 @@ void main() {
   group('applyIosHardwareDecode', () {
     test('unsupported HEVC removes all four aliases and nothing else',
         () async {
-      stub(() => {'hevc': false, 'vp9': true, 'av1': true});
+      stub(() => {'hevc': false, 'av1': true});
 
       final profile = await apply();
 
@@ -59,17 +59,33 @@ void main() {
       expect(profile.containers, full.containers);
     });
 
-    test('unsupported VP9 and AV1 remove their aliases', () async {
-      stub(() => {'hevc': true, 'vp9': false, 'av1': false});
+    test('unsupported AV1 removes its aliases', () async {
+      stub(() => {'hevc': true, 'av1': false});
 
       final profile = await apply();
 
-      expect(profile.videoCodecs,
-          ['h264', 'hevc', 'h265', 'h.265', 'hvc1', 'mpeg2']);
+      expect(profile.videoCodecs, [
+        'h264',
+        'hevc',
+        'h265',
+        'h.265',
+        'hvc1',
+        'vp9',
+        'vp09',
+        'mpeg2',
+      ]);
+    });
+
+    test('a vp9 false in the answer never removes vp9 aliases', () async {
+      stub(() => {'hevc': true, 'vp9': false, 'av1': true});
+
+      final profile = await apply();
+
+      expect(profile.videoCodecs, full.videoCodecs);
     });
 
     test('everything supported leaves the profile unchanged', () async {
-      stub(() => {'hevc': true, 'vp9': true, 'av1': true});
+      stub(() => {'hevc': true, 'av1': true});
 
       expect((await apply()).videoCodecs, full.videoCodecs);
     });
