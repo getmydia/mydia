@@ -278,6 +278,18 @@ defmodule MydiaWeb.Features.ManualSearchLayoutTest do
 
       assert %{"inside" => true} = panel.()
 
+      # From `sm` up the sheet covers only part of the dialog, so the results
+      # stay visible (dimmed) behind the overlay. Waits out the 300ms a phone
+      # takes to hide them, so a regression cannot slip past an early read.
+      if unquote(w) >= 640 do
+        Process.sleep(600)
+
+        assert eval_js(
+                 session,
+                 "return getComputedStyle(document.getElementById('manual-search-results-pane')).visibility;"
+               ) == "visible"
+      end
+
       js_click(session, "#manual-search-show-results")
 
       eventually(fn -> if panel.()["shown"], do: :error, else: {:ok, true} end,
