@@ -8,14 +8,22 @@
 /// Deliberately separate from `subtitle_track_builder.dart`, which reconciles
 /// two track lists and carries a choice across a source switch. Those are a
 /// different problem, and keeping this file free of the player lets it be
-/// tested without one. It borrows only [nativeTwinOf] from there, to find a
-/// server track on mpv's list.
+/// tested without one. It borrows [nativeTwinOf] from there, to find a
+/// server track on mpv's list, and that file's restore types, to say what a
+/// preference carried across a switch comes to on the new source.
 library;
 
 import '../../../core/language/language_equivalents.dart';
 import '../../../domain/models/subtitle_track.dart';
 
-import 'subtitle_track_builder.dart' show nativeTwinOf;
+import 'subtitle_track_builder.dart'
+    show
+        RestoreOff,
+        RestoreTrack,
+        RestoreUnavailable,
+        SubtitleNotice,
+        SubtitleRestore,
+        nativeTwinOf;
 
 export '../../../core/language/language_equivalents.dart'
     show subtitlePreferenceLanguageEquals;
@@ -144,6 +152,38 @@ SubtitleTrack? preferenceTarget({
     if (twin != null) return twin;
   }
   return matchSubtitlePreference(pref, tracks);
+}
+
+/// What a preference carried across a source switch (`IntentPreference`)
+/// applies on the source that just landed.
+///
+/// The same matching the preference used when the playback opened
+/// ([preferenceTarget]), against the new source's [tracks]. A preference that
+/// matches nothing there is [SubtitleNotice.notCarried], not the silence
+/// [preferenceTarget]'s caller keeps on a fresh open: here a subtitle was
+/// showing a moment ago, and it must not disappear without a word. A null
+/// [pref] is the same answer, since there is nothing left to match with.
+SubtitleRestore carriedPreferenceRestore({
+  required SubtitlePreference? pref,
+  required List<SubtitleTrack> serverTracks,
+  required List<SubtitleTrack> tracks,
+  required Map<String, int> streamIndexByMpvId,
+}) {
+  const notCarried = RestoreUnavailable(SubtitleNotice.notCarried);
+  switch (pref) {
+    case null:
+      return notCarried;
+    case PreferOff():
+      return const RestoreOff();
+    case PreferTrack():
+      final target = preferenceTarget(
+        pref: pref,
+        serverTracks: serverTracks,
+        tracks: tracks,
+        streamIndexByMpvId: streamIndexByMpvId,
+      );
+      return target == null ? notCarried : RestoreTrack(target);
+  }
 }
 
 /// Whether the stored preference may be applied to the playback right now.

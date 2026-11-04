@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/screens/player/subtitle_preference.dart';
+import 'package:player/presentation/screens/player/subtitle_track_builder.dart';
 
 SubtitleTrack track(
   String id,
@@ -367,6 +368,64 @@ void main() {
         ),
         isNull,
       );
+    });
+  });
+
+  group('carriedPreferenceRestore', () {
+    final serverTracks = [
+      const SubtitleTrack(
+          id: '4', language: 'eng', title: 'Full', embedded: true),
+      const SubtitleTrack(id: 'side-1', language: 'fre', title: 'Fan subs'),
+    ];
+
+    test('a track preference lands on the new source by the same matching', () {
+      // Direct play to a transcode: the server's own track is on screen.
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferTrack(language: 'eng'),
+          serverTracks: serverTracks,
+          tracks: serverTracks,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreTrack>().having((r) => r.track.id, 'track', '4'),
+      );
+      // A transcode to direct play: mpv's own stream, by index.
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferTrack(language: 'eng'),
+          serverTracks: serverTracks,
+          tracks: [track('mk_1', 'eng'), serverTracks[1]],
+          streamIndexByMpvId: const {'1': 4},
+        ),
+        isA<RestoreTrack>().having((r) => r.track.id, 'track', 'mk_1'),
+      );
+    });
+
+    test('an Off preference stays off', () {
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferOff(),
+          serverTracks: serverTracks,
+          tracks: serverTracks,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreOff>(),
+      );
+    });
+
+    test('a preference matching nothing on the new source is reported', () {
+      for (final pref in [const PreferTrack(language: 'jpn'), null]) {
+        expect(
+          carriedPreferenceRestore(
+            pref: pref,
+            serverTracks: serverTracks,
+            tracks: serverTracks,
+            streamIndexByMpvId: const {},
+          ),
+          isA<RestoreUnavailable>()
+              .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        );
+      }
     });
   });
 }

@@ -777,6 +777,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
   final Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
+  /// The subtitle files `sub-add`ed to the file now loaded, oldest first, so
+  /// mpv's entries for them are not offered as subtitles of their own; see
+  /// [subAddedMpvTrackIds]. Emptied on every open, since mpv drops them when
+  /// it loads a new file.
+  final List<SubAddedSubtitle> _subAddedSubtitles = [];
+
   /// Local copies of bitmap subtitle sidecars fetched during this screen's
   /// life, deleted in [dispose]. mpv loads them from disk; see
   /// [_fetchImageSubtitleTrack].
@@ -2138,6 +2144,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // this file's pre-probe server fallback and fetch a stream mpv is about
     // to report itself.
     final tracksSettleEpoch = _beginTracksSettle();
+    _subAddedSubtitles.clear();
     await player.open(opening.media, play: false);
     _detectTracks();
     if (opening.seekAfterOpen) await player.seek(playerTarget);
@@ -2276,8 +2283,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// What [_switchSource] carries to the new source: the latest pick,
-  /// counting one still resolving, in the server's id space. Null when the
-  /// viewer never chose this playback, so mpv keeps its own defaults.
+  /// counting one still resolving, in the server's id space. When the stored
+  /// preference chose instead of the viewer, the preference itself, to be
+  /// matched again on the new source. Null when neither chose this
+  /// playback, so mpv keeps its own defaults.
   ///
   /// An mpv-native pick is translated through its stream index, which has
   /// to be read now, while the file it belongs to is still loaded. Read
@@ -2294,6 +2303,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       viewerChose: _subtitleChosenThisPlayback,
       selectedStreamIndex: streamIndex,
       serverTracks: _serverSubtitleTracks,
+      // Taken, and not given back, only when the preference selected
+      // something, Off included. See [_applySubtitlePreference].
+      preferenceApplied: _preferenceAppliedForPlayback,
     );
   }
 
@@ -2327,11 +2339,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     if (!stillCurrent()) return;
 
-    final restore = resolveSubtitleIntent(
-      intent: intent,
-      tracks: _subtitleTracks,
-      streamIndexByMpvId: indices,
-    );
+    final restore = intent is IntentPreference
+        ? carriedPreferenceRestore(
+            pref: _subtitlePreference,
+            serverTracks: _serverSubtitleTracks,
+            tracks: _subtitleTracks,
+            streamIndexByMpvId: indices,
+          )
+        : resolveSubtitleIntent(
+            intent: intent,
+            tracks: _subtitleTracks,
+            streamIndexByMpvId: indices,
+          );
     final generation = await _applySubtitleSelection(
       restore is RestoreTrack ? restore.track : null,
       keepNudge: true,
@@ -2831,6 +2850,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // anyway for consistency with `_attachSource`'s native branch, which
     // needs it.
     final tracksSettleEpoch = _beginTracksSettle();
+    _subAddedSubtitles.clear();
 
     // Subscribe before opening. `player.stream.tracks` is a plain broadcast
     // stream with no replay, so a revision published between `open()` and the
@@ -3302,13 +3322,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (currentMkSubtitle != SubtitleTrack.auto() &&
         currentMkSubtitle != SubtitleTrack.no()) {
-      for (final appTrack in _subtitleTracks) {
-        if (_mediaKitSubtitleTrackMap[appTrack.id]?.id ==
-            currentMkSubtitle.id) {
-          applied = appTrack;
-          break;
-        }
-      }
+      bool showing(app_models.SubtitleTrack t) =>
+          _mediaKitSubtitleTrackMap[t.id] == currentMkSubtitle;
+      // The server's tracks first, including one this list no longer offers:
+      // in direct play an embedded server track fetched before mpv listed its
+      // own is still the one `sub-add`ed and showing once mpv's list replaces
+      // the server's. Matching on `_subtitleTracks` alone adopted nothing,
+      // and the selection was lost at the next source switch.
+      applied = _serverSubtitleTracks.where(showing).firstOrNull ??
+          _subtitleTracks.where(showing).firstOrNull;
     }
 
     _selectedSubtitleTrack = applied;
@@ -3388,6 +3410,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       mpvTracks.add(appTrack);
       mpvById[appTrack.id] = mkTrack;
     }
+
+    // mpv's entries for the server tracks this playback fetched and added
+    // are those server tracks, already selectable and selected as such.
+    final added = subAddedMpvTrackIds(
+      mpvTracks: mpvTracks,
+      added: _subAddedSubtitles,
+    );
+    mpvTracks.removeWhere((t) => added.contains(t.id));
 
     final derived = resolveSubtitleTracks(
       serverTracks: _serverSubtitleTracks,
@@ -3919,12 +3949,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// under [generation] was superseded while it waited (see
   /// [_canApplySubtitleSelection]). Reads `_player` only once let through,
   /// since a web switch replaces the player.
+  ///
+  /// A data or uri track reaches mpv as a `sub-add`, which gives it an entry
+  /// of its own in mpv's list; that is recorded in [_subAddedSubtitles] once
+  /// the call returns, and the list derived again in case mpv published
+  /// first.
   Future<bool> _setSubtitleTrack(int generation, SubtitleTrack track) =>
-      _switchGate.pass(() => _canApplySubtitleSelection(generation), () {
+      _switchGate.pass(() => _canApplySubtitleSelection(generation), () async {
         final player = _player;
-        if (player == null) return Future<void>.value();
+        if (player == null) return;
         _monitor?.noteInterruption();
-        return player.setSubtitleTrack(track);
+        await player.setSubtitleTrack(track);
+        if ((track.data || track.uri) &&
+            mounted &&
+            identical(_player, player)) {
+          _subAddedSubtitles.add((
+            title: track.title ?? 'external',
+            language: track.language ?? 'auto',
+          ));
+          _refreshSubtitleTracks();
+        }
       });
 
   /// Hands the browser the cues of whatever was just applied, or stops it

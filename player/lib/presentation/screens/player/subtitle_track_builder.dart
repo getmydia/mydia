@@ -99,6 +99,42 @@ List<SubtitleTrack> resolveSubtitleTracks({
   );
 }
 
+/// A subtitle file this player handed mpv with `sub-add`, as mpv was told to
+/// label it: media_kit passes the track's title, or `external`, and its
+/// language, or `auto`.
+typedef SubAddedSubtitle = ({String title, String language});
+
+/// The ids of the entries in [mpvTracks] that are files this playback
+/// `sub-add`ed to the file now loaded, [added] in the order they were added.
+///
+/// Such an entry is a server track the player fetched, already selected as
+/// that server track, so it must not be offered again as a subtitle of its
+/// own. media_kit reports no `external` flag, so the entries are found the
+/// way mpv lays them out: it appends every `sub-add` after what the file
+/// carries, so the added files are the trailing entries, labelled as they
+/// were added. Matched from the end, stopping at the first entry that does
+/// not line up, so a container track sharing a fetched track's label stays
+/// listed. The one gap: a list mpv publishes after a `sub-add` is recorded
+/// but before mpv lists that file can hide the container's last track if
+/// the labels agree, until the next revision corrects it.
+Set<String> subAddedMpvTrackIds({
+  required List<SubtitleTrack> mpvTracks,
+  required List<SubAddedSubtitle> added,
+}) {
+  final ids = <String>{};
+  var i = mpvTracks.length - 1;
+  var j = added.length - 1;
+  while (i >= 0 && j >= 0) {
+    final entry = mpvTracks[i];
+    final file = added[j];
+    if (entry.title != file.title || entry.language != file.language) break;
+    ids.add(entry.id);
+    i--;
+    j--;
+  }
+  return ids;
+}
+
 /// Whether an in-flight subtitle selection's result should still be applied
 /// to the player, once its async work (a media_kit "Off" call, or a
 /// `SubtitleContent` fetch) finishes.
@@ -334,6 +370,17 @@ final class IntentUnmappable extends SubtitleIntent {
   const IntentUnmappable();
 }
 
+/// The stored per-show preference chose what is showing, not the viewer, so
+/// the new source applies the preference again against its own list.
+///
+/// Carries no payload: the preference belongs to the file, which a switch
+/// does not change, and the screen still holds it. It is resolved by
+/// `carriedPreferenceRestore` in `subtitle_preference.dart`, with the same
+/// matching the preference used on the source being left.
+final class IntentPreference extends SubtitleIntent {
+  const IntentPreference();
+}
+
 /// What to carry across a source switch, given the latest pick.
 ///
 /// [selected] is the pending selection (a pick still resolving counts). Null
@@ -341,6 +388,12 @@ final class IntentUnmappable extends SubtitleIntent {
 /// playback, and the answer is null: nothing to carry, so mpv keeps its own
 /// defaults exactly as on a fresh open. Forcing Off there would hide a
 /// forced or default track mpv shows on a fresh open at Original.
+///
+/// [preferenceApplied] with [viewerChose] false means the stored preference
+/// made the selection, and the answer is [IntentPreference] whatever is
+/// selected. Carrying the track it landed on instead loses it in two ways:
+/// a server track `sub-add`ed in direct play is selected on no list mpv
+/// reports, and an mpv-native one often has no stream index to map it by.
 ///
 /// An mpv-native [selected] is translated through [selectedStreamIndex],
 /// its `ff-index`, read while its file was still loaded; the server's
@@ -351,7 +404,9 @@ SubtitleIntent? subtitleIntentBeforeSwitch({
   required bool viewerChose,
   required int? selectedStreamIndex,
   required List<SubtitleTrack> serverTracks,
+  bool preferenceApplied = false,
 }) {
+  if (!viewerChose && preferenceApplied) return const IntentPreference();
   if (selected == null) return viewerChose ? const IntentOff() : null;
   if (!isMpvNativeSubtitleTrackId(selected.id)) return IntentTrack(selected);
   if (selectedStreamIndex == null) return const IntentUnmappable();
@@ -432,7 +487,9 @@ SubtitleRestore resolveSubtitleIntent({
   switch (intent) {
     case IntentOff():
       return const RestoreOff();
-    case IntentUnmappable():
+    // Resolved by `carriedPreferenceRestore`, which has the preference to
+    // match with. Reaching here means there is none, so nothing is carried.
+    case IntentUnmappable() || IntentPreference():
       return const RestoreUnavailable(SubtitleNotice.notCarried);
     case IntentTrack(:final track):
       final same = tracks.where((t) => t.id == track.id).firstOrNull;

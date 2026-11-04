@@ -1,0 +1,382 @@
+// A subtitle the stored preference selected, carried across a fallback.
+//
+// Reproduces an iPad session: native direct play applied the saved English
+// preference by fetching the server's copy of an embedded track and
+// `sub-add`ing it, mpv's list grew by one entry for the added file, and a
+// fallback to transcode then lost the subtitle with no toast. The fallback
+// here is driven by two stalls under Auto rather than by dropped frames:
+// frame stats come from mpv's own properties, which a widget test cannot
+// fake, and both reasons reach the same `_fallbackToTranscode`.
+
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:player/core/remote/remote_target_controller.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/widgets/toast/toaster.dart';
+
+import '../../../test_utils/mock_network_images.dart';
+import '../../../test_utils/probed_tracks.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
+import 'player_screen_test_harness.dart';
+
+const _notCarried =
+    "Couldn't keep your subtitles at this quality. Pick them again.";
+
+/// A media_kit player with no decoder behind it that answers a subtitle
+/// selection the way mpv and media_kit do.
+///
+/// `setSubtitleTrack` records the track as current, and a data or uri track
+/// (a `sub-add`) appends an external entry to mpv's list, titled and tagged
+/// as media_kit asks mpv to tag it. `open` starts a new file, so it drops
+/// those entries and resets the current track to `auto`.
+class _MpvLikePlayer extends PlatformPlayer {
+  _MpvLikePlayer({required this.containerSubtitles})
+      : super(configuration: const PlayerConfiguration());
+
+  /// What mpv reads out of the direct-play container once [probe] runs.
+  final List<SubtitleTrack> containerSubtitles;
+
+  final opened = <Media>[];
+  final subtitleTracks = <SubtitleTrack>[];
+
+  final _handle = Completer<int>();
+
+  @override
+  Future<int> get handle => _handle.future;
+
+  List<SubtitleTrack> _subtitles = const [];
+
+  void _publish() {
+    state = state.copyWith(
+      tracks: probedTracks(subtitle: [
+        SubtitleTrack.auto(),
+        SubtitleTrack.no(),
+        ..._subtitles,
+      ]),
+    );
+    tracksController.add(state.tracks);
+  }
+
+  @override
+  Future<void> open(Playable playable, {bool play = true}) async {
+    opened.add(playable as Media);
+    _subtitles = const [];
+    state = state.copyWith(
+      duration: const Duration(seconds: 90),
+      position: playable.start ?? Duration.zero,
+      playing: false,
+      track: state.track.copyWith(subtitle: SubtitleTrack.auto()),
+    );
+    durationController.add(state.duration);
+    positionController.add(state.position);
+    playingController.add(false);
+    // Video and audio straight away, subtitles only once [probe] runs: the
+    // window in which the preference matched the server's list.
+    _publish();
+  }
+
+  /// mpv finishes reading the container's subtitle streams.
+  void probe() {
+    _subtitles = [...containerSubtitles, ..._subtitles];
+    _publish();
+  }
+
+  @override
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {
+    subtitleTracks.add(track);
+    if (track.data || track.uri) {
+      final nextId = _subtitles
+              .map((t) => int.tryParse(t.id) ?? 0)
+              .fold<int>(0, (a, b) => a > b ? a : b) +
+          1;
+      _subtitles = [
+        ..._subtitles,
+        SubtitleTrack(
+          '$nextId',
+          track.title ?? 'external',
+          track.language ?? 'auto',
+        ),
+      ];
+    }
+    state = state.copyWith(track: state.track.copyWith(subtitle: track));
+    trackController.add(state.track);
+  }
+
+  /// mpv publishes its revised list, with any `sub-add`ed file in it. mpv's
+  /// observer reports it after the command has returned, so a test calls
+  /// this once the selection has landed.
+  void publishTrackList() => _publish();
+
+  @override
+  Future<void> play() async {
+    state = state.copyWith(playing: true);
+    playingController.add(true);
+  }
+
+  @override
+  Future<void> pause() async {
+    state = state.copyWith(playing: false);
+    playingController.add(false);
+  }
+
+  @override
+  Future<void> seek(Duration position) async => advance(position);
+
+  void advance(Duration position) {
+    state = state.copyWith(position: position);
+    positionController.add(position);
+  }
+
+  void buffering(bool value) {
+    state = state.copyWith(buffering: value);
+    bufferingController.add(value);
+  }
+}
+
+/// A transport that can hold the first `SubtitleContent` request open, so
+/// mpv's probe can land while the preference's fetch is in flight.
+class _Server extends ScriptedMydiaTransport {
+  _Server(super.handler);
+
+  Completer<void>? holdSubtitleContent;
+  bool subtitleContentHeld = false;
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+    String? deviceProfile,
+    Duration? timeout,
+  }) async {
+    final hold = holdSubtitleContent;
+    if (hold != null &&
+        ScriptedMydiaTransport.operationOf(query) == 'SubtitleContent') {
+      holdSubtitleContent = null;
+      subtitleContentHeld = true;
+      await hold.future;
+    }
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
+  }
+}
+
+_Server _server({required Map<String, dynamic> file}) {
+  return _Server((request, index) {
+    switch (request.operation) {
+      case 'SubtitleContent':
+        return {
+          '__typename': 'RootQueryType',
+          'subtitleContent': 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi\n',
+        };
+      case 'MovieDetail':
+        return movieDetailResponse(positionSeconds: 0, files: [file]);
+      case 'MovieSubtitlePreference':
+        return subtitlePreferenceResponse(preferences: {
+          'file-1': preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+        });
+      case 'MovieSegments':
+        return movieSegmentsResponse();
+      case 'SubtitleTrackSettings':
+        return subtitleTrackSettingsResponse();
+      case 'StreamingCandidates':
+        return streamingCandidatesResponse(
+          directPlay: true,
+          duration: 5400,
+          height: 1080,
+          bitrate: 8000000,
+        );
+    }
+    final variables = request.variables;
+    if (variables.containsKey('strategy')) {
+      return startStreamingSessionResponse(
+        sessionId: 'sess-$index',
+        startPosition: variables['startPosition'] as int? ?? 0,
+        duration: 5400,
+      );
+    }
+    if (variables.containsKey('sessionId')) {
+      return endStreamingSessionResponse();
+    }
+    return <String, dynamic>{
+      '__typename': 'RootMutationType',
+      'updateMovieProgress': null,
+    };
+  });
+}
+
+Future<RemotePlayerBinding> _mount(
+  WidgetTester tester,
+  _Server server,
+  _MpvLikePlayer player,
+) async {
+  final container = buildPlayerScreenContainer(
+    server: server,
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+    castManager: CapturingCastSessionManager(),
+    proxyService: TrackingLocalProxyService(),
+  );
+  addTearDown(container.dispose);
+  await pumpPlayerScreen(
+    tester,
+    container,
+    createPlayer: () => Player(platformPlayer: player),
+  );
+  await pumpUntil(tester, () => player.state.playing, maxTries: 500);
+  return tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+}
+
+/// Every message the toast layer is asked to show, however briefly.
+List<String> _recordToasts(WidgetTester tester) {
+  final controller = Toaster.maybeControllerOf(
+    tester.element(find.byType(PlayerScreen)),
+  )!;
+  final shown = <String>[];
+  void record() {
+    final message = controller.current?.message;
+    if (message != null) shown.add(message);
+  }
+
+  controller.addListener(record);
+  addTearDown(() => controller.removeListener(record));
+  return shown;
+}
+
+/// Two stalls under Auto fall back to transcode, then the new source plays.
+Future<void> _fallBackToTranscode(
+  WidgetTester tester,
+  _MpvLikePlayer player,
+) async {
+  Future<void> tick() => tester.pump(const Duration(seconds: 1));
+  await tick(); // playback has run once
+  player.buffering(true);
+  await tick(); // stall 1
+  player.buffering(false);
+  await tick();
+  player.buffering(true);
+  await tick(); // stall 2
+  await pumpUntil(tester, () => player.opened.length == 2);
+  expect(player.opened.last.uri, contains('/hls/'),
+      reason: 'the stalls must have fallen back to a transcode');
+
+  player.buffering(false);
+  player.advance(const Duration(seconds: 1));
+  await tester.pump();
+  player.advance(const Duration(seconds: 2));
+  await tester.pump();
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await tester.pump(const Duration(seconds: 1));
+}
+
+void main() {
+  testWidgets(
+      'a preference applied from the server in direct play is shown again '
+      'after a fallback to transcode', (tester) async {
+    await mockHttpResponse(() async {
+      final player = _MpvLikePlayer(containerSubtitles: const [
+        SubtitleTrack('1', 'English', 'eng'),
+        SubtitleTrack('2', 'Japanese', 'jpn'),
+      ]);
+      final server = _server(
+        file: mediaFileWithSubtitle(
+          trackId: '3',
+          language: 'eng',
+          title: 'English',
+          url: null,
+          embedded: true,
+        ),
+      )..holdSubtitleContent = Completer<void>();
+      final hold = server.holdSubtitleContent!;
+
+      final binding = await _mount(tester, server, player);
+      final toasts = _recordToasts(tester);
+
+      // mpv listed no subtitles, so the preference matched the server's list
+      // and is fetching the embedded track's body.
+      await pumpUntil(tester, () => server.subtitleContentHeld);
+      expect(server.subtitleContentHeld, isTrue);
+
+      // mpv lists the container's own tracks while that fetch is open.
+      player.probe();
+      await tester.pump();
+      hold.complete();
+      await pumpUntil(tester, () => player.subtitleTracks.isNotEmpty);
+      final added = player.subtitleTracks.single;
+      expect(added.data, isTrue,
+          reason: "the server's body was sub-added to the player");
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(binding.describe(0).selectedSubtitle, '3');
+
+      // mpv's list grows by one entry, for the file just added.
+      player.publishTrackList();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(binding.describe(0).selectedSubtitle, '3',
+          reason: "after mpv lists the added file, the selection is still the "
+              "server's track, not mpv's entry for the added file or nothing");
+      expect(
+        binding.describe(0).subtitleTracks.map((t) => t.id),
+        ['mk_1', 'mk_2'],
+        reason: "mpv's entry for the added file is the server's track, not a "
+            'subtitle of its own to offer',
+      );
+
+      await _fallBackToTranscode(tester, player);
+      await pumpUntil(tester, () => player.subtitleTracks.length == 2);
+
+      expect(player.subtitleTracks, hasLength(2),
+          reason: 'the subtitle must be applied again on the transcode');
+      expect(player.subtitleTracks.last, added);
+      expect(binding.describe(0).selectedSubtitle, '3');
+      expect(toasts, isNot(contains(_notCarried)));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets(
+      'a carried preference that matches nothing on the new source says so',
+      (tester) async {
+    await mockHttpResponse(() async {
+      final player = _MpvLikePlayer(containerSubtitles: const [
+        SubtitleTrack('1', 'English', 'eng'),
+      ]);
+      // The server cannot deliver its English track as text, so a transcode
+      // has no English to offer, while direct play reads mpv's own.
+      final server = _server(
+        file: mediaFileWithSubtitle(
+          trackId: '3',
+          language: 'eng',
+          title: 'English',
+          url: null,
+          embedded: true,
+          deliverable: false,
+        ),
+      );
+
+      final binding = await _mount(tester, server, player);
+      final toasts = _recordToasts(tester);
+
+      player.probe();
+      await pumpUntil(tester, () => player.subtitleTracks.isNotEmpty);
+      expect(player.subtitleTracks.single.id, '1',
+          reason: "the preference lands on mpv's own English track");
+      expect(binding.describe(0).selectedSubtitle, 'mk_1');
+
+      await _fallBackToTranscode(tester, player);
+      await pumpUntil(tester, () => toasts.contains(_notCarried));
+
+      expect(toasts, contains(_notCarried),
+          reason: 'a subtitle never disappears silently');
+      expect(binding.describe(0).selectedSubtitle, isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+}

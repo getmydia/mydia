@@ -755,6 +755,37 @@ void main() {
       );
     });
 
+    test('carries the preference when it, not the viewer, chose', () {
+      // Whatever it landed on: nothing a revision left selected, a server
+      // track, or an mpv track with no index to map it by.
+      for (final selected in [null, serverEnglish, mpvEnglish]) {
+        expect(
+          subtitleIntentBeforeSwitch(
+            selected: selected,
+            viewerChose: false,
+            selectedStreamIndex: null,
+            serverTracks: serverList,
+            preferenceApplied: true,
+          ),
+          isA<IntentPreference>(),
+          reason: 'selected: ${selected?.id}',
+        );
+      }
+    });
+
+    test("a viewer's pick wins over an applied preference", () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: null,
+          viewerChose: true,
+          selectedStreamIndex: null,
+          serverTracks: serverList,
+          preferenceApplied: true,
+        ),
+        isA<IntentOff>(),
+      );
+    });
+
     test('carries a server track as itself', () {
       for (final track in [sidecar, serverEnglish]) {
         expect(
@@ -829,6 +860,57 @@ void main() {
           serverTracks: serverList,
         ),
         isA<IntentTrack>().having((i) => i.track, 'track', serverEnglish),
+      );
+    });
+  });
+
+  group('subAddedMpvTrackIds', () {
+    const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
+    const signs = SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Signs');
+    const fetchedFull =
+        SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full');
+
+    test('the trailing entries labelled as added are the added files', () {
+      expect(
+        subAddedMpvTrackIds(
+          mpvTracks: const [full, signs, fetchedFull],
+          added: const [(title: 'Full', language: 'eng')],
+        ),
+        {'mk_3'},
+      );
+    });
+
+    test('a container track sharing the label is not hidden', () {
+      // Nothing was added, or mpv has not listed the added file yet and its
+      // last container entry carries another label.
+      expect(
+        subAddedMpvTrackIds(
+          mpvTracks: const [full, signs],
+          added: const [],
+        ),
+        isEmpty,
+      );
+      expect(
+        subAddedMpvTrackIds(
+          mpvTracks: const [full, signs],
+          added: const [(title: 'Full', language: 'eng')],
+        ),
+        isEmpty,
+      );
+    });
+
+    test('several added files are matched newest last', () {
+      const fetchedSigns =
+          SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Signs');
+      expect(
+        subAddedMpvTrackIds(
+          mpvTracks: const [full, signs, fetchedFull, fetchedSigns],
+          added: const [
+            (title: 'Full', language: 'eng'),
+            (title: 'Signs', language: 'eng'),
+          ],
+        ),
+        {'mk_3', 'mk_4'},
       );
     });
   });
@@ -947,6 +1029,18 @@ void main() {
       expect(
         resolveSubtitleIntent(
           intent: const IntentUnmappable(),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>()
+            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+      );
+    });
+
+    test('a carried preference with no preference to match is reported', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentPreference(),
           tracks: streamingList,
           streamIndexByMpvId: const {},
         ),
