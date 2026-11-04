@@ -121,6 +121,26 @@ void main() {
       expect((await apply()).videoCodecs, full.videoCodecs);
     });
 
+    test('probes the dev.mydia.player/codecs channel by default', () async {
+      const defaultChannel = MethodChannel('dev.mydia.player/codecs');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var defaultCalls = 0;
+      messenger.setMockMethodCallHandler(defaultChannel, (call) async {
+        defaultCalls++;
+        expect(call.method, 'hardwareVideoDecoders');
+        return {'hevc': false, 'av1': true};
+      });
+      addTearDown(
+          () => messenger.setMockMethodCallHandler(defaultChannel, null));
+
+      final profile = await applyIosHardwareDecode(full, isIos: true);
+
+      expect(defaultCalls, 1);
+      expect(profile.videoCodecs, isNot(contains('hevc')));
+      expect(profile.videoCodecs, contains('av1'));
+    });
+
     test('does not probe or narrow off iOS', () async {
       stub(() => {'hevc': false, 'vp9': false, 'av1': false});
 

@@ -735,6 +735,10 @@ void main() {
     expect(_subtitleContentRequests(link), 1,
         reason: "with no mpv list the server's copy is the only one there is: "
             'the preference is delayed, never dropped');
+
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    expect(player.selectedSubtitleTracks.last.language, 'eng',
+        reason: "the server's English copy reached the player");
   });
 
   testWidgets('a sidecar preference applies as soon as the cap expires',
