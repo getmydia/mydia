@@ -42,7 +42,14 @@ defmodule MydiaWeb.MobileLayoutManifest do
       "/movies/:id" => %{
         path: &"/movies/#{&1.movie}",
         states: [
-          {"manual-search", [{:click, "#manual-search-button"}, {:wait, "#manual-search-modal"}]}
+          {"manual-search", [{:click, "#manual-search-button"}, {:wait, "#manual-search-modal"}]},
+          {"manual-search-filters",
+           [
+             {:click, "#manual-search-button"},
+             {:wait, "#manual-search-filters-button"},
+             {:click, "#manual-search-filters-button"},
+             {:wait, "#manual-search-filter-toggle:checked"}
+           ]}
         ]
       },
       "/tv" => page("/tv"),

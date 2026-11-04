@@ -375,6 +375,26 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       render_component(&Modals.manual_search_modal/1, assigns)
     end
 
+    test "filters live in a closed drawer and the chips render once" do
+      html = modal_html(%{}, %{quality_filters: ["1080p"], raw_results_empty?: false})
+      doc = LazyHTML.from_fragment(html)
+
+      toggle =
+        LazyHTML.query(
+          doc,
+          "#manual-search-drawer > input#manual-search-filter-toggle.drawer-toggle"
+        )
+
+      assert [_] = Enum.to_list(toggle)
+      assert LazyHTML.attribute(toggle, "checked") == []
+      assert LazyHTML.attribute(toggle, "phx-update") == ["ignore"]
+      # Not a tab stop; the Filters button drives it.
+      assert LazyHTML.attribute(toggle, "tabindex") == ["-1"]
+
+      assert [_] = doc |> LazyHTML.query("#manual-search-chip-quality") |> Enum.to_list()
+      assert [] = doc |> LazyHTML.query("[id^='manual-search-lg-chip']") |> Enum.to_list()
+    end
+
     test "shows the existing file name with its full name on hover" do
       existing = %MydiaWeb.MediaLive.Show.ExistingFiles{
         kind: :file,
@@ -573,6 +593,23 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
 
       assert html =~ ~s(id="search-result-00000-1")
+    end
+
+    test "large seeder counts render compactly with the exact count on hover" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 123_456})
+      doc = LazyHTML.from_fragment(html)
+
+      # The lg column badge, the mobile badge and the no-profile circle.
+      for selector <- [
+            "#search-result-00000-1-seeds .badge",
+            "#search-result-00000-1-seeds-inline",
+            "#search-result-00000-1-seeders-circle"
+          ] do
+        site = LazyHTML.query(doc, selector)
+        assert [_] = Enum.to_list(site), "#{selector} did not render"
+        assert site |> LazyHTML.text() |> String.trim() == "123k", selector
+        assert LazyHTML.attribute(site, "title") == ["123456 seeders"], selector
+      end
     end
 
     test "nil seeders render a placeholder, not 0, in the seeds cell" do

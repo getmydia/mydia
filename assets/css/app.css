@@ -342,8 +342,14 @@
    accessibility tree. Deliberately not `display: none`: the DockNav hook reads
    getBoundingClientRect() of the active link on every LiveView patch to place
    #dock-indicator, and a display:none rect is all zeros, which would strand the
-   indicator in the viewport corner. */
-#main-drawer:checked ~ .drawer-content #mobile-dock {
+   indicator in the viewport corner.
+
+   The manual search dialog (z-999) already covers the dock, so hiding the dock
+   there changes nothing visible. The rule exists for the tap target audit,
+   where the dialog's bottom button (Show results) would otherwise collide with
+   the dock, and for the tab order. */
+#main-drawer:checked ~ .drawer-content #mobile-dock,
+body:has(#manual-search-modal) #mobile-dock {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;

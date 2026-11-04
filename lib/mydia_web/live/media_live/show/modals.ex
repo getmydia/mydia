@@ -857,7 +857,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       <div class={[
         "modal-box relative flex flex-col overflow-hidden p-0",
         "max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none",
-        "sm:h-[90vh] sm:max-w-4xl lg:max-w-6xl"
+        "sm:h-[90vh] sm:max-w-4xl lg:max-w-6xl xl:max-w-[min(120rem,92vw)]"
       ]}>
         <%!-- Header --%>
         <div class="navbar min-h-0 shrink-0 gap-2 border-b border-base-300 px-3 py-2 sm:px-4">
@@ -964,23 +964,18 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           indexer_filters={@indexer_filters}
           min_seeders={@min_seeders}
         />
-        <div class={[
-          "flex min-h-0 flex-1 flex-col",
-          @filters_visible? &&
-            "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]"
-        ]}>
-          <ManualSearchFilters.filter_panel
-            :if={@filters_visible?}
-            quality_filters={@quality_filters}
-            source_filters={@source_filters}
-            codec_filters={@codec_filters}
-            indexer_filters={@indexer_filters}
-            filter_options={@filter_options}
-            quality_options={quality_options()}
-            min_seeders={@min_seeders}
-            close_after_grab={@close_after_grab}
-            result_count={@result_count}
-          />
+        <ManualSearchFilters.filter_drawer
+          visible?={@filters_visible?}
+          quality_filters={@quality_filters}
+          source_filters={@source_filters}
+          codec_filters={@codec_filters}
+          indexer_filters={@indexer_filters}
+          filter_options={@filter_options}
+          quality_options={quality_options()}
+          min_seeders={@min_seeders}
+          close_after_grab={@close_after_grab}
+          result_count={@result_count}
+        >
           <div id="manual-search-results-pane" class="min-h-0 flex-1 overflow-y-auto">
             <%!-- Inline Download Error --%>
             <%= if @download_error do %>
@@ -994,24 +989,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               blocking={@blocking}
               context_type={@manual_search_context && @manual_search_context.type}
             />
-            <%!-- Search progress, then the lg filter chips. Stacked: beside the
-                 card, the chips crushed it to a sliver (#1311). --%>
+            <%!-- Search progress --%>
             <div class="px-4 pt-3">
               <.indexer_search_status
                 progress={@indexer_progress}
                 cardigann={@cardigann_summary}
                 retry_event="retry_indexer"
                 retest_paused_event="retest_paused"
-              />
-              <ManualSearchFilters.active_chips
-                :if={@filters_visible?}
-                id_prefix="manual-search-lg-chip"
-                class="hidden flex-wrap pb-3 lg:flex"
-                quality_filters={@quality_filters}
-                source_filters={@source_filters}
-                codec_filters={@codec_filters}
-                indexer_filters={@indexer_filters}
-                min_seeders={@min_seeders}
               />
             </div>
             <%!-- Loading State --%>
@@ -1093,7 +1077,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               </ul>
             <% end %>
           </div>
-        </div>
+        </ManualSearchFilters.filter_drawer>
       </div>
       <div class="modal-backdrop" phx-click="close_manual_search_modal"></div>
     </div>
