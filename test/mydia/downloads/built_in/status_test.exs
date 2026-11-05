@@ -49,6 +49,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       reasons = [
         :missing_net_admin,
         :missing_tun,
+        :split_group_missing,
         {:reserved_variable, "DNS_ADDRESS"},
         {:invalid_port, "x"},
         {:vpn_auth_failed, "bad credentials"},
@@ -72,6 +73,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
 
       assert Status.describe(:missing_net_admin) =~ "cap_add"
       assert Status.describe(:missing_tun) =~ "/dev/net/tun"
+      assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
     end
   end

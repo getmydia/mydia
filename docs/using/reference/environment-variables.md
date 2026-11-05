@@ -175,13 +175,22 @@ The container needs these for the VPN:
   without it. Docker mounts `/proc/sys` read-only, so gluetun cannot set it
   itself. It does no harm on other hosts.
 
+Two more things the VPN depends on:
+
+- The built-in engine is a setgid binary, so the container must not run with
+  `no-new-privileges`. Files the engine writes belong to group `mydia-torrent`.
+- That group has the fixed GID 65530. `PGID=65530` is refused (the entrypoint
+  ignores it and says so). If the group is missing or shares the `mydia` GID,
+  the VPN stays off and the admin panel says so; recreate the container or
+  pick another `PGID`.
+
 Mydia sets `SPLIT_TUNNEL_GID`, `HTTP_CONTROL_SERVER_ADDRESS`,
 `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` and `DNS_ADDRESS` itself. Setting them
 with the `MYDIA_VPN_` prefix is ignored and shown as a warning in the admin UI.
 
 **Limitation: values cannot contain whitespace.** The entrypoint passes the
-`MYDIA_VPN_*` variables to gluetun by word splitting, so a value with a space
-in it (a city such as `New York`, for instance) breaks. Use values without
+`MYDIA_VPN_*` variables to gluetun by word splitting (globbing is switched
+off, so `*` and `?` stay literal), so a value with a space in it (a city such as `New York`, for instance) breaks. Use values without
 spaces, such as `pia` for `private internet access`, or a country in place of
 a city, until the entrypoint reads an env file.
 

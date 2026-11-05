@@ -29,9 +29,15 @@ CURRENT_GID=$(id -g mydia 2>/dev/null || echo 1000)
 if [ "$PUID" != "$CURRENT_UID" ] || [ "$PGID" != "$CURRENT_GID" ]; then
     echo "Updating mydia user UID:GID to $PUID:$PGID..."
 
+    # The VPN's split group is pinned to GID 65530 and must survive the remap.
+    if [ "$PGID" = "65530" ]; then
+        echo "  Warning: PGID 65530 is reserved for group 'mydia-torrent'; leaving the group IDs alone"
+        PGID="$CURRENT_GID"
+    fi
+
     # Check if target GID is already in use by another group
     EXISTING_GROUP=$(getent group "$PGID" 2>/dev/null | cut -d: -f1)
-    if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "mydia" ]; then
+    if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "mydia" ] && [ "$EXISTING_GROUP" != "mydia-torrent" ]; then
         echo "  GID $PGID is already in use by group '$EXISTING_GROUP', removing it..."
         # Try multiple deletion methods
         if ! delgroup "$EXISTING_GROUP" 2>/dev/null && \

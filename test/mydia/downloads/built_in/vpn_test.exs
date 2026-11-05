@@ -104,6 +104,14 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert %Status{vpn: {:down, :missing_net_admin}} = Status.get(ctx.status)
   end
 
+  test "a missing split group is reported without calling gluetun", ctx do
+    File.write!(Path.join(ctx.dir, "preflight"), "net_admin=ok\ntun=ok\nsplit_group=missing\n")
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop, :split_group_missing}, 1_000
+    assert %Status{vpn: {:down, :split_group_missing}} = Status.get(ctx.status)
+  end
+
   test "an unreachable gluetun is reported", ctx do
     Bypass.down(ctx.bypass)
     start_vpn(ctx, :ok)

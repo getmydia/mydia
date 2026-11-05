@@ -90,8 +90,9 @@ is enabled:
 - **`Vpn`**: started only when the VPN is configured. Gluetun itself is
   started by the entrypoint as root (see Data flow), because its own traffic
   (provider API calls, DNS upstream, public IP lookup) must be tunneled and
-  gluetun joins the split group itself (`Setgid(SPLIT_TUNNEL_GID)`); a process the BEAM spawned would carry
-  the BEAM's uid and need capabilities the BEAM should not hold. `Vpn` reads
+  gluetun joins the split group itself (`Setgid(SPLIT_TUNNEL_GID)`); a
+  process the BEAM spawned would carry the BEAM's uid and need capabilities
+  the BEAM should not hold. `Vpn` reads
   the entrypoint's preflight file `/config/gluetun/preflight` and the
   generated control-server API key `/config/gluetun/apikey`, and polls the
   control server on `127.0.0.1:8000` (`X-API-Key` header) every 10 seconds:

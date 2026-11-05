@@ -53,6 +53,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe(:missing_tun),
     do: "The VPN needs the TUN device. Add devices: [/dev/net/tun] to the Mydia container."
 
+  def describe(:split_group_missing),
+    do:
+      "The torrent group the VPN relies on (mydia-torrent) is missing or collides with PGID. Recreate the container, or pick another PGID."
+
   def describe({:reserved_variable, name}),
     do: "MYDIA_VPN_#{name} is set by Mydia itself. Remove it from the container environment."
 

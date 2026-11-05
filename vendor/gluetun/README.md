@@ -43,9 +43,11 @@ Unset, gluetun behaves exactly as upstream.
   before its packets are marked.
 - **DNS.** `/etc/resolv.conf` is left alone. The DNS server listens on
   `127.0.0.1:53` only. `nat OUTPUT` redirects marked port 53 traffic to it,
-  inserted ahead of Docker's embedded DNS rules. Gluetun's own (uid 0) DNS is
-  not redirected, so a plaintext upstream does not loop, but it is still
-  tunneled. Over IPv6, marked port 53 traffic is dropped instead.
+  inserted ahead of Docker's embedded DNS rules. Port 53 traffic from uid 0 is
+  exempt from the redirect by uid (the redirect would otherwise loop gluetun's
+  own plaintext upstream queries back to itself); gluetun's own traffic is
+  tunneled because it is in the group, not because it is uid 0. Over IPv6, marked port 53 traffic is dropped
+  instead.
 - **IPv6.** When `ip6tables` exists, the marking and kill switch rules are
   applied through it as well; the policy rule and unreachable route are added
   for IPv6 when gluetun detects IPv6 support.
@@ -103,8 +105,9 @@ partway, nothing is removed: split tunnel traffic fails closed.
 - Gluetun's HTTP proxy and Shadowsocks server would send their replies into
   the tunnel; do not enable them. The health server and the control server
   must stay on loopback, as they are by default and as Mydia sets them.
-- Processes in the group must not run as root: DNS from uid 0 is not
-  redirected.
+- Other processes in the group that run as root get no DNS redirect, because
+  the redirect skips uid 0. Run them as an unprivileged user, as rqbit and
+  `torrent-curl` are.
 - VPN-side port redirection (`VPN_PORT_FORWARDING_LISTENING_PORT`) appends its
   `INPUT` accept after the tunnel `DROP` and does not work.
 
@@ -140,6 +143,10 @@ Build the image (`docker build -t mydia:builtin-vpn .`) and run it with
    connections.
 6. Gluetun's log has no reverse path filtering warning, or the container has
    the `src_valid_mark` sysctl.
+
+On `docker stop`, gluetun gets SIGKILL with no teardown. That is harmless: the
+rules, routes and tunnel live in the container's network namespace, which dies
+with the container.
 
 The smoke test needs real VPN credentials and has not been run against the
 image yet. Record any deviation here after the first run. `docker/vpn-preflight.sh`

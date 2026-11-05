@@ -188,6 +188,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         cond do
           body =~ "net_admin=missing" -> {:down, :missing_net_admin}
           body =~ "tun=missing" -> {:down, :missing_tun}
+          body =~ "split_group=missing" -> {:down, :split_group_missing}
           true -> :ok
         end
 

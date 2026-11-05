@@ -24,28 +24,45 @@ tun=ok
 src_valid_mark=missing
 [ "$(cat /proc/sys/net/ipv4/conf/all/src_valid_mark 2>/dev/null)" = 1 ] && src_valid_mark=ok
 
-printf 'net_admin=%s\ntun=%s\nsrc_valid_mark=%s\n' "$net_admin" "$tun" "$src_valid_mark" > "$dir/preflight"
+# The split group must exist and differ from mydia's own gid, or the setgid
+# binaries would not be told apart from the rest of Mydia's traffic.
+gid=$(getent group mydia-torrent | cut -d: -f3)
+split_group=ok
+if [ -z "$gid" ] || [ "$gid" = "$(id -g mydia)" ]; then
+    split_group=missing
+fi
+
+printf 'net_admin=%s\ntun=%s\nsplit_group=%s\nsrc_valid_mark=%s\n' \
+    "$net_admin" "$tun" "$split_group" "$src_valid_mark" > "$dir/preflight"
 chmod 644 "$dir/preflight"
 
-if [ "$net_admin" = missing ] || [ "$tun" = missing ]; then
-    echo "VPN: preflight failed (net_admin=$net_admin tun=$tun); torrents stay stopped"
+if [ "$net_admin" = missing ] || [ "$tun" = missing ] || [ "$split_group" = missing ]; then
+    # A key left by an earlier boot would point Mydia at a gluetun that is gone.
+    rm -f "$dir/apikey"
+    echo "VPN: preflight failed (net_admin=$net_admin tun=$tun split_group=$split_group); torrents stay stopped"
+    [ "$split_group" = ok ] || echo "VPN: group mydia-torrent is missing or shares mydia's gid (PGID); recreate the container or pick another PGID"
     exit 0
 fi
 
-key=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
-printf '%s' "$key" > "$dir/apikey"
+(
+    umask 077
+    key=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+    printf '%s' "$key" > "$dir/apikey"
+)
 chown mydia:mydia "$dir/apikey"
 chmod 400 "$dir/apikey"
-
-gid=$(getent group mydia-torrent | cut -d: -f3)
+key=$(cat "$dir/apikey")
 
 # MYDIA_VPN_FOO=bar becomes FOO=bar for gluetun. Mydia's own values are
 # passed last so they win over any user attempt to set them.
 gluetun_env=$(env | sed -n 's/^MYDIA_VPN_//p')
 
 (
+    # One VAR=value per word. Globbing is off (this subshell only) so a value
+    # with * or ? stays literal.
+    set -f
     while true; do
-        # shellcheck disable=SC2086 # word splitting is the point: one VAR=value per word
+        # shellcheck disable=SC2086 # word splitting is the point
         env -i PATH="$PATH" $gluetun_env \
             SPLIT_TUNNEL_GID="$gid" \
             HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \

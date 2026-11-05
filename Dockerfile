@@ -471,7 +471,9 @@ COPY --from=gluetun /out/gluetun /usr/local/bin/gluetun
 # The built-in engine and the leak check's curl run as group mydia-torrent:
 # gluetun's split mode tunnels exactly that group. setgid on the binaries is
 # what switches the group, so the BEAM needs no capabilities.
-RUN addgroup -S mydia-torrent && \
+# GID 65530 is fixed so the entrypoint's PGID remap can tell this group from
+# any other and never delete it. PGID=65530 is refused.
+RUN addgroup -g 65530 mydia-torrent && \
     cp /usr/bin/curl /usr/local/bin/torrent-curl && \
     chgrp mydia-torrent /usr/local/bin/rqbit /usr/local/bin/torrent-curl && \
     chmod 2755 /usr/local/bin/rqbit /usr/local/bin/torrent-curl
