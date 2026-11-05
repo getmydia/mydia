@@ -19,6 +19,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
             {gettext("VPN experimental")}
           </span>
           <button
+            :if={match?({:crashed, _, _}, @status.engine)}
             id="built-in-restart"
             class="btn btn-ghost btn-xs ml-auto"
             phx-click="restart_built_in"
@@ -50,6 +51,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
 
   defp engine_label({:stopped, reason}),
     do: gettext("Stopped: %{why}", why: Status.describe(reason))
+
+  defp engine_label({:crashed, reason, 0}),
+    do: gettext("Not running: %{why}", why: Status.describe(reason))
 
   defp engine_label({:crashed, reason, restarts}),
     do: gettext("Crashed after %{n} restarts: %{why}", n: restarts, why: Status.describe(reason))

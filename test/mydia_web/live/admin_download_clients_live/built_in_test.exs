@@ -6,6 +6,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.BuiltIn.{Config, Status}
 
+  # The page lists downloads from the built-in client, which is not running.
+  @moduletag :capture_log
+
   setup %{conn: conn} do
     unique_id = System.unique_integer([:positive])
 
@@ -56,7 +59,32 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     assert render(element(view, "#built-in-engine-state")) =~ "Running"
   end
 
-  test "restart with the engine not running flashes an error instead of crashing", %{conn: conn} do
+  test "restart is offered only for a crashed engine", %{conn: conn} do
+    Status.put(:engine, :running)
+    {:ok, view, _html} = live(conn, ~p"/admin/clients")
+    refute has_element?(view, "#built-in-restart")
+
+    Status.put(:engine, {:stopped, :vpn_down})
+    refute has_element?(view, "#built-in-restart")
+
+    Status.put(:engine, {:crashed, {:engine_exit, 3}, 5})
+    assert has_element?(view, "#built-in-restart")
+    assert render(element(view, "#built-in-engine-state")) =~ "Crashed after 5 restarts"
+  end
+
+  test "a crash before any restart reads as not running", %{conn: conn} do
+    Status.put(:engine, {:crashed, :rqbit_not_found, 0})
+    {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+    label = render(element(view, "#built-in-engine-state"))
+    assert label =~ "Not running"
+    refute label =~ "0 restarts"
+  end
+
+  test "restart with the engine process gone flashes an error instead of crashing", %{
+    conn: conn
+  } do
+    Status.put(:engine, {:crashed, :rqbit_not_found, 0})
     {:ok, view, _html} = live(conn, ~p"/admin/clients")
     render_click(element(view, "#built-in-restart"))
     assert has_element?(view, "#built-in-torrent")
