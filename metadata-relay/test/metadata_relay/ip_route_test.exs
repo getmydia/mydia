@@ -22,6 +22,26 @@ defmodule MetadataRelay.IpRouteTest do
     assert Jason.decode!(second.resp_body) == %{"ip" => "203.0.113.9"}
   end
 
+  test "prefers cf-connecting-ip over the Traefik peer behind Cloudflare" do
+    conn =
+      Plug.Test.conn(:get, "/ip")
+      |> Map.put(:remote_ip, {10, 42, 0, 7})
+      |> Plug.Conn.put_req_header("cf-connecting-ip", "203.0.113.50")
+      |> Router.call(Router.init([]))
+
+    assert Jason.decode!(conn.resp_body) == %{"ip" => "203.0.113.50"}
+  end
+
+  test "a blank cf-connecting-ip falls back to the resolved peer address" do
+    conn =
+      Plug.Test.conn(:get, "/ip")
+      |> Map.put(:remote_ip, {198, 51, 100, 7})
+      |> Plug.Conn.put_req_header("cf-connecting-ip", "   ")
+      |> Router.call(Router.init([]))
+
+    assert Jason.decode!(conn.resp_body) == %{"ip" => "198.51.100.7"}
+  end
+
   defp get_from(remote_ip) do
     Plug.Test.conn(:get, "/ip")
     |> Map.put(:remote_ip, remote_ip)

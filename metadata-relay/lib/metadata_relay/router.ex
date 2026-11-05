@@ -84,11 +84,25 @@ defmodule MetadataRelay.Router do
   # The caller's public address, as the relay sees it. Mydia's built-in
   # torrent client compares the address its torrent traffic leaves from with
   # Mydia's own to prove the VPN is in the path.
+  #
+  # Production is Cloudflare -> Traefik -> relay, so the TCP peer is always
+  # Traefik and ClientIp.resolve/1 would return its pod address for everyone.
+  # cf-connecting-ip carries the real caller. Forging it only echoes the
+  # forger's own value back, and nothing is keyed on it, so the rate-limit
+  # objection in ClientIp's moduledoc does not apply here.
   get "/ip" do
+    ip =
+      case get_req_header(conn, "cf-connecting-ip") do
+        [value | _] -> String.trim(value)
+        [] -> ""
+      end
+
+    ip = if ip == "", do: MetadataRelay.ClientIp.resolve(conn), else: ip
+
     conn
     |> put_resp_content_type("application/json")
     |> put_resp_header("cache-control", "no-store")
-    |> send_resp(200, Jason.encode!(%{ip: MetadataRelay.ClientIp.resolve(conn)}))
+    |> send_resp(200, Jason.encode!(%{ip: ip}))
   end
 
   # TMDB Configuration
