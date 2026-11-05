@@ -106,8 +106,7 @@ defmodule Mydia.Settings.RuntimeDownloadClientTest do
       log =
         capture_log(fn ->
           clients = Mydia.Settings.list_download_client_configs()
-          assert [%{type: :qbittorrent}, %{type: :rqbit}] = clients
-          assert [_] = Enum.filter(clients, &BuiltIn.managed?/1)
+          assert [%{type: :rqbit}] = clients
         end)
 
       assert log =~ "from the database"

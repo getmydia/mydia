@@ -49,7 +49,7 @@ defmodule Mydia.Downloads.BuiltIn do
 
       Logger.warning(
         "A download client from #{source} is named #{inspect(@name)}, which is reserved for " <>
-          "the built-in torrent client. Rename it; the built-in client is listed regardless."
+          "the built-in torrent client. Rename it; while the built-in client is active, only the built-in client answers to the name."
       )
     end
 

@@ -32,14 +32,20 @@ defmodule Mydia.Settings.ServiceConfigs do
       |> Repo.all()
 
     # Merge with runtime config (database takes precedence by name). The
-    # built-in client is exempt: a database row may carry its name from before
-    # the name was reserved, and must not hide it.
+    # built-in client is exempt: a database row carrying its name from before
+    # the name was reserved must not hide it, and client selection finds clients
+    # by name, so while the built-in client is active that row is left out.
     {built_in, runtime} =
       Enum.split_with(RC.get_runtime_download_clients(), &BuiltIn.managed?/1)
 
-    if built_in != [] and Enum.any?(db_configs, &BuiltIn.reserved_name?(&1.name)) do
-      BuiltIn.warn_name_taken("the database")
-    end
+    db_configs =
+      if built_in == [] do
+        db_configs
+      else
+        {namesakes, others} = Enum.split_with(db_configs, &BuiltIn.reserved_name?(&1.name))
+        if namesakes != [], do: BuiltIn.warn_name_taken("the database")
+        others
+      end
 
     RC.merge_with_runtime_config(db_configs, fn -> runtime end, :name) ++ built_in
   end
