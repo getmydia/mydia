@@ -256,12 +256,14 @@ defmodule Mydia.Settings.RuntimeConfig do
   def get_runtime_download_clients do
     runtime_config = get_runtime_config()
 
-    if is_struct(runtime_config) and Map.has_key?(runtime_config, :download_clients) do
-      runtime_config.download_clients
-      |> Enum.map(&map_to_download_client_config/1)
-    else
-      []
-    end
+    configured =
+      if is_struct(runtime_config) and Map.has_key?(runtime_config, :download_clients) do
+        Enum.map(runtime_config.download_clients, &map_to_download_client_config/1)
+      else
+        []
+      end
+
+    configured ++ Mydia.Downloads.BuiltIn.client_configs()
   end
 
   def get_runtime_indexers do
