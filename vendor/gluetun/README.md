@@ -120,7 +120,8 @@ partway, nothing is removed: split tunnel traffic fails closed.
 ## Smoke test
 
 Build the image (`docker build -t mydia:builtin-vpn .`) and run it with
-`--cap-add NET_ADMIN --device /dev/net/tun` and a ProtonVPN WireGuard login
+`--cap-add NET_ADMIN --device /dev/net/tun
+--sysctl net.ipv4.conf.all.src_valid_mark=1` and a ProtonVPN WireGuard login
 (`MYDIA_VPN_SERVICE_PROVIDER=protonvpn`, `MYDIA_VPN_VPN_TYPE=wireguard`,
 `MYDIA_VPN_WIREGUARD_PRIVATE_KEY`, `MYDIA_VPN_VPN_PORT_FORWARDING=on`). Then:
 
@@ -139,3 +140,8 @@ Build the image (`docker build -t mydia:builtin-vpn .`) and run it with
    connections.
 6. Gluetun's log has no reverse path filtering warning, or the container has
    the `src_valid_mark` sysctl.
+
+The smoke test needs real VPN credentials and has not been run against the
+image yet. Record any deviation here after the first run. `docker/vpn-preflight.sh`
+records `src_valid_mark=ok|missing` in `/config/gluetun/preflight`; Mydia does
+not read that key yet, so check 6 is done by hand.

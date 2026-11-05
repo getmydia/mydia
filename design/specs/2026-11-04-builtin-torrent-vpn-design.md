@@ -90,7 +90,7 @@ is enabled:
 - **`Vpn`**: started only when the VPN is configured. Gluetun itself is
   started by the entrypoint as root (see Data flow), because its own traffic
   (provider API calls, DNS upstream, public IP lookup) must be tunneled and
-  the split rules match it by uid 0; a process the BEAM spawned would carry
+  gluetun joins the split group itself (`Setgid(SPLIT_TUNNEL_GID)`); a process the BEAM spawned would carry
   the BEAM's uid and need capabilities the BEAM should not hold. `Vpn` reads
   the entrypoint's preflight file `/config/gluetun/preflight` and the
   generated control-server API key `/config/gluetun/apikey`, and polls the
@@ -139,9 +139,13 @@ and a README describing each patch and how to rebase onto a new release. The
 patches add `SPLIT_TUNNEL_GID=<gid>`. When set:
 
 - **Marking**: iptables `mangle OUTPUT` marks packets from sockets owned by
-  gid `SPLIT_TUNNEL_GID` or uid 0 (gluetun and its OpenVPN child), except
-  packets to the VPN server endpoint, which must leave on the physical
-  interface. Kernel WireGuard's own socket has no owner and is never marked.
+  gid `SPLIT_TUNNEL_GID` only, except packets to the VPN server endpoint,
+  which must leave on the physical interface. Gluetun calls
+  `Setgid(SPLIT_TUNNEL_GID)` itself at startup, so it and its OpenVPN child
+  are in the group and tunneled. uid 0 is not marked: Docker's embedded DNS
+  forwarder runs as uid 0 in the container's namespace, and marking it would
+  send all of Mydia's name resolution through the VPN. Kernel WireGuard's own
+  socket has no owner and is never marked.
 - **Routing**: in place of WireGuard's inverted "not fwmark 51820" rule and
   OpenVPN's pushed `redirect-gateway`, an `ip rule` sends only the split mark
   to the VPN table, which holds the default route through the tunnel and an
@@ -152,14 +156,16 @@ patches add `SPLIT_TUNNEL_GID=<gid>`. When set:
   is never reachable from the VPN side.
 - **DNS**: `resolv.conf` is left alone. Gluetun's DNS server listens on
   `127.0.0.1:53` only, and `nat OUTPUT` redirects marked port 53 traffic to
-  it; its upstream queries come from uid 0 and are tunneled.
+  it; its upstream queries come from gluetun, which is in the group, and are
+  tunneled.
 - **Health and restarts**: unchanged.
 
 A Go test in the patch series asserts the rules generated in split mode.
 
 Docker gets a `gluetun` stage (`golang:alpine`, apply patches, `go build`); the
-runtime stage copies the binary and adds `openvpn`, `iptables`, `iproute2`
-and `curl`, and creates the `mydia-torrent` group with
+runtime stage copies the binary and adds `openvpn`, `iptables`, `ip6tables`,
+`iproute2` (Mydia reads the tunnel address with `ip -4 -o addr show` and starts
+rqbit with `--listen-ip`) and `curl`, and creates the `mydia-torrent` group with
 the setgid `rqbit` and `torrent-curl`. The `rqbit` binary is built from a
 pinned version in the existing cargo stage for musl and both architectures.
 The IP echo endpoint is added to metadata-relay in the same PR.

@@ -146,6 +146,45 @@ startup, so changing it takes a restart.
     network, for example a JSON file on a NAS. It never relaxes the scheme
     allowlist, which is always limited to `http` and `https`.
 
+## Built-in torrent client
+
+Mydia ships with a torrent client (rqbit) that it runs itself. It turns on
+when no qBittorrent, Transmission, rqbit or rTorrent client is configured. See
+[Download Clients](download-clients.md#built-in) for what it does.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MYDIA_TORRENT_ENABLED` | auto | `true` or `false` overrides the auto-enable rule. |
+| `MYDIA_TORRENT_DOWNLOAD_PATH` | `/data/downloads` | Where the built-in client writes downloads. Must be writable by the Mydia user. |
+| `MYDIA_TORRENT_PORT` | `51413` | Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below). |
+| `MYDIA_VPN_SERVICE_PROVIDER` | unset | Turns the experimental VPN on, for example `protonvpn` or `pia`. |
+| `MYDIA_VPN_*` | unset | Any other [gluetun variable](https://github.com/qdm12/gluetun-wiki) with the `MYDIA_VPN_` prefix. The prefix is stripped, so `MYDIA_VPN_VPN_TYPE=wireguard` reaches gluetun as `VPN_TYPE=wireguard`. |
+
+The VPN is **experimental**. It runs a patched gluetun that tunnels only the
+built-in client, so the rest of Mydia keeps its normal network. If the VPN is
+configured and not verified, the engine stays stopped rather than download
+outside the tunnel. Provider settings are in gluetun's wiki, under
+[Providers](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers).
+
+The container needs these for the VPN:
+
+- `cap_add: [NET_ADMIN]`
+- `devices: ["/dev/net/tun:/dev/net/tun"]`
+- `sysctls: ["net.ipv4.conf.all.src_valid_mark=1"]`. Hosts with strict reverse
+  path filtering (`net.ipv4.conf.all.rp_filter=1`) drop the tunnel's replies
+  without it. Docker mounts `/proc/sys` read-only, so gluetun cannot set it
+  itself. It does no harm on other hosts.
+
+Mydia sets `SPLIT_TUNNEL_GID`, `HTTP_CONTROL_SERVER_ADDRESS`,
+`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` and `DNS_ADDRESS` itself. Setting them
+with the `MYDIA_VPN_` prefix is ignored and shown as a warning in the admin UI.
+
+**Limitation: values cannot contain whitespace.** The entrypoint passes the
+`MYDIA_VPN_*` variables to gluetun by word splitting, so a value with a space
+in it (a city such as `New York`, for instance) breaks. Use values without
+spaces, such as `pia` for `private internet access`, or a country in place of
+a city, until the entrypoint reads an env file.
+
 ## Download Clients
 
 Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):

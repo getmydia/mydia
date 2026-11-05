@@ -181,6 +181,27 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
       cp "native/$crate/target/release/lib$crate.so" "/out/$crate.so"; \
     done
 
+# ── rqbit: the built-in torrent engine ───────────────────────────────────────
+FROM toolchain AS rqbit
+ARG RQBIT_VERSION=9.0.1
+# rqbit links libssl and libcrypto, and the musl target links statically, so the
+# link fails with "cannot find -lssl" without the static archives.
+RUN apk add --no-cache openssl-dev openssl-libs-static
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    cargo install rqbit --version "${RQBIT_VERSION}" --locked --root /out
+
+# ── gluetun: patched for split tunnelling (vendor/gluetun/README.md) ─────────
+FROM golang:1.26-alpine AS gluetun
+RUN apk add --no-cache git
+COPY vendor/gluetun /vendor-gluetun
+RUN set -eu; \
+    git clone --depth 1 --branch "$(cat /vendor-gluetun/VERSION)" \
+      https://github.com/qdm12/gluetun.git /src; \
+    cd /src; \
+    git -c user.email=build@mydia -c user.name=build am /vendor-gluetun/patches/*.patch; \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gluetun ./cmd/gluetun
+
 # ── deps: Hex dependencies on top of the toolchain ───────────────────────────
 FROM toolchain AS deps
 
@@ -434,12 +455,28 @@ RUN apk add --no-cache \
     shadow \
     openssl \
     libstdc++ \
-    ncurses-libs && \
+    ncurses-libs \
+    openvpn \
+    iptables \
+    ip6tables \
+    iproute2 && \
     if [ "$TARGETARCH" = "amd64" ]; then apk add --no-cache intel-media-driver; fi
 
 # Create app user with default UID/GID (will be updated by entrypoint if needed)
 RUN addgroup -g 1000 mydia && \
     adduser -D -u 1000 -G mydia mydia
+
+COPY --from=rqbit /out/bin/rqbit /usr/local/bin/rqbit
+COPY --from=gluetun /out/gluetun /usr/local/bin/gluetun
+# The built-in engine and the leak check's curl run as group mydia-torrent:
+# gluetun's split mode tunnels exactly that group. setgid on the binaries is
+# what switches the group, so the BEAM needs no capabilities.
+RUN addgroup -S mydia-torrent && \
+    cp /usr/bin/curl /usr/local/bin/torrent-curl && \
+    chgrp mydia-torrent /usr/local/bin/rqbit /usr/local/bin/torrent-curl && \
+    chmod 2755 /usr/local/bin/rqbit /usr/local/bin/torrent-curl
+COPY docker/vpn-preflight.sh /usr/local/bin/vpn-preflight
+RUN chmod 755 /usr/local/bin/vpn-preflight
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app /config /data /media && \

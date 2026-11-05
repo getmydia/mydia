@@ -127,6 +127,8 @@ if [ -e "$RENDER_DEVICE" ]; then
     fi
 fi
 
+/usr/local/bin/vpn-preflight
+
 echo "────────────────────────────────────────"
 echo "Starting Mydia..."
 echo "────────────────────────────────────────"

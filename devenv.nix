@@ -155,6 +155,10 @@ in
     # S3 server for storage tests and local S3 libraries (MinIO is archived)
     rustfs
 
+    # Built-in torrent engine, started by Mydia in the native dev loop. The
+    # VPN is Docker-only.
+    rqbit
+
     # Media processing
     ffmpeg
     # fpcalc, the audio fingerprinter behind intro/credits segment detection
