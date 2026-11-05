@@ -84,6 +84,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:invalid_port, "x"},
         {:invalid_api_port, "x"},
         {:invalid_enabled, "maybe"},
+        {:reserved_name_taken},
         {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"},
         {:vpn_auth_failed, "bad credentials"},
         :vpn_down,

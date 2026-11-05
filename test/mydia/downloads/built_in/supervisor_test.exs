@@ -16,6 +16,23 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
     opts
   end
 
+  describe "summarize_clients/1" do
+    test "keeps enabled torrent handlers and flags a taken name, enabled or not" do
+      clients = [
+        %{name: "SAB", type: :sabnzbd, enabled: true},
+        %{name: "qb", type: :qbittorrent, enabled: false},
+        %{name: " built-IN ", type: :sabnzbd, enabled: false}
+      ]
+
+      assert {[], true} = BuiltInSupervisor.summarize_clients(clients)
+
+      assert {[:transmission], false} =
+               BuiltInSupervisor.summarize_clients([
+                 %{name: "T", type: :transmission, enabled: true}
+               ])
+    end
+  end
+
   test "disabled starts nothing" do
     assert BuiltInSupervisor.children(%Config{enabled?: false}, credentials: {"u", "p"}) == []
   end

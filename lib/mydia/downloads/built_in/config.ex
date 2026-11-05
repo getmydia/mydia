@@ -58,6 +58,12 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   Options: `:find_executable` (default `System.find_executable/1`). Left
   unset, MYDIA_TORRENT_ENABLED only turns the client on when `rqbit` is on the
   PATH, so installs without it (bare releases, the NixOS module) stay off.
+
+  `:name_taken` (default `false`) says some other configured client, enabled
+  or not, already uses the built-in client's reserved name. Automatic
+  activation then stays off, since the built-in client would hide that client
+  from the lists, and a `{:reserved_name_taken}` warning is recorded. An
+  explicit MYDIA_TORRENT_ENABLED=true still wins.
   """
   @spec load(%{String.t() => String.t()}, [atom()] | :unknown, keyword()) :: t()
   def load(env, other_client_types, opts \\ []) do
@@ -69,9 +75,14 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
     {enabled, enabled_warnings} = parse_enabled(env["MYDIA_TORRENT_ENABLED"])
     provider = blank_to_nil(env["MYDIA_VPN_SERVICE_PROVIDER"])
+    name_taken? = Keyword.get(opts, :name_taken, false)
+
+    auto? = enabled == :unset and auto_enabled?(other_client_types, finder)
+
+    name_warnings = if auto? and name_taken?, do: [{:reserved_name_taken}], else: []
 
     %__MODULE__{
-      enabled?: enabled?(enabled, other_client_types, finder),
+      enabled?: enabled?(enabled, auto? and not name_taken?),
       download_path: blank_to_nil(env["MYDIA_TORRENT_DOWNLOAD_PATH"]) || @default_download_path,
       state_dir: blank_to_nil(env["MYDIA_TORRENT_STATE_PATH"]) || @default_state_dir,
       port: port,
@@ -79,7 +90,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       vpn?: provider != nil,
       vpn_provider: provider,
       vpn_interface: vpn_interface(env),
-      warnings: enabled_warnings ++ port_warnings ++ api_port_warnings ++ reserved_warnings(env)
+      warnings:
+        enabled_warnings ++
+          name_warnings ++ port_warnings ++ api_port_warnings ++ reserved_warnings(env)
     }
   end
 
@@ -110,11 +123,13 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     end
   end
 
-  defp enabled?(true, _types, _finder), do: true
-  defp enabled?(false, _types, _finder), do: false
-  defp enabled?(:unset, :unknown, _finder), do: false
+  defp enabled?(true, _auto), do: true
+  defp enabled?(false, _auto), do: false
+  defp enabled?(:unset, auto), do: auto
 
-  defp enabled?(:unset, types, finder),
+  defp auto_enabled?(:unknown, _finder), do: false
+
+  defp auto_enabled?(types, finder),
     do: not Enum.any?(types, &(&1 in @torrent_handler_types)) and finder.("rqbit") != nil
 
   # Gluetun names the tunnel wg0 for WireGuard and tun0 for OpenVPN.

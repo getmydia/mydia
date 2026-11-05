@@ -35,7 +35,20 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
   end
 
   defp build_children(opts) do
-    config = Config.load(System.get_env(), other_client_types())
+    {types, name_taken?} =
+      case configured_clients() do
+        :unknown -> {:unknown, false}
+        summary -> summary
+      end
+
+    config = Config.load(System.get_env(), types, name_taken: name_taken?)
+
+    # With the client off it is not listed anywhere, so the log is the only
+    # place left to say why.
+    if {:reserved_name_taken} in config.warnings do
+      Logger.warning(Status.describe({:reserved_name_taken}))
+    end
+
     credentials = {"mydia", Base.url_encode64(:crypto.strong_rand_bytes(24), padding: false)}
     api_port = Keyword.get(opts, :api_port, config.api_port)
 
@@ -68,16 +81,14 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
     if config.vpn?, do: base ++ [{Vpn, config: config}], else: base
   end
 
-  # Types of the clients configured other than the built-in one: database rows
-  # plus DOWNLOAD_CLIENT_<N>_* blocks. The built-in client is rejected
-  # explicitly: after a supervisor restart it is already in the runtime list,
-  # and counting it as an rqbit client would switch it off.
-  defp other_client_types do
+  # The clients configured other than the built-in one: database rows plus
+  # DOWNLOAD_CLIENT_<N>_* blocks. The built-in client is rejected explicitly:
+  # after a supervisor restart it is already in the runtime list, and counting
+  # it as an rqbit client would switch it off.
+  defp configured_clients do
     Mydia.Settings.list_download_client_configs()
-    |> Enum.filter(& &1.enabled)
     |> Enum.reject(&BuiltIn.managed?(%{connection_settings: &1.connection_settings}))
-    |> Enum.map(& &1.type)
-    |> Enum.filter(&(&1 in Config.torrent_handler_types()))
+    |> summarize_clients()
   rescue
     e ->
       Logger.warning(
@@ -85,5 +96,22 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
       )
 
       :unknown
+  end
+
+  @doc """
+  Reduces client configs to `{torrent_handler_types, name_taken?}` for
+  `Config.load/3`. Only enabled clients count as torrent handlers, but a
+  disabled client still takes the reserved name: enabling it later would
+  collide with the built-in client.
+  """
+  @spec summarize_clients([map()]) :: {[atom()], boolean()}
+  def summarize_clients(clients) do
+    types =
+      clients
+      |> Enum.filter(& &1.enabled)
+      |> Enum.map(& &1.type)
+      |> Enum.filter(&(&1 in Config.torrent_handler_types()))
+
+    {types, Enum.any?(clients, &BuiltIn.reserved_name?(&1.name))}
   end
 end

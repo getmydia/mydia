@@ -72,6 +72,36 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
     end
   end
 
+  describe "load/3 reserved name" do
+    test "automatic activation is skipped, with a warning, when the name is taken" do
+      config = load(%{}, [:sabnzbd], name_taken: true)
+      refute config.enabled?
+      assert {:reserved_name_taken} in config.warnings
+    end
+
+    test "an invalid MYDIA_TORRENT_ENABLED is still automatic" do
+      config = load(%{"MYDIA_TORRENT_ENABLED" => "maybe"}, [], name_taken: true)
+      refute config.enabled?
+      assert {:reserved_name_taken} in config.warnings
+    end
+
+    test "an explicit true still enables it" do
+      config = load(%{"MYDIA_TORRENT_ENABLED" => "true"}, [:sabnzbd], name_taken: true)
+      assert config.enabled?
+      refute {:reserved_name_taken} in config.warnings
+    end
+
+    test "no warning when automatic activation was off anyway" do
+      assert %Config{enabled?: false, warnings: []} = load(%{}, [:qbittorrent], name_taken: true)
+      assert %Config{warnings: []} = load(%{}, [], [{:name_taken, true} | no_rqbit()])
+      assert %Config{warnings: []} = load(%{}, :unknown, name_taken: true)
+    end
+
+    test "a free name changes nothing" do
+      assert %Config{enabled?: true, warnings: []} = load(%{}, [], name_taken: false)
+    end
+  end
+
   describe "load/3 values" do
     test "defaults" do
       config = load(%{}, [])
