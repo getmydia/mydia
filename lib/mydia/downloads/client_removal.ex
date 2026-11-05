@@ -320,8 +320,12 @@ defmodule Mydia.Downloads.ClientRemoval do
           username: client_config.username,
           password: client_config.password,
           use_ssl: client_config.use_ssl || false,
+          # Carries connection_settings like the other config builders, so
+          # the built-in client is still recognised as managed and a stopped
+          # engine reports its named reason.
+          connection_settings: client_config.connection_settings || %{},
           options:
-            %{}
+            (client_config.connection_settings || %{})
             |> maybe_put(:url_base, client_config.url_base)
             |> maybe_put(:api_key, client_config.api_key)
         }
