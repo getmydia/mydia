@@ -20,7 +20,15 @@ Unset, gluetun behaves exactly as upstream.
   with `0x5154`, except packets to the VPN server's address, protocol and
   port, which leave on the physical interface. Kernel WireGuard's own socket
   has no owner; userspace WireGuard and OpenVPN sockets hit the endpoint
-  exemption.
+  exemption. The exemption applies to every socket in the group, not only
+  the VPN's: a torrent peer at the VPN server's address and port would be
+  reached outside the tunnel.
+- **Connection mark.** The mark is saved on the connection (`CONNMARK
+  --save-mark`) and restored first thing in `mangle OUTPUT`; connections
+  arriving on the tunnel get it in `PREROUTING`. Packets the kernel sends
+  for a connection after its socket is gone (final ACKs from `TIME_WAIT`,
+  RSTs, ICMP errors) have no owner, and would otherwise take the main table
+  out of the default interface with the real address and the swarm ports.
 - **Routing.** An `ip rule` at priority 99 sends the mark to the VPN table:
   WireGuard's own table (51820), or table `0x5154` for OpenVPN. The table
   holds the tunnel route and an `unreachable` default at metric 2147483647,
@@ -57,10 +65,18 @@ OpenVPN keeps applying its pushed `redirect-gateway`. On every
 "Initialization Sequence Completed", gluetun moves the routes it added to the
 main table (`0.0.0.0/1`, `128.0.0.0/1`, and the IPv6 ones) into the split
 table, keeping their gateway. `route-noexec` is not used because PIA port
-forwarding finds the VPN gateway from those routes. For the few milliseconds
-between OpenVPN adding the routes and gluetun moving them, the whole container
-routes through the tunnel: nothing leaks, but Mydia's own connections can
-stall briefly.
+forwarding finds the VPN gateway from those routes. From OpenVPN adding the
+routes until gluetun processes the tunnel-up event and moves them, the whole
+container routes through the tunnel: nothing leaks, but Mydia's own
+connections can stall.
+
+### Restarts
+
+Mydia runs gluetun in a restart loop while the engine may keep running, in a
+network namespace that keeps the previous run's rules. On enable, each rule
+that already exists (`iptables -C`) is added again and only then is one copy
+removed, so marking and the kill switch never lapse. If enabling fails
+partway, nothing is removed: split tunnel traffic fails closed.
 
 ## Requirements and limits
 
@@ -71,6 +87,17 @@ stall briefly.
   warning naming the sysctl when it cannot; Docker mounts `/proc/sys`
   read-only, so the fix is `sysctls: [net.ipv4.conf.all.src_valid_mark=1]` on
   the container. Loose (`2`) or disabled (`0`) filtering needs nothing.
+- **Inbound UDP needs a bound socket.** A UDP socket bound to `0.0.0.0`
+  answers an inbound datagram from the container's eth0 address, which
+  MASQUERADE then rewrites, port included, so the reply leaves the tunnel
+  from a different port than the one the peer contacted. The client must
+  bind its sockets to the tunnel address (Mydia starts rqbit with
+  `--listen-ip <tunnel address>`) for inbound UDP to reply from the right
+  port.
+- `SPLIT_TUNNEL_GID=0` is rejected: it would match every root process.
+- Without `ip6tables`, IPv6 traffic from the group is neither marked nor
+  kill-switched. Gluetun logs an error when the container has an IPv6
+  default route in that case.
 - `FIREWALL_INPUT_PORTS` and `FIREWALL_OUTBOUND_SUBNETS` are ignored, with a
   warning.
 - Gluetun's HTTP proxy and Shadowsocks server would send their replies into
@@ -106,6 +133,9 @@ Build the image (`docker build -t mydia:builtin-vpn .`) and run it with
    VPN down and the engine stopped.
 4. Without `--cap-add NET_ADMIN` the admin page shows the `cap_add` message
    and the engine stays stopped.
-5. A magnet grabbed from the UI downloads and imports.
+5. A magnet grabbed from the UI downloads and imports. While rqbit churns
+   peers, `docker exec <c> tcpdump -ni eth0 'not host <vpn endpoint>'` shows
+   nothing from the engine: no final ACKs, RSTs or ICMP errors for its
+   connections.
 6. Gluetun's log has no reverse path filtering warning, or the container has
    the `src_valid_mark` sysctl.

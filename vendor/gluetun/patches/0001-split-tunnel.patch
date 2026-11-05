@@ -1,4 +1,4 @@
-From 1cf9bdbd4d0d36761307c6669bc4a7bc8000b6e6 Mon Sep 17 00:00:00 2001
+From d3e7c4ae46ae590f602ca4b64500d206fd9a3d5f Mon Sep 17 00:00:00 2001
 From: Alexandre Rosenfeld <arsfeld@gmail.com>
 Date: Wed, 4 Nov 2026 20:18:13 -0500
 Subject: [PATCH] Add SPLIT_TUNNEL_GID split-tunnel mode
@@ -14,30 +14,32 @@ of the container keeps its routes, DNS and an unfiltered firewall.
 - OpenVPN's redirect-gateway routes move out of the main table.
 - The DNS server listens on 127.0.0.1 and resolv.conf is left alone.
 ---
- cmd/gluetun/main.go                         |  41 ++++-
- internal/configuration/settings/firewall.go |  32 ++++
- internal/configuration/settings/settings.go |   7 +
- internal/dns/loop.go                        |   7 +-
- internal/dns/plaintext.go                   |  11 +-
- internal/dns/setup.go                       |  14 +-
- internal/firewall/enable.go                 |  16 ++
- internal/firewall/firewall.go               |   3 +
- internal/firewall/ports.go                  |  12 +-
- internal/firewall/splittunnel.go            | 191 +++++++++++++++++++
- internal/firewall/splittunnel_test.go       | 100 ++++++++++
- internal/firewall/vpn.go                    |   4 +
- internal/splittunnel/routing.go             | 168 +++++++++++++++++
- internal/splittunnel/routing_test.go        | 192 ++++++++++++++++++++
- internal/splittunnel/rules.go               | 161 ++++++++++++++++
- internal/splittunnel/rules_test.go          | 187 +++++++++++++++++++
- internal/vpn/interfaces.go                  |   1 +
- internal/vpn/loop.go                        |   3 +
- internal/vpn/run.go                         |  17 +-
- internal/vpn/splittunnel.go                 |  49 +++++
- internal/vpn/wireguard.go                   |   3 +-
- internal/wireguard/run.go                   |  20 +-
- internal/wireguard/settings.go              |   4 +
- 23 files changed, 1218 insertions(+), 25 deletions(-)
+ cmd/gluetun/main.go                           |  44 +++-
+ internal/configuration/settings/errors.go     |   1 +
+ internal/configuration/settings/firewall.go   |  43 ++++
+ .../configuration/settings/firewall_test.go   |  12 +
+ internal/configuration/settings/settings.go   |   7 +
+ internal/dns/loop.go                          |   7 +-
+ internal/dns/plaintext.go                     |  11 +-
+ internal/dns/setup.go                         |  14 +-
+ internal/firewall/enable.go                   |  13 +
+ internal/firewall/firewall.go                 |   3 +
+ internal/firewall/ports.go                    |  12 +-
+ internal/firewall/splittunnel.go              | 232 +++++++++++++++++
+ internal/firewall/splittunnel_test.go         | 173 +++++++++++++
+ internal/firewall/vpn.go                      |   4 +
+ internal/splittunnel/routing.go               | 168 +++++++++++++
+ internal/splittunnel/routing_test.go          | 192 ++++++++++++++
+ internal/splittunnel/rules.go                 | 187 ++++++++++++++
+ internal/splittunnel/rules_test.go            | 235 ++++++++++++++++++
+ internal/vpn/interfaces.go                    |   1 +
+ internal/vpn/loop.go                          |   3 +
+ internal/vpn/run.go                           |  17 +-
+ internal/vpn/splittunnel.go                   |  49 ++++
+ internal/vpn/wireguard.go                     |   3 +-
+ internal/wireguard/run.go                     |  20 +-
+ internal/wireguard/settings.go                |   4 +
+ 25 files changed, 1430 insertions(+), 25 deletions(-)
  create mode 100644 internal/firewall/splittunnel.go
  create mode 100644 internal/firewall/splittunnel_test.go
  create mode 100644 internal/splittunnel/routing.go
@@ -47,7 +49,7 @@ of the container keeps its routes, DNS and an unfiltered firewall.
  create mode 100644 internal/vpn/splittunnel.go
 
 diff --git a/cmd/gluetun/main.go b/cmd/gluetun/main.go
-index 842ff99..2315b8d 100644
+index 842ff99..2b6deff 100644
 --- a/cmd/gluetun/main.go
 +++ b/cmd/gluetun/main.go
 @@ -40,6 +40,7 @@ import (
@@ -58,7 +60,7 @@ index 842ff99..2315b8d 100644
  	"github.com/qdm12/gluetun/internal/storage"
  	updater "github.com/qdm12/gluetun/internal/updater/loop"
  	"github.com/qdm12/gluetun/internal/updater/resolver"
-@@ -231,6 +232,21 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+@@ -231,6 +232,24 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
  		return err
  	}
  
@@ -68,6 +70,9 @@ index 842ff99..2315b8d 100644
 +		// from now on, and those of its OpenVPN child, are marked and
 +		// tunneled like the group's. Go applies it to every thread.
 +		gid := *allSettings.Firewall.SplitTunnelGID
++		if err := allSettings.Firewall.ValidateSplitTunnel(); err != nil {
++			return fmt.Errorf("firewall settings: %w", err)
++		}
 +		if err := syscall.Setgid(int(gid)); err != nil {
 +			return fmt.Errorf("joining split tunnel group %d: %w", gid, err)
 +		}
@@ -80,7 +85,7 @@ index 842ff99..2315b8d 100644
  	if *allSettings.Firewall.Enabled {
  		err = firewallConf.SetEnabled(ctx, true)
  		if err != nil {
-@@ -323,11 +339,16 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+@@ -323,11 +342,16 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
  		}
  	}()
  
@@ -102,7 +107,7 @@ index 842ff99..2315b8d 100644
  	}
  
  	err = routingConf.AddLocalRules(localNetworks)
-@@ -335,7 +356,11 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+@@ -335,7 +359,11 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
  		return fmt.Errorf("adding local rules: %w", err)
  	}
  
@@ -115,7 +120,7 @@ index 842ff99..2315b8d 100644
  		for _, defaultRoute := range defaultRoutes {
  			err = firewallConf.SetAllowedPort(ctx, port, defaultRoute.NetInterface)
  			if err != nil {
-@@ -381,7 +406,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+@@ -381,7 +409,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
  
  	dnsLogger := logger.New(log.SetComponent("dns"))
  	dnsLooper, err := dns.NewLoop(allSettings.DNS, httpClient,
@@ -124,7 +129,7 @@ index 842ff99..2315b8d 100644
  	if err != nil {
  		return fmt.Errorf("creating DNS loop: %w", err)
  	}
-@@ -435,7 +460,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+@@ -435,7 +463,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
  	vpnLooper := vpn.NewLoop(allSettings.VPN, ipv6Supported, allSettings.Firewall.VPNInputPorts,
  		providers, storage, allSettings.Health, healthChecker, healthcheckServer, ovpnConf, netLinker, firewallConf,
  		routingConf, portForwardLooper, cmder, publicIPLooper, dnsLooper, vpnLogger, httpClient,
@@ -133,8 +138,20 @@ index 842ff99..2315b8d 100644
  	vpnHandler, vpnCtx, vpnDone := goshutdown.NewGoRoutineHandler(
  		"vpn", goroutine.OptionTimeout(time.Second))
  	go vpnLooper.Run(vpnCtx, vpnDone)
+diff --git a/internal/configuration/settings/errors.go b/internal/configuration/settings/errors.go
+index b3329a5..02e4ff1 100644
+--- a/internal/configuration/settings/errors.go
++++ b/internal/configuration/settings/errors.go
+@@ -11,6 +11,7 @@ var (
+ 	ErrFilepathMissing                 = errors.New("filepath is missing")
+ 	ErrFirewallZeroPort                = errors.New("cannot have a zero port")
+ 	ErrFirewallPublicOutboundSubnet    = errors.New("outbound subnet has an unspecified address")
++	ErrFirewallSplitTunnelRootGroup    = errors.New("split tunnel group ID cannot be 0 (root)")
+ 	ErrHostnameNotValid                = errors.New("the hostname specified is not valid")
+ 	ErrISPNotValid                     = errors.New("the ISP specified is not valid")
+ 	ErrMinRatioNotValid                = errors.New("minimum ratio is not valid")
 diff --git a/internal/configuration/settings/firewall.go b/internal/configuration/settings/firewall.go
-index 19712d6..8f48350 100644
+index 19712d6..1b58502 100644
 --- a/internal/configuration/settings/firewall.go
 +++ b/internal/configuration/settings/firewall.go
 @@ -16,6 +16,12 @@ type Firewall struct {
@@ -150,7 +167,25 @@ index 19712d6..8f48350 100644
  }
  
  func (f Firewall) validate() (err error) {
-@@ -52,6 +58,7 @@ func (f *Firewall) copy() (copied Firewall) {
+@@ -33,6 +39,17 @@ func (f Firewall) validate() (err error) {
+ 		}
+ 	}
+ 
++	return f.ValidateSplitTunnel()
++}
++
++// ValidateSplitTunnel validates SplitTunnelGID. It is exported because the
++// firewall is set up before the full settings validation runs.
++func (f Firewall) ValidateSplitTunnel() error {
++	// Group 0 would mark every root process sharing the network namespace,
++	// Docker's embedded DNS forwarder among them.
++	if f.SplitTunnelGID != nil && *f.SplitTunnelGID == 0 {
++		return fmt.Errorf("%w: %d", ErrFirewallSplitTunnelRootGroup, *f.SplitTunnelGID)
++	}
+ 	return nil
+ }
+ 
+@@ -52,6 +69,7 @@ func (f *Firewall) copy() (copied Firewall) {
  		OutboundSubnets: gosettings.CopySlice(f.OutboundSubnets),
  		Enabled:         gosettings.CopyPointer(f.Enabled),
  		Debug:           gosettings.CopyPointer(f.Debug),
@@ -158,7 +193,7 @@ index 19712d6..8f48350 100644
  	}
  }
  
-@@ -64,6 +71,7 @@ func (f *Firewall) overrideWith(other Firewall) {
+@@ -64,6 +82,7 @@ func (f *Firewall) overrideWith(other Firewall) {
  	f.OutboundSubnets = gosettings.OverrideWithSlice(f.OutboundSubnets, other.OutboundSubnets)
  	f.Enabled = gosettings.OverrideWithPointer(f.Enabled, other.Enabled)
  	f.Debug = gosettings.OverrideWithPointer(f.Debug, other.Debug)
@@ -166,7 +201,7 @@ index 19712d6..8f48350 100644
  }
  
  func (f *Firewall) setDefaults() {
-@@ -87,6 +95,10 @@ func (f Firewall) toLinesNode() (node *gotree.Node) {
+@@ -87,6 +106,10 @@ func (f Firewall) toLinesNode() (node *gotree.Node) {
  		node.Appendf("Debug mode: on")
  	}
  
@@ -177,7 +212,7 @@ index 19712d6..8f48350 100644
  	if len(f.VPNInputPorts) > 0 {
  		vpnInputPortsNode := node.Appendf("VPN input ports:")
  		for _, port := range f.VPNInputPorts {
-@@ -138,5 +150,25 @@ func (f *Firewall) read(r *reader.Reader) (err error) {
+@@ -138,5 +161,25 @@ func (f *Firewall) read(r *reader.Reader) (err error) {
  		return err
  	}
  
@@ -203,6 +238,29 @@ index 19712d6..8f48350 100644
 +	}
 +	return warnings
 +}
+diff --git a/internal/configuration/settings/firewall_test.go b/internal/configuration/settings/firewall_test.go
+index e79ca3f..a5ea32a 100644
+--- a/internal/configuration/settings/firewall_test.go
++++ b/internal/configuration/settings/firewall_test.go
+@@ -46,6 +46,18 @@ func Test_Firewall_validate(t *testing.T) {
+ 				},
+ 			},
+ 		},
++		"split_tunnel_gid_zero": {
++			firewall: Firewall{
++				SplitTunnelGID: ptrTo(uint32(0)),
++			},
++			errWrapped: ErrFirewallSplitTunnelRootGroup,
++			errMessage: "split tunnel group ID cannot be 0 (root): 0",
++		},
++		"split_tunnel_gid": {
++			firewall: Firewall{
++				SplitTunnelGID: ptrTo(uint32(1500)),
++			},
++		},
+ 		"valid_settings": {
+ 			firewall: Firewall{
+ 				VPNInputPorts: []uint16{100, 101},
 diff --git a/internal/configuration/settings/settings.go b/internal/configuration/settings/settings.go
 index 091c4a4..977106c 100644
 --- a/internal/configuration/settings/settings.go
@@ -314,7 +372,7 @@ index 3f9fe13..63ba603 100644
  	err = check.WaitForDNS(ctx, check.Settings{})
  	if err != nil {
 diff --git a/internal/firewall/enable.go b/internal/firewall/enable.go
-index 30a6ebc..a01ea61 100644
+index 30a6ebc..940ae19 100644
 --- a/internal/firewall/enable.go
 +++ b/internal/firewall/enable.go
 @@ -58,6 +58,10 @@ func (c *Config) disable(ctx context.Context) (err error) {
@@ -328,19 +386,16 @@ index 30a6ebc..a01ea61 100644
  	return nil
  }
  
-@@ -72,6 +76,18 @@ func (c *Config) fallbackToDisabled(ctx context.Context) {
+@@ -72,6 +76,15 @@ func (c *Config) fallbackToDisabled(ctx context.Context) {
  }
  
  func (c *Config) enable(ctx context.Context) (err error) {
 +	if c.splitTunnel != nil {
 +		// Split tunnel mode keeps the ACCEPT policies and the rules for
 +		// local networks and outbound subnets out: only marked traffic
-+		// is filtered.
-+		defer func() {
-+			if err != nil {
-+				c.fallbackToDisabled(ctx)
-+			}
-+		}()
++		// is filtered. Unlike the full mode, a failure does not fall back
++		// to disabled: the marking and kill switch rules already in place
++		// stay, so split tunnel traffic fails closed.
 +		return c.enableSplitTunnel(ctx)
 +	}
 +
@@ -401,10 +456,10 @@ index 6f5867e..d213019 100644
  				port, netInterface, err)
 diff --git a/internal/firewall/splittunnel.go b/internal/firewall/splittunnel.go
 new file mode 100644
-index 0000000..18e77b9
+index 0000000..b945df8
 --- /dev/null
 +++ b/internal/firewall/splittunnel.go
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,232 @@
 +package firewall
 +
 +import (
@@ -415,6 +470,7 @@ index 0000000..18e77b9
 +	"strings"
 +
 +	"github.com/qdm12/gluetun/internal/models"
++	"github.com/qdm12/gluetun/internal/netlink"
 +	"github.com/qdm12/gluetun/internal/splittunnel"
 +)
 +
@@ -445,18 +501,30 @@ index 0000000..18e77b9
 +func (c *Config) enableSplitTunnel(ctx context.Context) (err error) {
 +	settings := c.splitTunnelSettings()
 +
-+	// Gluetun can be restarted inside a network namespace that still holds
-+	// the rules of its previous run: remove them first so they do not pile up.
-+	c.removeSplitTunnelInstructions(ctx, settings.BaseInstructions)
++	if c.ip6Tables == "" {
++		for _, defaultRoute := range c.defaultRoutes {
++			if defaultRoute.Family == netlink.FamilyV6 {
++				c.logger.Error("ip6tables is not available: split tunnel IPv6 traffic " +
++					"is neither marked nor kill-switched and leaves through " +
++					defaultRoute.NetInterface + " outside the VPN")
++				break
++			}
++		}
++	}
 +
++	// Gluetun can be restarted inside a network namespace that still holds
++	// the rules of its previous run, while the engine keeps running. Each
++	// rule is added before its duplicate from the previous run is removed,
++	// so marking and the kill switch never lapse.
++	const replace = true
 +	err = c.runSplitTunnelInstructions(ctx, settings.BaseInstructions(false, false),
-+		settings.BaseInstructions(true, false))
++		settings.BaseInstructions(true, false), replace)
 +	if err != nil {
 +		return fmt.Errorf("adding split tunnel rules: %w", err)
 +	}
 +
 +	err = c.runSplitTunnelInstructions(ctx, settings.TunnelInstructions(false, false),
-+		settings.TunnelInstructions(true, false))
++		settings.TunnelInstructions(true, false), replace)
 +	if err != nil {
 +		return fmt.Errorf("adding split tunnel VPN rules: %w", err)
 +	}
@@ -509,9 +577,10 @@ index 0000000..18e77b9
 +
 +	c.logger.Info("allowing VPN connection for split tunnel traffic...")
 +	next := c.splitTunnelSettings()
++	const replace = false
 +	return c.runSplitTunnelInstructions(ctx,
 +		splittunnel.TunnelChanges(previous, next, false),
-+		splittunnel.TunnelChanges(previous, next, true))
++		splittunnel.TunnelChanges(previous, next, true), replace)
 +}
 +
 +func (c *Config) splitTunnelInboundPort(ctx context.Context, intf string,
@@ -525,32 +594,59 @@ index 0000000..18e77b9
 +		return nil
 +	}
 +	instructions := settings.InboundPortInstructions(port, false)
-+	return c.runSplitTunnelInstructions(ctx, instructions, instructions)
++	const replace = false
++	return c.runSplitTunnelInstructions(ctx, instructions, instructions, replace)
 +}
 +
 +// runSplitTunnelInstructions runs the IPv4 instructions with iptables and
 +// the IPv6 ones with ip6tables, when it is available. A missing IPv6 nat
 +// table only loses MASQUERADE, so marked IPv6 traffic keeps the wrong source
 +// address and fails rather than leaks: it is logged instead of failing.
-+func (c *Config) runSplitTunnelInstructions(ctx context.Context, ipv4, ipv6 []string) error {
-+	for _, instruction := range ipv4 {
-+		if err := c.runSplitTunnelInstruction(ctx, c.ipTables, instruction); err != nil {
-+			return err
++//
++// With replace, rules that already exist (checked with -C) are added again
++// and only then is one copy removed, so an existing rule is never missing.
++// Nothing is removed on failure: rules already in place stay, failing closed.
++func (c *Config) runSplitTunnelInstructions(ctx context.Context,
++	ipv4, ipv6 []string, replace bool,
++) error {
++	err := c.runSplitTunnelFamily(ctx, c.ipTables, ipv4, replace)
++	if err != nil || c.ip6Tables == "" {
++		return err
++	}
++	return c.runSplitTunnelFamily(ctx, c.ip6Tables, ipv6, replace)
++}
++
++func (c *Config) runSplitTunnelFamily(ctx context.Context,
++	iptablesBinary string, instructions []string, replace bool,
++) error {
++	var duplicates []string
++	if replace {
++		for _, instruction := range instructions {
++			check := splittunnel.WithOperation(instruction, "-C")
++			if c.runSplitTunnelInstruction(ctx, iptablesBinary, check) == nil {
++				duplicates = append(duplicates, splittunnel.WithOperation(instruction, "-D"))
++			}
 +		}
 +	}
-+	if c.ip6Tables == "" {
-+		return nil
-+	}
-+	for _, instruction := range ipv6 {
-+		err := c.runSplitTunnelInstruction(ctx, c.ip6Tables, instruction)
++
++	for _, instruction := range instructions {
++		err := c.runSplitTunnelInstruction(ctx, iptablesBinary, instruction)
 +		switch {
 +		case err == nil:
-+		case strings.HasPrefix(instruction, "-t nat ") &&
++		case iptablesBinary == c.ip6Tables && strings.HasPrefix(instruction, "-t nat ") &&
 +			strings.Contains(err.Error(), "Table does not exist"):
 +			c.logger.Warn("IPv6 split tunnel NAT disabled because your kernel " +
 +				"does not support IPv6 NAT: " + err.Error())
 +		default:
 +			return err
++		}
++	}
++
++	// -D removes the first match: the previous run's copy of an appended
++	// rule, or the new copy of an inserted one. Either way one copy stays.
++	for _, duplicate := range duplicates {
++		if err := c.runSplitTunnelInstruction(ctx, iptablesBinary, duplicate); err != nil {
++			c.logger.Debug("removing duplicate split tunnel rule: " + err.Error())
 +		}
 +	}
 +	return nil
@@ -598,16 +694,18 @@ index 0000000..18e77b9
 +}
 diff --git a/internal/firewall/splittunnel_test.go b/internal/firewall/splittunnel_test.go
 new file mode 100644
-index 0000000..7b6b5a1
+index 0000000..f0a62da
 --- /dev/null
 +++ b/internal/firewall/splittunnel_test.go
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,173 @@
 +package firewall
 +
 +import (
 +	"context"
++	"errors"
 +	"net/netip"
 +	"os/exec"
++	"slices"
 +	"strings"
 +	"testing"
 +
@@ -616,12 +714,26 @@ index 0000000..7b6b5a1
 +	"github.com/stretchr/testify/require"
 +)
 +
++var errTestCommand = errors.New("test command failure")
++
++// recordingRunner records commands. Check commands (-C) fail unless
++// rulesExist, as iptables does for a missing rule, and commands containing
++// failOn fail.
 +type recordingRunner struct {
-+	commands []string
++	commands   []string
++	rulesExist bool
++	failOn     string
 +}
 +
 +func (r *recordingRunner) Run(cmd *exec.Cmd) (string, error) {
-+	r.commands = append(r.commands, strings.Join(cmd.Args, " "))
++	command := strings.Join(cmd.Args, " ")
++	r.commands = append(r.commands, command)
++	switch {
++	case slices.Contains(cmd.Args, "-C") && !r.rulesExist:
++		return "iptables: Bad rule (does a matching rule exist in that chain?).", errTestCommand
++	case r.failOn != "" && strings.Contains(command, r.failOn):
++		return "", errTestCommand
++	}
 +	return "", nil
 +}
 +
@@ -632,10 +744,7 @@ index 0000000..7b6b5a1
 +func (discardLogger) Warn(string)  {}
 +func (discardLogger) Error(string) {}
 +
-+func Test_splitTunnel(t *testing.T) {
-+	t.Parallel()
-+	ctx := context.Background()
-+	runner := &recordingRunner{}
++func newSplitTunnelConfig(runner CmdRunner) *Config {
 +	config := &Config{
 +		runner:            runner,
 +		logger:            discardLogger{},
@@ -645,6 +754,66 @@ index 0000000..7b6b5a1
 +		allowedInputPorts: make(map[uint16]map[string]struct{}),
 +	}
 +	config.SetSplitTunnel(1500)
++	return config
++}
++
++func killSwitchRules() []string {
++	return []string{
++		"iptables -t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
++		"iptables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"iptables -A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"ip6tables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"ip6tables -A OUTPUT -m mark --mark 0x5154 -j DROP",
++	}
++}
++
++func deleteOf(command string) string {
++	return strings.Replace(command, " -A ", " -D ", 1)
++}
++
++func Test_splitTunnel_enableFresh(t *testing.T) {
++	t.Parallel()
++	runner := &recordingRunner{}
++	require.NoError(t, newSplitTunnelConfig(runner).SetEnabled(context.Background(), true))
++	for _, command := range runner.commands {
++		assert.NotContains(t, command, " -D ", "nothing to replace on a fresh namespace")
++	}
++}
++
++// Gluetun restarts in a loop while the engine may keep running: the rules of
++// the previous run must stay until their replacements exist.
++func Test_splitTunnel_enableOverPreviousRun(t *testing.T) {
++	t.Parallel()
++	runner := &recordingRunner{rulesExist: true}
++	require.NoError(t, newSplitTunnelConfig(runner).SetEnabled(context.Background(), true))
++	for _, rule := range killSwitchRules() {
++		added := slices.Index(runner.commands, rule)
++		deleted := slices.Index(runner.commands, deleteOf(rule))
++		require.GreaterOrEqual(t, added, 0, "missing %q", rule)
++		require.GreaterOrEqual(t, deleted, 0, "duplicate of %q not removed", rule)
++		assert.Less(t, added, deleted, "%q removed before its replacement exists", rule)
++		assert.Equal(t, 1, strings.Count(strings.Join(runner.commands, "\n"), deleteOf(rule)+"\n"),
++			"exactly one duplicate of %q removed", rule)
++	}
++}
++
++// A partial enable failure must fail closed: the rules already in place stay.
++func Test_splitTunnel_enableFailureKeepsKillSwitch(t *testing.T) {
++	t.Parallel()
++	runner := &recordingRunner{failOn: "MASQUERADE"}
++	config := newSplitTunnelConfig(runner)
++	config.vpnIntf = "wg0"
++	require.Error(t, config.SetEnabled(context.Background(), true))
++	for _, rule := range killSwitchRules() {
++		assert.NotContains(t, runner.commands, deleteOf(rule))
++	}
++}
++
++func Test_splitTunnel(t *testing.T) {
++	t.Parallel()
++	ctx := context.Background()
++	runner := &recordingRunner{}
++	config := newSplitTunnelConfig(runner)
 +
 +	require.NoError(t, config.SetEnabled(ctx, true))
 +	for _, command := range runner.commands {
@@ -1091,10 +1260,10 @@ index 0000000..89dfb1f
 +}
 diff --git a/internal/splittunnel/rules.go b/internal/splittunnel/rules.go
 new file mode 100644
-index 0000000..19591bc
+index 0000000..0526cf9
 --- /dev/null
 +++ b/internal/splittunnel/rules.go
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,187 @@
 +// Package splittunnel builds the routing and firewall rules for
 +// SPLIT_TUNNEL_GID mode: only sockets owned by the given group use the VPN.
 +// Everything else in the container keeps the main routing table and is not
@@ -1116,6 +1285,7 @@ index 0000000..19591bc
 +	"fmt"
 +	"net/netip"
 +	"slices"
++	"strings"
 +)
 +
 +const (
@@ -1155,7 +1325,13 @@ index 0000000..19591bc
 +func (s Settings) mark() string { return fmt.Sprintf("0x%x", s.Mark) }
 +
 +// BaseInstructions returns the rules that exist for the whole time the
-+// firewall is enabled: marking, the kill switch and DNS. ipv6 selects the
++// firewall is enabled: marking, the kill switch and DNS.
++//
++// The mark is saved on the connection and restored onto every packet of a
++// marked connection. Packets the kernel sends after the socket is gone
++// (final ACKs from TIME_WAIT, RSTs, ICMP errors) have no owner, and without
++// the restore they would take the main table out of the default interface,
++// unfiltered, carrying the real address and the swarm ports. ipv6 selects the
 +// ip6tables variant, which drops marked DNS instead of redirecting it since
 +// the DNS server only listens on 127.0.0.1.
 +//
@@ -1170,7 +1346,9 @@ index 0000000..19591bc
 +	appendOp, insertOp := ops(remove)
 +	mark := s.mark()
 +	instructions := []string{
++		fmt.Sprintf("-t mangle %s OUTPUT -m connmark --mark %s -j MARK --set-mark %s", appendOp, mark, mark),
 +		fmt.Sprintf("-t mangle %s OUTPUT -m owner --gid-owner %d -j MARK --set-mark %s", appendOp, s.GID, mark),
++		fmt.Sprintf("-t mangle %s OUTPUT -m mark --mark %s -j CONNMARK --save-mark", appendOp, mark),
 +		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o lo -j ACCEPT", appendOp, mark),
 +		fmt.Sprintf("%s OUTPUT -m mark --mark %s -j DROP", appendOp, mark),
 +	}
@@ -1195,7 +1373,9 @@ index 0000000..19591bc
 +// MASQUERADE is needed because a socket picks its source address from the
 +// main table before its packets are marked and rerouted. The PREROUTING mark
 +// on packets arriving from the tunnel lets reverse path filtering find the
-+// tunnel route when net.ipv4.conf.all.src_valid_mark is 1.
++// tunnel route when net.ipv4.conf.all.src_valid_mark is 1, and the connection
++// mark keeps the kernel's own packets for connections that came in through
++// the tunnel (the forwarded port) on the tunnel.
 +func (s Settings) TunnelInstructions(ipv6, remove bool) []string {
 +	if s.Interface == "" {
 +		return nil
@@ -1211,6 +1391,7 @@ index 0000000..19591bc
 +	}
 +	return append(instructions,
 +		fmt.Sprintf("-t mangle %s PREROUTING -i %s -j MARK --set-mark %s", appendOp, s.Interface, mark),
++		fmt.Sprintf("-t mangle %s PREROUTING -i %s -j CONNMARK --set-mark %s", appendOp, s.Interface, mark),
 +		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o %s -j ACCEPT", insertOp, mark, s.Interface),
 +		fmt.Sprintf("%s INPUT -i %s -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT", appendOp, s.Interface),
 +		fmt.Sprintf("%s INPUT -i %s -j DROP", appendOp, s.Interface),
@@ -1250,6 +1431,20 @@ index 0000000..19591bc
 +	return changes
 +}
 +
++// WithOperation replaces the operation (-A, -I or -D) of an instruction
++// built here with op, for example -C to check whether the rule exists.
++func WithOperation(instruction, op string) string {
++	fields := strings.Fields(instruction)
++	for i, field := range fields {
++		switch field {
++		case "-A", "-I", "-D", "-C":
++			fields[i] = op
++			return strings.Join(fields, " ")
++		}
++	}
++	return instruction
++}
++
 +func ops(remove bool) (appendOp, insertOp string) {
 +	if remove {
 +		return "-D", "-D"
@@ -1258,10 +1453,10 @@ index 0000000..19591bc
 +}
 diff --git a/internal/splittunnel/rules_test.go b/internal/splittunnel/rules_test.go
 new file mode 100644
-index 0000000..18cbafd
+index 0000000..3a43734
 --- /dev/null
 +++ b/internal/splittunnel/rules_test.go
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,235 @@
 +package splittunnel
 +
 +import (
@@ -1305,7 +1500,9 @@ index 0000000..18cbafd
 +	t.Parallel()
 +	got := testSettings().BaseInstructions(false, false)
 +	want := []string{
++		"-t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
 +		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"-t mangle -A OUTPUT -m mark --mark 0x5154 -j CONNMARK --save-mark",
 +		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
 +		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
 +		"-t nat -I OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 " +
@@ -1320,7 +1517,9 @@ index 0000000..18cbafd
 +	t.Parallel()
 +	got := testSettings().BaseInstructions(true, false)
 +	want := []string{
++		"-t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
 +		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"-t mangle -A OUTPUT -m mark --mark 0x5154 -j CONNMARK --save-mark",
 +		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
 +		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
 +		"-t mangle -A OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 -j DROP",
@@ -1344,12 +1543,55 @@ index 0000000..18cbafd
 +	}
 +}
 +
++// Packets the kernel sends for a connection after its socket is gone (final
++// ACKs from TIME_WAIT, RSTs, ICMP errors) have no owner. The mark saved on
++// the connection must be restored onto them before the gid rule, so they
++// take the tunnel route and the kill switch like the rest of the connection.
++func TestBaseInstructionsCarryTheMarkOnTheConnection(t *testing.T) {
++	t.Parallel()
++	for _, ipv6 := range []bool{false, true} {
++		got := testSettings().BaseInstructions(ipv6, false)
++		restore := slices.Index(got, "-t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154")
++		mark := slices.Index(got, "-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154")
++		save := slices.Index(got, "-t mangle -A OUTPUT -m mark --mark 0x5154 -j CONNMARK --save-mark")
++		if restore < 0 || mark <= restore || save <= mark {
++			t.Errorf("ipv6=%t: want connmark restore, gid mark, then save, got %v", ipv6, got)
++		}
++	}
++}
++
++func TestWithOperation(t *testing.T) {
++	t.Parallel()
++	testCases := map[string]struct{ instruction, op, want string }{
++		"append to check": {
++			"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154", "-C",
++			"-t mangle -C OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		},
++		"insert to delete": {
++			"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT", "-D",
++			"-D OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
++		},
++		"interface flag untouched": {
++			"-A INPUT -i tun0 -j DROP", "-C", "-C INPUT -i tun0 -j DROP",
++		},
++	}
++	for name, testCase := range testCases {
++		t.Run(name, func(t *testing.T) {
++			t.Parallel()
++			if got := WithOperation(testCase.instruction, testCase.op); got != testCase.want {
++				t.Errorf("got %q, want %q", got, testCase.want)
++			}
++		})
++	}
++}
++
 +func TestTunnelInstructionsIPv4(t *testing.T) {
 +	t.Parallel()
 +	got := testSettings().TunnelInstructions(false, false)
 +	want := []string{
 +		"-t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 1194 -j RETURN",
 +		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
++		"-t mangle -A PREROUTING -i tun0 -j CONNMARK --set-mark 0x5154",
 +		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
 +		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
 +		"-A INPUT -i tun0 -j DROP",
@@ -1363,6 +1605,7 @@ index 0000000..18cbafd
 +	got := testSettings().TunnelInstructions(true, false)
 +	want := []string{
 +		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
++		"-t mangle -A PREROUTING -i tun0 -j CONNMARK --set-mark 0x5154",
 +		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
 +		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
 +		"-A INPUT -i tun0 -j DROP",
