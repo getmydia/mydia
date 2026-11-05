@@ -14,6 +14,82 @@ Mydia supports the following client types. All are configurable via the Admin UI
 | rTorrent | `rtorrent` | XML-RPC | Categories, seeding |
 | Blackhole | `blackhole` | Watch directory | Drops `.torrent` files for an external client to pick up |
 
+## Built-in
+
+Mydia bundles rqbit and runs it for you, so a fresh install can download
+torrents with no client to set up. It appears in Admin, Download Clients as a
+managed client named after the built-in engine, with a status panel.
+
+- **Auto-enable.** It turns on when the rqbit binary is installed (it is in
+  the Docker image) and no qBittorrent, Transmission, rqbit, rTorrent, Debrid
+  or Blackhole client is configured. `MYDIA_TORRENT_ENABLED=true` or `false`
+  overrides that. Adding your own torrent client later turns it off after a
+  restart.
+- **Reserved name.** The client is listed as "Built-in", and no other client
+  may use that name. If an existing client already has it (a database row from
+  before the name was reserved, or a `DOWNLOAD_CLIENT_<N>_NAME` of `Built-in`),
+  the built-in client does not auto-enable and logs why; rename that client
+  and restart. With `MYDIA_TORRENT_ENABLED=true` the built-in client takes the
+  name anyway and the other client is hidden until it is renamed.
+- **Download path.** `/data/downloads` by default, from
+  `MYDIA_TORRENT_DOWNLOAD_PATH`. Torrent state lives in `/config/rqbit`, from
+  `MYDIA_TORRENT_STATE_PATH`. In the Docker image, files the engine writes
+  belong to group `mydia-torrent`, with or without the VPN.
+- **VPN (experimental).** Set `MYDIA_VPN_SERVICE_PROVIDER` and Mydia runs a
+  patched gluetun that tunnels only the built-in client. The engine starts
+  once the VPN is up and a leak check passes, and stops when it drops. The
+  panel shows the VPN state, public IP, forwarded port and the reason for any
+  failure. Variables are in
+  [Environment Variables](environment-variables.md#built-in-torrent-client).
+
+Both examples below need `NET_ADMIN`, the tun device and the `src_valid_mark`
+sysctl. `init: true` adds an init process that reaps a VPN process left
+behind when gluetun restarts. Values must not contain spaces.
+
+ProtonVPN with WireGuard and port forwarding:
+
+```yaml
+services:
+  mydia:
+    image: ghcr.io/getmydia/mydia:latest
+    init: true
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      MYDIA_VPN_SERVICE_PROVIDER: protonvpn
+      MYDIA_VPN_VPN_TYPE: wireguard
+      MYDIA_VPN_WIREGUARD_PRIVATE_KEY: ${PROTON_WIREGUARD_KEY}
+      MYDIA_VPN_VPN_PORT_FORWARDING: "on"
+      MYDIA_VPN_SERVER_COUNTRIES: Netherlands
+```
+
+Private Internet Access with OpenVPN:
+
+```yaml
+services:
+  mydia:
+    image: ghcr.io/getmydia/mydia:latest
+    init: true
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      MYDIA_VPN_SERVICE_PROVIDER: pia
+      MYDIA_VPN_OPENVPN_USER: ${PIA_USER}
+      MYDIA_VPN_OPENVPN_PASSWORD: ${PIA_PASSWORD}
+      MYDIA_VPN_SERVER_REGIONS: Netherlands
+```
+
+`pia` is gluetun's spelling of `private internet access`, which the
+entrypoint could not pass because of the space.
+
 ## Usenet Clients
 
 | Client | Type value | Protocol | Features |

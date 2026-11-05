@@ -35,6 +35,8 @@ Two more, both about how the relay identifies a caller for rate limiting:
 - `RELAY_TRUSTED_PROXY_CIDRS` — comma-separated CIDRs whose `X-Forwarded-For` the relay will honour. Defaults to loopback plus RFC1918. Setting it **replaces** the default rather than adding to it, so it can be narrowed as well as widened.
 - `RELAY_PROXY_RATE_LIMIT` — set to `1`/`true`/`yes`/`on` to enable the TMDB/TVDB proxy rate limit. **Off by default, deliberately.** Production sits behind Cloudflare, where the furthest hop the relay can trust is a Cloudflare edge address shared by many installs, so an enabled limiter would throttle unrelated installs against each other rather than an abuser. The real caller is in `CF-Connecting-IP`, but honouring that is only safe once Traefik's public entrypoint is restricted to Cloudflare's published ranges — until then anyone reaching the origin directly could set it and choose their own bucket. See `MetadataRelay.Plug.ProxyRateLimit`'s moduledoc for the full ordering.
 
+`GET /ip` reads `CF-Connecting-IP` from any peer on purpose: it keys no shared state and returns the value only to the requester, so a forged header can only mislead the caller who sent it, and its peer is always Traefik, so a peer gate would not help.
+
 ## Deploying a New Version
 
 The deployment process is tag-driven and automated via GitHub Actions.

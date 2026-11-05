@@ -16,8 +16,12 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     def put(status_or_error), do: :persistent_term.put({__MODULE__, :result}, status_or_error)
     def take_removes, do: :persistent_term.get({__MODULE__, :removes}, [])
 
+    def last_config, do: :persistent_term.get({__MODULE__, :config}, nil)
+
     @impl true
-    def get_status(_config, _id) do
+    def get_status(config, _id) do
+      :persistent_term.put({__MODULE__, :config}, config)
+
       case :persistent_term.get({__MODULE__, :result}, nil) do
         {:error, _} = err -> err
         %DownloadStatus{} = s -> {:ok, s}
@@ -54,6 +58,7 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     on_exit(fn ->
       :persistent_term.erase({StubAdapter, :result})
       :persistent_term.erase({StubAdapter, :removes})
+      :persistent_term.erase({StubAdapter, :config})
       if previous, do: Registry.register(:qbittorrent, previous)
     end)
 
@@ -181,6 +186,24 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     assert :removed = ClientRemoval.finish_pending_removal(download)
     assert StubAdapter.take_removes() == []
     assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
+  end
+
+  test "the adapter config keeps connection_settings, so a managed client stays managed" do
+    client =
+      client!(
+        type: :qbittorrent,
+        remove_completed: true,
+        connection_settings: %{"managed" => true}
+      )
+
+    download = download!(client, imported: true)
+    StubAdapter.put(status(:seeding, download.download_client_id))
+
+    ClientRemoval.finish_pending_removal(download)
+
+    config = StubAdapter.last_config()
+    assert config.connection_settings == %{"managed" => true}
+    assert Mydia.Downloads.BuiltIn.managed?(config)
   end
 
   test "finish_pending_removal leaves row pending when client config is missing" do

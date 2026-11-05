@@ -65,85 +65,107 @@ defmodule Mydia.Downloads.Client.Rqbit do
 
   require Logger
 
+  alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.Client.{Error, HTTP}
   alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
+
+  # A managed (built-in) config reports why the engine is not running instead
+  # of a connection error to 127.0.0.1.
+  defp guarded(config, fun) do
+    case BuiltIn.guard(config) do
+      :ok -> fun.()
+      {:error, _} = error -> error
+    end
+  end
 
   # rqbit reports speeds in mebibytes per second (MiB/s).
   @bytes_per_mib 1_048_576
 
   @impl true
   def test_connection(config) do
-    req = HTTP.new_request(config)
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
 
-    case HTTP.get(req, "/torrents") do
-      {:ok, %{status: status}} when status in 200..299 ->
-        {:ok, ClientInfo.new(version: "rqbit")}
+      case HTTP.get(req, "/torrents") do
+        {:ok, %{status: status}} when status in 200..299 ->
+          {:ok, ClientInfo.new(version: "rqbit")}
 
-      {:ok, response} ->
-        {:error, api_error_from(response)}
+        {:ok, response} ->
+          {:error, api_error_from(response)}
 
-      {:error, _} = error ->
-        error
-    end
+        {:error, _} = error ->
+          error
+      end
+    end)
   end
 
   @impl true
   def add_torrent(config, torrent, opts \\ []) do
-    req = HTTP.new_request(config)
-    {body, params} = build_add_request(torrent, opts)
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+      {body, params} = build_add_request(torrent, opts)
 
-    case HTTP.post(req, "/torrents", params: params, body: body) do
-      {:ok, %{status: status, body: resp_body}} when status in 200..299 ->
-        case extract_info_hash(resp_body) do
-          nil ->
-            {:error,
-             Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
+      case HTTP.post(req, "/torrents", params: params, body: body) do
+        {:ok, %{status: status, body: resp_body}} when status in 200..299 ->
+          finish_add(config, resp_body, opts)
 
-          info_hash ->
-            maybe_pause_after_add(config, info_hash, opts)
-            {:ok, info_hash}
-        end
+        {:ok, response} ->
+          {:error, api_error_from(response)}
 
-      {:ok, response} ->
-        {:error, api_error_from(response)}
+        {:error, _} = error ->
+          error
+      end
+    end)
+  end
 
-      {:error, _} = error ->
-        error
+  defp finish_add(config, resp_body, opts) do
+    case extract_info_hash(resp_body) do
+      nil ->
+        {:error, Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
+
+      info_hash ->
+        maybe_pause_after_add(config, info_hash, opts)
+        {:ok, info_hash}
     end
   end
 
   @impl true
   def get_status(config, client_id) do
-    req = HTTP.new_request(config)
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
 
-    with {:ok, details} <- fetch_details(req, client_id),
-         {:ok, stats} <- fetch_stats(req, client_id) do
-      {:ok, build_status(details, stats)}
-    end
+      with {:ok, details} <- fetch_details(req, client_id),
+           {:ok, stats} <- fetch_stats(req, client_id) do
+        {:ok, build_status(details, stats)}
+      end
+    end)
   end
 
   @impl true
   def list_torrents(config, opts \\ []) do
-    req = HTTP.new_request(config)
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
 
-    case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
-      {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
-        parsed =
-          torrents
-          |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
-          |> apply_filters(opts)
+      case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
+        {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
+          {:ok, parse_torrent_list(torrents, opts)}
 
-        {:ok, parsed}
+        {:ok, %{status: status}} when status in 200..299 ->
+          {:ok, []}
 
-      {:ok, %{status: status}} when status in 200..299 ->
-        {:ok, []}
+        {:ok, response} ->
+          {:error, api_error_from(response)}
 
-      {:ok, response} ->
-        {:error, api_error_from(response)}
+        {:error, _} = error ->
+          error
+      end
+    end)
+  end
 
-      {:error, _} = error ->
-        error
-    end
+  defp parse_torrent_list(torrents, opts) do
+    torrents
+    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
+    |> apply_filters(opts)
   end
 
   @impl true
@@ -154,28 +176,32 @@ defmodule Mydia.Downloads.Client.Rqbit do
     # entries), so `get_status/2` is the single source of truth here. `files`
     # is nil when the client reported none yet, which the callback contract
     # represents as an empty list ("unknown"), never as "this torrent is empty".
-    case get_status(config, client_id) do
-      {:ok, %DownloadStatus{files: files}} when is_list(files) -> {:ok, files}
-      {:ok, %DownloadStatus{}} -> {:ok, []}
-      {:error, reason} -> {:error, reason}
-    end
+    guarded(config, fn ->
+      case get_status(config, client_id) do
+        {:ok, %DownloadStatus{files: files}} when is_list(files) -> {:ok, files}
+        {:ok, %DownloadStatus{}} -> {:ok, []}
+        {:error, reason} -> {:error, reason}
+      end
+    end)
   end
 
   @impl true
   def remove_torrent(config, client_id, opts \\ []) do
-    req = HTTP.new_request(config)
-    action = if Keyword.get(opts, :delete_files, false), do: "delete", else: "forget"
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+      action = if Keyword.get(opts, :delete_files, false), do: "delete", else: "forget"
 
-    case HTTP.post(req, "/torrents/#{client_id}/#{action}", []) do
-      {:ok, %{status: status}} when status in 200..299 ->
-        :ok
+      case HTTP.post(req, "/torrents/#{client_id}/#{action}", []) do
+        {:ok, %{status: status}} when status in 200..299 ->
+          :ok
 
-      {:ok, response} ->
-        {:error, api_error_from(response)}
+        {:ok, response} ->
+          {:error, api_error_from(response)}
 
-      {:error, _} = error ->
-        error
-    end
+        {:error, _} = error ->
+          error
+      end
+    end)
   end
 
   @impl true
@@ -191,18 +217,20 @@ defmodule Mydia.Downloads.Client.Rqbit do
   ## Private Functions
 
   defp control(config, client_id, action) do
-    req = HTTP.new_request(config)
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
 
-    case HTTP.post(req, "/torrents/#{client_id}/#{action}", []) do
-      {:ok, %{status: status}} when status in 200..299 ->
-        :ok
+      case HTTP.post(req, "/torrents/#{client_id}/#{action}", []) do
+        {:ok, %{status: status}} when status in 200..299 ->
+          :ok
 
-      {:ok, response} ->
-        {:error, api_error_from(response)}
+        {:ok, response} ->
+          {:error, api_error_from(response)}
 
-      {:error, _} = error ->
-        error
-    end
+        {:error, _} = error ->
+          error
+      end
+    end)
   end
 
   # Builds the {body, query_params} pair for POST /torrents.

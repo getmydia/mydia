@@ -13,6 +13,19 @@ defmodule Mydia.BoundedCommandTest do
       assert {:error, {:exit, 7, _output}} = BoundedCommand.run("sh", ["-c", "exit 7"], 5_000)
     end
 
+    test ":env sets variables and unsets inherited ones" do
+      # HOME is inherited from the test process; `false` must remove it.
+      assert {:ok, output} =
+               BoundedCommand.run(
+                 "sh",
+                 ["-c", ~s(echo "$MYDIA_BC_SET ${HOME:-unset}")],
+                 5_000,
+                 env: [{"MYDIA_BC_SET", "set"}, {"HOME", false}]
+               )
+
+      assert String.trim(output) == "set unset"
+    end
+
     test "reports :not_found for a missing executable" do
       assert {:error, :not_found} =
                BoundedCommand.run("definitely-not-a-real-mydia-binary", [], 5_000)

@@ -32,6 +32,28 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
     )
   end
 
+  describe "changeset/2 name" do
+    test "rejects the built-in client's name, ignoring case and whitespace" do
+      for name <- ["Built-in", "built-in", "  BUILT-IN "] do
+        changeset =
+          DownloadClientConfig.changeset(%DownloadClientConfig{}, %{@valid_attrs | name: name})
+
+        refute changeset.valid?
+        assert "is reserved for the built-in torrent client" in errors_on(changeset).name
+      end
+    end
+
+    test "accepts names that only contain it" do
+      changeset =
+        DownloadClientConfig.changeset(%DownloadClientConfig{}, %{
+          @valid_attrs
+          | name: "Built-in 2"
+        })
+
+      assert changeset.valid?
+    end
+  end
+
   describe "web_ui_url/1" do
     test "an explicit web_ui_url wins" do
       assert DownloadClientConfig.web_ui_url(client(%{web_ui_url: "https://qbit.example.org/"})) ==

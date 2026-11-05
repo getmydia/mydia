@@ -650,6 +650,18 @@ nothing at compile time and nothing loads the `.so`. Only the probe catches it,
 and only if the module is in its list, which is why the list must grow in the
 same edit. Without it the image would build and fail at boot.
 
+The built-in torrent engine and the VPN have stages of their own. `rqbit` is
+`cargo install rqbit --version "$RQBIT_VERSION" --locked` on the toolchain
+stage, with `openssl-dev` and `openssl-libs-static` added: the musl target
+links statically and fails with `cannot find -lssl` otherwise. The result is a
+static-pie binary with no runtime library dependency. `gluetun` is
+`golang:alpine` cloning the tag in `vendor/gluetun/VERSION`, applying
+`vendor/gluetun/patches/*.patch` with `git am` and building with
+`CGO_ENABLED=0`. The runtime stage copies both binaries; `rqbit` and
+`torrent-curl` are setgid `mydia-torrent`. Each stage builds alone with
+`docker build --target rqbit .` or `--target gluetun .`. Rebasing the patches
+is in `vendor/gluetun/README.md`.
+
 ## Docker tags
 
 `ci-docker.yml` pushes `:master` and `:master-pg` on every master push, which is

@@ -245,6 +245,7 @@ defmodule Mydia.Application do
         Mydia.Accounts.ApiKeyRateLimiter
       ] ++
       Mydia.Player.children() ++
+      built_in_torrent_children() ++
       client_health_children() ++
       indexer_health_children() ++
       cardigann_engine_children() ++
@@ -275,6 +276,18 @@ defmodule Mydia.Application do
     if Mydia.Indexers.CardigannFeatureFlags.enabled?(),
       do: [Mydia.Indexers.Cardigann.Wasm.Slots, Mydia.Indexers.Cardigann.EngineSwitcher],
       else: []
+  end
+
+  # The built-in torrent client reads the configured download clients, so it
+  # is gated like ClientHealth: the supervisor's own process has no SQL
+  # Sandbox connection under mix test. It sits after the migrator and the
+  # config merge, so the read sees a migrated database.
+  defp built_in_torrent_children do
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.Downloads.BuiltIn.Supervisor]
+    else
+      []
+    end
   end
 
   defp client_health_children do

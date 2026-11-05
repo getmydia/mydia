@@ -256,12 +256,27 @@ defmodule Mydia.Settings.RuntimeConfig do
   def get_runtime_download_clients do
     runtime_config = get_runtime_config()
 
-    if is_struct(runtime_config) and Map.has_key?(runtime_config, :download_clients) do
-      runtime_config.download_clients
-      |> Enum.map(&map_to_download_client_config/1)
-    else
-      []
+    configured =
+      if is_struct(runtime_config) and Map.has_key?(runtime_config, :download_clients) do
+        Enum.map(runtime_config.download_clients, &map_to_download_client_config/1)
+      else
+        []
+      end
+
+    case Mydia.Downloads.BuiltIn.client_configs() do
+      [] -> configured
+      built_in -> drop_built_in_namesakes(configured) ++ built_in
     end
+  end
+
+  # Clients are looked up and merged by name, so a configured client named
+  # like the built-in one would shadow it. The built-in client wins.
+  defp drop_built_in_namesakes(configured) do
+    {namesakes, others} =
+      Enum.split_with(configured, &Mydia.Downloads.BuiltIn.reserved_name?(&1.name))
+
+    if namesakes != [], do: Mydia.Downloads.BuiltIn.warn_name_taken("the environment or YAML")
+    others
   end
 
   def get_runtime_indexers do
