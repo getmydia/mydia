@@ -100,15 +100,16 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
 
   @doc """
   Reduces client configs to `{torrent_handler_types, name_taken?}` for
-  `Config.load/3`. Only enabled clients count as torrent handlers, but a
-  disabled client still takes the reserved name: enabling it later would
-  collide with the built-in client.
+  `Config.load/3`. Every configured torrent handler counts, enabled or not:
+  a disabled qBittorrent still means the user has a torrent client, so the
+  built-in client does not auto-enable beside it. A disabled client also takes
+  the reserved name, since enabling it later would collide with the built-in
+  client.
   """
   @spec summarize_clients([map()]) :: {[atom()], boolean()}
   def summarize_clients(clients) do
     types =
       clients
-      |> Enum.filter(& &1.enabled)
       |> Enum.map(& &1.type)
       |> Enum.filter(&(&1 in Config.torrent_handler_types()))
 
