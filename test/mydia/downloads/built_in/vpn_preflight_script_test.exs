@@ -6,10 +6,14 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
   @script Path.expand("docker/vpn-preflight.sh")
 
   defp gluetun_env(vars) do
-    runner = ". #{@script} && run_with_gluetun_env #{System.find_executable("env")} 65530 key123"
+    # Paths go in as positional arguments, so a checkout path with spaces or
+    # shell metacharacters survives.
+    runner = ~s(. "$1" && run_with_gluetun_env "$2" 65530 key123)
 
     {out, 0} =
-      System.cmd("sh", ["-c", runner], env: [{"VPN_PREFLIGHT_FUNCTIONS_ONLY", "1"} | vars])
+      System.cmd("sh", ["-c", runner, "sh", @script, System.find_executable("env")],
+        env: [{"VPN_PREFLIGHT_FUNCTIONS_ONLY", "1"} | vars]
+      )
 
     out
   end
