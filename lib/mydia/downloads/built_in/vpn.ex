@@ -33,8 +33,8 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
       interval_ms: Keyword.get(opts, :interval_ms, 10_000),
       engine_fun: Keyword.get(opts, :engine_fun, default_engine_fun(engine)),
       leak_check:
-        Keyword.get(opts, :leak_check, fn ->
-          LeakCheck.run(relay_url: Mydia.Metadata.metadata_relay_url())
+        Keyword.get(opts, :leak_check, fn public_ip ->
+          LeakCheck.run(relay_url: Mydia.Metadata.metadata_relay_url(), expected_ip: public_ip)
         end),
       tunnel_ip_fun: Keyword.get(opts, :tunnel_ip_fun, &read_tunnel_ip/1),
       verified_ip: nil,
@@ -98,7 +98,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp verify_and_start(req, ip, %{verified_ip: ip} = state), do: start_engine(req, ip, state)
 
   defp verify_and_start(req, ip, state) do
-    case state.leak_check.() do
+    case state.leak_check.(ip) do
       :ok -> start_engine(req, ip, %{state | verified_ip: ip})
       {:error, reason} -> down(state, reason)
     end
@@ -117,15 +117,34 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp start_engine(req, ip, tunnel_ip, state) do
     state = put_vpn(state, {:up, %{provider: state.config.vpn_provider, public_ip: ip}})
 
-    {state, port} =
-      case GluetunClient.forwarded_port(req) do
-        {:ok, n} when n > 0 -> {put_port(state, {:forwarded, n}), n}
-        _ -> {put_port(state, {:static, state.config.port}), state.config.port}
-      end
-
+    {state, port} = listen_port(GluetunClient.forwarded_port(req), state)
     call_engine(state, {:start, port, tunnel_ip})
     state
   end
+
+  # Once a port was forwarded on this tunnel, a failed or empty read keeps the
+  # engine on that port and reports the failure, instead of restarting rqbit
+  # on the static port and back. The static port is only for a tunnel that
+  # never had one forwarded.
+  defp listen_port({:ok, n}, state) when is_integer(n) and n > 0,
+    do: {put_port(state, {:forwarded, n}), n}
+
+  defp listen_port(result, %{last_port: {:forwarded, last, _since}} = state),
+    do: forward_failed(result, last, state)
+
+  defp listen_port(result, %{last_port: {:failed, _reason, last}} = state),
+    do: forward_failed(result, last, state)
+
+  defp listen_port(_result, state),
+    do: {put_port(state, {:static, state.config.port}), state.config.port}
+
+  defp forward_failed(result, last, state),
+    do: {put_port(state, {:failed, {:port_forward_failed, forward_error(result)}, last}), last}
+
+  defp forward_error({:ok, _none}), do: "gluetun reports no forwarded port"
+  defp forward_error({:error, {:http_status, status}}), do: "gluetun answered #{status}"
+  defp forward_error({:error, reason}) when is_binary(reason), do: reason
+  defp forward_error(other), do: inspect(other)
 
   @doc false
   # The first IPv4 address of the tunnel interface, from `ip -4 -o addr show`.
@@ -162,6 +181,10 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp put_vpn(%{last_vpn: value} = state, value), do: state
 
   defp put_vpn(state, value) do
+    with {:down, reason} <- value do
+      Logger.error("VPN down, torrents stopped: #{Status.describe(reason)}")
+    end
+
     Status.put(state.status, :vpn, value)
     %{state | last_vpn: value}
   end
@@ -170,6 +193,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   # that number was first seen and survives repeated polls.
   defp put_port(%{last_port: {:forwarded, n, _}} = state, {:forwarded, n}), do: state
   defp put_port(%{last_port: {:static, n}} = state, {:static, n}), do: state
+  defp put_port(%{last_port: {:failed, r, n}} = state, {:failed, r, n}), do: state
 
   defp put_port(state, {:forwarded, n}) do
     value = {:forwarded, n, DateTime.utc_now()}
@@ -177,7 +201,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
     %{state | last_port: value}
   end
 
-  defp put_port(state, {:static, _} = value) do
+  defp put_port(state, value) do
     Status.put(state.status, :port, value)
     %{state | last_port: value}
   end
@@ -200,25 +224,42 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp client(state) do
     case File.read(Path.join(state.config.gluetun_dir, "apikey")) do
       {:ok, key} -> {:ok, GluetunClient.new(state.base_url, String.trim(key))}
-      {:error, _} -> {:down, :vpn_unreachable}
+      {:error, _} -> {:down, unreachable_reason(state.config.gluetun_dir)}
     end
   end
 
   defp status(req, state) do
     case GluetunClient.vpn_status(req) do
       {:ok, "running"} = ok -> ok
-      {:ok, _other} -> {:down, vpn_down_reason(state.config.gluetun_dir)}
-      {:error, _} -> {:down, :vpn_unreachable}
+      {:ok, _other} -> {:down, last_error(state.config.gluetun_dir, :vpn_down)}
+      {:error, _} -> {:down, unreachable_reason(state.config.gluetun_dir)}
     end
   end
 
-  defp vpn_down_reason(dir) do
-    with {:ok, log} <- File.read(Path.join(dir, "gluetun.log")),
+  # Bad gluetun settings make it exit before its control server listens, so
+  # an unreachable gluetun usually has the explanation at the end of its log.
+  defp unreachable_reason(dir), do: last_error(dir, :vpn_unreachable)
+
+  @log_tail_bytes 65_536
+
+  # The last ERROR line in the tail of gluetun.log, which grows without bound.
+  defp last_error(dir, fallback) do
+    with {:ok, tail} <- read_tail(Path.join(dir, "gluetun.log"), @log_tail_bytes),
          line when is_binary(line) <-
-           log |> String.split("\n", trim: true) |> Enum.reverse() |> Enum.find(&(&1 =~ "ERROR")) do
+           tail |> String.split("\n", trim: true) |> Enum.reverse() |> Enum.find(&(&1 =~ "ERROR")) do
       {:vpn_down, line}
     else
-      _ -> :vpn_down
+      _ -> fallback
+    end
+  end
+
+  defp read_tail(path, bytes) do
+    with {:ok, %File.Stat{size: size}} <- File.stat(path),
+         {:ok, {:ok, data}} <-
+           File.open(path, [:read, :binary], &:file.pread(&1, max(size - bytes, 0), bytes)) do
+      {:ok, data}
+    else
+      _ -> :error
     end
   end
 

@@ -58,6 +58,32 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
     assert run({:ok, "2001:db8::1"}, {:ok, "2001:db8:0:0:0:0:0:1"}) == {:error, :leak_detected}
   end
 
+  defp run_expecting(torrent, mydia, expected_ip) do
+    LeakCheck.run(
+      relay_url: "https://relay.invalid",
+      expected_ip: expected_ip,
+      torrent_ip_fun: fn _url -> torrent end,
+      mydia_ip_fun: fn _url -> mydia end
+    )
+  end
+
+  test "the torrent side must use the VPN's public address when gluetun reports one" do
+    assert run_expecting({:ok, "203.0.113.9"}, {:ok, "198.51.100.7"}, "203.0.113.9") == :ok
+
+    assert run_expecting({:ok, "203.0.113.5"}, {:ok, "198.51.100.7"}, "203.0.113.9") ==
+             {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
+  end
+
+  test "an unparseable VPN address fails closed" do
+    assert run_expecting({:ok, "203.0.113.9"}, {:ok, "198.51.100.7"}, "garbage") ==
+             {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
+  end
+
+  test "the same address on both sides is still a leak when it matches the VPN address" do
+    assert run_expecting({:ok, "203.0.113.9"}, {:ok, "203.0.113.9"}, "203.0.113.9") ==
+             {:error, :leak_detected}
+  end
+
   test "a trailing slash on the relay URL is not doubled" do
     # The fns only match the single-slash URL, so a doubled slash raises.
     assert LeakCheck.run(

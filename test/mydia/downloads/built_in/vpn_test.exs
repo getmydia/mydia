@@ -1,9 +1,13 @@
 defmodule Mydia.Downloads.BuiltIn.VpnTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Mydia.Downloads.BuiltIn.{Config, Status, Vpn}
 
   @moduletag :tmp_dir
+  # Every transition into a down state logs an error.
+  @moduletag :capture_log
 
   setup %{tmp_dir: dir} do
     bypass = Bypass.open()
@@ -18,7 +22,10 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
   end
 
   defp start_vpn(ctx, leak_result) when not is_function(leak_result),
-    do: start_vpn(ctx, fn -> leak_result end)
+    do: start_vpn(ctx, fn _public_ip -> leak_result end)
+
+  defp start_vpn(ctx, leak_fun) when is_function(leak_fun, 0),
+    do: start_vpn(ctx, fn _public_ip -> leak_fun.() end)
 
   defp start_vpn(ctx, leak_fun) do
     test_pid = self()
@@ -150,8 +157,12 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
       Plug.Conn.resp(conn, 200, Jason.encode!(%{public_ip: Agent.get(agent, & &1.ip)}))
     end)
 
+    # `port: :error` makes the port forward read fail.
     Bypass.stub(bypass, "GET", "/v1/portforward", fn conn ->
-      Plug.Conn.resp(conn, 200, Jason.encode!(%{port: Agent.get(agent, & &1.port)}))
+      case Agent.get(agent, & &1.port) do
+        :error -> Plug.Conn.resp(conn, 500, "")
+        port -> Plug.Conn.resp(conn, 200, Jason.encode!(%{port: port}))
+      end
     end)
 
     agent
@@ -303,6 +314,95 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     assert {:forwarded, 40_123, second} = Status.get(ctx.status).port
     assert DateTime.compare(second, first) == :gt
+  end
+
+  test "the leak check is given gluetun's public address", ctx do
+    gluetun(ctx.bypass, "running", 0)
+    test_pid = self()
+
+    start_vpn(ctx, fn public_ip ->
+      send(test_pid, {:leak_check_ip, public_ip})
+      :ok
+    end)
+
+    assert_receive {:leak_check_ip, "203.0.113.9"}, 1_000
+  end
+
+  test "a failed port forward read keeps the forwarded port and reports it", ctx do
+    agent = mutable_gluetun(ctx.bypass, %{status: "running", ip: "203.0.113.1", port: 40_123})
+    start_vpn(ctx, :ok)
+    assert_receive {:engine_start, 40_123}, 1_000
+
+    Agent.update(agent, &%{&1 | port: :error})
+    flush_engine_messages()
+    refute_receive {:engine_start, 51413}, 300
+
+    assert %Status{port: {:failed, {:port_forward_failed, message}, 40_123}} =
+             Status.get(ctx.status)
+
+    assert message =~ "500"
+  end
+
+  test "a forwarded port that reads back as 0 is a failure, not the static port", ctx do
+    agent = mutable_gluetun(ctx.bypass, %{status: "running", ip: "203.0.113.1", port: 40_123})
+    start_vpn(ctx, :ok)
+    assert_receive {:engine_start, 40_123}, 1_000
+
+    Agent.update(agent, &%{&1 | port: 0})
+    flush_engine_messages()
+    assert_receive {:engine_start, 40_123}, 1_000
+    refute_receive {:engine_start, 51413}, 200
+    assert %Status{port: {:failed, {:port_forward_failed, _}, 40_123}} = Status.get(ctx.status)
+
+    # Forwarding comes back on a new port.
+    Agent.update(agent, &%{&1 | port: 40_200})
+    assert_receive {:engine_start, 40_200}, 1_000
+    assert %Status{port: {:forwarded, 40_200, _}} = Status.get(ctx.status)
+  end
+
+  test "a failed port forward read without an earlier forward uses the static port", ctx do
+    mutable_gluetun(ctx.bypass, %{status: "running", ip: "203.0.113.1", port: :error})
+    start_vpn(ctx, :ok)
+    assert_receive {:engine_start, 51413}, 1_000
+    assert %Status{port: {:static, 51413}} = Status.get(ctx.status)
+  end
+
+  test "an unreachable gluetun shows the last error from its log", ctx do
+    File.write!(
+      Path.join(ctx.dir, "gluetun.log"),
+      "INFO starting\nERROR VPN settings: wireguard private key is missing\n"
+    )
+
+    Bypass.down(ctx.bypass)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop,
+                    {:vpn_down, "ERROR VPN settings: wireguard private key is missing"}},
+                   1_000
+  end
+
+  test "only the tail of the gluetun log is read", ctx do
+    filler = String.duplicate("INFO filler line that pads the log\n", 3_000)
+    log = Path.join(ctx.dir, "gluetun.log")
+    File.write!(log, "ERROR old failure outside the tail\n" <> filler)
+
+    Bypass.down(ctx.bypass)
+    start_vpn(ctx, :ok)
+    assert_receive {:engine_stop, :vpn_unreachable}, 1_000
+  end
+
+  test "a transition into a down state is logged once, not on every poll", ctx do
+    File.write!(Path.join(ctx.dir, "preflight"), "net_admin=missing\ntun=ok\n")
+
+    log =
+      capture_log(fn ->
+        start_vpn(ctx, :ok)
+        # Several 50ms polls.
+        Process.sleep(300)
+      end)
+
+    occurrences = log |> String.split("needs the NET_ADMIN capability") |> length()
+    assert occurrences - 1 == 1
   end
 
   # Drops queued engine messages: the gate also stops the engine on boot and
