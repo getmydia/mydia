@@ -5,18 +5,34 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   from the address it sees from Mydia itself.
   """
 
+  # Fails closed: a value that is not a parseable IP address on either side is
+  # a failed check, never a pass, so the engine cannot start on a malformed
+  # relay answer.
   def run(opts) do
-    url = Keyword.fetch!(opts, :relay_url) <> "/ip"
+    url = String.trim_trailing(Keyword.fetch!(opts, :relay_url), "/") <> "/ip"
     torrent_ip = Keyword.get(opts, :torrent_ip_fun, &torrent_ip/1)
     mydia_ip = Keyword.get(opts, :mydia_ip_fun, &mydia_ip/1)
 
     with {:ok, via_torrent} <- torrent_ip.(url),
-         {:ok, via_mydia} <- mydia_ip.(url) do
-      if via_torrent == via_mydia, do: {:error, :leak_detected}, else: :ok
+         {:ok, via_mydia} <- mydia_ip.(url),
+         {:ok, torrent_addr} <- parse_address(via_torrent),
+         {:ok, mydia_addr} <- parse_address(via_mydia) do
+      if torrent_addr == mydia_addr, do: {:error, :leak_detected}, else: :ok
     else
       {:error, message} -> {:error, {:leak_check_failed, message}}
     end
   end
+
+  # Compares parsed tuples, so equal addresses written differently (for example
+  # IPv6 with and without zero compression) still count as a leak.
+  defp parse_address(ip) when is_binary(ip) do
+    case :inet.parse_address(:binary.bin_to_list(ip)) do
+      {:ok, addr} -> {:ok, addr}
+      {:error, _} -> {:error, "invalid address from relay"}
+    end
+  end
+
+  defp parse_address(_ip), do: {:error, "invalid address from relay"}
 
   defp torrent_ip(url) do
     case Mydia.BoundedCommand.run("torrent-curl", ["-fsS", "--max-time", "10", url], 15_000) do

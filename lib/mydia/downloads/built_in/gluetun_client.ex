@@ -39,4 +39,8 @@ defmodule Mydia.Downloads.BuiltIn.GluetunClient do
       _ -> {:error, :invalid_json}
     end
   end
+
+  # A JSON array or scalar decoded by Req (when gluetun does send a JSON content
+  # type) is not a status object.
+  defp field(_body, _key), do: {:error, :invalid_json}
 end
