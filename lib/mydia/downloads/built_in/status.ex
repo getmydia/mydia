@@ -49,6 +49,8 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   # The VPN clause comes first: Vpn records the tunnel as down before it stops
   # the engine, and in between the engine still reads :running.
   def blocking_reason(%__MODULE__{vpn: {:down, reason}}), do: reason
+  # :connecting is written before the engine is stopped, so it blocks too.
+  def blocking_reason(%__MODULE__{vpn: :connecting}), do: :vpn_connecting
   def blocking_reason(%__MODULE__{engine: :running}), do: nil
   def blocking_reason(%__MODULE__{engine: {:stopped, reason}}), do: reason
   def blocking_reason(%__MODULE__{engine: {:crashed, reason, _}}), do: reason
@@ -86,6 +88,9 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe({:vpn_down, last_log}),
     do: "The VPN tunnel is down. Torrents are stopped until it returns. Last VPN log: #{last_log}"
+
+  def describe(:vpn_connecting),
+    do: "The VPN tunnel is connecting. Torrents start once it is verified."
 
   def describe(:vpn_unreachable),
     do: "The VPN service is not answering. Torrents are stopped until it does."

@@ -57,6 +57,15 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.blocking_reason(status) == :vpn_unreachable
     end
 
+    test "a connecting VPN blocks before the engine has been stopped" do
+      status = %Status{engine: :running, vpn: :connecting}
+      assert Status.blocking_reason(status) == :vpn_connecting
+    end
+
+    test "an off VPN does not block a running engine" do
+      assert Status.blocking_reason(%Status{engine: :running, vpn: :off}) == nil
+    end
+
     test "the engine reason otherwise" do
       assert Status.blocking_reason(%Status{engine: {:crashed, {:engine_exit, 1}, 5}}) ==
                {:engine_exit, 1}
@@ -79,6 +88,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:vpn_auth_failed, "bad credentials"},
         :vpn_down,
         {:vpn_down, "last log line"},
+        :vpn_connecting,
         :vpn_unreachable,
         :leak_detected,
         {:leak_check_failed, "timeout"},
