@@ -81,6 +81,16 @@ defmodule MetadataRelay.Router do
     |> send_resp(200, Jason.encode!(MetadataRelay.ClientConfig.document()))
   end
 
+  # The caller's public address, as the relay sees it. Mydia's built-in
+  # torrent client compares the address its torrent traffic leaves from with
+  # Mydia's own to prove the VPN is in the path.
+  get "/ip" do
+    conn
+    |> put_resp_content_type("application/json")
+    |> put_resp_header("cache-control", "no-store")
+    |> send_resp(200, Jason.encode!(%{ip: MetadataRelay.ClientIp.resolve(conn)}))
+  end
+
   # TMDB Configuration
   get "/configuration" do
     handle_tmdb_request(conn, fn -> Handler.configuration() end)

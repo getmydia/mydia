@@ -83,6 +83,14 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   @impl true
+  def call(%Plug.Conn{method: "GET", request_path: "/ip"} = conn, _opts) do
+    # The response is the caller's own address. Caching it under a path-only
+    # key would hand the first caller's address to every later one, and the
+    # public header would let the Cloudflare edge do the same.
+    conn
+  end
+
+  @impl true
   def call(%Plug.Conn{method: "GET", request_path: "/pairing" <> _rest} = conn, _opts) do
     # Skip caching for pairing endpoints (dynamic data, rate limited)
     conn
