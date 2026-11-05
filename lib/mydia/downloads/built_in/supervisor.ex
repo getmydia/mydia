@@ -37,7 +37,7 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
   defp build_children(opts) do
     config = Config.load(System.get_env(), other_client_types())
     credentials = {"mydia", Base.url_encode64(:crypto.strong_rand_bytes(24), padding: false)}
-    api_port = Keyword.get(opts, :api_port, 3030)
+    api_port = Keyword.get(opts, :api_port, config.api_port)
 
     # Never leave an entry from an earlier start behind when this one is off.
     if config.enabled? do
@@ -58,7 +58,7 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
         {Engine,
          config: config,
          credentials: Keyword.fetch!(opts, :credentials),
-         api_port: Keyword.get(opts, :api_port, 3030),
+         api_port: Keyword.get(opts, :api_port, config.api_port),
          rqbit_path: Keyword.get(opts, :rqbit_path, "rqbit"),
          autostart: not config.vpn?},
         shutdown: @engine_shutdown_ms
@@ -77,7 +77,7 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
     |> Enum.filter(& &1.enabled)
     |> Enum.reject(&BuiltIn.managed?(%{connection_settings: &1.connection_settings}))
     |> Enum.map(& &1.type)
-    |> Enum.filter(&(&1 in Config.torrent_types()))
+    |> Enum.filter(&(&1 in Config.torrent_handler_types()))
   rescue
     e ->
       Logger.warning(

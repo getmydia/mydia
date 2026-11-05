@@ -1,10 +1,12 @@
 #!/bin/sh
 # Stands in for rqbit in Engine tests. Records its pid, its arguments and the
-# basic auth variable, then behaves as FAKE_RQBIT_MODE says. With `exec`, the
+# basic auth variable (and, when FAKE_RQBIT_ENV names a file, its whole
+# environment), then behaves as FAKE_RQBIT_MODE says. With `exec`, the
 # recorded pid belongs to the final `sleep`.
 echo $$ > "$FAKE_RQBIT_PID"
 printf '%s\n' "$@" > "$FAKE_RQBIT_ARGS"
 printf '%s\n' "$RQBIT_HTTP_BASIC_AUTH_USERPASS" >> "$FAKE_RQBIT_ARGS"
+[ -n "${FAKE_RQBIT_ENV:-}" ] && env > "$FAKE_RQBIT_ENV"
 case "$FAKE_RQBIT_MODE" in
   exit) exit 3 ;;
   hold)

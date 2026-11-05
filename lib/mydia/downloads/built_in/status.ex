@@ -32,10 +32,14 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def get(server \\ __MODULE__), do: Agent.get(server, & &1)
 
   @spec put(GenServer.server(), :engine | :vpn | :port | :warnings, term()) :: :ok
+  # Broadcasts from inside the Agent, so subscribers receive updates in the
+  # order they were applied even when several processes write at once.
   def put(server \\ __MODULE__, part, value) do
-    status = Agent.get_and_update(server, &(Map.put(&1, part, value) |> then(fn s -> {s, s} end)))
-    Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:built_in_status, status})
-    :ok
+    Agent.update(server, fn status ->
+      status = Map.put(status, part, value)
+      Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:built_in_status, status})
+      status
+    end)
   end
 
   @spec blocking_reason(t()) :: nil | term()
@@ -62,6 +66,13 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe({:invalid_port, value}),
     do: "MYDIA_TORRENT_PORT is #{inspect(value)}, not a port number. Using 51413."
+
+  def describe({:invalid_api_port, value}),
+    do: "MYDIA_TORRENT_API_PORT is #{inspect(value)}, not a port number. Using 3030."
+
+  def describe({:invalid_enabled, value}),
+    do:
+      "MYDIA_TORRENT_ENABLED is #{inspect(value)}, which is neither true nor false. Ignoring it and deciding automatically."
 
   def describe({:vpn_auth_failed, message}),
     do: "The VPN provider rejected the login: #{message}. Check the MYDIA_VPN_ credentials."
@@ -97,9 +108,9 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "The rqbit binary could not be started (#{message}). Check that it is installed and executable."
 
-  def describe({:path_unwritable, path, reason}),
+  def describe({:path_unwritable, path, reason, variable}),
     do:
-      "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set MYDIA_TORRENT_DOWNLOAD_PATH to a writable download directory."
+      "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set #{variable} to a writable directory."
 
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
 end

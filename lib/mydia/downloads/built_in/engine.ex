@@ -66,7 +66,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       config: config,
       status: Keyword.get(opts, :status, Status),
       rqbit_path: Keyword.get(opts, :rqbit_path, "rqbit"),
-      api_port: Keyword.get(opts, :api_port, 3030),
+      api_port: Keyword.get(opts, :api_port, config.api_port),
       credentials: Keyword.fetch!(opts, :credentials),
       backoff_ms: Keyword.get(opts, :backoff_ms, 2_000),
       env: Keyword.get(opts, :env, []),
@@ -78,7 +78,8 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       desired: :stopped,
       crashed?: false,
       timer: nil,
-      started_at: nil
+      started_at: nil,
+      reported: nil
     }
 
     kill_stale(config.state_dir)
@@ -90,18 +91,15 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     {:ok, state}
   end
 
+  # The VPN gate repeats its start every poll. While the engine is meant to
+  # run on this port and address, that is a no-op whether the child is up,
+  # waiting out a backoff or crashed: only a new target, or `restart/1` after a
+  # crash, resets the restart counter.
   @impl true
-  def handle_call({:start, listen_port, listen_ip}, _from, %{port: nil} = state) do
-    state =
-      cancel_timer(%{state | listen_port: listen_port, listen_ip: listen_ip, desired: :running})
-
-    {:reply, :ok, spawn_child(%{state | restarts: 0, crashed?: false})}
-  end
-
   def handle_call(
         {:start, listen_port, listen_ip},
         _from,
-        %{listen_port: listen_port, listen_ip: listen_ip} = state
+        %{desired: :running, listen_port: listen_port, listen_ip: listen_ip} = state
       ),
       do: {:reply, :ok, state}
 
@@ -120,17 +118,22 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     {:reply, :ok, spawn_child(state)}
   end
 
+  # A stop also ends a crash, so `restart/1` cannot spawn rqbit while the VPN
+  # gate that stopped it still holds it down.
   def handle_call({:stop, reason}, _from, state) do
-    state = %{state | desired: :stopped} |> cancel_timer() |> kill_child()
-    Status.put(state.status, :engine, {:stopped, reason})
-    {:reply, :ok, state}
+    state = %{state | desired: :stopped, crashed?: false} |> cancel_timer() |> kill_child()
+    {:reply, :ok, report(state, {:stopped, reason})}
   end
 
-  # Only leaves a crash; any other state is managed by start_engine/stop_engine,
-  # and a restart must not bypass the VPN gate that stopped the engine.
-  def handle_call(:restart, _from, %{crashed?: true, listen_port: port} = state)
+  # Only leaves a crash of an engine that is meant to run; any other state is
+  # managed by start_engine/stop_engine.
+  def handle_call(
+        :restart,
+        _from,
+        %{crashed?: true, desired: :running, listen_port: port} = state
+      )
       when not is_nil(port) do
-    state = %{state | desired: :running, restarts: 0, crashed?: false}
+    state = %{state | restarts: 0, crashed?: false}
     {:reply, :ok, spawn_child(cancel_timer(state))}
   end
 
@@ -154,13 +157,11 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     state = %{state | port: nil, os_pid: nil, restarts: restarts}
 
     if restarts >= @max_restarts do
-      Status.put(state.status, :engine, {:crashed, {:engine_exit, code}, restarts})
-      {:noreply, %{state | crashed?: true}}
+      {:noreply, crashed(state, {:engine_exit, code}, restarts)}
     else
       delay = state.backoff_ms * Integer.pow(2, restarts)
-      Status.put(state.status, :engine, :starting)
       timer = Process.send_after(self(), :respawn, delay)
-      {:noreply, %{state | restarts: restarts + 1, timer: timer}}
+      {:noreply, report(%{state | restarts: restarts + 1, timer: timer}, :starting)}
     end
   end
 
@@ -181,41 +182,49 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     %{state | timer: nil}
   end
 
+  # Status is written only when the engine's state changes, so the VPN gate
+  # repeating a stop every poll does not re-broadcast it.
+  defp report(%{reported: value} = state, value), do: state
+
+  defp report(state, value) do
+    Status.put(state.status, :engine, value)
+    %{state | reported: value}
+  end
+
+  defp crashed(state, reason, restarts),
+    do: report(%{state | crashed?: true}, {:crashed, reason, restarts})
+
   defp spawn_child(state) do
     case System.find_executable(state.rqbit_path) do
       nil ->
-        Status.put(state.status, :engine, {:crashed, :rqbit_not_found, 0})
-        %{state | crashed?: true}
+        crashed(state, :rqbit_not_found, 0)
 
       path ->
         case ensure_dirs(state.config) do
           :ok ->
             spawn_rqbit(path, state)
 
-          {:error, dir, reason} ->
-            Status.put(state.status, :engine, {:crashed, {:path_unwritable, dir, reason}, 0})
-            %{state | crashed?: true}
+          {:error, dir, reason, variable} ->
+            crashed(state, {:path_unwritable, dir, reason, variable}, 0)
         end
     end
   end
 
   defp ensure_dirs(config) do
-    Enum.find_value([config.state_dir, config.download_path], :ok, fn dir ->
+    [
+      {config.state_dir, "MYDIA_TORRENT_STATE_PATH"},
+      {config.download_path, "MYDIA_TORRENT_DOWNLOAD_PATH"}
+    ]
+    |> Enum.find_value(:ok, fn {dir, variable} ->
       case File.mkdir_p(dir) do
         :ok -> nil
-        {:error, reason} -> {:error, dir, reason}
+        {:error, reason} -> {:error, dir, reason, variable}
       end
     end)
   end
 
   defp spawn_rqbit(path, state) do
-    {user, pass} = state.credentials
-
-    env =
-      [{"RQBIT_HTTP_BASIC_AUTH_USERPASS", "#{user}:#{pass}"} | state.env]
-      |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
-    case open_port(path, env, state) do
+    case open_port(path, child_env(state), state) do
       {:ok, port, os_pid} ->
         adopt_child(state, port, os_pid)
 
@@ -223,9 +232,19 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
         # Raising here would loop through the supervisor and take the app down
         # for users who never configured the built-in client.
         Logger.error("could not spawn rqbit: #{reason}")
-        Status.put(state.status, :engine, {:crashed, {:spawn_failed, reason}, 0})
-        %{state | crashed?: true}
+        crashed(state, {:spawn_failed, reason}, 0)
     end
+  end
+
+  # rqbit inherits the BEAM's environment, which holds the VPN credentials and
+  # Mydia's own secrets. Those are unset; the variables set here win.
+  @doc false
+  def child_env(state, parent_env \\ System.get_env()) do
+    {user, pass} = state.credentials
+    set = [{"RQBIT_HTTP_BASIC_AUTH_USERPASS", "#{user}:#{pass}"} | state.env]
+    names = MapSet.new(set, &elem(&1, 0))
+    unset = Enum.reject(Config.child_env_unset(parent_env), &(elem(&1, 0) in names))
+    Mydia.BoundedCommand.port_env(unset ++ set)
   end
 
   defp open_port(path, env, state) do
@@ -274,8 +293,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
     end
 
-    Status.put(state.status, :engine, :running)
-    state
+    report(state, :running)
   end
 
   defp kill_child(%{port: nil} = state), do: state

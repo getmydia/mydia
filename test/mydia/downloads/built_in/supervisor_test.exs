@@ -34,6 +34,13 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
     assert engine_opts(children)[:autostart] == false
   end
 
+  test "the engine's API port comes from the config" do
+    children =
+      BuiltInSupervisor.children(%Config{enabled?: true, api_port: 4036}, credentials: {"u", "p"})
+
+    assert engine_opts(children)[:api_port] == 4036
+  end
+
   test "the engine gets time to stop rqbit before it is killed" do
     children = BuiltInSupervisor.children(%Config{enabled?: true}, credentials: {"u", "p"})
     assert engine_spec(children).shutdown == 15_000

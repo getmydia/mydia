@@ -20,6 +20,21 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
     assert %Status{warnings: [{:invalid_port, "x"}]} = Status.get(name)
   end
 
+  test "concurrent puts broadcast in the order they were applied", %{name: name} do
+    tasks = for n <- 1..50, do: Task.async(fn -> Status.put(name, :port, {:static, n}) end)
+    Task.await_many(tasks)
+
+    # Other async tests broadcast on the same topic; only these ports count.
+    last =
+      Enum.reduce(1..50, nil, fn _, _ ->
+        assert_receive {:built_in_status, %Status{port: {:static, n} = port}} when n in 1..50
+        port
+      end)
+
+    # The last broadcast is the state the Agent ended in.
+    assert Status.get(name).port == last
+  end
+
   test "put/3 stores and broadcasts", %{name: name} do
     :ok = Status.put(name, :vpn, {:down, :missing_net_admin})
     assert %Status{vpn: {:down, :missing_net_admin}} = Status.get(name)
@@ -52,6 +67,9 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         :split_group_missing,
         {:reserved_variable, "DNS_ADDRESS"},
         {:invalid_port, "x"},
+        {:invalid_api_port, "x"},
+        {:invalid_enabled, "maybe"},
+        {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"},
         {:vpn_auth_failed, "bad credentials"},
         :vpn_down,
         {:vpn_down, "last log line"},
@@ -75,6 +93,11 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.describe(:missing_tun) =~ "/dev/net/tun"
       assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
+
+      assert Status.describe(
+               {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"}
+             ) =~
+               "MYDIA_TORRENT_STATE_PATH"
     end
   end
 end

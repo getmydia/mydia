@@ -35,13 +35,14 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
           rqbit_path: @fake,
           credentials: {"mydia", "secret"},
           backoff_ms: 10,
-          env: [
-            {"FAKE_RQBIT_ARGS", ctx.args_file},
-            {"FAKE_RQBIT_PID", ctx.pid_file},
-            {"FAKE_RQBIT_MODE", Keyword.get(extra, :mode, "run")}
-          ]
+          env:
+            [
+              {"FAKE_RQBIT_ARGS", ctx.args_file},
+              {"FAKE_RQBIT_PID", ctx.pid_file},
+              {"FAKE_RQBIT_MODE", Keyword.get(extra, :mode, "run")}
+            ] ++ Enum.map(List.wrap(extra[:env_file]), &{"FAKE_RQBIT_ENV", &1})
         ],
-        Keyword.drop(extra, [:mode])
+        Keyword.drop(extra, [:mode, :env_file])
       )
 
     start_supervised!({Engine, opts}, id: name)
@@ -285,9 +286,138 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     start_engine(%{ctx | config: config}, autostart: true)
 
     assert_receive {:built_in_status,
-                    %Status{engine: {:crashed, {:path_unwritable, ^bad, _reason}, 0}}},
+                    %Status{
+                      engine:
+                        {:crashed,
+                         {:path_unwritable, ^bad, _reason, "MYDIA_TORRENT_DOWNLOAD_PATH"}, 0}
+                    }},
                    1_000
 
     refute File.exists?(ctx.pid_file)
+  end
+
+  @tag :tmp_dir
+  test "an unwritable state path names its own variable", ctx do
+    blocker = Path.join(ctx.tmp_dir, "blocker")
+    File.write!(blocker, "")
+    bad = Path.join(blocker, "rqbit")
+
+    start_engine(%{ctx | config: %{ctx.config | state_dir: bad}}, autostart: true)
+
+    assert_receive {:built_in_status,
+                    %Status{
+                      engine:
+                        {:crashed, {:path_unwritable, ^bad, _reason, "MYDIA_TORRENT_STATE_PATH"},
+                         0}
+                    }},
+                   1_000
+  end
+
+  @tag :tmp_dir
+  @tag :capture_log
+  test "restart/1 after a stop does not spawn, even when the engine had crashed", ctx do
+    name = start_engine(ctx, autostart: true, mode: "exit")
+    assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, 2_000
+    :ok = Engine.stop_engine(name, :vpn_down)
+    File.rm!(ctx.args_file)
+    drain()
+
+    :ok = Engine.restart(name)
+    refute_receive {:built_in_status, _}, 200
+    refute File.exists?(ctx.args_file)
+    assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)
+  end
+
+  @tag :tmp_dir
+  @tag :capture_log
+  test "repeating start on the same target does not reset a crash or a backoff", ctx do
+    name = start_engine(ctx, autostart: true, mode: "exit", backoff_ms: 20)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+
+    # The VPN gate repeats its start every poll while rqbit keeps exiting. The
+    # counter must still run out instead of being reset by each call.
+    for _ <- 1..20 do
+      :ok = Engine.start_engine(name, 51413)
+      Process.sleep(20)
+    end
+
+    assert_receive {:built_in_status, %Status{engine: {:crashed, {:engine_exit, 3}, 5}}}, 3_000
+    File.rm!(ctx.args_file)
+    drain()
+
+    :ok = Engine.start_engine(name, 51413)
+    refute_receive {:built_in_status, _}, 200
+    refute File.exists?(ctx.args_file)
+    assert %Status{engine: {:crashed, _, 5}} = Status.get(ctx.status)
+
+    # A new target is a fresh start.
+    :ok = Engine.start_engine(name, 6881)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+  end
+
+  @tag :tmp_dir
+  test "a missing binary is not re-reported on every start", ctx do
+    name = start_engine(ctx, rqbit_path: "/nonexistent/rqbit")
+    :ok = Engine.start_engine(name, 6881, "10.2.0.2")
+    assert_receive {:built_in_status, %Status{engine: {:crashed, :rqbit_not_found, 0}}}, 1_000
+
+    :ok = Engine.start_engine(name, 6881, "10.2.0.2")
+    :ok = Engine.start_engine(name, 6881, "10.2.0.2")
+    refute_receive {:built_in_status, _}, 100
+  end
+
+  @tag :tmp_dir
+  test "a repeated stop for the same reason is broadcast once", ctx do
+    name = start_engine(ctx, autostart: true)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    drain()
+
+    :ok = Engine.stop_engine(name, :vpn_down)
+    :ok = Engine.stop_engine(name, :vpn_down)
+    assert_receive {:built_in_status, %Status{engine: {:stopped, :vpn_down}}}, 1_000
+    refute_receive {:built_in_status, _}, 100
+
+    :ok = Engine.stop_engine(name, :leak_detected)
+    assert_receive {:built_in_status, %Status{engine: {:stopped, :leak_detected}}}, 1_000
+  end
+
+  @tag :tmp_dir
+  test "child_env unsets inherited secrets and keeps its own values" do
+    parent = %{
+      "MYDIA_VPN_WIREGUARD_PRIVATE_KEY" => "k",
+      "SECRET_KEY_BASE" => "s",
+      "PATH" => "/bin",
+      "FAKE_SECRET_SETTING" => "inherited"
+    }
+
+    env =
+      Engine.child_env(
+        %{credentials: {"mydia", "pw"}, env: [{"FAKE_SECRET_SETTING", "mine"}]},
+        parent
+      )
+
+    assert {~c"MYDIA_VPN_WIREGUARD_PRIVATE_KEY", false} in env
+    assert {~c"SECRET_KEY_BASE", false} in env
+    assert {~c"RQBIT_HTTP_BASIC_AUTH_USERPASS", ~c"mydia:pw"} in env
+    assert {~c"FAKE_SECRET_SETTING", ~c"mine"} in env
+    refute {~c"FAKE_SECRET_SETTING", false} in env
+    refute Enum.any?(env, &match?({~c"PATH", _}, &1))
+  end
+
+  @tag :tmp_dir
+  test "rqbit does not inherit secrets from Mydia's environment", ctx do
+    env_file = Path.join(ctx.tmp_dir, "env")
+    start_engine(ctx, autostart: true, env_file: env_file)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    wait_until(fn -> File.exists?(env_file) end)
+
+    names =
+      env_file
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.map(&(&1 |> String.split("=", parts: 2) |> hd()))
+
+    inherited_secrets = Enum.map(Config.child_env_unset(System.get_env()), &elem(&1, 0))
+    assert Enum.filter(names, &(&1 in inherited_secrets)) == []
   end
 end

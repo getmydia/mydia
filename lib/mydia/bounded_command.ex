@@ -19,9 +19,13 @@ defmodule Mydia.BoundedCommand do
 
   `name` goes through `System.find_executable/1`, so a bare name resolved on
   PATH and an absolute path both work.
+
+  Options: `:env`, a list of `{name, value}` string pairs added to the
+  child's environment, where a `false` value unsets an inherited variable.
   """
-  @spec run(String.t(), [String.t()], timeout()) :: {:ok, binary()} | {:error, error()}
-  def run(name, args, timeout) do
+  @spec run(String.t(), [String.t()], timeout(), keyword()) ::
+          {:ok, binary()} | {:error, error()}
+  def run(name, args, timeout, opts \\ []) do
     case System.find_executable(name) do
       nil ->
         {:error, :not_found}
@@ -33,7 +37,8 @@ defmodule Mydia.BoundedCommand do
             :exit_status,
             :stderr_to_stdout,
             :hide,
-            args: args
+            args: args,
+            env: port_env(Keyword.get(opts, :env, []))
           ])
 
         os_pid =
@@ -72,6 +77,15 @@ defmodule Mydia.BoundedCommand do
         kill(port, os_pid)
         {:error, :timeout}
     end
+  end
+
+  @doc false
+  # Port.open/2 wants charlists, with `false` to unset a variable.
+  def port_env(env) do
+    Enum.map(env, fn
+      {name, false} -> {String.to_charlist(name), false}
+      {name, value} -> {String.to_charlist(name), String.to_charlist(value)}
+    end)
   end
 
   defp remaining_ms(:infinity), do: :infinity
