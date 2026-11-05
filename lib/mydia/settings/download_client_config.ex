@@ -58,8 +58,10 @@ defmodule Mydia.Settings.DownloadClientConfig do
           external_torrents: :auto | :adopt | :category_only | :ignore,
           updated_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           updated_by_id: binary() | nil,
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          # nil for runtime clients (environment, YAML, the built-in one),
+          # which are never stored.
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   @client_types [

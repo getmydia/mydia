@@ -56,9 +56,7 @@ defmodule Mydia.Downloads.BuiltIn do
     :ok
   end
 
-  # Not DownloadClientConfig.t(): a runtime client has no inserted_at or
-  # updated_at, which that type declares as DateTime.t().
-  @spec client_configs() :: [%DownloadClientConfig{}]
+  @spec client_configs() :: [DownloadClientConfig.t()]
   def client_configs do
     case runtime() do
       nil ->
