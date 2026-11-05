@@ -12,6 +12,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   """
 
   use GenServer
+  require Logger
 
   alias Mydia.Downloads.BuiltIn.{Engine, GluetunClient, LeakCheck, Status}
 
@@ -35,11 +36,14 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         Keyword.get(opts, :leak_check, fn ->
           LeakCheck.run(relay_url: Mydia.Metadata.metadata_relay_url())
         end),
-      verified?: false,
+      verified_ip: nil,
       last_vpn: :connecting,
       last_port: nil
     }
 
+    # Vpn can restart without Engine restarting (rest_for_one only restarts
+    # later siblings), so a fresh Vpn must not inherit a running, ungated engine.
+    call_engine(state, {:stop, :vpn_down})
     Status.put(state.status, :vpn, :connecting)
     send(self(), :poll)
     {:ok, state}
@@ -47,9 +51,22 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   @impl true
   def handle_info(:poll, state) do
-    state = poll(state)
+    state = safe_poll(state)
     Process.send_after(self(), :poll, state.interval_ms)
     {:noreply, state}
+  end
+
+  # Any failure while observing the tunnel fails closed instead of crashing.
+  defp safe_poll(state) do
+    poll(state)
+  rescue
+    e ->
+      Logger.error("VPN gate poll raised: #{Exception.format(:error, e, __STACKTRACE__)}")
+      down(state, {:leak_check_failed, Exception.message(e)})
+  catch
+    kind, reason ->
+      Logger.error("VPN gate poll failed: #{inspect({kind, reason})}")
+      down(state, {:leak_check_failed, inspect(reason)})
   end
 
   defp poll(state) do
@@ -62,22 +79,32 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
     end
   end
 
-  defp up(req, %{verified?: false} = state) do
+  defp up(req, state) do
+    case GluetunClient.public_ip(req) do
+      {:ok, ip} when is_binary(ip) and ip != "" -> verify_and_start(req, ip, state)
+      _ -> connecting(state)
+    end
+  end
+
+  # The tunnel is up but its address is unreadable, so it cannot be verified.
+  defp connecting(state) do
+    state = put_vpn(state, :connecting)
+    call_engine(state, {:stop, :vpn_down})
+    %{state | verified_ip: nil}
+  end
+
+  # A new address means the tunnel restarted since the last leak check.
+  defp verify_and_start(req, ip, %{verified_ip: ip} = state), do: start_engine(req, ip, state)
+
+  defp verify_and_start(req, ip, state) do
     case state.leak_check.() do
-      :ok -> up(req, %{state | verified?: true})
+      :ok -> start_engine(req, ip, %{state | verified_ip: ip})
       {:error, reason} -> down(state, reason)
     end
   end
 
-  defp up(req, state) do
-    public_ip =
-      case GluetunClient.public_ip(req) do
-        {:ok, ip} -> ip
-        _ -> nil
-      end
-
-    state =
-      put_vpn(state, {:up, %{provider: state.config.vpn_provider, public_ip: public_ip}})
+  defp start_engine(req, ip, state) do
+    state = put_vpn(state, {:up, %{provider: state.config.vpn_provider, public_ip: ip}})
 
     {state, port} =
       case GluetunClient.forwarded_port(req) do
@@ -85,14 +112,21 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         _ -> {put_port(state, {:static, state.config.port}), state.config.port}
       end
 
-    state.engine_fun.({:start, port})
+    call_engine(state, {:start, port})
     state
   end
 
   defp down(state, reason) do
     state = put_vpn(state, {:down, reason})
-    state.engine_fun.({:stop, reason})
-    %{state | verified?: false}
+    call_engine(state, {:stop, reason})
+    %{state | verified_ip: nil, last_port: nil}
+  end
+
+  defp call_engine(state, message) do
+    case state.engine_fun.(message) do
+      :ok -> :ok
+      other -> Logger.warning("Engine #{inspect(message)} returned #{inspect(other)}")
+    end
   end
 
   defp put_vpn(%{last_vpn: value} = state, value), do: state
