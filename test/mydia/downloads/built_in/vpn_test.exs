@@ -368,6 +368,21 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert %Status{port: {:static, 51413}} = Status.get(ctx.status)
   end
 
+  test "the same error with a new timestamp is one transition", ctx do
+    log = Path.join(ctx.dir, "gluetun.log")
+    File.write!(log, "2026-11-04T19:52:12Z ERROR [vpn] auth failed\n")
+    gluetun(ctx.bypass, "stopped", 0)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:built_in_status,
+                    %Status{vpn: {:down, {:vpn_down, "ERROR [vpn] auth failed"}}}},
+                   1_000
+
+    File.write!(log, "2026-11-04T19:52:42Z ERROR [vpn] auth failed\n")
+    # Several polls (50ms apart) read the new timestamp.
+    refute_receive {:built_in_status, %Status{vpn: {:down, _}}}, 400
+  end
+
   test "an unreachable gluetun shows the last error from its log", ctx do
     File.write!(
       Path.join(ctx.dir, "gluetun.log"),

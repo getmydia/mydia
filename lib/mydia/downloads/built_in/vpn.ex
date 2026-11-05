@@ -247,10 +247,22 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
     with {:ok, tail} <- read_tail(Path.join(dir, "gluetun.log"), @log_tail_bytes),
          line when is_binary(line) <-
            tail |> String.split("\n", trim: true) |> Enum.reverse() |> Enum.find(&(&1 =~ "ERROR")) do
-      {:vpn_down, line}
+      {:vpn_down, strip_timestamp(line)}
     else
       _ -> fallback
     end
+  end
+
+  # gluetun stamps every line (`2026-11-04T19:52:12Z ERROR ...`). Left in the
+  # reason, a restart loop repeating one error would look like a new
+  # transition on every poll.
+  defp strip_timestamp(line) do
+    line
+    |> String.trim()
+    |> String.replace(
+      ~r/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?\s*/,
+      ""
+    )
   end
 
   defp read_tail(path, bytes) do
