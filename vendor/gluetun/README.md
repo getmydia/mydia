@@ -75,10 +75,22 @@ connections can stall.
 ### Restarts
 
 Mydia runs gluetun in a restart loop while the engine may keep running, in a
-network namespace that keeps the previous run's rules. On enable, each rule
-that already exists (`iptables -C`) is added again and only then is one copy
-removed, so marking and the kill switch never lapse. If enabling fails
+network namespace that keeps the previous run's rules. On enable, each base
+rule (marking, kill switch, DNS) that already exists (`iptables -C`) is added
+again and only then is one copy removed, so marking and the kill switch never
+lapse. The tunnel rules (the `PREROUTING` marks, the tunnel `INPUT` and
+`OUTPUT` rules, `MASQUERADE` and the endpoint `RETURN`) are handled the same
+way on the first VPN connection of a run, when gluetun has no rules of its own
+to diff against; later reconnects in the same run only add what changed and
+then remove what the new connection no longer needs. If enabling fails
 partway, nothing is removed: split tunnel traffic fails closed.
+
+A restarted gluetun only knows the rules it is about to add. Tunnel rules of
+the previous run that the new connection does not share stay in place: in
+practice the endpoint `RETURN` of a server the previous run used, or tunnel
+rules for an interface name that changed. A stale `RETURN` exempts traffic to
+that old server's address and port from the tunnel. Recreating the container
+clears them.
 
 ## Requirements and limits
 
@@ -110,6 +122,18 @@ partway, nothing is removed: split tunnel traffic fails closed.
   `torrent-curl` are.
 - VPN-side port redirection (`VPN_PORT_FORWARDING_LISTENING_PORT`) appends its
   `INPUT` accept after the tunnel `DROP` and does not work.
+
+### Known limits not addressed
+
+- **No PID 1 reaping.** Mydia's entrypoint `exec`s the application, which
+  does not reap orphans. An OpenVPN child left behind when gluetun dies
+  becomes a zombie. Run the container with `init: true` (the compose examples
+  in the download client docs do) so an init process reaps it.
+- **The image is referenced by tag, not digest.** Upstream gluetun and the
+  Mydia image are not pinned by digest.
+- **The engine is reported running before its API listens.** Mydia marks
+  rqbit running once the process starts; requests in the first moments can
+  fail with a connection error until its HTTP API is up.
 
 ## Rebasing onto a new release
 

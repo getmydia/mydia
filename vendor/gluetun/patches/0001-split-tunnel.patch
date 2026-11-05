@@ -1,4 +1,4 @@
-From d3e7c4ae46ae590f602ca4b64500d206fd9a3d5f Mon Sep 17 00:00:00 2001
+From f325afc269b14f802d2ae5792eab5636e2880996 Mon Sep 17 00:00:00 2001
 From: Alexandre Rosenfeld <arsfeld@gmail.com>
 Date: Wed, 4 Nov 2026 20:18:13 -0500
 Subject: [PATCH] Add SPLIT_TUNNEL_GID split-tunnel mode
@@ -25,8 +25,8 @@ of the container keeps its routes, DNS and an unfiltered firewall.
  internal/firewall/enable.go                   |  13 +
  internal/firewall/firewall.go                 |   3 +
  internal/firewall/ports.go                    |  12 +-
- internal/firewall/splittunnel.go              | 232 +++++++++++++++++
- internal/firewall/splittunnel_test.go         | 173 +++++++++++++
+ internal/firewall/splittunnel.go              | 235 ++++++++++++++++++
+ internal/firewall/splittunnel_test.go         | 219 ++++++++++++++++
  internal/firewall/vpn.go                      |   4 +
  internal/splittunnel/routing.go               | 168 +++++++++++++
  internal/splittunnel/routing_test.go          | 192 ++++++++++++++
@@ -39,7 +39,7 @@ of the container keeps its routes, DNS and an unfiltered firewall.
  internal/vpn/wireguard.go                     |   3 +-
  internal/wireguard/run.go                     |  20 +-
  internal/wireguard/settings.go                |   4 +
- 25 files changed, 1430 insertions(+), 25 deletions(-)
+ 25 files changed, 1479 insertions(+), 25 deletions(-)
  create mode 100644 internal/firewall/splittunnel.go
  create mode 100644 internal/firewall/splittunnel_test.go
  create mode 100644 internal/splittunnel/routing.go
@@ -456,10 +456,10 @@ index 6f5867e..d213019 100644
  				port, netInterface, err)
 diff --git a/internal/firewall/splittunnel.go b/internal/firewall/splittunnel.go
 new file mode 100644
-index 0000000..b945df8
+index 0000000..c7dfe7d
 --- /dev/null
 +++ b/internal/firewall/splittunnel.go
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,235 @@
 +package firewall
 +
 +import (
@@ -577,7 +577,10 @@ index 0000000..b945df8
 +
 +	c.logger.Info("allowing VPN connection for split tunnel traffic...")
 +	next := c.splitTunnelSettings()
-+	const replace = false
++	// The first connection of this process diffs against no rules, but the
++	// namespace may still hold the tunnel rules of a previous run: replace
++	// them like the base rules instead of appending a second copy.
++	replace := previous.Interface == ""
 +	return c.runSplitTunnelInstructions(ctx,
 +		splittunnel.TunnelChanges(previous, next, false),
 +		splittunnel.TunnelChanges(previous, next, true), replace)
@@ -694,10 +697,10 @@ index 0000000..b945df8
 +}
 diff --git a/internal/firewall/splittunnel_test.go b/internal/firewall/splittunnel_test.go
 new file mode 100644
-index 0000000..f0a62da
+index 0000000..ef86f4b
 --- /dev/null
 +++ b/internal/firewall/splittunnel_test.go
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,219 @@
 +package firewall
 +
 +import (
@@ -797,6 +800,52 @@ index 0000000..f0a62da
 +	}
 +}
 +
++// The first VPN connection after a gluetun restart finds the tunnel rules of
++// the previous run: they are replaced, not appended a second time.
++func Test_splitTunnel_firstConnectionOverPreviousRun(t *testing.T) {
++	t.Parallel()
++	ctx := context.Background()
++	runner := &recordingRunner{rulesExist: true}
++	config := newSplitTunnelConfig(runner)
++	require.NoError(t, config.SetEnabled(ctx, true))
++
++	runner.commands = nil
++	connection := models.Connection{
++		IP:       netip.MustParseAddr("192.0.2.10"),
++		Port:     51820,
++		Protocol: "udp",
++	}
++	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
++
++	tunnelRules := []string{
++		"iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
++		"iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x5154",
++		"iptables -t mangle -A PREROUTING -i wg0 -j CONNMARK --set-mark 0x5154",
++		"iptables -I OUTPUT -m mark --mark 0x5154 -o wg0 -j ACCEPT",
++		"iptables -A INPUT -i wg0 -j DROP",
++		"iptables -t nat -A POSTROUTING -m mark --mark 0x5154 -o wg0 -j MASQUERADE",
++	}
++	all := strings.Join(runner.commands, "\n") + "\n"
++	for _, rule := range tunnelRules {
++		deleted := strings.Replace(strings.Replace(rule, " -A ", " -D ", 1), " -I ", " -D ", 1)
++		added := slices.Index(runner.commands, rule)
++		removed := slices.Index(runner.commands, deleted)
++		require.GreaterOrEqual(t, added, 0, "missing %q", rule)
++		require.GreaterOrEqual(t, removed, 0, "duplicate of %q not removed", rule)
++		assert.Less(t, added, removed, "%q removed before its replacement exists", rule)
++		assert.Equal(t, 1, strings.Count(all, deleted+"\n"), "exactly one duplicate of %q removed", rule)
++	}
++
++	// Later connections in the same run diff against known rules.
++	runner.commands = nil
++	connection.IP = netip.MustParseAddr("192.0.2.20")
++	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
++	assert.Equal(t, []string{
++		"iptables -t mangle -I OUTPUT -d 192.0.2.20 -p udp --dport 51820 -j RETURN",
++		"iptables -t mangle -D OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
++	}, runner.commands)
++}
++
 +// A partial enable failure must fail closed: the rules already in place stay.
 +func Test_splitTunnel_enableFailureKeepsKillSwitch(t *testing.T) {
 +	t.Parallel()
@@ -833,8 +882,8 @@ index 0000000..f0a62da
 +		Protocol: "udp",
 +	}
 +	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
-+	assert.Equal(t, "iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
-+		runner.commands[0])
++	assert.Contains(t, runner.commands,
++		"iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN")
 +	assert.Contains(t, runner.commands, "iptables -I OUTPUT -m mark --mark 0x5154 -o wg0 -j ACCEPT")
 +	assert.Contains(t, runner.commands, "ip6tables -A INPUT -i wg0 -j DROP")
 +
