@@ -145,6 +145,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
       :updated_by_id
     ])
     |> validate_required([:name, :type])
+    |> validate_reserved_name()
     |> validate_inclusion(:type, @client_types)
     |> apply_debrid_grace_default(attrs)
     |> validate_by_type()
@@ -155,6 +156,18 @@ defmodule Mydia.Settings.DownloadClientConfig do
     |> validate_number(:incomplete_grace_minutes, greater_than: 0)
     |> validate_priority_profile()
     |> unique_constraint(:name)
+  end
+
+  # The built-in torrent client is listed under this name, and clients are
+  # merged by name.
+  defp validate_reserved_name(changeset) do
+    validate_change(changeset, :name, fn :name, name ->
+      if Mydia.Downloads.BuiltIn.reserved_name?(name) do
+        [name: "is reserved for the built-in torrent client"]
+      else
+        []
+      end
+    end)
   end
 
   # Debrid clients submit a release to the provider and then wait — sometimes

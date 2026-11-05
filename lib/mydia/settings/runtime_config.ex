@@ -263,7 +263,20 @@ defmodule Mydia.Settings.RuntimeConfig do
         []
       end
 
-    configured ++ Mydia.Downloads.BuiltIn.client_configs()
+    case Mydia.Downloads.BuiltIn.client_configs() do
+      [] -> configured
+      built_in -> drop_built_in_namesakes(configured) ++ built_in
+    end
+  end
+
+  # Clients are looked up and merged by name, so a configured client named
+  # like the built-in one would shadow it. The built-in client wins.
+  defp drop_built_in_namesakes(configured) do
+    {namesakes, others} =
+      Enum.split_with(configured, &Mydia.Downloads.BuiltIn.reserved_name?(&1.name))
+
+    if namesakes != [], do: Mydia.Downloads.BuiltIn.warn_name_taken("the environment or YAML")
+    others
   end
 
   def get_runtime_indexers do

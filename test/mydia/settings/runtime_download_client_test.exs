@@ -50,6 +50,70 @@ defmodule Mydia.Settings.RuntimeDownloadClientTest do
     end)
   end
 
+  describe "the built-in client's name" do
+    import ExUnit.CaptureLog
+
+    alias Mydia.Downloads.BuiltIn
+    alias Mydia.Settings.DownloadClientConfig
+
+    setup do
+      BuiltIn.put_runtime(%{
+        api_port: 3030,
+        credentials: {"mydia", "x"},
+        config: %BuiltIn.Config{download_path: "/data/downloads"}
+      })
+
+      on_exit(fn ->
+        BuiltIn.clear_runtime()
+        :persistent_term.erase({BuiltIn, :name_taken_warned, "the environment or YAML"})
+        :persistent_term.erase({BuiltIn, :name_taken_warned, "the database"})
+      end)
+    end
+
+    test "a runtime client named like it is dropped with a warning" do
+      setup_runtime_config([client_config(%{name: " built-in"}), client_config(%{})])
+
+      log =
+        capture_log(fn ->
+          clients = RuntimeConfig.get_runtime_download_clients()
+          assert Enum.map(clients, & &1.name) == ["runtime-qbit", "Built-in"]
+          assert [%{type: :rqbit}] = Enum.filter(clients, &BuiltIn.managed?/1)
+        end)
+
+      assert log =~ "reserved for the built-in torrent client"
+    end
+
+    test "a runtime client with that name stays when the built-in client is off" do
+      BuiltIn.clear_runtime()
+      setup_runtime_config([client_config(%{name: "Built-in"})])
+
+      assert [%{name: "Built-in", type: :qbittorrent}] =
+               RuntimeConfig.get_runtime_download_clients()
+    end
+
+    test "a database row with that name does not hide it" do
+      setup_runtime_config([])
+
+      # Inserted without the changeset, as a row from before the name was
+      # reserved would be.
+      Repo.insert!(%DownloadClientConfig{
+        name: "Built-in",
+        type: :qbittorrent,
+        host: "qbit.lan",
+        port: 8080
+      })
+
+      log =
+        capture_log(fn ->
+          clients = Mydia.Settings.list_download_client_configs()
+          assert [%{type: :qbittorrent}, %{type: :rqbit}] = clients
+          assert [_] = Enum.filter(clients, &BuiltIn.managed?/1)
+        end)
+
+      assert log =~ "from the database"
+    end
+  end
+
   describe "map_to_download_client_config/1 external_torrents" do
     test "carries an explicit mode through to the struct" do
       setup_runtime_config([client_config(%{external_torrents: :ignore})])

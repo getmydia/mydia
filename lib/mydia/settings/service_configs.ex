@@ -16,6 +16,7 @@ defmodule Mydia.Settings.ServiceConfigs do
     SubtitleProviderConfig
   }
 
+  alias Mydia.Downloads.BuiltIn
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Settings.RuntimeConfig, as: RC
   alias Mydia.Subtitles.ProviderRegistry
@@ -30,8 +31,17 @@ defmodule Mydia.Settings.ServiceConfigs do
       |> order_by([d], desc: d.enabled, asc: d.priority, asc: d.name)
       |> Repo.all()
 
-    # Merge with runtime config (database takes precedence by name)
-    RC.merge_with_runtime_config(db_configs, &RC.get_runtime_download_clients/0, :name)
+    # Merge with runtime config (database takes precedence by name). The
+    # built-in client is exempt: a database row may carry its name from before
+    # the name was reserved, and must not hide it.
+    {built_in, runtime} =
+      Enum.split_with(RC.get_runtime_download_clients(), &BuiltIn.managed?/1)
+
+    if built_in != [] and Enum.any?(db_configs, &BuiltIn.reserved_name?(&1.name)) do
+      BuiltIn.warn_name_taken("the database")
+    end
+
+    RC.merge_with_runtime_config(db_configs, fn -> runtime end, :name) ++ built_in
   end
 
   def get_download_client_config!(id, opts \\ [])

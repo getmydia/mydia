@@ -8,6 +8,8 @@ defmodule Mydia.Downloads.BuiltIn do
   client of type `rqbit` driven by `Mydia.Downloads.Client.Rqbit`.
   """
 
+  require Logger
+
   alias Mydia.Downloads.BuiltIn.Status
   alias Mydia.Downloads.Client.Error
   alias Mydia.Settings.DownloadClientConfig
@@ -19,6 +21,40 @@ defmodule Mydia.Downloads.BuiltIn do
   def put_runtime(runtime), do: :persistent_term.put(@key, runtime)
   def clear_runtime, do: :persistent_term.erase(@key)
   def runtime, do: :persistent_term.get(@key, nil)
+
+  @doc "The name the built-in client is listed under."
+  def name, do: @name
+
+  @doc """
+  Whether `name` is the built-in client's, ignoring case and surrounding
+  whitespace. Other clients may not use it: lists of clients are merged by
+  name, so one would hide the other.
+  """
+  @spec reserved_name?(term()) :: boolean()
+  def reserved_name?(name) when is_binary(name),
+    do: String.downcase(String.trim(name)) == String.downcase(@name)
+
+  def reserved_name?(_name), do: false
+
+  @doc """
+  Logs, once per boot and `source`, that a client other than the built-in one
+  uses its name. Callers run on every client listing, hence the once.
+  """
+  @spec warn_name_taken(String.t()) :: :ok
+  def warn_name_taken(source) do
+    key = {__MODULE__, :name_taken_warned, source}
+
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "A download client from #{source} is named #{inspect(@name)}, which is reserved for " <>
+          "the built-in torrent client. Rename it; the built-in client is listed regardless."
+      )
+    end
+
+    :ok
+  end
 
   # Not DownloadClientConfig.t(): a runtime client has no inserted_at or
   # updated_at, which that type declares as DateTime.t().
