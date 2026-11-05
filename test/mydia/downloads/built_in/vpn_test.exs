@@ -24,8 +24,9 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     test_pid = self()
 
     engine_fun = fn
-      {:start, port} ->
+      {:start, port, listen_ip} ->
         send(test_pid, {:engine_start, port})
+        send(test_pid, {:engine_listen, port, listen_ip})
         :ok
 
       {:stop, reason} ->
@@ -39,6 +40,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
        config: ctx.config,
        status: ctx.status,
        engine_fun: engine_fun,
+       tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
        base_url: "http://localhost:#{ctx.bypass.port}",
        interval_ms: 50,
        leak_check: leak_fun}
@@ -214,6 +216,41 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert %Status{vpn: :connecting} = Status.get(ctx.status)
   end
 
+  test "the engine is started on the tunnel address", ctx do
+    gluetun(ctx.bypass, "running", 40_123)
+    start_vpn(ctx, :ok)
+    assert_receive {:engine_listen, 40_123, "10.2.0.2"}, 1_000
+  end
+
+  test "an unreadable tunnel address stops the engine and leaves the VPN connecting", ctx do
+    gluetun(ctx.bypass, "running", 40_123)
+    ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:error, :no_tunnel_address} end)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop, :vpn_down}, 1_000
+    Process.sleep(150)
+    refute_received {:engine_start, _}
+    assert %Status{vpn: :connecting} = Status.get(ctx.status)
+  end
+
+  test "a changed tunnel address restarts the engine on the new one", ctx do
+    gluetun(ctx.bypass, "running", 40_123)
+    {:ok, agent} = Agent.start_link(fn -> "10.2.0.2" end)
+    ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:ok, Agent.get(agent, & &1)} end)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_listen, 40_123, "10.2.0.2"}, 1_000
+    Agent.update(agent, fn _ -> "10.2.0.9" end)
+    assert_receive {:engine_listen, 40_123, "10.2.0.9"}, 1_000
+  end
+
+  test "the tunnel address is parsed from ip output" do
+    line = "7: tun0    inet 10.2.0.2/32 scope global tun0\\       valid_lft forever\\n"
+    assert {:ok, "10.2.0.2"} = Vpn.parse_tunnel_ip(line)
+    assert {:error, _} = Vpn.parse_tunnel_ip("")
+    assert {:error, _} = Vpn.parse_tunnel_ip("7: tun0    inet 999.1.1.1/32 scope global tun0\n")
+  end
+
   test "up then stopped stops the engine, and running again re-runs the leak check", ctx do
     agent = mutable_gluetun(ctx.bypass, %{status: "running", ip: "203.0.113.1", port: 0})
     start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
@@ -265,6 +302,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
   defp flush_engine_messages do
     receive do
       {:engine_start, _} -> flush_engine_messages()
+      {:engine_listen, _, _} -> flush_engine_messages()
       {:engine_stop, _} -> flush_engine_messages()
     after
       0 -> :ok

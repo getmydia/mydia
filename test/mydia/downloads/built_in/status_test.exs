@@ -60,7 +60,8 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:port_forward_failed, "no port"},
         {:engine_exit, 101},
         :engine_starting,
-        :rqbit_not_found
+        :rqbit_not_found,
+        {:spawn_failed, "eacces"}
       ]
 
       for reason <- reasons do

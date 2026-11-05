@@ -30,17 +30,28 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     %{id: Keyword.get(opts, :name, __MODULE__), start: {__MODULE__, :start_link, [opts]}}
   end
 
-  def start_engine(server \\ __MODULE__, listen_port),
-    do: GenServer.call(server, {:start, listen_port})
+  @doc """
+  Starts the child on `listen_port`, or restarts it when the port or the
+  listen address differs from the running one. `listen_ip` is the tunnel
+  address in VPN mode and `nil` otherwise.
+  """
+  def start_engine(server \\ __MODULE__, listen_port, listen_ip \\ nil),
+    do: GenServer.call(server, {:start, listen_port, listen_ip})
 
   def stop_engine(server \\ __MODULE__, reason), do: GenServer.call(server, {:stop, reason})
   def restart(server \\ __MODULE__), do: GenServer.call(server, :restart)
 
-  @spec args(Config.t(), pos_integer(), pos_integer()) :: [String.t()]
-  def args(%Config{} = config, api_port, listen_port) do
+  # `--listen-ip` pins the listening sockets to the tunnel address. Bound to
+  # 0.0.0.0, replies to inbound UDP (uTP, DHT) pick the eth0 source address
+  # before the split-tunnel mark applies, and gluetun's MASQUERADE then remaps
+  # the source port.
+  @spec args(Config.t(), pos_integer(), pos_integer(), String.t() | nil) :: [String.t()]
+  def args(%Config{} = config, api_port, listen_port, listen_ip \\ nil) do
     bind = if config.vpn?, do: ["--bind-device", config.vpn_interface], else: []
+    listen = if is_binary(listen_ip), do: ["--listen-ip", listen_ip], else: []
 
     ["--http-api-listen-addr", "127.0.0.1:#{api_port}", "--listen-port", "#{listen_port}"] ++
+      listen ++
       ["--disable-upnp-port-forward"] ++
       bind ++
       ["server", "start", "--persistence-location", config.state_dir, config.download_path]
@@ -62,6 +73,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       port: nil,
       os_pid: nil,
       listen_port: nil,
+      listen_ip: nil,
       restarts: 0,
       desired: :stopped,
       crashed?: false,
@@ -79,17 +91,32 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   end
 
   @impl true
-  def handle_call({:start, listen_port}, _from, %{port: nil} = state) do
-    state = cancel_timer(%{state | listen_port: listen_port, desired: :running})
+  def handle_call({:start, listen_port, listen_ip}, _from, %{port: nil} = state) do
+    state =
+      cancel_timer(%{state | listen_port: listen_port, listen_ip: listen_ip, desired: :running})
+
     {:reply, :ok, spawn_child(%{state | restarts: 0, crashed?: false})}
   end
 
-  def handle_call({:start, listen_port}, _from, %{listen_port: listen_port} = state),
-    do: {:reply, :ok, state}
+  def handle_call(
+        {:start, listen_port, listen_ip},
+        _from,
+        %{listen_port: listen_port, listen_ip: listen_ip} = state
+      ),
+      do: {:reply, :ok, state}
 
-  def handle_call({:start, listen_port}, _from, state) do
+  def handle_call({:start, listen_port, listen_ip}, _from, state) do
     state = state |> cancel_timer() |> kill_child()
-    state = %{state | listen_port: listen_port, desired: :running, restarts: 0, crashed?: false}
+
+    state = %{
+      state
+      | listen_port: listen_port,
+        listen_ip: listen_ip,
+        desired: :running,
+        restarts: 0,
+        crashed?: false
+    }
+
     {:reply, :ok, spawn_child(state)}
   end
 
@@ -188,18 +215,51 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       [{"RQBIT_HTTP_BASIC_AUTH_USERPASS", "#{user}:#{pass}"} | state.env]
       |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
 
+    case open_port(path, env, state) do
+      {:ok, port, os_pid} ->
+        adopt_child(state, port, os_pid)
+
+      {:error, reason} ->
+        # Raising here would loop through the supervisor and take the app down
+        # for users who never configured the built-in client.
+        Logger.error("could not spawn rqbit: #{reason}")
+        Status.put(state.status, :engine, {:crashed, {:spawn_failed, reason}, 0})
+        %{state | crashed?: true}
+    end
+  end
+
+  defp open_port(path, env, state) do
     port =
       Port.open({:spawn_executable, path}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,
         :hide,
-        args: args(state.config, state.api_port, state.listen_port),
+        args: args(state.config, state.api_port, state.listen_port, state.listen_ip),
         env: env
       ])
 
-    {:os_pid, os_pid} = Port.info(port, :os_pid)
+    case Port.info(port, :os_pid) do
+      {:os_pid, os_pid} ->
+        {:ok, port, os_pid}
 
+      _ ->
+        close_quietly(port)
+        {:error, "no OS pid for the spawned process"}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  catch
+    kind, reason -> {:error, inspect({kind, reason})}
+  end
+
+  defp close_quietly(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp adopt_child(state, port, os_pid) do
     # The state owns the child before anything else can fail, so a pid
     # file write error cannot orphan it.
     state = %{

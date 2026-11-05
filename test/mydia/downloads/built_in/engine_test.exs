@@ -106,6 +106,51 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
   end
 
   @tag :tmp_dir
+  test "args/4 puts --listen-ip right after the listen port", ctx do
+    args = Engine.args(ctx.config, 3030, 6881, "10.2.0.2")
+    assert ["--listen-port", "6881", "--listen-ip", "10.2.0.2"] == Enum.slice(args, 2, 4)
+
+    assert Enum.find_index(args, &(&1 == "--listen-ip")) <
+             Enum.find_index(args, &(&1 == "server"))
+  end
+
+  @tag :tmp_dir
+  test "start_engine/3 with the same port and a different ip restarts the child", ctx do
+    name = start_engine(ctx, [])
+    :ok = Engine.start_engine(name, 6881, "10.2.0.2")
+    first_pid = read_pid(ctx.pid_file)
+
+    wait_until(fn ->
+      "10.2.0.2" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+    end)
+
+    # Same port and ip is a no-op.
+    :ok = Engine.start_engine(name, 6881, "10.2.0.2")
+    assert read_pid(ctx.pid_file) == first_pid
+
+    :ok = Engine.start_engine(name, 6881, "10.2.0.9")
+    assert gone?(first_pid)
+
+    wait_until(fn ->
+      read_pid(ctx.pid_file) != first_pid and
+        "10.2.0.9" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+    end)
+  end
+
+  @tag :tmp_dir
+  @tag :capture_log
+  test "a spawn failure is reported and the engine stays alive", ctx do
+    # A NUL byte in the environment makes Port.open raise.
+    name = start_engine(ctx, credentials: {"mydia", "se\0cret"})
+    :ok = Engine.start_engine(name, 6881)
+
+    assert %Status{engine: {:crashed, {:spawn_failed, reason}, 0}} = Status.get(ctx.status)
+    assert is_binary(reason)
+    assert Process.alive?(Process.whereis(name))
+    refute File.exists?(ctx.pid_file)
+  end
+
+  @tag :tmp_dir
   test "autostart runs rqbit with credentials and reports running", ctx do
     start_engine(ctx, autostart: true)
     assert_receive {:built_in_status, %Status{engine: :running, port: {:static, 51413}}}, 1_000

@@ -36,6 +36,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         Keyword.get(opts, :leak_check, fn ->
           LeakCheck.run(relay_url: Mydia.Metadata.metadata_relay_url())
         end),
+      tunnel_ip_fun: Keyword.get(opts, :tunnel_ip_fun, &read_tunnel_ip/1),
       verified_ip: nil,
       last_vpn: :connecting,
       last_port: nil
@@ -103,7 +104,17 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
     end
   end
 
+  # The engine listens on the tunnel address, so an unreadable one gets the
+  # same treatment as an unreadable public address. It is read every poll, so
+  # a changed address restarts the engine through `Engine.start_engine/3`.
   defp start_engine(req, ip, state) do
+    case state.tunnel_ip_fun.(state.config.vpn_interface) do
+      {:ok, tunnel_ip} -> start_engine(req, ip, tunnel_ip, state)
+      {:error, _} -> connecting(state)
+    end
+  end
+
+  defp start_engine(req, ip, tunnel_ip, state) do
     state = put_vpn(state, {:up, %{provider: state.config.vpn_provider, public_ip: ip}})
 
     {state, port} =
@@ -112,8 +123,27 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         _ -> {put_port(state, {:static, state.config.port}), state.config.port}
       end
 
-    call_engine(state, {:start, port})
+    call_engine(state, {:start, port, tunnel_ip})
     state
+  end
+
+  @doc false
+  # The first IPv4 address of the tunnel interface, from `ip -4 -o addr show`.
+  def read_tunnel_ip(interface) do
+    case Mydia.BoundedCommand.run("ip", ["-4", "-o", "addr", "show", "dev", interface], 5_000) do
+      {:ok, output} -> parse_tunnel_ip(output)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc false
+  def parse_tunnel_ip(output) do
+    with [_, addr] <- Regex.run(~r/\binet (\d+\.\d+\.\d+\.\d+)\//, output),
+         {:ok, _} <- :inet.parse_address(String.to_charlist(addr)) do
+      {:ok, addr}
+    else
+      _ -> {:error, :no_tunnel_address}
+    end
   end
 
   defp down(state, reason) do
@@ -193,7 +223,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   defp default_engine_fun(engine) do
     fn
-      {:start, port} -> Engine.start_engine(engine, port)
+      {:start, port, listen_ip} -> Engine.start_engine(engine, port, listen_ip)
       {:stop, reason} -> Engine.stop_engine(engine, reason)
     end
   end

@@ -89,6 +89,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe(:rqbit_not_found),
     do: "The rqbit binary is missing from this installation."
 
+  def describe({:spawn_failed, message}),
+    do:
+      "The rqbit binary could not be started (#{message}). Check that it is installed and executable."
+
   def describe({:path_unwritable, path, reason}),
     do:
       "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set MYDIA_TORRENT_DOWNLOAD_PATH to a writable download directory."
