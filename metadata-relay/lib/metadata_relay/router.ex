@@ -85,19 +85,24 @@ defmodule MetadataRelay.Router do
   # torrent client compares the address its torrent traffic leaves from with
   # Mydia's own to prove the VPN is in the path.
   #
-  # Production is Cloudflare -> Traefik -> relay, so the TCP peer is always
-  # Traefik and ClientIp.resolve/1 would return its pod address for everyone.
-  # cf-connecting-ip carries the real caller. Forging it only echoes the
-  # forger's own value back, and nothing is keyed on it, so the rate-limit
-  # objection in ClientIp's moduledoc does not apply here.
+  # Threat model. Production is Cloudflare -> Traefik -> relay, so the TCP peer
+  # is always Traefik and ClientIp.resolve/1 would return its pod address for
+  # everyone. This route therefore reads cf-connecting-ip from any peer. The
+  # precondition in metadata-relay/CLAUDE.md and ClientIp's moduledoc protects
+  # shared state keyed on the address (rate-limit buckets). /ip keys nothing
+  # and returns the value only to the requester, so a forger can only mislead
+  # themselves. A peer-based gate would not help, because the peer is always
+  # Traefik. The header is validated as an IP; anything else falls back to the
+  # resolved peer address.
   get "/ip" do
     ip =
-      case get_req_header(conn, "cf-connecting-ip") do
-        [value | _] -> String.trim(value)
-        [] -> ""
+      with [value | _] <- get_req_header(conn, "cf-connecting-ip"),
+           {:ok, parsed} <-
+             value |> String.trim() |> String.to_charlist() |> :inet.parse_address() do
+        parsed |> :inet.ntoa() |> to_string()
+      else
+        _ -> MetadataRelay.ClientIp.resolve(conn)
       end
-
-    ip = if ip == "", do: MetadataRelay.ClientIp.resolve(conn), else: ip
 
     conn
     |> put_resp_content_type("application/json")

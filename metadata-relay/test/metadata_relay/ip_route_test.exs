@@ -42,6 +42,16 @@ defmodule MetadataRelay.IpRouteTest do
     assert Jason.decode!(conn.resp_body) == %{"ip" => "198.51.100.7"}
   end
 
+  test "a cf-connecting-ip that is not an IP falls back to the resolved peer address" do
+    conn =
+      Plug.Test.conn(:get, "/ip")
+      |> Map.put(:remote_ip, {198, 51, 100, 7})
+      |> Plug.Conn.put_req_header("cf-connecting-ip", "not-an-ip")
+      |> Router.call(Router.init([]))
+
+    assert Jason.decode!(conn.resp_body) == %{"ip" => "198.51.100.7"}
+  end
+
   defp get_from(remote_ip) do
     Plug.Test.conn(:get, "/ip")
     |> Map.put(:remote_ip, remote_ip)
