@@ -107,15 +107,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
 
       case HTTP.post(req, "/torrents", params: params, body: body) do
         {:ok, %{status: status, body: resp_body}} when status in 200..299 ->
-          case extract_info_hash(resp_body) do
-            nil ->
-              {:error,
-               Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
-
-            info_hash ->
-              maybe_pause_after_add(config, info_hash, opts)
-              {:ok, info_hash}
-          end
+          finish_add(config, resp_body, opts)
 
         {:ok, response} ->
           {:error, api_error_from(response)}
@@ -124,6 +116,17 @@ defmodule Mydia.Downloads.Client.Rqbit do
           error
       end
     end)
+  end
+
+  defp finish_add(config, resp_body, opts) do
+    case extract_info_hash(resp_body) do
+      nil ->
+        {:error, Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
+
+      info_hash ->
+        maybe_pause_after_add(config, info_hash, opts)
+        {:ok, info_hash}
+    end
   end
 
   @impl true
@@ -145,12 +148,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
 
       case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
         {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
-          parsed =
-            torrents
-            |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
-            |> apply_filters(opts)
-
-          {:ok, parsed}
+          {:ok, parse_torrent_list(torrents, opts)}
 
         {:ok, %{status: status}} when status in 200..299 ->
           {:ok, []}
@@ -162,6 +160,12 @@ defmodule Mydia.Downloads.Client.Rqbit do
           error
       end
     end)
+  end
+
+  defp parse_torrent_list(torrents, opts) do
+    torrents
+    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
+    |> apply_filters(opts)
   end
 
   @impl true
