@@ -7,8 +7,9 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
 
   setup %{tmp_dir: tmp_dir} = ctx do
     status = :"status_#{System.unique_integer([:positive])}"
-    start_supervised!({Status, name: status})
-    Phoenix.PubSub.subscribe(Mydia.PubSub, Status.topic())
+    topic = "built_in_status:test:#{System.unique_integer([:positive])}"
+    start_supervised!({Status, name: status, topic: topic})
+    Phoenix.PubSub.subscribe(Mydia.PubSub, topic)
 
     config = %Config{
       enabled?: true,

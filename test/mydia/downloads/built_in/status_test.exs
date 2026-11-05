@@ -5,8 +5,9 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
 
   setup do
     name = :"status_#{System.unique_integer([:positive])}"
-    start_supervised!({Status, name: name})
-    Phoenix.PubSub.subscribe(Mydia.PubSub, Status.topic())
+    topic = "built_in_status:test:#{System.unique_integer([:positive])}"
+    start_supervised!({Status, name: name, topic: topic})
+    Phoenix.PubSub.subscribe(Mydia.PubSub, topic)
     %{name: name}
   end
 

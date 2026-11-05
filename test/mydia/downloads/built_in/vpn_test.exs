@@ -12,8 +12,9 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
   setup %{tmp_dir: dir} do
     bypass = Bypass.open()
     status = :"status_#{System.unique_integer([:positive])}"
-    start_supervised!({Status, name: status})
-    Phoenix.PubSub.subscribe(Mydia.PubSub, Status.topic())
+    topic = "built_in_status:test:#{System.unique_integer([:positive])}"
+    start_supervised!({Status, name: status, topic: topic})
+    Phoenix.PubSub.subscribe(Mydia.PubSub, topic)
     File.write!(Path.join(dir, "apikey"), "k3y")
     File.write!(Path.join(dir, "preflight"), "net_admin=ok\ntun=ok\n")
 

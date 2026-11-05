@@ -11,17 +11,20 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   @topic "built_in_torrent:status"
 
-  defstruct engine: :starting, vpn: :off, port: nil, warnings: []
+  defstruct engine: :starting, vpn: :off, port: nil, warnings: [], topic: @topic
 
   @type t :: %__MODULE__{}
 
   def topic, do: @topic
 
-  # opts: :name, and :warnings (Config.warnings, shown on the admin panel).
+  # opts: :name, :warnings (Config.warnings, shown on the admin panel) and :topic
+  # (the PubSub topic broadcasts go to; tests pass a unique one so async tests
+  # do not hear each other).
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
     warnings = Keyword.get(opts, :warnings, [])
-    Agent.start_link(fn -> %__MODULE__{warnings: warnings} end, name: name)
+    topic = Keyword.get(opts, :topic, @topic)
+    Agent.start_link(fn -> %__MODULE__{warnings: warnings, topic: topic} end, name: name)
   end
 
   def child_spec(opts) do
@@ -37,7 +40,7 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def put(server \\ __MODULE__, part, value) do
     Agent.update(server, fn status ->
       status = Map.put(status, part, value)
-      Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:built_in_status, status})
+      Phoenix.PubSub.broadcast(Mydia.PubSub, status.topic, {:built_in_status, status})
       status
     end)
   end
