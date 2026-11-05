@@ -228,4 +228,21 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     start_engine(ctx, autostart: true, rqbit_path: "/nonexistent/rqbit")
     assert_receive {:built_in_status, %Status{engine: {:crashed, :rqbit_not_found, 0}}}, 1_000
   end
+
+  @tag :tmp_dir
+  test "an unwritable path is a named reason and nothing is spawned", ctx do
+    blocker = Path.join(ctx.config.state_dir <> "-file", "x")
+    File.mkdir_p!(Path.dirname(blocker))
+    File.write!(Path.dirname(blocker) |> Path.join("f"), "")
+    bad = Path.join(Path.join(Path.dirname(blocker), "f"), "downloads")
+    config = %{ctx.config | download_path: bad}
+
+    start_engine(%{ctx | config: config}, autostart: true)
+
+    assert_receive {:built_in_status,
+                    %Status{engine: {:crashed, {:path_unwritable, ^bad, _reason}, 0}}},
+                   1_000
+
+    refute File.exists?(ctx.pid_file)
+  end
 end

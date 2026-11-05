@@ -161,43 +161,61 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
         %{state | crashed?: true}
 
       path ->
-        File.mkdir_p!(state.config.state_dir)
-        File.mkdir_p!(state.config.download_path)
-        {user, pass} = state.credentials
+        case ensure_dirs(state.config) do
+          :ok ->
+            spawn_rqbit(path, state)
 
-        env =
-          [{"RQBIT_HTTP_BASIC_AUTH_USERPASS", "#{user}:#{pass}"} | state.env]
-          |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
-        port =
-          Port.open({:spawn_executable, path}, [
-            :binary,
-            :exit_status,
-            :stderr_to_stdout,
-            :hide,
-            args: args(state.config, state.api_port, state.listen_port),
-            env: env
-          ])
-
-        {:os_pid, os_pid} = Port.info(port, :os_pid)
-
-        # The state owns the child before anything else can fail, so a pid
-        # file write error cannot orphan it.
-        state = %{
-          state
-          | port: port,
-            os_pid: os_pid,
-            started_at: System.monotonic_time(:millisecond)
-        }
-
-        case File.write(pid_file(state.config.state_dir), Integer.to_string(os_pid)) do
-          :ok -> :ok
-          {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
+          {:error, dir, reason} ->
+            Status.put(state.status, :engine, {:crashed, {:path_unwritable, dir, reason}, 0})
+            %{state | crashed?: true}
         end
-
-        Status.put(state.status, :engine, :running)
-        state
     end
+  end
+
+  defp ensure_dirs(config) do
+    Enum.find_value([config.state_dir, config.download_path], :ok, fn dir ->
+      case File.mkdir_p(dir) do
+        :ok -> nil
+        {:error, reason} -> {:error, dir, reason}
+      end
+    end)
+  end
+
+  defp spawn_rqbit(path, state) do
+    {user, pass} = state.credentials
+
+    env =
+      [{"RQBIT_HTTP_BASIC_AUTH_USERPASS", "#{user}:#{pass}"} | state.env]
+      |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
+
+    port =
+      Port.open({:spawn_executable, path}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        :hide,
+        args: args(state.config, state.api_port, state.listen_port),
+        env: env
+      ])
+
+    {:os_pid, os_pid} = Port.info(port, :os_pid)
+
+    # The state owns the child before anything else can fail, so a pid
+    # file write error cannot orphan it.
+    state = %{
+      state
+      | port: port,
+        os_pid: os_pid,
+        started_at: System.monotonic_time(:millisecond)
+    }
+
+    case File.write(pid_file(state.config.state_dir), Integer.to_string(os_pid)) do
+      :ok -> :ok
+      {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
+    end
+
+    Status.put(state.status, :engine, :running)
+    state
   end
 
   defp kill_child(%{port: nil} = state), do: state

@@ -7,6 +7,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   """
 
   @torrent_types [:qbittorrent, :transmission, :rqbit, :rtorrent]
+  def torrent_types, do: @torrent_types
+
   @reserved ~w(SPLIT_TUNNEL_GID HTTP_CONTROL_SERVER_ADDRESS HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE DNS_ADDRESS)
   @default_port 51413
 
@@ -32,7 +34,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             gluetun_dir: "/config/gluetun",
             warnings: []
 
-  @spec load(%{String.t() => String.t()}, [atom()]) :: t()
+  # `:unknown` means the configured clients could not be read. It never turns
+  # the client on by itself, only an explicit MYDIA_TORRENT_ENABLED=true does.
+  @spec load(%{String.t() => String.t()}, [atom()] | :unknown) :: t()
   def load(env, other_client_types) do
     {port, port_warnings} = parse_port(env["MYDIA_TORRENT_PORT"])
     provider = blank_to_nil(env["MYDIA_VPN_SERVICE_PROVIDER"])
@@ -50,6 +54,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   defp enabled?("true", _types), do: true
   defp enabled?("false", _types), do: false
+  defp enabled?(_unset, :unknown), do: false
   defp enabled?(_unset, types), do: not Enum.any?(types, &(&1 in @torrent_types))
 
   defp parse_port(nil), do: {@default_port, []}

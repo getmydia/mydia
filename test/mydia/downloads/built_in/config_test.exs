@@ -14,6 +14,11 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       end
     end
 
+    test "stays off when the configured clients could not be read" do
+      assert %Config{enabled?: false} = Config.load(%{}, :unknown)
+      assert %Config{enabled?: true} = Config.load(%{"MYDIA_TORRENT_ENABLED" => "true"}, :unknown)
+    end
+
     test "MYDIA_TORRENT_ENABLED forces either way" do
       assert %Config{enabled?: true} =
                Config.load(%{"MYDIA_TORRENT_ENABLED" => "true"}, [:qbittorrent])

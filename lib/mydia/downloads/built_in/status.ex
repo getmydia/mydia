@@ -89,5 +89,9 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe(:rqbit_not_found),
     do: "The rqbit binary is missing from this installation."
 
+  def describe({:path_unwritable, path, reason}),
+    do:
+      "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set MYDIA_TORRENT_DOWNLOAD_PATH to a writable download directory."
+
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
 end
