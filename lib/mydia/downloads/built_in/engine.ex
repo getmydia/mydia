@@ -18,6 +18,9 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   alias Mydia.Downloads.BuiltIn.{Config, Status}
 
   @max_restarts 5
+  @stable_ms 60_000
+  @kill_wait_ms 5_000
+  @poll_ms 50
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -59,7 +62,11 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       port: nil,
       os_pid: nil,
       listen_port: nil,
-      restarts: 0
+      restarts: 0,
+      desired: :stopped,
+      crashed?: false,
+      timer: nil,
+      started_at: nil
     }
 
     kill_stale(config.state_dir)
@@ -72,32 +79,40 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   end
 
   @impl true
-  def handle_call({:start, listen_port}, _from, %{port: nil} = state),
-    do: {:reply, :ok, spawn_child(%{state | listen_port: listen_port})}
+  def handle_call({:start, listen_port}, _from, %{port: nil} = state) do
+    state = cancel_timer(%{state | listen_port: listen_port, desired: :running})
+    {:reply, :ok, spawn_child(%{state | restarts: 0, crashed?: false})}
+  end
 
   def handle_call({:start, listen_port}, _from, %{listen_port: listen_port} = state),
     do: {:reply, :ok, state}
 
   def handle_call({:start, listen_port}, _from, state) do
-    state = kill_child(state)
-    {:reply, :ok, spawn_child(%{state | listen_port: listen_port})}
+    state = state |> cancel_timer() |> kill_child()
+    state = %{state | listen_port: listen_port, desired: :running, restarts: 0, crashed?: false}
+    {:reply, :ok, spawn_child(state)}
   end
 
   def handle_call({:stop, reason}, _from, state) do
-    state = kill_child(state)
+    state = %{state | desired: :stopped} |> cancel_timer() |> kill_child()
     Status.put(state.status, :engine, {:stopped, reason})
     {:reply, :ok, state}
   end
 
-  def handle_call(:restart, _from, state) do
-    state = kill_child(%{state | restarts: 0})
-    {:reply, :ok, spawn_child(state)}
+  # Only leaves a crash; any other state is managed by start_engine/stop_engine,
+  # and a restart must not bypass the VPN gate that stopped the engine.
+  def handle_call(:restart, _from, %{crashed?: true, listen_port: port} = state)
+      when not is_nil(port) do
+    state = %{state | desired: :running, restarts: 0, crashed?: false}
+    {:reply, :ok, spawn_child(cancel_timer(state))}
   end
+
+  def handle_call(:restart, _from, state), do: {:reply, :ok, state}
 
   @impl true
   def handle_info({:autostart, port}, state) do
     Status.put(state.status, :port, {:static, port})
-    {:noreply, spawn_child(%{state | listen_port: port})}
+    {:noreply, spawn_child(%{state | listen_port: port, desired: :running})}
   end
 
   def handle_info({port, {:data, data}}, %{port: port} = state) do
@@ -107,30 +122,43 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
 
   def handle_info({port, {:exit_status, code}}, %{port: port} = state) do
     Logger.error("rqbit exited with code #{code}")
-    state = %{state | port: nil, os_pid: nil}
+    uptime = System.monotonic_time(:millisecond) - state.started_at
+    restarts = if uptime >= @stable_ms, do: 0, else: state.restarts
+    state = %{state | port: nil, os_pid: nil, restarts: restarts}
 
-    if state.restarts >= @max_restarts do
-      Status.put(state.status, :engine, {:crashed, {:engine_exit, code}, state.restarts})
-      {:noreply, state}
+    if restarts >= @max_restarts do
+      Status.put(state.status, :engine, {:crashed, {:engine_exit, code}, restarts})
+      {:noreply, %{state | crashed?: true}}
     else
-      delay = state.backoff_ms * Integer.pow(2, state.restarts)
-      Process.send_after(self(), :respawn, delay)
-      {:noreply, %{state | restarts: state.restarts + 1}}
+      delay = state.backoff_ms * Integer.pow(2, restarts)
+      Status.put(state.status, :engine, :starting)
+      timer = Process.send_after(self(), :respawn, delay)
+      {:noreply, %{state | restarts: restarts + 1, timer: timer}}
     end
   end
 
-  def handle_info(:respawn, %{port: nil} = state), do: {:noreply, spawn_child(state)}
-  def handle_info(:respawn, state), do: {:noreply, state}
-  def handle_info({:EXIT, _port, _reason}, state), do: {:noreply, state}
+  def handle_info(:respawn, %{desired: :running, port: nil} = state),
+    do: {:noreply, spawn_child(%{state | timer: nil})}
+
+  # Stale messages from a killed child, or a timer that lost a race with a
+  # stop or start.
+  def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
   def terminate(_reason, state), do: kill_child(state)
+
+  defp cancel_timer(%{timer: nil} = state), do: state
+
+  defp cancel_timer(%{timer: timer} = state) do
+    Process.cancel_timer(timer)
+    %{state | timer: nil}
+  end
 
   defp spawn_child(state) do
     case System.find_executable(state.rqbit_path) do
       nil ->
         Status.put(state.status, :engine, {:crashed, :rqbit_not_found, 0})
-        state
+        %{state | crashed?: true}
 
       path ->
         File.mkdir_p!(state.config.state_dir)
@@ -152,21 +180,38 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
           ])
 
         {:os_pid, os_pid} = Port.info(port, :os_pid)
-        File.write!(pid_file(state.config.state_dir), Integer.to_string(os_pid))
+
+        # The state owns the child before anything else can fail, so a pid
+        # file write error cannot orphan it.
+        state = %{
+          state
+          | port: port,
+            os_pid: os_pid,
+            started_at: System.monotonic_time(:millisecond)
+        }
+
+        case File.write(pid_file(state.config.state_dir), Integer.to_string(os_pid)) do
+          :ok -> :ok
+          {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
+        end
+
         Status.put(state.status, :engine, :running)
-        %{state | port: port, os_pid: os_pid}
+        state
     end
   end
 
   defp kill_child(%{port: nil} = state), do: state
 
   defp kill_child(state) do
-    Port.close(state.port)
-    System.cmd("kill", ["-TERM", Integer.to_string(state.os_pid)], stderr_to_stdout: true)
+    try do
+      Port.close(state.port)
+    rescue
+      ArgumentError -> :ok
+    end
+
+    terminate_pid(state.os_pid)
     File.rm(pid_file(state.config.state_dir))
     %{state | port: nil, os_pid: nil}
-  rescue
-    ArgumentError -> %{state | port: nil, os_pid: nil}
   end
 
   defp kill_stale(state_dir) do
@@ -174,10 +219,47 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
          {pid, ""} <- Integer.parse(String.trim(contents)),
          {:ok, cmdline} <- File.read("/proc/#{pid}/cmdline"),
          true <- String.contains?(cmdline, "rqbit") do
-      System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
+      terminate_pid(pid)
     end
 
     File.rm(pid_file(state_dir))
+  end
+
+  # TERM, wait for the process to be gone, then KILL if it ignored us.
+  defp terminate_pid(pid) do
+    signal("TERM", pid)
+
+    unless wait_gone(pid, @kill_wait_ms) do
+      signal("KILL", pid)
+      wait_gone(pid, @kill_wait_ms)
+    end
+
+    :ok
+  end
+
+  defp signal(name, pid),
+    do: System.cmd("kill", ["-#{name}", Integer.to_string(pid)], stderr_to_stdout: true)
+
+  defp wait_gone(pid, remaining) do
+    cond do
+      gone?(pid) ->
+        true
+
+      remaining <= 0 ->
+        false
+
+      true ->
+        Process.sleep(@poll_ms)
+        wait_gone(pid, remaining - @poll_ms)
+    end
+  end
+
+  # A zombie has already exited and only awaits reaping.
+  defp gone?(pid) do
+    case File.read("/proc/#{pid}/stat") do
+      {:ok, stat} -> stat |> String.split(") ") |> List.last() |> String.starts_with?("Z")
+      {:error, _} -> true
+    end
   end
 
   defp pid_file(state_dir), do: Path.join(state_dir, "rqbit.pid")

@@ -19,7 +19,8 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     }
 
     args_file = Path.join(tmp_dir, "args")
-    %{status: status, config: config, args_file: args_file}
+    pid_file = Path.join(tmp_dir, "child.pid")
+    %{status: status, config: config, args_file: args_file, pid_file: pid_file}
   end
 
   defp start_engine(ctx, extra) do
@@ -36,6 +37,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
           backoff_ms: 10,
           env: [
             {"FAKE_RQBIT_ARGS", ctx.args_file},
+            {"FAKE_RQBIT_PID", ctx.pid_file},
             {"FAKE_RQBIT_MODE", Keyword.get(extra, :mode, "run")}
           ]
         ],
@@ -46,8 +48,40 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     name
   end
 
+  defp wait_until(fun, tries \\ 200) do
+    cond do
+      fun.() -> :ok
+      tries == 0 -> flunk("condition not met in time")
+      true -> Process.sleep(10) && wait_until(fun, tries - 1)
+    end
+  end
+
+  defp read_pid(file) do
+    wait_until(fn -> match?({:ok, <<_, _::binary>>}, File.read(file)) end)
+    file |> File.read!() |> String.trim() |> String.to_integer()
+  end
+
+  defp gone?(pid), do: not File.exists?("/proc/#{pid}") or zombie?(pid)
+
+  defp zombie?(pid) do
+    case File.read("/proc/#{pid}/stat") do
+      {:ok, stat} -> stat |> String.split(") ") |> List.last() |> String.starts_with?("Z")
+      _ -> false
+    end
+  end
+
+  defp drain do
+    receive do
+      {:built_in_status, _} -> drain()
+    after
+      0 -> :ok
+    end
+  end
+
   @tag :tmp_dir
-  test "args put global flags before server start", ctx do
+  test "args put
+ global flags before server start",
+       ctx do
     args = Engine.args(ctx.config, 3030, 6881)
 
     assert args == [
@@ -85,8 +119,89 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
   test "stop_engine/2 kills the child and records the reason", ctx do
     name = start_engine(ctx, autostart: true)
     assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    pid = read_pid(ctx.pid_file)
     :ok = Engine.stop_engine(name, :vpn_down)
     assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)
+    assert gone?(pid)
+  end
+
+  @tag :tmp_dir
+  @tag :capture_log
+  test "a respawn pending during backoff does not survive stop_engine/2", ctx do
+    name = start_engine(ctx, autostart: true, mode: "exit", backoff_ms: 300)
+    # :starting is also the initial state, so wait for the first spawn and
+    # then for the backoff that follows its exit.
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    drain()
+    assert_receive {:built_in_status, %Status{engine: :starting}}, 1_000
+    :ok = Engine.stop_engine(name, :vpn_down)
+    File.rm!(ctx.args_file)
+    drain()
+
+    refute_receive {:built_in_status, _}, 500
+    refute File.exists?(ctx.args_file)
+    assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)
+  end
+
+  @tag :tmp_dir
+  test "start_engine/2 with a different port restarts the child on it", ctx do
+    name = start_engine(ctx, autostart: true)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    old_pid = read_pid(ctx.pid_file)
+
+    :ok = Engine.start_engine(name, 6881)
+    assert gone?(old_pid)
+
+    wait_until(fn ->
+      File.read!(ctx.pid_file) |> String.trim() != Integer.to_string(old_pid) and
+        "6881" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+    end)
+  end
+
+  @tag :tmp_dir
+  test "a stale pid file left by a crashed BEAM is killed on start", ctx do
+    File.mkdir_p!(ctx.config.state_dir)
+
+    stale =
+      Port.open({:spawn_executable, @fake}, [
+        :binary,
+        env: [
+          {~c"FAKE_RQBIT_ARGS", String.to_charlist(ctx.args_file)},
+          {~c"FAKE_RQBIT_PID", String.to_charlist(ctx.pid_file)},
+          {~c"FAKE_RQBIT_MODE", ~c"hold"}
+        ]
+      ])
+
+    {:os_pid, os_pid} = Port.info(stale, :os_pid)
+    assert read_pid(ctx.pid_file) == os_pid
+    File.write!(Path.join(ctx.config.state_dir, "rqbit.pid"), Integer.to_string(os_pid))
+
+    start_engine(ctx, [])
+    assert gone?(os_pid)
+    refute File.exists?(Path.join(ctx.config.state_dir, "rqbit.pid"))
+  end
+
+  @tag :tmp_dir
+  test "restart/1 is a no-op unless the engine crashed", ctx do
+    name = start_engine(ctx, autostart: true)
+    assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+    pid = read_pid(ctx.pid_file)
+    :ok = Engine.restart(name)
+    assert gone?(pid) == false
+
+    :ok = Engine.stop_engine(name, :vpn_down)
+    drain()
+    :ok = Engine.restart(name)
+    refute_receive {:built_in_status, _}, 100
+    assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)
+  end
+
+  @tag :tmp_dir
+  test "restart/1 does not spawn before a port is known", ctx do
+    name = start_engine(ctx, [])
+    :ok = Engine.restart(name)
+    refute_receive {:built_in_status, _}, 100
+    assert %Status{engine: :starting} = Status.get(ctx.status)
   end
 
   @tag :tmp_dir
@@ -103,6 +218,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
   test "restart/1 clears a crash", ctx do
     name = start_engine(ctx, autostart: true, mode: "exit")
     assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, 2_000
+    drain()
     :ok = Engine.restart(name)
     assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
   end
