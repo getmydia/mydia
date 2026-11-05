@@ -198,11 +198,9 @@ The tunnel interface defaults to `wg0` when `MYDIA_VPN_VPN_TYPE` is
 `wireguard` and `tun0` otherwise, as gluetun names them;
 `MYDIA_VPN_VPN_INTERFACE` overrides both.
 
-**Limitation: values cannot contain whitespace.** The entrypoint passes the
-`MYDIA_VPN_*` variables to gluetun by word splitting (globbing is switched
-off, so `*` and `?` stay literal), so a value with a space in it (a city such as `New York`, for instance) breaks. Use values without
-spaces, such as `pia` for `private internet access`, or a country in place of
-a city, until the entrypoint reads an env file.
+Values reach gluetun unchanged, spaces included, so
+`MYDIA_VPN_SERVER_CITIES=New York` works. A provider that is only whitespace
+counts as unset and leaves the VPN off.
 
 ## Download Clients
 

@@ -4,7 +4,49 @@
 # into /config/gluetun/preflight, which Mydia shows in the admin UI.
 set -u
 
-[ -n "${MYDIA_VPN_SERVICE_PROVIDER:-}" ] || exit 0
+# Runs $1 with the environment gluetun gets. MYDIA_VPN_FOO=bar becomes
+# FOO=bar. The one exception is the provider: gluetun reads
+# VPN_SERVICE_PROVIDER, so MYDIA_VPN_SERVICE_PROVIDER is passed under that
+# name too (without it gluetun falls back to its default provider). Mydia's own
+# values come last so they win over any user attempt to set them. DNS_SERVER
+# stays on: split DNS needs gluetun's resolver. $2 is the split group's gid and
+# $3 the control server's API key.
+#
+# Each value is read from its variable and passed as one argument, so spaces,
+# quotes, * and ? reach gluetun unchanged. Only the names come from `env`, which
+# cannot tell a newline inside a value from the start of the next variable: a
+# name that is not actually set is skipped.
+run_with_gluetun_env() {
+    bin=$1
+    split_gid=$2
+    api_key=$3
+    isset=
+    value=
+    set --
+    for name in $(env | sed -n 's/^\(MYDIA_VPN_[A-Za-z0-9_]*\)=.*/\1/p'); do
+        eval "isset=\${$name+x}"
+        [ -n "$isset" ] || continue
+        eval "value=\${$name}"
+        set -- "$@" "${name#MYDIA_VPN_}=$value"
+    done
+    env -i PATH="$PATH" "$@" \
+        VPN_SERVICE_PROVIDER="$MYDIA_VPN_SERVICE_PROVIDER" \
+        SPLIT_TUNNEL_GID="$split_gid" \
+        HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \
+        HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE="{\"auth\":\"apikey\",\"apikey\":\"$api_key\"}" \
+        DNS_ADDRESS=127.0.0.1 \
+        DNS_SERVER=on \
+        "$bin"
+}
+
+# Tests source this file for the function above and stop here.
+if [ "${VPN_PREFLIGHT_FUNCTIONS_ONLY:-}" = 1 ]; then
+    # shellcheck disable=SC2317 # exit is the fallback when run, not sourced
+    return 0 2>/dev/null || exit 0
+fi
+
+# A provider of only whitespace counts as unset, as it does in Mydia.
+[ -n "$(printf '%s' "${MYDIA_VPN_SERVICE_PROVIDER:-}" | tr -d '[:space:]')" ] || exit 0
 
 # The VPN only serves the built-in client, so it stays down when that is off.
 case "$(printf '%s' "${MYDIA_TORRENT_ENABLED:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
@@ -61,27 +103,9 @@ chown mydia:mydia "$dir/apikey"
 chmod 400 "$dir/apikey"
 key=$(cat "$dir/apikey")
 
-# MYDIA_VPN_FOO=bar becomes FOO=bar for gluetun. The one exception is the
-# provider: gluetun reads VPN_SERVICE_PROVIDER, so MYDIA_VPN_SERVICE_PROVIDER
-# is passed under that name too (without it gluetun falls back to its default
-# provider). Mydia's own values are passed last so they win over any user
-# attempt to set them. DNS_SERVER stays on: split DNS needs gluetun's resolver.
-gluetun_env=$(env | sed -n 's/^MYDIA_VPN_//p')
-
 (
-    # One VAR=value per word. Globbing is off (this subshell only) so a value
-    # with * or ? stays literal.
-    set -f
     while true; do
-        # shellcheck disable=SC2086 # word splitting is the point
-        env -i PATH="$PATH" $gluetun_env \
-            VPN_SERVICE_PROVIDER="$MYDIA_VPN_SERVICE_PROVIDER" \
-            SPLIT_TUNNEL_GID="$gid" \
-            HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \
-            HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE="{\"auth\":\"apikey\",\"apikey\":\"$key\"}" \
-            DNS_ADDRESS=127.0.0.1 \
-            DNS_SERVER=on \
-            /usr/local/bin/gluetun >> "$dir/gluetun.log" 2>&1
+        run_with_gluetun_env /usr/local/bin/gluetun "$gid" "$key" >> "$dir/gluetun.log" 2>&1
         echo "gluetun exited with $?; restarting in 5s" >> "$dir/gluetun.log"
         sleep 5
     done
