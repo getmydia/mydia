@@ -63,6 +63,9 @@ let
   flutterPort = portBase + 3;
   httpsPort = portBase + 4;
   s3Port = portBase + 5;
+  # Built-in torrent client (rqbit is in `packages`, so it auto-enables).
+  torrentApiPort = portBase + 6;
+  torrentPeerPort = portBase + 7;
 
   # ── Shared caches outside any worktree (KTD4 / R11) ─────────────────────────
   # Immutable/derived downloads are shared so a second worktree's first run
@@ -255,6 +258,13 @@ in
     HTTPS_PORT = lib.mkDefault (toString httpsPort);
     P2P_BIND_PORT = lib.mkDefault (toString p2pPort);
     FLUTTER_DEV_PORT = lib.mkDefault (toString flutterPort);
+
+    # Built-in torrent client: per-worktree ports and state, so worktrees do
+    # not fight over 3030/51413 and nothing writes to /config or /data.
+    MYDIA_TORRENT_API_PORT = lib.mkDefault (toString torrentApiPort);
+    MYDIA_TORRENT_PORT = lib.mkDefault (toString torrentPeerPort);
+    MYDIA_TORRENT_STATE_PATH = lib.mkDefault "${config.devenv.state}/rqbit";
+    MYDIA_TORRENT_DOWNLOAD_PATH = lib.mkDefault "${config.devenv.state}/downloads";
 
     # Postgres connection details (read by config/dev.exs only under
     # DATABASE_TYPE=postgres). devenv's Postgres bootstraps a superuser role
@@ -640,6 +650,7 @@ in
     echo "  Phoenix:   http://localhost:$PORT  ·  https://localhost:$HTTPS_PORT"
     echo "  P2P bind:  $P2P_BIND_PORT"
     echo "  Flutter:   dev-server port $FLUTTER_DEV_PORT"
+    echo "  Torrents:  rqbit API $MYDIA_TORRENT_API_PORT, peer port $MYDIA_TORRENT_PORT"
     ${lib.optionalString usePostgres ''
       echo "  Postgres:  127.0.0.1:$DATABASE_PORT (mydia_dev / mydia_test)"''}
     echo "  Toolchain: Elixir $(elixir --version | tail -1 | cut -d' ' -f2) · Rust $(rustc --version | cut -d' ' -f2) · Node $(node --version)"
