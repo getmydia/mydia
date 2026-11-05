@@ -1,4 +1,4 @@
-From f325afc269b14f802d2ae5792eab5636e2880996 Mon Sep 17 00:00:00 2001
+From 4dbc84f3acb3f3a3179363d3cc14f0a6af24ac21 Mon Sep 17 00:00:00 2001
 From: Alexandre Rosenfeld <arsfeld@gmail.com>
 Date: Wed, 4 Nov 2026 20:18:13 -0500
 Subject: [PATCH] Add SPLIT_TUNNEL_GID split-tunnel mode
@@ -34,12 +34,13 @@ of the container keeps its routes, DNS and an unfiltered firewall.
  internal/splittunnel/rules_test.go            | 235 ++++++++++++++++++
  internal/vpn/interfaces.go                    |   1 +
  internal/vpn/loop.go                          |   3 +
- internal/vpn/run.go                           |  17 +-
- internal/vpn/splittunnel.go                   |  49 ++++
+ internal/vpn/run.go                           |  38 ++-
+ internal/vpn/splittunnel.go                   |  51 ++++
+ internal/vpn/splittunnel_test.go              |  76 ++++++
  internal/vpn/wireguard.go                     |   3 +-
  internal/wireguard/run.go                     |  20 +-
  internal/wireguard/settings.go                |   4 +
- 25 files changed, 1479 insertions(+), 25 deletions(-)
+ 26 files changed, 1578 insertions(+), 25 deletions(-)
  create mode 100644 internal/firewall/splittunnel.go
  create mode 100644 internal/firewall/splittunnel_test.go
  create mode 100644 internal/splittunnel/routing.go
@@ -47,6 +48,7 @@ of the container keeps its routes, DNS and an unfiltered firewall.
  create mode 100644 internal/splittunnel/rules.go
  create mode 100644 internal/splittunnel/rules_test.go
  create mode 100644 internal/vpn/splittunnel.go
+ create mode 100644 internal/vpn/splittunnel_test.go
 
 diff --git a/cmd/gluetun/main.go b/cmd/gluetun/main.go
 index 842ff99..2b6deff 100644
@@ -1782,7 +1784,7 @@ index eab9e39..81f6a5f 100644
  		openvpnConf:    openvpnConf,
  		netLinker:      netLinker,
 diff --git a/internal/vpn/run.go b/internal/vpn/run.go
-index e9ab780..dcbdcad 100644
+index e9ab780..7409921 100644
 --- a/internal/vpn/run.go
 +++ b/internal/vpn/run.go
 @@ -40,12 +40,21 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
@@ -1816,12 +1818,17 @@ index e9ab780..dcbdcad 100644
  			l.crashed(ctx, err)
  			continue
  		}
-@@ -75,12 +85,16 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+@@ -75,12 +85,21 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
  		for stayHere {
  			select {
  			case <-tunnelReady:
 +				if openvpnSplitTunnel {
-+					l.moveOpenVPNRoutes(vpnInterface)
++					err := l.moveOpenVPNRoutes(vpnInterface)
++					if err != nil {
++						l.restartAfterTunnelError(ctx, vpnCancel, waitError, err)
++						stayHere = false
++						break
++					}
 +				}
  				go l.onTunnelUp(vpnCtx, ctx, tunnelUpData)
  			case <-ctx.Done():
@@ -1833,19 +1840,35 @@ index e9ab780..dcbdcad 100644
  				return
  			case <-l.stop:
  				l.userTrigger = true
-@@ -108,5 +122,6 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+@@ -108,5 +127,22 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
  			}
  		}
  		vpnCancel()
 +		removeSplitRouting()
  	}
  }
++
++// restartAfterTunnelError stops the VPN runner after the tunnel came up but
++// could not be set up, and leaves Run to start it again after the backoff,
++// like an unexpected error from the runner does.
++func (l *Loop) restartAfterTunnelError(ctx context.Context,
++	vpnCancel context.CancelFunc, waitError <-chan error, err error,
++) {
++	l.statusManager.Lock() // prevent SetStatus from running in parallel
++	defer l.statusManager.Unlock()
++
++	l.cleanup()
++	vpnCancel()
++	<-waitError
++	l.statusManager.SetStatus(constants.Crashed)
++	l.logAndWait(ctx, err)
++}
 diff --git a/internal/vpn/splittunnel.go b/internal/vpn/splittunnel.go
 new file mode 100644
-index 0000000..e815846
+index 0000000..83469ef
 --- /dev/null
 +++ b/internal/vpn/splittunnel.go
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,51 @@
 +package vpn
 +
 +import (
@@ -1886,13 +1909,97 @@ index 0000000..e815846
 +
 +// moveOpenVPNRoutes moves the routes OpenVPN added for redirect-gateway out
 +// of the main table into the split tunnel table, so only marked traffic uses
-+// the tunnel. Until it runs, the whole container routes through the tunnel,
-+// which leaks nothing. If it fails, marked traffic meets the unreachable
-+// route and the health check restarts the VPN.
-+func (l *Loop) moveOpenVPNRoutes(vpnInterface string) {
++// the tunnel. Until it runs, the whole container routes through the tunnel.
++// An error means some routes may still be in the main table, steering
++// unrelated container traffic into the tunnel, so Run restarts the VPN:
++// stopping OpenVPN deletes its interface and every route through it.
++func (l *Loop) moveOpenVPNRoutes(vpnInterface string) error {
 +	err := splittunnel.MoveTunnelRoutes(l.netLinker, vpnInterface, splittunnel.Table)
 +	if err != nil {
-+		l.logger.Error("moving OpenVPN routes to the split tunnel table: " + err.Error())
++		return fmt.Errorf("moving OpenVPN routes to the split tunnel table: %w", err)
++	}
++	return nil
++}
+diff --git a/internal/vpn/splittunnel_test.go b/internal/vpn/splittunnel_test.go
+new file mode 100644
+index 0000000..fdf4e69
+--- /dev/null
++++ b/internal/vpn/splittunnel_test.go
+@@ -0,0 +1,76 @@
++package vpn
++
++import (
++	"errors"
++	"net/netip"
++	"strings"
++	"testing"
++
++	"github.com/qdm12/gluetun/internal/netlink"
++	"golang.org/x/sys/unix"
++)
++
++type fakeRouteMover struct {
++	NetLinker // unused methods panic
++	routes    []netlink.Route
++	added     []netlink.Route
++	deleted   []netlink.Route
++	delErr    error
++}
++
++func (f *fakeRouteMover) LinkByName(name string) (netlink.Link, error) {
++	return netlink.Link{Name: name, Index: 7}, nil
++}
++
++func (f *fakeRouteMover) RouteList(int) ([]netlink.Route, error) { return f.routes, nil }
++
++func (f *fakeRouteMover) RouteAdd(route netlink.Route) error {
++	f.added = append(f.added, route)
++	return nil
++}
++
++func (f *fakeRouteMover) RouteDel(route netlink.Route) error {
++	if f.delErr != nil {
++		return f.delErr
++	}
++	f.deleted = append(f.deleted, route)
++	return nil
++}
++
++func redirectGatewayRoutes() []netlink.Route {
++	return []netlink.Route{
++		{LinkIndex: 7, Table: unix.RT_TABLE_MAIN, Dst: netip.MustParsePrefix("0.0.0.0/1")},
++		{LinkIndex: 7, Table: unix.RT_TABLE_MAIN, Dst: netip.MustParsePrefix("128.0.0.0/1")},
++	}
++}
++
++func TestMoveOpenVPNRoutes(t *testing.T) {
++	t.Parallel()
++	nl := &fakeRouteMover{routes: redirectGatewayRoutes()}
++	l := &Loop{netLinker: nl}
++
++	if err := l.moveOpenVPNRoutes("tun0"); err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if len(nl.deleted) != 2 {
++		t.Fatalf("deleted %d routes from the main table, want 2", len(nl.deleted))
++	}
++}
++
++// When a route cannot leave the main table, the error must reach Run so it
++// restarts the VPN instead of leaving unrelated traffic in the tunnel.
++func TestMoveOpenVPNRoutesReturnsError(t *testing.T) {
++	t.Parallel()
++	errDel := errors.New("netlink failure")
++	nl := &fakeRouteMover{routes: redirectGatewayRoutes(), delErr: errDel}
++	l := &Loop{netLinker: nl}
++
++	err := l.moveOpenVPNRoutes("tun0")
++	if !errors.Is(err, errDel) {
++		t.Fatalf("got error %v, want it to wrap %v", err, errDel)
++	}
++	const wantPrefix = "moving OpenVPN routes to the split tunnel table: "
++	if !strings.HasPrefix(err.Error(), wantPrefix) {
++		t.Errorf("error %q lacks the prefix %q", err, wantPrefix)
 +	}
 +}
 diff --git a/internal/vpn/wireguard.go b/internal/vpn/wireguard.go

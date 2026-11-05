@@ -70,7 +70,9 @@ table, keeping their gateway. `route-noexec` is not used because PIA port
 forwarding finds the VPN gateway from those routes. From OpenVPN adding the
 routes until gluetun processes the tunnel-up event and moves them, the whole
 container routes through the tunnel: nothing leaks, but Mydia's own
-connections can stall.
+connections can stall. If moving them fails, gluetun restarts the VPN run
+rather than leave the routes in the main table: stopping OpenVPN removes the
+tun interface, and the kernel drops every route through it.
 
 ### Restarts
 
