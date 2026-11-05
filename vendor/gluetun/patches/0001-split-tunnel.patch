@@ -1,0 +1,1691 @@
+From 1cf9bdbd4d0d36761307c6669bc4a7bc8000b6e6 Mon Sep 17 00:00:00 2001
+From: Alexandre Rosenfeld <arsfeld@gmail.com>
+Date: Wed, 4 Nov 2026 20:18:13 -0500
+Subject: [PATCH] Add SPLIT_TUNNEL_GID split-tunnel mode
+
+When SPLIT_TUNNEL_GID is set, only sockets owned by that group use the
+VPN. Gluetun joins the group itself so its own traffic follows. The rest
+of the container keeps its routes, DNS and an unfiltered firewall.
+
+- internal/splittunnel builds the mangle, filter and nat rules and the
+  policy routing, with unit tests.
+- The firewall keeps ACCEPT policies and only filters marked traffic.
+- Wireguard routes the split mark instead of everything but its own mark.
+- OpenVPN's redirect-gateway routes move out of the main table.
+- The DNS server listens on 127.0.0.1 and resolv.conf is left alone.
+---
+ cmd/gluetun/main.go                         |  41 ++++-
+ internal/configuration/settings/firewall.go |  32 ++++
+ internal/configuration/settings/settings.go |   7 +
+ internal/dns/loop.go                        |   7 +-
+ internal/dns/plaintext.go                   |  11 +-
+ internal/dns/setup.go                       |  14 +-
+ internal/firewall/enable.go                 |  16 ++
+ internal/firewall/firewall.go               |   3 +
+ internal/firewall/ports.go                  |  12 +-
+ internal/firewall/splittunnel.go            | 191 +++++++++++++++++++
+ internal/firewall/splittunnel_test.go       | 100 ++++++++++
+ internal/firewall/vpn.go                    |   4 +
+ internal/splittunnel/routing.go             | 168 +++++++++++++++++
+ internal/splittunnel/routing_test.go        | 192 ++++++++++++++++++++
+ internal/splittunnel/rules.go               | 161 ++++++++++++++++
+ internal/splittunnel/rules_test.go          | 187 +++++++++++++++++++
+ internal/vpn/interfaces.go                  |   1 +
+ internal/vpn/loop.go                        |   3 +
+ internal/vpn/run.go                         |  17 +-
+ internal/vpn/splittunnel.go                 |  49 +++++
+ internal/vpn/wireguard.go                   |   3 +-
+ internal/wireguard/run.go                   |  20 +-
+ internal/wireguard/settings.go              |   4 +
+ 23 files changed, 1218 insertions(+), 25 deletions(-)
+ create mode 100644 internal/firewall/splittunnel.go
+ create mode 100644 internal/firewall/splittunnel_test.go
+ create mode 100644 internal/splittunnel/routing.go
+ create mode 100644 internal/splittunnel/routing_test.go
+ create mode 100644 internal/splittunnel/rules.go
+ create mode 100644 internal/splittunnel/rules_test.go
+ create mode 100644 internal/vpn/splittunnel.go
+
+diff --git a/cmd/gluetun/main.go b/cmd/gluetun/main.go
+index 842ff99..2315b8d 100644
+--- a/cmd/gluetun/main.go
++++ b/cmd/gluetun/main.go
+@@ -40,6 +40,7 @@ import (
+ 	"github.com/qdm12/gluetun/internal/routing"
+ 	"github.com/qdm12/gluetun/internal/server"
+ 	"github.com/qdm12/gluetun/internal/shadowsocks"
++	"github.com/qdm12/gluetun/internal/splittunnel"
+ 	"github.com/qdm12/gluetun/internal/storage"
+ 	updater "github.com/qdm12/gluetun/internal/updater/loop"
+ 	"github.com/qdm12/gluetun/internal/updater/resolver"
+@@ -231,6 +232,21 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+ 		return err
+ 	}
+ 
++	splitTunnel := allSettings.Firewall.SplitTunnelGID != nil
++	if splitTunnel {
++		// Gluetun joins the split tunnel group so the sockets it opens
++		// from now on, and those of its OpenVPN child, are marked and
++		// tunneled like the group's. Go applies it to every thread.
++		gid := *allSettings.Firewall.SplitTunnelGID
++		if err := syscall.Setgid(int(gid)); err != nil {
++			return fmt.Errorf("joining split tunnel group %d: %w", gid, err)
++		}
++		firewallConf.SetSplitTunnel(gid)
++		if warning := splittunnel.PrepareReversePathFilter("/proc/sys"); warning != "" {
++			firewallLogger.Warn(warning)
++		}
++	}
++
+ 	if *allSettings.Firewall.Enabled {
+ 		err = firewallConf.SetEnabled(ctx, true)
+ 		if err != nil {
+@@ -323,11 +339,16 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+ 		}
+ 	}()
+ 
+-	if err := firewallConf.SetOutboundSubnets(ctx, allSettings.Firewall.OutboundSubnets); err != nil {
+-		return err
+-	}
+-	if err := routingConf.SetOutboundRoutes(allSettings.Firewall.OutboundSubnets); err != nil {
+-		return err
++	// Split tunnel mode ignores outbound subnets and input ports, see
++	// the settings warnings: only split tunnel traffic is filtered or
++	// routed through the VPN.
++	if !splitTunnel {
++		if err := firewallConf.SetOutboundSubnets(ctx, allSettings.Firewall.OutboundSubnets); err != nil {
++			return err
++		}
++		if err := routingConf.SetOutboundRoutes(allSettings.Firewall.OutboundSubnets); err != nil {
++			return err
++		}
+ 	}
+ 
+ 	err = routingConf.AddLocalRules(localNetworks)
+@@ -335,7 +356,11 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+ 		return fmt.Errorf("adding local rules: %w", err)
+ 	}
+ 
+-	for _, port := range allSettings.Firewall.InputPorts {
++	inputPorts := allSettings.Firewall.InputPorts
++	if splitTunnel {
++		inputPorts = nil
++	}
++	for _, port := range inputPorts {
+ 		for _, defaultRoute := range defaultRoutes {
+ 			err = firewallConf.SetAllowedPort(ctx, port, defaultRoute.NetInterface)
+ 			if err != nil {
+@@ -381,7 +406,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+ 
+ 	dnsLogger := logger.New(log.SetComponent("dns"))
+ 	dnsLooper, err := dns.NewLoop(allSettings.DNS, httpClient,
+-		dnsLogger)
++		dnsLogger, splitTunnel)
+ 	if err != nil {
+ 		return fmt.Errorf("creating DNS loop: %w", err)
+ 	}
+@@ -435,7 +460,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
+ 	vpnLooper := vpn.NewLoop(allSettings.VPN, ipv6Supported, allSettings.Firewall.VPNInputPorts,
+ 		providers, storage, allSettings.Health, healthChecker, healthcheckServer, ovpnConf, netLinker, firewallConf,
+ 		routingConf, portForwardLooper, cmder, publicIPLooper, dnsLooper, vpnLogger, httpClient,
+-		buildInfo, *allSettings.Version.Enabled)
++		buildInfo, *allSettings.Version.Enabled, splitTunnel)
+ 	vpnHandler, vpnCtx, vpnDone := goshutdown.NewGoRoutineHandler(
+ 		"vpn", goroutine.OptionTimeout(time.Second))
+ 	go vpnLooper.Run(vpnCtx, vpnDone)
+diff --git a/internal/configuration/settings/firewall.go b/internal/configuration/settings/firewall.go
+index 19712d6..8f48350 100644
+--- a/internal/configuration/settings/firewall.go
++++ b/internal/configuration/settings/firewall.go
+@@ -16,6 +16,12 @@ type Firewall struct {
+ 	OutboundSubnets []netip.Prefix
+ 	Enabled         *bool
+ 	Debug           *bool
++	// SplitTunnelGID turns on split tunnel mode when set: only sockets owned
++	// by this group ID use the VPN and are subject to the kill switch.
++	// Gluetun joins the group so its own traffic is among them. The rest of
++	// the container keeps its routes, DNS and an unfiltered firewall. It
++	// defaults to nil, which keeps the whole container behind the VPN.
++	SplitTunnelGID *uint32
+ }
+ 
+ func (f Firewall) validate() (err error) {
+@@ -52,6 +58,7 @@ func (f *Firewall) copy() (copied Firewall) {
+ 		OutboundSubnets: gosettings.CopySlice(f.OutboundSubnets),
+ 		Enabled:         gosettings.CopyPointer(f.Enabled),
+ 		Debug:           gosettings.CopyPointer(f.Debug),
++		SplitTunnelGID:  gosettings.CopyPointer(f.SplitTunnelGID),
+ 	}
+ }
+ 
+@@ -64,6 +71,7 @@ func (f *Firewall) overrideWith(other Firewall) {
+ 	f.OutboundSubnets = gosettings.OverrideWithSlice(f.OutboundSubnets, other.OutboundSubnets)
+ 	f.Enabled = gosettings.OverrideWithPointer(f.Enabled, other.Enabled)
+ 	f.Debug = gosettings.OverrideWithPointer(f.Debug, other.Debug)
++	f.SplitTunnelGID = gosettings.OverrideWithPointer(f.SplitTunnelGID, other.SplitTunnelGID)
+ }
+ 
+ func (f *Firewall) setDefaults() {
+@@ -87,6 +95,10 @@ func (f Firewall) toLinesNode() (node *gotree.Node) {
+ 		node.Appendf("Debug mode: on")
+ 	}
+ 
++	if f.SplitTunnelGID != nil {
++		node.Appendf("Split tunnel group ID: %d", *f.SplitTunnelGID)
++	}
++
+ 	if len(f.VPNInputPorts) > 0 {
+ 		vpnInputPortsNode := node.Appendf("VPN input ports:")
+ 		for _, port := range f.VPNInputPorts {
+@@ -138,5 +150,25 @@ func (f *Firewall) read(r *reader.Reader) (err error) {
+ 		return err
+ 	}
+ 
++	f.SplitTunnelGID, err = r.Uint32Ptr("SPLIT_TUNNEL_GID")
++	if err != nil {
++		return err
++	}
++
+ 	return nil
+ }
++
++func (f Firewall) splitTunnelWarnings() (warnings []string) {
++	if f.SplitTunnelGID == nil {
++		return nil
++	}
++	if len(f.InputPorts) > 0 {
++		warnings = append(warnings, "FIREWALL_INPUT_PORTS is ignored with SPLIT_TUNNEL_GID: "+
++			"the firewall only filters split tunnel traffic, so every other port is already open")
++	}
++	if len(f.OutboundSubnets) > 0 {
++		warnings = append(warnings, "FIREWALL_OUTBOUND_SUBNETS is ignored with SPLIT_TUNNEL_GID: "+
++			"only split tunnel traffic uses the VPN, everything else keeps the container routes")
++	}
++	return warnings
++}
+diff --git a/internal/configuration/settings/settings.go b/internal/configuration/settings/settings.go
+index 091c4a4..977106c 100644
+--- a/internal/configuration/settings/settings.go
++++ b/internal/configuration/settings/settings.go
+@@ -183,6 +183,13 @@ func (s Settings) Warnings() (warnings []string) {
+ 			" corresponding to the first DNS provider chosen is used.")
+ 	}
+ 
++	warnings = append(warnings, s.Firewall.splitTunnelWarnings()...)
++	if s.Firewall.SplitTunnelGID != nil && (*s.DNS.KeepNameserver || !*s.DNS.ServerEnabled) {
++		warnings = append(warnings, "SPLIT_TUNNEL_GID redirects split tunnel DNS to the "+
++			"DNS server on 127.0.0.1, which DNS_SERVER=off or DNS_KEEP_NAMESERVER=on "+
++			"leaves without a listener: split tunnel DNS will fail")
++	}
++
+ 	return warnings
+ }
+ 
+diff --git a/internal/dns/loop.go b/internal/dns/loop.go
+index a8f3fa1..3ef8960 100644
+--- a/internal/dns/loop.go
++++ b/internal/dns/loop.go
+@@ -34,12 +34,16 @@ type Loop struct {
+ 	backoffTime    time.Duration
+ 	timeNow        func() time.Time
+ 	timeSince      func(time.Time) time.Duration
++	// splitTunnel keeps the DNS server on 127.0.0.1 and leaves
++	// resolvConf alone: only split tunnel traffic is redirected to
++	// the server, by the firewall.
++	splitTunnel bool
+ }
+ 
+ const defaultBackoffTime = 10 * time.Second
+ 
+ func NewLoop(settings settings.DNS,
+-	client *http.Client, logger Logger,
++	client *http.Client, logger Logger, splitTunnel bool,
+ ) (loop *Loop, err error) {
+ 	start := make(chan struct{})
+ 	running := make(chan models.LoopStatus)
+@@ -63,6 +67,7 @@ func NewLoop(settings settings.DNS,
+ 		server:        nil,
+ 		filter:        filter,
+ 		resolvConf:    "/etc/resolv.conf",
++		splitTunnel:   splitTunnel,
+ 		client:        client,
+ 		logger:        logger,
+ 		userTrigger:   true,
+diff --git a/internal/dns/plaintext.go b/internal/dns/plaintext.go
+index 728a4b9..aa92860 100644
+--- a/internal/dns/plaintext.go
++++ b/internal/dns/plaintext.go
+@@ -26,8 +26,17 @@ func (l *Loop) useUnencryptedDNS(fallback bool) {
+ 	}
+ 	nameserver.UseDNSInternally(settingsInternalDNS)
+ 
++	l.useDNSSystemWide(targetIP)
++}
++
++// useDNSSystemWide points resolvConf at ip, except in split tunnel mode,
++// where the rest of the container keeps its own nameservers.
++func (l *Loop) useDNSSystemWide(ip netip.Addr) {
++	if l.splitTunnel {
++		return
++	}
+ 	settingsSystemWide := nameserver.SettingsSystemDNS{
+-		IPs:        []netip.Addr{targetIP},
++		IPs:        []netip.Addr{ip},
+ 		ResolvPath: l.resolvConf,
+ 	}
+ 	err := nameserver.UseDNSSystemWide(settingsSystemWide)
+diff --git a/internal/dns/setup.go b/internal/dns/setup.go
+index 3f9fe13..63ba603 100644
+--- a/internal/dns/setup.go
++++ b/internal/dns/setup.go
+@@ -9,6 +9,7 @@ import (
+ 	"github.com/qdm12/dns/v2/pkg/middlewares/filter/update"
+ 	"github.com/qdm12/dns/v2/pkg/nameserver"
+ 	"github.com/qdm12/dns/v2/pkg/server"
++	"github.com/qdm12/gluetun/internal/splittunnel"
+ )
+ 
+ func (l *Loop) setupServer(ctx context.Context) (runError <-chan error, err error) {
+@@ -29,6 +30,11 @@ func (l *Loop) setupServer(ctx context.Context) (runError <-chan error, err erro
+ 	if err != nil {
+ 		return nil, fmt.Errorf("building server settings: %w", err)
+ 	}
++	if l.splitTunnel {
++		listeningAddress := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}),
++			splittunnel.DNSPort).String()
++		serverSettings.ListeningAddress = &listeningAddress
++	}
+ 
+ 	server, err := server.New(serverSettings)
+ 	if err != nil {
+@@ -46,13 +52,7 @@ func (l *Loop) setupServer(ctx context.Context) (runError <-chan error, err erro
+ 	nameserver.UseDNSInternally(nameserver.SettingsInternalDNS{
+ 		AddrPort: netip.AddrPortFrom(settings.ServerAddress, defaultDNSPort),
+ 	})
+-	err = nameserver.UseDNSSystemWide(nameserver.SettingsSystemDNS{
+-		IPs:        []netip.Addr{settings.ServerAddress},
+-		ResolvPath: l.resolvConf,
+-	})
+-	if err != nil {
+-		l.logger.Error(err.Error())
+-	}
++	l.useDNSSystemWide(settings.ServerAddress)
+ 
+ 	err = check.WaitForDNS(ctx, check.Settings{})
+ 	if err != nil {
+diff --git a/internal/firewall/enable.go b/internal/firewall/enable.go
+index 30a6ebc..a01ea61 100644
+--- a/internal/firewall/enable.go
++++ b/internal/firewall/enable.go
+@@ -58,6 +58,10 @@ func (c *Config) disable(ctx context.Context) (err error) {
+ 		return fmt.Errorf("removing port redirections: %w", err)
+ 	}
+ 
++	if c.splitTunnel != nil {
++		c.disableSplitTunnel(ctx)
++	}
++
+ 	return nil
+ }
+ 
+@@ -72,6 +76,18 @@ func (c *Config) fallbackToDisabled(ctx context.Context) {
+ }
+ 
+ func (c *Config) enable(ctx context.Context) (err error) {
++	if c.splitTunnel != nil {
++		// Split tunnel mode keeps the ACCEPT policies and the rules for
++		// local networks and outbound subnets out: only marked traffic
++		// is filtered.
++		defer func() {
++			if err != nil {
++				c.fallbackToDisabled(ctx)
++			}
++		}()
++		return c.enableSplitTunnel(ctx)
++	}
++
+ 	touched := false
+ 	if err = c.setIPv4AllPolicies(ctx, "DROP"); err != nil {
+ 		return err
+diff --git a/internal/firewall/firewall.go b/internal/firewall/firewall.go
+index c78b41f..f857330 100644
+--- a/internal/firewall/firewall.go
++++ b/internal/firewall/firewall.go
+@@ -7,6 +7,7 @@ import (
+ 
+ 	"github.com/qdm12/gluetun/internal/models"
+ 	"github.com/qdm12/gluetun/internal/routing"
++	"github.com/qdm12/gluetun/internal/splittunnel"
+ )
+ 
+ type Config struct {
+@@ -29,6 +30,8 @@ type Config struct {
+ 	allowedInputPorts map[uint16]map[string]struct{} // port to interfaces set mapping
+ 	portRedirections  portRedirections
+ 	stateMutex        sync.Mutex
++	// splitTunnel is nil unless SPLIT_TUNNEL_GID is set.
++	splitTunnel *splittunnel.Settings
+ }
+ 
+ // NewConfig creates a new Config instance and returns an error
+diff --git a/internal/firewall/ports.go b/internal/firewall/ports.go
+index 6f5867e..d213019 100644
+--- a/internal/firewall/ports.go
++++ b/internal/firewall/ports.go
+@@ -35,7 +35,11 @@ func (c *Config) SetAllowedPort(ctx context.Context, port uint16, intf string) (
+ 	c.logger.Info("setting allowed input port " + fmt.Sprint(port) + " through interface " + intf + "...")
+ 
+ 	const remove = false
+-	if err := c.acceptInputToPort(ctx, intf, port, remove); err != nil {
++	acceptInputToPort := c.acceptInputToPort
++	if c.splitTunnel != nil {
++		acceptInputToPort = c.splitTunnelInboundPort
++	}
++	if err := acceptInputToPort(ctx, intf, port, remove); err != nil {
+ 		return fmt.Errorf("allowing input to port %d through interface %s: %w",
+ 			port, intf, err)
+ 	}
+@@ -67,8 +71,12 @@ func (c *Config) RemoveAllowedPort(ctx context.Context, port uint16) (err error)
+ 	}
+ 
+ 	const remove = true
++	acceptInputToPort := c.acceptInputToPort
++	if c.splitTunnel != nil {
++		acceptInputToPort = c.splitTunnelInboundPort
++	}
+ 	for netInterface := range interfacesSet {
+-		err := c.acceptInputToPort(ctx, netInterface, port, remove)
++		err := acceptInputToPort(ctx, netInterface, port, remove)
+ 		if err != nil {
+ 			return fmt.Errorf("removing allowed port %d on interface %s: %w",
+ 				port, netInterface, err)
+diff --git a/internal/firewall/splittunnel.go b/internal/firewall/splittunnel.go
+new file mode 100644
+index 0000000..18e77b9
+--- /dev/null
++++ b/internal/firewall/splittunnel.go
+@@ -0,0 +1,191 @@
++package firewall
++
++import (
++	"context"
++	"fmt"
++	"net/netip"
++	"os/exec"
++	"strings"
++
++	"github.com/qdm12/gluetun/internal/models"
++	"github.com/qdm12/gluetun/internal/splittunnel"
++)
++
++// SetSplitTunnel switches the firewall to split tunnel mode for the given
++// group ID. It must be called before SetEnabled. In this mode the chain
++// policies stay ACCEPT and only marked traffic is filtered, see the
++// splittunnel package.
++func (c *Config) SetSplitTunnel(gid uint32) {
++	c.stateMutex.Lock()
++	defer c.stateMutex.Unlock()
++	c.splitTunnel = &splittunnel.Settings{
++		GID:     gid,
++		Mark:    splittunnel.Mark,
++		DNSPort: splittunnel.DNSPort,
++	}
++}
++
++// splitTunnelSettings returns the split tunnel settings for the current VPN
++// connection. It must be called with the state mutex held.
++func (c *Config) splitTunnelSettings() splittunnel.Settings {
++	settings := *c.splitTunnel
++	settings.Interface = c.vpnIntf
++	settings.Endpoint = netip.AddrPortFrom(c.vpnConnection.IP, c.vpnConnection.Port)
++	settings.Protocol = c.vpnConnection.Protocol
++	return settings
++}
++
++func (c *Config) enableSplitTunnel(ctx context.Context) (err error) {
++	settings := c.splitTunnelSettings()
++
++	// Gluetun can be restarted inside a network namespace that still holds
++	// the rules of its previous run: remove them first so they do not pile up.
++	c.removeSplitTunnelInstructions(ctx, settings.BaseInstructions)
++
++	err = c.runSplitTunnelInstructions(ctx, settings.BaseInstructions(false, false),
++		settings.BaseInstructions(true, false))
++	if err != nil {
++		return fmt.Errorf("adding split tunnel rules: %w", err)
++	}
++
++	err = c.runSplitTunnelInstructions(ctx, settings.TunnelInstructions(false, false),
++		settings.TunnelInstructions(true, false))
++	if err != nil {
++		return fmt.Errorf("adding split tunnel VPN rules: %w", err)
++	}
++
++	for port, netInterfaces := range c.allowedInputPorts {
++		for netInterface := range netInterfaces {
++			const remove = false
++			err = c.splitTunnelInboundPort(ctx, netInterface, port, remove)
++			if err != nil {
++				return fmt.Errorf("accepting input port %d on interface %s: %w",
++					port, netInterface, err)
++			}
++		}
++	}
++
++	const remove = false
++	err = c.redirectPorts(ctx, remove)
++	if err != nil {
++		return fmt.Errorf("redirecting ports: %w", err)
++	}
++
++	err = c.runUserPostRules(ctx, c.customRulesPath, remove)
++	if err != nil {
++		return fmt.Errorf("running user defined post firewall rules: %w", err)
++	}
++
++	return nil
++}
++
++// disableSplitTunnel removes the mangle and nat rules, which the filter
++// table flush in disable does not reach.
++func (c *Config) disableSplitTunnel(ctx context.Context) {
++	settings := c.splitTunnelSettings()
++	c.removeSplitTunnelInstructions(ctx, settings.TunnelInstructions)
++	c.removeSplitTunnelInstructions(ctx, settings.BaseInstructions)
++}
++
++// setSplitTunnelVPNConnection moves the tunnel rules to a new VPN connection.
++// It must be called with the state mutex held.
++func (c *Config) setSplitTunnelVPNConnection(ctx context.Context,
++	connection models.Connection, vpnIntf string,
++) (err error) {
++	previous := c.splitTunnelSettings()
++	c.vpnConnection = connection
++	c.vpnIntf = vpnIntf
++	if !c.enabled {
++		c.logger.Info("firewall disabled, only updating internal VPN connection")
++		return nil
++	}
++
++	c.logger.Info("allowing VPN connection for split tunnel traffic...")
++	next := c.splitTunnelSettings()
++	return c.runSplitTunnelInstructions(ctx,
++		splittunnel.TunnelChanges(previous, next, false),
++		splittunnel.TunnelChanges(previous, next, true))
++}
++
++func (c *Config) splitTunnelInboundPort(ctx context.Context, intf string,
++	port uint16, remove bool,
++) error {
++	settings := splittunnel.Settings{Interface: intf}
++	if remove {
++		c.removeSplitTunnelInstructions(ctx, func(_, _ bool) []string {
++			return settings.InboundPortInstructions(port, true)
++		})
++		return nil
++	}
++	instructions := settings.InboundPortInstructions(port, false)
++	return c.runSplitTunnelInstructions(ctx, instructions, instructions)
++}
++
++// runSplitTunnelInstructions runs the IPv4 instructions with iptables and
++// the IPv6 ones with ip6tables, when it is available. A missing IPv6 nat
++// table only loses MASQUERADE, so marked IPv6 traffic keeps the wrong source
++// address and fails rather than leaks: it is logged instead of failing.
++func (c *Config) runSplitTunnelInstructions(ctx context.Context, ipv4, ipv6 []string) error {
++	for _, instruction := range ipv4 {
++		if err := c.runSplitTunnelInstruction(ctx, c.ipTables, instruction); err != nil {
++			return err
++		}
++	}
++	if c.ip6Tables == "" {
++		return nil
++	}
++	for _, instruction := range ipv6 {
++		err := c.runSplitTunnelInstruction(ctx, c.ip6Tables, instruction)
++		switch {
++		case err == nil:
++		case strings.HasPrefix(instruction, "-t nat ") &&
++			strings.Contains(err.Error(), "Table does not exist"):
++			c.logger.Warn("IPv6 split tunnel NAT disabled because your kernel " +
++				"does not support IPv6 NAT: " + err.Error())
++		default:
++			return err
++		}
++	}
++	return nil
++}
++
++// removeSplitTunnelInstructions removes rules that may not exist, so
++// failures are only logged at the debug level.
++func (c *Config) removeSplitTunnelInstructions(ctx context.Context,
++	instructions func(ipv6, remove bool) []string,
++) {
++	const remove = true
++	for _, instruction := range instructions(false, remove) {
++		if err := c.runSplitTunnelInstruction(ctx, c.ipTables, instruction); err != nil {
++			c.logger.Debug("removing split tunnel rule: " + err.Error())
++		}
++	}
++	if c.ip6Tables == "" {
++		return
++	}
++	for _, instruction := range instructions(true, remove) {
++		if err := c.runSplitTunnelInstruction(ctx, c.ip6Tables, instruction); err != nil {
++			c.logger.Debug("removing split tunnel rule: " + err.Error())
++		}
++	}
++}
++
++// runSplitTunnelInstruction runs the instruction as is. Unlike
++// runIptablesInstruction, it deletes by rule specification: the line number
++// lookup parses chain listings and does not know the owner, mark, MARK,
++// DNAT and MASQUERADE options these rules use.
++func (c *Config) runSplitTunnelInstruction(ctx context.Context,
++	iptablesBinary, instruction string,
++) error {
++	c.iptablesMutex.Lock()
++	defer c.iptablesMutex.Unlock()
++
++	flags := strings.Fields(instruction)
++	cmd := exec.CommandContext(ctx, iptablesBinary, flags...) // #nosec G204
++	c.logger.Debug(cmd.String())
++	if output, err := c.runner.Run(cmd); err != nil {
++		return fmt.Errorf("command failed: \"%s %s\": %s: %w",
++			iptablesBinary, instruction, output, err)
++	}
++	return nil
++}
+diff --git a/internal/firewall/splittunnel_test.go b/internal/firewall/splittunnel_test.go
+new file mode 100644
+index 0000000..7b6b5a1
+--- /dev/null
++++ b/internal/firewall/splittunnel_test.go
+@@ -0,0 +1,100 @@
++package firewall
++
++import (
++	"context"
++	"net/netip"
++	"os/exec"
++	"strings"
++	"testing"
++
++	"github.com/qdm12/gluetun/internal/models"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++type recordingRunner struct {
++	commands []string
++}
++
++func (r *recordingRunner) Run(cmd *exec.Cmd) (string, error) {
++	r.commands = append(r.commands, strings.Join(cmd.Args, " "))
++	return "", nil
++}
++
++type discardLogger struct{}
++
++func (discardLogger) Debug(string) {}
++func (discardLogger) Info(string)  {}
++func (discardLogger) Warn(string)  {}
++func (discardLogger) Error(string) {}
++
++func Test_splitTunnel(t *testing.T) {
++	t.Parallel()
++	ctx := context.Background()
++	runner := &recordingRunner{}
++	config := &Config{
++		runner:            runner,
++		logger:            discardLogger{},
++		ipTables:          "iptables",
++		ip6Tables:         "ip6tables",
++		customRulesPath:   "/nonexistent/post-rules.txt",
++		allowedInputPorts: make(map[uint16]map[string]struct{}),
++	}
++	config.SetSplitTunnel(1500)
++
++	require.NoError(t, config.SetEnabled(ctx, true))
++	for _, command := range runner.commands {
++		assert.NotContains(t, command, "--policy", "split tunnel mode must keep the chain policies")
++	}
++	assert.Contains(t, runner.commands,
++		"iptables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154")
++	assert.Contains(t, runner.commands,
++		"ip6tables -A OUTPUT -m mark --mark 0x5154 -j DROP")
++	assert.NotContains(t, strings.Join(runner.commands, "\n"), "tun0",
++		"no tunnel rules before the first VPN connection")
++
++	runner.commands = nil
++	connection := models.Connection{
++		IP:       netip.MustParseAddr("192.0.2.10"),
++		Port:     51820,
++		Protocol: "udp",
++	}
++	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
++	assert.Equal(t, "iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
++		runner.commands[0])
++	assert.Contains(t, runner.commands, "iptables -I OUTPUT -m mark --mark 0x5154 -o wg0 -j ACCEPT")
++	assert.Contains(t, runner.commands, "ip6tables -A INPUT -i wg0 -j DROP")
++
++	runner.commands = nil
++	require.NoError(t, config.SetAllowedPort(ctx, 40123, "wg0"))
++	assert.Equal(t, []string{
++		"iptables -I INPUT -i wg0 -p tcp --dport 40123 -j ACCEPT",
++		"iptables -I INPUT -i wg0 -p udp --dport 40123 -j ACCEPT",
++		"ip6tables -I INPUT -i wg0 -p tcp --dport 40123 -j ACCEPT",
++		"ip6tables -I INPUT -i wg0 -p udp --dport 40123 -j ACCEPT",
++	}, runner.commands)
++
++	runner.commands = nil
++	require.NoError(t, config.RemoveAllowedPort(ctx, 40123))
++	assert.Equal(t, []string{
++		"iptables -D INPUT -i wg0 -p tcp --dport 40123 -j ACCEPT",
++		"iptables -D INPUT -i wg0 -p udp --dport 40123 -j ACCEPT",
++		"ip6tables -D INPUT -i wg0 -p tcp --dport 40123 -j ACCEPT",
++		"ip6tables -D INPUT -i wg0 -p udp --dport 40123 -j ACCEPT",
++	}, runner.commands)
++
++	runner.commands = nil
++	connection.IP = netip.MustParseAddr("192.0.2.20")
++	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
++	assert.Equal(t, []string{
++		"iptables -t mangle -I OUTPUT -d 192.0.2.20 -p udp --dport 51820 -j RETURN",
++		"iptables -t mangle -D OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
++	}, runner.commands, "a new server only swaps the endpoint exemption")
++
++	runner.commands = nil
++	require.NoError(t, config.SetEnabled(ctx, false))
++	assert.Contains(t, runner.commands,
++		"iptables -t mangle -D OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154")
++	assert.Contains(t, runner.commands,
++		"iptables -t nat -D POSTROUTING -m mark --mark 0x5154 -o wg0 -j MASQUERADE")
++}
+diff --git a/internal/firewall/vpn.go b/internal/firewall/vpn.go
+index 4e90685..77861c9 100644
+--- a/internal/firewall/vpn.go
++++ b/internal/firewall/vpn.go
+@@ -13,6 +13,10 @@ func (c *Config) SetVPNConnection(ctx context.Context,
+ 	c.stateMutex.Lock()
+ 	defer c.stateMutex.Unlock()
+ 
++	if c.splitTunnel != nil {
++		return c.setSplitTunnelVPNConnection(ctx, connection, vpnIntf)
++	}
++
+ 	if !c.enabled {
+ 		c.logger.Info("firewall disabled, only updating internal VPN connection")
+ 		c.vpnConnection = connection
+diff --git a/internal/splittunnel/routing.go b/internal/splittunnel/routing.go
+new file mode 100644
+index 0000000..51a9803
+--- /dev/null
++++ b/internal/splittunnel/routing.go
+@@ -0,0 +1,168 @@
++package splittunnel
++
++import (
++	"errors"
++	"fmt"
++	"math"
++	"net/netip"
++	"os"
++	"path/filepath"
++	"strings"
++
++	"github.com/qdm12/gluetun/internal/netlink"
++	"golang.org/x/sys/unix"
++)
++
++// UnreachableMetric is the metric of the unreachable default route in the
++// VPN table, so marked traffic fails closed when the tunnel route is gone.
++// It is the largest metric an int holds on every architecture gluetun builds
++// for; a 32 bit int cannot hold 4294967295.
++const UnreachableMetric = math.MaxInt32
++
++type PolicyRouter interface {
++	RouteAdd(route netlink.Route) error
++	RuleAdd(rule netlink.Rule) error
++	RuleDel(rule netlink.Rule) error
++}
++
++// AddPolicyRouting adds, for one IP family, the unreachable default route to
++// table and the ip rule sending the split mark to table. Entries left by an
++// earlier run in the same network namespace are not errors. The cleanup
++// removes the rule. The unreachable route stays: without the rule nothing
++// looks it up.
++func AddPolicyRouting(nl PolicyRouter, table, family int) (
++	cleanup func() error, err error,
++) {
++	unreachable := netlink.Route{
++		Dst:      defaultPrefix(family),
++		Family:   family,
++		Table:    table,
++		Type:     unix.RTN_UNREACHABLE,
++		Priority: UnreachableMetric,
++	}
++	err = nl.RouteAdd(unreachable)
++	if err != nil && !alreadyExists(err) {
++		return nil, fmt.Errorf("adding unreachable default route to table %d: %w", table, err)
++	}
++
++	rule := netlink.NewRule()
++	rule.Priority = RulePriority
++	rule.Mark = Mark
++	rule.Table = table
++	rule.Family = family
++	err = nl.RuleAdd(rule)
++	if err != nil && !alreadyExists(err) {
++		return nil, fmt.Errorf("adding %s for mark 0x%x: %w", rule, Mark, err)
++	}
++
++	cleanup = func() error {
++		err := nl.RuleDel(rule)
++		if err != nil {
++			return fmt.Errorf("deleting %s for mark 0x%x: %w", rule, Mark, err)
++		}
++		return nil
++	}
++	return cleanup, nil
++}
++
++type RouteMover interface {
++	LinkByName(name string) (link netlink.Link, err error)
++	RouteList(family int) (routes []netlink.Route, err error)
++	RouteAdd(route netlink.Route) error
++	RouteDel(route netlink.Route) error
++}
++
++// MoveTunnelRoutes moves the routes OpenVPN adds to the main table for
++// redirect-gateway (0.0.0.0/1 and 128.0.0.0/1, and their IPv6 counterparts)
++// into table, so only marked traffic uses the tunnel. The routes keep their
++// gateway, which port forwarding reads to find the VPN gateway. It runs on
++// every "Initialization Sequence Completed", and finds nothing to move after
++// a restart that kept the tunnel and its routes.
++func MoveTunnelRoutes(nl RouteMover, interfaceName string, table int) error {
++	link, err := nl.LinkByName(interfaceName)
++	if err != nil {
++		return fmt.Errorf("finding link %s: %w", interfaceName, err)
++	}
++
++	routes, err := nl.RouteList(netlink.FamilyAll)
++	if err != nil {
++		return fmt.Errorf("listing routes: %w", err)
++	}
++
++	for _, route := range routes {
++		if route.LinkIndex != link.Index || route.Table != unix.RT_TABLE_MAIN ||
++			!isRedirectGatewayRoute(route.Dst) {
++			continue
++		}
++
++		moved := route
++		moved.Table = table
++		err = nl.RouteAdd(moved)
++		if err != nil && !alreadyExists(err) {
++			return fmt.Errorf("adding route %s to table %d: %w", route.Dst, table, err)
++		}
++
++		err = nl.RouteDel(route)
++		if err != nil {
++			return fmt.Errorf("deleting route %s from the main table: %w", route.Dst, err)
++		}
++	}
++	return nil
++}
++
++func isRedirectGatewayRoute(dst netip.Prefix) bool {
++	switch dst.String() {
++	case "0.0.0.0/0", "0.0.0.0/1", "128.0.0.0/1",
++		"::/0", "::/3", "2000::/4", "3000::/4", "fc00::/7":
++		return true
++	default:
++		return false
++	}
++}
++
++// PrepareReversePathFilter sets net.ipv4.conf.all.src_valid_mark to 1 under
++// procSys (normally /proc/sys), so strict reverse path filtering sees the
++// mark put on packets arriving from the tunnel and accepts the replies to
++// masqueraded connections. Docker mounts /proc/sys read-only, so this usually
++// only works when the sysctl is already passed to the container. It returns a
++// warning when the write fails and the filtering is strict, and an empty
++// string otherwise.
++func PrepareReversePathFilter(procSys string) (warning string) {
++	conf := filepath.Join(procSys, "net", "ipv4", "conf")
++	file, err := os.OpenFile(filepath.Join(conf, "all", "src_valid_mark"), os.O_WRONLY|os.O_TRUNC, 0)
++	if err == nil {
++		_, err = file.WriteString("1")
++		closeErr := file.Close()
++		if err == nil && closeErr == nil {
++			return ""
++		}
++	}
++
++	const strict = "1"
++	if readSysctl(filepath.Join(conf, "all", "rp_filter")) != strict &&
++		readSysctl(filepath.Join(conf, "default", "rp_filter")) != strict {
++		return ""
++	}
++	return "strict reverse path filtering (rp_filter=1) will drop replies arriving through " +
++		"the tunnel for split tunnel traffic; run the container with the sysctl " +
++		"net.ipv4.conf.all.src_valid_mark=1"
++}
++
++func readSysctl(path string) string {
++	b, err := os.ReadFile(path)
++	if err != nil {
++		return ""
++	}
++	return strings.TrimSpace(string(b))
++}
++
++func defaultPrefix(family int) netip.Prefix {
++	if family == netlink.FamilyV6 {
++		return netip.PrefixFrom(netip.IPv6Unspecified(), 0)
++	}
++	return netip.PrefixFrom(netip.IPv4Unspecified(), 0)
++}
++
++func alreadyExists(err error) bool {
++	return errors.Is(err, unix.EEXIST) || strings.HasSuffix(err.Error(), "file exists")
++}
+diff --git a/internal/splittunnel/routing_test.go b/internal/splittunnel/routing_test.go
+new file mode 100644
+index 0000000..89dfb1f
+--- /dev/null
++++ b/internal/splittunnel/routing_test.go
+@@ -0,0 +1,192 @@
++package splittunnel
++
++import (
++	"net/netip"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/qdm12/gluetun/internal/netlink"
++	"golang.org/x/sys/unix"
++)
++
++type fakeNetLinker struct {
++	routes  []netlink.Route
++	rules   []netlink.Rule
++	added   []netlink.Route
++	deleted []netlink.Route
++	links   map[string]int
++	addErr  error
++	ruleErr error
++}
++
++func (f *fakeNetLinker) RouteList(int) ([]netlink.Route, error) { return f.routes, nil }
++
++func (f *fakeNetLinker) RouteAdd(route netlink.Route) error {
++	if f.addErr != nil {
++		return f.addErr
++	}
++	f.added = append(f.added, route)
++	return nil
++}
++
++func (f *fakeNetLinker) RouteDel(route netlink.Route) error {
++	f.deleted = append(f.deleted, route)
++	return nil
++}
++
++func (f *fakeNetLinker) RuleAdd(rule netlink.Rule) error {
++	if f.ruleErr != nil {
++		return f.ruleErr
++	}
++	f.rules = append(f.rules, rule)
++	return nil
++}
++
++func (f *fakeNetLinker) RuleDel(netlink.Rule) error {
++	f.rules = f.rules[:len(f.rules)-1]
++	return nil
++}
++
++func (f *fakeNetLinker) LinkByName(name string) (netlink.Link, error) {
++	return netlink.Link{Name: name, Index: f.links[name]}, nil
++}
++
++func TestAddPolicyRouting(t *testing.T) {
++	t.Parallel()
++	nl := &fakeNetLinker{}
++
++	cleanup, err := AddPolicyRouting(nl, 51820, netlink.FamilyV4)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if len(nl.added) != 1 {
++		t.Fatalf("want one route, got %v", nl.added)
++	}
++	unreachable := nl.added[0]
++	if unreachable.Type != unix.RTN_UNREACHABLE || unreachable.Table != 51820 ||
++		unreachable.Dst != netip.MustParsePrefix("0.0.0.0/0") || unreachable.Priority != UnreachableMetric {
++		t.Errorf("unexpected unreachable route %+v", unreachable)
++	}
++
++	if len(nl.rules) != 1 {
++		t.Fatalf("want one rule, got %v", nl.rules)
++	}
++	rule := nl.rules[0]
++	if rule.Invert || rule.Mark != Mark || rule.Table != 51820 ||
++		rule.Priority != RulePriority || rule.Family != netlink.FamilyV4 {
++		t.Errorf("unexpected rule %+v", rule)
++	}
++
++	if err := cleanup(); err != nil {
++		t.Fatal(err)
++	}
++	if len(nl.rules) != 0 {
++		t.Errorf("cleanup left rules behind: %v", nl.rules)
++	}
++}
++
++func TestAddPolicyRoutingToleratesLeftovers(t *testing.T) {
++	t.Parallel()
++	nl := &fakeNetLinker{addErr: unix.EEXIST, ruleErr: unix.EEXIST}
++	if _, err := AddPolicyRouting(nl, Table, netlink.FamilyV6); err != nil {
++		t.Errorf("an existing rule or route from an earlier run must not fail: %v", err)
++	}
++}
++
++func TestMoveTunnelRoutes(t *testing.T) {
++	t.Parallel()
++	const tunIndex, ethIndex = 7, 2
++	gateway := netip.MustParseAddr("10.8.0.1")
++	tunRoute := func(dst string) netlink.Route {
++		return netlink.Route{
++			LinkIndex: tunIndex, Dst: netip.MustParsePrefix(dst), Gw: gateway,
++			Table: unix.RT_TABLE_MAIN, Family: netlink.FamilyV4,
++		}
++	}
++	nl := &fakeNetLinker{
++		links: map[string]int{testInterface: tunIndex},
++		routes: []netlink.Route{
++			tunRoute("0.0.0.0/1"),
++			tunRoute("128.0.0.0/1"),
++			{LinkIndex: tunIndex, Dst: netip.MustParsePrefix("10.8.0.0/24"), Table: unix.RT_TABLE_MAIN},
++			{LinkIndex: tunIndex, Dst: netip.MustParsePrefix("::/3"), Table: unix.RT_TABLE_MAIN},
++			{LinkIndex: ethIndex, Dst: netip.MustParsePrefix("0.0.0.0/0"), Table: unix.RT_TABLE_MAIN},
++			{LinkIndex: tunIndex, Dst: netip.MustParsePrefix("0.0.0.0/1"), Table: Table},
++		},
++	}
++
++	if err := MoveTunnelRoutes(nl, testInterface, Table); err != nil {
++		t.Fatal(err)
++	}
++
++	wantMoved := []string{"0.0.0.0/1", "128.0.0.0/1", "::/3"}
++	if len(nl.added) != len(wantMoved) || len(nl.deleted) != len(wantMoved) {
++		t.Fatalf("want %d routes moved, added %v, deleted %v", len(wantMoved), nl.added, nl.deleted)
++	}
++	for i, dst := range wantMoved {
++		added, deleted := nl.added[i], nl.deleted[i]
++		if added.Dst.String() != dst || added.Table != Table || added.LinkIndex != tunIndex {
++			t.Errorf("route %d added as %+v", i, added)
++		}
++		if deleted.Dst.String() != dst || deleted.Table != unix.RT_TABLE_MAIN {
++			t.Errorf("route %d deleted as %+v", i, deleted)
++		}
++	}
++	if nl.added[0].Gw != gateway {
++		t.Errorf("the moved route must keep its gateway for port forwarding, got %+v", nl.added[0])
++	}
++}
++
++func TestReversePathFilter(t *testing.T) {
++	t.Parallel()
++
++	setup := func(t *testing.T, all, def string, writable bool) string {
++		t.Helper()
++		root := t.TempDir()
++		for name, value := range map[string]string{"all": all, "default": def} {
++			dir := filepath.Join(root, "net", "ipv4", "conf", name)
++			if err := os.MkdirAll(dir, 0o755); err != nil {
++				t.Fatal(err)
++			}
++			if err := os.WriteFile(filepath.Join(dir, "rp_filter"), []byte(value+"\n"), 0o600); err != nil {
++				t.Fatal(err)
++			}
++			if name == "all" && writable {
++				if err := os.WriteFile(filepath.Join(dir, "src_valid_mark"), []byte("0\n"), 0o600); err != nil {
++					t.Fatal(err)
++				}
++			}
++		}
++		return root
++	}
++
++	t.Run("enables src_valid_mark", func(t *testing.T) {
++		t.Parallel()
++		root := setup(t, "1", "1", true)
++		if warning := PrepareReversePathFilter(root); warning != "" {
++			t.Errorf("unexpected warning %q", warning)
++		}
++		b, err := os.ReadFile(filepath.Join(root, "net", "ipv4", "conf", "all", "src_valid_mark"))
++		if err != nil || strings.TrimSpace(string(b)) != "1" {
++			t.Errorf("src_valid_mark not set: %q %v", b, err)
++		}
++	})
++
++	t.Run("loose filtering needs nothing", func(t *testing.T) {
++		t.Parallel()
++		if warning := PrepareReversePathFilter(setup(t, "0", "2", false)); warning != "" {
++			t.Errorf("unexpected warning %q", warning)
++		}
++	})
++
++	t.Run("strict filtering read-only warns", func(t *testing.T) {
++		t.Parallel()
++		warning := PrepareReversePathFilter(setup(t, "0", "1", false))
++		if !strings.Contains(warning, "net.ipv4.conf.all.src_valid_mark=1") {
++			t.Errorf("warning does not name the fix: %q", warning)
++		}
++	})
++}
+diff --git a/internal/splittunnel/rules.go b/internal/splittunnel/rules.go
+new file mode 100644
+index 0000000..19591bc
+--- /dev/null
++++ b/internal/splittunnel/rules.go
+@@ -0,0 +1,161 @@
++// Package splittunnel builds the routing and firewall rules for
++// SPLIT_TUNNEL_GID mode: only sockets owned by the given group use the VPN.
++// Everything else in the container keeps the main routing table and is not
++// filtered.
++//
++// Gluetun joins the group itself at startup, so its own traffic (provider
++// APIs, DNS upstream, health checks, public IP, the OpenVPN child) is marked
++// and tunneled too. It is not matched as root: other root processes share
++// the network namespace, among them Docker's embedded DNS forwarder, which
++// would take every name lookup in the container through the VPN.
++//
++// Packets from those sockets get the firewall mark Mark in mangle OUTPUT. An
++// ip rule sends the mark to the VPN routing table, which holds the route
++// through the tunnel and an unreachable fallback. The filter table drops
++// marked packets that would leave on any interface but lo and the tunnel.
++package splittunnel
++
++import (
++	"fmt"
++	"net/netip"
++	"slices"
++)
++
++const (
++	// Mark is the firewall mark carried by split tunnel packets.
++	Mark uint32 = 0x5154
++	// Table is the routing table OpenVPN's tunnel routes are moved to.
++	// WireGuard keeps its own table, numbered after its firewall mark.
++	Table = 0x5154
++	// RulePriority places the split ip rule after gluetun's local network
++	// rules (98) and before its inbound rule (100). The inbound rule matches
++	// the container's own address, which marked packets carry as their source
++	// until MASQUERADE rewrites it, and would send them out of the default
++	// interface.
++	RulePriority = 99
++	// DNSPort is the port gluetun's DNS server listens on, on 127.0.0.1.
++	DNSPort uint16 = 53
++)
++
++// Settings describes one split tunnel rule set.
++type Settings struct {
++	// GID is the group whose sockets use the VPN.
++	GID uint32
++	// Mark is the firewall mark, normally Mark.
++	Mark uint32
++	// Interface is the tunnel interface. It is empty until the first
++	// VPN connection, and no tunnel rules exist until then.
++	Interface string
++	// Endpoint is the VPN server. Packets to it are never marked, so the
++	// encrypted tunnel traffic leaves on the physical interface.
++	Endpoint netip.AddrPort
++	// Protocol is the VPN transport protocol, "udp" or "tcp".
++	Protocol string
++	// DNSPort is the port of gluetun's DNS server on 127.0.0.1.
++	DNSPort uint16
++}
++
++func (s Settings) mark() string { return fmt.Sprintf("0x%x", s.Mark) }
++
++// BaseInstructions returns the rules that exist for the whole time the
++// firewall is enabled: marking, the kill switch and DNS. ipv6 selects the
++// ip6tables variant, which drops marked DNS instead of redirecting it since
++// the DNS server only listens on 127.0.0.1.
++//
++// Marked DNS from uid 0 is not redirected: it is gluetun's DNS server talking
++// to its upstream (or the DNS health check), which would otherwise loop back
++// into itself with a plaintext upstream. It is still marked, so it is
++// tunneled.
++//
++// The nat rules are inserted rather than appended so they run before
++// Docker's embedded DNS rules, which DNAT 127.0.0.11 to Docker's resolver.
++func (s Settings) BaseInstructions(ipv6, remove bool) []string {
++	appendOp, insertOp := ops(remove)
++	mark := s.mark()
++	instructions := []string{
++		fmt.Sprintf("-t mangle %s OUTPUT -m owner --gid-owner %d -j MARK --set-mark %s", appendOp, s.GID, mark),
++		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o lo -j ACCEPT", appendOp, mark),
++		fmt.Sprintf("%s OUTPUT -m mark --mark %s -j DROP", appendOp, mark),
++	}
++	for _, protocol := range []string{"udp", "tcp"} {
++		if ipv6 {
++			instructions = append(instructions, fmt.Sprintf(
++				"-t mangle %s OUTPUT -m mark --mark %s -m owner ! --uid-owner 0 -p %s --dport 53 -j DROP",
++				appendOp, mark, protocol))
++			continue
++		}
++		instructions = append(instructions, fmt.Sprintf(
++			"-t nat %s OUTPUT -m mark --mark %s -m owner ! --uid-owner 0 -p %s --dport 53 "+
++				"-j DNAT --to-destination 127.0.0.1:%d",
++			insertOp, mark, protocol, s.DNSPort))
++	}
++	return instructions
++}
++
++// TunnelInstructions returns the rules tied to the current VPN connection.
++// They are empty until the tunnel interface is known.
++//
++// MASQUERADE is needed because a socket picks its source address from the
++// main table before its packets are marked and rerouted. The PREROUTING mark
++// on packets arriving from the tunnel lets reverse path filtering find the
++// tunnel route when net.ipv4.conf.all.src_valid_mark is 1.
++func (s Settings) TunnelInstructions(ipv6, remove bool) []string {
++	if s.Interface == "" {
++		return nil
++	}
++	appendOp, insertOp := ops(remove)
++	mark := s.mark()
++	var instructions []string
++	endpoint := s.Endpoint.Addr()
++	if endpoint.IsValid() && endpoint.Unmap().Is6() == ipv6 {
++		instructions = append(instructions, fmt.Sprintf(
++			"-t mangle %s OUTPUT -d %s -p %s --dport %d -j RETURN",
++			insertOp, endpoint.Unmap(), s.Protocol, s.Endpoint.Port()))
++	}
++	return append(instructions,
++		fmt.Sprintf("-t mangle %s PREROUTING -i %s -j MARK --set-mark %s", appendOp, s.Interface, mark),
++		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o %s -j ACCEPT", insertOp, mark, s.Interface),
++		fmt.Sprintf("%s INPUT -i %s -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT", appendOp, s.Interface),
++		fmt.Sprintf("%s INPUT -i %s -j DROP", appendOp, s.Interface),
++		fmt.Sprintf("-t nat %s POSTROUTING -m mark --mark %s -o %s -j MASQUERADE", appendOp, mark, s.Interface),
++	)
++}
++
++// InboundPortInstructions inserts ahead of the INPUT DROP so the forwarded
++// port, and only it, is reachable from the VPN side.
++func (s Settings) InboundPortInstructions(port uint16, remove bool) []string {
++	_, insertOp := ops(remove)
++	return []string{
++		fmt.Sprintf("%s INPUT -i %s -p tcp --dport %d -j ACCEPT", insertOp, s.Interface, port),
++		fmt.Sprintf("%s INPUT -i %s -p udp --dport %d -j ACCEPT", insertOp, s.Interface, port),
++	}
++}
++
++// TunnelChanges returns the instructions moving the tunnel rules from
++// previous to next. Additions come first so marked traffic is never left
++// without them, then removals of the rules next no longer has.
++func TunnelChanges(previous, next Settings, ipv6 bool) []string {
++	previousAdds := previous.TunnelInstructions(ipv6, false)
++	previousRemoves := previous.TunnelInstructions(ipv6, true)
++	nextAdds := next.TunnelInstructions(ipv6, false)
++
++	var changes []string
++	for _, instruction := range nextAdds {
++		if !slices.Contains(previousAdds, instruction) {
++			changes = append(changes, instruction)
++		}
++	}
++	for i, instruction := range previousAdds {
++		if !slices.Contains(nextAdds, instruction) {
++			changes = append(changes, previousRemoves[i])
++		}
++	}
++	return changes
++}
++
++func ops(remove bool) (appendOp, insertOp string) {
++	if remove {
++		return "-D", "-D"
++	}
++	return "-A", "-I"
++}
+diff --git a/internal/splittunnel/rules_test.go b/internal/splittunnel/rules_test.go
+new file mode 100644
+index 0000000..18cbafd
+--- /dev/null
++++ b/internal/splittunnel/rules_test.go
+@@ -0,0 +1,187 @@
++package splittunnel
++
++import (
++	"net/netip"
++	"slices"
++	"strings"
++	"testing"
++)
++
++func containsFlag(instruction, flag string) bool {
++	return slices.Contains(strings.Fields(instruction), flag)
++}
++
++const testInterface = "tun0"
++
++func testSettings() Settings {
++	return Settings{
++		GID:       1500,
++		Mark:      0x5154,
++		Interface: testInterface,
++		Endpoint:  netip.MustParseAddrPort("192.0.2.10:1194"),
++		Protocol:  "udp",
++		DNSPort:   53,
++	}
++}
++
++func assertInstructions(t *testing.T, got, want []string) {
++	t.Helper()
++	if len(got) != len(want) {
++		t.Fatalf("got %d instructions, want %d:\n%s",
++			len(got), len(want), strings.Join(got, "\n"))
++	}
++	for i := range want {
++		if got[i] != want[i] {
++			t.Errorf("instruction %d:\n got %q\nwant %q", i, got[i], want[i])
++		}
++	}
++}
++
++func TestBaseInstructionsIPv4(t *testing.T) {
++	t.Parallel()
++	got := testSettings().BaseInstructions(false, false)
++	want := []string{
++		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
++		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"-t nat -I OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 " +
++			"-j DNAT --to-destination 127.0.0.1:53",
++		"-t nat -I OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p tcp --dport 53 " +
++			"-j DNAT --to-destination 127.0.0.1:53",
++	}
++	assertInstructions(t, got, want)
++}
++
++func TestBaseInstructionsIPv6DropsDNSInsteadOfRedirecting(t *testing.T) {
++	t.Parallel()
++	got := testSettings().BaseInstructions(true, false)
++	want := []string{
++		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
++		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
++		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"-t mangle -A OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 -j DROP",
++		"-t mangle -A OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p tcp --dport 53 -j DROP",
++	}
++	assertInstructions(t, got, want)
++}
++
++// Other root processes share the container's network namespace, among them
++// Docker's embedded DNS forwarder, which every container name lookup goes
++// through. Gluetun joins the split tunnel group instead of being marked as
++// root, so those stay off the VPN.
++func TestBaseInstructionsDoNotMarkRoot(t *testing.T) {
++	t.Parallel()
++	for _, ipv6 := range []bool{false, true} {
++		for _, instruction := range testSettings().BaseInstructions(ipv6, false) {
++			if strings.Contains(instruction, "MARK") && strings.Contains(instruction, "--uid-owner") {
++				t.Errorf("instruction marks by user: %q", instruction)
++			}
++		}
++	}
++}
++
++func TestTunnelInstructionsIPv4(t *testing.T) {
++	t.Parallel()
++	got := testSettings().TunnelInstructions(false, false)
++	want := []string{
++		"-t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 1194 -j RETURN",
++		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
++		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
++		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
++		"-A INPUT -i tun0 -j DROP",
++		"-t nat -A POSTROUTING -m mark --mark 0x5154 -o tun0 -j MASQUERADE",
++	}
++	assertInstructions(t, got, want)
++}
++
++func TestTunnelInstructionsIPv6SkipsIPv4Endpoint(t *testing.T) {
++	t.Parallel()
++	got := testSettings().TunnelInstructions(true, false)
++	want := []string{
++		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
++		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
++		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
++		"-A INPUT -i tun0 -j DROP",
++		"-t nat -A POSTROUTING -m mark --mark 0x5154 -o tun0 -j MASQUERADE",
++	}
++	assertInstructions(t, got, want)
++}
++
++func TestTunnelInstructionsIPv6Endpoint(t *testing.T) {
++	t.Parallel()
++	s := testSettings()
++	s.Endpoint = netip.MustParseAddrPort("[2001:db8::1]:51820")
++	if got := s.TunnelInstructions(false, false)[0]; strings.Contains(got, "2001:db8::1") {
++		t.Errorf("IPv4 instructions contain the IPv6 endpoint: %q", got)
++	}
++	want := "-t mangle -I OUTPUT -d 2001:db8::1 -p udp --dport 51820 -j RETURN"
++	if got := s.TunnelInstructions(true, false)[0]; got != want {
++		t.Errorf("got %q, want %q", got, want)
++	}
++}
++
++func TestTunnelInstructionsEmptyBeforeFirstConnection(t *testing.T) {
++	t.Parallel()
++	s := Settings{GID: 1500, Mark: 0x5154, DNSPort: 53}
++	if got := s.TunnelInstructions(false, false); len(got) != 0 {
++		t.Errorf("want no instructions without a tunnel interface, got %v", got)
++	}
++}
++
++func TestRemoveInstructionsUseDelete(t *testing.T) {
++	t.Parallel()
++	s := testSettings()
++	for _, ipv6 := range []bool{false, true} {
++		all := slices.Concat(s.BaseInstructions(ipv6, true),
++			s.TunnelInstructions(ipv6, true),
++			s.InboundPortInstructions(40123, true))
++		for _, instruction := range all {
++			if !containsFlag(instruction, "-D") {
++				t.Errorf("remove instruction lacks -D: %q", instruction)
++			}
++			if containsFlag(instruction, "-A") || containsFlag(instruction, "-I") {
++				t.Errorf("remove instruction still appends or inserts: %q", instruction)
++			}
++		}
++	}
++}
++
++func TestInboundPortInstructions(t *testing.T) {
++	t.Parallel()
++	s := Settings{Interface: testInterface}
++	want := []string{
++		"-I INPUT -i tun0 -p tcp --dport 40123 -j ACCEPT",
++		"-I INPUT -i tun0 -p udp --dport 40123 -j ACCEPT",
++	}
++	assertInstructions(t, s.InboundPortInstructions(40123, false), want)
++}
++
++func TestTunnelChanges(t *testing.T) {
++	t.Parallel()
++
++	old := testSettings()
++
++	t.Run("unchanged", func(t *testing.T) {
++		t.Parallel()
++		if got := TunnelChanges(old, old, false); len(got) != 0 {
++			t.Errorf("want no changes, got %v", got)
++		}
++	})
++
++	t.Run("new endpoint adds before it removes", func(t *testing.T) {
++		t.Parallel()
++		updated := old
++		updated.Endpoint = netip.MustParseAddrPort("192.0.2.20:1194")
++		want := []string{
++			"-t mangle -I OUTPUT -d 192.0.2.20 -p udp --dport 1194 -j RETURN",
++			"-t mangle -D OUTPUT -d 192.0.2.10 -p udp --dport 1194 -j RETURN",
++		}
++		assertInstructions(t, TunnelChanges(old, updated, false), want)
++	})
++
++	t.Run("first connection", func(t *testing.T) {
++		t.Parallel()
++		none := Settings{GID: 1500, Mark: 0x5154, DNSPort: 53}
++		assertInstructions(t, TunnelChanges(none, old, false), old.TunnelInstructions(false, false))
++	})
++}
+diff --git a/internal/vpn/interfaces.go b/internal/vpn/interfaces.go
+index 638a68e..3b675b0 100644
+--- a/internal/vpn/interfaces.go
++++ b/internal/vpn/interfaces.go
+@@ -67,6 +67,7 @@ type NetLinker interface {
+ type Router interface {
+ 	RouteList(family int) (routes []netlink.Route, err error)
+ 	RouteAdd(route netlink.Route) error
++	RouteDel(route netlink.Route) error
+ }
+ 
+ type Ruler interface {
+diff --git a/internal/vpn/loop.go b/internal/vpn/loop.go
+index eab9e39..81f6a5f 100644
+--- a/internal/vpn/loop.go
++++ b/internal/vpn/loop.go
+@@ -24,6 +24,7 @@ type Loop struct {
+ 	buildInfo     models.BuildInformation
+ 	versionInfo   bool
+ 	ipv6Supported bool
++	splitTunnel   bool
+ 	vpnInputPorts []uint16 // TODO make changeable through stateful firewall
+ 	// Configurators
+ 	openvpnConf OpenVPN
+@@ -60,6 +61,7 @@ func NewLoop(vpnSettings settings.VPN, ipv6Supported bool, vpnInputPorts []uint1
+ 	publicip PublicIPLoop, dnsLooper DNSLoop,
+ 	logger log.LoggerInterface, client *http.Client,
+ 	buildInfo models.BuildInformation, versionInfo bool,
++	splitTunnel bool,
+ ) *Loop {
+ 	start := make(chan struct{})
+ 	running := make(chan models.LoopStatus)
+@@ -85,6 +87,7 @@ func NewLoop(vpnSettings settings.VPN, ipv6Supported bool, vpnInputPorts []uint1
+ 		buildInfo:      buildInfo,
+ 		versionInfo:    versionInfo,
+ 		ipv6Supported:  ipv6Supported,
++		splitTunnel:    splitTunnel,
+ 		vpnInputPorts:  vpnInputPorts,
+ 		openvpnConf:    openvpnConf,
+ 		netLinker:      netLinker,
+diff --git a/internal/vpn/run.go b/internal/vpn/run.go
+index e9ab780..dcbdcad 100644
+--- a/internal/vpn/run.go
++++ b/internal/vpn/run.go
+@@ -40,12 +40,21 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+ 		} else { // Wireguard
+ 			vpnInterface = settings.Wireguard.Interface
+ 			vpnRunner, connection, err = setupWireguard(ctx, l.netLinker, l.fw,
+-				providerConf, settings, l.ipv6Supported, subLogger)
++				providerConf, settings, l.ipv6Supported, l.splitTunnel, subLogger)
+ 		}
+ 		if err != nil {
+ 			l.crashed(ctx, err)
+ 			continue
+ 		}
++		openvpnSplitTunnel := l.splitTunnel && settings.Type == vpn.OpenVPN
++		removeSplitRouting := func() {}
++		if openvpnSplitTunnel {
++			removeSplitRouting, err = l.addOpenVPNSplitRouting()
++			if err != nil {
++				l.crashed(ctx, err)
++				continue
++			}
++		}
+ 		tunnelUpData := tunnelUpData{
+ 			serverIP:       connection.IP,
+ 			serverName:     connection.ServerName,
+@@ -64,6 +73,7 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+ 
+ 		if err := l.waitForError(ctx, waitError); err != nil {
+ 			vpnCancel()
++			removeSplitRouting()
+ 			l.crashed(ctx, err)
+ 			continue
+ 		}
+@@ -75,12 +85,16 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+ 		for stayHere {
+ 			select {
+ 			case <-tunnelReady:
++				if openvpnSplitTunnel {
++					l.moveOpenVPNRoutes(vpnInterface)
++				}
+ 				go l.onTunnelUp(vpnCtx, ctx, tunnelUpData)
+ 			case <-ctx.Done():
+ 				l.cleanup()
+ 				vpnCancel()
+ 				<-waitError
+ 				close(waitError)
++				removeSplitRouting()
+ 				return
+ 			case <-l.stop:
+ 				l.userTrigger = true
+@@ -108,5 +122,6 @@ func (l *Loop) Run(ctx context.Context, done chan<- struct{}) {
+ 			}
+ 		}
+ 		vpnCancel()
++		removeSplitRouting()
+ 	}
+ }
+diff --git a/internal/vpn/splittunnel.go b/internal/vpn/splittunnel.go
+new file mode 100644
+index 0000000..e815846
+--- /dev/null
++++ b/internal/vpn/splittunnel.go
+@@ -0,0 +1,49 @@
++package vpn
++
++import (
++	"fmt"
++
++	"github.com/qdm12/gluetun/internal/netlink"
++	"github.com/qdm12/gluetun/internal/splittunnel"
++)
++
++// addOpenVPNSplitRouting adds the split tunnel ip rule and unreachable
++// fallback for OpenVPN. The tunnel routes join them on each tunnel up, see
++// moveOpenVPNRoutes. Wireguard does the same inside its own setup.
++func (l *Loop) addOpenVPNSplitRouting() (cleanup func(), err error) {
++	families := []int{netlink.FamilyV4}
++	if l.ipv6Supported {
++		families = append(families, netlink.FamilyV6)
++	}
++
++	var cleanups []func() error
++	cleanup = func() {
++		for _, removeFamily := range cleanups {
++			if err := removeFamily(); err != nil {
++				l.logger.Error("removing split tunnel routing: " + err.Error())
++			}
++		}
++	}
++
++	for _, family := range families {
++		familyCleanup, err := splittunnel.AddPolicyRouting(l.netLinker, splittunnel.Table, family)
++		if err != nil {
++			cleanup()
++			return nil, fmt.Errorf("adding split tunnel routing: %w", err)
++		}
++		cleanups = append(cleanups, familyCleanup)
++	}
++	return cleanup, nil
++}
++
++// moveOpenVPNRoutes moves the routes OpenVPN added for redirect-gateway out
++// of the main table into the split tunnel table, so only marked traffic uses
++// the tunnel. Until it runs, the whole container routes through the tunnel,
++// which leaks nothing. If it fails, marked traffic meets the unreachable
++// route and the health check restarts the VPN.
++func (l *Loop) moveOpenVPNRoutes(vpnInterface string) {
++	err := splittunnel.MoveTunnelRoutes(l.netLinker, vpnInterface, splittunnel.Table)
++	if err != nil {
++		l.logger.Error("moving OpenVPN routes to the split tunnel table: " + err.Error())
++	}
++}
+diff --git a/internal/vpn/wireguard.go b/internal/vpn/wireguard.go
+index 60fc9af..796252f 100644
+--- a/internal/vpn/wireguard.go
++++ b/internal/vpn/wireguard.go
+@@ -16,7 +16,7 @@ import (
+ // It returns a serverName for port forwarding (PIA) and an error if it fails.
+ func setupWireguard(ctx context.Context, netlinker NetLinker,
+ 	fw Firewall, providerConf provider.Provider,
+-	settings settings.VPN, ipv6Supported bool, logger wireguard.Logger) (
++	settings settings.VPN, ipv6Supported, splitTunnel bool, logger wireguard.Logger) (
+ 	wireguarder *wireguard.Wireguard, connection models.Connection, err error,
+ ) {
+ 	connection, err = providerConf.GetConnection(settings.Provider.ServerSelection, ipv6Supported)
+@@ -25,6 +25,7 @@ func setupWireguard(ctx context.Context, netlinker NetLinker,
+ 	}
+ 
+ 	wireguardSettings := utils.BuildWireguardSettings(connection, settings.Wireguard, ipv6Supported)
++	wireguardSettings.SplitTunnel = splitTunnel
+ 
+ 	logger.Debug("Wireguard server public key: " + wireguardSettings.PublicKey)
+ 	logger.Debug("Wireguard client private key: " + gosettings.ObfuscateKey(wireguardSettings.PrivateKey))
+diff --git a/internal/wireguard/run.go b/internal/wireguard/run.go
+index d84bb11..ad6571b 100644
+--- a/internal/wireguard/run.go
++++ b/internal/wireguard/run.go
+@@ -7,6 +7,7 @@ import (
+ 	"net"
+ 
+ 	"github.com/qdm12/gluetun/internal/netlink"
++	"github.com/qdm12/gluetun/internal/splittunnel"
+ 	gtun "github.com/qdm12/gluetun/internal/tun"
+ 	"golang.org/x/sys/unix"
+ 	"golang.zx2c4.com/wireguard/conn"
+@@ -115,10 +116,22 @@ func (w *Wireguard) Run(ctx context.Context, waitError chan<- error, ready chan<
+ 		return
+ 	}
+ 
++	addRule := func(family int) (cleanup func() error, err error) {
++		return w.addRule(w.settings.RulePriority, w.settings.FirewallMark, family)
++	}
++	if w.settings.SplitTunnel {
++		// Only the split mark is routed to the Wireguard table, which also
++		// gets an unreachable default so marked traffic fails closed when
++		// the Wireguard route disappears. The Wireguard socket keeps its own
++		// FirewallMark, which no rule matches, so it uses the main table.
++		addRule = func(family int) (cleanup func() error, err error) {
++			return splittunnel.AddPolicyRouting(w.netlink, int(w.settings.FirewallMark), family)
++		}
++	}
++
+ 	if *w.settings.IPv6 {
+ 		// requires net.ipv6.conf.all.disable_ipv6=0
+-		ruleCleanup6, err := w.addRule(w.settings.RulePriority,
+-			w.settings.FirewallMark, unix.AF_INET6)
++		ruleCleanup6, err := addRule(unix.AF_INET6)
+ 		if err != nil {
+ 			waitError <- fmt.Errorf("adding IPv6 rule: %w", err)
+ 			return
+@@ -126,8 +139,7 @@ func (w *Wireguard) Run(ctx context.Context, waitError chan<- error, ready chan<
+ 		closers.add("removing IPv6 rule", stepOne, ruleCleanup6)
+ 	}
+ 
+-	ruleCleanup, err := w.addRule(w.settings.RulePriority,
+-		w.settings.FirewallMark, unix.AF_INET)
++	ruleCleanup, err := addRule(unix.AF_INET)
+ 	if err != nil {
+ 		waitError <- fmt.Errorf("adding IPv4 rule: %w", err)
+ 		return
+diff --git a/internal/wireguard/settings.go b/internal/wireguard/settings.go
+index 5b08061..79bd83c 100644
+--- a/internal/wireguard/settings.go
++++ b/internal/wireguard/settings.go
+@@ -48,6 +48,10 @@ type Settings struct {
+ 	// Implementation is the implementation to use.
+ 	// It can be auto, kernelspace or userspace, and defaults to auto.
+ 	Implementation string
++	// SplitTunnel routes only packets carrying the split tunnel mark
++	// (see the splittunnel package) through the tunnel, instead of every
++	// packet without FirewallMark.
++	SplitTunnel bool
+ }
+ 
+ func (s *Settings) SetDefaults() {
+-- 
+2.56.0
+
