@@ -11,8 +11,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    built_in = Mydia.Downloads.BuiltIn.runtime()
+
+    if connected?(socket) and built_in do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Mydia.Downloads.BuiltIn.Status.topic())
+    end
+
     {:ok,
      socket
+     |> assign(:built_in_vpn?, built_in != nil and built_in.config.vpn?)
+     |> assign(:built_in_status, built_in && safe_built_in_status())
      |> assign(:page_title, gettext("Configuration - Download Clients"))
      |> assign(:pending_delete_download_client, nil)
      |> assign(:pending_delete_download_count, 0)
@@ -24,7 +32,24 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_info({:built_in_status, status}, socket),
+    do: {:noreply, assign(socket, :built_in_status, status)}
+
   ## Download Client Events
+
+  @impl true
+  def handle_event("restart_built_in", _params, socket) do
+    # Engine.restart/1 only acts on a crashed engine; it is a no-op otherwise.
+    try do
+      Mydia.Downloads.BuiltIn.Engine.restart()
+      {:noreply, put_flash(socket, :info, gettext("Restarting the built-in torrent client"))}
+    catch
+      :exit, _ ->
+        {:noreply,
+         put_flash(socket, :error, gettext("The built-in torrent client is not running"))}
+    end
+  end
 
   @impl true
   def handle_event("new_download_client", _params, socket) do
@@ -370,6 +395,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   end
 
   ## Private Helpers
+
+  defp safe_built_in_status do
+    Mydia.Downloads.BuiltIn.Status.get()
+  catch
+    :exit, _ -> %Mydia.Downloads.BuiltIn.Status{}
+  end
 
   defp load_data(socket) do
     download_clients = Settings.list_download_client_configs()

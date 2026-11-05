@@ -13501,7 +13501,7 @@ msgstr ""
 msgid "Cannot delete runtime-configured clients"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:122
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:147
 #, elixir-autogen, elixir-format
 msgid "Cannot delete runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
 msgstr ""
@@ -13551,7 +13551,7 @@ msgstr ""
 msgid "Cannot edit runtime-configured clients"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:51
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:76
 #, elixir-autogen, elixir-format
 msgid "Cannot edit runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
 msgstr ""
@@ -13755,7 +13755,7 @@ msgstr ""
 msgid "Configuration - API Keys"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:16
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:24
 #, elixir-autogen, elixir-format
 msgid "Configuration - Download Clients"
 msgstr ""
@@ -13960,8 +13960,8 @@ msgstr ""
 msgid "Connection error: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:251
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:331
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:276
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:356
 #: lib/mydia_web/live/admin_indexers_live/index.ex:403
 #, elixir-autogen, elixir-format
 msgid "Connection failed: %{error}"
@@ -13978,17 +13978,17 @@ msgstr ""
 msgid "Connection successful!"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:395
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:426
 #, elixir-autogen, elixir-format
 msgid "Connection successful! Connected"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:392
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:423
 #, elixir-autogen, elixir-format
 msgid "Connection successful! RPC Version: %{version}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:389
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:420
 #: lib/mydia_web/live/admin_indexers_live/index.ex:394
 #, elixir-autogen, elixir-format
 msgid "Connection successful! Version: %{version}"
@@ -14418,6 +14418,7 @@ msgstr ""
 msgid "Disable Cloudflare bypass for %{name}"
 msgstr ""
 
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:48
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:78
 #: lib/mydia_web/live/admin_indexers_live/components.ex:175
 #: lib/mydia_web/live/admin_indexers_live/components.ex:271
@@ -14480,12 +14481,12 @@ msgstr ""
 msgid "Download cleared"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:169
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:194
 #, elixir-autogen, elixir-format
 msgid "Download client deleted successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:105
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:130
 #, elixir-autogen, elixir-format
 msgid "Download client saved successfully"
 msgstr ""
@@ -16846,6 +16847,7 @@ msgstr ""
 msgid "OIDC authentication is not configured."
 msgstr ""
 
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:56
 #: lib/mydia_web/live/admin_settings_live/components.ex:206
 #, elixir-autogen, elixir-format
 msgid "Off"
@@ -17181,6 +17183,7 @@ msgstr ""
 msgid "Pool Size"
 msgstr ""
 
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:35
 #: lib/mydia_web/live/admin_download_clients_live/connection_fields_components.ex:179
 #: lib/mydia_web/live/admin_settings_live/labels.ex:29
 #, elixir-autogen, elixir-format
@@ -17928,12 +17931,12 @@ msgstr ""
 msgid "SFTP Username"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:367
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:392
 #, elixir-autogen, elixir-format
 msgid "SFTP connection failed: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:354
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:379
 #, elixir-autogen, elixir-format
 msgid "SFTP connection successful"
 msgstr ""
@@ -19209,7 +19212,7 @@ msgstr ""
 msgid "URL Scheme"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/index.ex:412
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:443
 #: lib/mydia_web/live/admin_indexers_live/index.ex:971
 #, elixir-autogen, elixir-format
 msgid "Unable to check health"
@@ -21563,4 +21566,89 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:188
 #, elixir-autogen, elixir-format
 msgid "Show filters"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:65
+#, elixir-autogen, elixir-format
+msgid "%{port} (fixed)"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:69
+#, elixir-autogen, elixir-format
+msgid "%{port} (forwarded since %{since})"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:75
+#, elixir-autogen, elixir-format
+msgid "%{port}: %{why}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:16
+#, elixir-autogen, elixir-format
+msgid "Built-in torrent client"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:60
+#, elixir-autogen, elixir-format
+msgid "Connected via %{provider}, public IP %{ip}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:57
+#, elixir-autogen, elixir-format
+msgid "Connecting"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:54
+#, elixir-autogen, elixir-format
+msgid "Crashed after %{n} restarts: %{why}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:29
+#, elixir-autogen, elixir-format
+msgid "Engine"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:64
+#, elixir-autogen, elixir-format
+msgid "Not set yet"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:25
+#, elixir-autogen, elixir-format
+msgid "Restart"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:46
+#, elixir-autogen, elixir-format
+msgid "Restarting the built-in torrent client"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:46
+#, elixir-autogen, elixir-format
+msgid "Running"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:47
+#, elixir-autogen, elixir-format
+msgid "Starting"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:51
+#, elixir-autogen, elixir-format
+msgid "Stopped: %{why}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/index.ex:50
+#, elixir-autogen, elixir-format
+msgid "The built-in torrent client is not running"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:32
+#, elixir-autogen, elixir-format
+msgid "VPN"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:18
+#, elixir-autogen, elixir-format
+msgid "VPN experimental"
 msgstr ""
