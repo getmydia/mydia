@@ -52,6 +52,11 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.blocking_reason(status) == :missing_tun
     end
 
+    test "a down VPN blocks before the engine has been stopped" do
+      status = %Status{engine: :running, vpn: {:down, :vpn_unreachable}}
+      assert Status.blocking_reason(status) == :vpn_unreachable
+    end
+
     test "the engine reason otherwise" do
       assert Status.blocking_reason(%Status{engine: {:crashed, {:engine_exit, 1}, 5}}) ==
                {:engine_exit, 1}

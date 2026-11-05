@@ -46,8 +46,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   end
 
   @spec blocking_reason(t()) :: nil | term()
-  def blocking_reason(%__MODULE__{engine: :running}), do: nil
+  # The VPN clause comes first: Vpn records the tunnel as down before it stops
+  # the engine, and in between the engine still reads :running.
   def blocking_reason(%__MODULE__{vpn: {:down, reason}}), do: reason
+  def blocking_reason(%__MODULE__{engine: :running}), do: nil
   def blocking_reason(%__MODULE__{engine: {:stopped, reason}}), do: reason
   def blocking_reason(%__MODULE__{engine: {:crashed, reason, _}}), do: reason
   def blocking_reason(%__MODULE__{engine: :disabled}), do: :engine_disabled
