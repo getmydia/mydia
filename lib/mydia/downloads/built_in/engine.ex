@@ -39,6 +39,12 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     do: GenServer.call(server, {:start, listen_port, listen_ip})
 
   def stop_engine(server \\ __MODULE__, reason), do: GenServer.call(server, {:stop, reason})
+
+  @doc """
+  Spawns rqbit again after a crash. Returns `{:error, :not_crashed}` and does
+  nothing unless the engine crashed while meant to run.
+  """
+  @spec restart(GenServer.server()) :: :ok | {:error, :not_crashed}
   def restart(server \\ __MODULE__), do: GenServer.call(server, :restart)
 
   # `--listen-ip` pins the listening sockets to the tunnel address. Bound to
@@ -137,7 +143,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     {:reply, :ok, spawn_child(cancel_timer(state))}
   end
 
-  def handle_call(:restart, _from, state), do: {:reply, :ok, state}
+  def handle_call(:restart, _from, state), do: {:reply, {:error, :not_crashed}, state}
 
   @impl true
   def handle_info({:autostart, port}, state) do
@@ -288,7 +294,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
         started_at: System.monotonic_time(:millisecond)
     }
 
-    case File.write(pid_file(state.config.state_dir), Integer.to_string(os_pid)) do
+    case File.write(pid_file(state.config.state_dir), pid_file_contents(os_pid)) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
     end
@@ -310,15 +316,40 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
     %{state | port: nil, os_pid: nil}
   end
 
+  # The pid file holds "<pid> <start time>", the start time being field 22 of
+  # /proc/<pid>/stat, so a pid reused by an unrelated process is not signalled.
+  @doc false
+  def pid_file_contents(os_pid) do
+    case start_time(os_pid) do
+      nil -> Integer.to_string(os_pid)
+      started -> "#{os_pid} #{started}"
+    end
+  end
+
+  # Only a pid whose start time still matches is ours. A pid file without a
+  # start time (older releases wrote only the pid) cannot be verified, so it
+  # is removed without signalling anything.
   defp kill_stale(state_dir) do
     with {:ok, contents} <- File.read(pid_file(state_dir)),
-         {pid, ""} <- Integer.parse(String.trim(contents)),
+         [pid_text, started] <- String.split(contents),
+         {pid, ""} <- Integer.parse(pid_text),
+         ^started <- start_time(pid),
          {:ok, cmdline} <- File.read("/proc/#{pid}/cmdline"),
          true <- String.contains?(cmdline, "rqbit") do
       terminate_pid(pid)
     end
 
     File.rm(pid_file(state_dir))
+  end
+
+  # Field 22 of /proc/<pid>/stat. The command name (field 2) may contain spaces
+  # and parentheses, so fields are counted from after its last ") ", which
+  # leaves field 3 first.
+  defp start_time(pid) do
+    case File.read("/proc/#{pid}/stat") do
+      {:ok, stat} -> stat |> String.split(") ") |> List.last() |> String.split() |> Enum.at(19)
+      {:error, _} -> nil
+    end
   end
 
   # TERM, wait for the process to be gone, then KILL if it ignored us.

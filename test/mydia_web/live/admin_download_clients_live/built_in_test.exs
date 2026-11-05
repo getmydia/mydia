@@ -4,7 +4,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
   import Phoenix.LiveViewTest
 
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.{Config, Status}
+  alias Mydia.Downloads.BuiltIn.{Config, Engine, Status}
+
+  @fake_rqbit Path.expand("../../../support/fixtures/fake_rqbit.sh", __DIR__)
 
   # The page lists downloads from the built-in client, which is not running.
   @moduletag :capture_log
@@ -89,6 +91,83 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     render_click(element(view, "#built-in-restart"))
     assert has_element?(view, "#built-in-torrent")
     assert render(view) =~ "not running"
+  end
+
+  describe "restart with a real engine" do
+    @describetag :tmp_dir
+
+    # Engine registers under its default name, which the LiveView calls; this
+    # module is async: false for that reason.
+    defp start_real_engine(tmp_dir, autostart?) do
+      args_file = Path.join(tmp_dir, "args")
+
+      config = %Config{
+        enabled?: true,
+        download_path: Path.join(tmp_dir, "downloads"),
+        state_dir: Path.join(tmp_dir, "rqbit")
+      }
+
+      start_supervised!(
+        {Engine,
+         config: config,
+         status: Status,
+         rqbit_path: @fake_rqbit,
+         credentials: {"mydia", "x"},
+         backoff_ms: 1,
+         autostart: autostart?,
+         env: [
+           {"FAKE_RQBIT_ARGS", args_file},
+           {"FAKE_RQBIT_PID", Path.join(tmp_dir, "child.pid")},
+           {"FAKE_RQBIT_MODE", "exit"}
+         ]}
+      )
+
+      args_file
+    end
+
+    defp wait_for(fun, tries \\ 300) do
+      cond do
+        fun.() -> :ok
+        tries == 0 -> flunk("condition not met in time")
+        true -> Process.sleep(10) && wait_for(fun, tries - 1)
+      end
+    end
+
+    test "restarts a crashed engine", %{conn: conn, tmp_dir: tmp_dir} do
+      args_file = start_real_engine(tmp_dir, true)
+      wait_for(fn -> match?(%Status{engine: {:crashed, _, 5}}, Status.get()) end)
+      File.rm!(args_file)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Status.topic())
+      render_click(element(view, "#built-in-restart"))
+
+      assert render(view) =~ "Restarting the built-in torrent client"
+      assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
+      wait_for(fn -> File.exists?(args_file) end)
+    end
+
+    test "flashes an error when the engine has not crashed", %{conn: conn, tmp_dir: tmp_dir} do
+      args_file = start_real_engine(tmp_dir, false)
+      # The engine is idle; only the status claims a crash, as when the
+      # engine left the crash between the render and the click.
+      Status.put(:engine, {:crashed, {:engine_exit, 3}, 5})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+      render_click(element(view, "#built-in-restart"))
+
+      assert render(view) =~ "has not crashed"
+      refute File.exists?(args_file)
+    end
+  end
+
+  test "an unreadable status says so instead of showing a state", %{conn: conn} do
+    stop_supervised!(Status)
+    {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+    assert has_element?(view, "#built-in-status-unavailable")
+    refute has_element?(view, "#built-in-engine-state")
+    refute has_element?(view, "#built-in-restart")
   end
 
   test "no panel when the built-in client is not running", %{conn: conn} do

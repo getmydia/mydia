@@ -221,11 +221,46 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
 
     {:os_pid, os_pid} = Port.info(stale, :os_pid)
     assert read_pid(ctx.pid_file) == os_pid
-    File.write!(Path.join(ctx.config.state_dir, "rqbit.pid"), Integer.to_string(os_pid))
+    contents = Engine.pid_file_contents(os_pid)
+    assert [_, _] = String.split(contents)
+    File.write!(Path.join(ctx.config.state_dir, "rqbit.pid"), contents)
 
     start_engine(ctx, [])
     assert gone?(os_pid)
     refute File.exists?(Path.join(ctx.config.state_dir, "rqbit.pid"))
+  end
+
+  # A pid reused by another process, or a pid file from a release that wrote
+  # only the pid, must not get that process killed.
+  defp stale_contents(:other_start, pid), do: "#{pid} 1"
+  defp stale_contents(:pid_only, pid), do: Integer.to_string(pid)
+
+  for {label, kind} <- [{"a different start time", :other_start}, {"no start time", :pid_only}] do
+    @tag :tmp_dir
+    @tag stale_kind: kind
+    test "a stale pid file with #{label} is removed without signalling", ctx do
+      File.mkdir_p!(ctx.config.state_dir)
+
+      stale =
+        Port.open({:spawn_executable, @fake}, [
+          :binary,
+          env: [
+            {~c"FAKE_RQBIT_ARGS", String.to_charlist(ctx.args_file)},
+            {~c"FAKE_RQBIT_PID", String.to_charlist(ctx.pid_file)},
+            {~c"FAKE_RQBIT_MODE", ~c"hold"}
+          ]
+        ])
+
+      {:os_pid, os_pid} = Port.info(stale, :os_pid)
+      on_exit(fn -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)]) end)
+      assert read_pid(ctx.pid_file) == os_pid
+      pid_file = Path.join(ctx.config.state_dir, "rqbit.pid")
+      File.write!(pid_file, stale_contents(ctx.stale_kind, os_pid))
+
+      start_engine(ctx, [])
+      refute gone?(os_pid)
+      refute File.exists?(pid_file)
+    end
   end
 
   @tag :tmp_dir
@@ -233,12 +268,12 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     name = start_engine(ctx, autostart: true)
     assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
     pid = read_pid(ctx.pid_file)
-    :ok = Engine.restart(name)
+    assert {:error, :not_crashed} = Engine.restart(name)
     assert gone?(pid) == false
 
     :ok = Engine.stop_engine(name, :vpn_down)
     drain()
-    :ok = Engine.restart(name)
+    assert {:error, :not_crashed} = Engine.restart(name)
     refute_receive {:built_in_status, _}, 100
     assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)
   end
@@ -246,7 +281,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
   @tag :tmp_dir
   test "restart/1 does not spawn before a port is known", ctx do
     name = start_engine(ctx, [])
-    :ok = Engine.restart(name)
+    assert {:error, :not_crashed} = Engine.restart(name)
     refute_receive {:built_in_status, _}, 100
     assert %Status{engine: :starting} = Status.get(ctx.status)
   end
@@ -323,7 +358,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     File.rm!(ctx.args_file)
     drain()
 
-    :ok = Engine.restart(name)
+    assert {:error, :not_crashed} = Engine.restart(name)
     refute_receive {:built_in_status, _}, 200
     refute File.exists?(ctx.args_file)
     assert %Status{engine: {:stopped, :vpn_down}} = Status.get(ctx.status)

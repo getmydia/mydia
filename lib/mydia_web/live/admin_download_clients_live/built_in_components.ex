@@ -4,7 +4,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
 
   alias Mydia.Downloads.BuiltIn.Status
 
-  attr :status, Status, required: true
+  # nil when the status could not be read.
+  attr :status, Status, default: nil
   attr :vpn?, :boolean, required: true
   attr :display, Mydia.TimeDisplay, required: true
 
@@ -19,7 +20,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
             {gettext("VPN experimental")}
           </span>
           <button
-            :if={match?({:crashed, _, _}, @status.engine)}
+            :if={@status && match?({:crashed, _, _}, @status.engine)}
             id="built-in-restart"
             class="btn btn-ghost btn-xs ml-auto"
             phx-click="restart_built_in"
@@ -27,7 +28,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
             <.icon name="hero-arrow-path" class="size-4" /> {gettext("Restart")}
           </button>
         </div>
-        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <p :if={is_nil(@status)} id="built-in-status-unavailable" class="text-sm text-warning">
+          {gettext("Status unavailable: the built-in torrent client's status could not be read.")}
+        </p>
+        <dl :if={@status} class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <dt class="text-base-content/70">{gettext("Engine")}</dt>
           <dd id="built-in-engine-state">{engine_label(@status.engine)}</dd>
           <%= if @vpn? do %>
@@ -37,7 +41,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
           <dt class="text-base-content/70">{gettext("Port")}</dt>
           <dd id="built-in-port-state">{port_label(@status.port, @display)}</dd>
         </dl>
-        <ul :if={@status.warnings != []} id="built-in-warnings" class="text-sm text-warning">
+        <ul
+          :if={@status && @status.warnings != []}
+          id="built-in-warnings"
+          class="text-sm text-warning"
+        >
           <li :for={warning <- @status.warnings}>{Status.describe(warning)}</li>
         </ul>
       </div>
