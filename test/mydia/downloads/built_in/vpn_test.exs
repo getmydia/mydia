@@ -146,9 +146,19 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert {:forwarded, 40_123, ^since} = Status.get(ctx.status).port
   end
 
+  # State shared with the Vpn poll. Supervised, and started before Vpn, so
+  # ExUnit stops Vpn first (reverse start order): a poll still in flight at
+  # teardown never finds the state process gone.
+  defp start_state(initial) do
+    start_supervised!(%{
+      id: {:state, System.unique_integer([:positive])},
+      start: {Agent, :start_link, [fn -> initial end]}
+    })
+  end
+
   # Gluetun whose answers the test changes while the gate is polling.
   defp mutable_gluetun(bypass, initial) do
-    {:ok, agent} = Agent.start_link(fn -> initial end)
+    agent = start_state(initial)
 
     Bypass.stub(bypass, "GET", "/v1/vpn/status", fn conn ->
       Plug.Conn.resp(conn, 200, Jason.encode!(%{status: Agent.get(agent, & &1.status)}))
@@ -171,7 +181,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
   defp counting_leak_check(results) do
     test_pid = self()
-    {:ok, counter} = Agent.start_link(fn -> 0 end)
+    counter = start_state(0)
 
     fn ->
       n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
@@ -255,7 +265,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
   test "a changed tunnel address restarts the engine on the new one", ctx do
     gluetun(ctx.bypass, "running", 40_123)
-    {:ok, agent} = Agent.start_link(fn -> "10.2.0.2" end)
+    agent = start_state("10.2.0.2")
     ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:ok, Agent.get(agent, & &1)} end)
     start_vpn(ctx, :ok)
 
