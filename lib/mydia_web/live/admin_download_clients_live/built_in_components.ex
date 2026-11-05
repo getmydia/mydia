@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
 
   attr :status, Status, required: true
   attr :vpn?, :boolean, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def built_in_panel(assigns) do
     ~H"""
@@ -33,7 +34,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
             <dd id="built-in-vpn-state">{vpn_label(@status.vpn)}</dd>
           <% end %>
           <dt class="text-base-content/70">{gettext("Port")}</dt>
-          <dd id="built-in-port-state">{port_label(@status.port)}</dd>
+          <dd id="built-in-port-state">{port_label(@status.port, @display)}</dd>
         </dl>
         <ul :if={@status.warnings != []} id="built-in-warnings" class="text-sm text-warning">
           <li :for={warning <- @status.warnings}>{Status.describe(warning)}</li>
@@ -61,16 +62,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
 
   defp vpn_label({:down, reason}), do: Status.describe(reason)
 
-  defp port_label(nil), do: gettext("Not set yet")
-  defp port_label({:static, n}), do: gettext("%{port} (fixed)", port: n)
+  defp port_label(nil, _display), do: gettext("Not set yet")
+  defp port_label({:static, n}, _display), do: gettext("%{port} (fixed)", port: n)
 
-  defp port_label({:forwarded, n, since}),
+  defp port_label({:forwarded, n, since}, display),
     do:
       gettext("%{port} (forwarded since %{since})",
         port: n,
-        since: Calendar.strftime(since, "%H:%M")
+        since: MydiaWeb.DateTimeFormat.format(since, :time, display)
       )
 
-  defp port_label({:failed, reason, last}),
+  defp port_label({:failed, reason, last}, _display),
     do: gettext("%{port}: %{why}", port: last, why: Status.describe(reason))
 end
