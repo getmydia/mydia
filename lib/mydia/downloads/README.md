@@ -93,8 +93,15 @@ seeding), so it needs no warning.
 
 `Mydia.Downloads.BuiltIn` runs rqbit and, optionally, the VPN that tunnels it.
 `BuiltIn.Config` reads the `MYDIA_TORRENT_*` and `MYDIA_VPN_*` variables and
-decides auto-enable (on unless a qBittorrent, Transmission, rqbit or rTorrent
-client is configured).
+decides auto-enable: on when `rqbit` is on the `PATH` and no qBittorrent,
+Transmission, rqbit, rTorrent, Debrid or Blackhole client is configured.
+`ClientRemoval` and the other config builders must carry
+`connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
+unmanaged and the guard below is skipped.
+
+**Child environment.** rqbit and `torrent-curl` are spawned with every
+`MYDIA_VPN_*` variable and Mydia's secrets unset
+(`BuiltIn.Config.child_env_unset/1`).
 
 **Runtime injection.** `Mydia.Settings.RuntimeConfig.get_runtime_download_clients/0`
 appends `BuiltIn.client_configs/0` to the clients from env and YAML, so the

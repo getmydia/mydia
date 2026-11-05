@@ -20,11 +20,15 @@ Mydia bundles rqbit and runs it for you, so a fresh install can download
 torrents with no client to set up. It appears in Admin, Download Clients as a
 managed client named after the built-in engine, with a status panel.
 
-- **Auto-enable.** It turns on when no qBittorrent, Transmission, rqbit or
-  rTorrent client is configured. `MYDIA_TORRENT_ENABLED=true` or `false`
-  overrides that. Adding your own torrent client later leaves it off.
+- **Auto-enable.** It turns on when the rqbit binary is installed (it is in
+  the Docker image) and no qBittorrent, Transmission, rqbit, rTorrent, Debrid
+  or Blackhole client is configured. `MYDIA_TORRENT_ENABLED=true` or `false`
+  overrides that. Adding your own torrent client later turns it off after a
+  restart.
 - **Download path.** `/data/downloads` by default, from
-  `MYDIA_TORRENT_DOWNLOAD_PATH`. Torrent state lives in `/config/rqbit`.
+  `MYDIA_TORRENT_DOWNLOAD_PATH`. Torrent state lives in `/config/rqbit`, from
+  `MYDIA_TORRENT_STATE_PATH`. In the Docker image, files the engine writes
+  belong to group `mydia-torrent`, with or without the VPN.
 - **VPN (experimental).** Set `MYDIA_VPN_SERVICE_PROVIDER` and Mydia runs a
   patched gluetun that tunnels only the built-in client. The engine starts
   once the VPN is up and a leak check passes, and stops when it drops. The
@@ -33,7 +37,8 @@ managed client named after the built-in engine, with a status panel.
   [Environment Variables](environment-variables.md#built-in-torrent-client).
 
 Both examples below need `NET_ADMIN`, the tun device and the `src_valid_mark`
-sysctl. Values must not contain spaces.
+sysctl. `init: true` adds an init process that reaps a VPN process left
+behind when gluetun restarts. Values must not contain spaces.
 
 ProtonVPN with WireGuard and port forwarding:
 
@@ -41,6 +46,7 @@ ProtonVPN with WireGuard and port forwarding:
 services:
   mydia:
     image: ghcr.io/getmydia/mydia:latest
+    init: true
     cap_add:
       - NET_ADMIN
     devices:
@@ -61,6 +67,7 @@ Private Internet Access with OpenVPN:
 services:
   mydia:
     image: ghcr.io/getmydia/mydia:latest
+    init: true
     cap_add:
       - NET_ADMIN
     devices:

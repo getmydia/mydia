@@ -57,15 +57,23 @@ access) keeps its normal route. Nothing fails silently.
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
-| `MYDIA_TORRENT_ENABLED` | `true` forces the built-in client on, `false` off. Unset: on when no torrent-type client (`qbittorrent`, `transmission`, `rqbit`, `rtorrent`) is configured. | unset |
+| `MYDIA_TORRENT_ENABLED` | `true` forces the built-in client on, `false` off (also `1`/`0`, `yes`/`no`, `on`/`off`, any case; anything else is a warning and counts as unset). Unset: on when `rqbit` is on the `PATH` and no client that takes torrents (`qbittorrent`, `transmission`, `rqbit`, `rtorrent`, `debrid`, `blackhole`) is configured. | unset |
 | `MYDIA_TORRENT_DOWNLOAD_PATH` | Where the engine writes. | `/data/downloads` |
+| `MYDIA_TORRENT_STATE_PATH` | The engine's session state. | `/config/rqbit` |
 | `MYDIA_TORRENT_PORT` | Listen port without a forwarded port. | `51413` |
-| `MYDIA_VPN_SERVICE_PROVIDER` | Turns the VPN on. Any gluetun provider name. | unset |
-| `MYDIA_VPN_*` | Every other gluetun variable, prefix stripped before it reaches gluetun (e.g. `MYDIA_VPN_OPENVPN_USER`, `MYDIA_VPN_SERVER_REGIONS`, `MYDIA_VPN_VPN_PORT_FORWARDING`). Gluetun's documentation applies as written. | |
+| `MYDIA_TORRENT_API_PORT` | The engine's HTTP API port on `127.0.0.1`. | `3030` |
+| `MYDIA_VPN_SERVICE_PROVIDER` | Turns the VPN on. Any gluetun provider name. Gluetun reads the provider from `VPN_SERVICE_PROVIDER`, so the entrypoint passes this value under that name. | unset |
+| `MYDIA_VPN_*` | Every other gluetun variable `MYDIA_VPN_<X>` reaches gluetun as `<X>`, prefix stripped (e.g. `MYDIA_VPN_OPENVPN_USER`, `MYDIA_VPN_SERVER_REGIONS`, `MYDIA_VPN_VPN_PORT_FORWARDING`). Gluetun's documentation applies as written. | |
 
-Mydia sets the gluetun variables it owns itself (control server address, split
-mode gid, DNS behaviour) and refuses a user value for them with a startup
-error naming the variable.
+Blank values count as unset. The tunnel interface defaults to `wg0` when
+`MYDIA_VPN_VPN_TYPE` is `wireguard` and `tun0` otherwise, unless
+`MYDIA_VPN_VPN_INTERFACE` is set.
+
+Mydia sets the gluetun variables it owns itself (`SPLIT_TUNNEL_GID`, the
+control server address and auth, `DNS_ADDRESS`, and `DNS_SERVER=on`, which
+split DNS needs). They are passed after the user's, so a user value never
+takes effect, and setting one with the prefix shows a warning naming the
+variable on the admin panel. It is not a startup error.
 
 When the VPN is on, the container needs `cap_add: [NET_ADMIN]` and
 `devices: [/dev/net/tun]`. Without the VPN it needs neither.
@@ -103,8 +111,12 @@ is enabled:
 - **`LeakCheck`**: once per tunnel start, requests the public IP as the torrent
   group (`torrent-curl`, a copy of `curl` installed setgid `mydia-torrent`)
   and as Mydia (`Req`), using an IP echo endpoint on
-  metadata-relay. Equal IPs, or the torrent group reaching the endpoint while
-  gluetun reports the tunnel down, is a leak.
+  metadata-relay. Equal IPs are a leak. The torrent side's IP must also equal
+  the public IP gluetun reports. Not implemented: treating the torrent group
+  reaching the endpoint while gluetun reports the tunnel down as a leak (the
+  engine is stopped then, and the gluetun kill switch drops the traffic).
+- **The setgid group** applies to the image's `rqbit` with or without the VPN,
+  so downloads belong to group `mydia-torrent` either way.
 - **`Status`**: one struct, broadcast on PubSub:
 
 | Part | States |
@@ -122,8 +134,9 @@ is enabled:
    variables plus `SPLIT_TUNNEL_GID`, `HTTP_CONTROL_SERVER_ADDRESS` and
    `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`. A missing capability or device is
    never a boot failure. It then drops to the `mydia` user as today; the BEAM
-   holds no capabilities. Without the variable the entrypoint behaves exactly
-   as today.
+   holds no capabilities. Without the variable, or with
+   `MYDIA_TORRENT_ENABLED` set to false, the entrypoint does not start
+   gluetun.
 2. `Vpn` waits for gluetun to report `running`. `LeakCheck` runs.
 3. `Engine` starts only after a passed leak check, with the forwarded port if
    gluetun has one, else `MYDIA_TORRENT_PORT`.
@@ -184,8 +197,8 @@ adapter's `{:error, reason}` so a grab fails with the cause, and logged at
 | `:missing_net_admin` | Add `cap_add: [NET_ADMIN]` to the container |
 | `:missing_tun` | Add `devices: [/dev/net/tun]` to the container |
 | `{:reserved_variable, name}` | `MYDIA_VPN_<name>` is set by Mydia; remove it |
-| `{:vpn_auth_failed, msg}` | Gluetun's message, e.g. wrong credentials |
-| `:vpn_down` | Tunnel down, torrents stopped until it returns |
+| `{:vpn_auth_failed, msg}` | Not implemented: an auth failure shows as `{:vpn_down, last_log_line}` |
+| `:vpn_down` / `{:vpn_down, line}` | Tunnel down, torrents stopped until it returns, with gluetun's last ERROR log line when there is one (also when gluetun is unreachable) |
 | `:leak_detected` | Leak check failed; torrents will not start |
 | `{:port_forward_failed, msg}` | Engine keeps running on the last port; seeding limited to outgoing connections |
 | `{:engine_exit, code}` | rqbit exited; restarting, or crashed after 5 tries |
@@ -213,3 +226,8 @@ reconnect logic is left in charge of the tunnel.
 Nix packaging and the NixOS module for the VPN (the built-in engine gets rqbit
 from nixpkgs for devenv), editing VPN settings in the UI, offering the patch
 upstream, more than one built-in engine.
+
+Known gaps left for later: Mydia is PID 1 and does not reap an OpenVPN child
+orphaned by gluetun (the compose examples use `init: true`), images are not
+pinned by digest, and the engine is reported running before its HTTP API
+listens.

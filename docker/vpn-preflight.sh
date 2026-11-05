@@ -6,6 +6,14 @@ set -u
 
 [ -n "${MYDIA_VPN_SERVICE_PROVIDER:-}" ] || exit 0
 
+# The VPN only serves the built-in client, so it stays down when that is off.
+case "$(printf '%s' "${MYDIA_TORRENT_ENABLED:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+    false | 0 | no | off)
+        echo "VPN: not started because MYDIA_TORRENT_ENABLED turns the built-in torrent client off"
+        exit 0
+        ;;
+esac
+
 dir=/config/gluetun
 mkdir -p "$dir"
 chown mydia:mydia "$dir"
@@ -53,8 +61,11 @@ chown mydia:mydia "$dir/apikey"
 chmod 400 "$dir/apikey"
 key=$(cat "$dir/apikey")
 
-# MYDIA_VPN_FOO=bar becomes FOO=bar for gluetun. Mydia's own values are
-# passed last so they win over any user attempt to set them.
+# MYDIA_VPN_FOO=bar becomes FOO=bar for gluetun. The one exception is the
+# provider: gluetun reads VPN_SERVICE_PROVIDER, so MYDIA_VPN_SERVICE_PROVIDER
+# is passed under that name too (without it gluetun falls back to its default
+# provider). Mydia's own values are passed last so they win over any user
+# attempt to set them. DNS_SERVER stays on: split DNS needs gluetun's resolver.
 gluetun_env=$(env | sed -n 's/^MYDIA_VPN_//p')
 
 (
@@ -64,10 +75,12 @@ gluetun_env=$(env | sed -n 's/^MYDIA_VPN_//p')
     while true; do
         # shellcheck disable=SC2086 # word splitting is the point
         env -i PATH="$PATH" $gluetun_env \
+            VPN_SERVICE_PROVIDER="$MYDIA_VPN_SERVICE_PROVIDER" \
             SPLIT_TUNNEL_GID="$gid" \
             HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \
             HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE="{\"auth\":\"apikey\",\"apikey\":\"$key\"}" \
             DNS_ADDRESS=127.0.0.1 \
+            DNS_SERVER=on \
             /usr/local/bin/gluetun >> "$dir/gluetun.log" 2>&1
         echo "gluetun exited with $?; restarting in 5s" >> "$dir/gluetun.log"
         sleep 5
