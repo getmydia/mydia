@@ -33,8 +33,8 @@ dependencies:
   elliptic: ^0.4.0
   pointycastle: ^4.0.0
   convert: ^3.1.2
-  flutter_riverpod: ^3.3.2
-  riverpod_annotation: ^4.0.0
+  flutter_riverpod: ^3.4.3
+  riverpod_annotation: ^4.0.7
   go_router: ^18.0.1
   collection: ^1.19.1
   # HCT colour space plus the quantizer and scorer the ambient tint uses.
@@ -50,7 +50,7 @@ dependencies:
   cached_network_image: ^4.0.0
   # ImageRenderMethodForWeb lives here, not in cached_network_image's exports.
   # core/cache/artwork_decode.dart picks HttpGet so web decodes honour a size.
-  cached_network_image_platform_interface: ^5.0.0
+  cached_network_image_platform_interface: ^5.0.3
   # ArtworkImage builds on this directly; it is what CachedNetworkImage wraps.
   octo_image: ^2.1.0
   flutter_cache_manager: ^3.3.0
@@ -65,30 +65,30 @@ dependencies:
   # Talks to org.freedesktop.portal.Flatpak so the Flatpak build can update
   # itself. Plain Dart rather than a Flutter plugin, so it adds no platform
   # channel and no build step, and it is only constructed inside the sandbox.
-  dbus: ^0.7.15
+  dbus: ^0.8.0
   path_provider: ^2.1.0
   dart_cast: 0.7.4
   bonsoir: ^7.1.5
-  web: ^1.0.0
+  web: ^1.1.2
   crypto: ^3.0.3
   cryptography: ^2.9.0
   uuid: ^4.5.1
-  connectivity_plus: ^7.3.1
-  device_info_plus: ^13.2.0
+  connectivity_plus: ^7.3.2
+  device_info_plus: ^13.3.0
   local_auth: ^3.0.0
-  package_info_plus: ^10.2.1
+  package_info_plus: ^10.2.2
   # Parses crash stack traces into frames for core/crash_reporting. Already
   # resolved transitively; declared so the import is not an undeclared
   # dependency.
   stack_trace: ^1.12.1
   mobile_scanner: ^7.0.1
-  url_launcher: ^6.3.0
+  url_launcher: ^6.3.3
   flutter_rust_bridge: ^2.13.0
   mydia_player_p2p:
     path: rust_builder
   flutter_foreground_task: ^11.0.3
-  hive_ce: ^2.16.0
-  hive_ce_flutter: ^2.3.4
+  hive_ce: ^2.22.0
+  hive_ce_flutter: ^2.5.0
   freezed_annotation: ^3.1.0
   window_manager: ^0.5.2
   # Direct, not transitive: window geometry restore needs the display work
@@ -101,14 +101,14 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  build_runner: ^2.4.0
-  riverpod_generator: ^4.0.0+1
+  build_runner: ^2.16.2
+  riverpod_generator: ^4.0.9
   graphql_codegen: ^3.0.0
   # Parses Dart source for test/l10n/untranslated_text_test.dart. Already
   # resolved transitively through build_runner; declared so the import is not
   # an undeclared dependency.
-  analyzer: ^12.1.0
-  mockito: ^5.4.0
+  analyzer: ^14.4.0
+  mockito: ^5.8.1
   # Used directly by five test files to drive Timer.periodic without real
   # waits. It already arrived transitively via flutter_test, so declaring it
   # pins the same resolved version and only stops the analyzer flagging every
@@ -116,8 +116,8 @@ dev_dependencies:
   fake_async: ^1.3.3
   file: ^7.0.1
   flutter_launcher_icons: ^0.14.3
-  hive_ce_generator: ^1.10.0
-  freezed: ^3.2.6-dev.1
+  hive_ce_generator: ^1.12.0
+  freezed: ^4.0.3
   yaml: ^3.1.4
 
 flutter_launcher_icons:
