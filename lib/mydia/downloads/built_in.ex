@@ -20,7 +20,9 @@ defmodule Mydia.Downloads.BuiltIn do
   def clear_runtime, do: :persistent_term.erase(@key)
   def runtime, do: :persistent_term.get(@key, nil)
 
-  @spec client_configs() :: [DownloadClientConfig.t()]
+  # Not DownloadClientConfig.t(): a runtime client has no inserted_at or
+  # updated_at, which that type declares as DateTime.t().
+  @spec client_configs() :: [%DownloadClientConfig{}]
   def client_configs do
     case runtime() do
       nil ->
