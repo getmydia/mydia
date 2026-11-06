@@ -9,9 +9,13 @@ is in `design/specs/2026-11-05-tv-dpad-focus-rule-design.md`; the code is
 
 1. Each row, grid, list and button bar remembers the item that last had focus
    in it, by a stable item id rather than by position.
-2. Entering one from outside (UP or DOWN from another row) lands on that
-   remembered item; one never visited lands on its first item (first visible
-   item, for vertical lists).
+2. Any move entering one from outside the region lands on that remembered
+   item, whatever the direction: UP or DOWN from another row, RIGHT from a
+   button beside a rail, RIGHT from the sidebar into a rail. One never visited
+   lands on its first item, meaning the lowest built index (first visible
+   item, for vertical lists). RIGHT from the sidebar goes through
+   `SidebarFocusBoundary`, which returns to the card that left for the
+   sidebar, and that card is the row's remembered item.
 3. If the remembered item is gone or not built, focus lands on the item nearest
    its last index.
 4. Moves inside a row (LEFT and RIGHT along a rail, column-straight in a grid)
@@ -24,7 +28,10 @@ untouched and the callback only delegates to Flutter's default.
 
 ## Opting a widget in
 
-The shared widgets already do it. Pass a stable id and you are done:
+`HorizontalRail` and `BrowseGrid` already do it: each wraps its list in a
+region and every built item in an item. Without `itemId` an item's index
+stands in for its id, which remembers a place only while the order holds, so
+pass a stable id:
 
 ```dart
 HorizontalRail(itemCount: items.length, itemId: (i) => items[i].ref, ...)
@@ -64,8 +71,11 @@ Regions and items only record. The redirect happens in
 `requestFocusCallback`, which every directional move Flutter makes goes
 through. It is installed in two places only:
 
-- the shell's content region policy in `lib/presentation/widgets/app_shell.dart`
-  (`RegionTraversalPolicy(onExit: ..., requestFocusCallback: FocusMemory.requestFocus)`);
+- the shell's region policy, built by `_region` in
+  `lib/presentation/widgets/app_shell.dart`
+  (`RegionTraversalPolicy(onExit: ..., requestFocusCallback: FocusMemory.requestFocus)`).
+  `_region` builds both the content and the sidebar region, so both carry it;
+  only the content region holds rows, so in the sidebar it only delegates;
 - the player OSD's traversal group.
 
 A region outside both never redirects anything. Do not add per-screen arrow-key

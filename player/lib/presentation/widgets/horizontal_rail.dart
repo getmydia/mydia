@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import '../../core/focus/focus_memory.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/palette.dart';
@@ -23,6 +24,16 @@ class HorizontalRail extends StatefulWidget {
   final Key leftFadeKey;
   final Key rightFadeKey;
 
+  /// The stable identity of the item at an index, which the rail remembers
+  /// on the television tier so focus entering the rail returns to the item
+  /// that last had it (see `FocusMemoryRegion`).
+  ///
+  /// Pass the item's identity (`ItemSummary.ref`), never its position: a
+  /// rail that reorders, as Continue Watching does, must return to the title
+  /// rather than the slot. Without it the index stands in, which still
+  /// remembers a place in a rail whose order does not change.
+  final Object Function(int index)? itemId;
+
   const HorizontalRail({
     super.key,
     required this.itemCount,
@@ -30,6 +41,7 @@ class HorizontalRail extends StatefulWidget {
     required this.height,
     required this.leftFadeKey,
     required this.rightFadeKey,
+    this.itemId,
   });
 
   @override
@@ -39,10 +51,10 @@ class HorizontalRail extends StatefulWidget {
 class _HorizontalRailState extends State<HorizontalRail> {
   /// How far past the viewport the list keeps items built.
   ///
-  /// Same reasoning as `ContentRail`: focus traversal can only reach a
-  /// widget that exists, and `ListView.builder`'s 250px default is narrower
-  /// than a single episode still. Two viewport widths guarantee at least one
-  /// built item past each edge, applied only in the directional tier.
+  /// Focus traversal can only reach a widget that exists, and
+  /// `ListView.builder`'s 250px default is narrower than a single episode
+  /// still. Two viewport widths guarantee at least one built item past each
+  /// edge, applied only in the directional tier.
   static const double _directionalCacheExtent = 2400;
 
   final ScrollController _scrollController = ScrollController();
@@ -111,35 +123,47 @@ class _HorizontalRailState extends State<HorizontalRail> {
 
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
+    final directional = InputCapabilities.directionalPrimary;
+
+    // The wrapper is what makes a plain mouse wheel move the rail; the
+    // controller stays owned here because the edge fades listen to it.
+    final list = HorizontalWheelScroll(
+      controller: _scrollController,
+      builder: (context, controller) => ListView.builder(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        scrollCacheExtent: directional
+            ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
+            : null,
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        itemCount: widget.itemCount,
+        itemBuilder: (context, index) {
+          final card = RailFocusScroller(
+            child: widget.itemBuilder(context, index),
+          );
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index < widget.itemCount - 1 ? cardSpacing : 0,
+            ),
+            // Gated here as well as inside the widget so the tree off the
+            // television tier is exactly what it was, not merely inert.
+            child: directional
+                ? FocusMemoryItem(
+                    id: widget.itemId?.call(index) ?? index,
+                    index: index,
+                    child: card,
+                  )
+                : card,
+          );
+        },
+      ),
+    );
 
     return SizedBox(
       height: widget.height,
       child: Stack(
         children: [
-          // The wrapper is what makes a plain mouse wheel move the rail; the
-          // controller stays owned here because the edge fades listen to it.
-          HorizontalWheelScroll(
-            controller: _scrollController,
-            builder: (context, controller) => ListView.builder(
-              controller: controller,
-              scrollDirection: Axis.horizontal,
-              scrollCacheExtent: InputCapabilities.directionalPrimary
-                  ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
-                  : null,
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              itemCount: widget.itemCount,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index < widget.itemCount - 1 ? cardSpacing : 0,
-                  ),
-                  child: RailFocusScroller(
-                    child: widget.itemBuilder(context, index),
-                  ),
-                );
-              },
-            ),
-          ),
+          if (directional) FocusMemoryRegion(child: list) else list,
           if (_showLeftFade) _buildFade(widget.leftFadeKey, atStart: true),
           if (_showRightFade) _buildFade(widget.rightFadeKey, atStart: false),
         ],
