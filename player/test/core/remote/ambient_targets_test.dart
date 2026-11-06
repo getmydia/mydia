@@ -476,8 +476,6 @@ void main() {
         );
         final stopped = <String>[];
         targets.stopped.listen(stopped.add);
-        List<AmbientTarget>? latest;
-        targets.playing.listen((held) => latest = held);
 
         unawaited(targets.sweep());
         async.flushMicrotasks();
@@ -492,8 +490,39 @@ void main() {
         async.flushMicrotasks();
 
         expect(stopped, isEmpty);
-        expect(latest, isEmpty,
-            reason: 'a stale refresh must not repopulate the held list');
+
+        targets.dispose();
+      });
+    });
+
+    test(
+        'a refresh in flight across a background and resume does not refill '
+        'the held list', () {
+      fakeAsync((async) {
+        var pending = false;
+        final late = Completer<FlutterPlaybackSnapshot?>();
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: (nodeId) => pending
+              ? late.future
+              : Future.value(playingSnapshot(title: 'The Lantern Keepers')),
+        );
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        pending = true;
+        async.elapse(const Duration(seconds: 5)); // refresh starts, waits
+
+        targets.onBackground();
+        targets.onForeground();
+        // Answers playing, so only the epoch guard keeps it out of `_held`;
+        // the next sweep after resume is what repopulates.
+        late.complete(playingSnapshot(title: 'The Lantern Keepers'));
+        async.flushMicrotasks();
+
+        expect(latest, isEmpty);
 
         targets.dispose();
       });
