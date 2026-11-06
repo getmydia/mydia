@@ -197,10 +197,18 @@ defmodule MetadataRelay.Router do
     handle_tmdb_request(conn, fn -> Handler.get_collection(id, params) end)
   end
 
-  # TMDB Person Search (must come before /tmdb/person/:id)
+  # TMDB Person Search and Popular People (both must come before /tmdb/person/:id)
   get "/tmdb/person/search" do
     params = extract_query_params(conn)
     handle_tmdb_request(conn, fn -> Handler.search_people(params) end)
+  end
+
+  # Relays up to 0.22.0 served this through /tmdb/person/:id, which forwards
+  # the same TMDB path; the explicit route keeps it working if :id is ever
+  # narrowed to integers.
+  get "/tmdb/person/popular" do
+    params = extract_query_params(conn)
+    handle_tmdb_request(conn, fn -> Handler.popular_people(params) end)
   end
 
   # TMDB Person Details

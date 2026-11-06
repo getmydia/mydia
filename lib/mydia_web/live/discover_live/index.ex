@@ -24,7 +24,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.{PeopleSearch, RegionalRows}
+  alias MydiaWeb.DiscoverLive.{Messages, People, RegionalRows}
   alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
@@ -64,7 +64,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
       |> PersonModal.attach()
-      |> PeopleSearch.assign_scope(:titles)
+      |> People.reset()
       |> assign(:load_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
@@ -82,6 +82,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_params(%{"type" => "person"} = params, _url, socket),
+    do: People.handle_params(params, socket)
+
+  def handle_params(%{"scope" => "people", "q" => q} = params, _url, socket) when q != "",
+    do: People.handle_params(params, socket)
+
   def handle_params(params, _url, socket) do
     if connected?(socket) do
       media_type = parse_media_type(params["type"])
@@ -129,7 +135,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:categories, categories)
         |> assign(:search_query, search_query)
         |> assign(:search_mode, search_mode)
-        |> PeopleSearch.assign_scope(parse_search_scope(search_mode, params["scope"]))
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
         |> assign(:year_from, year_from)
@@ -243,25 +248,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
     query = String.trim(query)
 
     params =
-      if query == "" do
-        %{"type" => to_string(socket.assigns.media_type)}
-      else
-        PeopleSearch.params(socket.assigns.media_type, query, socket.assigns.search_scope)
+      cond do
+        socket.assigns.media_type == :person -> People.params(query)
+        query == "" -> %{"type" => to_string(socket.assigns.media_type)}
+        true -> %{"type" => to_string(socket.assigns.media_type), "q" => query}
       end
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
-  def handle_event("switch_search_scope", %{"scope" => scope}, socket) do
-    %{media_type: media_type, search_query: query} = socket.assigns
-    params = PeopleSearch.params(media_type, query, parse_search_scope(true, scope))
-    {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
-  end
-
-  def handle_event("retry_people_search", _params, %{assigns: %{search_scope: :people}} = socket),
-    do: {:noreply, PeopleSearch.load(socket)}
-
-  def handle_event("retry_people_search", _params, socket), do: {:noreply, socket}
+  def handle_event("retry_people_search", _params, socket), do: {:noreply, People.retry(socket)}
 
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
@@ -402,6 +398,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
+
+  def handle_event("load_more", _, %{assigns: %{media_type: :person}} = socket),
+    do: {:noreply, People.load_more(socket)}
 
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
@@ -564,8 +563,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  def handle_info(:load_data, %{assigns: %{search_scope: :people}} = socket),
-    do: {:noreply, PeopleSearch.load(socket)}
+  def handle_info(msg, %{assigns: %{media_type: :person}} = socket)
+      when msg == :load_data or (is_tuple(msg) and elem(msg, 0) == :load_page),
+      do: {:noreply, People.handle_info(msg, socket)}
 
   def handle_info(:load_data, socket) do
     %{
@@ -882,8 +882,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
-  def handle_async(:people_search, result, socket),
-    do: {:noreply, PeopleSearch.handle_result(socket, result)}
+  def handle_async(:people, result, socket),
+    do: {:noreply, People.handle_result(socket, result)}
 
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}

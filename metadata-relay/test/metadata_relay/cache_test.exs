@@ -239,6 +239,11 @@ defmodule MetadataRelay.CacheTest do
       assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/search:query=wren") ==
                :timer.hours(24 * 7)
     end
+
+    test "the popular people list keeps the person TTL" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/popular:page=1") ==
+               :timer.hours(24 * 3)
+    end
   end
 
   describe "integration scenarios" do

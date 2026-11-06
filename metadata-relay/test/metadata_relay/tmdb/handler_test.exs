@@ -277,6 +277,45 @@ defmodule MetadataRelay.TMDB.HandlerTest do
     end
   end
 
+  describe "GET /tmdb/person/popular" do
+    test "dispatches to the handler and returns the TMDB body verbatim" do
+      fixture = person_search_fixture()
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/person/popular" => {200, fixture}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/popular")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == fixture
+    end
+
+    test "forwards language and page to TMDB" do
+      test_pid = self()
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        send(test_pid, {:request_url, request.url})
+        {request, Req.Response.new(status: 200, body: person_search_fixture())}
+      end)
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/popular?language=fr-FR&page=3")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert_received {:request_url, url}
+      assert url.path == "/3/person/popular"
+      query = URI.decode_query(url.query || "")
+      assert query["language"] == "fr-FR"
+      assert query["page"] == "3"
+    end
+  end
+
   describe "GET /tmdb/person/:id" do
     test "dispatches to the handler and returns the TMDB body verbatim" do
       fixture = person_fixture()

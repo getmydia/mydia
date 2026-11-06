@@ -8,6 +8,11 @@ defmodule MydiaWeb.PersonComponents do
   use Phoenix.Component
   use Gettext, backend: MydiaWeb.Gettext
 
+  use Phoenix.VerifiedRoutes,
+    endpoint: MydiaWeb.Endpoint,
+    router: MydiaWeb.Router,
+    statics: MydiaWeb.static_paths()
+
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
   alias Mydia.Metadata.ImageUrl
@@ -195,7 +200,9 @@ defmodule MydiaWeb.PersonComponents do
   member that has a `tmdb_person_id` becomes a button that emits `event` with
   `phx-value-id`, `phx-value-name` and `phx-value-profile_path`, the payload
   `MydiaWeb.Live.Helpers.PersonModal.open/2` expects. A member without an id
-  renders greyed with a tooltip, since there is nobody to open.
+  (cast not yet backfilled, or a name TMDB could not match) is a link to
+  Discover's People search for their name, id `"<id_prefix>-search-<index>"`,
+  so the user picks the right person instead of Mydia guessing.
 
   A host that passes `event` must handle it.
 
@@ -241,17 +248,21 @@ defmodule MydiaWeb.PersonComponents do
           />
         </div>
       <% is_nil(@person_id) -> %>
-        <div
-          class={[cast_person_class(@layout), "opacity-60 tooltip"]}
-          data-tip={gettext("No linked profile yet")}
+        <.link
+          id={"#{@id_prefix}-search-#{@index}"}
+          navigate={~p"/discover?#{%{"type" => "person", "q" => @member.name}}"}
+          class={[cast_person_class(@layout), "group tooltip"]}
+          data-tip={gettext("Search for %{name}", name: @member.name)}
         >
           <.cast_person_body
             member={@member}
             profile_path={@profile_path}
             character={@character}
             layout={@layout}
+            hover
+            search
           />
-        </div>
+        </.link>
       <% true -> %>
         <button
           id={"#{@id_prefix}-#{@person_id}-#{@index}"}
@@ -282,6 +293,7 @@ defmodule MydiaWeb.PersonComponents do
   attr :character, :string, default: nil
   attr :layout, :string, required: true
   attr :hover, :boolean, default: false
+  attr :search, :boolean, default: false, doc: "marks a member that opens a name search"
 
   defp cast_person_body(%{layout: "row"} = assigns) do
     ~H"""
@@ -304,6 +316,12 @@ defmodule MydiaWeb.PersonComponents do
     <% end %>
     <span class="text-sm min-w-0">
       <span class={["font-medium", @hover && "group-hover:text-primary"]}>{@member.name}</span>
+      <.icon
+        :if={@search}
+        name="hero-magnifying-glass"
+        class="w-3 h-3 text-base-content/40 align-middle"
+        aria-hidden="true"
+      />
       <span :if={@character} class="text-base-content/60 text-xs">
         {gettext("as %{character}", character: @character)}
       </span>
@@ -330,7 +348,14 @@ defmodule MydiaWeb.PersonComponents do
         <.icon name="hero-user" class="w-8 h-8 text-base-content/30" />
       </div>
     <% end %>
-    <p class="text-sm font-medium line-clamp-1">{@member.name}</p>
+    <p class="text-sm font-medium line-clamp-1">
+      {@member.name}<.icon
+        :if={@search}
+        name="hero-magnifying-glass"
+        class="w-3 h-3 ml-0.5 text-base-content/40 align-middle"
+        aria-hidden="true"
+      />
+    </p>
     <%= if @character do %>
       <p class="text-xs text-base-content/60 line-clamp-1">{@character}</p>
     <% end %>
