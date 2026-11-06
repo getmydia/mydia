@@ -66,8 +66,9 @@ scope.
 ### `Mydia.Metadata.People`
 
 - `search_people/3` and `search_people_cached/3` take a `:page` option and
-  return `{:ok, %{results: [PersonSearchResult.t()], page: integer, total_pages:
-  integer}}` instead of a bare list. Discover is the only caller.
+  return `{:ok, %PersonPage{results: [PersonSearchResult.t()], page: integer,
+  total_pages: integer}}` (a new struct in `Mydia.Metadata.Structs`) instead of
+  a bare list. Discover is the only caller.
 - New `popular_people/2` and `popular_people_cached/2`, same options and return
   shape, relay-only like the rest of the module.
 - TMDB popular entries carry the same `id`, `name`, `profile_path`,
