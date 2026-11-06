@@ -13,12 +13,61 @@ defmodule MydiaWeb.DiscoverLive.People do
   require Logger
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [start_async: 3]
+  import Phoenix.LiveView, only: [connected?: 1, push_patch: 2, start_async: 3]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Metadata
   alias Mydia.Metadata.People
   alias Mydia.Metadata.Structs.PersonPage
+
+  @doc """
+  Discover's `handle_params/3` for a People URL: `?type=person`, or an
+  18.beta.3 link that made People a scope of the title search
+  (`?q=...&scope=people`). The old link renders People straight away and, once
+  connected, has its URL patched onto the People type.
+  """
+  def handle_params(%{"scope" => "people", "q" => query}, socket) do
+    query = String.trim(query)
+
+    if connected?(socket),
+      do:
+        {:noreply,
+         push_patch(socket, to: "/discover?" <> URI.encode_query(params(query)), replace: true)},
+      else: handle_params(params(query), socket)
+  end
+
+  def handle_params(%{"type" => "person"} = params, socket) do
+    query = params["q"] || ""
+
+    # The title-only assigns are reset too: the template still reads them,
+    # and a value left from Movies (a filter, a See all source) must not leak.
+    socket =
+      socket
+      |> assign(:media_type, :person)
+      |> assign(:category, :trending)
+      |> assign(:categories, [])
+      |> assign(:search_query, query)
+      |> assign(:search_mode, query != "")
+      |> assign(:selected_genres, [])
+      |> assign(:selected_language, nil)
+      |> assign(:year_from, nil)
+      |> assign(:year_to, nil)
+      |> assign(:min_rating, nil)
+      |> assign(:sort_by, "popularity.desc")
+      |> assign(:source, nil)
+      |> assign(:regional_sources, [])
+      |> assign(:regional_rows, %{})
+      |> assign(:items, [])
+      |> assign(:visible_items, [])
+      |> assign(:has_more, false)
+      |> assign(:load_error, nil)
+      |> assign(:loading, true)
+      |> reset()
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:noreply, socket}
+  end
 
   @doc "Clears every people assign."
   def reset(socket) do
@@ -50,6 +99,10 @@ defmodule MydiaWeb.DiscoverLive.People do
     |> assign(:loading, true)
     |> fetch(1)
   end
+
+  @doc "The error state's Try again: reloads the first page, on People only."
+  def retry(%{assigns: %{media_type: :person}} = socket), do: load(socket)
+  def retry(socket), do: socket
 
   @doc "Starts loading the next page, unless one is out or there is none."
   def load_more(%{assigns: %{people_has_more: true, people_loading_more: false}} = socket) do

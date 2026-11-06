@@ -4,7 +4,7 @@
     <div>
       <h1 class="text-3xl font-bold">{gettext("Discover")}</h1>
       <p class="text-base-content/70 mt-1">
-        {page_subtitle(@media_type)}
+        {Messages.page_subtitle(@media_type)}
       </p>
     </div>
 
@@ -20,8 +20,8 @@
               type="text"
               name="q"
               value={@search_query}
-              placeholder={search_placeholder(@media_type)}
-              aria-label={search_placeholder(@media_type)}
+              placeholder={Messages.search_placeholder(@media_type)}
+              aria-label={Messages.search_placeholder(@media_type)}
               class="grow"
               autocomplete="off"
             />

@@ -24,7 +24,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.{People, RegionalRows}
+  alias MydiaWeb.DiscoverLive.{Messages, People, RegionalRows}
   alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
@@ -81,49 +81,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:ok, socket}
   end
 
-  # 18.beta.3 made People a scope of the title search (`?q=...&scope=people`).
-  # Such links now land on the People type.
   @impl true
-  def handle_params(%{"scope" => "people", "q" => query} = params, url, socket)
-      when is_binary(query) and query != "" do
-    if connected?(socket) do
-      {:noreply,
-       push_patch(socket, to: ~p"/discover?#{People.params(String.trim(query))}", replace: true)}
-    else
-      handle_params(Map.delete(params, "scope"), url, socket)
-    end
-  end
+  def handle_params(%{"type" => "person"} = params, _url, socket),
+    do: People.handle_params(params, socket)
 
-  def handle_params(%{"type" => "person"} = params, _url, socket) do
-    search_query = params["q"] || ""
-
-    socket =
-      socket
-      |> assign(:media_type, :person)
-      |> assign(:category, :trending)
-      |> assign(:categories, [])
-      |> assign(:search_query, search_query)
-      |> assign(:search_mode, search_query != "")
-      |> assign(:selected_genres, [])
-      |> assign(:selected_language, nil)
-      |> assign(:year_from, nil)
-      |> assign(:year_to, nil)
-      |> assign(:min_rating, nil)
-      |> assign(:sort_by, "popularity.desc")
-      |> assign(:source, nil)
-      |> assign(:regional_sources, [])
-      |> assign(:regional_rows, %{})
-      |> assign(:items, [])
-      |> assign_visible_items()
-      |> assign(:has_more, false)
-      |> assign(:load_error, nil)
-      |> assign(:loading, true)
-      |> People.reset()
-
-    if connected?(socket), do: send(self(), :load_data)
-
-    {:noreply, socket}
-  end
+  def handle_params(%{"scope" => "people", "q" => q} = params, _url, socket) when q != "",
+    do: People.handle_params(params, socket)
 
   def handle_params(params, _url, socket) do
     if connected?(socket) do
@@ -294,10 +257,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
-  def handle_event("retry_people_search", _params, %{assigns: %{media_type: :person}} = socket),
-    do: {:noreply, People.load(socket)}
-
-  def handle_event("retry_people_search", _params, socket), do: {:noreply, socket}
+  def handle_event("retry_people_search", _params, socket), do: {:noreply, People.retry(socket)}
 
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
@@ -1026,14 +986,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     assign(socket, :hide_owned, value)
   end
-
-  defp page_subtitle(:movie), do: gettext("Find new movies to add to your library")
-  defp page_subtitle(:tv_show), do: gettext("Find new TV shows to add to your library")
-  defp page_subtitle(:person), do: gettext("Find people and the titles they appear in")
-
-  defp search_placeholder(:movie), do: gettext("Search for a movie to add")
-  defp search_placeholder(:tv_show), do: gettext("Search for a show to add")
-  defp search_placeholder(:person), do: gettext("Search people")
 
   defp landing?(assigns),
     do: assigns.category == :home and is_nil(assigns.source) and not assigns.search_mode
