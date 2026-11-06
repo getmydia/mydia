@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/focus/focus_memory.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/palette.dart';
+import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
 import 'calendar_card.dart';
 import 'calendar_dates.dart';
@@ -16,9 +19,15 @@ class CalendarDayGroup extends StatelessWidget {
     required this.item,
     required this.today,
     required this.layout,
+    this.firstEntryIndex = 0,
   });
 
   final TimelineDay item;
+
+  /// The position of this day's first entry among every entry in the
+  /// timeline, so on a television each entry's [FocusMemoryItem] index
+  /// orders it against the other days' entries, not only its own.
+  final int firstEntryIndex;
 
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
@@ -87,23 +96,41 @@ class CalendarDayGroup extends StatelessWidget {
       ];
     }
 
+    final directional = InputCapabilities.directionalPrimary;
     return [
       for (final (index, entry) in item.entries.indexed) ...[
         if (index > 0) const SizedBox(height: TimelineLayout.entryGap),
-        SizedBox(
-          key: ValueKey('calendar-entry-${entry.ref.externalId}'),
-          height: layout.entryHeight(entry),
-          child: entry.isPlayable
-              ? CalendarCard(
-                  entry: entry,
-                  today: today,
-                  imageHeight: layout.cardImageHeight,
-                )
-              : CalendarRow(entry: entry, today: today),
+        _remembered(
+          directional,
+          entry,
+          firstEntryIndex + index,
+          SizedBox(
+            key: ValueKey('calendar-entry-${entry.ref.externalId}'),
+            height: layout.entryHeight(entry),
+            child: entry.isPlayable
+                ? CalendarCard(
+                    entry: entry,
+                    today: today,
+                    imageHeight: layout.cardImageHeight,
+                  )
+                : CalendarRow(entry: entry, today: today),
+          ),
         ),
       ],
     ];
   }
+
+  /// On a television, one item of the timeline's [FocusMemoryRegion], keyed
+  /// by the entry so a refetch that shifts the days still remembers it.
+  static Widget _remembered(
+    bool directional,
+    ItemSummary entry,
+    int index,
+    Widget child,
+  ) =>
+      directional
+          ? FocusMemoryItem(id: entry.ref, index: index, child: child)
+          : child;
 }
 
 class _Gutter extends StatelessWidget {

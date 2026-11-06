@@ -202,7 +202,11 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
   final updateState = ref.watch(updateProvider);
   final l10n = context.l10n;
   return [
-    const UpdateTrackSection(),
+    // Keyed because `SettingsSection` names its rows for TV focus memory by
+    // key, falling back to position. The retry row above it comes and goes
+    // with registration, so a positional id would hand the picker's place to
+    // the retry row.
+    const UpdateTrackSection(key: Key('update-track-row')),
     if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
       SettingsRow.action(
         key: const Key('check-for-updates-row'),

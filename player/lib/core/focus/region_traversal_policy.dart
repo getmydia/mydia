@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'focus_memory.dart';
+
 /// Called when a region has no candidate in [direction].
 ///
 /// Return true only if focus was actually moved. Returning true for a
@@ -73,24 +75,8 @@ class RegionTraversalPolicy extends ReadingOrderTraversalPolicy {
   /// sitting inside a popup route never reaches `onExit`: the press is left
   /// dead inside the modal on purpose, which beats teleporting behind it.
   bool _exit(FocusNode currentNode, TraversalDirection direction) {
-    if (_isInsidePopupRoute(currentNode)) return false;
+    if (isInsidePopupRoute(currentNode)) return false;
     return onExit?.call(direction) ?? false;
-  }
-
-  /// Whether [node] sits inside a popup route rather than on the page itself.
-  ///
-  /// `ModalRoute.of` walks up from [node]'s `context` to the nearest route.
-  /// `PopupRoute` is the common supertype of `ModalBottomSheetRoute`, the
-  /// route `showMenu` pushes, and dialog routes, while a go_router shell
-  /// destination is a `PageRoute`. Checking against `PopupRoute` therefore
-  /// tells "a modal is open above the page" from "this is the page", without
-  /// naming any one sheet or menu type. Answers false, rather than throwing,
-  /// when the node has no context or its context is no longer mounted, since
-  /// there is then nothing to ask.
-  static bool _isInsidePopupRoute(FocusNode node) {
-    final context = node.context;
-    if (context == null || !context.mounted) return false;
-    return ModalRoute.of(context) is PopupRoute;
   }
 
   /// Whether a left or right move from the scope's focused node has no

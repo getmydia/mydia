@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/sources/library.dart';
 import '../../../l10n/l10n.dart';
@@ -53,21 +54,27 @@ class AllServersGridScreen extends ConsumerWidget {
           SizedBox(
             height: 48,
             child: BackdropGroup(
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  for (final s in SharedSort.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GlassChip(
-                        chipKey: Key('all-grid-sort-${s.name}'),
-                        label: Text(_sortLabel(context.l10n, s)),
-                        selected: (state?.sort ?? SharedSort.title) == s,
-                        onSelected: (_) => notifier.setSort(s),
+              child: FocusMemoryRegion(
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    for (final (index, s) in SharedSort.values.indexed)
+                      FocusMemoryItem(
+                        id: s,
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GlassChip(
+                            chipKey: Key('all-grid-sort-${s.name}'),
+                            label: Text(_sortLabel(context.l10n, s)),
+                            selected: (state?.sort ?? SharedSort.title) == s,
+                            onSelected: (_) => notifier.setSort(s),
+                          ),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -100,6 +107,7 @@ class AllServersGridScreen extends ConsumerWidget {
                     // The Column above already reserved the bar's height.
                     scrollTopPadding: 0,
                     itemCount: items.length,
+                    itemId: (index) => items[index].ref,
                     itemBuilder: (context, index) => AllServersPoster(
                       item: items[index],
                       extraCopies: state.extraCopies[items[index].ref] ?? 0,

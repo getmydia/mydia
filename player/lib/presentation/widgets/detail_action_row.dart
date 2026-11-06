@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/focus/focus_memory.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/palette.dart';
@@ -75,67 +77,101 @@ class DetailActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final trailerUrl = this.trailerUrl;
-    final actions = <Widget>[
+    // Each action is named, and the television tier's focus memory keys the
+    // button by that name rather than its slot: buttons come and go while the
+    // page is open (Download and Info appear once the files load), and a slot
+    // would then name a different button than the one that had focus.
+    final actions = <(String, Widget)>[
       if (showWatched)
-        _ActionButton(
-          icon: watched
-              ? Icons.check_circle_rounded
-              : Icons.check_circle_outline_rounded,
-          label: context.l10n.commonWatched,
-          highlighted: watched,
-          highlightColor: AppColors.success,
-          onTap: onToggleWatched,
+        (
+          'watched',
+          _ActionButton(
+            icon: watched
+                ? Icons.check_circle_rounded
+                : Icons.check_circle_outline_rounded,
+            label: context.l10n.commonWatched,
+            highlighted: watched,
+            highlightColor: AppColors.success,
+            onTap: onToggleWatched,
+          ),
         ),
       if (showFavorite && onToggleFavorite != null)
-        _ActionButton(
-          icon: isFavorite
-              ? Icons.favorite_rounded
-              : Icons.favorite_border_rounded,
-          label: context.l10n.commonFavorite,
-          highlighted: isFavorite,
-          highlightColor: AppColors.error,
-          onTap: onToggleFavorite!,
+        (
+          'favorite',
+          _ActionButton(
+            icon: isFavorite
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
+            label: context.l10n.commonFavorite,
+            highlighted: isFavorite,
+            highlightColor: AppColors.error,
+            onTap: onToggleFavorite!,
+          ),
         ),
       if (showDownload && onDownload != null)
-        _ActionButton(
-          icon: isDownloaded
-              ? Icons.download_done_rounded
-              : Icons.download_rounded,
-          label: context.l10n.commonDownload,
-          highlighted: isDownloaded,
-          highlightColor: AppColors.success,
-          onTap: onDownload!,
+        (
+          'download',
+          _ActionButton(
+            icon: isDownloaded
+                ? Icons.download_done_rounded
+                : Icons.download_rounded,
+            label: context.l10n.commonDownload,
+            highlighted: isDownloaded,
+            highlightColor: AppColors.success,
+            onTap: onDownload!,
+          ),
         ),
       if (trailerUrl != null)
-        _ActionButton(
-          icon: Icons.smart_display_rounded,
-          label: context.l10n.detailTrailer,
-          highlighted: false,
-          highlightColor: palette.primary,
-          onTap: () => _openTrailer(context, trailerUrl),
+        (
+          'trailer',
+          _ActionButton(
+            icon: Icons.smart_display_rounded,
+            label: context.l10n.detailTrailer,
+            highlighted: false,
+            highlightColor: palette.primary,
+            onTap: () => _openTrailer(context, trailerUrl),
+          ),
         ),
       if (onShowMediaInfo != null)
-        _ActionButton(
-          icon: Icons.info_outline_rounded,
-          label: context.l10n.detailInfo,
-          highlighted: false,
-          highlightColor: palette.textPrimary,
-          onTap: onShowMediaInfo!,
+        (
+          'info',
+          _ActionButton(
+            icon: Icons.info_outline_rounded,
+            label: context.l10n.detailInfo,
+            highlighted: false,
+            highlightColor: palette.textPrimary,
+            onTap: onShowMediaInfo!,
+          ),
         ),
     ];
 
+    final directional = InputCapabilities.directionalPrimary;
     final row = Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
-        for (final action in actions)
-          compact
-              ? SizedBox(width: _kActionSlotWidth, child: action)
-              : Expanded(child: action),
+        for (final (index, (id, button)) in actions.indexed)
+          _slot(
+            directional
+                ? FocusMemoryItem(
+                    key: ValueKey('detail-action-$id'),
+                    id: id,
+                    index: index,
+                    child: button,
+                  )
+                : button,
+          ),
       ],
     );
+    // A button bar on the television tier: entering it from the rails below
+    // lands on the button that last had focus, else the first.
+    final bar = directional ? FocusMemoryRegion(child: row) : row;
     // One backdrop pass shared by every glass circle in the row.
-    return GlassStyle.of(context) ? BackdropGroup(child: row) : row;
+    return GlassStyle.of(context) ? BackdropGroup(child: bar) : bar;
   }
+
+  Widget _slot(Widget action) => compact
+      ? SizedBox(width: _kActionSlotWidth, child: action)
+      : Expanded(child: action);
 
   Future<void> _openTrailer(BuildContext context, String url) async {
     final uri = Uri.tryParse(url);

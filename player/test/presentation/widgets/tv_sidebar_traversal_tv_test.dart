@@ -19,9 +19,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/focus/focus_memory.dart';
 import 'package:player/core/focus/region_traversal_policy.dart';
 import 'package:player/core/focus/sidebar_focus_boundary.dart';
 import 'package:player/core/player/input_capabilities.dart';
+import 'package:player/presentation/widgets/horizontal_rail.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
 
 void main() {
@@ -106,10 +108,13 @@ void main() {
               // be exercised at all.
               Expanded(
                 child: FocusTraversalGroup(
+                  // Built as the shell's `_region` builds it, memory
+                  // callback included.
                   policy: RegionTraversalPolicy(
                     onExit: (direction) => direction == TraversalDirection.left
                         ? boundary.focusSidebar()
                         : false,
+                    requestFocusCallback: FocusMemory.requestFocus,
                   ),
                   child: FocusScope(
                     node: contentScope,
@@ -280,7 +285,7 @@ void main() {
       final upperCards = railNodes('upper');
       final lowerCards = railNodes('lower');
 
-      // Built the way ContentRail builds on the television tier: a
+      // Built the way HorizontalRail builds on the television tier: a
       // horizontal list whose cache keeps cards built well past each edge.
       // Those off-screen cards are what Flutter's search used to jump to.
       Widget rail(ScrollController controller, List<FocusNode> nodes) {
@@ -333,6 +338,89 @@ void main() {
       await tester.pump();
 
       expect(lowerCards.first.hasFocus, isTrue);
+    });
+
+    testWidgets(
+        'RIGHT from the sidebar returns to the remembered card after rows '
+        'were re-scrolled', (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      createShellNodes();
+
+      String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      ScrollPosition railPosition(String name) => tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byKey(ValueKey('rail-$name')),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position;
+
+      // The real rail, with item ids, so this is the rail the shell's screens
+      // build rather than a stand-in for it.
+      Widget rail(String name) {
+        final ids = [for (var i = 0; i < 12; i++) '$name-$i'];
+        return HorizontalRail(
+          key: ValueKey('rail-$name'),
+          itemCount: ids.length,
+          height: 120,
+          leftFadeKey: ValueKey('$name-left-fade'),
+          rightFadeKey: ValueKey('$name-right-fade'),
+          itemId: (i) => ids[i],
+          itemBuilder: (context, i) => Focus(
+            debugLabel: ids[i],
+            child: const SizedBox(width: 150, height: 100),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(
+        buildShell(
+          content: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [rail('upper'), rail('lower')],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      FocusManager.instance.rootScope.descendants
+          .singleWhere((n) => n.debugLabel == 'upper-4')
+          .requestFocus();
+      await tester.pumpAndSettle();
+      expect(focused(), 'upper-4');
+
+      // Into the lower rail, which has nothing remembered, so it lands on its
+      // first card, and from there LEFT is the rail's edge.
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(focused(), 'lower-0');
+      await press(LogicalKeyboardKey.arrowLeft);
+      expect(sidebarSelected.hasFocus, isTrue);
+
+      // While the viewer is in the sidebar, both rows are scrolled: the upper
+      // one to its end, so the card geometrically above lower-0 is no longer
+      // upper-4.
+      final upper = railPosition('upper');
+      upper.jumpTo(upper.maxScrollExtent);
+      final lower = railPosition('lower');
+      lower.jumpTo(lower.maxScrollExtent / 2);
+      await tester.pumpAndSettle();
+
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(focused(), 'lower-0');
+
+      // And the upper row still remembers its card through the shell's
+      // content-region policy.
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(focused(), 'upper-4');
     });
   }, skip: skipReason);
 }

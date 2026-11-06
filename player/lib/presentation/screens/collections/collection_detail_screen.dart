@@ -12,6 +12,7 @@ import '../../../core/downloads/collection_sync_service.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/summary_download_metadata.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -303,30 +304,41 @@ class CollectionDetailScreen extends ConsumerWidget {
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
+    // Not a BrowseGrid (see its class doc), so it joins the television focus
+    // rule by hand: the grid is a region and each poster an item keyed by
+    // its ref, so focus coming down from the header returns to the poster
+    // that left it. Both widgets are inert off the television tier.
+    return FocusMemoryRegion(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
 
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-              horizontalPadding, topPadding, horizontalPadding, bottomPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.58,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing + 4,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return SourcePoster(
-              key: ValueKey('source-poster-${item.ref.externalId}'),
-              item: item,
-              onTap: () => context.push(detailLocation(SourceTarget(item.ref))),
-            );
-          },
-        );
-      },
+          return GridView.builder(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, topPadding,
+                horizontalPadding, bottomPadding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.58,
+              crossAxisSpacing: cardSpacing,
+              mainAxisSpacing: cardSpacing + 4,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return FocusMemoryItem(
+                id: item.ref,
+                index: index,
+                child: SourcePoster(
+                  key: ValueKey('source-poster-${item.ref.externalId}'),
+                  item: item,
+                  onTap: () =>
+                      context.push(detailLocation(SourceTarget(item.ref))),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 

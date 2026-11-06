@@ -12,6 +12,7 @@ import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/orphan_download_sweep.dart';
+import '../../core/focus/focus_memory.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/layout/window_chrome_inset.dart';
@@ -703,6 +704,15 @@ class _AppShellState extends ConsumerState<AppShell>
   /// consulted — so the boundary would silently stop calling back and the
   /// sidebar would become unreachable again, with no test failing. Do not
   /// reconfigure these nodes.
+  ///
+  /// [FocusMemory.requestFocus] is what makes a row remember its place: every
+  /// move the policy makes lands through it, and a move entering a
+  /// `FocusMemoryRegion` from outside is redirected to that region's
+  /// remembered item (see `docs/tv-focus.md`). It changes only where inside a
+  /// region a move lands, never whether the move leaves the region, so the
+  /// `onExit` handoff above is untouched. Both regions get it because they are
+  /// built here; only the content region holds rows, so in the sidebar it
+  /// only delegates.
   static Widget _region({
     required bool enabled,
     required Widget child,
@@ -711,7 +721,10 @@ class _AppShellState extends ConsumerState<AppShell>
   }) {
     if (!enabled) return child;
     return FocusTraversalGroup(
-      policy: RegionTraversalPolicy(onExit: onExit),
+      policy: RegionTraversalPolicy(
+        onExit: onExit,
+        requestFocusCallback: FocusMemory.requestFocus,
+      ),
       child: FocusScope(node: node, child: child),
     );
   }

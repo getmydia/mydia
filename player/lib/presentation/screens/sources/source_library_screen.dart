@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/cache/invalidation_target.dart';
 import '../../../core/cache/watcher_registry.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/settings/settings_providers.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/media_source.dart' show SourceCapability;
@@ -355,6 +357,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
                 : BrowseGrid(
                     scrollTopPadding: scrollTopPadding,
                     itemCount: value.items.length,
+                    itemId: (index) => value.items[index].ref,
                     itemBuilder: (context, index) {
                       final item = value.items[index];
                       return SourcePoster(
@@ -392,42 +395,55 @@ class _ChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sorts = info.sortOptions.length;
     return BackdropGroup(
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final option in info.sortOptions)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GlassChip(
-                chipKey: Key('source-sort-${option.id}'),
-                label: Text(context.l10n.sortName(option.name)),
-                selected:
-                    (query.sortId ?? info.sortOptions.first.id) == option.id,
-                // A new sort starts in its own default direction.
-                onSelected: (_) => onChanged(BrowseQuery(
-                  sortId: option.id,
-                  filterIds: query.filterIds,
-                  pageSize: query.pageSize,
-                )),
+      // Sort and filter ids are separate namespaces, so each chip's memory
+      // id says which kind it is.
+      child: FocusMemoryRegion(
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final (index, option) in info.sortOptions.indexed)
+              FocusMemoryItem(
+                id: ('sort', option.id),
+                index: index,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GlassChip(
+                    chipKey: Key('source-sort-${option.id}'),
+                    label: Text(context.l10n.sortName(option.name)),
+                    selected: (query.sortId ?? info.sortOptions.first.id) ==
+                        option.id,
+                    // A new sort starts in its own default direction.
+                    onSelected: (_) => onChanged(BrowseQuery(
+                      sortId: option.id,
+                      filterIds: query.filterIds,
+                      pageSize: query.pageSize,
+                    )),
+                  ),
+                ),
               ),
-            ),
-          for (final filter in info.filterOptions)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GlassChip(
-                multiSelect: true,
-                chipKey: Key('source-filter-${filter.id}'),
-                label: Text(context.l10n.filterOptionName(filter)),
-                selected: query.filterIds.contains(filter.id),
-                onSelected: (on) => onChanged(query.copyWith(
-                  filterIds: on
-                      ? {...query.filterIds, filter.id}
-                      : ({...query.filterIds}..remove(filter.id)),
-                )),
+            for (final (index, filter) in info.filterOptions.indexed)
+              FocusMemoryItem(
+                id: ('filter', filter.id),
+                index: sorts + index,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GlassChip(
+                    multiSelect: true,
+                    chipKey: Key('source-filter-${filter.id}'),
+                    label: Text(context.l10n.filterOptionName(filter)),
+                    selected: query.filterIds.contains(filter.id),
+                    onSelected: (on) => onChanged(query.copyWith(
+                      filterIds: on
+                          ? {...query.filterIds, filter.id}
+                          : ({...query.filterIds}..remove(filter.id)),
+                    )),
+                  ),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -442,13 +458,31 @@ class _ItemList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    return ListView.builder(
+    final directional = InputCapabilities.directionalPrimary;
+    final list = ListView.builder(
       key: const Key('source-library-list'),
       padding: EdgeInsets.fromLTRB(horizontalPadding, scrollTopPadding,
           horizontalPadding, DockInsets.bottomOf(context)),
       itemCount: items.length,
-      itemBuilder: (context, index) => _ListRow(item: items[index]),
+      itemBuilder: (context, index) {
+        final row = _ListRow(item: items[index]);
+        // Keyed by the item, as the grid view's posters are, so coming back
+        // from the chip bar returns to the row that left rather than the
+        // row nearest the chip.
+        return directional
+            ? FocusMemoryItem(id: items[index].ref, index: index, child: row)
+            : row;
+      },
     );
+    // A one-column list: a first entry lands on the first row on screen,
+    // not on one built above the viewport.
+    return directional
+        ? FocusMemoryRegion(
+            entry: FocusMemoryEntry.firstVisible,
+            debugLabel: 'source-library-list',
+            child: list,
+          )
+        : list;
   }
 }
 

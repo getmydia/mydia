@@ -14,8 +14,10 @@ import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/scrub_controller.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/scrub_bubble.dart';
+import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
 /// A [PlatformPlayer] that never touches native mpv/web bindings, counting
 /// play/pause toggles. This repo keeps one fake per file.
@@ -75,7 +77,10 @@ void main() {
       player.dispose();
     });
 
-    Future<void> pumpChrome(WidgetTester tester) async {
+    Future<void> pumpChrome(
+      WidgetTester tester, {
+      bool episodeNavigation = false,
+    }) async {
       // The 1280x720 canvas TvCanvas gives a television.
       tester.view.physicalSize = const Size(1280, 720);
       tester.view.devicePixelRatio = 1.0;
@@ -93,6 +98,8 @@ void main() {
               title: 'Harbor Lights',
               scrub: scrub,
               scrubberFocusNode: scrubberFocus,
+              onPreviousEpisode: episodeNavigation ? () {} : null,
+              onNextEpisode: episodeNavigation ? () {} : null,
             ),
           ),
         ),
@@ -163,6 +170,39 @@ void main() {
       expect(commits, [const Duration(minutes: 10, seconds: 10)]);
       await finish(tester);
     });
+
+    /// The key of the `ControlButton` holding focus. Every OSD control
+    /// shares the `ControlButton` debug label, so the key tells them apart.
+    Key? focusedControlKey() => FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<ControlButton>()
+        ?.key;
+
+    // With the OSD hidden, LEFT or RIGHT starts a scrub and focuses the bar
+    // directly, so the control bar above it has never held focus and has
+    // nothing to remember. UP must still land on play/pause, the centred
+    // control, and not on the lowest-indexed button: OK there would switch
+    // episode or seek back instead of resuming.
+    for (final episodeNavigation in [false, true]) {
+      testWidgets(
+          'UP after a scrub that bypassed the control bar lands on '
+          'play/pause (episode navigation: $episodeNavigation)',
+          (tester) async {
+        await pumpChrome(tester, episodeNavigation: episodeNavigation);
+        expect(
+          find.byKey(TransportSurface.previousEpisodeKey),
+          episodeNavigation ? findsOneWidget : findsNothing,
+        );
+        scrubberFocus.requestFocus();
+        await tester.pump();
+        await press(tester, LogicalKeyboardKey.arrowRight);
+        expect(scrub.active, isTrue);
+
+        await press(tester, LogicalKeyboardKey.arrowUp);
+
+        expect(focusedControlKey(), TransportSurface.playPauseKey);
+        await finish(tester);
+      });
+    }
 
     testWidgets('Play/Pause on the bar commits, then toggles playback',
         (tester) async {
