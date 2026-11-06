@@ -13,6 +13,14 @@ data:
         access: proxy
         isDefault: true
         editable: false
+      # Deployed by this directory, unlike VictoriaMetrics, so a clean
+      # install has a working source. Dashboards choose via ${datasource}.
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus.monitoring.svc:9090
+        access: proxy
+        isDefault: false
+        editable: false
 ---
 apiVersion: v1
 kind: ConfigMap
