@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/connection/connection_summary.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
@@ -77,6 +78,22 @@ class SettingsScreen extends ConsumerWidget {
     );
     final horizontal = MediaQuery.sizeOf(context).width >= 600 ? 26.0 : 14.0;
 
+    // On a television the list is one focus memory region: a move back into
+    // it from the title bar returns to the row that left it. Each section is
+    // given its place so its rows order against the others' (see
+    // SettingsFocusOrder); the update card sits above them all.
+    final directional = InputCapabilities.directionalPrimary;
+    Widget section(int order, Widget child) =>
+        directional ? SettingsFocusOrder(order: order, child: child) : child;
+    Widget list(Widget child) => directional
+        ? FocusMemoryRegion(
+            entry: FocusMemoryEntry.firstVisible,
+            debugLabel: 'settings',
+            child: child,
+          )
+        : child;
+    const updateCard = UpdateCard();
+
     // Settings sits in the shell's content column, whose leading inset the
     // shell already narrows by the sidebar width, so its own `WindowTitleRow`
     // (via `WindowTitleBar`, below) draws into the band directly rather than
@@ -91,7 +108,7 @@ class SettingsScreen extends ConsumerWidget {
           // An explicit padding turns off ListView's own MediaQuery bottom
           // inset, so the dock's height has to be reserved here by hand.
           body: SettingsInitialFocus(
-            child: ListView(
+            child: list(ListView(
               padding: EdgeInsets.fromLTRB(
                 horizontal,
                 20,
@@ -112,24 +129,34 @@ class SettingsScreen extends ConsumerWidget {
                             username: settings?.username ?? '',
                             serverUrl: settings?.serverUrl ?? '',
                           ),
-                        const UpdateCard(),
-                        PlaybackSettingsSection(
-                          settings: settings,
-                          failed: settingsAsync.hasError,
+                        if (directional)
+                          const FocusMemoryItem(
+                            id: 'update-card',
+                            index: 0,
+                            child: updateCard,
+                          )
+                        else
+                          updateCard,
+                        section(
+                          1,
+                          PlaybackSettingsSection(
+                            settings: settings,
+                            failed: settingsAsync.hasError,
+                          ),
                         ),
                         const SizedBox(height: 18),
-                        const AppearanceSettingsSection(),
+                        section(2, const AppearanceSettingsSection()),
                         const SizedBox(height: 18),
-                        _ManageSection(connection: summary),
+                        section(3, _ManageSection(connection: summary)),
                         const SizedBox(height: 18),
-                        const SourcesSettingsSection(),
+                        section(4, const SourcesSettingsSection()),
                         VersionFooter(version: currentVersion),
                       ],
                     ),
                   ),
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),

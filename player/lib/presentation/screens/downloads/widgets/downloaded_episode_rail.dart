@@ -25,6 +25,9 @@ class DownloadedEpisodeRail extends StatelessWidget {
   Widget build(BuildContext context) {
     return HorizontalRail(
       itemCount: episodes.length,
+      // The episode's own id, so on a television the rail returns to the
+      // same episode after one before it is deleted.
+      itemId: (index) => episodes[index].mediaId,
       height: Breakpoints.getDownloadedEpisodeRailHeight(context),
       leftFadeKey: ValueKey('downloaded-rail-$seasonNumber-left-fade'),
       rightFadeKey: ValueKey('downloaded-rail-$seasonNumber-right-fade'),

@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
@@ -59,6 +61,16 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
   /// the end, so `maxScrollExtent` can be far short when a jump is requested.
   double _maxOffset = 0;
 
+  /// Counts jumps, to key the television focus region with.
+  ///
+  /// A jump is the viewer asking for a different day, and the entry the
+  /// region remembers is usually far from it, scrolled out of the build
+  /// cache. Remembering it would send the next DOWN from the bar to whichever
+  /// built entry sits nearest its old index, at the edge of the cache rather
+  /// than on the day asked for. A new key gives the region fresh state, so
+  /// that DOWN lands on the first entry on screen instead.
+  int _jumps = 0;
+
   @override
   void initState() {
     super.initState();
@@ -110,6 +122,7 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
     if (day == null || geometry == null || controller == null) return;
     if (!controller.hasClients) return;
 
+    if (InputCapabilities.directionalPrimary) setState(() => _jumps++);
     controller.animateTo(
       math.min(geometry.offsetOf(day), _maxOffset),
       duration: _jumpDuration,
@@ -146,6 +159,37 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
         final items = buildTimeline(widget.entries, widget.today);
         final geometry = TimelineGeometry(items, layout);
         _geometry = geometry;
+        final directional = InputCapabilities.directionalPrimary;
+        // Where each day's entries start among all the timeline's entries,
+        // for the television focus items' indices.
+        final firstEntryIndex = <int>[];
+        var entryCount = 0;
+        for (final item in items) {
+          firstEntryIndex.add(entryCount);
+          if (item is TimelineDay) entryCount += item.entries.length;
+        }
+
+        final list = SliverVariedExtentList.builder(
+          itemCount: items.length,
+          itemExtentBuilder: (index, _) =>
+              index < items.length ? geometry.extentAt(index) : null,
+          itemBuilder: (context, index) => Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: layout.contentWidth,
+              child: switch (items[index]) {
+                final MonthDivider divider =>
+                  CalendarMonthRule(month: divider.month),
+                final TimelineDay day => CalendarDayGroup(
+                    item: day,
+                    today: widget.today,
+                    layout: layout,
+                    firstEntryIndex: firstEntryIndex[index],
+                  ),
+              },
+            ),
+          ),
+        );
         _maxOffset = math.max(
           0,
           widget.scrollTopPadding +
@@ -167,26 +211,17 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
             SliverToBoxAdapter(
               child: SizedBox(height: widget.scrollTopPadding),
             ),
-            SliverVariedExtentList.builder(
-              itemCount: items.length,
-              itemExtentBuilder: (index, _) =>
-                  index < items.length ? geometry.extentAt(index) : null,
-              itemBuilder: (context, index) => Align(
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: layout.contentWidth,
-                  child: switch (items[index]) {
-                    final MonthDivider divider =>
-                      CalendarMonthRule(month: divider.month),
-                    final TimelineDay day => CalendarDayGroup(
-                        item: day,
-                        today: widget.today,
-                        layout: layout,
-                      ),
-                  },
-                ),
-              ),
-            ),
+            // A one-column list: a first entry from the bar lands on the
+            // first entry on screen, not on a past day built above it.
+            if (directional)
+              FocusMemoryRegion(
+                key: ValueKey(_jumps),
+                entry: FocusMemoryEntry.firstVisible,
+                debugLabel: 'calendar-timeline',
+                child: list,
+              )
+            else
+              list,
             SliverToBoxAdapter(
               child: SizedBox(
                 height: _footerHeight,

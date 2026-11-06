@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/player/input_capabilities.dart';
+import '../../widgets/focus_highlight.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
@@ -90,6 +93,7 @@ class DownloadsScreen extends ConsumerWidget {
     final downloadedMediaAsync = ref.watch(downloadedMediaProvider);
     final downloadQueueAsync = ref.watch(downloadQueueProvider);
     final failedDownloadsAsync = ref.watch(failedDownloadsProvider);
+    final directional = InputCapabilities.directionalPrimary;
 
     // Downloads uses the calm static backdrop (no per-title artwork).
     publishBackdropSource(ref, BackdropSource.none);
@@ -238,24 +242,36 @@ class DownloadsScreen extends ConsumerWidget {
                   builder: (context, constraints) {
                     final crossAxisCount =
                         _calculateCrossAxisCount(constraints.crossAxisExtent);
+                    final grid = SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: 0.48,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 16,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final group = sortedItems[index];
+                          final item = _buildGridItem(context, ref, group,
+                              serverLabel: serverLabel(group));
+                          return directional
+                              ? _tvGridItem(context, ref, group, index, item)
+                              : item;
+                        },
+                        childCount: sortedItems.length,
+                      ),
+                    );
                     return SliverPadding(
                       padding: const EdgeInsets.all(16),
-                      sliver: SliverGrid(
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          childAspectRatio: 0.48,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 16,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final group = sortedItems[index];
-                            return _buildGridItem(context, ref, group,
-                                serverLabel: serverLabel(group));
-                          },
-                          childCount: sortedItems.length,
-                        ),
-                      ),
+                      // The page scrolls as one, so a first visit lands on
+                      // the first title on screen, not one scrolled past.
+                      sliver: directional
+                          ? FocusMemoryRegion(
+                              entry: FocusMemoryEntry.firstVisible,
+                              debugLabel: 'downloads-grid',
+                              child: grid,
+                            )
+                          : grid,
                     );
                   },
                 ),
@@ -326,26 +342,79 @@ class DownloadsScreen extends ConsumerWidget {
         SizedBox(
           height: 160,
           child: HorizontalWheelScroll(
-            builder: (context, controller) => ListView.builder(
-              controller: controller,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: failed.length,
-              itemBuilder: (context, index) {
-                final task = failed[index];
-                return Container(
-                  key: ValueKey('failed-download-${task.id}'),
-                  width: 300,
-                  margin: const EdgeInsets.only(right: 12),
-                  child: _buildFailedDownloadCard(context, ref, task),
-                );
-              },
-            ),
+            builder: (context, controller) {
+              final directional = InputCapabilities.directionalPrimary;
+              final list = ListView.builder(
+                controller: controller,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: failed.length,
+                itemBuilder: (context, index) {
+                  final task = failed[index];
+                  final card = Container(
+                    key: ValueKey('failed-download-${task.id}'),
+                    width: 300,
+                    margin: const EdgeInsets.only(right: 12),
+                    child: _buildFailedDownloadCard(context, ref, task),
+                  );
+                  return directional
+                      ? FocusMemoryItem(id: task.id, index: index, child: card)
+                      : card;
+                },
+              );
+              // A row: entering it from the grid below returns to the card
+              // that left it.
+              return directional
+                  ? FocusMemoryRegion(
+                      debugLabel: 'downloads-failed', child: list)
+                  : list;
+            },
           ),
         ),
       ],
     );
   }
+
+  /// What a tap on a grid title does: a series opens its episodes, an active
+  /// movie offers to cancel, a downloaded movie plays.
+  Future<void> _openGroup(
+      BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    final activeTask = group.activeTasks.firstOrNull;
+    if (group.type == GroupType.series) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (context) => SeriesDownloadsScreen(
+            sourceId: group.sourceId,
+            showId: group.itemId,
+            showTitle: group.title,
+            showPosterUrl: group.posterUrl,
+            backdropUrl: group.backdropUrl,
+          ),
+        ),
+      );
+    } else if (activeTask != null) {
+      await _showCancelDialog(context, ref, activeTask);
+    } else if (group.downloads.isNotEmpty) {
+      await context.push<void>(downloadedPlayLocation(group.downloads.first));
+    }
+  }
+
+  /// One title of the grid on a television: a focus stop (the
+  /// `GestureDetector` alone takes no focus, so a remote could not reach the
+  /// grid at all) and an item of the grid's [FocusMemoryRegion], keyed by the
+  /// download group.
+  Widget _tvGridItem(BuildContext context, WidgetRef ref, DownloadGroup group,
+          int index, Widget child) =>
+      FocusMemoryItem(
+        key: ValueKey('download-group-${group.id}'),
+        id: group.id,
+        index: index,
+        child: FocusHighlight(
+          onActivate: () => _openGroup(context, ref, group),
+          borderRadius: BorderRadius.circular(12),
+          child: child,
+        ),
+      );
 
   Widget _buildGridItem(
       BuildContext context, WidgetRef ref, DownloadGroup group,
@@ -370,28 +439,7 @@ class DownloadsScreen extends ConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: () async {
-        if (group.type == GroupType.series) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (context) => SeriesDownloadsScreen(
-                sourceId: group.sourceId,
-                showId: group.itemId,
-                showTitle: group.title,
-                showPosterUrl: group.posterUrl,
-                backdropUrl: group.backdropUrl,
-              ),
-            ),
-          );
-        } else {
-          if (activeTask != null) {
-            await _showCancelDialog(context, ref, activeTask);
-          } else if (group.downloads.isNotEmpty) {
-            await context
-                .push<void>(downloadedPlayLocation(group.downloads.first));
-          }
-        }
-      },
+      onTap: () => _openGroup(context, ref, group),
       onLongPress: () => _showItemOptions(context, ref, group),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1095,6 +1143,7 @@ class DownloadsScreen extends ConsumerWidget {
                 color: palette.surfaceVariant.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
+                  key: const ValueKey('downloads-storage-settings'),
                   borderRadius: BorderRadius.circular(8),
                   onTap: () => _showStorageSettings(context, ref, status),
                   child: Padding(

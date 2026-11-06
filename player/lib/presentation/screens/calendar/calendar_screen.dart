@@ -62,6 +62,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       actions: [
         if (entries.isNotEmpty) _monthButton(entries, today),
         TextButton(
+          key: const ValueKey('calendar-today-button'),
           onPressed: () => _jumps.request(today),
           child: Text(context.l10n.calendarToday),
         ),

@@ -64,7 +64,18 @@ with its own `Focus` or `InkWell` needs nothing else, and a control nested in
 the card (an episode card's watched menu) is never picked over the card. For a
 one-column vertical list pass `entry: FocusMemoryEntry.firstVisible`, so a
 first visit lands on the top on-screen row rather than a cached row above the
-viewport.
+viewport. On screen means the row's centre is inside the view, less the
+`MediaQuery` padding, and inside every enclosing scroll viewport. The padding
+matters for a list that scrolls under a translucent app bar
+(`extendBodyBehindAppBar`), whose rows behind the bar are laid out inside the
+viewport but cannot be read.
+
+A list whose sections are built by separate widgets (Settings) cannot number
+its rows from one builder. `SettingsFocusOrder` gives each section its place,
+and the section turns its rows into items indexed by section then row. A list
+the viewer can jump around in (the calendar's Today button and month sheet)
+keys its region by a jump counter, so a jump starts it with nothing
+remembered rather than returning to an entry far from the day asked for.
 
 ## Pages of sections: `FocusMemoryColumn`
 

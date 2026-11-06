@@ -8,8 +8,9 @@ enum FocusMemoryEntry {
   /// The registered item with the lowest index.
   first,
 
-  /// The registered item with the lowest index whose focus target is at least
-  /// partly on screen, falling back to [first] when none is.
+  /// The registered item with the lowest index whose focus target is on
+  /// screen (its centre is: a row peeking out by a few pixels is not one the
+  /// viewer can read), falling back to [first] when none is.
   ///
   /// For one-column vertical lists, where the lowest built index can sit a
   /// whole cache extent above the viewport and landing there would scroll the
@@ -230,21 +231,31 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
     }
   }
 
-  /// Whether [node]'s rect overlaps what the viewer can see.
+  /// Whether the centre of [node]'s rect is inside what the viewer can see.
   ///
   /// The view alone is not enough: a list that does not fill the screen
   /// keeps cached items laid out beyond its own viewport, which can still be
   /// inside the view's rectangle while clipped from sight. So the visible
   /// area is the view intersected with every enclosing scrollable's viewport.
-  /// `Rect.overlaps` is strict, so an item whose edge only touches the
-  /// boundary counts as off screen.
+  ///
+  /// The view is also inset by the node's `MediaQuery` padding. A list that
+  /// scrolls under a translucent app bar (a `Scaffold` with
+  /// `extendBodyBehindAppBar`, which reports the bar to its body as top
+  /// padding) keeps the row above the first full one laid out behind the
+  /// bar, inside the viewport. That row is not something the viewer can
+  /// read, and landing there would pick it over the row they can.
+  ///
+  /// The centre rather than any overlap for the same reason: the calendar
+  /// leaves the last row above the first full one peeking a pixel out from
+  /// under its bar, which a strict overlap still counts as on screen.
   static bool _isOnScreen(FocusNode node) {
     final context = node.context;
     if (context == null || !context.mounted) return false;
     final view = View.maybeOf(context);
     var bounds = view == null
         ? Rect.largest
-        : Offset.zero & (view.physicalSize / view.devicePixelRatio);
+        : (MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero).deflateRect(
+            Offset.zero & (view.physicalSize / view.devicePixelRatio));
     var scrollable = Scrollable.maybeOf(context);
     while (scrollable != null) {
       final box = scrollable.context.findRenderObject();
@@ -253,7 +264,7 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
       }
       scrollable = Scrollable.maybeOf(scrollable.context);
     }
-    return node.rect.overlaps(bounds);
+    return bounds.contains(node.rect.center);
   }
 
   @override
