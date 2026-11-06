@@ -623,6 +623,7 @@
     config_open={@add_config != nil}
     add_event="add_selected_item"
     request_event="request_selected_item"
+    person_event="show_person"
   >
     <:rail>
       <DiscoverComponents.media_rail
@@ -639,6 +640,19 @@
       />
     </:rail>
   </.live_component>
+
+  <%!-- Person popup, opened from the cast panel or the dialog's cast. Sits
+       below the detail modal, so a title opened from its posters stacks on
+       top; Escape belongs to whichever layer is uppermost. --%>
+  <MydiaWeb.PersonComponents.person_modal
+    id="person-modal"
+    person={@selected_person}
+    stub={@person_stub}
+    titles={@person_titles}
+    loading={@person_loading}
+    error={@person_error}
+    escape_enabled={is_nil(@selected_item) and is_nil(@add_config)}
+  />
 
   <MydiaWeb.AddMediaComponents.add_config_modal
     config={@add_config}

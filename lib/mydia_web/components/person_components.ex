@@ -183,12 +183,23 @@ defmodule MydiaWeb.PersonComponents do
   renders greyed with a tooltip, since there is nobody to open.
 
   A host that passes `event` must handle it.
+
+  `layout` is `"card"` (the default, the title preview's avatar card) or
+  `"row"`, a small avatar beside "name as character", the media page's compact
+  cast panel.
+
+  `id_prefix` names the button's DOM id, `"<id_prefix>-<tmdb_person_id>"`. A page
+  that renders its own cast next to the title preview's (the media page) can
+  show one actor in both, so it must pass a prefix of its own or the two
+  buttons share an id.
   """
   attr :member, :any,
     required: true,
     doc: "anything with `name`, `character`, `profile_path` and `tmdb_person_id`"
 
   attr :event, :string, default: nil, doc: "the host event to emit on click, nil for no link"
+  attr :layout, :string, default: "card", values: ["card", "row"]
+  attr :id_prefix, :string, default: "cast-person"
 
   def cast_person(assigns) do
     member = assigns.member
@@ -203,30 +214,41 @@ defmodule MydiaWeb.PersonComponents do
     ~H"""
     <%= cond do %>
       <% is_nil(@event) -> %>
-        <div class="text-center">
-          <.cast_person_body member={@member} profile_path={@profile_path} character={@character} />
+        <div class={cast_person_class(@layout)}>
+          <.cast_person_body
+            member={@member}
+            profile_path={@profile_path}
+            character={@character}
+            layout={@layout}
+          />
         </div>
       <% is_nil(@person_id) -> %>
         <div
-          class="text-center opacity-60 tooltip"
+          class={[cast_person_class(@layout), "opacity-60 tooltip"]}
           data-tip={gettext("Refresh metadata to link this person")}
-        >
-          <.cast_person_body member={@member} profile_path={@profile_path} character={@character} />
-        </div>
-      <% true -> %>
-        <button
-          id={"cast-person-#{@person_id}"}
-          type="button"
-          phx-click={@event}
-          phx-value-id={@person_id}
-          phx-value-name={@member.name}
-          phx-value-profile_path={@profile_path}
-          class="group text-center cursor-pointer"
         >
           <.cast_person_body
             member={@member}
             profile_path={@profile_path}
             character={@character}
+            layout={@layout}
+          />
+        </div>
+      <% true -> %>
+        <button
+          id={"#{@id_prefix}-#{@person_id}"}
+          type="button"
+          phx-click={@event}
+          phx-value-id={@person_id}
+          phx-value-name={@member.name}
+          phx-value-profile_path={@profile_path}
+          class={[cast_person_class(@layout), "group cursor-pointer"]}
+        >
+          <.cast_person_body
+            member={@member}
+            profile_path={@profile_path}
+            character={@character}
+            layout={@layout}
             hover
           />
         </button>
@@ -234,10 +256,42 @@ defmodule MydiaWeb.PersonComponents do
     """
   end
 
+  defp cast_person_class("row"), do: "flex w-full items-center gap-2 text-left"
+  defp cast_person_class(_card), do: "text-center"
+
   attr :member, :any, required: true
   attr :profile_path, :string, default: nil
   attr :character, :string, default: nil
+  attr :layout, :string, required: true
   attr :hover, :boolean, default: false
+
+  defp cast_person_body(%{layout: "row"} = assigns) do
+    ~H"""
+    <%= if @profile_path do %>
+      <img
+        src={ImageUrl.profile_url(@profile_path)}
+        alt={@member.name}
+        class={[
+          "w-6 h-6 rounded-full object-cover shrink-0",
+          @hover && "transition group-hover:ring-2 group-hover:ring-primary"
+        ]}
+      />
+    <% else %>
+      <div class={[
+        "w-6 h-6 rounded-full bg-base-300 flex items-center justify-center shrink-0",
+        @hover && "transition group-hover:ring-2 group-hover:ring-primary"
+      ]}>
+        <.icon name="hero-user" class="w-3 h-3 text-base-content/30" />
+      </div>
+    <% end %>
+    <span class="text-sm min-w-0">
+      <span class={["font-medium", @hover && "group-hover:text-primary"]}>{@member.name}</span>
+      <span :if={@character} class="text-base-content/60 text-xs">
+        {gettext("as %{character}", character: @character)}
+      </span>
+    </span>
+    """
+  end
 
   defp cast_person_body(assigns) do
     ~H"""
