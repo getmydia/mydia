@@ -394,6 +394,51 @@ defmodule MydiaWeb.DiscoverComponents do
   defp library_path(:tv_show, id), do: "/tv/#{id}"
 
   @doc """
+  The infinite-scroll sentinel under a Discover grid.
+
+  It asks for the next page about a screen and a half before the end. The host
+  replies to `event` before the page is fetched and sets `loading_more`, so
+  `data-has-more` is false while one is in flight; flipping back to true when
+  it lands is what makes the hook ask again. A failed page keeps it false until
+  Retry, which emits the same `event`.
+  """
+  attr :id, :string, required: true
+  attr :has_more, :boolean, required: true
+  attr :loading_more, :boolean, required: true
+  attr :error?, :boolean, required: true
+  attr :event, :string, default: "load_more"
+
+  def load_more_sentinel(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      phx-hook="LoadMoreSentinel"
+      data-event={@event}
+      data-has-more={to_string(@has_more and not @loading_more and not @error?)}
+      class="flex justify-center py-8"
+    >
+      <%= cond do %>
+        <% @error? -> %>
+          <div id={"#{@id}-error"} class="flex items-center gap-3 text-sm text-base-content/60">
+            {gettext("Couldn't load more results.")}
+            <button
+              id={"#{@id}-retry"}
+              type="button"
+              class="btn btn-ghost btn-sm"
+              phx-click={@event}
+            >
+              <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
+            </button>
+          </div>
+        <% @has_more -> %>
+          <span class="loading loading-spinner loading-md text-primary"></span>
+        <% true -> %>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
   Renders Discover's People search results: round headshots with the name
   and a known-for line, each a button emitting `event` with the person's
   `id`, `name` and `profile_path`, the params the person popup opens with.

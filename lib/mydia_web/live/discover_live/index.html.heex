@@ -362,40 +362,12 @@
           <% end %>
         </div>
 
-        <%!--
-          Asks for the next page about a screen and a half before the end.
-          load_more replies before the page is fetched, so data-has-more is
-          false while one is in flight; flipping back to true when it lands
-          is what makes the hook ask again. A failed page keeps it false
-          until Retry.
-        --%>
-        <div
+        <.load_more_sentinel
           id="discover-load-more"
-          phx-hook="LoadMoreSentinel"
-          data-has-more={to_string(@has_more and not @loading_more and is_nil(@load_error))}
-          class="flex justify-center py-8"
-        >
-          <%= cond do %>
-            <% @load_error != nil -> %>
-              <div
-                id="discover-load-more-error"
-                class="flex items-center gap-3 text-sm text-base-content/60"
-              >
-                {gettext("Couldn't load more results.")}
-                <button
-                  id="discover-load-more-retry"
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  phx-click="load_more"
-                >
-                  <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
-                </button>
-              </div>
-            <% @has_more -> %>
-              <span class="loading loading-spinner loading-md text-primary"></span>
-            <% true -> %>
-          <% end %>
-        </div>
+          has_more={@has_more}
+          loading_more={@loading_more}
+          error?={@load_error != nil}
+        />
     <% end %>
   </div>
 
