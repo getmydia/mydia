@@ -9,6 +9,7 @@ import '../../../core/cache/watcher_registry.dart';
 import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/settings/settings_providers.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/media_source.dart' show SourceCapability;
@@ -457,13 +458,31 @@ class _ItemList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    return ListView.builder(
+    final directional = InputCapabilities.directionalPrimary;
+    final list = ListView.builder(
       key: const Key('source-library-list'),
       padding: EdgeInsets.fromLTRB(horizontalPadding, scrollTopPadding,
           horizontalPadding, DockInsets.bottomOf(context)),
       itemCount: items.length,
-      itemBuilder: (context, index) => _ListRow(item: items[index]),
+      itemBuilder: (context, index) {
+        final row = _ListRow(item: items[index]);
+        // Keyed by the item, as the grid view's posters are, so coming back
+        // from the chip bar returns to the row that left rather than the
+        // row nearest the chip.
+        return directional
+            ? FocusMemoryItem(id: items[index].ref, index: index, child: row)
+            : row;
+      },
     );
+    // A one-column list: a first entry lands on the first row on screen,
+    // not on one built above the viewport.
+    return directional
+        ? FocusMemoryRegion(
+            entry: FocusMemoryEntry.firstVisible,
+            debugLabel: 'source-library-list',
+            child: list,
+          )
+        : list;
   }
 }
 

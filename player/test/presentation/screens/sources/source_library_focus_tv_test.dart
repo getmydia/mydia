@@ -105,5 +105,22 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowDown);
       expectFocusIn(poster(3));
     });
+
+    testWidgets('the list view is re-entered on the row that left it',
+        (tester) async {
+      await pumpLibrary(tester);
+      await focusIn(tester, const Key('source-view-toggle'));
+      await press(tester, LogicalKeyboardKey.enter);
+      Key row(int n) => ValueKey('source-list-m$n');
+      expect(find.byKey(row(1)), findsOneWidget);
+
+      await focusIn(tester, row(2));
+      await focusIn(tester, unwatched);
+
+      // Geometry alone lands on the row nearest the chip, the first one.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expectFocusIn(row(2));
+    });
   }, skip: tvSkipReason);
 }
