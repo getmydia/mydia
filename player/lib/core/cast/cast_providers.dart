@@ -177,8 +177,23 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
     probe: (nodeId) => probeMydiaNodeState(transport, nodeId),
   );
   ref.onDispose(() => unawaited(targets.dispose()));
+  forgetDismissalsOnStop(ref, targets);
   return targets;
 });
+
+/// A dismissed banner lasts one viewing: once its player is seen stopped,
+/// the next time it plays is news again.
+///
+/// Tied to [targets]' own lifetime, not [ambientPlayingProvider]'s: that one
+/// is disposed whenever the bar has no room for a banner (local playback, a
+/// cast of this device's own), yet the app-resume sweep in
+/// `ambient_lifecycle.dart` still runs then, and a stop it sees must count.
+void forgetDismissalsOnStop(Ref ref, AmbientTargets targets) {
+  final stopped = targets.stopped.listen(
+    (nodeId) => ref.read(ambientDismissalsProvider.notifier).forgetNode(nodeId),
+  );
+  ref.onDispose(stopped.cancel);
+}
 
 /// The targets [ambientTargetsProvider] currently holds, for
 /// `CastMiniController`'s ambient banner.
@@ -197,13 +212,6 @@ final ambientPlayingProvider =
     yield const [];
     return;
   }
-
-  // A dismissed banner lasts one viewing: once its player is seen stopped,
-  // the next time it plays is news again.
-  final stopped = targets.stopped.listen(
-    (nodeId) => ref.read(ambientDismissalsProvider.notifier).forgetNode(nodeId),
-  );
-  ref.onDispose(stopped.cancel);
 
   unawaited(targets.sweep());
   final resweep = Timer.periodic(

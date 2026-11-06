@@ -649,8 +649,10 @@ void main() {
     });
   });
 
-  group('ambientPlayingProvider dismissals', () {
-    test('forgets a dismissal once that player is found stopped', () async {
+  group('forgetDismissalsOnStop', () {
+    test(
+        'forgets a dismissal once that player is found stopped, even with '
+        'the banner provider idle', () async {
       String? answer = 'The Lantern Keepers';
       final targets = AmbientTargets(
         rosterSource: () async => const ['node-tv'],
@@ -673,15 +675,19 @@ void main() {
               ),
       );
       final c = ProviderContainer(overrides: [
-        ambientTargetsProvider.overrideWithValue(targets),
+        ambientTargetsProvider.overrideWith((ref) {
+          forgetDismissalsOnStop(ref, targets);
+          return targets;
+        }),
       ]);
       addTearDown(() async {
         c.dispose();
         await targets.dispose();
       });
-      final sub = c.listen(ambientPlayingProvider, (_, __) {});
-      addTearDown(sub.close);
-      await Future<void>.delayed(Duration.zero);
+      // Deliberately no listener on ambientPlayingProvider: the bar is busy
+      // (local playback, say), yet the app-resume sweep below still sees
+      // the player stop, and that has to count.
+      c.read(ambientTargetsProvider);
 
       c
           .read(ambientDismissalsProvider.notifier)
