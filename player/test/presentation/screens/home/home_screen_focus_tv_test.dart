@@ -40,6 +40,9 @@ void main() {
     Key cw(int n) => ValueKey('home-continue-${server.id.value}-cw$n');
     Key movie(int n) => ValueKey('source-poster-mv$n');
     const recentMovies = Key('home-recent-movies');
+    const continueWatching = Key('home-continue-watching');
+    const heroPlay = Key('source-home-hero-play');
+    const heroMore = Key('source-home-hero-more');
 
     late List<ItemSummary> resuming;
     late TvShell shell;
@@ -97,6 +100,44 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
     }
 
+    // Ported from home_screen_test.dart, where it never ran in CI. The row
+    // heading is a focus stop of its own, so UP from the first card reaches
+    // Continue Watching's heading first and the hero one press later.
+    testWidgets('UP from the first rail card reaches the hero Play button',
+        (tester) async {
+      await pumpHome(tester);
+      await focusIn(tester, cw(0));
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectOnHeading(tester, continueWatching);
+      // The heading spans the screen, so the geometric search alone picks the
+      // hero button nearer its centre (More). The hero's button bar sends a
+      // first entry to Play.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expectFocusIn(heroPlay);
+    });
+
+    testWidgets('the hero buttons are re-entered on the one that left',
+        (tester) async {
+      await pumpHome(tester);
+      await focusIn(tester, heroMore);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectOnHeading(tester, continueWatching);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(cw(0));
+      // A sideways move clears Flutter's own up/down history.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expectFocusIn(cw(1));
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectOnHeading(tester, continueWatching);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expectFocusIn(heroMore);
+    });
+
     testWidgets('a row entered for the first time lands on its first card',
         (tester) async {
       await pumpHome(tester);
@@ -114,9 +155,14 @@ void main() {
       await focusIn(tester, cw(5));
       await downIntoMovies(tester);
       expectFocusIn(movie(0));
+      // Over and back, so the UP below is not a replay of Flutter's own
+      // up/down history.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expectFocusIn(movie(0));
 
       // Shift Continue Watching under the viewer, keeping cw5 built.
-      railPosition(tester, const Key('home-continue-watching')).jumpTo(200);
+      railPosition(tester, continueWatching).jumpTo(200);
       await tester.pumpAndSettle();
 
       await upIntoContinueWatching(tester);

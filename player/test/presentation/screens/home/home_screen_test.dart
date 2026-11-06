@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/watcher_registry.dart';
-import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/cache/source_codecs.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
@@ -27,7 +25,6 @@ import 'package:player/presentation/screens/home/home_screen.dart';
 import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 import 'package:player/presentation/screens/sources/home_header.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
-import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -537,37 +534,6 @@ void main() {
       await t.pumpAndSettle();
       expect(Uri.parse(pushed.last).path, '$base/player/e2');
     });
-
-    // Requires --dart-define=MYDIA_FORCE_TV=true; CI runs it in the
-    // television-tier step.
-    testWidgets(
-      'TV: Up from the first rail card focuses the hero play button',
-      (t) async {
-        await pumpHome(
-            t,
-            [
-              FakeResumingSource(resuming: [cw1])
-            ],
-            scope: const OneServer(fakeSourceId));
-        final card = find.byKey(sourceCard('m1'));
-        Focus.of(t.element(find.descendant(
-                of: card, matching: find.byKey(FocusHighlight.ringKey))))
-            .requestFocus();
-        await t.pump();
-        await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-        await t.pumpAndSettle();
-        var onPlay = false;
-        FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
-          if (e.widget.key == const Key('source-home-hero-play')) {
-            onPlay = true;
-            return false;
-          }
-          return true;
-        });
-        expect(onPlay, isTrue);
-      },
-      skip: !InputCapabilities.directionalPrimary,
-    );
 
     testWidgets('a stored answer paints at once while the fetch is pending',
         (t) async {
