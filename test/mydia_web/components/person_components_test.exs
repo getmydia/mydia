@@ -1,0 +1,115 @@
+defmodule MydiaWeb.PersonComponentsTest do
+  use ExUnit.Case, async: true
+
+  import Phoenix.LiveViewTest
+
+  alias Mydia.Metadata.Structs.{Person, PersonCredit, SearchResult}
+  alias MydiaWeb.PersonComponents
+
+  defp credit(id, type \\ :movie),
+    do: %PersonCredit{
+      tmdb_id: id,
+      media_type: type,
+      title: "Title #{id}",
+      year: 2020,
+      poster_path: "/p#{id}.jpg"
+    }
+
+  defp title(id, type \\ :movie, owned \\ false),
+    do:
+      %SearchResult{
+        provider_id: Integer.to_string(id),
+        provider: :tmdb,
+        media_type: type,
+        title: "Title #{id}"
+      }
+      |> Map.put(:in_library, owned)
+
+  defp person(attrs \\ []) do
+    struct!(%Person{tmdb_id: 1, name: "Test Person", biography: "A bio."}, attrs)
+  end
+
+  defp render_modal(assigns) do
+    assigns = Map.merge(%{id: "person-modal", escape_enabled: true}, Map.new(assigns))
+    render_component(&PersonComponents.person_modal/1, assigns) |> LazyHTML.from_fragment()
+  end
+
+  defp text(doc, selector),
+    do: doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
+
+  defp count(doc, selector), do: doc |> LazyHTML.query(selector) |> Enum.count()
+
+  test "renders name, bio and the owned count" do
+    p = person(movie_credits: [credit(1), credit(2), credit(3)])
+    titles = [title(1, :movie, true), title(2, :movie, true), title(3)]
+    doc = render_modal(person: p, titles: titles)
+
+    assert text(doc, "#person-modal-name") == "Test Person"
+    assert text(doc, "#person-bio") == "A bio."
+    assert text(doc, "#person-owned-count") == "2 in your library"
+  end
+
+  test "an owned poster carries the check badge and an unowned one does not" do
+    p = person(movie_credits: [credit(1), credit(2)])
+    doc = render_modal(person: p, titles: [title(1, :movie, true), title(2)])
+
+    assert count(doc, "#person-credit-movie-1 .badge-success") == 1
+    assert count(doc, "#person-credit-movie-2 .badge-success") == 0
+  end
+
+  test "only twelve posters are visible of thirty, with a Show all button" do
+    ids = Enum.to_list(1..30)
+    p = person(movie_credits: Enum.map(ids, &credit/1))
+    doc = render_modal(person: p, titles: Enum.map(ids, &title/1))
+
+    assert count(doc, "#person-movies button[id^=person-credit-movie-]") == 30
+    assert count(doc, "#person-movies button[id^=person-credit-movie-]:not([data-extra])") == 12
+    assert text(doc, "#person-movies-show-all") == "Show all 30"
+  end
+
+  test "no TV credits means no shows section" do
+    doc = render_modal(person: person(movie_credits: [credit(1)]), titles: [title(1)])
+
+    assert count(doc, "#person-movies") == 1
+    assert count(doc, "#person-shows") == 0
+  end
+
+  test "a credit the filter removed is not rendered" do
+    p = person(movie_credits: [credit(1), credit(2)])
+    doc = render_modal(person: p, titles: [title(1)])
+
+    assert count(doc, "#person-credit-movie-1") == 1
+    assert count(doc, "#person-credit-movie-2") == 0
+  end
+
+  test "no biography renders no bio block" do
+    doc = render_modal(person: person(biography: nil), titles: [])
+
+    assert count(doc, "#person-bio-block") == 0
+  end
+
+  test "an error renders the retry button and the stub's name" do
+    doc =
+      render_modal(
+        person: nil,
+        stub: %{id: 9, name: "Stub Name", profile_path: nil},
+        error: :boom
+      )
+
+    assert count(doc, "#person-modal-error") == 1
+    assert count(doc, "#person-modal-retry") == 1
+    assert text(doc, "#person-modal-error") =~ "Stub Name"
+  end
+
+  test "escape binding follows escape_enabled" do
+    p = person()
+
+    assert render_modal(person: p, escape_enabled: true)
+           |> LazyHTML.query("#person-modal")
+           |> LazyHTML.attribute("phx-window-keydown") == ["close_person"]
+
+    assert render_modal(person: p, escape_enabled: false)
+           |> LazyHTML.query("#person-modal")
+           |> LazyHTML.attribute("phx-window-keydown") == []
+  end
+end
