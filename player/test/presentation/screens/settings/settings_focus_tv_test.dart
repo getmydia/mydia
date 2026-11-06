@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -26,6 +27,7 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
@@ -61,12 +63,30 @@ class _FakeUpdateNotifier extends UpdateNotifier {
       );
 }
 
+/// An installation that offers a release track picker, as a sideloaded
+/// Android TV build does.
+class _TrackedUpdateNotifier extends UpdateNotifier {
+  @override
+  UpdateState build() => const UpdateState(
+        currentVersion: '0.1.0',
+        manualCheck: ManualCheckBehaviour.checksOnly,
+        availableTracks: {UpdateTrack.stable, UpdateTrack.beta},
+      );
+}
+
 class _IdleRegistrations extends NodeRegistrations {
   @override
   Map<SourceId, RegistrationStatus> build() => const {};
 
   @override
   void retryAll() {}
+
+  /// A registration failing while Settings is open, which inserts the retry
+  /// row under the remote-control switch.
+  void fail() => state = {
+        const SourceId('instance'):
+            const RegistrationFailed('offline', 1, null),
+      };
 }
 
 var _boxCounter = 0;
@@ -75,7 +95,10 @@ void main() {
   group('Settings focus memory (requires MYDIA_FORCE_TV=true)', () {
     late TvShell shell;
 
-    Future<void> pumpSettings(WidgetTester tester) async {
+    Future<void> pumpSettings(
+      WidgetTester tester, {
+      UpdateNotifier Function() update = _FakeUpdateNotifier.new,
+    }) async {
       // An in-memory box, as settings_screen_test.dart explains: a
       // disk-backed one leaves writes the fake-async zone never drives.
       final box = await Hive.openBox<dynamic>(
@@ -90,7 +113,7 @@ void main() {
         overrides: [
           settingsControllerProvider.overrideWith(_FakeSettingsController.new),
           p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
-          updateProvider.overrideWith(_FakeUpdateNotifier.new),
+          updateProvider.overrideWith(update),
           nodeRegistrationsProvider.overrideWith(_IdleRegistrations.new),
           remoteControlSettingsProvider
               .overrideWith((ref) async => RemoteControlSettings(box: box)),
@@ -167,6 +190,26 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectOnRow(tester, 4);
+    });
+
+    testWidgets(
+        'a retry row appearing above the track picker does not take its place',
+        (tester) async {
+      await pumpSettings(tester, update: _TrackedUpdateNotifier.new);
+      const stable = Key('update-track-option-stable');
+      await focusIn(tester, stable);
+      await focusIn(tester, cast);
+
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(SettingsScreen)));
+      (container.read(nodeRegistrationsProvider.notifier) as _IdleRegistrations)
+          .fail();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expectFocusIn(stable);
     });
   }, skip: tvSkipReason);
 }
