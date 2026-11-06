@@ -62,26 +62,7 @@ final class CastBarPlaying extends CastBarState {
 /// probe holds live connections, and only runs while something is showing
 /// the bar.
 final castBarStateProvider = Provider.autoDispose<CastBarState?>((ref) {
-  final capabilities = ref.watch(castCapabilitiesProvider);
-  // `capabilities` describes only Chromecast/DLNA platform entitlement.
-  // A Mydia target needs none of that — it is reached over the
-  // already-connected p2p host, not the platform's local-network
-  // discovery — so `castDiscoveryProvider` and `cast_device_picker.dart`
-  // both already keep it ungated for the same reason (see
-  // `castDiscoveryProvider`'s own dartdoc in `cast_providers.dart`).
-  // Gating the whole bar on `capabilities.any` alone means this never
-  // mounts on a build with no other capability at all — Flutter Web,
-  // `ambient_lifecycle.dart` names as this app's primary deployment —
-  // which would make both the ambient "Playing on X" banner and the
-  // pull-to-local button unreachable there.
-  final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
-  if (!capabilities.any && !hasMydia) return null;
-
-  // Gate on a Mydia server before touching anything else in the cast stack.
-  // Building the cast chain before a server is stored does work for
-  // nothing: you cannot be casting before you have a server, so there is
-  // nothing to show.
-  if (!ref.watch(hasMydiaProvider)) return null;
+  if (!_castBarEnabled(ref)) return null;
 
   final session = ref.watch(castSessionProvider).value;
   final target = ref.watch(castTargetProvider);
@@ -111,6 +92,30 @@ final castBarStateProvider = Provider.autoDispose<CastBarState?>((ref) {
   return CastBarPlaying(session);
 });
 
+/// Whether this build and this account can show a cast bar at all.
+bool _castBarEnabled(Ref ref) {
+  final capabilities = ref.watch(castCapabilitiesProvider);
+  // `capabilities` describes only Chromecast/DLNA platform entitlement.
+  // A Mydia target needs none of that — it is reached over the
+  // already-connected p2p host, not the platform's local-network
+  // discovery — so `castDiscoveryProvider` and `cast_device_picker.dart`
+  // both already keep it ungated for the same reason (see
+  // `castDiscoveryProvider`'s own dartdoc in `cast_providers.dart`).
+  // Gating the whole bar on `capabilities.any` alone means this never
+  // mounts on a build with no other capability at all — Flutter Web,
+  // `ambient_lifecycle.dart` names as this app's primary deployment —
+  // which would make both the ambient "Playing on X" banner and the
+  // pull-to-local button unreachable there.
+  final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
+  if (!capabilities.any && !hasMydia) return false;
+
+  // Gate on a Mydia server before touching anything else in the cast stack.
+  // Building the cast chain before a server is stored does work for
+  // nothing: you cannot be casting before you have a server, so there is
+  // nothing to show.
+  return ref.watch(hasMydiaProvider);
+}
+
 /// "Playing on Living Room" for a paired player already mid-watch that
 /// nobody asked this device to track — from [ambientPlayingProvider]
 /// (`AmbientTargets`, `core/remote/ambient_targets.dart`). Null when there
@@ -123,15 +128,8 @@ final castBarStateProvider = Provider.autoDispose<CastBarState?>((ref) {
 /// picker. Shows the first held target that is neither this device nor
 /// dismissed.
 CastBarAmbient? _ambient(Ref ref) {
-  final held = ref.watch(ambientPlayingProvider).value ?? const [];
   final dismissed = ref.watch(ambientDismissalsProvider);
-  final selfNodeId =
-      ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
-
-  final ambientTarget = held
-      .where((t) =>
-          selfNodeId == null ||
-          t.device.id.toLowerCase() != selfNodeId.toLowerCase())
+  final ambientTarget = _otherPlayers(ref)
       .where((t) => !dismissed.contains(AmbientDismissal.of(t)))
       .firstOrNull;
   if (ambientTarget == null) return null;
@@ -147,6 +145,35 @@ CastBarAmbient? _ambient(Ref ref) {
     deviceName: names[ambientTarget.device.id] ?? ambientTarget.device.id,
   );
 }
+
+/// The held ambient targets other than this device itself.
+Iterable<AmbientTarget> _otherPlayers(Ref ref) {
+  final held = ref.watch(ambientPlayingProvider).value ?? const [];
+  final selfNodeId =
+      ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
+  return held.where((t) =>
+      selfNodeId == null ||
+      t.device.id.toLowerCase() != selfNodeId.toLowerCase());
+}
+
+/// True when the bar is empty only because the user hid a "Playing on X"
+/// banner that is still current. `CastButton` draws a dot for it; opening
+/// the picker (`showCastDevicePicker`) clears the dismissals and brings the
+/// banner back.
+///
+/// Same gates as the ambient branch of [castBarStateProvider]: while this
+/// device has a cast of its own the banner would not show even if restored,
+/// and [ambientPlayingProvider] is not watched.
+final castBarAmbientHiddenProvider = Provider.autoDispose<bool>((ref) {
+  if (!_castBarEnabled(ref)) return false;
+  if (ref.watch(castSessionProvider).value != null) return false;
+  if (ref.watch(castTargetProvider) != null) return false;
+  if (ref.watch(localPlaybackActiveProvider)) return false;
+
+  final dismissed = ref.watch(ambientDismissalsProvider);
+  return _otherPlayers(ref)
+      .any((t) => dismissed.contains(AmbientDismissal.of(t)));
+});
 
 /// The words the cast bar uses, shared with the native accessory so the two
 /// cannot drift.

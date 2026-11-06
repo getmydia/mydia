@@ -415,4 +415,71 @@ void main() {
       });
     });
   });
+
+  group('AmbientTargets.stopped', () {
+    test('reports every node a sweep found not playing', () async {
+      final scripted = ScriptedProbe({
+        'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+        'node-den': null,
+      });
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv', 'node-den']),
+        probe: scripted.call,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      await targets.sweep();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, ['node-den']);
+    });
+
+    test('reports a held node once a refresh finds it stopped', () {
+      fakeAsync((async) {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+        final stopped = <String>[];
+        targets.stopped.listen(stopped.add);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        expect(stopped, isEmpty);
+
+        scripted.update({'node-tv': null});
+        async.elapse(const Duration(seconds: 5));
+
+        expect(stopped, ['node-tv']);
+
+        targets.dispose();
+      });
+    });
+
+    test('does not report anything when the app backgrounds', () async {
+      final scripted = ScriptedProbe({
+        'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+      });
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv']),
+        probe: scripted.call,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      await targets.sweep();
+      targets.onBackground();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, isEmpty,
+          reason: 'dropping connections on background says nothing about '
+              'whether the player stopped');
+    });
+  });
 }

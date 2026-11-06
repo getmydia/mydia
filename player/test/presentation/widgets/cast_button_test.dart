@@ -9,6 +9,7 @@ import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
 import 'package:player/presentation/widgets/cast_button.dart';
 
 const _device = CastDevice(
@@ -204,5 +205,41 @@ void main() {
       expect(iconOf(tester).icon, isNot(Icons.cast_connected),
           reason: '$state must not render the connected glyph');
     }
+  });
+
+  group('hidden Playing on banner', () {
+    for (final glass in [false, true]) {
+      testWidgets('shows a dot while one is hidden (glass: $glass)',
+          (tester) async {
+        await tester.pumpWidget(ProviderScope(
+          overrides: [
+            castCapabilitiesProvider
+                .overrideWithValue(const CastCapabilities.full()),
+            castBarAmbientHiddenProvider.overrideWithValue(true),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: CastButton(onPressed: () {}, glass: glass),
+            ),
+          ),
+        ));
+        await tester.pump();
+
+        expect(
+            find.byKey(const Key('cast-button-ambient-dot')), findsOneWidget);
+      });
+    }
+
+    testWidgets('no dot when nothing is hidden', (tester) async {
+      await pumpButton(
+        tester,
+        capabilities: const CastCapabilities.full(),
+        overrides: [castBarAmbientHiddenProvider.overrideWithValue(false)],
+      );
+
+      expect(find.byKey(const Key('cast-button-ambient-dot')), findsNothing);
+    });
   });
 }

@@ -9,6 +9,7 @@ import '../../presentation/screens/player/session/source_cast_binding_impl.dart'
 import '../p2p/local_proxy_service.dart';
 import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
+import '../remote/ambient_dismissals.dart';
 import '../remote/ambient_targets.dart';
 import '../remote/merged_roster.dart';
 import '../router/legacy_routes.dart';
@@ -196,6 +197,13 @@ final ambientPlayingProvider =
     yield const [];
     return;
   }
+
+  // A dismissed banner lasts one viewing: once its player is seen stopped,
+  // the next time it plays is news again.
+  final stopped = targets.stopped.listen(
+    (nodeId) => ref.read(ambientDismissalsProvider.notifier).forgetNode(nodeId),
+  );
+  ref.onDispose(stopped.cancel);
 
   unawaited(targets.sweep());
   final resweep = Timer.periodic(

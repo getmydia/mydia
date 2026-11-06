@@ -126,6 +126,18 @@ class AmbientTargets {
     yield* _updates.stream;
   }
 
+  /// Node IDs a probe just answered as not playing (idle, unreachable or
+  /// timed out), from [sweep] and from the held-target refresh. Never from
+  /// [onBackground]: dropping connections says nothing about the player,
+  /// so an empty [playing] list is no evidence that anything stopped.
+  Stream<String> get stopped => _stopped.stream;
+  final _stopped = StreamController<String>.broadcast();
+
+  void _reportStopped(Iterable<String> nodeIds) {
+    if (_stopped.isClosed) return;
+    nodeIds.forEach(_stopped.add);
+  }
+
   /// Probes every rostered device once, in parallel, and holds a connection
   /// to whichever ones answered playing — capped at [_maxHeldTargets],
   /// taking the first three in roster order — then starts polling those.
@@ -156,6 +168,10 @@ class AmbientTargets {
     // here would repopulate `_held` and restart the poll timer behind a
     // backgrounded app — exactly the state this guard exists to prevent.
     if (_backgrounded) return;
+    _reportStopped([
+      for (final entry in probed)
+        if (entry.value == null) entry.key,
+    ]);
     _setHeld(_takePlaying(Map.fromEntries(probed)));
     _restartPolling();
   }
@@ -182,6 +198,7 @@ class AmbientTargets {
   Future<void> dispose() async {
     _pollTimer?.cancel();
     _pollTimer = null;
+    await _stopped.close();
     await _updates.close();
   }
 
@@ -241,6 +258,10 @@ class AmbientTargets {
       final snapshot = await probe(target.device.id);
       return MapEntry(target, snapshot);
     }));
+    _reportStopped([
+      for (final entry in probed)
+        if (entry.value == null) entry.key.device.id,
+    ]);
     final refreshed = <AmbientTarget>[
       for (final entry in probed)
         if (entry.value != null)

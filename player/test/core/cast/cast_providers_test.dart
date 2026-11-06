@@ -11,12 +11,14 @@ import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/cast/multicast_lock.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/native/lib.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/mydia_test_source.dart';
@@ -644,6 +646,58 @@ void main() {
       expect(c.read(isCastingProvider), isTrue,
           reason: 'a lost session with media must keep the cast UI up so '
               'Reconnect is meaningful; Stop is what tears it down');
+    });
+  });
+
+  group('ambientPlayingProvider dismissals', () {
+    test('forgets a dismissal once that player is found stopped', () async {
+      String? answer = 'The Lantern Keepers';
+      final targets = AmbientTargets(
+        rosterSource: () async => const ['node-tv'],
+        probe: (nodeId) async => answer == null
+            ? null
+            : FlutterPlaybackSnapshot(
+                state: FlutterPlaybackState.playing,
+                title: 'The Lantern Keepers',
+                positionMs: BigInt.zero,
+                durationMs: BigInt.from(60000),
+                muted: false,
+                audioTracks: const [],
+                subtitleTracks: const [],
+                capabilities: const FlutterTargetCapabilities(
+                  volume: true,
+                  trackSelection: true,
+                  nextPrevious: false,
+                ),
+                sequence: BigInt.one,
+              ),
+      );
+      final c = ProviderContainer(overrides: [
+        ambientTargetsProvider.overrideWithValue(targets),
+      ]);
+      addTearDown(() async {
+        c.dispose();
+        await targets.dispose();
+      });
+      final sub = c.listen(ambientPlayingProvider, (_, __) {});
+      addTearDown(sub.close);
+      await Future<void>.delayed(Duration.zero);
+
+      c
+          .read(ambientDismissalsProvider.notifier)
+          .dismissKey(const AmbientDismissal('node-tv', 'The Lantern Keepers'));
+
+      // Still playing: the dismissal holds.
+      await targets.sweep();
+      expect(c.read(ambientDismissalsProvider), isNotEmpty);
+
+      answer = null;
+      await targets.sweep();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(c.read(ambientDismissalsProvider), isEmpty,
+          reason: 'the next time that player starts, even the same title, '
+              'the banner is new information again');
     });
   });
 
