@@ -119,10 +119,14 @@ defmodule MydiaWeb.PersonComponents do
                     <button
                       id="person-bio-toggle"
                       type="button"
-                      phx-click={JS.toggle_class("line-clamp-4", to: "#person-bio")}
+                      phx-click={
+                        JS.toggle_class("line-clamp-4", to: "#person-bio")
+                        |> JS.toggle_class("hidden", to: "#person-bio-toggle > span")
+                      }
                       class="link link-hover text-sm"
                     >
-                      {gettext("Read more")}
+                      <span>{gettext("Read more")}</span>
+                      <span class="hidden">{gettext("Show less")}</span>
                     </button>
                   </div>
                 <% end %>
@@ -326,7 +330,8 @@ defmodule MydiaWeb.PersonComponents do
 
   # "All / In library" and "Show all" are client-side classes on the section, so
   # neither costs a server round trip. Selecting "In library" also expands the
-  # section, since the owned titles can sit past the first twelve.
+  # section, since the owned titles can sit past the first twelve; an expanded
+  # section hides "Show all", and the toggle marks whichever filter is on.
   defp credit_section(assigns) do
     assigns =
       assigns
@@ -345,7 +350,7 @@ defmodule MydiaWeb.PersonComponents do
             id={"#{@id}-filter-all"}
             type="button"
             phx-click={JS.remove_class("owned-only", to: "##{@id}")}
-            class="btn btn-xs join-item"
+            class="btn btn-xs join-item group-[:not(.owned-only)]/credits:btn-active"
           >
             {gettext("All")}
           </button>
@@ -353,7 +358,7 @@ defmodule MydiaWeb.PersonComponents do
             id={"#{@id}-filter-owned"}
             type="button"
             phx-click={JS.add_class("owned-only expanded", to: "##{@id}")}
-            class="btn btn-xs join-item"
+            class="btn btn-xs join-item group-[.owned-only]/credits:btn-active"
           >
             {gettext("In library")}
           </button>
@@ -395,8 +400,8 @@ defmodule MydiaWeb.PersonComponents do
         :if={@total > initial_visible()}
         id={"#{@id}-show-all"}
         type="button"
-        phx-click={JS.add_class("expanded", to: "##{@id}") |> JS.hide(to: "##{@id}-show-all")}
-        class="btn btn-ghost btn-sm mt-2"
+        phx-click={JS.add_class("expanded", to: "##{@id}")}
+        class="btn btn-ghost btn-sm mt-2 group-[.expanded]/credits:hidden"
       >
         {gettext("Show all %{count}", count: @total)}
       </button>

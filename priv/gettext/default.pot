@@ -436,7 +436,7 @@ msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:217
 #: lib/mydia_web/components/layouts.ex:560
-#: lib/mydia_web/components/person_components.ex:158
+#: lib/mydia_web/components/person_components.ex:162
 #: lib/mydia_web/controllers/page_html/home.html.heex:12
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:124
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:94
@@ -2732,7 +2732,7 @@ msgstr ""
 msgid "Airing Today"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:350
+#: lib/mydia_web/components/person_components.ex:355
 #: lib/mydia_web/live/activity_live/index.ex:178
 #: lib/mydia_web/live/activity_live/index.html.heex:60
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:106
@@ -5969,7 +5969,7 @@ msgstr ""
 msgid "Load more"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:151
+#: lib/mydia_web/components/person_components.ex:155
 #: lib/mydia_web/live/components/trending_detail_modal.ex:290
 #, elixir-autogen, elixir-format
 msgid "Loading details..."
@@ -9001,6 +9001,7 @@ msgstr[1] ""
 msgid "Show fewer"
 msgstr ""
 
+#: lib/mydia_web/components/person_components.ex:129
 #: lib/mydia_web/live/devices_live/components.ex:153
 #: lib/mydia_web/live/media_live/show/components.ex:1205
 #, elixir-autogen, elixir-format
@@ -10608,7 +10609,7 @@ msgstr ""
 msgid "any condition (OR)"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:290
+#: lib/mydia_web/components/person_components.ex:294
 #, elixir-autogen, elixir-format
 msgid "as %{character}"
 msgstr ""
@@ -15579,7 +15580,7 @@ msgstr ""
 msgid "In 90 days"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:358
+#: lib/mydia_web/components/person_components.ex:363
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:640
 #: lib/mydia_web/live/admin_import_lists_live/items_components.ex:49
 #, elixir-autogen, elixir-format
@@ -21570,14 +21571,14 @@ msgstr ""
 msgid "Show filters"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:459
+#: lib/mydia_web/components/person_components.ex:464
 #, elixir-autogen, elixir-format
 msgid "%{count} credit"
 msgid_plural "%{count} credits"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/person_components.ex:432
+#: lib/mydia_web/components/person_components.ex:437
 #, elixir-autogen, elixir-format
 msgid "%{count} ep"
 msgid_plural "%{count} eps"
@@ -21591,42 +21592,42 @@ msgid_plural "%{count} in your library"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/person_components.ex:449
+#: lib/mydia_web/components/person_components.ex:454
 #, elixir-autogen, elixir-format
 msgid "Born %{year}"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:443
+#: lib/mydia_web/components/person_components.ex:448
 #, elixir-autogen, elixir-format
 msgid "Born %{year} in %{place}"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:452
+#: lib/mydia_web/components/person_components.ex:457
 #, elixir-autogen, elixir-format
 msgid "Born in %{place}"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:138
+#: lib/mydia_web/components/person_components.ex:142
 #, elixir-autogen, elixir-format
 msgid "Could not load details for %{name}."
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:125
+#: lib/mydia_web/components/person_components.ex:128
 #, elixir-autogen, elixir-format
 msgid "Read more"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:401
+#: lib/mydia_web/components/person_components.ex:406
 #, elixir-autogen, elixir-format
 msgid "Show all %{count}"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:165
+#: lib/mydia_web/components/person_components.ex:169
 #, elixir-autogen, elixir-format
 msgid "Shows"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:145
+#: lib/mydia_web/components/person_components.ex:149
 #, elixir-autogen, elixir-format
 msgid "Try again"
 msgstr ""
@@ -21646,7 +21647,7 @@ msgstr ""
 msgid "People"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:228
+#: lib/mydia_web/components/person_components.ex:232
 #, elixir-autogen, elixir-format
 msgid "Refresh metadata to link this person"
 msgstr ""

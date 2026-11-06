@@ -67,6 +67,25 @@ defmodule MydiaWeb.PersonComponentsTest do
     assert text(doc, "#person-movies-show-all") == "Show all 30"
   end
 
+  # "In library" expands the section without touching the button, so the
+  # button must hide on the section's class, not on its own click.
+  test "Show all hides with any expanded section and the filter marks its state" do
+    ids = Enum.to_list(1..30)
+    p = person(movie_credits: Enum.map(ids, &credit/1))
+    doc = render_modal(person: p, titles: [title(1, :movie, true) | Enum.map(2..30, &title/1)])
+
+    [show_all_class] = LazyHTML.attribute(LazyHTML.query(doc, "#person-movies-show-all"), "class")
+    assert show_all_class =~ "group-[.expanded]/credits:hidden"
+
+    [all_class] = LazyHTML.attribute(LazyHTML.query(doc, "#person-movies-filter-all"), "class")
+
+    [owned_class] =
+      LazyHTML.attribute(LazyHTML.query(doc, "#person-movies-filter-owned"), "class")
+
+    assert all_class =~ "group-[:not(.owned-only)]/credits:btn-active"
+    assert owned_class =~ "group-[.owned-only]/credits:btn-active"
+  end
+
   test "no TV credits means no shows section" do
     doc = render_modal(person: person(movie_credits: [credit(1)]), titles: [title(1)])
 
@@ -80,6 +99,16 @@ defmodule MydiaWeb.PersonComponentsTest do
 
     assert count(doc, "#person-credit-movie-1") == 1
     assert count(doc, "#person-credit-movie-2") == 0
+  end
+
+  test "the bio toggle swaps its label between Read more and Show less" do
+    doc = render_modal(person: person(), titles: [])
+
+    assert text(doc, "#person-bio-toggle > span:not(.hidden)") == "Read more"
+    assert text(doc, "#person-bio-toggle > span.hidden") == "Show less"
+
+    [click] = LazyHTML.attribute(LazyHTML.query(doc, "#person-bio-toggle"), "phx-click")
+    assert click =~ "#person-bio-toggle > span"
   end
 
   test "no biography renders no bio block" do
