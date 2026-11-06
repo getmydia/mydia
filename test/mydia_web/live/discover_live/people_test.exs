@@ -127,6 +127,19 @@ defmodule MydiaWeb.DiscoverLive.PeopleTest do
     assert has_element?(view, "#discover-person-503")
   end
 
+  test "a titles page still queued when People opens is dropped", %{conn: conn, bypass: bypass} do
+    stub_search(bypass)
+
+    {:ok, view, _html} = live(conn, ~p"/discover?type=person&q=#{@query}")
+    render_async(view)
+
+    # Hide-owned and restricted viewers chain {:load_page, ...} messages; one
+    # can still be in the mailbox after the user patches over to People.
+    send(view.pid, {:load_page, 2, 0, 40})
+
+    assert has_element?(view, "#discover-person-#{@person_id}")
+  end
+
   test "a people result after switching to Movies is ignored", %{conn: conn, bypass: bypass} do
     test_pid = self()
 

@@ -563,8 +563,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  def handle_info(:load_data, %{assigns: %{media_type: :person}} = socket),
-    do: {:noreply, People.load(socket)}
+  def handle_info(msg, %{assigns: %{media_type: :person}} = socket)
+      when msg == :load_data or (is_tuple(msg) and elem(msg, 0) == :load_page),
+      do: {:noreply, People.handle_info(msg, socket)}
 
   def handle_info(:load_data, socket) do
     %{

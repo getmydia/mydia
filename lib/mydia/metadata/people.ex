@@ -158,9 +158,12 @@ defmodule Mydia.Metadata.People do
     end
   end
 
+  # Search asks TMDB to exclude adult people, but /person/popular has no such
+  # parameter, so the flag is checked here for both.
   defp parse_results(results) when is_list(results) do
     results
     |> Enum.filter(&match?(%{"id" => id} when is_integer(id), &1))
+    |> Enum.reject(&(&1["adult"] == true))
     |> Enum.map(&PersonSearchResult.from_api_response/1)
   end
 

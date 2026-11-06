@@ -209,6 +209,25 @@ defmodule Mydia.Metadata.PeopleTest do
     assert PersonPage.more?(page)
   end
 
+  test "adult-flagged people are dropped", %{bypass: bypass, config: config} do
+    on_exit(fn -> Cache.delete("person_popular:metadata_relay:en-US:9") end)
+    Cache.delete("person_popular:metadata_relay:en-US:9")
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/person/popular", fn conn ->
+      json(conn, 200, %{
+        "page" => 9,
+        "total_pages" => 9,
+        "results" => [
+          %{"id" => 40, "name" => "Ottilie Brand", "adult" => true},
+          %{"id" => 41, "name" => "Casimir Vale", "adult" => false}
+        ]
+      })
+    end)
+
+    assert {:ok, %PersonPage{results: [%PersonSearchResult{tmdb_id: 41}]}} =
+             People.popular_people_cached(config, page: 9)
+  end
+
   test "popular people parse like search results", %{bypass: bypass, config: config} do
     on_exit(fn -> Cache.delete("person_popular:metadata_relay:en-US:1") end)
     Cache.delete("person_popular:metadata_relay:en-US:1")
