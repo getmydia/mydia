@@ -5,6 +5,11 @@ metadata:
   namespace: monitoring
 spec:
   replicas: 1
+  # grafana-data is a ReadWriteOnce local-path volume holding Grafana's SQLite
+  # database. A rolling update would start the new pod on the same node and
+  # open that database from two processes during the overlap.
+  strategy:
+    type: Recreate
   # Immutable, and predates this repo owning grafana: it was created by the
   # arsfeld/argocd observability app. Changing it means deleting and
   # recreating the Deployment.
@@ -59,13 +64,16 @@ spec:
           ports:
             - containerPort: 3000
               name: http
+          # Grafana 13 runs its embedded apiserver and search index in-process.
+          # At the old 256Mi/200m it sat on both limits, was OOMKilled dozens of
+          # times a day and timed out its own health checks.
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "50m"
-            limits:
               memory: "256Mi"
-              cpu: "200m"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "1000m"
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana
@@ -81,6 +89,15 @@ spec:
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 5
+          # Generous on purpose: restart a wedged Grafana, not a slow one.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
       volumes:
         - name: data
           persistentVolumeClaim:
