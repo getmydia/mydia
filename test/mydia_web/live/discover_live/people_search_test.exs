@@ -29,8 +29,8 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearchTest do
     language = Metadata.default_relay_config().options.language
 
     keys = [
-      "person_search:metadata_relay:#{@query}:#{language}",
-      "person_search:metadata_relay:#{@other_query}:#{language}",
+      "person_search:metadata_relay:#{@query}:#{language}:1",
+      "person_search:metadata_relay:#{@other_query}:#{language}:1",
       "person:metadata_relay:#{@person_id}:#{language}"
     ]
 

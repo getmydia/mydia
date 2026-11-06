@@ -15,6 +15,7 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearch do
   alias Mydia.Accounts.Scope
   alias Mydia.Metadata
   alias Mydia.Metadata.People
+  alias Mydia.Metadata.Structs.PersonPage
 
   @doc "Sets the scope and clears any earlier people results."
   def assign_scope(socket, scope) when scope in [:titles, :people] do
@@ -75,7 +76,7 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearch do
 
   def handle_result(socket, {:exit, _reason}), do: socket
 
-  defp put_result(socket, {:ok, people}) do
+  defp put_result(socket, {:ok, %PersonPage{results: people}}) do
     people =
       if Scope.restricted?(socket.assigns.current_scope),
         do: Enum.map(people, &%{&1 | known_for: []}),

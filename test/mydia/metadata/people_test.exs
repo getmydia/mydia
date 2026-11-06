@@ -3,7 +3,7 @@ defmodule Mydia.Metadata.PeopleTest do
 
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.People
-  alias Mydia.Metadata.Structs.{Person, PersonCredit, PersonSearchResult}
+  alias Mydia.Metadata.Structs.{Person, PersonCredit, PersonPage, PersonSearchResult}
 
   setup do
     bypass = Bypass.open()
@@ -159,7 +159,7 @@ defmodule Mydia.Metadata.PeopleTest do
 
   test "search parses known_for titles", %{bypass: bypass, config: config} do
     query = "vantrell#{System.unique_integer([:positive])}"
-    on_exit(fn -> Cache.delete("person_search:metadata_relay:#{query}:en-US") end)
+    on_exit(fn -> Cache.delete("person_search:metadata_relay:#{query}:en-US:1") end)
 
     Bypass.expect_once(bypass, "GET", "/tmdb/person/search", fn conn ->
       params = Plug.Conn.fetch_query_params(conn).query_params
@@ -182,9 +182,88 @@ defmodule Mydia.Metadata.PeopleTest do
       })
     end)
 
-    assert {:ok, [%PersonSearchResult{} = result]} = People.search_people_cached(config, query)
+    assert {:ok, %PersonPage{results: [%PersonSearchResult{} = result], page: 1, total_pages: 1}} =
+             People.search_people_cached(config, query)
+
     assert result.tmdb_id == 31
     assert result.known_for == ["The Salt Ledger", "Harbour Lights"]
+  end
+
+  test "search passes page and reads total_pages", %{bypass: bypass, config: config} do
+    query = "quillon#{System.unique_integer([:positive])}"
+    on_exit(fn -> Cache.delete("person_search:metadata_relay:#{query}:en-US:2") end)
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/person/search", fn conn ->
+      assert Plug.Conn.fetch_query_params(conn).query_params["page"] == "2"
+
+      json(conn, 200, %{
+        "page" => 2,
+        "total_pages" => 5,
+        "results" => [%{"id" => 32, "name" => "Teodor Quillon"}]
+      })
+    end)
+
+    assert {:ok, %PersonPage{page: 2, total_pages: 5} = page} =
+             People.search_people_cached(config, query, page: 2)
+
+    assert PersonPage.more?(page)
+  end
+
+  test "popular people parse like search results", %{bypass: bypass, config: config} do
+    on_exit(fn -> Cache.delete("person_popular:metadata_relay:en-US:1") end)
+    Cache.delete("person_popular:metadata_relay:en-US:1")
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/person/popular", fn conn ->
+      params = Plug.Conn.fetch_query_params(conn).query_params
+      assert params["page"] == "1"
+      assert params["language"] == "en-US"
+
+      json(conn, 200, %{
+        "page" => 1,
+        "total_pages" => 500,
+        "results" => [
+          %{
+            "id" => 33,
+            "name" => "Wren Abernathy",
+            "known_for" => [%{"media_type" => "movie", "title" => "Copper Tide"}]
+          }
+        ]
+      })
+    end)
+
+    assert {:ok, %PersonPage{results: [result], total_pages: 500}} =
+             People.popular_people_cached(config)
+
+    assert result.tmdb_id == 33
+    assert result.known_for == ["Copper Tide"]
+  end
+
+  test "a missing total_pages ends paging", %{bypass: bypass, config: config} do
+    on_exit(fn -> Cache.delete("person_popular:metadata_relay:en-US:3") end)
+    Cache.delete("person_popular:metadata_relay:en-US:3")
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/person/popular", fn conn ->
+      json(conn, 200, %{"results" => []})
+    end)
+
+    assert {:ok, %PersonPage{page: 3, total_pages: 3} = page} =
+             People.popular_people_cached(config, page: 3)
+
+    refute PersonPage.more?(page)
+  end
+
+  test "popular 404 is an error and is not cached", %{bypass: bypass, config: config} do
+    Cache.delete("person_popular:metadata_relay:en-US:7")
+    counter = :counters.new(1, [])
+
+    Bypass.expect(bypass, "GET", "/tmdb/person/popular", fn conn ->
+      :counters.add(counter, 1, 1)
+      json(conn, 404, %{})
+    end)
+
+    assert {:error, _} = People.popular_people_cached(config, page: 7)
+    assert {:error, _} = People.popular_people_cached(config, page: 7)
+    assert :counters.get(counter, 1) == 2
   end
 
   test "relay 404 is an error and is not cached", %{bypass: bypass, config: config} do
@@ -204,6 +283,7 @@ defmodule Mydia.Metadata.PeopleTest do
   test "non-relay config is rejected" do
     assert {:error, _} = People.fetch_person_cached(%{type: :tvdb}, 1)
     assert {:error, _} = People.search_people_cached(%{type: :tvdb}, "x")
+    assert {:error, _} = People.popular_people_cached(%{type: :tvdb})
   end
 
   test "to_search_result builds a TMDB SearchResult" do
