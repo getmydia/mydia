@@ -1,8 +1,8 @@
 defmodule Mydia.Metadata.PeopleTest do
   use ExUnit.Case, async: false
 
-  alias Mydia.Metadata
   alias Mydia.Metadata.Cache
+  alias Mydia.Metadata.People
   alias Mydia.Metadata.Structs.{Person, PersonCredit, PersonSearchResult}
 
   setup do
@@ -90,7 +90,7 @@ defmodule Mydia.Metadata.PeopleTest do
       end
     )
 
-    assert {:ok, %Person{} = person} = Metadata.fetch_person_cached(config, id)
+    assert {:ok, %Person{} = person} = People.fetch_person_cached(config, id)
     assert person.birthday == ~D[1979-03-02]
     assert person.name == "Marisol Vantrell"
 
@@ -113,7 +113,7 @@ defmodule Mydia.Metadata.PeopleTest do
       movie(9, "Twin Tides", "2020-01-01", "Inés (voice)")
     ])
 
-    assert {:ok, %Person{movie_credits: [credit]}} = Metadata.fetch_person_cached(config, id)
+    assert {:ok, %Person{movie_credits: [credit]}} = People.fetch_person_cached(config, id)
     assert credit.character == "Inés / Inés (voice)"
   end
 
@@ -128,7 +128,7 @@ defmodule Mydia.Metadata.PeopleTest do
     ])
 
     assert {:ok, %Person{tv_credits: [%{title: "Keeper"}]}} =
-             Metadata.fetch_person_cached(config, id)
+             People.fetch_person_cached(config, id)
   end
 
   test "a movie and a show with the same TMDB id stay separate", %{bypass: bypass, config: config} do
@@ -139,7 +139,7 @@ defmodule Mydia.Metadata.PeopleTest do
       tv(500, "Same Id Show", %{})
     ])
 
-    assert {:ok, person} = Metadata.fetch_person_cached(config, id)
+    assert {:ok, person} = People.fetch_person_cached(config, id)
     assert [%{tmdb_id: 500, title: "Same Id Film"}] = person.movie_credits
     assert [%{tmdb_id: 500, title: "Same Id Show"}] = person.tv_credits
   end
@@ -169,7 +169,7 @@ defmodule Mydia.Metadata.PeopleTest do
       })
     end)
 
-    assert {:ok, [%PersonSearchResult{} = result]} = Metadata.search_people_cached(config, query)
+    assert {:ok, [%PersonSearchResult{} = result]} = People.search_people_cached(config, query)
     assert result.tmdb_id == 31
     assert result.known_for == ["The Salt Ledger", "Harbour Lights"]
   end
@@ -183,14 +183,14 @@ defmodule Mydia.Metadata.PeopleTest do
       json(conn, 404, %{})
     end)
 
-    assert {:error, _} = Metadata.fetch_person_cached(config, id)
-    assert {:error, _} = Metadata.fetch_person_cached(config, id)
+    assert {:error, _} = People.fetch_person_cached(config, id)
+    assert {:error, _} = People.fetch_person_cached(config, id)
     assert :counters.get(counter, 1) == 2
   end
 
   test "non-relay config is rejected" do
-    assert {:error, _} = Metadata.fetch_person_cached(%{type: :tvdb}, 1)
-    assert {:error, _} = Metadata.search_people_cached(%{type: :tvdb}, "x")
+    assert {:error, _} = People.fetch_person_cached(%{type: :tvdb}, 1)
+    assert {:error, _} = People.search_people_cached(%{type: :tvdb}, "x")
   end
 
   test "to_search_result builds a TMDB SearchResult" do

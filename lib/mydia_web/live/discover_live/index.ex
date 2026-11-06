@@ -23,11 +23,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
-  alias MydiaWeb.Live.Helpers.PersonModal
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.RegionalRows
+  alias MydiaWeb.DiscoverLive.{PeopleSearch, RegionalRows}
+  alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
+  import MydiaWeb.DiscoverLive.UrlParams
   import MydiaWeb.GridDensityComponents
 
   import MydiaWeb.DiscoverLive.Messages,
@@ -62,13 +63,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:requesting_item_id, nil)
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
-      |> PersonModal.init()
-      # PersonModal reads its relay config from here.
-      |> assign(:metadata_config, Metadata.default_relay_config())
+      |> PersonModal.attach()
+      |> PeopleSearch.assign_scope(:titles)
       |> assign(:load_error, nil)
-      |> assign(:search_scope, :titles)
-      |> assign(:people_results, [])
-      |> assign(:people_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
@@ -91,10 +88,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
       category = parse_category(params["category"], media_type)
       search_query = params["q"] || ""
       search_mode = search_query != ""
-
-      # People is a scope of the search, not a third media type: without a
-      # query there is nothing to scope, so a stray ?scope=people is ignored.
-      search_scope = if search_mode, do: parse_search_scope(params["scope"]), else: :titles
 
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
@@ -136,9 +129,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:categories, categories)
         |> assign(:search_query, search_query)
         |> assign(:search_mode, search_mode)
-        |> assign(:search_scope, search_scope)
-        |> assign(:people_results, [])
-        |> assign(:people_error, nil)
+        |> PeopleSearch.assign_scope(parse_search_scope(search_mode, params["scope"]))
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
         |> assign(:year_from, year_from)
@@ -251,12 +242,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("search", %{"q" => query}, socket) do
     query = String.trim(query)
 
-    # A new query keeps the scope it was typed in.
     params =
       if query == "" do
         %{"type" => to_string(socket.assigns.media_type)}
       else
-        search_params(socket.assigns.media_type, query, socket.assigns.search_scope)
+        PeopleSearch.params(socket.assigns.media_type, query, socket.assigns.search_scope)
       end
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
@@ -264,12 +254,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event("switch_search_scope", %{"scope" => scope}, socket) do
     %{media_type: media_type, search_query: query} = socket.assigns
-    params = search_params(media_type, query, parse_search_scope(scope))
+    params = PeopleSearch.params(media_type, query, parse_search_scope(true, scope))
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
-  # Dropping `q` drops `scope` with it, so Discover returns to what it showed
-  # before the search.
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
@@ -499,17 +487,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  # The type is part of the lookup: a person's titles mix movies and shows, and
+  # TMDB numbers the two catalogs independently.
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
-    # The type is part of the lookup: a person's titles mix movies and shows,
-    # and TMDB numbers the two catalogs independently, so a movie and a show
-    # can share the clicked id.
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <-
-           DetailModal.find_selectable_item(
-             selectable_lists(socket.assigns),
-             id,
-             media_type
-           ) do
+           DetailModal.find_selectable_item(selectable_lists(socket.assigns), id, media_type) do
       # Recommendations are not sent here: the TMDB cross-reference they need
       # only exists once the detail metadata comes back (see
       # handle_info({:fetch_detail_metadata, ...})), and sending the item's own
@@ -523,20 +506,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event("close_details", _, socket) do
     {:noreply, DetailModal.close(socket)}
-  end
-
-  # Opening a person replaces the title dialog; opening a title from the
-  # person's posters stacks over the person instead (see show_details).
-  def handle_event("show_person", params, socket) do
-    {:noreply, socket |> DetailModal.close() |> PersonModal.open(params)}
-  end
-
-  def handle_event("close_person", _params, socket) do
-    {:noreply, PersonModal.close(socket)}
-  end
-
-  def handle_event("retry_person", _params, socket) do
-    {:noreply, PersonModal.retry(socket)}
   end
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
@@ -590,25 +559,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  # People results are the first page of TMDB's person search only: no paging,
-  # and no access filtering, since a person carries no titles of their own here.
-  # The popup filters the person's titles when it opens.
-  def handle_info(:load_data, %{assigns: %{search_scope: :people}} = socket) do
-    socket =
-      case Metadata.search_people_cached(
-             socket.assigns.metadata_config,
-             socket.assigns.search_query
-           ) do
-        {:ok, people} ->
-          assign(socket, :people_results, people)
-
-        {:error, reason} ->
-          Logger.warning("Failed to search people: #{inspect(reason)}")
-          socket |> assign(:people_results, []) |> assign(:people_error, reason)
-      end
-
-    {:noreply, assign(socket, :loading, false)}
-  end
+  def handle_info(:load_data, %{assigns: %{search_scope: :people}} = socket),
+    do: {:noreply, PeopleSearch.load(socket)}
 
   def handle_info(:load_data, socket) do
     %{
@@ -812,7 +764,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> refresh_lists(fn row_items ->
+         |> refresh_lists(items, recommendations, fn row_items ->
            row_items
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
@@ -844,7 +796,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> refresh_lists(fn row_items ->
+         |> refresh_lists(items, recommendations, fn row_items ->
            row_items
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
@@ -907,7 +859,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:items, items)
         |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
-        |> refresh_lists(&MediaRequestHelpers.enrich_with_request_status(&1, request_status_map))
+        |> refresh_lists(
+          items,
+          recommendations,
+          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
+        )
         |> put_flash(
           :info,
           gettext("%{title} requested. An admin will review it soon.", title: request.title)
@@ -921,10 +877,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
-  def handle_async(:load_person, result, socket) do
-    {:noreply, PersonModal.handle_result(socket, result)}
-  end
-
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end
@@ -1051,32 +1003,24 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :regional_sources, RegionalSources.sources_for(country, services, media_type))
   end
 
-  # Country-tab rows and the open person's titles are lists of the same shape
-  # as the grid and the rail. Without re-enriching them a row keeps offering
-  # "Add" for a title that was just added from it, a person's poster never
-  # gains its owned badge, and a second click fails on the tmdb_id index.
-  #
-  # Callers assign the re-enriched `:items` and `:selected_recommendations`
-  # first, so the selection is refreshed against every list as it now stands.
-  defp refresh_lists(socket, enrich_rows) do
-    socket =
-      socket
-      |> RegionalRows.map_items(enrich_rows)
-      |> assign(:person_titles, enrich_rows.(person_titles(socket.assigns)))
+  # Country-tab rows and an open person's titles are lists of the same shape as
+  # the grid and the rail. Without re-enriching them a row keeps offering "Add"
+  # for a title that was just added from it, a person's poster never gains its
+  # badge, and a second click fails on the tmdb_id index.
+  defp refresh_lists(socket, items, recommendations, enrich_rows) do
+    socket = socket |> RegionalRows.map_items(enrich_rows) |> PersonModal.refresh_titles()
 
-    DetailModal.refresh_selected(socket, selectable_lists(socket.assigns))
+    DetailModal.refresh_selected(socket, [
+      items,
+      recommendations,
+      PersonModal.titles(socket.assigns) | RegionalRows.item_lists(socket.assigns)
+    ])
   end
 
-  # The person's titles mix movies and shows, so a lookup here must pass the
-  # media type (see show_details and handle_info({:request_media, ...})).
   defp selectable_lists(assigns) do
-    [assigns.items, assigns.selected_recommendations, person_titles(assigns)] ++
+    [assigns.items, assigns.selected_recommendations, PersonModal.titles(assigns)] ++
       RegionalRows.item_lists(assigns)
   end
-
-  # Tolerant of a socket built without the person assigns, as
-  # RegionalRows.item_lists/1 is of one without rows.
-  defp person_titles(assigns), do: Map.get(assigns, :person_titles, [])
 
   defp enrich(results, socket) do
     results
@@ -1373,81 +1317,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params
   end
 
-  defp search_params(media_type, query, :people),
-    do: %{"type" => to_string(media_type), "q" => query, "scope" => "people"}
-
-  defp search_params(media_type, query, :titles),
-    do: %{"type" => to_string(media_type), "q" => query}
-
-  # Lenient, like ?type=: anything but "people" searches titles.
-  defp parse_search_scope("people"), do: :people
-  defp parse_search_scope(_), do: :titles
-
-  # Lenient: URL params are user-typed, so an unknown ?type= falls back to
-  # movies rather than erroring.
-  defp parse_media_type("tv_show"), do: :tv_show
-  defp parse_media_type(_), do: :movie
-
   # Strict: phx-value payloads are client-controlled, and
   # String.to_existing_atom/1 would raise on anything unexpected and take the
   # LiveView down with it. Match the two known types explicitly instead.
   defp parse_event_media_type("movie"), do: {:ok, :movie}
   defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_event_media_type(_), do: :error
-
-  defp parse_category(nil, _), do: :trending
-  defp parse_category("discover", _), do: :discover
-  defp parse_category("home", _), do: :home
-  defp parse_category("popular", _), do: :popular
-  defp parse_category("upcoming", :movie), do: :upcoming
-  defp parse_category("now_playing", :movie), do: :now_playing
-  defp parse_category("on_the_air", :tv_show), do: :on_the_air
-  defp parse_category("airing_today", :tv_show), do: :airing_today
-  defp parse_category(_, _), do: :trending
-
-  defp parse_genres_param(nil), do: []
-  defp parse_genres_param(""), do: []
-
-  defp parse_genres_param(genres_string) do
-    genres_string
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-  end
-
-  defp parse_year_param(nil), do: nil
-  defp parse_year_param(""), do: nil
-
-  defp parse_year_param(year_string) do
-    case Integer.parse(year_string) do
-      {year, ""} when year >= 1900 and year < 2100 -> year
-      _ -> nil
-    end
-  end
-
-  # A reversed range is almost always a slip, so it is read as the range the
-  # user meant rather than one that matches nothing.
-  defp order_years(from, to) when is_integer(from) and is_integer(to) and from > to,
-    do: {to, from}
-
-  defp order_years(from, to), do: {from, to}
-
-  defp parse_rating_param(nil), do: nil
-  defp parse_rating_param(""), do: nil
-
-  defp parse_rating_param(rating_string) do
-    case Float.parse(rating_string) do
-      {rating, _} when rating >= 0 and rating <= 10 -> rating
-      _ -> nil
-    end
-  end
-
-  defp parse_page_param(nil), do: 1
-
-  defp parse_page_param(page_string) do
-    case Integer.parse(page_string) do
-      {page, ""} when page > 0 -> page
-      _ -> 1
-    end
-  end
 end

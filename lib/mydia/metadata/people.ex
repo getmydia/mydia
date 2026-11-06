@@ -2,14 +2,58 @@ defmodule Mydia.Metadata.People do
   @moduledoc """
   Fetches and searches TMDB people through the metadata relay.
 
-  Uncached; `Mydia.Metadata.fetch_person_cached/3` and
-  `Mydia.Metadata.search_people_cached/3` add the cache.
+  `fetch_person_cached/3` and `search_people_cached/3` are what callers use;
+  `fetch_person/3` and `search_people/3` are the uncached requests behind them.
   """
 
+  alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Provider.{Error, HTTP}
   alias Mydia.Metadata.Structs.{Person, PersonSearchResult}
 
   @default_language "en-US"
+
+  @doc """
+  Fetches a person with their filmography, cached in ETS for 24 hours.
+
+  Relay-only, like `Mydia.Metadata.fetch_collection_cached/3`. The language is part
+  of the key so a non-English library never reads English-cached biographies.
+  """
+  @spec fetch_person_cached(map(), integer(), keyword()) ::
+          {:ok, Person.t()} | {:error, Error.t()}
+  def fetch_person_cached(config, tmdb_id, opts \\ [])
+
+  def fetch_person_cached(%{type: :metadata_relay} = config, tmdb_id, opts) do
+    cache_key = "person:metadata_relay:#{tmdb_id}:#{language(config, opts)}"
+
+    Cache.fetch(cache_key, fn -> fetch_person(config, tmdb_id, opts) end, ttl: :timer.hours(24))
+  end
+
+  def fetch_person_cached(%{type: type}, _tmdb_id, _opts) when is_atom(type),
+    do: {:error, relay_only(type)}
+
+  @doc """
+  Searches TMDB people by name, cached in ETS for 24 hours.
+
+  Relay-only, for the same reason as `fetch_person_cached/3`.
+  """
+  @spec search_people_cached(map(), String.t(), keyword()) ::
+          {:ok, [PersonSearchResult.t()]} | {:error, Error.t()}
+  def search_people_cached(config, query, opts \\ [])
+
+  def search_people_cached(%{type: :metadata_relay} = config, query, opts) do
+    cache_key = "person_search:metadata_relay:#{query}:#{language(config, opts)}"
+
+    Cache.fetch(cache_key, fn -> search_people(config, query, opts) end, ttl: :timer.hours(24))
+  end
+
+  def search_people_cached(%{type: type}, _query, _opts) when is_atom(type),
+    do: {:error, relay_only(type)}
+
+  defp relay_only(type) do
+    Error.invalid_config(
+      "People are only available through the metadata relay, got: #{inspect(type)}"
+    )
+  end
 
   @doc """
   Fetches a person with their combined credits.

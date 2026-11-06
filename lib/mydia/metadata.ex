@@ -308,57 +308,6 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
-  Fetches a TMDB person with their filmography, cached in ETS for 24 hours.
-
-  Relay-only, like `fetch_collection_cached/3`. The language is part of the key so
-  a non-English library never reads English-cached biographies.
-  """
-  def fetch_person_cached(config, tmdb_id, opts \\ [])
-
-  def fetch_person_cached(%{type: :metadata_relay} = config, tmdb_id, opts) do
-    alias Mydia.Metadata.{Cache, People}
-
-    language = Keyword.get(opts, :language, config_language(config))
-    cache_key = "person:metadata_relay:#{tmdb_id}:#{language}"
-
-    Cache.fetch(cache_key, fn -> People.fetch_person(config, tmdb_id, opts) end,
-      ttl: :timer.hours(24)
-    )
-  end
-
-  def fetch_person_cached(%{type: type}, _tmdb_id, _opts) when is_atom(type) do
-    {:error,
-     Provider.Error.invalid_config(
-       "People are only available through the metadata relay, got: #{inspect(type)}"
-     )}
-  end
-
-  @doc """
-  Searches TMDB people by name, cached in ETS for 24 hours.
-
-  Relay-only, for the same reason as `fetch_person_cached/3`.
-  """
-  def search_people_cached(config, query, opts \\ [])
-
-  def search_people_cached(%{type: :metadata_relay} = config, query, opts) do
-    alias Mydia.Metadata.{Cache, People}
-
-    language = Keyword.get(opts, :language, config_language(config))
-    cache_key = "person_search:metadata_relay:#{query}:#{language}"
-
-    Cache.fetch(cache_key, fn -> People.search_people(config, query, opts) end,
-      ttl: :timer.hours(24)
-    )
-  end
-
-  def search_people_cached(%{type: type}, _query, _opts) when is_atom(type) do
-    {:error,
-     Provider.Error.invalid_config(
-       "People are only available through the metadata relay, got: #{inspect(type)}"
-     )}
-  end
-
-  @doc """
   Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
 
   Accepts only a `{:tmdb, id}` ref: TMDB recommendations are the only kind

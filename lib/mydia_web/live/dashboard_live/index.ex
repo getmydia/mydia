@@ -11,8 +11,6 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.DashboardLive.RegionalComponents
   alias Mydia.Accounts.HomeLayout
   alias Mydia.Health.Rollup
-  alias Mydia.Indexers.CardigannSummary
-  alias Mydia.Downloads.ClientHealth
   alias Mydia.Media
   alias Mydia.Media.{FranchiseLibrary, RecentlyAdded, RemoteFilter}
   alias Mydia.Library
@@ -26,6 +24,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.DashboardLive.{ShelfFeedback, ShelfRail}
   alias MydiaWeb.DashboardLive.HomeOrder
   alias MydiaWeb.DashboardLive.HealthComponents
+  alias MydiaWeb.DashboardLive.SystemHealth
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
   alias MydiaWeb.Live.Helpers.DetailModal
@@ -59,9 +58,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       |> assign(:adding_item_ids, MapSet.new())
       |> assign(:requesting_item_id, nil)
       |> DetailModal.init()
-      |> PersonModal.init()
-      # PersonModal reads its relay config from here.
-      |> assign(:metadata_config, Metadata.default_relay_config())
+      |> PersonModal.attach()
       |> assign(:add_config, nil)
       |> assign_initial_widget_values()
 
@@ -152,7 +149,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     if user && user.role == "admin" do
       socket
       |> assign(:duplicates_state, :checking)
-      |> assign_system_health()
+      |> SystemHealth.load()
     else
       socket
     end
@@ -420,20 +417,6 @@ defmodule MydiaWeb.DashboardLive.Index do
     {:noreply, DetailModal.close(socket)}
   end
 
-  # Opening a person replaces the title dialog; opening a title from the
-  # person's posters stacks over the person instead (see show_details).
-  def handle_event("show_person", params, socket) do
-    {:noreply, socket |> DetailModal.close() |> PersonModal.open(params)}
-  end
-
-  def handle_event("close_person", _params, socket) do
-    {:noreply, PersonModal.close(socket)}
-  end
-
-  def handle_event("retry_person", _params, socket) do
-    {:noreply, PersonModal.retry(socket)}
-  end
-
   def handle_event("rate_shelf_item", params, socket),
     do: {:noreply, ShelfFeedback.rate(socket, params)}
 
@@ -464,7 +447,7 @@ defmodule MydiaWeb.DashboardLive.Index do
               if key in new_widgets do
                 load_widget(s, key)
               else
-                if key == :system_health, do: cancel_health_refresh(s), else: s
+                if key == :system_health, do: SystemHealth.cancel_refresh(s), else: s
               end
             end)
 
@@ -493,7 +476,7 @@ defmodule MydiaWeb.DashboardLive.Index do
           socket
           |> assign(:home_widgets, defaults)
           |> then(fn s ->
-            if :system_health in defaults, do: s, else: cancel_health_refresh(s)
+            if :system_health in defaults, do: s, else: SystemHealth.cancel_refresh(s)
           end)
           |> then(fn s ->
             Enum.reduce(defaults, s, fn k, acc -> load_widget(acc, k) end)
@@ -507,10 +490,6 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
-  def handle_async(:load_person, result, socket) do
-    {:noreply, PersonModal.handle_result(socket, result)}
-  end
-
   def handle_async({:regional_rail, param}, result, socket) do
     if param == socket.assigns.regional_selected do
       socket =
@@ -682,9 +661,9 @@ defmodule MydiaWeb.DashboardLive.Index do
     user = socket.assigns[:current_user]
 
     if user && user.role == "admin" && :system_health in (socket.assigns[:home_widgets] || []) do
-      {:noreply, assign_system_health(socket)}
+      {:noreply, SystemHealth.load(socket)}
     else
-      {:noreply, cancel_health_refresh(socket)}
+      {:noreply, SystemHealth.cancel_refresh(socket)}
     end
   end
 
@@ -701,61 +680,6 @@ defmodule MydiaWeb.DashboardLive.Index do
   def trending_rail_limit, do: @trending_rail_limit
 
   ## Private Helpers
-
-  # Shared by the first load and the periodic refresh. Indexer health counts
-  # configured connections and enabled Cardigann library trackers together.
-  defp assign_system_health(socket) do
-    client_status = ClientHealth.status_map()
-
-    indexer_status =
-      Map.merge(Mydia.Indexers.Health.status_map(), CardigannSummary.status_map())
-
-    media_server_status =
-      Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
-
-    trash_summary = Library.trashed_summary()
-    flaresolverr_enabled = Mydia.Indexers.FlareSolverr.enabled?()
-
-    socket
-    |> schedule_health_refresh()
-    |> assign(:clients_rollup, Rollup.from_status_map(client_status))
-    |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
-    |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
-    |> assign(:cardigann_summary, CardigannSummary.build())
-    |> assign(:trash_summary, trash_summary)
-    |> assign(:flaresolverr_enabled, flaresolverr_enabled)
-    |> start_async(:duplicate_count, fn ->
-      plan = Mydia.Library.Prune.plan()
-      length(plan.decisions)
-    end)
-    |> then(fn s ->
-      if flaresolverr_enabled do
-        s
-        |> assign(:flaresolverr_status, :checking)
-        |> start_async(:flaresolverr_status, fn ->
-          Mydia.Indexers.FlareSolverr.status()
-        end)
-      else
-        s
-        |> cancel_async(:flaresolverr_status)
-        |> assign(:flaresolverr_status, :disabled)
-      end
-    end)
-  end
-
-  defp schedule_health_refresh(socket) do
-    socket = cancel_health_refresh(socket)
-    ref = Process.send_after(self(), :refresh_health, 60_000)
-    assign(socket, :health_timer_ref, ref)
-  end
-
-  defp cancel_health_refresh(socket) do
-    if timer = socket.assigns[:health_timer_ref] do
-      Process.cancel_timer(timer)
-    end
-
-    assign(socket, :health_timer_ref, nil)
-  end
 
   defp add_with_opts(ref, media_type, opts, socket) do
     opts =
@@ -796,8 +720,8 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
+         |> PersonModal.refresh_titles()
          |> ShelfFeedback.record_add(ref, media_type)
-         |> refresh_person_titles(&MediaAddHelpers.enrich_with_library_status(&1, updated_map))
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(
            :info,
@@ -831,7 +755,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
-         |> refresh_person_titles(&MediaAddHelpers.enrich_with_library_status(&1, updated_map))
+         |> PersonModal.refresh_titles()
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(
            :info,
@@ -907,10 +831,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv, trending_tv)
         |> assign(:regional_items, regional_items)
         |> reenrich_shelves()
+        |> PersonModal.refresh_titles()
         |> ShelfFeedback.record_add(Ref.from_search_result(item), media_type)
-        |> refresh_person_titles(
-          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
-        )
         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
         |> put_flash(
           :info,
@@ -952,24 +874,14 @@ defmodule MydiaWeb.DashboardLive.Index do
     )
   end
 
-  # An open person's titles are one more list of the same shape; without
-  # re-enriching them a poster never gains its owned or requested badge.
-  defp refresh_person_titles(socket, enrich) do
-    assign(socket, :person_titles, enrich.(person_titles(socket.assigns)))
-  end
-
-  # The person's titles mix movies and shows, so every lookup against these
-  # lists passes the media type (see show_details and {:request_media, ...}).
   defp rail_lists(assigns),
     do: [
       assigns.trending_movies,
       assigns.trending_tv,
       assigns.regional_items,
       ShelfRail.items(assigns.shelves),
-      person_titles(assigns)
+      PersonModal.titles(assigns)
     ]
-
-  defp person_titles(assigns), do: Map.get(assigns, :person_titles, [])
 
   defp find_trending_item(socket, id, media_type),
     do: DetailModal.find_selectable_item(rail_lists(socket.assigns), id, media_type)

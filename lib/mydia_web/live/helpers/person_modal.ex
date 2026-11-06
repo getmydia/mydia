@@ -13,26 +13,51 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
       narrowed to what the viewer may see and stamped with library and request
       status
 
-  The fetch runs under `start_async(:load_person, ...)`, so the host owns the
-  matching `handle_async(:load_person, result, socket)` clause and hands the
-  result to `handle_result/2`. The host must have a `:metadata_config` assign
-  and a `:current_scope`.
+  A host calls `attach/1` from `mount/3` and renders the dialog; the lifecycle
+  hooks it attaches answer the dialog's `show_person`, `close_person` and
+  `retry_person` events and the `:load_person` async result, so the host defines
+  no clauses for them. Opening a person closes the title dialog
+  (`MydiaWeb.Live.Helpers.DetailModal`); a title opened from the person's
+  posters stacks over the person instead. The host must have a `:current_scope`;
+  a `:metadata_config` assign, when present, overrides the default relay config.
   """
 
   require Logger
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [start_async: 3, cancel_async: 2]
+  import Phoenix.LiveView, only: [attach_hook: 4, start_async: 3, cancel_async: 2]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.RemoteFilter
   alias Mydia.Metadata
+  alias Mydia.Metadata.People
   alias Mydia.Metadata.Structs.{Person, PersonCredit, SearchResult}
-  alias MydiaWeb.Live.Helpers.{MediaAddHelpers, MediaRequestHelpers}
+  alias MydiaWeb.Live.Helpers.{DetailModal, MediaAddHelpers, MediaRequestHelpers}
 
   @doc """
-  Assigns every person assign to its empty value. Call from `mount/3`.
+  Sets up a host: assigns the empty person state and attaches the event and
+  async hooks. Call once from `mount/3`.
+  """
+  def attach(socket) do
+    socket
+    |> init()
+    |> attach_hook(:person_modal_events, :handle_event, &handle_event/3)
+    |> attach_hook(:person_modal_async, :handle_async, &handle_async/3)
+  end
+
+  defp handle_event("show_person", params, socket),
+    do: {:halt, socket |> DetailModal.close() |> open(params)}
+
+  defp handle_event("close_person", _params, socket), do: {:halt, close(socket)}
+  defp handle_event("retry_person", _params, socket), do: {:halt, retry(socket)}
+  defp handle_event(_event, _params, socket), do: {:cont, socket}
+
+  defp handle_async(:load_person, result, socket), do: {:halt, handle_result(socket, result)}
+  defp handle_async(_name, _result, socket), do: {:cont, socket}
+
+  @doc """
+  Assigns every person assign to its empty value.
   """
   def init(socket) do
     socket
@@ -110,10 +135,25 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   def close(socket), do: socket |> cancel_async(:load_person) |> init()
 
   @doc """
-  The person's titles, for hosts that resolve a `show_details` click against a
-  selectable list.
+  The person's titles from a host's assigns, for hosts that resolve a
+  `show_details` click against a selectable list. Empty for assigns built
+  without the person state.
+
+  The titles mix movies and shows, so a lookup against them must pass the media
+  type: TMDB numbers the two catalogs independently.
   """
-  def titles(socket), do: socket.assigns.person_titles
+  def titles(assigns), do: Map.get(assigns, :person_titles, [])
+
+  @doc """
+  Re-reads the library and request status of the open person's titles.
+
+  Call after an add or a request: without it a poster never gains its owned or
+  requested badge. A no-op while no person is loaded.
+  """
+  def refresh_titles(%{assigns: %{selected_person: %Person{} = person}} = socket),
+    do: assign(socket, :person_titles, enrich_titles(person, socket.assigns.current_scope))
+
+  def refresh_titles(socket), do: socket
 
   @doc """
   The person's credits as `SearchResult`s the viewer may see, movies first, with
@@ -145,7 +185,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   end
 
   defp start_fetch(socket, stub) do
-    config = socket.assigns.metadata_config
+    config = Map.get_lazy(socket.assigns, :metadata_config, &Metadata.default_relay_config/0)
 
     socket
     |> assign(:person_stub, stub)
@@ -153,7 +193,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     |> assign(:person_titles, [])
     |> assign(:person_error, nil)
     |> assign(:person_loading, true)
-    |> start_async(:load_person, fn -> Metadata.fetch_person_cached(config, stub.id) end)
+    |> start_async(:load_person, fn -> People.fetch_person_cached(config, stub.id) end)
   end
 
   defp fail(socket, reason) do

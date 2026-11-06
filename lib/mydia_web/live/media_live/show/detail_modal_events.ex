@@ -1,11 +1,12 @@
 defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   @moduledoc """
-  The detail page's host side of `TrendingDetailModal` and of the person popup.
+  The detail page's host side of `TrendingDetailModal`.
 
   An adapter, like `RecommendationComponents` and `FranchiseComponents`: the
-  state lives in `MydiaWeb.Live.Helpers.DetailModal` and
-  `MydiaWeb.Live.Helpers.PersonModal`, and this module only maps this page's
-  item lists and two add handlers onto them.
+  state lives in `MydiaWeb.Live.Helpers.DetailModal`, and this module only maps
+  this page's item lists and two add handlers onto it. The person popup handles
+  its own events (`MydiaWeb.Live.Helpers.PersonModal.attach/1`); its titles are
+  one more list here.
 
   A clicked title can come from the recommendations rail, the franchise strip,
   the rail inside the dialog itself, or an open person's titles. All four are
@@ -27,7 +28,6 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   one: a show opened from an actor on a movie's page is added as a show.
   """
 
-  import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3]
 
   alias Mydia.Media.Recommendations
@@ -63,39 +63,6 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
 
   @doc "Closes the dialog."
   def close_details(_params, socket), do: {:noreply, DetailModal.close(socket)}
-
-  @doc """
-  Opens the person popup. It replaces the title dialog; a title opened from the
-  person's posters stacks over the person instead (see `show_details/2`).
-  """
-  def show_person(params, socket),
-    do: {:noreply, socket |> DetailModal.close() |> PersonModal.open(params)}
-
-  @doc "Closes the person popup."
-  def close_person(_params, socket), do: {:noreply, PersonModal.close(socket)}
-
-  @doc "Re-runs a failed person lookup."
-  def retry_person(_params, socket), do: {:noreply, PersonModal.retry(socket)}
-
-  @doc "Stores the person lookup result."
-  def handle_person_result(result, socket),
-    do: {:noreply, PersonModal.handle_result(socket, result)}
-
-  @doc """
-  Re-reads the library and request status of the open person's titles.
-
-  Called after an add or a request: without it a poster never gains its owned
-  or requested badge. A no-op while no person is loaded.
-  """
-  def refresh_person_titles(%{assigns: %{selected_person: %{} = person}} = socket) do
-    assign(
-      socket,
-      :person_titles,
-      PersonModal.enrich_titles(person, socket.assigns.current_scope)
-    )
-  end
-
-  def refresh_person_titles(socket), do: socket
 
   @doc """
   Adds the title the dialog is open over, through the rail it belongs to.
@@ -143,7 +110,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
       socket.assigns[:recommendations] || [],
       franchise_items(socket.assigns[:franchise]),
       socket.assigns[:selected_recommendations] || [],
-      socket.assigns[:person_titles] || []
+      PersonModal.titles(socket.assigns)
     ]
   end
 

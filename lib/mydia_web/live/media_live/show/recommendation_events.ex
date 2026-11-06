@@ -17,6 +17,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
@@ -249,7 +250,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
               status_map
             )
           )
-          |> DetailModalEvents.refresh_person_titles()
+          |> PersonModal.refresh_titles()
 
         {:noreply,
          socket
@@ -468,7 +469,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         :selected_recommendations,
         mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
       )
-      |> DetailModalEvents.refresh_person_titles()
+      |> PersonModal.refresh_titles()
 
     DetailModal.refresh_selected(socket, DetailModalEvents.item_lists(socket))
   end

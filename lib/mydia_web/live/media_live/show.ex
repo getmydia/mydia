@@ -36,7 +36,6 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.AddConfigEvents
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
-  alias MydiaWeb.Live.Helpers.PersonModal
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.DiscoverComponents
@@ -185,11 +184,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # Mydia.Subtitles.Format.detect/1 on the received bytes is the real gate,
      # in SubtitleEvents.finish_upload/6, and the size and count limits below
      # are independent of accept.
-     |> allow_upload(:subtitle,
-       accept: :any,
-       max_entries: 1,
-       max_file_size: 2_000_000
-     )
+     |> allow_upload(:subtitle, accept: :any, max_entries: 1, max_file_size: 2_000_000)
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
@@ -201,7 +196,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(:add_config, nil)
      |> DetailModal.init()
-     |> PersonModal.init()
+     |> MydiaWeb.Live.Helpers.PersonModal.attach()
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -631,17 +626,6 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("request_selected_item", params, socket),
     do: DetailModalEvents.request_selected_item(params, socket)
 
-  # Person popup events
-
-  def handle_event("show_person", params, socket),
-    do: DetailModalEvents.show_person(params, socket)
-
-  def handle_event("close_person", params, socket),
-    do: DetailModalEvents.close_person(params, socket)
-
-  def handle_event("retry_person", params, socket),
-    do: DetailModalEvents.retry_person(params, socket)
-
   @impl true
   def handle_info({:download_created, download}, socket) do
     if download_for_media?(download, socket.assigns.media_item) do
@@ -980,9 +964,6 @@ defmodule MydiaWeb.MediaLive.Show do
   # since start_async/3 overwrites rather than cancels under an existing key.
   def handle_async(:load_selected_recommendations, result, socket),
     do: DetailModalEvents.handle_recommendations_result(result, socket)
-
-  def handle_async(:load_person, result, socket),
-    do: DetailModalEvents.handle_person_result(result, socket)
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)
