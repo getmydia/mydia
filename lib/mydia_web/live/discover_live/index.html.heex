@@ -55,9 +55,14 @@
               <:option value="tv_show" label={gettext("TV Shows")} icon="hero-tv" />
             </.segmented_control>
 
-            <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+            <%!-- Both act on title results; People scope has neither. --%>
+            <.grid_density_toggle
+              :if={@search_scope != :people}
+              id="discover-density-toggle"
+              density={@grid_density}
+            />
 
-            <label class="flex items-center gap-2 cursor-pointer">
+            <label :if={@search_scope != :people} class="flex items-center gap-2 cursor-pointer">
               <input
                 id="discover-hide-owned"
                 type="checkbox"

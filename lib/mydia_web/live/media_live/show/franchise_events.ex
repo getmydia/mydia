@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
@@ -192,6 +193,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       socket
       |> clear_in_flight(tmdb_id)
       |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+      |> PersonModal.refresh_titles()
 
     {:noreply,
      socket
@@ -208,6 +210,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       socket
       |> clear_in_flight(tmdb_id)
       |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+      |> PersonModal.refresh_titles()
 
     {:noreply,
      socket
@@ -295,11 +298,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
         # handle_add_result/3 above: an argument expression evaluates against
         # this function's own `socket` parameter, not a later pipeline step.
         socket =
-          assign(
-            socket,
+          socket
+          |> assign(
             :franchise,
             mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
           )
+          |> PersonModal.refresh_titles()
 
         {:noreply,
          socket

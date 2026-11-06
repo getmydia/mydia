@@ -64,6 +64,10 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearchTest do
     refute has_element?(view, "#discover-grid")
     refute has_element?(view, "[role=tablist]")
     refute has_element?(view, "#discover-filter-form")
+
+    # Grid density and "Hide in library" act on title results only.
+    refute has_element?(view, "#discover-density-toggle")
+    refute has_element?(view, "#discover-hide-owned")
   end
 
   test "a person with no known-for titles shows their department", %{
@@ -140,6 +144,8 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearchTest do
 
     assert_patched(view, ~p"/discover?q=#{@query}&type=movie")
     refute has_element?(view, "#discover-people-results")
+    assert has_element?(view, "#discover-density-toggle")
+    assert has_element?(view, "#discover-hide-owned")
   end
 
   test "loading a people search directly renders people", %{conn: conn, bypass: bypass} do
