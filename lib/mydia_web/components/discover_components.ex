@@ -439,7 +439,7 @@ defmodule MydiaWeb.DiscoverComponents do
   end
 
   @doc """
-  Renders Discover's People search results: round headshots with the name
+  Renders Discover's People grid (popular people or search results): round headshots with the name
   and a known-for line, each a button emitting `event` with the person's
   `id`, `name` and `profile_path`, the params the person popup opens with.
   The error state's Try again emits `retry_people_search`, which the host must
@@ -464,7 +464,7 @@ defmodule MydiaWeb.DiscoverComponents do
           class="alert alert-error alert-soft max-w-xl mx-auto"
         >
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-          <span>{gettext("Could not search people. The metadata service may be unavailable.")}</span>
+          <span>{gettext("Could not load people. The metadata service may be unavailable.")}</span>
           <button
             id="discover-people-retry"
             type="button"

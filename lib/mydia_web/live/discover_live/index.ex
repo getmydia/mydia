@@ -24,7 +24,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.{PeopleSearch, RegionalRows}
+  alias MydiaWeb.DiscoverLive.{People, RegionalRows}
   alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
@@ -64,7 +64,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
       |> PersonModal.attach()
-      |> PeopleSearch.assign_scope(:titles)
+      |> People.reset()
       |> assign(:load_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
@@ -81,7 +81,50 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:ok, socket}
   end
 
+  # 18.beta.3 made People a scope of the title search (`?q=...&scope=people`).
+  # Such links now land on the People type.
   @impl true
+  def handle_params(%{"scope" => "people", "q" => query} = params, url, socket)
+      when is_binary(query) and query != "" do
+    if connected?(socket) do
+      {:noreply,
+       push_patch(socket, to: ~p"/discover?#{People.params(String.trim(query))}", replace: true)}
+    else
+      handle_params(Map.delete(params, "scope"), url, socket)
+    end
+  end
+
+  def handle_params(%{"type" => "person"} = params, _url, socket) do
+    search_query = params["q"] || ""
+
+    socket =
+      socket
+      |> assign(:media_type, :person)
+      |> assign(:category, :trending)
+      |> assign(:categories, [])
+      |> assign(:search_query, search_query)
+      |> assign(:search_mode, search_query != "")
+      |> assign(:selected_genres, [])
+      |> assign(:selected_language, nil)
+      |> assign(:year_from, nil)
+      |> assign(:year_to, nil)
+      |> assign(:min_rating, nil)
+      |> assign(:sort_by, "popularity.desc")
+      |> assign(:source, nil)
+      |> assign(:regional_sources, [])
+      |> assign(:regional_rows, %{})
+      |> assign(:items, [])
+      |> assign_visible_items()
+      |> assign(:has_more, false)
+      |> assign(:load_error, nil)
+      |> assign(:loading, true)
+      |> People.reset()
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:noreply, socket}
+  end
+
   def handle_params(params, _url, socket) do
     if connected?(socket) do
       media_type = parse_media_type(params["type"])
@@ -129,7 +172,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:categories, categories)
         |> assign(:search_query, search_query)
         |> assign(:search_mode, search_mode)
-        |> PeopleSearch.assign_scope(parse_search_scope(search_mode, params["scope"]))
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
         |> assign(:year_from, year_from)
@@ -243,23 +285,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
     query = String.trim(query)
 
     params =
-      if query == "" do
-        %{"type" => to_string(socket.assigns.media_type)}
-      else
-        PeopleSearch.params(socket.assigns.media_type, query, socket.assigns.search_scope)
+      cond do
+        socket.assigns.media_type == :person -> People.params(query)
+        query == "" -> %{"type" => to_string(socket.assigns.media_type)}
+        true -> %{"type" => to_string(socket.assigns.media_type), "q" => query}
       end
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
-  def handle_event("switch_search_scope", %{"scope" => scope}, socket) do
-    %{media_type: media_type, search_query: query} = socket.assigns
-    params = PeopleSearch.params(media_type, query, parse_search_scope(true, scope))
-    {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
-  end
-
-  def handle_event("retry_people_search", _params, %{assigns: %{search_scope: :people}} = socket),
-    do: {:noreply, PeopleSearch.load(socket)}
+  def handle_event("retry_people_search", _params, %{assigns: %{media_type: :person}} = socket),
+    do: {:noreply, People.load(socket)}
 
   def handle_event("retry_people_search", _params, socket), do: {:noreply, socket}
 
@@ -402,6 +438,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
+
+  def handle_event("load_more", _, %{assigns: %{media_type: :person}} = socket),
+    do: {:noreply, People.load_more(socket)}
 
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
@@ -564,8 +603,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  def handle_info(:load_data, %{assigns: %{search_scope: :people}} = socket),
-    do: {:noreply, PeopleSearch.load(socket)}
+  def handle_info(:load_data, %{assigns: %{media_type: :person}} = socket),
+    do: {:noreply, People.load(socket)}
 
   def handle_info(:load_data, socket) do
     %{
@@ -882,8 +921,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
-  def handle_async(:people_search, result, socket),
-    do: {:noreply, PeopleSearch.handle_result(socket, result)}
+  def handle_async(:people, result, socket),
+    do: {:noreply, People.handle_result(socket, result)}
 
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
@@ -987,6 +1026,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     assign(socket, :hide_owned, value)
   end
+
+  defp page_subtitle(:movie), do: gettext("Find new movies to add to your library")
+  defp page_subtitle(:tv_show), do: gettext("Find new TV shows to add to your library")
+  defp page_subtitle(:person), do: gettext("Find people and the titles they appear in")
+
+  defp search_placeholder(:movie), do: gettext("Search for a movie to add")
+  defp search_placeholder(:tv_show), do: gettext("Search for a show to add")
+  defp search_placeholder(:person), do: gettext("Search people")
 
   defp landing?(assigns),
     do: assigns.category == :home and is_nil(assigns.source) and not assigns.search_mode
