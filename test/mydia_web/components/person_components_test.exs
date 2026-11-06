@@ -112,4 +112,46 @@ defmodule MydiaWeb.PersonComponentsTest do
            |> LazyHTML.query("#person-modal")
            |> LazyHTML.attribute("phx-window-keydown") == []
   end
+
+  describe "cast_person/1" do
+    defp render_cast(member, event) do
+      render_component(&PersonComponents.cast_person/1, member: member, event: event)
+      |> LazyHTML.from_fragment()
+    end
+
+    test "nil event renders a plain card, even for a linked member" do
+      doc =
+        render_cast(
+          %{name: "An Actor", character: "Role", profile_path: nil, tmdb_person_id: 7},
+          nil
+        )
+
+      assert Enum.count(LazyHTML.query(doc, "button")) == 0
+      assert Enum.count(LazyHTML.query(doc, "[id^=cast-person-]")) == 0
+      assert LazyHTML.text(doc) =~ "An Actor"
+      assert LazyHTML.text(doc) =~ "Role"
+    end
+
+    test "event with an id renders a button carrying the popup payload" do
+      doc =
+        render_cast(
+          %{name: "An Actor", character: nil, profile_path: "/a.jpg", tmdb_person_id: 7},
+          "show_person"
+        )
+
+      button = LazyHTML.query(doc, "#cast-person-7")
+      assert LazyHTML.attribute(button, "phx-click") == ["show_person"]
+      assert LazyHTML.attribute(button, "phx-value-id") == ["7"]
+      assert LazyHTML.attribute(button, "phx-value-name") == ["An Actor"]
+      assert LazyHTML.attribute(button, "phx-value-profile_path") == ["/a.jpg"]
+    end
+
+    test "event without an id renders greyed with a tooltip and no button" do
+      doc = render_cast(%{name: "An Actor", character: nil, profile_path: nil}, "show_person")
+
+      assert Enum.count(LazyHTML.query(doc, "button")) == 0
+      assert Enum.count(LazyHTML.query(doc, ".opacity-60.tooltip")) == 1
+      assert LazyHTML.attribute(LazyHTML.query(doc, ".tooltip"), "data-tip") != [""]
+    end
+  end
 end

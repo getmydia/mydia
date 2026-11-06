@@ -173,6 +173,98 @@ defmodule MydiaWeb.PersonComponents do
     """
   end
 
+  @doc """
+  Renders one cast member as a centered avatar card (the title preview layout).
+
+  With `event` nil it is the plain, non-interactive card. With `event` set, a
+  member that has a `tmdb_person_id` becomes a button that emits `event` with
+  `phx-value-id`, `phx-value-name` and `phx-value-profile_path`, the payload
+  `MydiaWeb.Live.Helpers.PersonModal.open/2` expects. A member without an id
+  renders greyed with a tooltip, since there is nobody to open.
+
+  A host that passes `event` must handle it.
+  """
+  attr :member, :any,
+    required: true,
+    doc: "anything with `name`, `character`, `profile_path` and `tmdb_person_id`"
+
+  attr :event, :string, default: nil, doc: "the host event to emit on click, nil for no link"
+
+  def cast_person(assigns) do
+    member = assigns.member
+    person_id = Map.get(member, :tmdb_person_id)
+
+    assigns =
+      assigns
+      |> assign(:person_id, person_id)
+      |> assign(:profile_path, Map.get(member, :profile_path))
+      |> assign(:character, Map.get(member, :character))
+
+    ~H"""
+    <%= cond do %>
+      <% is_nil(@event) -> %>
+        <div class="text-center">
+          <.cast_person_body member={@member} profile_path={@profile_path} character={@character} />
+        </div>
+      <% is_nil(@person_id) -> %>
+        <div
+          class="text-center opacity-60 tooltip"
+          data-tip={gettext("Refresh metadata to link this person")}
+        >
+          <.cast_person_body member={@member} profile_path={@profile_path} character={@character} />
+        </div>
+      <% true -> %>
+        <button
+          id={"cast-person-#{@person_id}"}
+          type="button"
+          phx-click={@event}
+          phx-value-id={@person_id}
+          phx-value-name={@member.name}
+          phx-value-profile_path={@profile_path}
+          class="group text-center cursor-pointer"
+        >
+          <.cast_person_body
+            member={@member}
+            profile_path={@profile_path}
+            character={@character}
+            hover
+          />
+        </button>
+    <% end %>
+    """
+  end
+
+  attr :member, :any, required: true
+  attr :profile_path, :string, default: nil
+  attr :character, :string, default: nil
+  attr :hover, :boolean, default: false
+
+  defp cast_person_body(assigns) do
+    ~H"""
+    <%= if @profile_path do %>
+      <img
+        src={ImageUrl.profile_url(@profile_path)}
+        alt={@member.name}
+        class={[
+          "w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2",
+          @hover && "transition group-hover:ring-2 group-hover:ring-primary"
+        ]}
+      />
+    <% else %>
+      <div class={[
+        "w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2",
+        @hover && "transition group-hover:ring-2 group-hover:ring-primary"
+      ]}>
+        <.icon name="hero-user" class="w-8 h-8 text-base-content/30" />
+      </div>
+    <% end %>
+    <p class="text-sm font-medium line-clamp-1">{@member.name}</p>
+    <%= if @character do %>
+      <p class="text-xs text-base-content/60 line-clamp-1">{@character}</p>
+    <% end %>
+    """
+  end
+
   attr :id, :string, required: true
   attr :type, :string, required: true
   attr :heading, :string, required: true
