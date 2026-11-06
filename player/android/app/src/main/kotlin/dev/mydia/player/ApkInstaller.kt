@@ -97,6 +97,7 @@ class ApkInstaller(private val activity: Activity) {
             UpdateRelaunchReceiver.markStarted(activity)
             session.commit(pending.intentSender)
         } catch (error: Exception) {
+            UpdateRelaunchReceiver.clearMarker(activity)
             opened?.abandon() ?: installer.abandonSession(sessionId)
             throw IllegalStateException(error.message ?: "The install session failed.")
         } finally {

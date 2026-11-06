@@ -105,15 +105,19 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
   }) async {
-    // A one-press install starts from the settings row with nothing found
-    // yet, so it checks first. An update already held is used as is: the
-    // banner and card offered that version by name.
-    if (_latest == null && _updater.installsWithoutAsking) {
+    // A one-press install is "check and install", so it checks fresh even
+    // when it already holds an update: the one found at startup can be hours
+    // old, and a newer release since then is the one to install. A failed
+    // check falls back to the update already held, if there is one.
+    if (_updater.installsWithoutAsking) {
       try {
         await refresh(force: true);
       } catch (e) {
-        return UpdateFailed(
-            UpdateProblem(UpdateIssue.checkFailed, detail: '$e'));
+        if (_latest == null) {
+          return UpdateFailed(
+              UpdateProblem(UpdateIssue.checkFailed, detail: '$e'));
+        }
+        debugPrint('[ReleaseUpdateBackend] Check failed, using held: $e');
       }
     }
 

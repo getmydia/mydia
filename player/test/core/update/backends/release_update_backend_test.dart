@@ -7,10 +7,10 @@ import 'package:player/core/update/update_service.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
-AppUpdate _update() => AppUpdate(
-      version: '0.16.0',
-      downloadUrl: 'https://example.invalid/player-linux-v0.16.0.tar.gz',
-      releaseNotesUrl: 'https://example.invalid/releases/0.16.0',
+AppUpdate _update({String version = '0.16.0'}) => AppUpdate(
+      version: version,
+      downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
+      releaseNotesUrl: 'https://example.invalid/releases/$version',
       releaseTitle: 'Quieter scanning',
       publishedAt: DateTime.utc(2026, 9, 1),
     );
@@ -252,19 +252,36 @@ void main() {
       expect(await backend.requestUpdate(), isA<UpdateFailed>());
     });
 
-    test('reuses an update it already holds without checking again', () async {
-      final service = _StubService(_update());
+    test('checks again and installs a newer release than the one it held',
+        () async {
+      final updater = _RecordingUpdater(installsWithoutAsking: true);
       final backend = ReleaseUpdateBackend(
-        updater: _RecordingUpdater(installsWithoutAsking: true),
+        updater: updater,
         currentVersion: '0.15.0',
-        service: service,
+        service: _SequenceService([_update(), _update(version: '0.17.0')]),
       );
       addTearDown(backend.dispose);
 
       await backend.refresh(force: true);
       await backend.requestUpdate();
 
-      expect(service.calls, 1);
+      expect((updater.applied as AppUpdate).version, '0.17.0');
+    });
+
+    test('installs the release it held when the fresh check fails', () async {
+      final updater = _RecordingUpdater(installsWithoutAsking: true);
+      final backend = ReleaseUpdateBackend(
+        updater: updater,
+        currentVersion: '0.15.0',
+        service: _SequenceService([_update(), Exception('feed unreachable')]),
+      );
+      addTearDown(backend.dispose);
+
+      await backend.refresh(force: true);
+      final outcome = await backend.requestUpdate();
+
+      expect(outcome, isA<UpdateInstalled>());
+      expect((updater.applied as AppUpdate).version, '0.16.0');
     });
   });
 
@@ -280,6 +297,26 @@ void main() {
     expect(await backend.requestUpdate(), isA<AlreadyUpToDate>());
     expect(service.calls, 0);
   });
+}
+
+/// Answers each check with the next entry: an update, null, or an
+/// exception to throw.
+class _SequenceService implements UpdateService {
+  _SequenceService(this._answers);
+
+  final List<Object?> _answers;
+  int _next = 0;
+
+  @override
+  Future<AppUpdate?> checkForUpdate({
+    required String currentVersion,
+    required UpdateTrack track,
+    bool force = false,
+  }) async {
+    final answer = _answers[_next++];
+    if (answer is Exception) throw answer;
+    return answer as AppUpdate?;
+  }
 }
 
 class _ThrowingService implements UpdateService {

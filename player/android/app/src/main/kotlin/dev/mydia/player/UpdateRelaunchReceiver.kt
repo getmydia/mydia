@@ -105,10 +105,22 @@ class UpdateRelaunchReceiver : BroadcastReceiver() {
                 .commit()
         }
 
+        /**
+         * Called when a session this app committed fails or is abandoned,
+         * including the user declining Android's dialog, so a later
+         * unrelated update cannot consume the marker and reopen the app.
+         */
+        fun clearMarker(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_STARTED_AT)
+                .commit()
+        }
+
         private fun consumeMarker(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val startedAt = prefs.getLong(KEY_STARTED_AT, 0L)
-            prefs.edit().remove(KEY_STARTED_AT).commit()
+            clearMarker(context)
             val age = System.currentTimeMillis() - startedAt
             return startedAt > 0L && age in 0..MARKER_TTL_MS
         }

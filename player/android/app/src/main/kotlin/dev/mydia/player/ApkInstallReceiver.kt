@@ -36,6 +36,9 @@ class ApkInstallReceiver : BroadcastReceiver() {
                 Log.i(TAG, "Update installed.")
             }
             else -> {
+                // Failed, or the user declined Android's dialog: nothing was
+                // replaced, so nothing should reopen on a later update.
+                UpdateRelaunchReceiver.clearMarker(context)
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 Log.e(TAG, "Install failed (status $status): $message")
             }
