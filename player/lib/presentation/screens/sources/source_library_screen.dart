@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/cache/invalidation_target.dart';
 import '../../../core/cache/watcher_registry.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/settings/settings_providers.dart';
@@ -355,6 +356,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
                 : BrowseGrid(
                     scrollTopPadding: scrollTopPadding,
                     itemCount: value.items.length,
+                    itemId: (index) => value.items[index].ref,
                     itemBuilder: (context, index) {
                       final item = value.items[index];
                       return SourcePoster(
@@ -392,42 +394,55 @@ class _ChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sorts = info.sortOptions.length;
     return BackdropGroup(
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final option in info.sortOptions)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GlassChip(
-                chipKey: Key('source-sort-${option.id}'),
-                label: Text(context.l10n.sortName(option.name)),
-                selected:
-                    (query.sortId ?? info.sortOptions.first.id) == option.id,
-                // A new sort starts in its own default direction.
-                onSelected: (_) => onChanged(BrowseQuery(
-                  sortId: option.id,
-                  filterIds: query.filterIds,
-                  pageSize: query.pageSize,
-                )),
+      // Sort and filter ids are separate namespaces, so each chip's memory
+      // id says which kind it is.
+      child: FocusMemoryRegion(
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final (index, option) in info.sortOptions.indexed)
+              FocusMemoryItem(
+                id: ('sort', option.id),
+                index: index,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GlassChip(
+                    chipKey: Key('source-sort-${option.id}'),
+                    label: Text(context.l10n.sortName(option.name)),
+                    selected: (query.sortId ?? info.sortOptions.first.id) ==
+                        option.id,
+                    // A new sort starts in its own default direction.
+                    onSelected: (_) => onChanged(BrowseQuery(
+                      sortId: option.id,
+                      filterIds: query.filterIds,
+                      pageSize: query.pageSize,
+                    )),
+                  ),
+                ),
               ),
-            ),
-          for (final filter in info.filterOptions)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GlassChip(
-                multiSelect: true,
-                chipKey: Key('source-filter-${filter.id}'),
-                label: Text(context.l10n.filterOptionName(filter)),
-                selected: query.filterIds.contains(filter.id),
-                onSelected: (on) => onChanged(query.copyWith(
-                  filterIds: on
-                      ? {...query.filterIds, filter.id}
-                      : ({...query.filterIds}..remove(filter.id)),
-                )),
+            for (final (index, filter) in info.filterOptions.indexed)
+              FocusMemoryItem(
+                id: ('filter', filter.id),
+                index: sorts + index,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GlassChip(
+                    multiSelect: true,
+                    chipKey: Key('source-filter-${filter.id}'),
+                    label: Text(context.l10n.filterOptionName(filter)),
+                    selected: query.filterIds.contains(filter.id),
+                    onSelected: (on) => onChanged(query.copyWith(
+                      filterIds: on
+                          ? {...query.filterIds, filter.id}
+                          : ({...query.filterIds}..remove(filter.id)),
+                    )),
+                  ),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

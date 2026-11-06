@@ -118,6 +118,7 @@ class SourceListingScreen extends ConsumerWidget {
             },
             child: BrowseGrid(
               itemCount: list.length,
+              itemId: (index) => list[index].ref,
               scrollTopPadding: scrollTopPadding,
               itemBuilder: (context, index) {
                 final item = list[index];

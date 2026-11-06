@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../domain/merged/merged_result.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -82,25 +83,31 @@ class _AllServersListingScreenState
             SizedBox(
               height: 48,
               child: BackdropGroup(
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: [
-                    for (final (key, label, kind) in [
-                      ('all', context.l10n.commonAll, null),
-                      ('movies', context.l10n.navMovies, LibraryKind.movies),
-                      ('shows', context.l10n.navShows, LibraryKind.shows),
-                    ])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GlassChip(
-                          chipKey: Key('all-listing-kind-$key'),
-                          label: Text(label),
-                          selected: _kind == kind,
-                          onSelected: (_) => setState(() => _kind = kind),
+                child: FocusMemoryRegion(
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      for (final (index, (key, label, kind)) in [
+                        ('all', context.l10n.commonAll, null),
+                        ('movies', context.l10n.navMovies, LibraryKind.movies),
+                        ('shows', context.l10n.navShows, LibraryKind.shows),
+                      ].indexed)
+                        FocusMemoryItem(
+                          id: key,
+                          index: index,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GlassChip(
+                              chipKey: Key('all-listing-kind-$key'),
+                              label: Text(label),
+                              selected: _kind == kind,
+                              onSelected: (_) => setState(() => _kind = kind),
+                            ),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -125,6 +132,7 @@ class _AllServersListingScreenState
                     key: const Key('all-listing-grid'),
                     scrollTopPadding: 8,
                     itemCount: items.length,
+                    itemId: (index) => items[index].ref,
                     itemBuilder: (context, index) {
                       final item = items[index];
                       final resuming =
