@@ -86,7 +86,8 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
       open_person(view, person_id)
 
       view |> element("#person-credit-movie-#{movie_id}") |> render_click()
-      wait_until(fn -> has_element?(view, "#media-detail-modal #cast-person-#{person_id}") end)
+      render_async(view)
+      assert has_element?(view, "#media-detail-modal #cast-person-#{person_id}")
 
       document = view |> render() |> LazyHTML.from_fragment()
       assert document |> LazyHTML.query("#media-cast-person-#{person_id}") |> Enum.count() == 1
@@ -331,17 +332,5 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
     conn
     |> Plug.Conn.put_resp_content_type("application/json")
     |> Plug.Conn.resp(status, Jason.encode!(body))
-  end
-
-  defp wait_until(fun, retries \\ 200)
-  defp wait_until(_fun, 0), do: flunk("condition was not met in time")
-
-  defp wait_until(fun, retries) do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(10)
-      wait_until(fun, retries - 1)
-    end
   end
 end

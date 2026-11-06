@@ -229,7 +229,7 @@ defmodule MydiaWeb.PersonComponents do
       <% is_nil(@person_id) -> %>
         <div
           class={[cast_person_class(@layout), "opacity-60 tooltip"]}
-          data-tip={gettext("Refresh metadata to link this person")}
+          data-tip={gettext("No linked profile yet")}
         >
           <.cast_person_body
             member={@member}

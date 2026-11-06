@@ -71,7 +71,8 @@ defmodule MydiaWeb.DiscoverLive.PersonModalTest do
       |> render_click()
 
       assert has_element?(view, "#discover-detail-modal[open]")
-      wait_until(fn -> has_element?(view, "#cast-person-#{ctx.person_id}") end)
+      render_async(view)
+      assert has_element?(view, "#cast-person-#{ctx.person_id}")
 
       view |> element("#cast-person-#{ctx.person_id}") |> render_click()
 
@@ -326,17 +327,5 @@ defmodule MydiaWeb.DiscoverLive.PersonModalTest do
     conn
     |> Plug.Conn.put_resp_content_type("application/json")
     |> Plug.Conn.resp(status, Jason.encode!(body))
-  end
-
-  defp wait_until(fun, retries \\ 200)
-  defp wait_until(_fun, 0), do: flunk("condition was not met in time")
-
-  defp wait_until(fun, retries) do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(10)
-      wait_until(fun, retries - 1)
-    end
   end
 end

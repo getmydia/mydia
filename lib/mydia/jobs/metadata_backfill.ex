@@ -21,7 +21,7 @@ defmodule Mydia.Jobs.MetadataBackfill do
   `scheduled_in`, so a version bump that selects a whole library spreads its
   relay load over hours instead of arriving as a burst. Once the library is
   repaired nothing is enqueued, but each run still reads the metadata of every
-  TV show. Idempotent and safe to re-run.
+  TV show and movie. Idempotent and safe to re-run.
   """
 
   use Oban.Worker,

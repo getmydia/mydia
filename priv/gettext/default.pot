@@ -2273,7 +2273,7 @@ msgstr ""
 msgid "%{provider} ID %{id}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:245
+#: lib/mydia_web/live/discover_live/index.html.heex:250
 #, elixir-autogen, elixir-format
 msgid "%{rating}+ Stars"
 msgstr ""
@@ -2353,8 +2353,8 @@ msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:762
 #: lib/mydia_web/live/discover_live/index.ex:806
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:215
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:317
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:218
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:323
 #, elixir-autogen, elixir-format
 msgid "%{title} is already in your library"
 msgstr ""
@@ -2381,8 +2381,8 @@ msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:839
 #: lib/mydia_web/live/discover_live/index.ex:869
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:309
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:260
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:313
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:266
 #, elixir-autogen, elixir-format
 msgid "%{title} requested. An admin will review it soon."
 msgstr ""
@@ -2641,8 +2641,8 @@ msgid_plural "Added %{count} items to %{name}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:199
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:308
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:201
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:314
 #, elixir-autogen, elixir-format
 msgid "Added %{title} to your library"
 msgstr ""
@@ -2751,13 +2751,13 @@ msgstr ""
 msgid "All Episodes"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:192
+#: lib/mydia_web/live/discover_live/index.html.heex:197
 #, elixir-autogen, elixir-format
 msgid "All Genres"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:91
-#: lib/mydia_web/live/discover_live/index.html.heex:204
+#: lib/mydia_web/live/discover_live/index.html.heex:209
 #, elixir-autogen, elixir-format
 msgid "All Languages"
 msgstr ""
@@ -2905,7 +2905,7 @@ msgstr ""
 msgid "Another release is still being added. Try again when it finishes."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:239
+#: lib/mydia_web/live/discover_live/index.html.heex:244
 #, elixir-autogen, elixir-format
 msgid "Any Rating"
 msgstr ""
@@ -3107,7 +3107,7 @@ msgstr ""
 msgid "Availability"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:173
+#: lib/mydia_web/live/discover_live/index.html.heex:178
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:144
 #: lib/mydia_web/live/plugin_page_live/activity.ex:84
 #, elixir-autogen, elixir-format
@@ -3462,7 +3462,7 @@ msgstr ""
 msgid "Clear inactive (%{count})"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:110
+#: lib/mydia_web/live/discover_live/index.html.heex:115
 #, elixir-autogen, elixir-format
 msgid "Clear search"
 msgstr ""
@@ -3796,22 +3796,22 @@ msgstr ""
 msgid "Could not add that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:236
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:239
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:226
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:229
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:338
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:344
 #, elixir-autogen, elixir-format
 msgid "Could not add that title"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:328
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:334
 #, elixir-autogen, elixir-format
 msgid "Could not add that title: %{reason}"
 msgstr ""
@@ -3929,12 +3929,12 @@ msgstr ""
 msgid "Could not request that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:315
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:319
 #, elixir-autogen, elixir-format
 msgid "Could not request that movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:269
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:275
 #, elixir-autogen, elixir-format
 msgid "Could not request that title"
 msgstr ""
@@ -4070,7 +4070,7 @@ msgstr ""
 msgid "Couldn't find the imported file for this download."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:379
+#: lib/mydia_web/live/discover_live/index.html.heex:384
 #, elixir-autogen, elixir-format
 msgid "Couldn't load more results."
 msgstr ""
@@ -4178,7 +4178,7 @@ msgstr ""
 msgid "Current match"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:146
+#: lib/mydia_web/live/discover_live/index.html.heex:151
 #: lib/mydia_web/live/section_live/new.ex:118
 #, elixir-autogen, elixir-format
 msgid "Custom"
@@ -5361,7 +5361,7 @@ msgstr[1] ""
 msgid "From %{provider} · not found on %{library_provider}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:220
+#: lib/mydia_web/live/discover_live/index.html.heex:225
 #, elixir-autogen, elixir-format
 msgid "From %{year}"
 msgstr ""
@@ -5371,12 +5371,12 @@ msgstr ""
 msgid "From indexer category"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:215
+#: lib/mydia_web/live/discover_live/index.html.heex:220
 #, elixir-autogen, elixir-format
 msgid "From year"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:217
+#: lib/mydia_web/live/discover_live/index.html.heex:222
 #, elixir-autogen, elixir-format
 msgid "From: any"
 msgstr ""
@@ -5526,7 +5526,7 @@ msgstr ""
 msgid "Hidden"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:69
+#: lib/mydia_web/live/discover_live/index.html.heex:74
 #, elixir-autogen, elixir-format
 msgid "Hide in library"
 msgstr ""
@@ -6776,7 +6776,7 @@ msgid "No results for \"%{query}\"."
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:524
-#: lib/mydia_web/live/discover_live/index.html.heex:333
+#: lib/mydia_web/live/discover_live/index.html.heex:338
 #, elixir-autogen, elixir-format
 msgid "No results found"
 msgstr ""
@@ -6904,7 +6904,7 @@ msgstr ""
 msgid "Noted. %{title} won't be suggested again."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:323
+#: lib/mydia_web/live/discover_live/index.html.heex:328
 #, elixir-autogen, elixir-format
 msgid "Nothing here is available for your account."
 msgstr ""
@@ -8212,7 +8212,7 @@ msgstr ""
 msgid "Results appear as each indexer responds"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:104
+#: lib/mydia_web/live/discover_live/index.html.heex:109
 #, elixir-autogen, elixir-format
 msgid "Results for \"%{query}\""
 msgstr ""
@@ -8245,7 +8245,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: lib/mydia_web/components/indexer_components.ex:160
-#: lib/mydia_web/live/discover_live/index.html.heex:386
+#: lib/mydia_web/live/discover_live/index.html.heex:391
 #: lib/mydia_web/live/discover_live/regional_components.ex:73
 #: lib/mydia_web/live/discover_live/regional_components.ex:159
 #: lib/mydia_web/live/downloads_live/index.html.heex:165
@@ -9594,8 +9594,8 @@ msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:628
 #: lib/mydia_web/live/helpers/media_add_helpers.ex:27
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:89
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:119
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:90
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:125
 #, elixir-autogen, elixir-format
 msgid "That library is no longer available. Nothing was added."
 msgstr ""
@@ -9701,7 +9701,7 @@ msgstr ""
 msgid "The media items in this collection will not be deleted."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:308
+#: lib/mydia_web/live/discover_live/index.html.heex:313
 #, elixir-autogen, elixir-format
 msgid "The metadata service is temporarily unavailable. Try a curated list instead."
 msgstr ""
@@ -9940,7 +9940,7 @@ msgstr ""
 msgid "Title match"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:339
+#: lib/mydia_web/live/discover_live/index.html.heex:344
 #, elixir-autogen, elixir-format
 msgid "Titles already in your library are hidden."
 msgstr ""
@@ -9950,17 +9950,17 @@ msgstr ""
 msgid "Titles whose original language is not English."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:233
+#: lib/mydia_web/live/discover_live/index.html.heex:238
 #, elixir-autogen, elixir-format
 msgid "To %{year}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:228
+#: lib/mydia_web/live/discover_live/index.html.heex:233
 #, elixir-autogen, elixir-format
 msgid "To year"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:230
+#: lib/mydia_web/live/discover_live/index.html.heex:235
 #, elixir-autogen, elixir-format
 msgid "To: any"
 msgstr ""
@@ -10093,7 +10093,7 @@ msgstr ""
 msgid "Try a different time period."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:336
+#: lib/mydia_web/live/discover_live/index.html.heex:341
 #, elixir-autogen, elixir-format
 msgid "Try adjusting your filters or search terms"
 msgstr ""
@@ -10143,7 +10143,7 @@ msgstr ""
 msgid "Typing the code needs a recent player. On an older one, scan the QR instead."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:305
+#: lib/mydia_web/live/discover_live/index.html.heex:310
 #, elixir-autogen, elixir-format
 msgid "Unable to load results"
 msgstr ""
@@ -10527,7 +10527,7 @@ msgstr ""
 msgid "Your activity"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:161
+#: lib/mydia_web/live/discover_live/index.html.heex:166
 #: lib/mydia_web/live/discover_live/regional_components.ex:115
 #, elixir-autogen, elixir-format
 msgid "Your country"
@@ -10957,8 +10957,8 @@ msgstr ""
 msgid "the file's location on disk could not be resolved."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:366
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:494
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:370
+#: lib/mydia_web/live/media_live/show/recommendation_events.ex:530
 #, elixir-autogen, elixir-format
 msgid "the metadata service could not be reached"
 msgstr ""
@@ -21642,22 +21642,22 @@ msgstr ""
 msgid "No people found"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:100
+#: lib/mydia_web/live/discover_live/index.html.heex:105
 #, elixir-autogen, elixir-format
 msgid "People"
 msgstr ""
 
-#: lib/mydia_web/components/person_components.ex:232
-#, elixir-autogen, elixir-format
-msgid "Refresh metadata to link this person"
-msgstr ""
-
-#: lib/mydia_web/live/discover_live/index.html.heex:80
+#: lib/mydia_web/live/discover_live/index.html.heex:85
 #, elixir-autogen, elixir-format
 msgid "Search in"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.html.heex:90
+#: lib/mydia_web/live/discover_live/index.html.heex:95
 #, elixir-autogen, elixir-format
 msgid "Titles"
+msgstr ""
+
+#: lib/mydia_web/components/person_components.ex:232
+#, elixir-autogen, elixir-format
+msgid "No linked profile yet"
 msgstr ""
