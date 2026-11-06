@@ -33,13 +33,20 @@ class _StubService implements UpdateService {
 }
 
 class _RecordingUpdater extends PlatformUpdater {
-  _RecordingUpdater({this.throws, this.handsOffUnconfirmed = false});
+  _RecordingUpdater({
+    this.throws,
+    this.handsOffUnconfirmed = false,
+    this.installsWithoutAsking = false,
+  });
 
   final Exception? throws;
   AvailableUpdate? applied;
 
   @override
   final bool handsOffUnconfirmed;
+
+  @override
+  final bool installsWithoutAsking;
 
   @override
   bool get canUpdateInPlace => true;
@@ -186,4 +193,101 @@ void main() {
 
     expect(backend.manualCheck, ManualCheckBehaviour.checksOnly);
   });
+
+  group('an updater that installs without asking (Android)', () {
+    test('makes the manual row install in one press', () {
+      final backend = ReleaseUpdateBackend(
+        updater: _RecordingUpdater(installsWithoutAsking: true),
+        currentVersion: '0.15.0',
+        service: _StubService(null),
+      );
+      addTearDown(backend.dispose);
+
+      expect(backend.manualCheck, ManualCheckBehaviour.installsWithoutAsking);
+    });
+
+    test('checks first when nothing is known yet, then installs', () async {
+      final updater = _RecordingUpdater(installsWithoutAsking: true);
+      final service = _StubService(_update());
+      final backend = ReleaseUpdateBackend(
+        updater: updater,
+        currentVersion: '0.15.0',
+        service: service,
+      );
+      addTearDown(backend.dispose);
+
+      final seen = <AvailableUpdate?>[];
+      backend.availability.listen(seen.add);
+      final outcome = await backend.requestUpdate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.calls, 1);
+      // Published, so the card can show the version it is downloading.
+      expect(seen.single, isA<AppUpdate>());
+      expect(outcome, isA<UpdateInstalled>());
+      expect((updater.applied as AppUpdate).version, '0.16.0');
+    });
+
+    test('reports up to date when the check finds nothing', () async {
+      final updater = _RecordingUpdater(installsWithoutAsking: true);
+      final backend = ReleaseUpdateBackend(
+        updater: updater,
+        currentVersion: '0.15.0',
+        service: _StubService(null),
+      );
+      addTearDown(backend.dispose);
+
+      expect(await backend.requestUpdate(), isA<AlreadyUpToDate>());
+      expect(updater.applied, isNull);
+    });
+
+    test('a failed check is a failure, not an escape', () async {
+      final backend = ReleaseUpdateBackend(
+        updater: _RecordingUpdater(installsWithoutAsking: true),
+        currentVersion: '0.15.0',
+        service: _ThrowingService(),
+      );
+      addTearDown(backend.dispose);
+
+      expect(await backend.requestUpdate(), isA<UpdateFailed>());
+    });
+
+    test('reuses an update it already holds without checking again', () async {
+      final service = _StubService(_update());
+      final backend = ReleaseUpdateBackend(
+        updater: _RecordingUpdater(installsWithoutAsking: true),
+        currentVersion: '0.15.0',
+        service: service,
+      );
+      addTearDown(backend.dispose);
+
+      await backend.refresh(force: true);
+      await backend.requestUpdate();
+
+      expect(service.calls, 1);
+    });
+  });
+
+  test('a checks-only updater never checks from requestUpdate', () async {
+    final service = _StubService(_update());
+    final backend = ReleaseUpdateBackend(
+      updater: _RecordingUpdater(),
+      currentVersion: '0.15.0',
+      service: service,
+    );
+    addTearDown(backend.dispose);
+
+    expect(await backend.requestUpdate(), isA<AlreadyUpToDate>());
+    expect(service.calls, 0);
+  });
+}
+
+class _ThrowingService implements UpdateService {
+  @override
+  Future<AppUpdate?> checkForUpdate({
+    required String currentVersion,
+    required UpdateTrack track,
+    bool force = false,
+  }) async =>
+      throw Exception('feed unreachable');
 }

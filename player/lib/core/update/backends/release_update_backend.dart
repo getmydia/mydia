@@ -51,7 +51,9 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Stream<AvailableUpdate?> get availability => _controller.stream;
 
   @override
-  ManualCheckBehaviour get manualCheck => ManualCheckBehaviour.checksOnly;
+  ManualCheckBehaviour get manualCheck => _updater.installsWithoutAsking
+      ? ManualCheckBehaviour.installsWithoutAsking
+      : ManualCheckBehaviour.checksOnly;
 
   @override
   bool get canUpdateInPlace => _updater.canUpdateInPlace;
@@ -103,6 +105,18 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
   }) async {
+    // A one-press install starts from the settings row with nothing found
+    // yet, so it checks first. An update already held is used as is: the
+    // banner and card offered that version by name.
+    if (_latest == null && _updater.installsWithoutAsking) {
+      try {
+        await refresh(force: true);
+      } catch (e) {
+        return UpdateFailed(
+            UpdateProblem(UpdateIssue.checkFailed, detail: '$e'));
+      }
+    }
+
     final update = _latest;
     if (update == null) return const AlreadyUpToDate();
 

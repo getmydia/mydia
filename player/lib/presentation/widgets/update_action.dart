@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/player/input_capabilities.dart';
 import '../../core/update/install_environment.dart';
+import '../../core/update/update_backend.dart';
 import '../../core/update/update_provider.dart';
 import '../../domain/models/available_update.dart';
 import '../../l10n/l10n.dart';
@@ -22,6 +23,10 @@ typedef UrlLauncher = Future<void> Function(Uri uri);
 /// avoid a second place that could get the GitHub-versus-app-store question
 /// wrong; one shared action answers that objection instead of working around
 /// it.
+///
+/// A backend whose manual check is `installsWithoutAsking` (sideloaded
+/// Android, phone or TV) never shows the confirmation: one press goes from
+/// the button to installed.
 ///
 /// On a directional-primary device (Android TV) the `inPlace` branch skips
 /// the confirmation: Android's package installer opens its own confirm
@@ -71,6 +76,13 @@ Future<void> startUpdate(
         return;
       }
       if (update is! AppUpdate) return;
+      // Sideloaded Android installs on the press, phone or TV alike: its
+      // package installer is the only confirmation left, when it asks at all.
+      if (ref.read(updateProvider).manualCheck ==
+          ManualCheckBehaviour.installsWithoutAsking) {
+        unawaited(notifier.requestUpdate());
+        return;
+      }
       if (directionalPrimary ?? InputCapabilities.directionalPrimary) {
         unawaited(notifier.requestUpdate());
         return;

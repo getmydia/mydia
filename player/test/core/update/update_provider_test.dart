@@ -17,7 +17,11 @@ class _FakeBackend implements UpdateBackend {
     this.outcome = const AlreadyUpToDate(),
     this.trackSwitchOutcome = const TrackSwitchApplied(),
     UpdateTrack currentTrack = UpdateTrack.stable,
+    this.manualCheck = ManualCheckBehaviour.checksAndInstalls,
   }) : _currentTrack = currentTrack;
+
+  @override
+  final ManualCheckBehaviour manualCheck;
 
   /// Mutable so a test can change what the next `requestUpdate` returns.
   UpdateOutcome outcome;
@@ -37,10 +41,6 @@ class _FakeBackend implements UpdateBackend {
 
   @override
   Stream<AvailableUpdate?> get availability => controller.stream;
-
-  @override
-  ManualCheckBehaviour get manualCheck =>
-      ManualCheckBehaviour.checksAndInstalls;
 
   @override
   bool get canUpdateInPlace => true;
@@ -407,6 +407,38 @@ void main() {
 
     expect(backend.refreshes, 0);
     expect(container.read(updateProvider).restartRequired, isTrue);
+  });
+
+  group('an install-without-asking backend (Android)', () {
+    test('checks at startup, so the banner can still offer an update',
+        () async {
+      final backend = _FakeBackend(
+        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+      );
+      final container = _container(backend);
+      container.read(updateProvider);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(backend.refreshes, 1);
+    });
+
+    test('checkForUpdate goes straight to the install', () async {
+      final backend = _FakeBackend(
+        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+        outcome: const UpdateDeferred(),
+      );
+      final container = _container(backend);
+      container.read(updateProvider);
+      await Future<void>.delayed(Duration.zero);
+      final startupRefreshes = backend.refreshes;
+
+      await container.read(updateProvider.notifier).checkForUpdate();
+
+      // The backend checks inside requestUpdate; a separate refresh here
+      // would be a second network round trip for the same answer.
+      expect(backend.refreshes, startupRefreshes);
+      expect(backend.requests, 1);
+    });
   });
 
   test('the backend\'s tracks and current track reach the state', () async {

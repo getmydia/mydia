@@ -14,8 +14,9 @@ import java.io.File
  *
  * PackageInstaller rather than an ACTION_VIEW intent on a FileProvider URI:
  * the session API reports its own failures, needs no provider declaration,
- * and is the path Android has kept working across versions. The confirmation
- * dialog is still the system's, so nothing here can install silently.
+ * and is the path Android has kept working across versions. Any confirmation
+ * dialog is the system's; on Android 12+ it skips that dialog for an app
+ * updating itself, which is what makes the update one press.
  */
 class ApkInstaller(private val activity: Activity) {
 
@@ -58,6 +59,19 @@ class ApkInstaller(private val activity: Activity) {
             PackageInstaller.SessionParams.MODE_FULL_INSTALL
         )
         params.setAppPackageName(activity.packageName)
+        // Android 12+ skips its confirmation dialog for an app updating
+        // itself, provided this app is already the package's installer of
+        // record (it installed the running copy) and holds
+        // UPDATE_PACKAGES_WITHOUT_USER_ACTION. When either is not so, as on
+        // the first update after a sideload from a browser, the session
+        // falls back to STATUS_PENDING_USER_ACTION and ApkInstallReceiver
+        // shows the dialog as before. Committing through this app also makes
+        // it the installer of record, so only that first update asks.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(
+                PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
+            )
+        }
 
         val sessionId = installer.createSession(params)
         var opened: PackageInstaller.Session? = null
@@ -78,6 +92,9 @@ class ApkInstaller(private val activity: Activity) {
                 0
             }
             val pending = PendingIntent.getBroadcast(activity, sessionId, intent, flags)
+            // Committed synchronously before the session, which can replace
+            // this process the moment it is committed.
+            UpdateRelaunchReceiver.markStarted(activity)
             session.commit(pending.intentSender)
         } catch (error: Exception) {
             opened?.abandon() ?: installer.abandonSession(sessionId)
