@@ -461,6 +461,66 @@ void main() {
       });
     });
 
+    test(
+        'ignores a refresh that was in flight across a background and '
+        'resume', () {
+      fakeAsync((async) {
+        var pending = false;
+        final late = Completer<FlutterPlaybackSnapshot?>();
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: (nodeId) {
+            if (pending) return late.future;
+            return Future.value(playingSnapshot(title: 'The Lantern Keepers'));
+          },
+        );
+        final stopped = <String>[];
+        targets.stopped.listen(stopped.add);
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        pending = true;
+        async.elapse(const Duration(seconds: 5)); // refresh starts, waits
+
+        targets.onBackground();
+        targets.onForeground();
+        // The connection the probe was using died with the background, so
+        // it fails late. That says nothing about the player.
+        late.complete(null);
+        async.flushMicrotasks();
+
+        expect(stopped, isEmpty);
+        expect(latest, isEmpty,
+            reason: 'a stale refresh must not repopulate the held list');
+
+        targets.dispose();
+      });
+    });
+
+    test('ignores a sweep that was in flight across a background and resume',
+        () async {
+      final late = Completer<FlutterPlaybackSnapshot?>();
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv']),
+        probe: (nodeId) => late.future,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      final sweep = targets.sweep();
+      await Future<void>.delayed(Duration.zero);
+      targets.onBackground();
+      targets.onForeground();
+      late.complete(null);
+      await sweep;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, isEmpty);
+    });
+
     test('does not report anything when the app backgrounds', () async {
       final scripted = ScriptedProbe({
         'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
