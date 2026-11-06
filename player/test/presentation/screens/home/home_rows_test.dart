@@ -8,6 +8,7 @@ import 'package:player/core/sources/mydia/mydia_mapping.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/ranked_item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/screens/home/home_rows.dart';
@@ -32,6 +33,9 @@ HomeFeeds feeds(
   bool cwFails = false,
   bool recentFails = false,
   bool librariesFail = false,
+  List<RankedItem> trendMovies = const [],
+  List<RankedItem> trendShows = const [],
+  AsyncValue<List<RankedItem>>? trending,
   bool loading = false,
 }) {
   AsyncValue<T> v<T>(T value, bool fails) => loading
@@ -47,8 +51,15 @@ HomeFeeds feeds(
     favorites: AsyncData(favs),
     libraries: v(libraries, librariesFail),
     previews: previews,
+    trendingMovies: trending ?? AsyncData(trendMovies),
+    trendingShows: trending ?? AsyncData(trendShows),
   );
 }
+
+List<RankedItem> ranked(Source s, int n, ItemKind kind) => [
+      for (var r = 1; r <= n; r++)
+        RankedItem(item: item(s, 't$r', kind: kind), rank: r),
+    ];
 
 void main() {
   final a = fakeServer('a'), b = fakeServer('b');
@@ -249,5 +260,48 @@ void main() {
     ]);
     expect(rows.favorites, hasLength(1));
     expect(rows.extraCopies[rows.favorites.single.ref], 1);
+  });
+  group('trending rows', () {
+    test('five or more ranked items fill the rows', () {
+      final rows = buildHomeRows([
+        feeds(a,
+            trendMovies: ranked(a, 5, ItemKind.movie),
+            trendShows: ranked(a, 6, ItemKind.show)),
+      ]);
+      expect(rows.trendingMovies, hasLength(homeTrendingMinimum));
+      expect(rows.trendingShows, hasLength(6));
+      expect(rows.isEmpty, isFalse);
+    });
+
+    test('four items leave the row empty', () {
+      final rows = buildHomeRows([
+        feeds(a, trendMovies: ranked(a, 4, ItemKind.movie)),
+      ]);
+      expect(rows.trendingMovies, isEmpty);
+    });
+
+    test('trending failure hides only the trending rows', () {
+      final rows = buildHomeRows([
+        feeds(a,
+            recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
+            trending:
+                const AsyncError<List<RankedItem>>(_down, StackTrace.empty)),
+      ]);
+      expect(rows.recentMovies, hasLength(1));
+      expect(rows.unavailable, isEmpty);
+      expect(rows.error, isNull);
+      expect(rows.loading, isFalse);
+      expect(rows.trendingMovies, isEmpty);
+    });
+
+    test('trending still loading does not hold Home loading', () {
+      final rows = buildHomeRows([
+        feeds(a,
+            recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
+            trending: const AsyncLoading<List<RankedItem>>()),
+      ]);
+      expect(rows.loading, isFalse);
+      expect(rows.recentMovies, hasLength(1));
+    });
   });
 }

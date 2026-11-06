@@ -7,6 +7,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/collection.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/ranked_item.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 Source fakeServer(String accountId, {SourceKind kind = SourceKind.plex}) =>
@@ -57,7 +58,8 @@ class FakeMergedSource extends MediaSource
         RecentlyAdded,
         Searchable,
         FavoritesListing,
-        Collections {
+        Collections,
+        Trending {
   FakeMergedSource(
     this.source, {
     this.movies = const [],
@@ -75,6 +77,8 @@ class FakeMergedSource extends MediaSource
     this.found = const [],
     this.favs = const [],
     this.cols = const [],
+    this.trendingMovies = const [],
+    this.trendingShows = const [],
     this.favPageSize = 50,
     this.caps = const {
       SourceCapability.continueWatching,
@@ -82,6 +86,7 @@ class FakeMergedSource extends MediaSource
       SourceCapability.searchable,
       SourceCapability.favoritesListing,
       SourceCapability.collections,
+      SourceCapability.trending,
     },
   });
 
@@ -97,6 +102,14 @@ class FakeMergedSource extends MediaSource
   final List<ItemSummary> found;
   final List<ItemSummary> favs;
   final List<SourceCollection> cols;
+  final List<RankedItem> trendingMovies;
+  final List<RankedItem> trendingShows;
+
+  /// Calls to [trending], for refresh tests.
+  int trendingCalls = 0;
+
+  /// Makes [trending] throw, after any rows it already answered.
+  bool trendingFails = false;
   final int favPageSize;
   final Set<SourceCapability> caps;
 
@@ -150,6 +163,7 @@ class FakeMergedSource extends MediaSource
       const (FavoritesListing) =>
         caps.contains(SourceCapability.favoritesListing),
       const (Collections) => caps.contains(SourceCapability.collections),
+      const (Trending) => caps.contains(SourceCapability.trending),
       _ => true,
     };
     return ok && this is T ? this as T : null;
@@ -228,6 +242,14 @@ class FakeMergedSource extends MediaSource
   Future<List<ItemSummary>> recentlyAdded() async {
     await _wait();
     return recent;
+  }
+
+  @override
+  Future<List<RankedItem>> trending(ItemKind kind) async {
+    trendingCalls++;
+    await _wait();
+    if (trendingFails) throw const SourceException.unreachable();
+    return kind == ItemKind.show ? trendingShows : trendingMovies;
   }
 
   @override

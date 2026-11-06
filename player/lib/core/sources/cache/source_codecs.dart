@@ -4,6 +4,7 @@ library;
 import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/ranked_item.dart';
 
 Map<String, Object?> _map(Object? json) => json! as Map<String, Object?>;
 
@@ -12,6 +13,12 @@ Object? encodeSummaries(List<ItemSummary> items) =>
 
 List<ItemSummary> decodeSummaries(Object? json) =>
     [for (final e in json! as List) ItemSummary.fromJson(_map(e))];
+
+Object? encodeRanked(List<RankedItem> items) =>
+    [for (final i in items) i.toJson()];
+
+List<RankedItem> decodeRanked(Object? json) =>
+    [for (final e in json! as List) RankedItem.fromJson(_map(e))];
 
 Object? encodeLibraries(List<Library> libraries) =>
     [for (final l in libraries) l.toJson()];

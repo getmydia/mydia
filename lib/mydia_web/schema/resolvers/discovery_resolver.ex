@@ -6,6 +6,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   alias Mydia.{Media, Playback}
 
   alias Mydia.Media.RecentlyAdded
+  alias Mydia.Media.TrendingInLibrary
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
   alias Mydia.Playback.OnDeckEntry
@@ -55,6 +56,37 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       end)
 
     {:ok, paginate_simple(all_items, first, after_cursor)}
+  end
+
+  @spec trending_in_library(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def trending_in_library(_parent, %{type: :episode}, _resolution), do: {:ok, []}
+
+  def trending_in_library(_parent, args, %{context: context}) do
+    first = (args[:first] || 20) |> max(1) |> min(50)
+
+    case context[:current_user] do
+      nil ->
+        {:ok, []}
+
+      user ->
+        case TrendingInLibrary.list(context[:current_scope], user.id, args.type, limit: first) do
+          {:ok, ranked} ->
+            added_at =
+              RecentlyAdded.added_at_map(ids: Enum.map(ranked, fn {item, _} -> item.id end))
+
+            {:ok,
+             Enum.map(ranked, fn {item, rank} ->
+               ItemBuilder.recently_added_item(item,
+                 added_at: Map.get(added_at, item.id),
+                 trending_rank: rank
+               )
+             end)}
+
+          {:error, _reason} ->
+            {:error, "Trending is unavailable right now"}
+        end
+    end
   end
 
   # The GraphQL arg is a list of atoms; RecentlyAdded filters on the string

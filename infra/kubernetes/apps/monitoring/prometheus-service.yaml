@@ -16,3 +16,4 @@ spec:
   selector:
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: mydia
