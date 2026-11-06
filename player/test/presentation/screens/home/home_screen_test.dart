@@ -243,6 +243,27 @@ void main() {
       expect(fake.trendingCalls, greaterThan(before));
     });
 
+    testWidgets(
+        'a trending refresh failure after cached rows leaves Home unbannered',
+        (t) async {
+      final s = fakeServer('a');
+      final fake = FakeMergedSource(s,
+          recent: [item(s, 'm', addedAt: DateTime.utc(2024))],
+          trendingMovies: _ranked(s, ItemKind.movie));
+      await pumpHome(t, [fake], size: const Size(1280, 900));
+      expect(find.byKey(const Key('home-trending-movies')), findsOneWidget);
+
+      fake.trendingFails = true;
+      final before = fake.trendingCalls;
+      await t.fling(
+          find.byKey(const Key('home-list')), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+
+      expect(fake.trendingCalls, greaterThan(before));
+      expect(find.byKey(const Key('freshness-banner')), findsNothing);
+      expect(find.byKey(const Key('home-recent-movies')), findsOneWidget);
+    });
+
     testWidgets('no servers is empty, not an error', (t) async {
       await pumpHome(t, []);
       expect(find.byKey(const Key('source-error-retry')), findsNothing);

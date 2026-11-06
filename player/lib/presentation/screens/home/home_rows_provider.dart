@@ -38,15 +38,15 @@ HomeFeeds _feedsOf(Ref ref, MediaSource source) {
   );
 }
 
-/// Every cache key Home reads for [ids], for the freshness header.
+/// The cache keys Home's freshness header watches for [ids]. Trending is
+/// left out on purpose: it is optional, so a failed or slow trending refetch
+/// must not raise Home's "couldn't refresh" banner or refresh line.
 List<QueryKey> homeQueryKeys(Iterable<SourceId> ids) => [
       for (final id in ids) ...[
         SourceKeys.libraries(id),
         SourceKeys.continueWatching(id),
         SourceKeys.recentlyAdded(id),
         SourceKeys.favoritesRow(id),
-        SourceKeys.trending(id, ItemKind.movie),
-        SourceKeys.trending(id, ItemKind.show),
       ],
     ];
 

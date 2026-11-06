@@ -107,6 +107,9 @@ class FakeMergedSource extends MediaSource
 
   /// Calls to [trending], for refresh tests.
   int trendingCalls = 0;
+
+  /// Makes [trending] throw, after any rows it already answered.
+  bool trendingFails = false;
   final int favPageSize;
   final Set<SourceCapability> caps;
 
@@ -245,6 +248,7 @@ class FakeMergedSource extends MediaSource
   Future<List<RankedItem>> trending(ItemKind kind) async {
     trendingCalls++;
     await _wait();
+    if (trendingFails) throw const SourceException.unreachable();
     return kind == ItemKind.show ? trendingShows : trendingMovies;
   }
 

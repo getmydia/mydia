@@ -103,12 +103,12 @@ void main() {
     expect(rows.continueWatching.map((i) => i.ref.sourceId).toSet(), {a.id});
   });
 
-  test('query keys cover every feed of every server, trending included', () {
+  test('query keys cover the freshness feeds, trending excluded', () {
     final id = fakeServer('a').id;
     final keys = homeQueryKeys([id]);
-    expect(keys, hasLength(6));
-    expect(keys, contains(SourceKeys.trending(id, ItemKind.movie)));
-    expect(keys, contains(SourceKeys.trending(id, ItemKind.show)));
+    expect(keys, hasLength(4));
+    expect(keys, isNot(contains(SourceKeys.trending(id, ItemKind.movie))));
+    expect(keys, isNot(contains(SourceKeys.trending(id, ItemKind.show))));
   });
 
   test('scopes compare by value', () {
