@@ -255,10 +255,11 @@ void main() {
     test('checks again and installs a newer release than the one it held',
         () async {
       final updater = _RecordingUpdater(installsWithoutAsking: true);
+      final service = _SequenceService([_update(), _update(version: '0.17.0')]);
       final backend = ReleaseUpdateBackend(
         updater: updater,
         currentVersion: '0.15.0',
-        service: _SequenceService([_update(), _update(version: '0.17.0')]),
+        service: service,
       );
       addTearDown(backend.dispose);
 
@@ -266,6 +267,9 @@ void main() {
       await backend.requestUpdate();
 
       expect((updater.applied as AppUpdate).version, '0.17.0');
+      // Forced, so UpdateService's rate limit cannot answer the press with
+      // the startup check's result.
+      expect(service.forced, [true, true]);
     });
 
     test('installs the release it held when the fresh check fails', () async {
@@ -307,12 +311,16 @@ class _SequenceService implements UpdateService {
   final List<Object?> _answers;
   int _next = 0;
 
+  /// The force argument of each check, in order.
+  final forced = <bool>[];
+
   @override
   Future<AppUpdate?> checkForUpdate({
     required String currentVersion,
     required UpdateTrack track,
     bool force = false,
   }) async {
+    forced.add(force);
     final answer = _answers[_next++];
     if (answer is Exception) throw answer;
     return answer as AppUpdate?;

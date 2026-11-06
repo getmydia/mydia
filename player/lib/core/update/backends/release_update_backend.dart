@@ -78,6 +78,11 @@ class ReleaseUpdateBackend implements UpdateBackend {
     }
 
     _track = track;
+    // An update held from the old track belongs to it. Forgotten here so a
+    // refresh that fails below cannot leave it on offer, or let a one-press
+    // install fall back to a build from the track the user just left.
+    _latest = null;
+    if (!_controller.isClosed) _controller.add(null);
     // Look immediately rather than waiting for the next scheduled check, so
     // the choice visibly does something. The switch itself already
     // succeeded by this point, so a failed look does not undo it: catch
