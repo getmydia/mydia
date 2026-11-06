@@ -72,17 +72,46 @@
           </div>
 
           <%= if @search_mode do %>
-            <div id="discover-search-chip" class="badge badge-lg gap-2">
-              {gettext("Results for \"%{query}\"", query: @search_query)}
-              <button
-                id="discover-search-clear"
-                type="button"
-                phx-click="clear_search"
-                class="btn btn-ghost btn-xs btn-circle"
-                aria-label={gettext("Clear search")}
+            <div class="flex flex-wrap items-center gap-2">
+              <div
+                id="discover-search-scope"
+                class="join"
+                role="group"
+                aria-label={gettext("Search in")}
               >
-                <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
-              </button>
+                <button
+                  id="discover-scope-titles"
+                  type="button"
+                  phx-click="switch_search_scope"
+                  phx-value-scope="titles"
+                  aria-pressed={to_string(@search_scope == :titles)}
+                  class={["btn btn-sm join-item", @search_scope == :titles && "btn-active"]}
+                >
+                  {gettext("Titles")}
+                </button>
+                <button
+                  id="discover-scope-people"
+                  type="button"
+                  phx-click="switch_search_scope"
+                  phx-value-scope="people"
+                  aria-pressed={to_string(@search_scope == :people)}
+                  class={["btn btn-sm join-item", @search_scope == :people && "btn-active"]}
+                >
+                  {gettext("People")}
+                </button>
+              </div>
+              <div id="discover-search-chip" class="badge badge-lg gap-2">
+                {gettext("Results for \"%{query}\"", query: @search_query)}
+                <button
+                  id="discover-search-clear"
+                  type="button"
+                  phx-click="clear_search"
+                  class="btn btn-ghost btn-xs btn-circle"
+                  aria-label={gettext("Clear search")}
+                >
+                  <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           <% else %>
             <div class="flex flex-wrap items-center gap-2">
@@ -151,7 +180,8 @@
         <% end %>
 
         <%!-- Filter controls — only visible in custom/discover mode --%>
-        <%= if @category == :discover or (@category == :home and @source != nil) do %>
+        <%= if @search_scope != :people and
+                 (@category == :discover or (@category == :home and @source != nil)) do %>
           <form
             id="discover-filter-form"
             phx-change="apply_filters"
@@ -251,6 +281,13 @@
           current_user={@current_user}
           adding_ids={@adding_item_ids}
           requesting_item_id={@requesting_item_id}
+        />
+      <% @search_scope == :people -> %>
+        <.people_results
+          people={@people_results}
+          loading={@loading}
+          error={@people_error}
+          event="show_person"
         />
       <% @loading -> %>
         <.poster_card_grid_skeleton

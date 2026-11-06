@@ -66,6 +66,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # PersonModal reads its relay config from here.
       |> assign(:metadata_config, Metadata.default_relay_config())
       |> assign(:load_error, nil)
+      |> assign(:search_scope, :titles)
+      |> assign(:people_results, [])
+      |> assign(:people_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
@@ -88,6 +91,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
       category = parse_category(params["category"], media_type)
       search_query = params["q"] || ""
       search_mode = search_query != ""
+
+      # People is a scope of the search, not a third media type: without a
+      # query there is nothing to scope, so a stray ?scope=people is ignored.
+      search_scope = if search_mode, do: parse_search_scope(params["scope"]), else: :titles
 
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
@@ -129,6 +136,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:categories, categories)
         |> assign(:search_query, search_query)
         |> assign(:search_mode, search_mode)
+        |> assign(:search_scope, search_scope)
+        |> assign(:people_results, [])
+        |> assign(:people_error, nil)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
         |> assign(:year_from, year_from)
@@ -241,16 +251,25 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("search", %{"q" => query}, socket) do
     query = String.trim(query)
 
+    # A new query keeps the scope it was typed in.
     params =
       if query == "" do
         %{"type" => to_string(socket.assigns.media_type)}
       else
-        %{"type" => to_string(socket.assigns.media_type), "q" => query}
+        search_params(socket.assigns.media_type, query, socket.assigns.search_scope)
       end
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
+  def handle_event("switch_search_scope", %{"scope" => scope}, socket) do
+    %{media_type: media_type, search_query: query} = socket.assigns
+    params = search_params(media_type, query, parse_search_scope(scope))
+    {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
+  end
+
+  # Dropping `q` drops `scope` with it, so Discover returns to what it showed
+  # before the search.
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
@@ -569,6 +588,26 @@ defmodule MydiaWeb.DiscoverLive.Index do
         Logger.warning("Failed to load genres: #{inspect(reason)}")
         {:noreply, socket}
     end
+  end
+
+  # People results are the first page of TMDB's person search only: no paging,
+  # and no access filtering, since a person carries no titles of their own here.
+  # The popup filters the person's titles when it opens.
+  def handle_info(:load_data, %{assigns: %{search_scope: :people}} = socket) do
+    socket =
+      case Metadata.search_people_cached(
+             socket.assigns.metadata_config,
+             socket.assigns.search_query
+           ) do
+        {:ok, people} ->
+          assign(socket, :people_results, people)
+
+        {:error, reason} ->
+          Logger.warning("Failed to search people: #{inspect(reason)}")
+          socket |> assign(:people_results, []) |> assign(:people_error, reason)
+      end
+
+    {:noreply, assign(socket, :loading, false)}
   end
 
   def handle_info(:load_data, socket) do
@@ -1333,6 +1372,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     params
   end
+
+  defp search_params(media_type, query, :people),
+    do: %{"type" => to_string(media_type), "q" => query, "scope" => "people"}
+
+  defp search_params(media_type, query, :titles),
+    do: %{"type" => to_string(media_type), "q" => query}
+
+  # Lenient, like ?type=: anything but "people" searches titles.
+  defp parse_search_scope("people"), do: :people
+  defp parse_search_scope(_), do: :titles
 
   # Lenient: URL params are user-typed, so an unknown ?type= falls back to
   # movies rather than erroring.

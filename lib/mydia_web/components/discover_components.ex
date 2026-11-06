@@ -393,6 +393,83 @@ defmodule MydiaWeb.DiscoverComponents do
   defp library_path(:movie, id), do: "/movies/#{id}"
   defp library_path(:tv_show, id), do: "/tv/#{id}"
 
+  @doc """
+  Renders Discover's People search results: round headshots with the name
+  and a known-for line, each a button emitting `event` with the person's
+  `id`, `name` and `profile_path`, the params the person popup opens with.
+  """
+  attr :people, :list, required: true, doc: "`Mydia.Metadata.Structs.PersonSearchResult`s"
+  attr :loading, :boolean, default: false
+  attr :error, :any, default: nil
+  attr :event, :string, required: true
+
+  def people_results(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @loading -> %>
+        <div id="discover-people-loading" class="flex justify-center py-16">
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+      <% @error != nil -> %>
+        <div
+          id="discover-people-error"
+          role="alert"
+          class="alert alert-error alert-soft max-w-xl mx-auto"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>{gettext("Could not search people. The metadata service may be unavailable.")}</span>
+        </div>
+      <% @people == [] -> %>
+        <div
+          id="discover-people-empty"
+          class="flex flex-col items-center justify-center py-16 gap-4"
+        >
+          <div class="bg-base-200 rounded-full p-6">
+            <.icon name="hero-user" class="w-10 h-10 text-base-content/40" />
+          </div>
+          <p class="text-lg font-medium text-base-content/80">{gettext("No people found")}</p>
+        </div>
+      <% true -> %>
+        <div
+          id="discover-people-results"
+          class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-6"
+        >
+          <button
+            :for={person <- @people}
+            id={"discover-person-#{person.tmdb_id}"}
+            type="button"
+            phx-click={@event}
+            phx-value-id={person.tmdb_id}
+            phx-value-name={person.name}
+            phx-value-profile_path={person.profile_path}
+            class="group text-center cursor-pointer min-w-0"
+          >
+            <%= if person.profile_path do %>
+              <img
+                src={ImageUrl.profile_url(person.profile_path)}
+                alt={person.name}
+                loading="lazy"
+                class="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover mx-auto mb-2 transition group-hover:ring-2 group-hover:ring-primary"
+              />
+            <% else %>
+              <div class="w-20 h-20 md:w-24 md:h-24 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2 transition group-hover:ring-2 group-hover:ring-primary">
+                <.icon name="hero-user" class="w-10 h-10 text-base-content/30" />
+              </div>
+            <% end %>
+            <p class="text-sm font-medium line-clamp-1">{person.name}</p>
+            <p :if={known_for_line(person)} class="text-xs text-base-content/60 line-clamp-2">
+              {known_for_line(person)}
+            </p>
+          </button>
+        </div>
+    <% end %>
+    """
+  end
+
+  # TMDB's known-for titles, or the person's department when it lists none.
+  defp known_for_line(%{known_for: [_ | _] = titles}), do: Enum.join(titles, ", ")
+  defp known_for_line(%{known_for_department: department}), do: department
+
   attr :item, :map, required: true
   attr :media_type, :atom, required: true
   # nil renders no loading attribute at all. See the note on trending_card/1's
