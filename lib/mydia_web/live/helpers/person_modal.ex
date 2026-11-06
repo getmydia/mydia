@@ -22,7 +22,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   require Logger
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [start_async: 3]
+  import Phoenix.LiveView, only: [start_async: 3, cancel_async: 2]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media
@@ -65,6 +65,8 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     end
   end
 
+  def open(socket, _params), do: socket
+
   @doc """
   Re-runs the fetch for the person the dialog is open over.
   """
@@ -76,6 +78,15 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
 
   Returns the socket, not a `{:noreply, _}` tuple, so a host can pipe further.
   """
+  def handle_result(%{assigns: %{person_stub: nil}} = socket, _result), do: socket
+
+  def handle_result(
+        %{assigns: %{person_stub: %{id: stub_id}}} = socket,
+        {:ok, {:ok, %Person{tmdb_id: id}}}
+      )
+      when id != stub_id,
+      do: socket
+
   def handle_result(socket, {:ok, {:ok, %Person{} = person}}) do
     titles = enrich_titles(person, socket.assigns.current_scope)
 
@@ -92,8 +103,11 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
 
   @doc """
   Closes the dialog and resets every assign.
+
+  Cancels the in-flight fetch too: a result landing after the dismissal would
+  otherwise reopen the popup.
   """
-  def close(socket), do: init(socket)
+  def close(socket), do: socket |> cancel_async(:load_person) |> init()
 
   @doc """
   The person's titles, for hosts that resolve a `show_details` click against a

@@ -22,6 +22,46 @@ defmodule MydiaWeb.Live.Helpers.PersonModalTest do
   defp credit(id, type),
     do: %PersonCredit{tmdb_id: id, media_type: type, title: "Title #{id}", year: 2020}
 
+  describe "open/close/handle_result" do
+    defp host_socket do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          metadata_config: %{type: :metadata_relay, base_url: "http://localhost:1", options: %{}},
+          current_scope: Scope.unrestricted()
+        }
+      }
+      |> PersonModal.init()
+    end
+
+    test "open ignores params without an id or with a bad id" do
+      socket = host_socket()
+      assert PersonModal.open(socket, %{"name" => "x"}) == socket
+      assert PersonModal.open(socket, %{"id" => "abc"}) == socket
+    end
+
+    test "a result landing after close does not reopen the dialog" do
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.close()
+        |> PersonModal.handle_result({:ok, {:ok, person([], [])}})
+
+      assert socket.assigns.selected_person == nil
+      assert socket.assigns.person_stub == nil
+    end
+
+    test "a stale result for another person is ignored" do
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "2", "name" => "Other"})
+        |> PersonModal.handle_result({:ok, {:ok, person([], [])}})
+
+      assert socket.assigns.selected_person == nil
+      assert socket.assigns.person_loading
+    end
+  end
+
   describe "enrich_titles/2" do
     test "library status is per media type when a movie and a show share an id" do
       media_item_fixture(%{type: "movie", tmdb_id: 500})
