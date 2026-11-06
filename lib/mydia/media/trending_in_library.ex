@@ -57,7 +57,7 @@ defmodule Mydia.Media.TrendingInLibrary do
 
     steps = for {list, pages} <- @plan, page <- 1..pages, do: {list, page}
 
-    case walk(steps, nil, ctx, state) do
+    case step_through(steps, nil, ctx, state) do
       {:error, reason} -> {:error, reason}
       {:ok, state} -> {:ok, state.matches |> Enum.reverse() |> Enum.take(ctx.limit)}
     end
@@ -65,31 +65,41 @@ defmodule Mydia.Media.TrendingInLibrary do
 
   # `last` is `{list, total_pages}` of the previous step, used to skip the
   # rest of a list once its last page was fetched.
-  defp walk([], _last, _ctx, state), do: {:ok, state}
+  defp step_through([], _last, _ctx, state), do: {:ok, state}
 
-  defp walk([{list, page} | rest], last, ctx, state) do
+  defp step_through([{list, page} | rest], last, ctx, state) do
     cond do
-      length(state.matches) >= ctx.limit ->
-        {:ok, state}
-
-      match?({^list, total} when page > total, last) ->
-        walk(rest, last, ctx, state)
-
-      true ->
-        case ctx.fetch.(list, media_type: ctx.media_type, page: page) do
-          {:ok, %{results: results} = response} ->
-            total = Map.get(response, :total_pages) || page
-            {ctx, state} = absorb(results, ctx, state)
-            walk(rest, {list, total}, ctx, %{state | fetched_any?: true})
-
-          {:error, reason} ->
-            if state.fetched_any?, do: {:ok, state}, else: {:error, reason}
-
-          _other ->
-            if state.fetched_any?, do: {:ok, state}, else: {:error, :unexpected_response}
-        end
+      limit_reached?(state, ctx) -> {:ok, state}
+      past_last_page?(last, list, page) -> step_through(rest, last, ctx, state)
+      true -> fetch_step(list, page, rest, ctx, state)
     end
   end
+
+  defp limit_reached?(state, ctx), do: length(state.matches) >= ctx.limit
+
+  defp past_last_page?({list, total}, list, page), do: page > total
+  defp past_last_page?(_last, _list, _page), do: false
+
+  defp fetch_step(list, page, rest, ctx, state) do
+    list
+    |> ctx.fetch.(media_type: ctx.media_type, page: page)
+    |> absorb_page(list, page, rest, ctx, state)
+  end
+
+  defp absorb_page({:ok, %{results: results} = response}, list, page, rest, ctx, state) do
+    total = Map.get(response, :total_pages) || page
+    {ctx, state} = absorb(results, ctx, state)
+    step_through(rest, {list, total}, ctx, %{state | fetched_any?: true})
+  end
+
+  defp absorb_page({:error, reason}, _list, _page, _rest, _ctx, state),
+    do: end_walk(state, reason)
+
+  defp absorb_page(_other, _list, _page, _rest, _ctx, state),
+    do: end_walk(state, :unexpected_response)
+
+  defp end_walk(%{fetched_any?: true} = state, _reason), do: {:ok, state}
+  defp end_walk(_state, reason), do: {:error, reason}
 
   defp absorb(results, ctx, state) do
     new_ids =
