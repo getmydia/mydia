@@ -30,8 +30,8 @@ defmodule MydiaWeb.Schema.TrendingInLibraryTest do
   defp tmdb(id), do: %{"id" => id, "title" => "Catalog #{id}", "media_type" => "movie"}
 
   test "returns owned trending items with trendingRank", %{user: user} do
-    first = owned_movie("Harbor Lights", 910_001)
-    second = owned_movie("Quiet Orchard", 910_003)
+    first = owned_movie("Zorblax Quarterly", 910_001)
+    second = owned_movie("Wumbleton Sprockets", 910_003)
     _unowned = tmdb(910_002)
 
     stub_curated_lists(:movie, %{
@@ -42,12 +42,21 @@ defmodule MydiaWeb.Schema.TrendingInLibraryTest do
     data = run_query(@query, %{"type" => "MOVIE", "first" => 5}, user)
 
     assert [
-             %{"id" => id1, "title" => "Harbor Lights", "trendingRank" => 1},
-             %{"id" => id2, "title" => "Quiet Orchard", "trendingRank" => 3}
+             %{"id" => id1, "title" => "Zorblax Quarterly", "trendingRank" => 1},
+             %{"id" => id2, "title" => "Wumbleton Sprockets", "trendingRank" => 3}
            ] = data["trendingInLibrary"]
 
     assert id1 == first.id
     assert id2 == second.id
+  end
+
+  test "an explicit null first falls back to the default", %{user: user} do
+    owned_movie("Zorblax Quarterly", 910_001)
+    stub_curated_lists(:movie, %{trending: [tmdb(910_001)], popular: []})
+
+    data = run_query(@query, %{"type" => "MOVIE", "first" => nil}, user)
+
+    assert [%{"title" => "Zorblax Quarterly"}] = data["trendingInLibrary"]
   end
 
   test "anonymous context answers []" do
@@ -80,7 +89,7 @@ defmodule MydiaWeb.Schema.TrendingInLibraryTest do
     end)
 
     Bypass.stub(bypass, "GET", "/tmdb/movies/trending", fn conn ->
-      Plug.Conn.resp(conn, 500, "boom")
+      Plug.Conn.resp(conn, 404, "boom")
     end)
 
     assert {:ok, %{data: data, errors: [_ | _]}} =
@@ -93,7 +102,7 @@ defmodule MydiaWeb.Schema.TrendingInLibraryTest do
   end
 
   test "other queries return null trendingRank", %{user: user} do
-    owned_movie("Paper Lanterns", 910_010)
+    owned_movie("The Gilded Teapot Affair", 910_010)
 
     data =
       run_query(
@@ -102,7 +111,8 @@ defmodule MydiaWeb.Schema.TrendingInLibraryTest do
         user
       )
 
-    assert [%{"title" => "Paper Lanterns", "trendingRank" => nil}] = data["recentlyAdded"]
+    assert [%{"title" => "The Gilded Teapot Affair", "trendingRank" => nil}] =
+             data["recentlyAdded"]
   end
 
   defp run_query(query, variables, user) do

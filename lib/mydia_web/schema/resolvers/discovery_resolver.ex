@@ -63,7 +63,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   def trending_in_library(_parent, %{type: :episode}, _resolution), do: {:ok, []}
 
   def trending_in_library(_parent, args, %{context: context}) do
-    first = Map.get(args, :first, 20)
+    first = (args[:first] || 20) |> max(1) |> min(50)
 
     case context[:current_user] do
       nil ->
