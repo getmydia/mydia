@@ -211,7 +211,7 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
       SettingsRow.action(
         key: const Key('check-for-updates-row'),
         icon: Icons.refresh,
-        title: updateState.manualCheck == ManualCheckBehaviour.checksAndInstalls
+        title: updateState.manualCheck.pressInstalls
             ? l10n.settingsCheckAndInstallUpdates
             : l10n.settingsCheckForUpdates,
         subtitle: updateCheckSubtitle(
@@ -220,10 +220,10 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
           update: updateState.availableUpdate,
         ),
         // isChecking covers the checksOnly/unavailable path (_refresh);
-        // isApplying covers checksAndInstalls (requestUpdate). The
-        // Flatpak row's press goes straight to requestUpdate, so without
-        // isApplying here a multi-second check-and-install transaction
-        // shows no feedback at all.
+        // isApplying covers the rows whose press installs (requestUpdate).
+        // Those go straight to requestUpdate, so without isApplying here a
+        // multi-second check-and-install transaction shows no feedback at
+        // all.
         trailing: (updateState.isChecking || updateState.isApplying)
             ? const SizedBox(
                 width: 20,
@@ -238,9 +238,13 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
   ];
 }
 
-/// A press on a check-and-install row installs, so it asks first. There is
-/// no version to preview, because the portal reports commits, so the dialog
-/// says what the press does rather than what it will fetch.
+/// A press on a Flatpak check-and-install row installs, so it asks first.
+/// There is no version to preview, because the portal reports commits, so the
+/// dialog says what the press does rather than what it will fetch.
+///
+/// An installsWithoutAsking row (sideloaded Android) does not ask: one press
+/// from checking to installed is the point of it, and Android's own installer
+/// is the confirmation on the occasions it shows one.
 Future<void> _check(BuildContext context, WidgetRef ref) async {
   final state = ref.read(updateProvider);
 
@@ -319,7 +323,7 @@ String updateCheckSubtitle(
   if (version != null) return l10n.settingsUpdateCheckVersionAvailable(version);
   if (update != null) return l10n.settingsUpdateCheckAvailable;
 
-  return behaviour == ManualCheckBehaviour.checksAndInstalls
+  return behaviour.pressInstalls
       ? l10n.settingsUpdateCheckInstallsNewest
       : l10n.settingsUpdateCheckUpToDate;
 }

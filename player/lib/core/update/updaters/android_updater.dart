@@ -40,6 +40,9 @@ class AndroidUpdater extends PlatformUpdater {
   bool get handsOffUnconfirmed => true;
 
   @override
+  bool get installsWithoutAsking => true;
+
+  @override
   Future<void> applyUpdate(
     AppUpdate update, {
     void Function(double progress)? onProgress,

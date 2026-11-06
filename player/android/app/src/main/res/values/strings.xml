@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown when Mydia Player reopens itself after updating. Keep in step
+         with the player's ARB catalogs: en, es, pt and pt_BR. -->
+    <string name="update_channel_name">App updates</string>
+    <string name="update_installed_title">Mydia Player updated</string>
+    <string name="update_installed_text">Tap to open the new version.</string>
+</resources>

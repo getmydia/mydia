@@ -263,8 +263,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
       });
 
       // A startup refresh is only meaningful for a backend that has to be
-      // told to check (checksOnly / unavailable). Flatpak owns its own 30
-      // minute timer and Sparkle checks on launch by itself, so calling
+      // told to check (checksOnly, unavailable, and installsWithoutAsking,
+      // whose press installs but whose banner still needs something to
+      // offer). Flatpak owns its own 30 minute timer and Sparkle checks on
+      // launch by itself, so calling
       // refresh() on either would just invoke a documented no-op; skipped
       // here rather than relied upon, so a fake backend under test cannot
       // report a spurious refresh from a case that should never reach one.
@@ -272,6 +274,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       switch (backend.manualCheck) {
         case ManualCheckBehaviour.checksOnly:
         case ManualCheckBehaviour.unavailable:
+        case ManualCheckBehaviour.installsWithoutAsking:
           await backend.refresh();
         case ManualCheckBehaviour.checksAndInstalls:
         case ManualCheckBehaviour.delegatesToSparkle:
@@ -289,6 +292,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
     switch (backend.manualCheck) {
       case ManualCheckBehaviour.checksAndInstalls:
+      case ManualCheckBehaviour.installsWithoutAsking:
         await requestUpdate();
       case ManualCheckBehaviour.delegatesToSparkle:
         await backend.requestUpdate();

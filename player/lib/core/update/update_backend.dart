@@ -12,11 +12,22 @@ enum ManualCheckBehaviour {
   /// shape there.
   checksAndInstalls,
 
+  /// The press checks, downloads and installs with no confirmation of the
+  /// app's own. Unlike [checksAndInstalls], the backend can also check on
+  /// its own, so startup still looks for an update and the banner can offer
+  /// it. Sideloaded Android: the package installer is the only confirmation
+  /// left, and on Android 12+ a self-update skips even that.
+  installsWithoutAsking,
+
   /// The press opens Sparkle's own dialog, which owns the rest.
   delegatesToSparkle,
 
   /// The row is not shown.
-  unavailable,
+  unavailable;
+
+  /// Whether a press on the row installs, not just looks.
+  bool get pressInstalls =>
+      this == checksAndInstalls || this == installsWithoutAsking;
 }
 
 /// The result of the user asking for an update.

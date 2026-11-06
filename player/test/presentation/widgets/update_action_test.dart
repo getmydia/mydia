@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/update/install_environment.dart';
+import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/update_action.dart';
@@ -111,6 +112,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('Mydia will close and update'), findsNothing);
+    expect(notifier.requestCount, 1);
+  });
+
+  testWidgets(
+      'an install-without-asking backend (Android) skips the confirm on a '
+      'touch device too', (tester) async {
+    final notifier = _FakeUpdateNotifier(
+      UpdateState(
+        currentVersion: '0.14.2',
+        availableUpdate: _update(),
+        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+      ),
+    );
+
+    await _pump(
+      tester,
+      notifier: notifier,
+      environment: InstallEnvironment.inPlace,
+      launched: <Uri>[],
+    );
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
     expect(find.textContaining('Mydia will close and update'), findsNothing);
     expect(notifier.requestCount, 1);
   });

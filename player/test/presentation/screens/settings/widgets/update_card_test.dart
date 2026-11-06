@@ -483,6 +483,17 @@ void main() {
       );
     });
 
+    test('an install-without-asking row says it installs, too', () {
+      expect(
+        updateCheckSubtitle(
+          en,
+          behaviour: ManualCheckBehaviour.installsWithoutAsking,
+          update: null,
+        ),
+        'Checks and installs the newest build',
+      );
+    });
+
     test('nothing pending on a check-only row reports up to date', () {
       expect(
         updateCheckSubtitle(
