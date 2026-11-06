@@ -21,4 +21,8 @@ resources:
 labels:
   - pairs:
       app.kubernetes.io/part-of: mydia
-    includeSelectors: true
+    # Not into selectors: they are immutable, and grafana's (app: grafana)
+    # predates this kustomization. prometheus names part-of in its own
+    # selector, so it is unaffected.
+    includeSelectors: false
+    includeTemplates: true
