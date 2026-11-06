@@ -113,13 +113,13 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
   Ids are compared as strings on both sides: a `SearchResult`'s `provider_id`
   is a string while several hosts hold parsed integers.
 
-  `media_type` is optional and defaults to nil, which matches on id alone as
-  before. Click resolution leaves it out: every list a click resolves against
-  is homogeneous by media type already (Discover's grid and rail are both
-  movies or both TV shows for the active tab; the detail page's rails all
-  belong to the viewed title's type), so the id alone is unambiguous there.
-  `refresh_selected/2`, below, is the one caller that passes it, because TMDB
-  namespaces ids per media type and its lists are not homogeneous.
+  `media_type` is optional and defaults to nil, which matches on id alone.
+  TMDB namespaces ids per media type, so a movie and a show can share one, and
+  any caller whose lists mix types must pass it. Every host searches an open
+  person's titles, which hold movies and shows side by side, so Discover, the
+  Dashboard and the detail page all pass it, on every click and request, and
+  `refresh_selected/2`, below, always does. The id alone is only safe where
+  every list searched belongs to one type.
   """
   def find_selectable_item(lists, id, media_type \\ nil) do
     id = to_string(id)
@@ -148,12 +148,11 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
   under the user.
 
   The stale item's `media_type` is passed to `find_selectable_item/3` alongside
-  its id. The Dashboard is the one caller whose lists mix media types
-  (`[trending_movies, trending_tv]`), and TMDB namespaces ids per type, so a
-  movie and a show can share one. Without the type check a refresh could swap
-  the dialog onto a same-id title of the other kind instead of just refreshing
-  the one already open. Every other caller's lists are homogeneous, so this is
-  a no-op there.
+  its id. The Dashboard (`[trending_movies, trending_tv]`) and Discover (an
+  open person's titles) hold lists that mix media types, and TMDB namespaces
+  ids per type, so a movie and a show can share one. Without the type check a
+  refresh could swap the dialog onto a same-id title of the other kind instead
+  of just refreshing the one already open.
   """
   def refresh_selected(socket, lists) do
     case socket.assigns.selected_item do

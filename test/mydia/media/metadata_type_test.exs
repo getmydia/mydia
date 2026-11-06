@@ -370,6 +370,36 @@ defmodule Mydia.Media.MetadataTypeTest do
     end
   end
 
+  describe "cast tmdb_person_id" do
+    test "round-trips tmdb_person_id" do
+      metadata = %MediaMetadata{
+        provider_id: "603",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Quiet Meridian",
+        cast: [%CastMember{name: "Odhran Pike", character: "Captain Reyes", tmdb_person_id: 4242}]
+      }
+
+      assert {:ok, json} = MetadataType.dump(metadata)
+      assert {:ok, %MediaMetadata{cast: [member]}} = MetadataType.load(json)
+      assert member.tmdb_person_id == 4242
+    end
+
+    test "loads a stored cast member without tmdb_person_id as nil" do
+      stored =
+        Jason.encode!(%{
+          "provider_id" => "603",
+          "provider" => "tmdb",
+          "media_type" => "movie",
+          "title" => "Quiet Meridian",
+          "cast" => [%{"name" => "Odhran Pike", "character" => "Captain Reyes"}]
+        })
+
+      assert {:ok, %MediaMetadata{cast: [member]}} = MetadataType.load(stored)
+      assert member.tmdb_person_id == nil
+    end
+  end
+
   describe "Ecto.Type callbacks" do
     test "type/0 returns :string for text column compatibility" do
       assert MetadataType.type() == :string

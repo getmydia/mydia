@@ -185,6 +185,157 @@ defmodule MetadataRelay.TMDB.HandlerTest do
     end
   end
 
+  defp person_search_fixture do
+    %{
+      "page" => 1,
+      "results" => [
+        %{
+          "id" => 31,
+          "name" => "Ione Marsh",
+          "known_for_department" => "Acting",
+          "profile_path" => "/marsh.jpg",
+          "popularity" => 12.5
+        }
+      ],
+      "total_pages" => 1,
+      "total_results" => 1
+    }
+  end
+
+  defp person_fixture do
+    %{
+      "id" => 31,
+      "name" => "Ione Marsh",
+      "biography" => "An invented performer.",
+      "birthday" => "1970-01-02",
+      "profile_path" => "/marsh.jpg",
+      "combined_credits" => %{
+        "cast" => [%{"id" => 500, "media_type" => "movie", "title" => "Lantern Road"}],
+        "crew" => []
+      }
+    }
+  end
+
+  describe "GET /tmdb/person/search" do
+    test "dispatches to the handler and returns the TMDB body verbatim" do
+      fixture = person_search_fixture()
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/search/person" => {200, fixture}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/search?query=marsh")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == fixture
+    end
+
+    test "forwards query, language, page and include_adult to TMDB" do
+      test_pid = self()
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        send(test_pid, {:request_url, request.url})
+        {request, Req.Response.new(status: 200, body: person_search_fixture())}
+      end)
+
+      conn =
+        Plug.Test.conn(
+          :get,
+          "/tmdb/person/search?query=marsh&language=fr-FR&page=2&include_adult=false"
+        )
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert_received {:request_url, url}
+      assert url.path == "/3/search/person"
+      query = URI.decode_query(url.query || "")
+      assert query["query"] == "marsh"
+      assert query["language"] == "fr-FR"
+      assert query["page"] == "2"
+      assert query["include_adult"] == "false"
+    end
+
+    test "propagates a TMDB error status" do
+      error_body = %{"status_code" => 7, "status_message" => "Invalid API key"}
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/search/person" => {401, error_body}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/search?query=marsh")
+        |> Router.call([])
+
+      assert conn.status == 401
+      assert Jason.decode!(conn.resp_body) == error_body
+    end
+  end
+
+  describe "GET /tmdb/person/:id" do
+    test "dispatches to the handler and returns the TMDB body verbatim" do
+      fixture = person_fixture()
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/person/31" => {200, fixture}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/31?language=en-US")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == fixture
+    end
+
+    test "forwards language and append_to_response to TMDB" do
+      test_pid = self()
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        send(test_pid, {:request_url, request.url})
+        {request, Req.Response.new(status: 200, body: person_fixture())}
+      end)
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/31?language=fr-FR&append_to_response=combined_credits")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert_received {:request_url, url}
+      assert url.path == "/3/person/31"
+      query = URI.decode_query(url.query || "")
+      assert query["language"] == "fr-FR"
+      assert query["append_to_response"] == "combined_credits"
+    end
+
+    test "propagates a TMDB 404 with its status and error body" do
+      error_body = %{
+        "status_code" => 34,
+        "status_message" => "The resource you requested could not be found."
+      }
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/person/999999999" => {404, error_body}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/person/999999999")
+        |> Router.call([])
+
+      assert conn.status == 404
+      assert Jason.decode!(conn.resp_body) == error_body
+    end
+  end
+
   defp watch_providers_fixture do
     %{
       "results" => [

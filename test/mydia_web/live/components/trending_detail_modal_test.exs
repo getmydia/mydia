@@ -11,6 +11,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   import Mydia.AccountsFixtures
 
   alias Mydia.Accounts.Scope
+  alias Mydia.Metadata.Structs.CastMember
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Metadata.Structs.Video
@@ -318,6 +319,46 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       html = render_modal(item(), metadata(%{videos: []}))
 
       refute html =~ "TrailerPlayer"
+    end
+  end
+
+  describe "cast" do
+    defp cast_metadata do
+      metadata(%{
+        cast: [
+          %CastMember{name: "Linked Actor", character: "Hero", tmdb_person_id: 4242},
+          %CastMember{name: "Unlinked Actor", character: "Villain"}
+        ]
+      })
+    end
+
+    test "with person_event a linked member is a button and an unlinked one is not" do
+      doc =
+        render_component(TrendingDetailModal,
+          id: "trending-detail-modal",
+          open: true,
+          item: item(),
+          metadata: cast_metadata(),
+          loading: false,
+          current_user: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"},
+          rail: [],
+          config_open: false,
+          person_event: "show_person"
+        )
+        |> LazyHTML.from_fragment()
+
+      button = LazyHTML.query(doc, "#cast-person-4242-0")
+      assert LazyHTML.attribute(button, "phx-click") == ["show_person"]
+      assert LazyHTML.attribute(button, "phx-value-name") == ["Linked Actor"]
+      assert LazyHTML.query(doc, "[id^=cast-person-]") |> Enum.count() == 1
+      assert LazyHTML.query(doc, ".opacity-60") |> Enum.count() == 1
+    end
+
+    test "without person_event the cast is not interactive" do
+      doc = render_modal(item(), cast_metadata()) |> LazyHTML.from_fragment()
+
+      assert Enum.empty?(LazyHTML.query(doc, "[id^=cast-person-]"))
+      assert LazyHTML.text(doc) =~ "Linked Actor"
     end
   end
 end

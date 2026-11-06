@@ -230,6 +230,17 @@ defmodule MetadataRelay.CacheTest do
     end
   end
 
+  describe "ttl_for/1 for people" do
+    test "a person's details and credits expire after three days" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/4242:") == :timer.hours(24 * 3)
+    end
+
+    test "a person search keeps the search TTL" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/search:query=wren") ==
+               :timer.hours(24 * 7)
+    end
+  end
+
   describe "integration scenarios" do
     test "handles typical API request caching workflow" do
       # Simulate caching an API request/response

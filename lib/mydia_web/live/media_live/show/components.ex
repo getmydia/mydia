@@ -399,26 +399,17 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <div class="text-xs font-semibold text-base-content/50 uppercase mb-2">
                     {gettext("Cast")}
                   </div>
+                  <%!-- Its own id prefix: the title dialog can render the same
+                        actor at the same time, under the default prefix. --%>
                   <div class="space-y-1.5">
-                    <div :for={actor <- Enum.take(@cast, 6)} class="flex items-center gap-2">
-                      <div class="avatar">
-                        <div class="w-6 h-6 rounded-full bg-base-300">
-                          <%= if get_profile_image_url(actor.profile_path) do %>
-                            <img src={get_profile_image_url(actor.profile_path)} alt={actor.name} />
-                          <% else %>
-                            <div class="flex items-center justify-center h-full">
-                              <.icon name="hero-user" class="w-3 h-3 text-base-content/30" />
-                            </div>
-                          <% end %>
-                        </div>
-                      </div>
-                      <div class="text-sm">
-                        <span class="font-medium">{actor.name}</span>
-                        <span class="text-base-content/60 text-xs">
-                          {gettext("as %{character}", character: actor.character)}
-                        </span>
-                      </div>
-                    </div>
+                    <MydiaWeb.PersonComponents.cast_person
+                      :for={{actor, index} <- Enum.with_index(Enum.take(@cast, 6))}
+                      member={actor}
+                      index={index}
+                      event="show_person"
+                      layout="row"
+                      id_prefix="media-cast-person"
+                    />
                   </div>
                 <% end %>
               </div>

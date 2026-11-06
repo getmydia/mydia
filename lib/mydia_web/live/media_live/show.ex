@@ -184,11 +184,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # Mydia.Subtitles.Format.detect/1 on the received bytes is the real gate,
      # in SubtitleEvents.finish_upload/6, and the size and count limits below
      # are independent of accept.
-     |> allow_upload(:subtitle,
-       accept: :any,
-       max_entries: 1,
-       max_file_size: 2_000_000
-     )
+     |> allow_upload(:subtitle, accept: :any, max_entries: 1, max_file_size: 2_000_000)
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
@@ -200,6 +196,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(:add_config, nil)
      |> DetailModal.init()
+     |> MydiaWeb.Live.Helpers.PersonModal.attach()
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -965,8 +962,8 @@ defmodule MydiaWeb.MediaLive.Show do
   # The key is deliberately not :load_recommendations: that one is the page's
   # own rail, and sharing a key would let the dialog's lookup overwrite it,
   # since start_async/3 overwrites rather than cancels under an existing key.
-  def handle_async(:load_selected_recommendations, result, socket),
-    do: DetailModalEvents.handle_recommendations_result(result, socket)
+  def handle_async({:load_selected_recommendations, ref, media_type}, result, socket),
+    do: DetailModalEvents.handle_recommendations_result(ref, media_type, result, socket)
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)

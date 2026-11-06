@@ -35,6 +35,11 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
     does the same for the guest Request button. A host whose add handler is
     named differently must pass them or the first click raises.
 
+  - `person_event` - Optional. When a host passes an event name here, cast
+    members with a TMDB person id become buttons that emit it with `id`,
+    `name` and `profile_path` params. A host passing it must handle that event
+    (see `MydiaWeb.Live.Helpers.PersonModal`). Unset, the cast is not clickable.
+
   ## `actions` slot
 
   Optional. Dashboard and Discovery render the default header action set
@@ -67,6 +72,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   alias Mydia.Metadata.Structs.Video
 
   import MydiaWeb.TrailerComponents
+
+  alias MydiaWeb.PersonComponents
 
   @impl true
   def render(assigns) do
@@ -315,26 +322,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <div>
                       <h3 class="text-lg font-semibold mb-3">{gettext("Cast")}</h3>
                       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        <%= for member <- Enum.take(cast(@metadata), 6) do %>
-                          <div class="text-center">
-                            <%= if member.profile_path do %>
-                              <img
-                                src={ImageUrl.profile_url(member.profile_path)}
-                                alt={member.name}
-                                class="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2"
-                              />
-                            <% else %>
-                              <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2">
-                                <.icon name="hero-user" class="w-8 h-8 text-base-content/30" />
-                              </div>
-                            <% end %>
-                            <p class="text-sm font-medium line-clamp-1">{member.name}</p>
-                            <%= if member.character do %>
-                              <p class="text-xs text-base-content/60 line-clamp-1">
-                                {member.character}
-                              </p>
-                            <% end %>
-                          </div>
+                        <%= for {member, index} <- Enum.with_index(Enum.take(cast(@metadata), 6)) do %>
+                          <PersonComponents.cast_person
+                            member={member}
+                            event={@person_event}
+                            index={index}
+                          />
                         <% end %>
                       </div>
                     </div>
@@ -380,7 +373,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      # raises FunctionClauseError and kills the LiveView on the first click.
      # Discover, the Dashboard and the request pages all keep the defaults.
      |> assign_new(:add_event, fn -> "add_to_library" end)
-     |> assign_new(:request_event, fn -> "request_media" end)}
+     |> assign_new(:request_event, fn -> "request_media" end)
+     # Opt-in clickable cast; nil keeps the cast non-interactive.
+     |> assign_new(:person_event, fn -> nil end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

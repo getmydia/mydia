@@ -197,6 +197,18 @@ defmodule MetadataRelay.Router do
     handle_tmdb_request(conn, fn -> Handler.get_collection(id, params) end)
   end
 
+  # TMDB Person Search (must come before /tmdb/person/:id)
+  get "/tmdb/person/search" do
+    params = extract_query_params(conn)
+    handle_tmdb_request(conn, fn -> Handler.search_people(params) end)
+  end
+
+  # TMDB Person Details
+  get "/tmdb/person/:id" do
+    params = extract_query_params(conn)
+    handle_tmdb_request(conn, fn -> Handler.get_person(id, params) end)
+  end
+
   # TMDB Movie Details
   get "/tmdb/movies/:id" do
     params = extract_query_params(conn)

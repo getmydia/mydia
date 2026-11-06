@@ -19,6 +19,7 @@ defmodule MetadataRelay.Cache do
   - Season/episode data still being filled in: 6 hours TTL (see
     `MetadataRelay.Cache.Settling`)
   - Search results: 7 days TTL
+  - Person details and credits: 3 days TTL
   - Trending: 1 hour TTL
   - Default: 24 hours TTL
 
@@ -38,6 +39,7 @@ defmodule MetadataRelay.Cache do
   @details_ttl :timer.hours(24 * 30)
   @season_ttl :timer.hours(24 * 14)
   @watch_providers_ttl :timer.hours(24)
+  @person_ttl :timer.hours(24 * 3)
 
   @doc """
   Builds a cache key from request method, path, and query string.
@@ -149,6 +151,11 @@ defmodule MetadataRelay.Cache do
       # Season/episode data - stable once aired
       String.contains?(key, "/tv/shows/") and String.match?(key, ~r{/\d+/\d+:}) ->
         @season_ttl
+
+      # A person's details and credits gain new titles as they are announced.
+      # The person search route matched "/search" above.
+      String.contains?(key, "/tmdb/person/") ->
+        @person_ttl
 
       # Default for other endpoints
       true ->

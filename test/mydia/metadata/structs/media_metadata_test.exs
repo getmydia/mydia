@@ -1,7 +1,7 @@
 defmodule Mydia.Metadata.Structs.MediaMetadataTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Metadata.Structs.MediaMetadata
+  alias Mydia.Metadata.Structs.{CastMember, MediaMetadata}
 
   describe "provider provenance" do
     test "defaults to :tmdb for a raw (string-keyed) API response map" do
@@ -117,6 +117,31 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
       }
 
       assert MediaMetadata.from_api_response(body, :movie, "4").content_rating == nil
+    end
+  end
+
+  describe "cast" do
+    test "parses the TMDB person id onto cast" do
+      body = %{
+        "id" => 603,
+        "title" => "Quiet Meridian",
+        "credits" => %{
+          "cast" => [
+            %{
+              "id" => 4242,
+              "name" => "Odhran Pike",
+              "character" => "Captain Reyes",
+              "order" => 0
+            }
+          ],
+          "crew" => []
+        }
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "603")
+
+      assert [%CastMember{tmdb_person_id: 4242, name: "Odhran Pike"}] = metadata.cast
+      assert metadata.schema_version == 2
     end
   end
 
