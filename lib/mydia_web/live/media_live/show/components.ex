@@ -403,8 +403,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         actor at the same time, under the default prefix. --%>
                   <div class="space-y-1.5">
                     <MydiaWeb.PersonComponents.cast_person
-                      :for={actor <- Enum.take(@cast, 6)}
+                      :for={{actor, index} <- Enum.with_index(Enum.take(@cast, 6))}
                       member={actor}
+                      index={index}
                       event="show_person"
                       layout="row"
                       id_prefix="media-cast-person"

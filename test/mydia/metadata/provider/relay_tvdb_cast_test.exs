@@ -8,7 +8,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbCastTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Metadata.Provider.Relay
-  alias Mydia.Metadata.Structs.CastMember
+  alias Mydia.Metadata.Structs.{CastMember, MediaMetadata}
 
   setup do
     bypass = Bypass.open()
@@ -101,6 +101,17 @@ defmodule Mydia.Metadata.Provider.RelayTvdbCastTest do
 
       assert {:ok, metadata} = fetch(ctx)
       assert %{"Marisol Ventura" => nil, "Bram Okafor" => nil} == ids_by_name(metadata)
+
+      # Below the version MetadataBackfill requires of TVDB shows, so the next
+      # run links the cast again rather than treating it as final.
+      assert metadata.schema_version == 1
+    end
+
+    test "linked cast is stored at the current schema version", ctx do
+      stub_cross_reference(ctx, [%{"id" => 501, "name" => "Marisol Ventura"}])
+
+      assert {:ok, metadata} = fetch(ctx)
+      assert metadata.schema_version == MediaMetadata.schema_version()
     end
 
     test "no TMDB cross-reference makes no extra request", ctx do
@@ -108,6 +119,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbCastTest do
 
       assert {:ok, metadata} = fetch(ctx)
       assert %{"Marisol Ventura" => nil, "Bram Okafor" => nil} == ids_by_name(metadata)
+      assert metadata.schema_version == MediaMetadata.schema_version()
     end
   end
 

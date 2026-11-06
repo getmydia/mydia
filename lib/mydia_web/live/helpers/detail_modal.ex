@@ -115,11 +115,11 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
 
   `media_type` is optional and defaults to nil, which matches on id alone.
   TMDB namespaces ids per media type, so a movie and a show can share one, and
-  any caller whose lists mix types must pass it. Discover does, on every click
-  and request: an open person's titles hold movies and shows side by side, next
-  to a grid of the active tab's type. `refresh_selected/2`, below, always does.
-  The id alone is only safe where every list belongs to one type, as on the
-  detail page, whose rails all share the viewed title's type.
+  any caller whose lists mix types must pass it. Every host searches an open
+  person's titles, which hold movies and shows side by side, so Discover, the
+  Dashboard and the detail page all pass it, on every click and request, and
+  `refresh_selected/2`, below, always does. The id alone is only safe where
+  every list searched belongs to one type.
   """
   def find_selectable_item(lists, id, media_type \\ nil) do
     id = to_string(id)

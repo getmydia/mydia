@@ -258,6 +258,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
+  def handle_event("retry_people_search", _params, %{assigns: %{search_scope: :people}} = socket),
+    do: {:noreply, PeopleSearch.load(socket)}
+
+  def handle_event("retry_people_search", _params, socket), do: {:noreply, socket}
+
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
@@ -877,6 +882,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_async(:people_search, result, socket),
+    do: {:noreply, PeopleSearch.handle_result(socket, result)}
+
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end

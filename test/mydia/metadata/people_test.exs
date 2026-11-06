@@ -117,6 +117,19 @@ defmodule Mydia.Metadata.PeopleTest do
     assert credit.character == "Inés / Inés (voice)"
   end
 
+  test "a character repeated after another is joined once", %{bypass: bypass, config: config} do
+    id = new_id()
+
+    expect_person(bypass, id, [
+      movie(9, "Twin Tides", "2020-01-01", "Inés"),
+      movie(9, "Twin Tides", "2020-01-01", "Marisol"),
+      movie(9, "Twin Tides", "2020-01-01", "Inés")
+    ])
+
+    assert {:ok, %Person{movie_credits: [credit]}} = People.fetch_person_cached(config, id)
+    assert credit.character == "Inés / Marisol"
+  end
+
   test "drops talk and news TV credits and untitled entries", %{bypass: bypass, config: config} do
     id = new_id()
 

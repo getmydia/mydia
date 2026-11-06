@@ -49,11 +49,11 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
 
       {:ok, view, _html} = live(log_in_user(conn, create_admin_user()), ~p"/media/#{movie.id}")
 
-      assert has_element?(view, "#media-cast-person-#{person_id}")
+      assert has_element?(view, "#media-cast-person-#{person_id}-0")
       refute has_element?(view, "button[phx-click='show_person']", "Brannoc Teale")
       assert has_element?(view, "[data-tip]", "Brannoc Teale")
 
-      view |> element("#media-cast-person-#{person_id}") |> render_click()
+      view |> element("#media-cast-person-#{person_id}-0") |> render_click()
       assert has_element?(view, "#person-modal[open]")
 
       render_async(view)
@@ -87,11 +87,11 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
 
       view |> element("#person-credit-movie-#{movie_id}") |> render_click()
       render_async(view)
-      assert has_element?(view, "#media-detail-modal #cast-person-#{person_id}")
+      assert has_element?(view, "#media-detail-modal #cast-person-#{person_id}-0")
 
       document = view |> render() |> LazyHTML.from_fragment()
-      assert document |> LazyHTML.query("#media-cast-person-#{person_id}") |> Enum.count() == 1
-      assert document |> LazyHTML.query("#cast-person-#{person_id}") |> Enum.count() == 1
+      assert document |> LazyHTML.query("#media-cast-person-#{person_id}-0") |> Enum.count() == 1
+      assert document |> LazyHTML.query("#cast-person-#{person_id}-0") |> Enum.count() == 1
     end
   end
 

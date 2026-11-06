@@ -10,7 +10,9 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearch do
   require Logger
 
   import Phoenix.Component, only: [assign: 3]
+  import Phoenix.LiveView, only: [start_async: 3]
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Metadata
   alias Mydia.Metadata.People
 
@@ -32,26 +34,62 @@ defmodule MydiaWeb.DiscoverLive.PeopleSearch do
   def params(media_type, query, :titles), do: %{"type" => to_string(media_type), "q" => query}
 
   @doc """
-  Searches people for the current query and clears `:loading`.
+  Starts the people search for the current query; `handle_result/2` stores it
+  and clears `:loading`.
 
-  The results are the first page of TMDB's person search only: no paging, and
-  no access filtering, since a person carries no titles of their own here. The
-  popup filters the person's titles when it opens.
+  Through `start_async/3` rather than inline: on a cache miss this is a relay
+  call with the config's timeout, and switching scope or clearing the search
+  would queue behind it.
+
+  The results are the first page of TMDB's person search only: no paging. A
+  person carries no titles of their own here, so the only access filtering is
+  that a restricted viewer gets no known-for line: those titles are names only,
+  with nothing the remote filter could judge them by. The popup filters the
+  person's titles when it opens.
   """
   def load(socket) do
     config =
       Map.get_lazy(socket.assigns, :metadata_config, &Metadata.default_relay_config/0)
 
-    socket =
-      case People.search_people_cached(config, socket.assigns.search_query) do
-        {:ok, people} ->
-          assign(socket, :people_results, people)
+    query = socket.assigns.search_query
 
-        {:error, reason} ->
-          Logger.warning("Failed to search people: #{inspect(reason)}")
-          socket |> assign(:people_results, []) |> assign(:people_error, reason)
-      end
+    socket
+    |> assign(:loading, true)
+    |> assign(:people_error, nil)
+    |> start_async(:people_search, fn -> {query, People.search_people_cached(config, query)} end)
+  end
 
-    assign(socket, :loading, false)
+  @doc """
+  Stores a people search result, unless the user has since moved on to another
+  query or to the Titles scope, whose own load owns `:loading` by then.
+  """
+  def handle_result(socket, {:ok, {query, result}}) do
+    case socket.assigns do
+      %{search_scope: :people, search_query: ^query} -> put_result(socket, result)
+      _moved_on -> socket
+    end
+  end
+
+  def handle_result(%{assigns: %{search_scope: :people}} = socket, {:exit, reason}),
+    do: put_result(socket, {:error, {:exit, reason}})
+
+  def handle_result(socket, {:exit, _reason}), do: socket
+
+  defp put_result(socket, {:ok, people}) do
+    people =
+      if Scope.restricted?(socket.assigns.current_scope),
+        do: Enum.map(people, &%{&1 | known_for: []}),
+        else: people
+
+    socket |> assign(:people_results, people) |> assign(:loading, false)
+  end
+
+  defp put_result(socket, {:error, reason}) do
+    Logger.warning("Failed to search people: #{inspect(reason)}")
+
+    socket
+    |> assign(:people_results, [])
+    |> assign(:people_error, reason)
+    |> assign(:loading, false)
   end
 end

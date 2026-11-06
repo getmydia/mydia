@@ -322,8 +322,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <div>
                       <h3 class="text-lg font-semibold mb-3">{gettext("Cast")}</h3>
                       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        <%= for member <- Enum.take(cast(@metadata), 6) do %>
-                          <PersonComponents.cast_person member={member} event={@person_event} />
+                        <%= for {member, index} <- Enum.with_index(Enum.take(cast(@metadata), 6)) do %>
+                          <PersonComponents.cast_person
+                            member={member}
+                            event={@person_event}
+                            index={index}
+                          />
                         <% end %>
                       </div>
                     </div>

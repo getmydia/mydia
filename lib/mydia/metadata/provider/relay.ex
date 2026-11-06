@@ -226,32 +226,31 @@ defmodule Mydia.Metadata.Provider.Relay do
   @impl true
   def fetch_by_ref(config, {:tvdb, id}, opts), do: fetch_tvdb_by_id(config, to_string(id), opts)
 
+  # TMDB numbers movies and shows independently, so one id can name both. The
+  # registry keeps one type per id, so it only vets a call that guessed its type
+  # (no `:media_type`); an explicit type is fetched as asked.
   def fetch_by_ref(config, {:tmdb, id}, opts) do
-    media_type = Keyword.get(opts, :media_type, :movie)
-    fetch_tmdb_by_id(config, to_string(id), media_type, opts)
+    case Keyword.get(opts, :media_type) do
+      nil -> fetch_tmdb_guessing_movie(config, to_string(id), opts)
+      media_type -> perform_tmdb_fetch(config, to_string(id), media_type, opts)
+    end
   end
 
-  # Fetch from TMDB (default behavior)
-  defp fetch_tmdb_by_id(config, provider_id, media_type, opts) do
-    # Validate that the provider ID matches the requested media type
-    case ProviderIDRegistry.validate_id_type({:tmdb, String.to_integer(provider_id)}, media_type) do
+  defp fetch_tmdb_guessing_movie(config, provider_id, opts) do
+    case ProviderIDRegistry.validate_id_type({:tmdb, String.to_integer(provider_id)}, :movie) do
       :ok ->
-        # Validation passed, proceed with fetch
-        perform_tmdb_fetch(config, provider_id, media_type, opts)
+        perform_tmdb_fetch(config, provider_id, :movie, opts)
 
       {:error, :type_mismatch, actual_type} ->
-        # Known ID with wrong type - skip the request
         Logger.warning(
           "Skipping TMDB fetch: provider ID belongs to different media type",
           provider_id: provider_id,
-          requested_type: media_type,
+          requested_type: :movie,
           actual_type: actual_type
         )
 
         {:error,
-         Error.invalid_request(
-           "Provider ID #{provider_id} is a #{actual_type}, not a #{media_type}"
-         )}
+         Error.invalid_request("Provider ID #{provider_id} is a #{actual_type}, not a movie")}
     end
   end
 
@@ -349,12 +348,13 @@ defmodule Mydia.Metadata.Provider.Relay do
         # payload, so videos are resolved separately.
         preferred = tvdb_preferred_codes(language, data["originalLanguage"])
 
+        metadata =
+          TvdbCastLink.link_metadata(config, tmdb_id_from_remote_ids(data["remoteIds"]), metadata)
+
         metadata = %{
           metadata
           | provider: :tvdb,
             videos: resolve_tvdb_videos(config, data, preferred, language),
-            cast:
-              TvdbCastLink.link(config, tmdb_id_from_remote_ids(data["remoteIds"]), metadata.cast),
             content_rating: metadata.content_rating || tmdb_rating_for_tvdb(config, data)
         }
 

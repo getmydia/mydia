@@ -84,6 +84,56 @@ defmodule MydiaWeb.Live.Helpers.PersonModalTest do
     end
   end
 
+  describe "refresh_titles/1" do
+    defp tmdb_title(id, type \\ :movie) do
+      %SearchResult{
+        provider: :tmdb,
+        provider_id: Integer.to_string(id),
+        media_type: type,
+        title: "Title #{id}"
+      }
+    end
+
+    test "an add that lands while the fetch runs is reflected when the titles arrive" do
+      id = unique_provider_id()
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.refresh_titles()
+
+      media_item_fixture(%{type: "movie", tmdb_id: id})
+
+      socket =
+        PersonModal.handle_result(
+          socket,
+          {:ok, {:ok, {person([id], []), [Map.put(tmdb_title(id), :in_library, false)]}}}
+        )
+
+      assert [%{in_library: true}] = socket.assigns.person_titles
+      refute socket.assigns.person_status_stale
+    end
+
+    test "re-reads status for the titles already shown, without re-filtering the credits" do
+      shown = unique_provider_id()
+      filtered_out = unique_provider_id()
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.handle_result(
+          {:ok, {:ok, {person([shown, filtered_out], []), [tmdb_title(shown)]}}}
+        )
+
+      media_item_fixture(%{type: "movie", tmdb_id: shown})
+
+      socket = PersonModal.refresh_titles(socket)
+
+      assert [%{provider_id: provider_id, in_library: true}] = socket.assigns.person_titles
+      assert provider_id == Integer.to_string(shown)
+    end
+  end
+
   describe "enrich_titles/2" do
     test "library status is per media type when a movie and a show share an id" do
       media_item_fixture(%{type: "movie", tmdb_id: 500})

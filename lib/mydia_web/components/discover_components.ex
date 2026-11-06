@@ -397,6 +397,8 @@ defmodule MydiaWeb.DiscoverComponents do
   Renders Discover's People search results: round headshots with the name
   and a known-for line, each a button emitting `event` with the person's
   `id`, `name` and `profile_path`, the params the person popup opens with.
+  The error state's Try again emits `retry_people_search`, which the host must
+  handle.
   """
   attr :people, :list, required: true, doc: "`Mydia.Metadata.Structs.PersonSearchResult`s"
   attr :loading, :boolean, default: false
@@ -418,6 +420,14 @@ defmodule MydiaWeb.DiscoverComponents do
         >
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
           <span>{gettext("Could not search people. The metadata service may be unavailable.")}</span>
+          <button
+            id="discover-people-retry"
+            type="button"
+            phx-click="retry_people_search"
+            class="btn btn-sm"
+          >
+            {gettext("Try again")}
+          </button>
         </div>
       <% @people == [] -> %>
         <div

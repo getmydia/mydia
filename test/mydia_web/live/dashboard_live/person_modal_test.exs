@@ -14,7 +14,9 @@ defmodule MydiaWeb.DashboardLive.PersonModalTest do
   import Mydia.MetadataCacheHelpers
   import Mydia.RelayStubHelpers
   import Mydia.SettingsFixtures
+  import Mydia.ShelfHelpers
 
+  alias Mydia.Accounts
   alias Mydia.Media.MediaItem
   alias Mydia.Media.MediaRequest
   alias Mydia.Metadata
@@ -72,9 +74,9 @@ defmodule MydiaWeb.DashboardLive.PersonModalTest do
 
       assert has_element?(view, "#trending-detail-modal[open]")
       render_async(view)
-      assert has_element?(view, "#cast-person-#{ctx.person_id}")
+      assert has_element?(view, "#cast-person-#{ctx.person_id}-0")
 
-      view |> element("#cast-person-#{ctx.person_id}") |> render_click()
+      view |> element("#cast-person-#{ctx.person_id}-0") |> render_click()
 
       assert has_element?(view, "#person-modal[open]")
       refute has_element?(view, "#trending-detail-modal[open]")
@@ -143,6 +145,42 @@ defmodule MydiaWeb.DashboardLive.PersonModalTest do
            )
 
     refute has_element?(view, "#trending-detail-modal button[phx-value-media_type='movie']")
+  end
+
+  test "a show poster opens the TMDB show, not a TVDB shelf show sharing its id", %{conn: conn} do
+    register_shelf_plugin!()
+    user = create_admin_user()
+    {:ok, _} = Accounts.put_home_widgets(user, [:shelves])
+    now = DateTime.utc_now()
+    shelf = shelf_fixture(user, filled_at: now, stale_at: DateTime.add(now, 3_600))
+
+    bypass = point_relay_at_bypass()
+    person_id = unique_person_id()
+    shared_id = unique_provider_id()
+
+    shelf_item_fixture(shelf, %{
+      media_type: :tv_show,
+      provider: :tvdb,
+      provider_id: shared_id,
+      title: "Harbor Decoy"
+    })
+
+    stub_show(bypass, shared_id, "Tidewater Bureau")
+    stub_person(bypass, person_id, [tv_credit(shared_id, "Tidewater Bureau")])
+
+    # Answered at once, so a click that wrongly resolves to the shelf show fails
+    # the assertion below instead of waiting out Req's retries.
+    Bypass.stub(bypass, "GET", "/tvdb/series/#{shared_id}/extended", fn conn ->
+      json(conn, 404, %{})
+    end)
+
+    {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+    open_person(view, person_id)
+
+    view |> element("#person-credit-tv_show-#{shared_id}") |> render_click()
+
+    selected = :sys.get_state(view.pid).socket.assigns.selected_item
+    assert %{provider: :tmdb, title: "Tidewater Bureau"} = selected
   end
 
   test "adding a movie credit marks its poster owned", %{conn: conn} do

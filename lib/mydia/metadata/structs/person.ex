@@ -9,6 +9,8 @@ defmodule Mydia.Metadata.Structs.Person do
   # guests on those accrues hundreds of per-episode credits that bury the work.
   @excluded_tv_genres [10767, 10763]
 
+  @character_separator " / "
+
   @enforce_keys [:tmdb_id, :name]
   defstruct [
     :tmdb_id,
@@ -88,15 +90,19 @@ defmodule Mydia.Metadata.Structs.Person do
     end)
   end
 
+  # `existing.character` may already be a join from an earlier repeat, so it is
+  # split back into names before de-duplicating: A, B, A must stay "A / B".
   defp merge(existing, credit) do
     characters =
       [existing.character, credit.character]
       |> Enum.reject(&is_nil/1)
+      |> Enum.flat_map(&String.split(&1, @character_separator))
       |> Enum.uniq()
 
     %{
       existing
-      | character: if(characters == [], do: nil, else: Enum.join(characters, " / ")),
+      | character:
+          if(characters == [], do: nil, else: Enum.join(characters, @character_separator)),
         episode_count: sum_counts(existing.episode_count, credit.episode_count)
     }
   end

@@ -66,113 +66,124 @@ defmodule MydiaWeb.PersonComponents do
       phx-window-keydown={@open && @escape_enabled && "close_person"}
       phx-key="Escape"
     >
-      <%= if @open do %>
-        <div class="modal-box max-w-4xl w-11/12 max-h-[90vh] p-0 flex flex-col overflow-hidden">
-          <div
-            id="person-modal-header"
-            class="relative p-4 md:p-6 bg-gradient-to-br from-base-300 to-base-100 flex gap-4 md:gap-6 shrink-0"
+      <%!-- focus_wrap keeps Tab inside the popup, and the close button takes
+            focus when it opens, so a keyboard user is not left on a control
+            hidden behind the backdrop. --%>
+      <.focus_wrap
+        :if={@open}
+        id={"#{@id}-box"}
+        phx-mounted={JS.focus(to: "#person-modal-close")}
+        class="modal-box max-w-4xl w-11/12 max-h-[90vh] p-0 flex flex-col overflow-hidden"
+      >
+        <div
+          id="person-modal-header"
+          class="relative p-4 md:p-6 bg-gradient-to-br from-base-300 to-base-100 flex gap-4 md:gap-6 shrink-0"
+        >
+          <button
+            id="person-modal-close"
+            type="button"
+            phx-click="close_person"
+            aria-label={gettext("Close")}
+            class="btn btn-circle btn-ghost btn-sm absolute top-3 right-3 z-10"
           >
-            <button
-              id="person-modal-close"
-              type="button"
-              phx-click="close_person"
-              aria-label={gettext("Close")}
-              class="btn btn-circle btn-ghost btn-sm absolute top-3 right-3 z-10"
-            >
-              <.icon name="hero-x-mark" class="w-5 h-5" />
-            </button>
+            <.icon name="hero-x-mark" class="w-5 h-5" />
+          </button>
 
-            <%= if @profile_path do %>
-              <img
-                src={ImageUrl.profile_url(@profile_path, "h632")}
-                alt={@name}
-                class="w-28 h-40 md:w-40 md:h-56 rounded-xl shadow-lg object-cover shrink-0"
-              />
-            <% else %>
-              <div class="w-28 h-40 md:w-40 md:h-56 rounded-xl bg-base-300 flex items-center justify-center shrink-0">
-                <.icon name="hero-user" class="w-12 h-12 text-base-content/30" />
-              </div>
-            <% end %>
-
-            <div class="flex flex-col gap-2 min-w-0">
-              <h2 id="person-modal-name" class="text-2xl md:text-3xl font-bold pr-10">{@name}</h2>
-              <%= if @person do %>
-                <p
-                  :if={facts_line(@person, length(@movies) + length(@shows)) != ""}
-                  class="text-sm text-base-content/70"
-                >
-                  {facts_line(@person, length(@movies) + length(@shows))}
-                </p>
-                <div :if={@owned_count > 0} class="flex gap-2 mt-1">
-                  <span id="person-owned-count" class="badge badge-success badge-soft">
-                    {ngettext("%{count} in your library", "%{count} in your library", @owned_count)}
-                  </span>
-                </div>
-                <%= if @person.biography do %>
-                  <div id="person-bio-block">
-                    <p
-                      id="person-bio"
-                      class="text-base-content/80 leading-relaxed mt-2 line-clamp-4 whitespace-pre-line"
-                    >
-                      {@person.biography}
-                    </p>
-                    <button
-                      id="person-bio-toggle"
-                      type="button"
-                      phx-click={
-                        JS.toggle_class("line-clamp-4", to: "#person-bio")
-                        |> JS.toggle_class("hidden", to: "#person-bio-toggle > span")
-                      }
-                      class="link link-hover text-sm"
-                    >
-                      <span>{gettext("Read more")}</span>
-                      <span class="hidden">{gettext("Show less")}</span>
-                    </button>
-                  </div>
-                <% end %>
-              <% end %>
+          <%= if @profile_path do %>
+            <img
+              src={ImageUrl.profile_url(@profile_path, "h632")}
+              alt={@name}
+              class="w-28 h-40 md:w-40 md:h-56 rounded-xl shadow-lg object-cover shrink-0"
+            />
+          <% else %>
+            <div class="w-28 h-40 md:w-40 md:h-56 rounded-xl bg-base-300 flex items-center justify-center shrink-0">
+              <.icon name="hero-user" class="w-12 h-12 text-base-content/30" />
             </div>
-          </div>
+          <% end %>
 
-          <div id="person-modal-body" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-8">
-            <%= cond do %>
-              <% @error -> %>
-                <div id="person-modal-error" class="alert alert-error">
-                  <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                  <span>{gettext("Could not load details for %{name}.", name: @name)}</span>
-                  <button
-                    id="person-modal-retry"
-                    type="button"
-                    phx-click="retry_person"
-                    class="btn btn-sm"
+          <div class="flex flex-col gap-2 min-w-0">
+            <h2 id="person-modal-name" class="text-2xl md:text-3xl font-bold pr-10">{@name}</h2>
+            <%= if @person do %>
+              <p
+                :if={facts_line(@person, length(@movies) + length(@shows)) != ""}
+                class="text-sm text-base-content/70"
+              >
+                {facts_line(@person, length(@movies) + length(@shows))}
+              </p>
+              <div :if={@owned_count > 0} class="flex gap-2 mt-1">
+                <span id="person-owned-count" class="badge badge-success badge-soft">
+                  {ngettext("%{count} in your library", "%{count} in your library", @owned_count)}
+                </span>
+              </div>
+              <%= if @person.biography do %>
+                <%!-- Expanded, the bio scrolls inside a bounded box: the
+                        header cannot shrink, so an unbounded bio would push
+                        Show less and the filmography out of the popup. --%>
+                <div id="person-bio-block">
+                  <p
+                    id="person-bio"
+                    class="text-base-content/80 leading-relaxed mt-2 line-clamp-4 whitespace-pre-line"
                   >
-                    {gettext("Try again")}
+                    {@person.biography}
+                  </p>
+                  <button
+                    id="person-bio-toggle"
+                    type="button"
+                    phx-click={
+                      JS.toggle_class("line-clamp-4 max-h-[30vh] overflow-y-auto",
+                        to: "#person-bio"
+                      )
+                      |> JS.toggle_class("hidden", to: "#person-bio-toggle > span")
+                    }
+                    class="link link-hover text-sm"
+                  >
+                    <span>{gettext("Read more")}</span>
+                    <span class="hidden">{gettext("Show less")}</span>
                   </button>
                 </div>
-              <% @loading or is_nil(@person) -> %>
-                <div id="person-modal-loading" class="flex items-center justify-center py-12">
-                  <span class="loading loading-spinner loading-lg"></span>
-                  <span class="ml-3 text-base-content/70">{gettext("Loading details...")}</span>
-                </div>
-              <% true -> %>
-                <.credit_section
-                  :if={@movies != []}
-                  id="person-movies"
-                  type="movie"
-                  heading={gettext("Movies")}
-                  rows={@movies}
-                />
-                <.credit_section
-                  :if={@shows != []}
-                  id="person-shows"
-                  type="tv_show"
-                  heading={gettext("Shows")}
-                  rows={@shows}
-                />
+              <% end %>
             <% end %>
           </div>
         </div>
-      <% end %>
+
+        <div id="person-modal-body" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-8">
+          <%= cond do %>
+            <% @error -> %>
+              <div id="person-modal-error" class="alert alert-error">
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                <span>{gettext("Could not load details for %{name}.", name: @name)}</span>
+                <button
+                  id="person-modal-retry"
+                  type="button"
+                  phx-click="retry_person"
+                  class="btn btn-sm"
+                >
+                  {gettext("Try again")}
+                </button>
+              </div>
+            <% @loading or is_nil(@person) -> %>
+              <div id="person-modal-loading" class="flex items-center justify-center py-12">
+                <span class="loading loading-spinner loading-lg"></span>
+                <span class="ml-3 text-base-content/70">{gettext("Loading details...")}</span>
+              </div>
+            <% true -> %>
+              <.credit_section
+                :if={@movies != []}
+                id="person-movies"
+                type="movie"
+                heading={gettext("Movies")}
+                rows={@movies}
+              />
+              <.credit_section
+                :if={@shows != []}
+                id="person-shows"
+                type="tv_show"
+                heading={gettext("Shows")}
+                rows={@shows}
+              />
+          <% end %>
+        </div>
+      </.focus_wrap>
     </dialog>
     """
   end
@@ -192,10 +203,12 @@ defmodule MydiaWeb.PersonComponents do
   `"row"`, a small avatar beside "name as character", the media page's compact
   cast panel.
 
-  `id_prefix` names the button's DOM id, `"<id_prefix>-<tmdb_person_id>"`. A page
-  that renders its own cast next to the title preview's (the media page) can
-  show one actor in both, so it must pass a prefix of its own or the two
-  buttons share an id.
+  `id_prefix` and `index` name the button's DOM id,
+  `"<id_prefix>-<tmdb_person_id>-<index>"`. A page that renders its own cast
+  next to the title preview's (the media page) can show one actor in both, so
+  it must pass a prefix of its own or the two buttons share an id. `index` is
+  the member's position in its list: an actor credited for two roles appears
+  twice in one cast.
   """
   attr :member, :any,
     required: true,
@@ -204,6 +217,7 @@ defmodule MydiaWeb.PersonComponents do
   attr :event, :string, default: nil, doc: "the host event to emit on click, nil for no link"
   attr :layout, :string, default: "card", values: ["card", "row"]
   attr :id_prefix, :string, default: "cast-person"
+  attr :index, :integer, default: 0, doc: "the member's position in its cast list"
 
   def cast_person(assigns) do
     member = assigns.member
@@ -240,7 +254,7 @@ defmodule MydiaWeb.PersonComponents do
         </div>
       <% true -> %>
         <button
-          id={"#{@id_prefix}-#{@person_id}"}
+          id={"#{@id_prefix}-#{@person_id}-#{@index}"}
           type="button"
           phx-click={@event}
           phx-value-id={@person_id}

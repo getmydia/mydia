@@ -12,6 +12,8 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     * `:person_titles` - the person's credits as enriched `SearchResult`s, already
       narrowed to what the viewer may see and stamped with library and request
       status
+    * `:person_status_stale` - whether an add or a request finished while the
+      fetch was in flight, so the status it read is out of date
 
   A host calls `attach/1` from `mount/3` and renders the dialog; the lifecycle
   hooks it attaches answer the dialog's `show_person`, `close_person` and
@@ -66,6 +68,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     |> assign(:person_loading, false)
     |> assign(:person_error, nil)
     |> assign(:person_titles, [])
+    |> assign(:person_status_stale, false)
   end
 
   @doc """
@@ -116,11 +119,20 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
       do: socket
 
   def handle_result(socket, {:ok, {:ok, {%Person{} = person, titles}}}) when is_list(titles) do
+    # The task read library and request status when it started. An add or a
+    # request that finished while it ran asked for a refresh that had nothing to
+    # refresh yet (see refresh_titles/1), so re-read the status for it now.
+    titles =
+      if socket.assigns.person_status_stale,
+        do: put_status(titles, socket.assigns.current_scope),
+        else: titles
+
     socket
     |> assign(:selected_person, person)
     |> assign(:person_titles, titles)
     |> assign(:person_loading, false)
     |> assign(:person_error, nil)
+    |> assign(:person_status_stale, false)
   end
 
   def handle_result(socket, {:ok, {:error, reason}}), do: fail(socket, reason)
@@ -149,10 +161,21 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   Re-reads the library and request status of the open person's titles.
 
   Call after an add or a request: without it a poster never gains its owned or
-  requested badge. A no-op while no person is loaded.
+  requested badge. While the fetch is in flight it marks the status stale, and
+  `handle_result/2` re-reads it when the titles land. A no-op while the dialog
+  is closed.
+
+  Only the status is re-read: the titles already passed the remote filter, and
+  an add or a request does not change what the viewer may see. Re-filtering
+  here would put the filter's relay lookups on the LiveView process.
   """
-  def refresh_titles(%{assigns: %{selected_person: %Person{} = person}} = socket),
-    do: assign(socket, :person_titles, enrich_titles(person, socket.assigns.current_scope))
+  def refresh_titles(%{assigns: %{selected_person: %Person{}}} = socket) do
+    %{person_titles: titles, current_scope: scope} = socket.assigns
+    assign(socket, :person_titles, put_status(titles, scope))
+  end
+
+  def refresh_titles(%{assigns: %{person_loading: true}} = socket),
+    do: assign(socket, :person_status_stale, true)
 
   def refresh_titles(socket), do: socket
 
@@ -165,11 +188,13 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   """
   @spec enrich_titles(Person.t(), Scope.t()) :: [SearchResult.t()]
   def enrich_titles(%Person{} = person, %Scope{} = scope) do
-    results =
-      (person.movie_credits ++ person.tv_credits)
-      |> Enum.map(&PersonCredit.to_search_result/1)
-      |> RemoteFilter.filter(scope)
+    (person.movie_credits ++ person.tv_credits)
+    |> Enum.map(&PersonCredit.to_search_result/1)
+    |> RemoteFilter.filter(scope)
+    |> put_status(scope)
+  end
 
+  defp put_status(results, scope) do
     status =
       Map.merge(
         Media.library_status_for_tmdb_ids(scope, ids_of(results, :movie), "movie"),
@@ -198,6 +223,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     |> assign(:person_titles, [])
     |> assign(:person_error, nil)
     |> assign(:person_loading, true)
+    |> assign(:person_status_stale, false)
     |> start_async(:load_person, fn -> fetch_and_enrich(config, stub.id, scope) end)
   end
 

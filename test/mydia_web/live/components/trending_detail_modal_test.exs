@@ -347,7 +347,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
         )
         |> LazyHTML.from_fragment()
 
-      button = LazyHTML.query(doc, "#cast-person-4242")
+      button = LazyHTML.query(doc, "#cast-person-4242-0")
       assert LazyHTML.attribute(button, "phx-click") == ["show_person"]
       assert LazyHTML.attribute(button, "phx-value-name") == ["Linked Actor"]
       assert LazyHTML.query(doc, "[id^=cast-person-]") |> Enum.count() == 1

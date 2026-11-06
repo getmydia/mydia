@@ -72,9 +72,9 @@ defmodule MydiaWeb.DiscoverLive.PersonModalTest do
 
       assert has_element?(view, "#discover-detail-modal[open]")
       render_async(view)
-      assert has_element?(view, "#cast-person-#{ctx.person_id}")
+      assert has_element?(view, "#cast-person-#{ctx.person_id}-0")
 
-      view |> element("#cast-person-#{ctx.person_id}") |> render_click()
+      view |> element("#cast-person-#{ctx.person_id}-0") |> render_click()
 
       assert has_element?(view, "#person-modal[open]")
       refute has_element?(view, "#discover-detail-modal[open]")

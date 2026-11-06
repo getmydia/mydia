@@ -14,26 +14,49 @@ defmodule Mydia.Metadata.Provider.TvdbCastLink do
 
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Provider.HTTP
-  alias Mydia.Metadata.Structs.CastMember
+  alias Mydia.Metadata.Structs.{CastMember, MediaMetadata}
 
   @doc """
-  Returns `cast` with `tmdb_person_id` set on every member whose name matches
-  exactly one person in the TMDB show `tmdb_id`. A nil `tmdb_id` or an empty cast
-  returns `cast` unchanged.
+  Links `metadata.cast` through `link/3`.
+
+  Cast that failed to link is stored one schema version below the one whose
+  cast carries TMDB person ids, so `Mydia.Jobs.MetadataBackfill` refreshes the
+  show again rather than treating the unlinked cast as final. The scheduled
+  refresh skips unmonitored shows, so without this their cast would stay
+  unclickable.
   """
-  @spec link(map(), String.t() | nil, [CastMember.t()]) :: [CastMember.t()]
+  @spec link_metadata(map(), String.t() | nil, MediaMetadata.t()) :: MediaMetadata.t()
+  def link_metadata(config, tmdb_id, %MediaMetadata{} = metadata) do
+    case link(config, tmdb_id, metadata.cast) do
+      {:ok, cast} ->
+        %{metadata | cast: cast}
+
+      {:error, cast} ->
+        %{metadata | cast: cast, schema_version: min(metadata.schema_version, 1)}
+    end
+  end
+
+  @doc """
+  Returns `{:ok, cast}` with `tmdb_person_id` set on every member whose name
+  matches exactly one person in the TMDB show `tmdb_id`. A nil `tmdb_id` or an
+  empty cast returns `{:ok, cast}` unchanged: there is nothing to link.
+
+  `{:error, cast}` means the TMDB lookup failed and `cast` is unlinked.
+  """
+  @spec link(map(), String.t() | nil, [CastMember.t()]) ::
+          {:ok | :error, [CastMember.t()]}
   def link(config, tmdb_id, [_ | _] = cast) when is_binary(tmdb_id) do
     case Cache.fetch(
            "tvdb_tmdb_people:#{tmdb_id}",
            fn -> request_tmdb_people(config, tmdb_id) end,
            ttl: :timer.hours(24)
          ) do
-      {:ok, ids_by_name} -> Enum.map(cast, &put_person_id(&1, ids_by_name))
-      _ -> cast
+      {:ok, ids_by_name} -> {:ok, Enum.map(cast, &put_person_id(&1, ids_by_name))}
+      _ -> {:error, cast}
     end
   end
 
-  def link(_config, _tmdb_id, cast), do: cast
+  def link(_config, _tmdb_id, cast), do: {:ok, cast}
 
   defp put_person_id(member, ids_by_name) do
     case Map.get(ids_by_name, normalize_name(member.name)) do
@@ -52,7 +75,9 @@ defmodule Mydia.Metadata.Provider.TvdbCastLink do
       when is_list(tmdb_cast) ->
         {:ok, unique_person_ids(tmdb_cast)}
 
-      {:ok, %{status: 200}} ->
+      # No cast, or a cross-reference TMDB no longer has: nothing will ever
+      # link, so it is cached as an answer rather than retried as a failure.
+      {:ok, %{status: status}} when status in [200, 404] ->
         {:ok, %{}}
 
       other ->

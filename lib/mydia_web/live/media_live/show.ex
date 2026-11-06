@@ -962,8 +962,8 @@ defmodule MydiaWeb.MediaLive.Show do
   # The key is deliberately not :load_recommendations: that one is the page's
   # own rail, and sharing a key would let the dialog's lookup overwrite it,
   # since start_async/3 overwrites rather than cancels under an existing key.
-  def handle_async(:load_selected_recommendations, result, socket),
-    do: DetailModalEvents.handle_recommendations_result(result, socket)
+  def handle_async({:load_selected_recommendations, ref, media_type}, result, socket),
+    do: DetailModalEvents.handle_recommendations_result(ref, media_type, result, socket)
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)

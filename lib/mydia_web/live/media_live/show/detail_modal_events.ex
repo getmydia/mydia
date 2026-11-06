@@ -121,12 +121,19 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   call with the config's timeout, and the dialog is already on screen by then,
   so doing it in the handle_info would queue Close, Add and Request behind the
   fetch and the dialog would look frozen.
+
+  The async key carries the ref and media type the lookup is for, so
+  `handle_recommendations_result/4` can drop a result for a title the dialog
+  has since moved off. `DetailModal.select/4` starts this lookup through a
+  message to `self()`, so a previous title's result can land after the new
+  selection but before this runs; it must not be shown, nor stamped with the
+  new title's type.
   """
   def fetch_recommendations(socket, ref, media_type) do
     config = socket.assigns.metadata_config
     scope = socket.assigns.current_scope
 
-    start_async(socket, :load_selected_recommendations, fn ->
+    start_async(socket, {:load_selected_recommendations, ref, media_type}, fn ->
       Recommendations.for_ref(ref, media_type, scope, config)
     end)
   end
@@ -134,29 +141,49 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   @doc """
   Stores the dialog's rail, or leaves it empty on anything but a clean result.
 
-  An empty rail renders nothing at all, which is the designed behaviour for a
-  title TMDB has no recommendations for. A crash must not take the page down for
-  a section that is meant to be silently absent.
+  A result for a title other than the selected one is dropped. An empty rail
+  renders nothing at all, which is the designed behaviour for a title TMDB has
+  no recommendations for. A crash must not take the page down for a section
+  that is meant to be silently absent.
   """
-  def handle_recommendations_result({:ok, {:ok, results}}, socket) do
-    {:noreply, DetailModal.put_recommendations(socket, results, &decorate(socket, &1))}
+  def handle_recommendations_result(ref, media_type, result, socket) do
+    if selected?(socket, ref, media_type) do
+      put_recommendations_result(result, media_type, socket)
+    else
+      {:noreply, socket}
+    end
   end
 
-  def handle_recommendations_result({:ok, :none}, socket) do
+  defp put_recommendations_result({:ok, {:ok, results}}, media_type, socket) do
+    {:noreply,
+     DetailModal.put_recommendations(socket, results, &decorate(socket, &1, media_type))}
+  end
+
+  defp put_recommendations_result({:ok, :none}, _media_type, socket) do
     {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
   end
 
-  def handle_recommendations_result({:exit, reason}, socket) do
+  defp put_recommendations_result({:exit, reason}, _media_type, socket) do
     Logger.warning("Detail dialog recommendations lookup crashed: #{inspect(reason)}")
     {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
   end
 
-  def handle_recommendations_result(other, socket) do
+  defp put_recommendations_result(other, _media_type, socket) do
     Logger.warning(
       "Detail dialog recommendations returned an unexpected result: #{inspect(other)}"
     )
 
     {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
+  end
+
+  defp selected?(socket, ref, media_type) do
+    case socket.assigns[:selected_item] do
+      nil ->
+        false
+
+      item ->
+        Map.get(item, :media_type) in [nil, media_type] and Ref.from_search_result(item) == ref
+    end
   end
 
   # A franchise is a TMDB movie collection, so a show sharing a member's TMDB
@@ -176,10 +203,11 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   # the rail inside the dialog keeps every poster on the dialog, and a link out
   # would close it from under the user mid-browse.
   #
-  # Typed by the title the dialog is open over, not the viewed one: a show
-  # opened from an actor on a movie's page has show recommendations.
-  defp decorate(socket, results) do
-    type = dialog_type(socket)
+  # Typed by the title the lookup was for (the one the dialog is open over),
+  # not the viewed one: a show opened from an actor on a movie's page has show
+  # recommendations.
+  defp decorate(socket, results, media_type) do
+    type = to_string(media_type)
     results = Enum.filter(results, &(RecommendationEvents.safe_provider_id(&1) != nil))
     tmdb_ids = Enum.map(results, &RecommendationEvents.safe_provider_id/1)
 
@@ -190,15 +218,5 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
     |> RecommendationEvents.stamp_media_type(type)
     |> MediaAddHelpers.enrich_with_library_status(status)
     |> MediaRequestHelpers.enrich_with_request_status(MediaRequestHelpers.request_status_map())
-  end
-
-  defp dialog_type(socket) do
-    case socket.assigns[:selected_item] do
-      %{media_type: media_type} when media_type in [:movie, :tv_show] ->
-        to_string(media_type)
-
-      _ ->
-        socket.assigns.media_item.type
-    end
   end
 end

@@ -195,6 +195,17 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
       )
     end
 
+    test "enqueues a TVDB show stored at version 1, before its cast carried TMDB person ids" do
+      item = tvdb_show("Harbor Lights", 881_004, %{schema_version: 1})
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      assert_enqueued(
+        worker: MetadataRefresh,
+        args: %{media_item_id: item.id, fetch_episodes: false}
+      )
+    end
+
     test "keys the required version by the resolved provider, not the blob's provider field" do
       # tvdb_id set and no metadata_source: resolve_provider/1 answers :tvdb
       # even though the blob says :tmdb.

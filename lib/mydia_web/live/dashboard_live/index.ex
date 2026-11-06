@@ -874,13 +874,18 @@ defmodule MydiaWeb.DashboardLive.Index do
     )
   end
 
+  # The person's titles come first. A lookup carries an id and a type but no
+  # provider, and a shelf can hold a TVDB show whose id equals a TMDB show's,
+  # so searched later a person's poster could open the shelf title. While the
+  # person popup is open its posters are the only ones reachable, and closing
+  # it empties the list, so putting it first never shadows a page card.
   defp rail_lists(assigns),
     do: [
+      PersonModal.titles(assigns),
       assigns.trending_movies,
       assigns.trending_tv,
       assigns.regional_items,
-      ShelfRail.items(assigns.shelves),
-      PersonModal.titles(assigns)
+      ShelfRail.items(assigns.shelves)
     ]
 
   defp find_trending_item(socket, id, media_type),

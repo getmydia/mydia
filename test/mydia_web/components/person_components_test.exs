@@ -65,6 +65,16 @@ defmodule MydiaWeb.PersonComponentsTest do
     assert count(doc, "#person-movies button[id^=person-credit-movie-]") == 30
     assert count(doc, "#person-movies button[id^=person-credit-movie-]:not([data-extra])") == 12
     assert text(doc, "#person-movies-show-all") == "Show all 30"
+
+    # The hiding is the class, not the marker: assert both halves of it.
+    for id <- 1..30 do
+      [class] = LazyHTML.attribute(LazyHTML.query(doc, "#person-credit-movie-#{id}"), "class")
+      assert String.contains?(class, "group-[:not(.expanded)]/credits:hidden") == id > 12
+    end
+
+    [click] = LazyHTML.attribute(LazyHTML.query(doc, "#person-movies-show-all"), "phx-click")
+    assert click =~ "#person-movies"
+    assert click =~ "expanded"
   end
 
   # "In library" expands the section without touching the button, so the
@@ -109,6 +119,20 @@ defmodule MydiaWeb.PersonComponentsTest do
 
     [click] = LazyHTML.attribute(LazyHTML.query(doc, "#person-bio-toggle"), "phx-click")
     assert click =~ "#person-bio-toggle > span"
+    # Expanded, the bio scrolls in a bounded box rather than growing the
+    # header past the popup's height.
+    assert click =~ ~s("max-h-[30vh]","overflow-y-auto")
+  end
+
+  test "opening moves focus to the close button and keeps Tab inside the popup" do
+    doc = render_modal(person: person(), titles: [])
+
+    [mounted] = LazyHTML.attribute(LazyHTML.query(doc, "#person-modal-box"), "phx-mounted")
+    assert mounted =~ "#person-modal-close"
+
+    assert LazyHTML.attribute(LazyHTML.query(doc, "#person-modal-box"), "phx-hook") == [
+             "Phoenix.FocusWrap"
+           ]
   end
 
   test "no biography renders no bio block" do
@@ -168,11 +192,29 @@ defmodule MydiaWeb.PersonComponentsTest do
           "show_person"
         )
 
-      button = LazyHTML.query(doc, "#cast-person-7")
+      button = LazyHTML.query(doc, "#cast-person-7-0")
       assert LazyHTML.attribute(button, "phx-click") == ["show_person"]
       assert LazyHTML.attribute(button, "phx-value-id") == ["7"]
       assert LazyHTML.attribute(button, "phx-value-name") == ["An Actor"]
       assert LazyHTML.attribute(button, "phx-value-profile_path") == ["/a.jpg"]
+    end
+
+    test "an actor listed twice gets a distinct id per entry" do
+      member = %{name: "An Actor", character: nil, profile_path: nil, tmdb_person_id: 7}
+
+      ids =
+        for index <- [0, 1] do
+          render_component(&PersonComponents.cast_person/1,
+            member: member,
+            event: "show_person",
+            index: index
+          )
+          |> LazyHTML.from_fragment()
+          |> LazyHTML.query("button")
+          |> LazyHTML.attribute("id")
+        end
+
+      assert ids == [["cast-person-7-0"], ["cast-person-7-1"]]
     end
 
     test "event without an id renders greyed with a tooltip and no button" do
