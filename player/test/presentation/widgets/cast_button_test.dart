@@ -53,6 +53,12 @@ void main() {
     expect(find.byKey(const Key('cast-button')), findsNothing);
   });
 
+  testWidgets('is absent on a television', (tester) async {
+    await pumpButton(tester, capabilities: const CastCapabilities.none());
+
+    expect(find.byKey(const Key('cast-button')), findsNothing);
+  });
+
   testWidgets('still renders with only one protocol capable (iOS)',
       (tester) async {
     await pumpButton(tester, capabilities: const CastCapabilities.iOS());
