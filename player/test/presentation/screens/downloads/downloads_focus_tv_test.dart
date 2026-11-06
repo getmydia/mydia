@@ -13,14 +13,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/downloads/storage_quota_providers.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/storage_settings.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
+import 'package:player/presentation/screens/downloads/series_downloads_screen.dart';
+import 'package:player/presentation/widgets/glass/glass_dialog.dart';
 
 import '../../../test_utils/tv_shell_harness.dart';
 
 const _source = 'acc1:owner:aa11';
+
+/// The cancel dialog waits on the manager before it opens; nothing here
+/// confirms it, so no method is ever called.
+class _IdleDownloads extends Fake implements DownloadService {}
 
 DownloadedMedia _movie(int n) => DownloadedMedia(
       id: 'row-m$n',
@@ -85,16 +92,18 @@ void main() {
     Future<void> pumpDownloads(
       WidgetTester tester, {
       int failedCount = 0,
+      List<DownloadedMedia>? media,
+      List<DownloadTask> queue = const [],
     }) async {
       shell = TvShell();
       await shell.pump(
         tester,
         const DownloadsScreen(),
         overrides: [
-          downloadedMediaProvider.overrideWith(
-              (ref) => Stream.value([for (var n = 0; n < 24; n++) _movie(n)])),
-          downloadQueueProvider
-              .overrideWith((ref) => Stream.value(const <DownloadTask>[])),
+          downloadedMediaProvider.overrideWith((ref) =>
+              Stream.value(media ?? [for (var n = 0; n < 24; n++) _movie(n)])),
+          downloadQueueProvider.overrideWith((ref) => Stream.value(queue)),
+          downloadManagerProvider.overrideWith((ref) async => _IdleDownloads()),
           failedDownloadsProvider.overrideWith((ref) =>
               Stream.value([for (var n = 0; n < failedCount; n++) _failed(n)])),
           storageQuotaStatusProvider.overrideWith(
@@ -180,6 +189,63 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectFocusIn(group(second));
+    });
+
+    // A title is a focus stop of its own on a television, so OK reaches it
+    // only through that stop's activation, not the tap handler under it.
+    downloadsTest('OK on a downloaded movie plays it', (tester) async {
+      await pumpDownloads(tester);
+      await focusIn(tester, group(0));
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.byKey(tvDetailStandInKey), findsOneWidget);
+      expect(shell.router.state.uri.path, '/s/$_source/player/m0');
+    });
+
+    downloadsTest('OK on a movie still downloading offers to cancel it',
+        (tester) async {
+      await pumpDownloads(tester, media: const [], queue: [
+        DownloadTask(
+          id: 'active-0',
+          mediaId: 'a0',
+          title: 'Marrow Lane',
+          quality: '1080p',
+          status: 'downloading',
+          createdAt: DateTime(2026, 1, 1),
+          sourceId: _source,
+        ),
+      ]);
+      await focusIn(tester, const ValueKey('download-group-$_source|a0'));
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.byType(GlassDialog), findsOneWidget);
+    });
+
+    downloadsTest('OK on a series opens its episodes', (tester) async {
+      await pumpDownloads(tester, media: [
+        DownloadedMedia(
+          id: 'row-e1',
+          mediaId: 'e1',
+          title: 'Pilot',
+          quality: '1080p',
+          filePath: '/nowhere/e1',
+          fileSize: 1,
+          mediaType: 'episode',
+          showId: 's1',
+          showTitle: 'Copper Tide',
+          seasonNumber: 1,
+          episodeNumber: 1,
+          downloadedAt: DateTime(2026, 1, 1),
+          sourceId: _source,
+        ),
+      ]);
+      await focusIn(tester, const ValueKey('download-group-$_source|s1'));
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.byType(SeriesDownloadsScreen), findsOneWidget);
     });
   }, skip: tvSkipReason);
 }
