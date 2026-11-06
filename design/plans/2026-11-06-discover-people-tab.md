@@ -34,7 +34,6 @@
 **Files:**
 - Modify: `metadata-relay/lib/metadata_relay/router.ex` (beside `get "/tmdb/person/search"`, ~line 200)
 - Modify: `metadata-relay/lib/metadata_relay/tmdb/handler.ex` (beside `search_people/1`, ~line 198)
-- Modify: `metadata-relay/mix.exs` (`version: "0.21.0"` to `"0.23.0"`)
 - Test: `metadata-relay/test/metadata_relay/tmdb/handler_test.exs`, `metadata-relay/test/metadata_relay/cache_test.exs`
 
 **Interfaces:**
@@ -52,11 +51,10 @@
 - [ ] **Step 3: Implement**
   - Handler: `def popular_people(params), do: Client.get("/person/popular", params: params)` with a `@doc` matching its neighbours.
   - Router: `get "/tmdb/person/popular"` using `extract_query_params/1` and `handle_tmdb_request/2`, placed directly after the search route and before `/tmdb/person/:id`; update the comment above search to say both must precede `:id`.
-  - Bump `mix.exs` version to `0.23.0`.
 
 - [ ] **Step 4: Run to verify pass** (same command). Expected: all PASS.
 
-- [ ] **Step 5: Commit** `feat(relay): proxy TMDB popular people` with the four files.
+- [ ] **Step 5: Commit** `feat(relay): proxy TMDB popular people` with the four changed relay files.
 
 ---
 
@@ -203,5 +201,5 @@ Pure extraction; the titles grid behaves exactly as before.
 - [ ] **Step 1:** `./dev mix precommit` in foreground chunks if it exceeds the 600 s tool limit (format, compile, credo, the suite). Fix anything in files this branch touched.
 - [ ] **Step 2:** Relay suite: `./dev bash`, `cd metadata-relay && mix test`. Expected: PASS.
 - [ ] **Step 3:** `git diff --stat origin/master...HEAD`; every file must be one this plan names (plus gettext catalogs). Anything else is a stale-read tell: investigate before continuing.
-- [ ] **Step 4:** Drive the real app (`./dev up -d`, then `/discover?type=person` in a browser): popular grid loads, scrolling pages in, a search works, a person opens the popup, and an unlinked cast member on a TVDB show page opens the search. Note that locally the relay is production 0.22.0, so the popular grid shows the error state until 0.23.0 ships; point the dev relay URL at a local relay (`cd metadata-relay && mix run --no-halt`) to see it work.
-- [ ] **Step 5:** With the user's go-ahead: push `HEAD:discover-people-tab`, open the PR (`Fixes #1350`), babysit CI and CodeRabbit, merge by hand. After merge, tag `metadata-relay-v0.23.0` on the merge commit and confirm `https://relay.mydia.dev/tmdb/person/popular` returns 200.
+- [ ] **Step 4:** Drive the real app (`./dev up -d`, then `/discover?type=person` in a browser): popular grid loads, scrolling pages in, a search works, a person opens the popup, and an unlinked cast member on a TVDB show page opens the search.
+- [ ] **Step 5:** With the user's go-ahead: push `HEAD:discover-people-tab`, open the PR (`Fixes #1350`), babysit CI and CodeRabbit, merge by hand. No relay tag is needed (see Task 1's ruling in the ledger and the spec's Rollout).

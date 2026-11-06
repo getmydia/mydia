@@ -126,9 +126,9 @@ Errors:
 - A failed first page shows the existing people error state ("The metadata
   service may be unavailable") with Retry. A failed later page shows the
   sentinel's Retry and keeps the people already shown.
-- A Mydia release paired with an older relay gets a 404 from
-  `/tmdb/person/popular` and lands in that same error state. Nothing crashes,
-  and it clears when the relay is updated.
+- A relay that cannot answer `/tmdb/person/popular` (a self-hosted relay older
+  than the person routes) returns 404, which lands in that same error state.
+  Nothing crashes.
 
 ### Unlinked cast
 
@@ -174,7 +174,7 @@ backfill, so there is no need to run `MetadataBackfill` sooner.
 
 ## Rollout
 
-One PR carrying the relay route, the Mydia change, and a bump of
-`metadata-relay/mix.exs` to 0.23.0 (it still reads 0.21.0; 0.22.0 was tagged
-without a bump). Right after it merges, tag `metadata-relay-v0.23.0` on the
-merge commit so the relay ships before any Mydia release that uses it.
+One PR carrying the relay route and the Mydia change. No relay release is
+needed for it: relays up to 0.22.0 already answer `/tmdb/person/popular`
+through `/tmdb/person/:id`, which forwards the same TMDB path. The explicit
+route ships with the next relay release, whenever that is.
