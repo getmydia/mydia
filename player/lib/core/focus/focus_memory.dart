@@ -353,12 +353,18 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
     return target;
   }
 
+  /// Registers with the nearest region above this item, which may not be the
+  /// one it registered with last time.
+  void _attach() {
+    _region = context.findAncestorStateOfType<FocusMemoryRegionState>();
+    _region?._register(this);
+  }
+
   @override
   void initState() {
     super.initState();
     if (!InputCapabilities.directionalPrimary) return;
-    _region = context.findAncestorStateOfType<FocusMemoryRegionState>();
-    _region?._register(this);
+    _attach();
   }
 
   @override
@@ -366,8 +372,27 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
     super.didUpdateWidget(oldWidget);
     if (!InputCapabilities.directionalPrimary) return;
     _region?._unregister(oldWidget.id, this);
-    _region = context.findAncestorStateOfType<FocusMemoryRegionState>();
-    _region?._register(this);
+    _attach();
+    // An unkeyed list rebuilt in a new order hands this slot, and the focus
+    // node inside it, to another item. Focus has not moved, so no focus
+    // change will report it: without this the region keeps remembering the
+    // item that left the slot, not the one the viewer is on.
+    if (_node.hasFocus) _region?._remember(widget.id, widget.index);
+  }
+
+  /// Re-resolves the region after a `GlobalKey` moves this item elsewhere in
+  /// the tree.
+  ///
+  /// A move that also changes the widget goes through [didUpdateWidget], but
+  /// one that reinserts the same widget instance does not, and would leave
+  /// the item registered with the region it left. Entering that region could
+  /// then focus an item drawn in another one.
+  @override
+  void activate() {
+    super.activate();
+    if (!InputCapabilities.directionalPrimary) return;
+    _region?._unregister(widget.id, this);
+    _attach();
   }
 
   @override

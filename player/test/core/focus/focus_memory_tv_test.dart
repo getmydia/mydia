@@ -449,6 +449,11 @@ void main() {
               ),
               child: Column(
                 children: [
+                  // A header above the list puts the cached row above the
+                  // viewport on screen, behind nothing but the list's own
+                  // clip, so only intersecting with the viewport (not the
+                  // view alone) rules it out.
+                  const SizedBox(height: 300),
                   Expanded(
                     child: FocusMemoryRegion(
                       entry: FocusMemoryEntry.firstVisible,
@@ -482,16 +487,102 @@ void main() {
         await tester.pumpAndSettle();
         list.jumpTo(400);
         await tester.pumpAndSettle();
-        expect(
-          FocusManager.instance.rootScope.descendants
-              .any((n) => n.debugLabel == 'item-3'),
-          isTrue,
-          reason: 'item 3 must be built (cached) off-screen for this test',
-        );
+        final cached = FocusManager.instance.rootScope.descendants
+            .where((n) => n.debugLabel == 'item-3');
+        expect(cached, hasLength(1),
+            reason: 'item 3 must be built (cached) above the viewport');
+        const screen = Rect.fromLTWH(0, 0, 1920, 1080);
+        expect(screen.contains(cached.single.rect.center), isTrue,
+            reason: 'item 3 must be on screen, so the view alone would '
+                'count it as visible');
 
         await focus(tester, 'below');
         await press(tester, LogicalKeyboardKey.arrowUp);
         expect(focused(), 'item-4');
+      },
+    );
+
+    testWidgets(
+      'a focused slot that takes another item remembers the item it shows',
+      (tester) async {
+        // The harness's cards are unkeyed, so a reorder reuses each slot's
+        // element and its focus node. Focus stays on slot 6, which now shows
+        // c0, and that is the card the viewer left.
+        await pumpRows(tester);
+        await focus(tester, 'r1-c6');
+
+        final swapped = _ids(1);
+        swapped[0] = 'r1-c6';
+        swapped[6] = 'r1-c0';
+        await pumpRows(tester, rows: [_ids(0), swapped, _ids(2)]);
+        expect(focused(), 'r1-c0');
+
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expect(focused(), startsWith('r0-'));
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expect(focused(), 'r1-c0');
+      },
+    );
+
+    testWidgets(
+      'an item a GlobalKey moves to another region leaves the old one',
+      (tester) async {
+        tester.view.physicalSize = const Size(1920, 1080);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        // One widget instance in both builds, so the move does not run
+        // didUpdateWidget: only the element's reactivation sees it.
+        final moving = FocusMemoryItem(
+          key: GlobalKey(),
+          id: 'moving',
+          index: 0,
+          child: const Focus(
+            debugLabel: 'moving',
+            child: SizedBox(width: _cardWidth, height: _rowHeight),
+          ),
+        );
+        Widget region(String label, List<Widget> items) => SizedBox(
+              height: _rowHeight,
+              child: FocusMemoryRegion(
+                debugLabel: label,
+                child: Row(children: items),
+              ),
+            );
+        Future<void> pumpRegions({required bool movedDown}) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: FocusTraversalGroup(
+                policy: ReadingOrderTraversalPolicy(
+                  requestFocusCallback: FocusMemory.requestFocus,
+                ),
+                child: Column(
+                  children: [
+                    region('top', [
+                      if (!movedDown) moving,
+                      card('top-1', 1),
+                    ]),
+                    region('bottom', [
+                      card('bottom-0', 0),
+                      if (movedDown) moving,
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await pumpRegions(movedDown: false);
+        await pumpRegions(movedDown: true);
+        await focus(tester, 'bottom-0');
+
+        // The top region has nothing remembered, so it lands on its lowest
+        // index. Still holding the moved item, that would be index 0, in the
+        // region below.
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expect(focused(), 'top-1');
       },
     );
   }, skip: skipReason);
