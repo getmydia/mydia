@@ -15,7 +15,6 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
-import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../test_utils/tv_shell_harness.dart';
 import '../sources/fake_capable_source.dart';
@@ -53,9 +52,9 @@ void main() {
     testWidgets('the grid entered for the first time lands on its first poster',
         (tester) async {
       await pumpCollection(tester);
-      // The cast button sits at the header's right end, above the last
-      // poster of the first row rather than the first.
-      await focusIn(tester, WindowTitleRow.castKey);
+      // A television has no cast button, so the back button is the header
+      // control the viewer comes down from.
+      await focusIn(tester, CollectionDetailScreen.backKey);
 
       await press(tester, LogicalKeyboardKey.arrowDown);
 
@@ -66,17 +65,19 @@ void main() {
         'the grid is re-entered on the poster that left it, after scrolling',
         (tester) async {
       await pumpCollection(tester);
-      await focusIn(tester, WindowTitleRow.castKey);
+      await focusIn(tester, CollectionDetailScreen.backKey);
       await press(tester, LogicalKeyboardKey.arrowDown);
       for (var i = 0; i < 3; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
       }
       expectFocusIn(poster(4));
 
-      // Back up to the header, then onto the cast button by hand, so the
-      // next DOWN is not a replay of Flutter's own up/down history.
+      // Back up to the header, then onto the back button by hand, so the
+      // next DOWN is not a replay of Flutter's own up/down history. The back
+      // button sits above the first poster, so geometry alone would pick
+      // poster 1: landing on poster 4 is the memory at work.
       await press(tester, LogicalKeyboardKey.arrowUp);
-      await focusIn(tester, WindowTitleRow.castKey);
+      await focusIn(tester, CollectionDetailScreen.backKey);
 
       final grid = gridPosition(tester);
       grid.jumpTo(grid.pixels + 150);

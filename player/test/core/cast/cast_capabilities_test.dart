@@ -14,6 +14,10 @@ void main() {
       expect(const CastCapabilities.web().any, isFalse);
     });
 
+    test('none has no cast capability at all', () {
+      expect(const CastCapabilities.none().any, isFalse);
+    });
+
     test('iOS gets Chromecast but not DLNA', () {
       // DLNA discovery is SSDP raw multicast, which iOS blocks without the
       // com.apple.developer.networking.multicast entitlement.
@@ -33,7 +37,7 @@ void main() {
     // `forCurrentPlatform` can only ever answer for the host running tests.
     test('web loses both protocols even if the iOS flag is somehow set', () {
       final capabilities =
-          CastCapabilities.forPlatform(isWeb: true, isIOS: true);
+          CastCapabilities.forPlatform(isWeb: true, isIOS: true, isTv: false);
 
       expect(capabilities.chromecast, isFalse);
       expect(capabilities.dlna, isFalse);
@@ -42,7 +46,7 @@ void main() {
 
     test('iOS keeps Chromecast and loses DLNA', () {
       final capabilities =
-          CastCapabilities.forPlatform(isWeb: false, isIOS: true);
+          CastCapabilities.forPlatform(isWeb: false, isIOS: true, isTv: false);
 
       expect(capabilities.chromecast, isTrue);
       expect(capabilities.dlna, isFalse);
@@ -50,10 +54,22 @@ void main() {
 
     test('everything else gets both', () {
       final capabilities =
-          CastCapabilities.forPlatform(isWeb: false, isIOS: false);
+          CastCapabilities.forPlatform(isWeb: false, isIOS: false, isTv: false);
 
       expect(capabilities.chromecast, isTrue);
       expect(capabilities.dlna, isTrue);
+    });
+
+    // A television (Chromecast with Google TV, any leanback device) is a
+    // cast receiver. Sending a cast from it has nowhere sensible to go, so it
+    // gets no cast affordance at all.
+    test('a television loses both protocols', () {
+      final capabilities =
+          CastCapabilities.forPlatform(isWeb: false, isIOS: false, isTv: true);
+
+      expect(capabilities.chromecast, isFalse);
+      expect(capabilities.dlna, isFalse);
+      expect(capabilities.any, isFalse);
     });
 
     test('forCurrentPlatform answers for the host running the tests', () {

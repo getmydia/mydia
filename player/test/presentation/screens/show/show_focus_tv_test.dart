@@ -147,10 +147,11 @@ void main() {
         expectFocusIn(section);
       }
       // Above the first section the column steps aside, and UP is the
-      // geometric search's again: the title row's cast button, straight
-      // above Play.
+      // geometric search's again. A television has no cast button, so the
+      // nearest stop above Play is the button bar, which on this layout sits
+      // wholly above it at the hero's left.
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(const ValueKey('window-title-row-cast'));
+      expectFocusIn(_action('watched'));
     });
 
     testWidgets('UP from the episodes returns to the season that left',
