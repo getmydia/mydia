@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../../core/focus/focus_memory.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
@@ -8,6 +10,7 @@ import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/watch_status.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/episode_rail.dart';
+import '../../widgets/focus_highlight.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
@@ -67,6 +70,7 @@ class ShowSeasonSection extends ConsumerWidget {
     }
 
     final seasonKey = (show: show.target, seasonNumber: selectedSeason);
+    final directional = InputCapabilities.directionalPrimary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,21 +117,19 @@ class ShowSeasonSection extends ConsumerWidget {
         SizedBox(
           height: 44,
           child: HorizontalWheelScroll(
-            builder: (context, controller) => ListView.builder(
-              controller: controller,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: availableSeasons.length,
-              itemBuilder: (context, index) {
-                final season = availableSeasons[index];
-                final unwatched =
-                    season.watchStatus?.unwatchedEpisodeCount ?? 0;
-                final isSelected = season.number == selectedSeason;
+            builder: (context, controller) {
+              final list = ListView.builder(
+                controller: controller,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: availableSeasons.length,
+                itemBuilder: (context, index) {
+                  final season = availableSeasons[index];
+                  final unwatched =
+                      season.watchStatus?.unwatchedEpisodeCount ?? 0;
+                  final isSelected = season.number == selectedSeason;
 
-                return Padding(
-                  key: ValueKey('season-chip-${season.number}'),
-                  padding: const EdgeInsets.only(right: 10),
-                  child: _SeasonChip(
+                  final chip = _SeasonChip(
                     label: context.l10n.downloadsSeasonNumber(season.number),
                     unwatched: unwatched,
                     watchStatus: season.watchStatus,
@@ -137,10 +139,24 @@ class ShowSeasonSection extends ConsumerWidget {
                           .read(selectedSeasonProvider(key).notifier)
                           .select(season.number);
                     },
-                  ),
-                );
-              },
-            ),
+                  );
+                  return Padding(
+                    key: ValueKey('season-chip-${season.number}'),
+                    padding: const EdgeInsets.only(right: 10),
+                    child: directional
+                        ? FocusMemoryItem(
+                            id: season.number,
+                            index: index,
+                            child: chip,
+                          )
+                        : chip,
+                  );
+                },
+              );
+              // The season selector is a button bar: entering it from the
+              // episodes below returns to the season that left it.
+              return directional ? FocusMemoryRegion(child: list) : list;
+            },
           ),
         ),
       ],
@@ -224,6 +240,16 @@ class ShowEpisodeList extends ConsumerWidget {
             // revealing the hero needs the enclosing Scrollable.
             child: Builder(
               builder: (railContext) => EpisodeRail(
+                // On the television tier a season gets a rail of its own, so
+                // a season switch starts with nothing remembered and the
+                // rail is entered on its first episode, scrolled to the
+                // start. Kept across seasons, the rail would fall back to the
+                // previous season's remembered position, landing mid-season.
+                // Off the television tier the rail keeps its state as
+                // before.
+                key: InputCapabilities.directionalPrimary
+                    ? ValueKey(('episode-rail', selectedSeason))
+                    : null,
                 episodes: episodes,
                 // Resolved through the same helper the hero uses, so the rail
                 // highlights whichever episode the hero describes, including
@@ -484,7 +510,7 @@ class _SeasonChipState extends State<_SeasonChip>
     } else {
       chip = Padding(padding: padding, child: content);
     }
-    return GestureDetector(
+    final tappable = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
@@ -496,6 +522,16 @@ class _SeasonChipState extends State<_SeasonChip>
         scale: _scaleAnimation,
         child: chip,
       ),
+    );
+    // A GestureDetector takes no focus, which left a remote with no way to
+    // change season. On the television tier the chip is a focus stop that
+    // the centre button selects. Elsewhere the tree and Tab order stay as
+    // they were.
+    if (!InputCapabilities.directionalPrimary) return tappable;
+    return FocusHighlight(
+      onActivate: widget.onTap,
+      borderRadius: BorderRadius.circular(glass ? 999 : 12),
+      child: tappable,
     );
   }
 }

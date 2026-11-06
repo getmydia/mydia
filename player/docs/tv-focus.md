@@ -59,8 +59,9 @@ FocusMemoryRegion(
 )
 ```
 
-The item's focus target is the first traversable node inside it, so a card
-with its own `Focus` or `InkWell` needs nothing else. For a one-column vertical
+The item's focus target is the outermost traversable node inside it, so a card
+with its own `Focus` or `InkWell` needs nothing else, and a control nested in
+the card (an episode card's watched menu) is never picked over the card. For a one-column vertical
 list pass `entry: FocusMemoryEntry.firstVisible`, so a first visit lands on
 the top on-screen row rather than a cached row above the viewport.
 

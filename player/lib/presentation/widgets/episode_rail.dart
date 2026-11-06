@@ -36,6 +36,7 @@ class EpisodeRail extends StatelessWidget {
       height: Breakpoints.getEpisodeRailHeight(context),
       leftFadeKey: const ValueKey('episode-rail-left-fade'),
       rightFadeKey: const ValueKey('episode-rail-right-fade'),
+      itemId: (index) => episodes[index].target.ref,
       itemBuilder: (context, index) {
         final episode = episodes[index];
         return EpisodeRailCard(

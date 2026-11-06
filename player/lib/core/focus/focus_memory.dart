@@ -267,9 +267,10 @@ class _FocusMemoryRegionState extends State<FocusMemoryRegion> {
 ///
 /// Wraps [child] in a non-focusable `Focus` that only listens: when anything
 /// inside the item gains focus, the region remembers this item. The node
-/// focus lands on when the region picks this item is the first traversable
-/// node inside it, so an item whose card has its own `Focus` needs nothing
-/// else.
+/// focus lands on when the region picks this item is the outermost
+/// traversable node inside it, so an item whose card has its own `Focus`
+/// needs nothing else, and a button nested in that card is not picked over
+/// the card.
 ///
 /// Off the television tier it returns [child] untouched and registers
 /// nothing.
@@ -298,12 +299,21 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
 
   _FocusMemoryRegionState? _region;
 
+  /// The outermost traversable node inside this item.
+  ///
+  /// `traversalDescendants` lists a node's children before the node itself,
+  /// so for a card holding a button of its own (an episode card's watched
+  /// menu) the button comes first. Landing there would put focus on a corner
+  /// control instead of the card, so a later node that encloses the current
+  /// pick replaces it.
   FocusNode? get _target {
+    FocusNode? target;
     for (final node in _node.traversalDescendants) {
       final context = node.context;
-      if (context != null && context.mounted) return node;
+      if (context == null || !context.mounted) continue;
+      if (target == null || target.ancestors.contains(node)) target = node;
     }
-    return null;
+    return target;
   }
 
   @override
