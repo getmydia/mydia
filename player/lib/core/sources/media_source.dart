@@ -23,6 +23,7 @@ enum SourceCapability {
   favorites,
   nextUp,
   recentlyAdded,
+  trending,
   collections,
   calendar,
   savedFilters,

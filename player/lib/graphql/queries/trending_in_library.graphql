@@ -1,0 +1,22 @@
+query TrendingInLibrary($type: MediaType!, $first: Int) {
+  trendingInLibrary(type: $type, first: $first) {
+    id
+    type
+    title
+    year
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    newEpisodeCount
+    latestSeasonNumber
+    latestEpisodeNumber
+    watchStatus { watched percentage unwatchedEpisodeCount }
+    trendingRank
+  }
+}

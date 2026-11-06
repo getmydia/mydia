@@ -215,6 +215,7 @@ void main() {
     test('declares the capability', () {
       final source = build().source;
       expect(source.capabilities, contains(SourceCapability.continueWatching));
+      expect(source.capabilities, isNot(contains(SourceCapability.trending)));
       expect(source.as<ContinueWatching>(), same(source));
     });
 

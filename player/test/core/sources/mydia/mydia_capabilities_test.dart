@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/domain/sources/ranked_item.dart';
 import 'package:player/core/sources/mydia/mydia_filters.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/navigation/media_filter.dart';
@@ -12,6 +15,26 @@ import 'mydia_fixtures.dart' as fx;
 const sid = SourceId(fx.sid);
 
 void main() {
+  test('Mydia offers Trending', () {
+    final source = fx.build().source;
+    expect(source.capabilities, contains(SourceCapability.trending));
+    expect(source.as<Trending>(), isNotNull);
+  });
+
+  test('RankedItem survives a JSON round trip', () {
+    const item = RankedItem(
+      item: ItemSummary(
+        ref: ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-9'),
+        title: 'Invented Tide',
+      ),
+      rank: 4,
+    );
+    final back = RankedItem.fromJson(item.toJson());
+    expect(back.rank, 4);
+    expect(back.item.ref, item.item.ref);
+    expect(back.item.title, 'Invented Tide');
+  });
+
   test('collections are listed', () async {
     final b = fx.build();
     final all = await b.source.collections();

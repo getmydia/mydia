@@ -15,6 +15,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/ranked_item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
 import '../../../graphql/mutations/register_device_node.graphql.dart';
@@ -32,6 +33,7 @@ import '../../../graphql/queries/mydia_queries.dart';
 import '../../../graphql/queries/search.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/queries/show_detail.graphql.dart';
+import '../../../graphql/queries/trending_in_library.graphql.dart';
 import '../../p2p/local_proxy_service.dart';
 import '../../p2p/media_route.dart';
 import '../../remote/remote_roster.dart';
@@ -40,6 +42,7 @@ import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
 import 'mydia_download_job_service.dart';
+import 'schema_downgrade.dart';
 import 'mydia_client.dart';
 import 'mydia_filters.dart';
 import 'mydia_mapping.dart';
@@ -75,6 +78,7 @@ class MydiaSource extends MediaSource
         Searchable,
         ContinueWatching,
         RecentlyAdded,
+        Trending,
         Favorites,
         NextUp,
         Similar,
@@ -117,6 +121,7 @@ class MydiaSource extends MediaSource
         SourceCapability.searchable,
         SourceCapability.continueWatching,
         SourceCapability.recentlyAdded,
+        SourceCapability.trending,
         SourceCapability.favorites,
         SourceCapability.nextUp,
         SourceCapability.similar,
@@ -484,6 +489,30 @@ class MydiaSource extends MediaSource
     return [
       for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r),
     ].whereType<ItemSummary>().take(_rowLimit).toList();
+  }
+
+  @override
+  Future<List<RankedItem>> trending(ItemKind kind) async {
+    final type = switch (kind) {
+      ItemKind.movie => 'MOVIE',
+      ItemKind.show => 'TV_SHOW',
+      _ => throw ArgumentError.value(kind, 'kind', 'movie or show only'),
+    };
+    final Map<String, dynamic> data;
+    try {
+      data = await _q(documentNodeQueryTrendingInLibrary,
+          {'type': type, 'first': _rowLimit});
+    } catch (e) {
+      // A server from before trendingInLibrary rejects the whole document.
+      if (isUnknownFieldError(e)) return const [];
+      rethrow;
+    }
+    return [
+      for (final r in _maps(data['trendingInLibrary']))
+        if (r['trendingRank'] case final int rank)
+          if (listingSummary(id, r) case final item?)
+            RankedItem(item: item, rank: rank),
+    ].take(_rowLimit).toList();
   }
 
   @override

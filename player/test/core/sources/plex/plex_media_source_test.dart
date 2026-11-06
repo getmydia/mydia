@@ -305,6 +305,7 @@ void main() {
     test('declares Continue Watching', () {
       final caps = build().source.capabilities;
       expect(caps, contains(SourceCapability.continueWatching));
+      expect(caps, isNot(contains(SourceCapability.trending)));
     });
 
     test('Continue Watching maps the flat list, capped at 20', () async {
