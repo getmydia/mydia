@@ -184,9 +184,7 @@ class BrowseScaffold extends ConsumerWidget {
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.menu_rounded),
-                          onPressed: () {
-                            AppShell.scaffoldKey.currentState?.openDrawer();
-                          },
+                          onPressed: () => AppShell.openNavigation(context),
                           tooltip: context.l10n.commonMenu,
                         )),
               // The label ellipsises: this bar uses `headlineSmall` to match

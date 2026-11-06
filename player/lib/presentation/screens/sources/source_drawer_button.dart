@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/app_shell.dart';
 
-/// Opens the shell's navigation drawer.
+/// Opens the shell's navigation: the drawer, or the menu page in the iOS app
+/// (see `AppShell.openNavigation`).
 ///
 /// The source screens build their own `Scaffold`, which has no drawer, so
 /// their `AppBar` never shows a menu icon by itself: the drawer belongs to
@@ -39,7 +40,7 @@ class SourceDrawerButton extends StatelessWidget {
       tooltip: context.l10n.commonMenu,
       icon: const Icon(Icons.menu_rounded),
       color: color,
-      onPressed: () => AppShell.scaffoldKey.currentState?.openDrawer(),
+      onPressed: () => AppShell.openNavigation(context),
     );
   }
 }
