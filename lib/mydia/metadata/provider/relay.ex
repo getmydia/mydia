@@ -355,6 +355,7 @@ defmodule Mydia.Metadata.Provider.Relay do
           metadata
           | provider: :tvdb,
             videos: resolve_tvdb_videos(config, data, preferred, language),
+            cast: link_tvdb_cast(config, data, metadata.cast),
             content_rating: metadata.content_rating || tmdb_rating_for_tvdb(config, data)
         }
 
@@ -466,6 +467,76 @@ defmodule Mydia.Metadata.Provider.Relay do
 
         error
     end
+  end
+
+  # TVDB cast carries no TMDB person id, so link it through the TMDB
+  # cross-reference in `remoteIds`: the matching TMDB show's aggregate cast maps
+  # names to ids. A name that appears twice maps to nothing, since guessing would
+  # attach the wrong person. Cached for a day; a failure degrades to the
+  # unlinked cast and is not cached, so it is retried on the next fetch.
+  defp link_tvdb_cast(config, data, [_ | _] = cast) do
+    with tmdb_id when is_binary(tmdb_id) <- tmdb_id_from_remote_ids(data["remoteIds"]),
+         {:ok, ids_by_name} <-
+           Cache.fetch(
+             "tvdb_tmdb_people:#{tmdb_id}",
+             fn -> request_tmdb_people(config, tmdb_id) end,
+             ttl: :timer.hours(24)
+           ) do
+      Enum.map(cast, fn member ->
+        case Map.get(ids_by_name, normalize_person_name(member.name)) do
+          nil -> member
+          id -> %{member | tmdb_person_id: id}
+        end
+      end)
+    else
+      _ -> cast
+    end
+  end
+
+  defp link_tvdb_cast(_config, _data, cast), do: cast
+
+  defp request_tmdb_people(config, tmdb_id) do
+    req = HTTP.new_request(config)
+
+    case HTTP.get(req, "/tmdb/tv/shows/#{tmdb_id}",
+           params: [append_to_response: "aggregate_credits"]
+         ) do
+      {:ok, %{status: 200, body: %{"aggregate_credits" => %{"cast" => tmdb_cast}}}}
+      when is_list(tmdb_cast) ->
+        {:ok, unique_person_ids(tmdb_cast)}
+
+      {:ok, %{status: 200}} ->
+        {:ok, %{}}
+
+      other ->
+        Logger.debug("TMDB cast cross-reference failed; leaving it uncached",
+          tmdb_id: tmdb_id,
+          result: inspect(other)
+        )
+
+        {:error, :tmdb_people_unavailable}
+    end
+  end
+
+  defp unique_person_ids(tmdb_cast) do
+    tmdb_cast
+    |> Enum.filter(&(is_map(&1) and is_binary(&1["name"]) and is_integer(&1["id"])))
+    |> Enum.group_by(&normalize_person_name(&1["name"]), & &1["id"])
+    |> Enum.flat_map(fn {name, ids} ->
+      case Enum.uniq(ids) do
+        [id] -> [{name, id}]
+        _ -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp normalize_person_name(name) do
+    name
+    |> :unicode.characters_to_nfd_binary()
+    |> String.replace(~r/\p{Mn}/u, "")
+    |> String.downcase()
+    |> String.trim()
   end
 
   # The `is_binary(id)` guard is load-bearing, not defensive noise. `remoteIds`
