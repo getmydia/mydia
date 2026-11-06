@@ -177,7 +177,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         ),
         // Dropdown button (only when multiple files)
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: _pickerGap),
           _versionPicker(context),
         ],
       ],
@@ -232,7 +232,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
                   ),
                 ))),
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: _pickerGap),
           _versionPicker(context),
         ],
       ],
@@ -257,6 +257,11 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   static const _playId = 'play';
   static const _versionId = 'version';
+
+  /// Space between Play and the version picker. On a television both grow
+  /// and ring when focused (`FocusEmphasis`), which needs room enough that
+  /// Play's ring is not drawn under the picker.
+  static double get _pickerGap => InputCapabilities.directionalPrimary ? 18 : 6;
 
   /// On the television tier, Play and the version picker are separate items
   /// of the enclosing `FocusMemoryRegion` (the detail hero's Play section).

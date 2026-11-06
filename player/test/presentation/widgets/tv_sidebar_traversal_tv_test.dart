@@ -270,7 +270,7 @@ void main() {
       // A section page as go_router's ShellRoute hosts it: a page of the
       // shell's own navigator, so a route of its own, apart from the
       // sidebar's. A filter control sits above the grid, first in the tree.
-      Widget section(String name) => Navigator(
+      Widget section(String name, {int firstCard = 0}) => Navigator(
             key: const ValueKey('shell-navigator'),
             pages: [
               MaterialPage<void>(
@@ -287,7 +287,7 @@ void main() {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          for (var i = 0; i < 3; i++)
+                          for (var i = firstCard; i < 3; i++)
                             FocusMemoryItem(
                               id: i,
                               index: i,
@@ -323,6 +323,21 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       expect(focused(), 'shows-card-0');
+
+      // The card the sidebar remembers leaves the page (a refresh dropped
+      // it) while the viewer is in the sidebar. The page is not new, so
+      // nothing lands; RIGHT falls back to the grid, not to the filter that
+      // comes first in the tree.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(sidebarSelected.hasFocus, isTrue);
+      await tester
+          .pumpWidget(buildShell(content: section('shows', firstCard: 1)));
+      await tester.pumpAndSettle();
+      expect(sidebarSelected.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(focused(), 'shows-card-1');
     });
 
     testWidgets(

@@ -108,6 +108,43 @@ abstract final class FocusMemory {
   /// Every mounted landing region (see [FocusMemoryRegion.landing]).
   static final Set<FocusMemoryRegionState> _landings = {};
 
+  /// Key presses made with focus on each page, counted as they happen.
+  ///
+  /// A landing must not undo a choice, and whether the viewer made one is a
+  /// question about when they pressed, not about where focus is when the
+  /// landing target finally arrives: by then a viewer who pressed LEFT from
+  /// the page into the sidebar is no longer on the page at all. Counting per
+  /// route also covers presses made before the landing region was built (a
+  /// grid still loading under a filter bar that autofocused).
+  static final Expando<int> _pagePresses = Expando('pagePresses');
+
+  /// Starts counting [_pagePresses], so it is running before any page's
+  /// first press. Called at startup, and again by every region as a
+  /// backstop. Re-adding is how it stays idempotent, and survives a test
+  /// binding that clears the keyboard's handlers. Off the television tier
+  /// it does nothing.
+  static void listenForPresses() {
+    if (!InputCapabilities.directionalPrimary) return;
+    HardwareKeyboard.instance
+      ..removeHandler(_recordPress)
+      ..addHandler(_recordPress);
+  }
+
+  static bool _recordPress(KeyEvent event) {
+    if (event is KeyUpEvent) return false;
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (context == null || !context.mounted) return false;
+    final route = ModalRoute.of(context);
+    // A press inside a menu or dialog is about that popup, not the page.
+    if (route != null && route is! PopupRoute) {
+      _pagePresses[route] = _pressesOn(route) + 1;
+    }
+    return false;
+  }
+
+  static int _pressesOn(ModalRoute<Object?>? route) =>
+      route == null ? 0 : _pagePresses[route] ?? 0;
+
   /// Sends focus to the landing region of the page [context] is on, as if the
   /// page had just opened: the region's remembered item is ignored, so it
   /// lands where its [FocusMemoryRegion.entry] and
@@ -126,7 +163,15 @@ abstract final class FocusMemory {
     if (!InputCapabilities.directionalPrimary) return;
     final route = ModalRoute.of(context);
     for (final region in _landings) {
-      if (region._route == route) region._claim(fresh: true, reveal: false);
+      if (region._route == route) {
+        // Presses up to now, including the one that asked for this, are
+        // what led here; only a later one is the viewer changing course.
+        region._claim(
+          fresh: true,
+          reveal: false,
+          baseline: _pressesOn(route),
+        );
+      }
     }
   }
 
@@ -264,18 +309,18 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
 
   bool _claimScheduled = false;
 
-  /// A key went down since the landing began. Listened for only while one is
-  /// pending.
-  bool _keyPressed = false;
+  /// The page's press count when the pending landing began: one more press
+  /// on the page cancels it (see [FocusMemory._pagePresses]).
+  int _pressBaseline = 0;
 
   ModalRoute<Object?>? _route;
 
   @override
   void initState() {
     super.initState();
-    if (widget.landing && InputCapabilities.directionalPrimary) {
-      FocusMemory._landings.add(this);
-    }
+    if (!InputCapabilities.directionalPrimary) return;
+    FocusMemory.listenForPresses();
+    if (widget.landing) FocusMemory._landings.add(this);
   }
 
   @override
@@ -283,15 +328,30 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
     super.didChangeDependencies();
     final first = _route == null;
     _route = ModalRoute.of(context);
-    // Landing is for arriving on a page. A region built while focus is
-    // already on its page (the library switching from grid to list) is the
-    // viewer rearranging the page they are on, and moving them would undo
-    // the press that did it.
+    // Landing is for arriving on a page. Measured from the page's first
+    // press, not from now, so a page the viewer has already pressed keys on
+    // keeps their place: the region was built late (a grid that was still
+    // loading under a control that autofocused), or rebuilt by the press
+    // itself (the library switching from grid to list).
     if (first && FocusMemory._landings.contains(this)) {
-      final focus = FocusManager.instance.primaryFocus;
-      if (focus == null || focus is FocusScopeNode || !_onThisPage(focus)) {
-        _claim(fresh: false, reveal: true);
-      }
+      _claim(fresh: false, reveal: true, baseline: 0);
+    }
+  }
+
+  @override
+  void didUpdateWidget(FocusMemoryRegion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!InputCapabilities.directionalPrimary ||
+        widget.landing == oldWidget.landing) {
+      return;
+    }
+    // Only a region marked from the start lands when its page opens; one
+    // marked later is reachable from the shell and [FocusMemory.claimLanding].
+    if (widget.landing) {
+      FocusMemory._landings.add(this);
+    } else {
+      FocusMemory._landings.remove(this);
+      _endClaim();
     }
   }
 
@@ -302,26 +362,28 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
     super.dispose();
   }
 
-  void _claim({required bool fresh, required bool reveal}) {
-    if (!_claiming) HardwareKeyboard.instance.addHandler(_onKey);
+  void _claim({
+    required bool fresh,
+    required bool reveal,
+    required int baseline,
+  }) {
+    if (!_claiming) FocusManager.instance.addListener(_scheduleClaim);
     _claiming = true;
     _claimFresh = fresh;
     _claimReveal = reveal;
-    _keyPressed = false;
+    _pressBaseline = baseline;
     _scheduleClaim();
   }
 
   void _endClaim() {
     if (!_claiming) return;
     _claiming = false;
-    HardwareKeyboard.instance.removeHandler(_onKey);
+    FocusManager.instance.removeListener(_scheduleClaim);
   }
 
-  bool _onKey(KeyEvent event) {
-    if (event is! KeyUpEvent) _keyPressed = true;
-    return false;
-  }
-
+  /// Tries the pending landing after the current frame. Called when it
+  /// starts, when an item registers (Play gaining its version), and on every
+  /// focus change while it is pending (a popup that held focus closing).
   void _scheduleClaim() {
     if (_claimScheduled) return;
     _claimScheduled = true;
@@ -334,23 +396,25 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
 
   void _tryClaim() {
     if (!_claiming || !mounted) return;
-    final focus = FocusManager.instance.primaryFocus;
-    if (focus != null && isInsidePopupRoute(focus)) return;
-    if (_keyPressed && focus != null && _onThisPage(focus)) {
+    if (FocusMemory._pressesOn(_route) > _pressBaseline) {
       // The viewer is already finding their way around the page.
       _endClaim();
       return;
     }
-    // Wait for the region's first item. Play is disabled, so not a focus
-    // stop, until its version is picked; landing meanwhile would put the
-    // viewer on the version picker beside it, and the region would then
+    final focus = FocusManager.instance.primaryFocus;
+    // A menu or dialog holds focus: wait for it to close.
+    if (focus != null && isInsidePopupRoute(focus)) return;
+    if (_covered()) {
+      // Another page opened over this one; landing would move focus to a
+      // page the viewer cannot see.
+      _endClaim();
+      return;
+    }
+    // Wait for the item the region lands on first. Play is disabled, so not
+    // a focus stop, until its version is picked; landing meanwhile would put
+    // the viewer on the version picker beside it, and the region would then
     // remember the picker.
-    final first = _items.values.fold<_FocusMemoryItemState?>(
-      null,
-      (best, item) =>
-          best == null || item.widget.index < best.widget.index ? item : best,
-    );
-    if (first?._target == null) return;
+    if (_firstItem()?._target == null) return;
     final target = _claimFresh ? _freshEntryTarget() : entryTarget();
     if (target == null) return;
     _endClaim();
@@ -361,10 +425,30 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
     }
   }
 
-  bool _onThisPage(FocusNode node) {
-    final context = node.context;
-    if (context == null || !context.mounted) return false;
-    return ModalRoute.of(context) == _route;
+  /// Whether a page sits over this region's: its route, or the route of any
+  /// navigator it is nested in (the shell's, under a detail page pushed on
+  /// the root navigator), is not the top one. Only asked once no popup
+  /// holds focus, so a popup is never what covers it.
+  bool _covered() {
+    var route = _route;
+    while (route != null) {
+      if (!route.isCurrent) return true;
+      final outer = route.navigator?.context;
+      route = outer == null || !outer.mounted ? null : ModalRoute.of(outer);
+    }
+    return false;
+  }
+
+  /// The item a first entry lands on: the [FocusMemoryRegion.initialId]
+  /// item when it is registered, else the lowest index.
+  _FocusMemoryItemState? _firstItem() {
+    final initial = _items[widget.initialId];
+    if (initial != null) return initial;
+    return _items.values.fold<_FocusMemoryItemState?>(
+      null,
+      (best, item) =>
+          best == null || item.widget.index < best.widget.index ? item : best,
+    );
   }
 
   /// [entryTarget] with nothing remembered.

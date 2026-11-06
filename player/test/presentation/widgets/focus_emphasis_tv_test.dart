@@ -84,6 +84,38 @@ void main() {
           context.palette.primary);
     });
 
+    testWidgets('focused, it paints a glow and then the accent ring',
+        (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await tester.pumpWidget(_host(FocusHighlight(
+        emphasis: true,
+        focusNode: node,
+        onActivate: () {},
+        child: const SizedBox(width: 80, height: 40),
+      )));
+      final ring = find.byKey(FocusEmphasis.ringKey);
+      final accent = tester.element(ring).palette.primary;
+      expect(tester.renderObject(ring), isNot(paints..rrect()));
+
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(
+        tester.renderObject(ring),
+        paints
+          ..rrect(
+            color: accent.withValues(alpha: 0.35),
+            strokeWidth: FocusEmphasis.ringWidth * 2,
+            style: PaintingStyle.stroke,
+          )
+          ..rrect(
+            color: accent,
+            strokeWidth: FocusEmphasis.ringWidth,
+            style: PaintingStyle.stroke,
+          ),
+      );
+    });
+
     testWidgets('a focused Play is emphasized', (tester) async {
       await tester.pumpWidget(
           _host(PrimaryPlayButton(onPressed: () {}, label: 'Play')));
@@ -102,6 +134,25 @@ void main() {
         label: 'More',
         onPressed: () {},
       )));
+      FocusManager.instance.rootScope.traversalDescendants.first.requestFocus();
+      await tester.pumpAndSettle();
+
+      final more = _emphasis(tester, find.byKey(key));
+      expect(more.scale, greaterThan(1.0));
+      expect(more.ring, isTrue);
+    });
+
+    testWidgets('a focused GlassButton on Liquid Glass is emphasized',
+        (tester) async {
+      const key = Key('more');
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+        home: Scaffold(
+          body: Center(
+            child: GlassButton(buttonKey: key, label: 'More', onPressed: () {}),
+          ),
+        ),
+      ));
       FocusManager.instance.rootScope.traversalDescendants.first.requestFocus();
       await tester.pumpAndSettle();
 

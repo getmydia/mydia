@@ -70,6 +70,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     navigator = GlobalKey<NavigatorState>();
+    // As main.dart does at startup.
+    FocusMemory.listenForPresses();
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: navigator,
@@ -176,14 +178,139 @@ void main() {
         ),
       );
       expect(focused(), 'grid-a');
-      FocusManager.instance.rootScope.descendants
-          .singleWhere((n) => n.debugLabel == 'toggle')
-          .requestFocus();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
+      expect(focused(), 'toggle');
 
+      // What OK on the toggle does.
       showGrid.value = false;
       await tester.pumpAndSettle();
       expect(focused(), 'toggle');
+    });
+
+    testWidgets(
+        'a press on the page before the landing region is built keeps the '
+        'viewer\'s place', (tester) async {
+      await pumpFirstPage(tester);
+      final loaded = ValueNotifier(false);
+      addTearDown(loaded.dispose);
+      await open(
+        tester,
+        Column(
+          children: [
+            box('top', autofocus: true),
+            box('next'),
+            ValueListenableBuilder<bool>(
+              valueListenable: loaded,
+              builder: (_, done, __) =>
+                  done ? grid(['a', 'b']) : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      );
+      expect(focused(), 'top');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focused(), 'next');
+
+      loaded.value = true;
+      await tester.pumpAndSettle();
+      expect(focused(), 'next');
+    });
+
+    testWidgets('a page covered by another before it is ready does not land',
+        (tester) async {
+      await pumpFirstPage(tester);
+      final items = ValueNotifier<List<String>>([]);
+      addTearDown(items.dispose);
+      await open(tester, page(items));
+      await open(tester, Column(children: [box('above', autofocus: true)]));
+      expect(focused(), 'above');
+
+      items.value = ['a', 'b'];
+      await tester.pumpAndSettle();
+      expect(focused(), 'above');
+    });
+
+    testWidgets(
+        'a landing that became ready under a dialog lands once it '
+        'closes', (tester) async {
+      await pumpFirstPage(tester);
+      final items = ValueNotifier<List<String>>([]);
+      addTearDown(items.dispose);
+      await open(tester, page(items));
+      unawaited(showDialog<void>(
+        context: navigator.currentContext!,
+        builder: (_) => Center(child: box('dialog', autofocus: true)),
+      ));
+      await tester.pumpAndSettle();
+      expect(focused(), 'dialog');
+
+      items.value = ['a', 'b'];
+      await tester.pumpAndSettle();
+      expect(focused(), 'dialog');
+
+      navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(focused(), 'a');
+    });
+
+    testWidgets('initialId picks the item a landing waits for', (tester) async {
+      await pumpFirstPage(tester);
+      await open(
+        tester,
+        FocusMemoryRegion(
+          landing: true,
+          initialId: 'b',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Never focusable: a landing that waited for the lowest index
+              // would wait forever.
+              const FocusMemoryItem(
+                id: 'a',
+                index: 0,
+                child: Focus(
+                  debugLabel: 'a',
+                  canRequestFocus: false,
+                  child: SizedBox(width: 100, height: 80),
+                ),
+              ),
+              FocusMemoryItem(id: 'b', index: 1, child: box('b')),
+            ],
+          ),
+        ),
+      );
+      expect(focused(), 'b');
+    });
+
+    testWidgets('a region no longer marked as landing stops its claim',
+        (tester) async {
+      await pumpFirstPage(tester);
+      final items = ValueNotifier<List<String>>([]);
+      final landing = ValueNotifier(true);
+      addTearDown(items.dispose);
+      addTearDown(landing.dispose);
+      await open(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: landing,
+          builder: (_, isLanding, __) => ValueListenableBuilder<List<String>>(
+            valueListenable: items,
+            builder: (_, ids, __) => grid(ids, landing: isLanding),
+          ),
+        ),
+      );
+      landing.value = false;
+      await tester.pumpAndSettle();
+
+      items.value = ['a', 'b'];
+      await tester.pumpAndSettle();
+      expect(focused(), isNot('a'));
+      expect(
+        FocusMemory.landingTargetWithin(FocusManager.instance.rootScope),
+        isNull,
+      );
     });
 
     testWidgets('lands only once: returning to the page does not re-land',

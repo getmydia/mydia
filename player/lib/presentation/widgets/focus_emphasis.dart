@@ -50,11 +50,44 @@ class FocusEmphasis extends StatefulWidget {
   State<FocusEmphasis> createState() => _FocusEmphasisState();
 }
 
+/// How far the glow spreads past the ring.
+const double _glowBlur = 10;
+
 class _FocusEmphasisState extends State<FocusEmphasis> {
   bool _focused = false;
 
   void _onFocusChange(bool focused) {
-    if (focused != _focused) setState(() => _focused = focused);
+    if (focused == _focused) return;
+    setState(() => _focused = focused);
+    if (focused) WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
+  }
+
+  /// Scrolls the whole emphasis into view, not just the button.
+  ///
+  /// Traversal reveals the focused node's own bounds, so a button entered at
+  /// the edge of a scrolled page would have its grown edge, ring and glow
+  /// cut off by the viewport. Runs after traversal's own reveal, and moves
+  /// nothing when the extra margin is already on screen.
+  void _reveal() {
+    if (!mounted) return;
+    // A page already scrolling has somewhere to be (picking an episode
+    // carries the page back to its hero); a reveal now would cut that short.
+    for (var s = Scrollable.maybeOf(context);
+        s != null;
+        s = Scrollable.maybeOf(s.context)) {
+      if (s.position.isScrollingNotifier.value) return;
+    }
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    final size = box.size;
+    final grow = size.longestSide * (FocusEmphasis.scale - 1) / 2;
+    final margin =
+        widget.gap + FocusEmphasis.ringWidth + _glowBlur + grow.ceilToDouble();
+    box.showOnScreen(
+      rect: (Offset.zero & size).inflate(margin),
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -111,8 +144,15 @@ class FocusEmphasisPainter extends CustomPainter {
     final rect = (Offset.zero & size).inflate(inset);
     final RRect ring;
     if (circular) {
-      ring =
-          RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide / 2));
+      // A circle around the centre even when the bounds are not square, so
+      // the ring follows the round control rather than becoming a capsule.
+      ring = RRect.fromRectAndRadius(
+        Rect.fromCircle(
+          center: size.center(Offset.zero),
+          radius: size.shortestSide / 2 + inset,
+        ),
+        Radius.circular(size.shortestSide / 2 + inset),
+      );
     } else {
       final r = borderRadius;
       ring = RRect.fromRectAndCorners(
@@ -129,7 +169,7 @@ class FocusEmphasisPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = FocusEmphasis.ringWidth * 2
         ..color = color.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 10),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, _glowBlur),
     );
     canvas.drawRRect(
       ring,

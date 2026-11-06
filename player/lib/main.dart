@@ -32,6 +32,7 @@ import 'core/logging/log_sink.dart';
 import 'core/logging/log_store.dart';
 import 'core/logging/log_uploader.dart';
 import 'core/platform/native_tab_bar_support.dart';
+import 'core/focus/focus_memory.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
@@ -219,6 +220,9 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           NativeTabBarSupport.initialize(),
           LiquidGlassSupport.initialize(),
         ]);
+        // Needs the tier answer above; counts the presses that decide
+        // whether a page may still move focus to its landing region.
+        FocusMemory.listenForPresses();
       },
       hiveCache: () async {
         // `initAppHive` sets the Hive base path itself, because
