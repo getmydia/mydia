@@ -217,12 +217,29 @@ defmodule MydiaWeb.PersonComponentsTest do
       assert ids == [["cast-person-7-0"], ["cast-person-7-1"]]
     end
 
-    test "event without an id renders greyed with a tooltip and no button" do
+    test "an unlinked member links to a people search for their name" do
       doc = render_cast(%{name: "An Actor", character: nil, profile_path: nil}, "show_person")
+      link = LazyHTML.query(doc, "a#cast-person-search-0")
 
+      assert search_params(link) == %{"type" => "person", "q" => "An Actor"}
+      assert LazyHTML.attribute(link, "data-tip") == ["Search for An Actor"]
       assert Enum.empty?(LazyHTML.query(doc, "button"))
-      assert Enum.count(LazyHTML.query(doc, ".opacity-60.tooltip")) == 1
-      assert LazyHTML.attribute(LazyHTML.query(doc, ".tooltip"), "data-tip") != [""]
+      assert Enum.empty?(LazyHTML.query(doc, ".opacity-60"))
+    end
+
+    test "an unlinked name with reserved characters round-trips into the search" do
+      name = "Zoë & Ash #2"
+      doc = render_cast(%{name: name, character: nil, profile_path: nil}, "show_person")
+
+      assert doc |> LazyHTML.query("a#cast-person-search-0") |> search_params() ==
+               %{"type" => "person", "q" => name}
+    end
+
+    defp search_params(link) do
+      [href] = LazyHTML.attribute(link, "href")
+      uri = URI.parse(href)
+      assert uri.path == "/discover"
+      URI.decode_query(uri.query)
     end
   end
 end
