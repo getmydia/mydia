@@ -55,7 +55,12 @@ void main() {
       .position;
 
   group('HorizontalRail focus memory (requires MYDIA_FORCE_TV=true)', () {
-    Widget rail(String name, List<String> ids, {bool withIds = true}) {
+    Widget rail(
+      String name,
+      List<String> ids, {
+      bool withIds = true,
+      bool keyed = false,
+    }) {
       return HorizontalRail(
         key: ValueKey('rail-$name'),
         itemCount: ids.length,
@@ -64,6 +69,7 @@ void main() {
         rightFadeKey: ValueKey('$name-right-fade'),
         itemId: withIds ? (i) => ids[i] : null,
         itemBuilder: (context, i) => Focus(
+          key: keyed ? ValueKey('card-${ids[i]}') : null,
           debugLabel: ids[i],
           child: const SizedBox(width: _cardWidth, height: _railHeight),
         ),
@@ -75,6 +81,7 @@ void main() {
       required List<String> a,
       required List<String> b,
       bool withIds = true,
+      bool keyed = false,
     }) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
@@ -89,8 +96,8 @@ void main() {
               child: FocusScope(
                 child: Column(
                   children: [
-                    rail('a', a, withIds: withIds),
-                    rail('b', b, withIds: withIds),
+                    rail('a', a, withIds: withIds, keyed: keyed),
+                    rail('b', b, withIds: withIds, keyed: keyed),
                   ],
                 ),
               ),
@@ -147,6 +154,25 @@ void main() {
         expect(focused(), startsWith('b-'));
 
         await press(tester, LogicalKeyboardKey.arrowUp);
+        expect(focused(), 'a-5');
+      },
+    );
+
+    testWidgets(
+      'a keyed card keeps focus when the rail reorders around it',
+      (tester) async {
+        // The app's cards carry their item's key (Continue Watching's
+        // `home-continue-...`), so a slot handed to another item replaces
+        // the card, and its focus node with it, unless the slot itself
+        // follows the item.
+        await pumpRails(tester, a: _ids('a'), b: _ids('b'), keyed: true);
+        await focus(tester, 'a-5');
+
+        // Back from playing a-5, Continue Watching moves it to the front.
+        final reordered = _ids('a')..remove('a-5');
+        reordered.insert(0, 'a-5');
+        await pumpRails(tester, a: reordered, b: _ids('b'), keyed: true);
+
         expect(focused(), 'a-5');
       },
     );

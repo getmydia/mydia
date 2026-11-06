@@ -140,6 +140,19 @@ class _HorizontalRailState extends State<HorizontalRail>
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final directional = InputCapabilities.directionalPrimary;
 
+    // On the television tier each slot is keyed by its item, so a reorder
+    // moves the slot's element with the item instead of handing it to
+    // another. The app's cards carry their item's key, so without this a
+    // reorder replaces the focused card, and its focus node, and the ring
+    // vanishes: back from playing a title, Continue Watching moves it to the
+    // front while its card holds focus. Only when every id is distinct,
+    // since two slots with one key would fight over one element.
+    final itemId = directional ? widget.itemId : null;
+    final indexById = itemId == null
+        ? null
+        : {for (var i = 0; i < widget.itemCount; i++) itemId(i): i};
+    final slotId = indexById?.length == widget.itemCount ? itemId : null;
+
     // The wrapper is what makes a plain mouse wheel move the rail; the
     // controller stays owned here because the edge fades listen to it.
     final list = HorizontalWheelScroll(
@@ -152,11 +165,15 @@ class _HorizontalRailState extends State<HorizontalRail>
             : null,
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         itemCount: widget.itemCount,
+        findChildIndexCallback: slotId == null
+            ? null
+            : (key) => key is _RailSlotKey ? (indexById?[key.value]) : null,
         itemBuilder: (context, index) {
           final card = RailFocusScroller(
             child: widget.itemBuilder(context, index),
           );
           return Padding(
+            key: slotId == null ? null : _RailSlotKey(slotId(index)),
             padding: EdgeInsets.only(
               right: index < widget.itemCount - 1 ? cardSpacing : 0,
             ),
@@ -211,4 +228,10 @@ class _HorizontalRailState extends State<HorizontalRail>
       ),
     );
   }
+}
+
+/// A rail slot's key on the television tier: its item's id, in a type of its
+/// own so `findChildIndexCallback` never mistakes a caller's key for one.
+class _RailSlotKey extends ValueKey<Object> {
+  const _RailSlotKey(super.value);
 }
