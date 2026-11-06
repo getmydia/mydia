@@ -41,6 +41,8 @@ class CollectionDetailScreen extends ConsumerWidget {
     required this.collectionId,
   });
 
+  static const Key backKey = Key('collection-detail-back');
+
   /// Builds Collection detail's title-bar header.
   ///
   /// A static, `@visibleForTesting` seam rather than inlined in [build]:
@@ -59,6 +61,7 @@ class CollectionDetailScreen extends ConsumerWidget {
     return WindowTitleBar(
       height: WindowTitleRow.heightOf(context),
       leading: IconButton(
+        key: backKey,
         icon: const Icon(Icons.arrow_back_rounded),
         onPressed: () {
           if (context.canPop()) {
