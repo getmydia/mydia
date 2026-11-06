@@ -69,7 +69,9 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
   /// cut off by the viewport. Runs after traversal's own reveal, and moves
   /// nothing when the extra margin is already on screen.
   void _reveal() {
-    if (!mounted) return;
+    // Focus may have moved on before this frame ended; revealing the button
+    // it left would scroll away from where it went.
+    if (!mounted || !_focused) return;
     // A page already scrolling has somewhere to be (picking an episode
     // carries the page back to its hero); a reveal now would cut that short.
     for (var s = Scrollable.maybeOf(context);
