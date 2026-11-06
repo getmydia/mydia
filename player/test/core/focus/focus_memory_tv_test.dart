@@ -58,11 +58,17 @@ void main() {
           ),
         );
 
-    Widget row(int r, List<String> ids, {double? cacheExtent}) {
+    Widget row(
+      int r,
+      List<String> ids, {
+      double? cacheExtent,
+      Object? initialId,
+    }) {
       return SizedBox(
         height: _rowHeight,
         child: FocusMemoryRegion(
           debugLabel: 'row-$r',
+          initialId: initialId,
           child: ListView.builder(
             controller: controllers[r],
             scrollDirection: Axis.horizontal,
@@ -80,6 +86,7 @@ void main() {
       WidgetTester tester, {
       List<List<String>>? rows,
       double? cacheExtent,
+      Map<int, Object>? initialIds,
     }) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
@@ -94,7 +101,12 @@ void main() {
             child: Column(
               children: [
                 for (var r = 0; r < data.length; r++)
-                  row(r, data[r], cacheExtent: cacheExtent),
+                  row(
+                    r,
+                    data[r],
+                    cacheExtent: cacheExtent,
+                    initialId: initialIds?[r],
+                  ),
               ],
             ),
           ),
@@ -139,6 +151,44 @@ void main() {
       'entering a never-visited row lands on its first item',
       (tester) async {
         await pumpRows(tester);
+        await focus(tester, 'r0-c4');
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expect(focused(), 'r1-c0');
+      },
+    );
+
+    testWidgets(
+      'entering a never-visited row with an initial id lands on that item',
+      (tester) async {
+        await pumpRows(tester, initialIds: {1: 'r1-c3'});
+        await focus(tester, 'r0-c4');
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expect(focused(), 'r1-c3');
+      },
+    );
+
+    testWidgets(
+      'a remembered item wins over the initial id',
+      (tester) async {
+        await pumpRows(tester, initialIds: {1: 'r1-c3'});
+        await focus(tester, 'r1-c1');
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expect(focused(), startsWith('r0-'));
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expect(focused(), 'r1-c1');
+      },
+    );
+
+    testWidgets(
+      'an initial id that is not built falls back to the entry item',
+      (tester) async {
+        await pumpRows(tester, cacheExtent: 0, initialIds: {1: 'r1-c10'});
+        expect(
+          FocusManager.instance.rootScope.descendants
+              .where((n) => n.debugLabel == 'r1-c10'),
+          isEmpty,
+          reason: 'c10 must be unbuilt for this test to mean anything',
+        );
         await focus(tester, 'r0-c4');
         await press(tester, LogicalKeyboardKey.arrowDown);
         expect(focused(), 'r1-c0');

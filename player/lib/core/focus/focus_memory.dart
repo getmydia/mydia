@@ -120,10 +120,12 @@ abstract final class FocusMemory {
 /// 1. The remembered item, by id, wherever it has moved to. A row remembers
 ///    the item, not the slot, so a title Continue Watching moved to the front
 ///    is still the one focus returns to.
-/// 2. If that item is not registered (removed from the list, or scrolled out
-///    of the build cache so it has no element), the registered item whose
-///    index is nearest the remembered index.
-/// 3. With nothing remembered, the item [entry] picks.
+/// 2. If that item is not registered, the [initialId] item, when given and
+///    registered.
+/// 3. If the remembered item is not registered (removed from the list, or
+///    scrolled out of the build cache so it has no element), the registered
+///    item whose index is nearest the remembered index.
+/// 4. With nothing remembered, the item [entry] picks.
 ///
 /// With no items registered at all (an emptied row), it lands nowhere of its
 /// own and the move keeps the geometric search's choice.
@@ -135,6 +137,7 @@ class FocusMemoryRegion extends StatefulWidget {
     super.key,
     required this.child,
     this.entry = FocusMemoryEntry.first,
+    this.initialId,
     this.debugLabel,
   });
 
@@ -142,6 +145,18 @@ class FocusMemoryRegion extends StatefulWidget {
 
   /// Where focus lands when the region has nothing remembered.
   final FocusMemoryEntry entry;
+
+  /// The id of the item to land on when the remembered one is not
+  /// registered, ahead of the index and [entry] fallbacks.
+  ///
+  /// For a bar whose natural landing is not at either end. The player OSD's
+  /// control bar can be skipped entirely on the way to the scrubber below it
+  /// (with the OSD hidden, LEFT or RIGHT focuses the scrubber directly), so
+  /// UP from there may enter a bar with nothing remembered. [entry] would
+  /// then pick its lowest index, Previous episode or -10s, where OK switches
+  /// episode or seeks back; play/pause, in the middle, is the control the
+  /// viewer expects. Ignored while no item with this id is registered.
+  final Object? initialId;
 
   /// Names the region in diagnostics only.
   final String? debugLabel;
@@ -205,6 +220,9 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
 
     final remembered = _items[_rememberedId]?._target;
     if (remembered != null) return remembered;
+
+    final initial = _items[widget.initialId]?._target;
+    if (initial != null) return initial;
 
     final rememberedIndex = _rememberedIndex;
     if (rememberedIndex != null) {

@@ -123,7 +123,12 @@ through. It is installed in two places only:
   and picture buttons beside it) is one region, since it is one row on screen
   and UP from the scrubber has to be able to return to either end of it. The
   scrubber is a one-item region nested inside it; without its own region it
-  would belong to the bar's, and UP from it would never be redirected.
+  would belong to the bar's, and UP from it would never be redirected. The
+  bar passes `initialId: TransportSurface.playPauseKey`: a scrub from the
+  hidden OSD focuses the scrubber without passing through the bar, so UP can
+  enter it with nothing remembered, and its lowest index is Previous episode
+  or -10s. `initialId` is consulted after the remembered item and before the
+  index and `entry` fallbacks, and only while that item is built.
 
 A region outside both never redirects anything. Do not add per-screen arrow-key
 handlers to get the same effect; that is the pattern this replaced. Section

@@ -542,6 +542,20 @@ void main() {
     });
 
     testWidgets(
+        'UP after a first scrub lands on play/pause when the bar has '
+        'nothing to remember', (tester) async {
+      // Playback starts, the OSD auto-hides, and the first press is a scrub:
+      // the control bar has never held focus. Its lowest index is -10s here
+      // (Previous episode for an episode), where OK would seek back.
+      await _mountPlayingScreen(tester);
+      await _scrubFromHiddenOsd(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(_focusedControlKey(), TransportSurface.playPauseKey);
+    });
+
+    testWidgets(
         'UP from the scrubber returns to a track button, across the '
         'transport', (tester) async {
       await _mountPlayingScreen(tester);

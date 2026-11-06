@@ -933,9 +933,15 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                   // be able to return to either. The scrubber
                                   // is its own region inside this one (see
                                   // `_ScrubberRow`), so leaving it counts as
-                                  // entering the bar.
+                                  // entering the bar. With nothing
+                                  // remembered (a scrub from the hidden OSD
+                                  // focuses the scrubber without passing
+                                  // through the bar), UP lands on
+                                  // play/pause rather than the lowest index,
+                                  // Previous episode or -10s.
                                   child: FocusMemoryRegion(
                                     debugLabel: 'osd-controls',
+                                    initialId: TransportSurface.playPauseKey,
                                     child: ChromePanel(
                                       metrics: metrics,
                                       transport: TransportCluster(
