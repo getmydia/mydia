@@ -126,8 +126,8 @@ defmodule MydiaWeb.PersonComponentsTest do
           nil
         )
 
-      assert Enum.count(LazyHTML.query(doc, "button")) == 0
-      assert Enum.count(LazyHTML.query(doc, "[id^=cast-person-]")) == 0
+      assert Enum.empty?(LazyHTML.query(doc, "button"))
+      assert Enum.empty?(LazyHTML.query(doc, "[id^=cast-person-]"))
       assert LazyHTML.text(doc) =~ "An Actor"
       assert LazyHTML.text(doc) =~ "Role"
     end
@@ -149,7 +149,7 @@ defmodule MydiaWeb.PersonComponentsTest do
     test "event without an id renders greyed with a tooltip and no button" do
       doc = render_cast(%{name: "An Actor", character: nil, profile_path: nil}, "show_person")
 
-      assert Enum.count(LazyHTML.query(doc, "button")) == 0
+      assert Enum.empty?(LazyHTML.query(doc, "button"))
       assert Enum.count(LazyHTML.query(doc, ".opacity-60.tooltip")) == 1
       assert LazyHTML.attribute(LazyHTML.query(doc, ".tooltip"), "data-tip") != [""]
     end

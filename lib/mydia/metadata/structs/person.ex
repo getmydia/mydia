@@ -45,8 +45,7 @@ defmodule Mydia.Metadata.Structs.Person do
       |> get_in(["combined_credits", "cast"])
       |> List.wrap()
       |> Enum.map(&PersonCredit.from_api_response/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.reject(&excluded?/1)
+      |> Enum.reject(&(is_nil(&1) or excluded?(&1)))
       |> merge_repeats()
 
     {movies, shows} = Enum.split_with(credits, &(&1.media_type == :movie))

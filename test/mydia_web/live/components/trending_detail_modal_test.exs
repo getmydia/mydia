@@ -357,7 +357,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
     test "without person_event the cast is not interactive" do
       doc = render_modal(item(), cast_metadata()) |> LazyHTML.from_fragment()
 
-      assert Enum.count(LazyHTML.query(doc, "[id^=cast-person-]")) == 0
+      assert Enum.empty?(LazyHTML.query(doc, "[id^=cast-person-]"))
       assert LazyHTML.text(doc) =~ "Linked Actor"
     end
   end
