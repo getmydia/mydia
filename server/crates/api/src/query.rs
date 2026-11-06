@@ -369,6 +369,20 @@ impl RootQueryType {
         Ok(None)
     }
 
+    /// Owned, unwatched titles ranked by TMDB trending, then popular. Episodes answer an empty list.
+    ///
+    /// Schema-only stub for SDL parity with the Elixir server. The real
+    /// implementation lives in
+    /// `lib/mydia_web/schema/resolvers/discovery_resolver.ex`.
+    async fn trending_in_library(
+        &self,
+        _ctx: &Context<'_>,
+        #[graphql(name = "type")] _media_type: MediaType,
+        _first: Option<i32>,
+    ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
+        Ok(None)
+    }
+
     /// Get dated episodes and movies between two dates, both bounds inclusive
     ///
     /// Schema-only stub for SDL parity with the Elixir server. The real

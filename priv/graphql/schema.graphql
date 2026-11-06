@@ -34,6 +34,9 @@ type RootQueryType {
   "Get recently added content"
   recentlyAdded(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
 
+  "Owned, unwatched titles ranked by TMDB trending, then popular. Episodes answer an empty list."
+  trendingInLibrary(type: MediaType!, first: Int): [RecentlyAddedItem]
+
   "Get next episodes to watch across all TV shows"
   upNext(first: Int, after: String): [UpNextItem] @deprecated(reason: "Merged into continueWatching, which now carries next episodes as well")
 
@@ -353,6 +356,9 @@ type RecentlyAddedItem {
 
   "IMDb id of the movie or show. Null for episodes and collections."
   imdbId: String
+
+  "Position among the distinct TMDB trending then popular titles. Null outside trendingInLibrary."
+  trendingRank: Int
 
   "Rolled-up watch state"
   watchStatus: WatchStatus
