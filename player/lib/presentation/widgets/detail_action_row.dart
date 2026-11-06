@@ -227,6 +227,7 @@ class _ActionButton extends StatelessWidget {
     return FocusHighlight(
       onActivate: onTap,
       borderRadius: const BorderRadius.all(Radius.circular(12)),
+      emphasis: true,
       child: InkWell(
         onTap: onTap,
         // FocusHighlight above is the single focus stop for this chip.

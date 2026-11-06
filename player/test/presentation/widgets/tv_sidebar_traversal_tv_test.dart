@@ -258,6 +258,74 @@ void main() {
     });
 
     testWidgets(
+        'activating a section lands on its grid, not the controls above it, '
+        'and RIGHT from the sidebar returns there', (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      createShellNodes();
+
+      String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
+
+      // A section page as go_router's ShellRoute hosts it: a page of the
+      // shell's own navigator, so a route of its own, apart from the
+      // sidebar's. A filter control sits above the grid, first in the tree.
+      Widget section(String name) => Navigator(
+            key: const ValueKey('shell-navigator'),
+            pages: [
+              MaterialPage<void>(
+                key: ValueKey(name),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Focus(
+                      debugLabel: '$name-filter',
+                      child: const SizedBox(width: 160, height: 40),
+                    ),
+                    FocusMemoryRegion(
+                      landing: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (var i = 0; i < 3; i++)
+                            FocusMemoryItem(
+                              id: i,
+                              index: i,
+                              child: Focus(
+                                debugLabel: '$name-card-$i',
+                                child: const SizedBox(width: 100, height: 150),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            onDidRemovePage: (_) {},
+          );
+
+      await tester.pumpWidget(buildShell(content: section('movies')));
+      await tester.pumpAndSettle();
+      sidebarSelected.requestFocus();
+      await tester.pumpAndSettle();
+      expect(sidebarSelected.hasFocus, isTrue);
+
+      // Activating a sidebar row: `context.go` replaces the shell's page.
+      await tester.pumpWidget(buildShell(content: section('shows')));
+      await tester.pumpAndSettle();
+      expect(focused(), 'shows-card-0');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(sidebarSelected.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(focused(), 'shows-card-0');
+    });
+
+    testWidgets(
         'LEFT from the first card of a rail reaches the sidebar while another '
         'rail is scrolled', (tester) async {
       tester.view.physicalSize = const Size(960, 540);

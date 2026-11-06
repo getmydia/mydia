@@ -479,6 +479,9 @@ class _ItemList extends StatelessWidget {
     return directional
         ? FocusMemoryRegion(
             entry: FocusMemoryEntry.firstVisible,
+            // The list view's rows are what the page is for, as the grid's
+            // posters are.
+            landing: true,
             debugLabel: 'source-library-list',
             child: list,
           )

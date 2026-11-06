@@ -212,6 +212,7 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
       return Center(child: Text(context.l10n.sourcesSearchNothingFound));
     }
     return BrowseGrid(
+      landing: false,
       scrollTopPadding: 8,
       itemCount: items.length,
       itemId: (index) => items[index].ref,
