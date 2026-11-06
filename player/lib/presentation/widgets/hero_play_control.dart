@@ -49,16 +49,12 @@ class HeroPlayControl extends StatelessWidget {
     // Play is a section of its own in the detail page's `FocusMemoryColumn`,
     // above the hero's button bar: that is what lets DOWN from Play reach the
     // bar, which the geometric search misses because the bar sits at the
-    // other side of the hero. Entering lands on Play, which precedes the
-    // version picker beside it.
+    // other side of the hero. Play and the version picker beside it are its
+    // items (see `SmartPlayButton`), so a first entry lands on Play and a
+    // return lands on whichever of the two the viewer left.
     return FocusMemoryRegion(
       debugLabel: 'hero-play',
-      child: FocusMemoryItem(
-        key: sectionKey,
-        id: 'play',
-        index: 0,
-        child: button,
-      ),
+      child: KeyedSubtree(key: sectionKey, child: button),
     );
   }
 }

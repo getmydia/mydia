@@ -12,6 +12,8 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/source_detail_controllers.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
+import 'package:player/presentation/widgets/smart_play_button.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -23,8 +25,25 @@ Key _action(String id) => ValueKey('detail-action-$id');
 Key _similar(int n) => ValueKey('source-poster-m$n');
 
 void main() {
+  /// Asserts focus is on the Play pill itself, not the version picker beside
+  /// it.
+  void expectOnPlay() => expect(
+        find.descendant(
+          of: find.byElementPredicate(
+              (e) => e == FocusManager.instance.primaryFocus?.context),
+          matching: find.byKey(PrimaryPlayButton.pillKey),
+        ),
+        findsOneWidget,
+        reason: 'focus is on ${describeFocus()}',
+      );
+
   group('movie detail focus memory (TV)', () {
-    Future<void> pumpMovie(WidgetTester tester) async {
+    Future<void> pumpMovie(
+      WidgetTester tester, {
+      List<MediaVersion> versions = const [
+        MediaVersion(id: 'v1', height: 1080)
+      ],
+    }) async {
       final movie = fakeMovie(1).ref;
       final source = ScriptedDetailSource(
         detailOf: (ref) => ItemDetail(
@@ -34,7 +53,7 @@ void main() {
           // Its cards have no action, so they are not focus stops, and a
           // press between the two must pass over it.
           cast: [for (var i = 0; i < 30; i++) Person(name: 'Actor $i')],
-          versions: const [MediaVersion(id: 'v1', height: 1080)],
+          versions: versions,
         ),
       );
       await mockNetworkImages(() => TvShell().pump(
@@ -124,6 +143,42 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowDown);
 
       expectFocusIn(_similar(12));
+    });
+
+    testWidgets('the Play section is re-entered on the version picker',
+        (tester) async {
+      // With two versions Play waits on the network probe to pick one, and
+      // stays disabled, so not a focus stop, until it answers. An unmocked
+      // channel never answers under the test clock.
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+        (call) async => ['ethernet'],
+      );
+      addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+                const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+                null,
+              ));
+      await pumpMovie(tester, versions: const [
+        MediaVersion(id: 'v1', height: 1080),
+        MediaVersion(id: 'v2', height: 2160),
+      ]);
+      expect(find.byKey(SmartPlayButton.versionPickerKey), findsOneWidget);
+      // First entry lands on Play. Play's focus node attaches once the
+      // version is picked, after the picker's, so a section that took its
+      // first node in focus-tree order would land on the picker.
+      await focusIn(tester, _action('watched'));
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectOnPlay();
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expectFocusIn(SmartPlayButton.versionPickerKey);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(_action('watched'));
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expectFocusIn(SmartPlayButton.versionPickerKey);
     });
   }, skip: tvSkipReason);
 }

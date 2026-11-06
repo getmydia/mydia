@@ -40,7 +40,15 @@ BrowseGrid(itemCount: items.length, itemId: (i) => items[i].ref, ...)
 
 Use the item's identity (`ItemSummary.ref`, a button's action name), never the
 index, or a reordered row (Continue Watching moving a title to the front)
-returns to the slot instead of the title.
+returns to the slot instead of the title. With distinct ids, `HorizontalRail`
+also keys each slot by its id, so a focused card survives a reorder instead of
+being rebuilt in another slot and losing focus.
+
+Give each focus stop its own item. An item holding two sibling stops lands on
+whichever comes first in the focus tree, which is the order their nodes
+attached, not the order they are drawn: the detail hero's Play pill attaches
+after its version picker once the best file is chosen, which is why
+`SmartPlayButton` registers Play and the picker as two items.
 
 A row that builds its own list wraps the list in a `FocusMemoryRegion` and
 each item in a `FocusMemoryItem`:
