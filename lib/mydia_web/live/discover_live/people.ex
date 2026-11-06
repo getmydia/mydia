@@ -104,10 +104,14 @@ defmodule MydiaWeb.DiscoverLive.People do
   Discover's `handle_info/2` while on People. `:load_data` loads the first
   page. A titles `{:load_page, ...}` is dropped: hide-owned and restricted
   viewers chain those, and one can still be queued when the user switches to
-  People, where it would fetch titles for a `:person` media type.
+  People, where it would fetch titles for a `:person` media type. Dropping it
+  also clears the titles grid's `:loading_more`, which would otherwise stay
+  set and stop Movies paging once the user goes back.
   """
   def handle_info(:load_data, socket), do: load(socket)
-  def handle_info({:load_page, _page, _advances, _target}, socket), do: socket
+
+  def handle_info({:load_page, _page, _advances, _target}, socket),
+    do: assign(socket, :loading_more, false)
 
   @doc "The error state's Try again: reloads the first page, on People only."
   def retry(%{assigns: %{media_type: :person}} = socket), do: load(socket)

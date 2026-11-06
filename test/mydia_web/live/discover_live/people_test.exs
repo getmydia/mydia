@@ -196,10 +196,14 @@ defmodule MydiaWeb.DiscoverLive.PeopleTest do
     conn: conn,
     bypass: bypass
   } do
+    # 0: page 2 fails, 1: page 2 answers.
+    relay_up = :counters.new(1, [])
+
     Bypass.stub(bypass, "GET", "/tmdb/person/popular", fn conn ->
-      case Plug.Conn.fetch_query_params(conn).query_params["page"] do
-        "1" -> json(conn, 200, page(1, 2, default_results()))
-        _ -> json(conn, 404, %{"error" => "boom"})
+      case {Plug.Conn.fetch_query_params(conn).query_params["page"], :counters.get(relay_up, 1)} do
+        {"1", _} -> json(conn, 200, page(1, 2, default_results()))
+        {_, 0} -> json(conn, 404, %{"error" => "boom"})
+        {_, _} -> json(conn, 200, page(2, 2, [person(503, "Iva Lund")]))
       end
     end)
 
@@ -212,6 +216,50 @@ defmodule MydiaWeb.DiscoverLive.PeopleTest do
     assert has_element?(view, "#discover-person-#{@person_id}")
     assert has_element?(view, "#discover-people-load-more-retry")
     refute has_element?(view, "#discover-people-error")
+
+    :counters.add(relay_up, 1, 1)
+    view |> element("#discover-people-load-more-retry") |> render_click()
+    render_async(view)
+
+    assert has_element?(view, "#discover-person-#{@person_id}")
+    assert has_element?(view, "#discover-person-503")
+    assert has_element?(view, "#discover-people-load-more[data-has-more=false]")
+  end
+
+  test "searching on People pages through the search results", %{conn: conn, bypass: bypass} do
+    test_pid = self()
+
+    Bypass.stub(bypass, "GET", "/tmdb/person/search", fn conn ->
+      params = Plug.Conn.fetch_query_params(conn).query_params
+      send(test_pid, {:search_page, params["query"], params["page"]})
+
+      case params["page"] do
+        "1" -> json(conn, 200, page(1, 2, default_results()))
+        "2" -> json(conn, 200, page(2, 2, [person(504, "Rune Halvard")]))
+      end
+    end)
+
+    {:ok, view, _html} = live(conn, ~p"/discover?type=person&q=#{@query}")
+    render_async(view)
+
+    render_hook(view, "load_more", %{})
+    render_async(view)
+
+    assert_received {:search_page, @query, "1"}
+    assert_received {:search_page, @query, "2"}
+    assert has_element?(view, "#discover-person-#{@person_id}")
+    assert has_element?(view, "#discover-person-504")
+    assert has_element?(view, "#discover-people-load-more[data-has-more=false]")
+  end
+
+  test "dropping a queued titles page clears its in-flight flag" do
+    socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, loading_more: true}}
+
+    # Left true, the titles grid would never ask for another page once the
+    # user is back on Movies: load_more refuses while one is in flight.
+    socket = MydiaWeb.DiscoverLive.People.handle_info({:load_page, 2, 0, 40}, socket)
+
+    refute socket.assigns.loading_more
   end
 
   test "a beta.3 scope link lands on the People type", %{conn: conn, bypass: bypass} do
