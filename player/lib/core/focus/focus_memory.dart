@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../player/input_capabilities.dart';
@@ -94,13 +95,13 @@ abstract final class FocusMemory {
     if (identical(region, _regionOf(FocusManager.instance.primaryFocus))) {
       return node;
     }
-    return region.resolveTarget() ?? node;
+    return region.entryTarget() ?? node;
   }
 
-  static _FocusMemoryRegionState? _regionOf(FocusNode? node) {
+  static FocusMemoryRegionState? _regionOf(FocusNode? node) {
     final context = node?.context;
     if (context == null || !context.mounted) return null;
-    return context.findAncestorStateOfType<_FocusMemoryRegionState>();
+    return context.findAncestorStateOfType<FocusMemoryRegionState>();
   }
 }
 
@@ -145,10 +146,11 @@ class FocusMemoryRegion extends StatefulWidget {
   final String? debugLabel;
 
   @override
-  State<FocusMemoryRegion> createState() => _FocusMemoryRegionState();
+  State<FocusMemoryRegion> createState() => FocusMemoryRegionState();
 }
 
-class _FocusMemoryRegionState extends State<FocusMemoryRegion> {
+/// The state of a [FocusMemoryRegion]. Public for [entryTarget] only.
+class FocusMemoryRegionState extends State<FocusMemoryRegion> {
   Object? _rememberedId;
   int? _rememberedIndex;
 
@@ -156,7 +158,7 @@ class _FocusMemoryRegionState extends State<FocusMemoryRegion> {
   ///
   /// Only built items are here: a lazy list drops an item's element once it
   /// leaves the cache extent, and its state unregisters on dispose. That is
-  /// what lets [resolveTarget] tell "the remembered item exists but is not
+  /// what lets [entryTarget] tell "the remembered item exists but is not
   /// built" from "it is built, focus it", and fall back by index for the
   /// former instead of reaching for a node that does not exist.
   final Map<Object, _FocusMemoryItemState> _items = {};
@@ -187,7 +189,12 @@ class _FocusMemoryRegionState extends State<FocusMemoryRegion> {
 
   /// The node focus should land on when entering this region, or null when
   /// no registered item has anything focusable.
-  FocusNode? resolveTarget() {
+  ///
+  /// The one answer to "where does entering this region land", shared by
+  /// [FocusMemory.requestFocus] (a geometric move redirected on entry) and
+  /// [FocusMemoryColumn] (a move to the next section), so the two paths
+  /// cannot disagree.
+  FocusNode? entryTarget() {
     final candidates = <({int index, FocusNode target})>[
       for (final item in _items.values)
         if (item._target case final target?)
@@ -297,7 +304,7 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
     skipTraversal: true,
   );
 
-  _FocusMemoryRegionState? _region;
+  FocusMemoryRegionState? _region;
 
   /// The outermost traversable node inside this item.
   ///
@@ -320,7 +327,7 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
   void initState() {
     super.initState();
     if (!InputCapabilities.directionalPrimary) return;
-    _region = context.findAncestorStateOfType<_FocusMemoryRegionState>();
+    _region = context.findAncestorStateOfType<FocusMemoryRegionState>();
     _region?._register(this);
   }
 
@@ -329,7 +336,7 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
     super.didUpdateWidget(oldWidget);
     if (!InputCapabilities.directionalPrimary) return;
     _region?._unregister(oldWidget.id, this);
-    _region = context.findAncestorStateOfType<_FocusMemoryRegionState>();
+    _region = context.findAncestorStateOfType<FocusMemoryRegionState>();
     _region?._register(this);
   }
 
@@ -352,6 +359,112 @@ class _FocusMemoryItemState extends State<FocusMemoryItem> {
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: _handleFocusChange,
+      child: widget.child,
+    );
+  }
+}
+
+/// A page whose remembering regions stack top to bottom as sections, so UP
+/// and DOWN step from section to section in that order.
+///
+/// The geometric search picks a section by where its nodes happen to sit, so
+/// a page whose sections are not aligned skips some: on a detail page Play
+/// sits at the right of the hero and the button bar below it at the left,
+/// and DOWN from Play overlaps the rail further down instead of the bar. A
+/// column puts the order the page declares in one place. On UP or DOWN with
+/// focus inside one of its regions, it focuses the entry target
+/// ([FocusMemoryRegionState.entryTarget]) of the previous or next region that
+/// has one, and the press is handled. With no such region, focus outside its
+/// regions, or focus inside a popup route, the press is left to normal
+/// traversal, so a column's edges and its non-region focus stops (a back
+/// button above the first section) behave exactly as they would without it.
+///
+/// Moves inside a region do not come through here as section moves: LEFT
+/// and RIGHT are never handled, and a region that is itself a vertical list
+/// should not sit in a column, since UP and DOWN would leave it at once.
+///
+/// The order is the regions' order in the element tree under the column,
+/// read at the moment of the press. Registration order would not do:
+/// sections appear as their data loads (a similar rail, a season's episodes),
+/// so a section declared above another can register after it. The tree order
+/// is the order the page declares its sections in, which for a column is the
+/// order they are drawn top to bottom. Only regions whose nearest column is
+/// this one count; a nested column orders its own.
+///
+/// Off the television tier it returns [child] untouched.
+class FocusMemoryColumn extends StatefulWidget {
+  const FocusMemoryColumn({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<FocusMemoryColumn> createState() => _FocusMemoryColumnState();
+}
+
+class _FocusMemoryColumnState extends State<FocusMemoryColumn> {
+  KeyEventResult _onKeyEvent(FocusNode _, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final step = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown => 1,
+      LogicalKeyboardKey.arrowUp => -1,
+      _ => 0,
+    };
+    if (step == 0) return KeyEventResult.ignored;
+
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null || isInsidePopupRoute(focus)) {
+      return KeyEventResult.ignored;
+    }
+    final current = FocusMemory._regionOf(focus);
+    if (current == null) return KeyEventResult.ignored;
+    final regions = _regions();
+    final at = regions.indexOf(current);
+    if (at < 0) return KeyEventResult.ignored;
+
+    for (var i = at + step; i >= 0 && i < regions.length; i += step) {
+      final target = regions[i].entryTarget();
+      if (target == null) continue;
+      // Flutter's directional policy keeps an up/down history to undo a
+      // move with the opposite press. This move bypassed the policy, so that
+      // history no longer describes how focus got here; left in place, a
+      // later geometric press could replay a node from before this move.
+      FocusTraversalGroup.maybeOfNode(focus)
+          ?.invalidateScopeData(focus.nearestScope!);
+      FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
+        target,
+        alignmentPolicy: step > 0
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+            : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+      );
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// This column's regions, in element tree order.
+  List<FocusMemoryRegionState> _regions() {
+    final regions = <FocusMemoryRegionState>[];
+    void visit(Element element) {
+      if (element is StatefulElement) {
+        final state = element.state;
+        // A nested column orders its own regions.
+        if (state is _FocusMemoryColumnState) return;
+        if (state is FocusMemoryRegionState) regions.add(state);
+      }
+      element.visitChildElements(visit);
+    }
+
+    context.visitChildElements(visit);
+    return regions;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!InputCapabilities.directionalPrimary) return widget.child;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _onKeyEvent,
       child: widget.child,
     );
   }

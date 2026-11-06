@@ -11,6 +11,7 @@ import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/source_detail_controllers.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
+import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -52,6 +53,29 @@ void main() {
       expect(find.byKey(_action('download')), findsOneWidget);
       expect(find.byKey(_action('info')), findsOneWidget);
     }
+
+    testWidgets(
+        'from Play, DOWN steps through the hero bar and the similar rail, '
+        'and UP climbs back to Play', (tester) async {
+      await pumpMovie(tester);
+      await focusIn(tester, HeroPlayControl.sectionKey);
+
+      // Play sits at the hero's right, the button bar under it at the left:
+      // left to the geometric search, DOWN from Play overlaps the similar
+      // rail instead and skips the bar.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(_action('watched'));
+      // The cast rail between has no focus stops.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(_similar(2));
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectFocusIn(_action('watched'));
+      // Left to the geometric search, UP from the bar reaches the back
+      // button straight above it.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectFocusIn(HeroPlayControl.sectionKey);
+    });
 
     testWidgets('the hero bar is entered first on its first button',
         (tester) async {

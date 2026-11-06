@@ -61,9 +61,38 @@ FocusMemoryRegion(
 
 The item's focus target is the outermost traversable node inside it, so a card
 with its own `Focus` or `InkWell` needs nothing else, and a control nested in
-the card (an episode card's watched menu) is never picked over the card. For a one-column vertical
-list pass `entry: FocusMemoryEntry.firstVisible`, so a first visit lands on
-the top on-screen row rather than a cached row above the viewport.
+the card (an episode card's watched menu) is never picked over the card. For a
+one-column vertical list pass `entry: FocusMemoryEntry.firstVisible`, so a
+first visit lands on the top on-screen row rather than a cached row above the
+viewport.
+
+## Pages of sections: `FocusMemoryColumn`
+
+Regions decide where a move lands *inside* the region it enters. Which region
+UP or DOWN enters is still the geometric search's choice, and on a page whose
+sections are not aligned that skips some. On a detail page Play sits at the
+right of the hero and the button bar below it at the left, so DOWN from Play
+overlaps a rail further down and the bar is never reached.
+
+`FocusMemoryColumn` puts the page's top-to-bottom section order in one place.
+With focus inside one of its regions, UP and DOWN focus the previous or next
+region's entry target (`FocusMemoryRegionState.entryTarget()`, the same
+answer the redirect uses), skipping regions with nothing focusable. The press
+is left to normal traversal when there is no such region, when focus is
+outside every region (a back button above the first section), or when focus is
+inside a popup route. LEFT and RIGHT are never touched.
+
+The order is the regions' order in the element tree under the column, read at
+each press, because sections register as their data arrives and a lower one
+can register first. A nested column orders its own regions.
+
+`DetailScreenFrame` wraps every detail page in one. Every focus stop meant to
+be reachable by UP and DOWN on such a page must therefore sit in a region, even
+a lone one: Play (`HeroPlayControl`), the similar row's disclosure, and the
+"Episodes" heading's buttons are one-item or small regions for that reason. A
+focusable node outside every region is skipped by section moves; it stays
+reachable from the sides. Do not put a vertical list region in a column, as
+UP and DOWN would leave it at once.
 
 ## Where the callback is installed
 
@@ -80,7 +109,8 @@ through. It is installed in two places only:
 - the player OSD's traversal group.
 
 A region outside both never redirects anything. Do not add per-screen arrow-key
-handlers to get the same effect; that is the pattern this replaced.
+handlers to get the same effect; that is the pattern this replaced. Section
+order across a page is `FocusMemoryColumn`'s job, above.
 
 ## Testing
 

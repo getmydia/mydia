@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/focus/focus_memory.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../domain/models/media_file.dart';
 import '../../l10n/l10n.dart';
 import 'smart_play_button.dart';
@@ -33,12 +35,30 @@ class HeroPlayControl extends StatelessWidget {
     this.resume = false,
   });
 
+  /// The key of Play's section on the television tier, for tests.
+  static const sectionKey = ValueKey('hero-play-section');
+
   @override
   Widget build(BuildContext context) {
-    return SmartPlayButton(
+    final button = SmartPlayButton(
       files: files,
       onFileSelected: onFileSelected,
       playLabel: resume ? context.l10n.commonResume : context.l10n.commonPlay,
+    );
+    if (!InputCapabilities.directionalPrimary) return button;
+    // Play is a section of its own in the detail page's `FocusMemoryColumn`,
+    // above the hero's button bar: that is what lets DOWN from Play reach the
+    // bar, which the geometric search misses because the bar sits at the
+    // other side of the hero. Entering lands on Play, which precedes the
+    // version picker beside it.
+    return FocusMemoryRegion(
+      debugLabel: 'hero-play',
+      child: FocusMemoryItem(
+        key: sectionKey,
+        id: 'play',
+        index: 0,
+        child: button,
+      ),
     );
   }
 }

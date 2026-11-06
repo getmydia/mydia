@@ -10,7 +10,9 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/source_detail_controllers.dart';
+import 'package:player/presentation/screens/detail/detail_similar_rail.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
+import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -37,6 +39,7 @@ ItemSummary _episode(int season, int number) => ItemSummary(
 Key _season(int n) => ValueKey('season-chip-$n');
 Key _episodeCard(int season, int n) => ValueKey('ep-$season-$n');
 Key _action(String id) => ValueKey('detail-action-$id');
+const _heading = ValueKey('source-season-download');
 
 /// Focus is on episode [n]'s card itself, not the watched menu in its
 /// corner, which is a focus stop of its own inside the card.
@@ -54,7 +57,10 @@ void _expectOnEpisode(int season, int n) {
 
 void main() {
   group('show detail focus memory (TV)', () {
-    Future<TvShell> pumpShow(WidgetTester tester) async {
+    /// Without [similar] the similar row is empty, so neither its
+    /// disclosure nor its rail is a section.
+    Future<TvShell> pumpShow(WidgetTester tester,
+        {bool similar = false}) async {
       final source = ScriptedDetailSource(
         detailOf: (ref) => ref.kind == ItemKind.episode
             ? ItemDetail(
@@ -90,23 +96,35 @@ void main() {
             overrides: [
               mediaSourceProvider(source.id).overrideWithValue(source),
               sourceArtworkProvider.overrideWith((ref, key) async => null),
-              // No similar row, so its disclosure header is not a stop
-              // between the hero bar and the seasons.
-              sourceSimilarProvider(_show)
-                  .overrideWith((_) => Stream.value(const <ItemSummary>[])),
+              sourceSimilarProvider(_show).overrideWith((_) => Stream.value([
+                    if (similar)
+                      for (var n = 2; n < 12; n++) fakeMovie(n),
+                  ])),
             ],
           ));
       return shell;
     }
 
     testWidgets(
-        'DOWN from the hero bar steps through the seasons, then the episodes, '
-        'each entered on its first item', (tester) async {
-      await pumpShow(tester);
-      await focusIn(tester, _action('info'));
+        'from Play, DOWN steps through every section in page order, each '
+        'entered on its first item, and UP climbs back', (tester) async {
+      await pumpShow(tester, similar: true);
+      await focusIn(tester, HeroPlayControl.sectionKey);
 
-      // The cast rail between them has no focus stops, and the "Episodes"
-      // heading's buttons sit at the far right, out of the way.
+      // Play sits at the hero's right, the button bar under it at the left:
+      // the page's section order, not the geometric search, links the two.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(_action('watched'));
+      // The cast rail has no focus stops. The similar row starts collapsed,
+      // so its disclosure is the next section; opening it adds the rail.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(DetailSimilarRail.headerSectionKey);
+      await press(tester, LogicalKeyboardKey.enter);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const ValueKey('source-poster-m2'));
+      // The "Episodes" heading's buttons, then the season chips.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(_heading);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expectFocusIn(_season(1));
       // Season 3 sits above the second episode card, which is where the
@@ -115,8 +133,24 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectFocusIn(_season(3));
       await press(tester, LogicalKeyboardKey.arrowDown);
-
       _expectOnEpisode(1, 1);
+
+      for (final section in [
+        _season(3),
+        _heading,
+        const ValueKey('source-poster-m2'),
+        DetailSimilarRail.headerSectionKey,
+        _action('watched'),
+        HeroPlayControl.sectionKey,
+      ]) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expectFocusIn(section);
+      }
+      // Above the first section the column steps aside, and UP is the
+      // geometric search's again: the title row's cast button, straight
+      // above Play.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expectFocusIn(const ValueKey('window-title-row-cast'));
     });
 
     testWidgets('UP from the episodes returns to the season that left',

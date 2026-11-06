@@ -72,47 +72,63 @@ class ShowSeasonSection extends ConsumerWidget {
     final seasonKey = (show: show.target, seasonNumber: selectedSeason);
     final directional = InputCapabilities.directionalPrimary;
 
+    // The heading's season buttons are a button bar of their own: a
+    // section of the page's FocusMemoryColumn between whatever sits above
+    // and the season chips, so stepping down the page stops on them.
+    Widget headingButton(String id, int index, Widget button) => directional
+        ? FocusMemoryItem(id: id, index: index, child: button)
+        : button;
+    final heading = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 20,
+            decoration: BoxDecoration(
+              color: palette.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            context.l10n.sourcesSearchKindEpisodes,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const Spacer(),
+          if (isDownloadSupported &&
+              show.features.contains(DetailFeature.seasonDownload))
+            if (availableSeasons
+                    .where((s) => s.number == selectedSeason)
+                    .firstOrNull
+                case final season?)
+              headingButton(
+                'download',
+                0,
+                SourceSeasonDownloadButton(
+                  show: show,
+                  season: season,
+                  seasons: availableSeasons,
+                ),
+              ),
+          // Season watched actions render on web too, where downloads are
+          // unsupported, so they live outside the isDownloadSupported gate.
+          if (show.features.contains(DetailFeature.watched))
+            headingButton(
+              'actions',
+              1,
+              SeasonActionsButton(seasonKey: seasonKey),
+            ),
+        ],
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: palette.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                context.l10n.sourcesSearchKindEpisodes,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const Spacer(),
-              if (isDownloadSupported &&
-                  show.features.contains(DetailFeature.seasonDownload))
-                if (availableSeasons
-                        .where((s) => s.number == selectedSeason)
-                        .firstOrNull
-                    case final season?)
-                  SourceSeasonDownloadButton(
-                    show: show,
-                    season: season,
-                    seasons: availableSeasons,
-                  ),
-              // Season watched actions render on web too, where downloads are
-              // unsupported, so they live outside the isDownloadSupported gate.
-              if (show.features.contains(DetailFeature.watched))
-                SeasonActionsButton(seasonKey: seasonKey),
-            ],
-          ),
-        ),
+        directional ? FocusMemoryRegion(child: heading) : heading,
         const SizedBox(height: 16),
         SizedBox(
           height: 44,

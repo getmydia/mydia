@@ -44,4 +44,20 @@ void main() {
     // Passthrough only applies off the television tier.
     skip: InputCapabilities.directionalPrimary,
   );
+
+  testWidgets(
+    'FocusMemoryColumn adds no Focus widget off TV',
+    (tester) async {
+      const page = SizedBox(width: 100, height: 100);
+      await tester.pumpWidget(const MaterialApp(home: page));
+      final bare = find.byType(Focus).evaluate().length;
+
+      await tester.pumpWidget(
+        const MaterialApp(home: FocusMemoryColumn(child: page)),
+      );
+
+      expect(find.byType(Focus).evaluate().length, bare);
+    },
+    skip: InputCapabilities.directionalPrimary,
+  );
 }
