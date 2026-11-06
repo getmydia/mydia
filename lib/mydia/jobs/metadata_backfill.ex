@@ -46,7 +46,8 @@ defmodule Mydia.Jobs.MetadataBackfill do
 
   # {provider, media_item.type} => minimum MediaMetadata schema_version.
   # 1: TVDB shows stored before cast was parsed from TVDB `characters`.
-  @required_versions %{{:tvdb, "tv_show"} => 1}
+  # 2: TMDB shows and movies stored before cast carried `tmdb_person_id`.
+  @required_versions %{{:tvdb, "tv_show"} => 2, {:tmdb, "tv_show"} => 2, {:tmdb, "movie"} => 2}
 
   @repair_types Enum.uniq(["tv_show" | Enum.map(Map.keys(@required_versions), &elem(&1, 1))])
 

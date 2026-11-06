@@ -37,7 +37,8 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
           provider: :tmdb,
           media_type: :movie,
           title: "Has Metadata",
-          poster_path: "/p.jpg"
+          poster_path: "/p.jpg",
+          schema_version: MediaMetadata.schema_version()
         }
       })
 
@@ -149,6 +150,39 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
     })
   end
 
+  defp tmdb_show(title, tmdb_id, version) do
+    media_item_fixture(%{
+      type: "tv_show",
+      title: title,
+      tmdb_id: tmdb_id,
+      tvdb_id: tmdb_id + 1,
+      metadata_source: :tmdb,
+      metadata: %MediaMetadata{
+        provider_id: to_string(tmdb_id),
+        provider: :tmdb,
+        media_type: :tv_show,
+        title: title,
+        schema_version: version,
+        external_ids: %{tmdb: tmdb_id, tvdb: tmdb_id + 1, imdb: nil}
+      }
+    })
+  end
+
+  defp tmdb_movie(title, tmdb_id, version) do
+    media_item_fixture(%{
+      type: "movie",
+      title: title,
+      tmdb_id: tmdb_id,
+      metadata: %MediaMetadata{
+        provider_id: to_string(tmdb_id),
+        provider: :tmdb,
+        media_type: :movie,
+        title: title,
+        schema_version: version
+      }
+    })
+  end
+
   describe "outdated metadata" do
     test "enqueues a metadata-only refresh for a TVDB show stored before the current version" do
       item = tvdb_show("Harbor Lights", 881_001)
@@ -183,40 +217,23 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
       refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
     end
 
-    test "skips TMDB shows and movies stored before the current version" do
-      tmdb_show =
-        media_item_fixture(%{
-          type: "tv_show",
-          title: "Paper Orchard",
-          tmdb_id: 77_001,
-          tvdb_id: 77_002,
-          metadata_source: :tmdb,
-          metadata: %MediaMetadata{
-            provider_id: "77001",
-            provider: :tmdb,
-            media_type: :tv_show,
-            title: "Paper Orchard",
-            external_ids: %{tmdb: 77_001, tvdb: 77_002, imdb: nil}
-          }
-        })
-
-      movie =
-        media_item_fixture(%{
-          type: "movie",
-          title: "Quiet Meridian",
-          tmdb_id: 77_003,
-          metadata: %MediaMetadata{
-            provider_id: "77003",
-            provider: :tmdb,
-            media_type: :movie,
-            title: "Quiet Meridian"
-          }
-        })
+    test "enqueues TMDB shows and movies stored at version 1, skips them at version 2" do
+      old_show = tmdb_show("Paper Orchard", 77_001, 1)
+      old_movie = tmdb_movie("Quiet Meridian", 77_003, 1)
+      new_show = tmdb_show("Salt Lantern", 77_011, 2)
+      new_movie = tmdb_movie("Hollow Tide", 77_013, 2)
 
       assert :ok = perform_job(MetadataBackfill, %{})
 
-      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: tmdb_show.id})
-      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: movie.id})
+      for item <- [old_show, old_movie] do
+        assert_enqueued(
+          worker: MetadataRefresh,
+          args: %{media_item_id: item.id, fetch_episodes: false}
+        )
+      end
+
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: new_show.id})
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: new_movie.id})
     end
 
     test "a no-metadata item keeps the full refresh with episodes" do

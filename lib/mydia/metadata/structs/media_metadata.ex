@@ -21,7 +21,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   # version promises.
   #
   # 1: TVDB `characters` mapped into `cast` (3ac79ecd4).
-  @schema_version 1
+  # 2: cast carries tmdb_person_id (people pages, #1346).
+  @schema_version 2
 
   @doc "The schema version `from_api_response/3` stamps on what it parses."
   @spec schema_version() :: pos_integer()
@@ -366,7 +367,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
         name: member["name"],
         character: member["character"],
         order: member["order"],
-        profile_path: member["profile_path"]
+        profile_path: member["profile_path"],
+        tmdb_person_id: member["id"]
       )
     end)
   end
