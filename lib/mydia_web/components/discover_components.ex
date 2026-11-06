@@ -442,7 +442,7 @@ defmodule MydiaWeb.DiscoverComponents do
             phx-value-id={person.tmdb_id}
             phx-value-name={person.name}
             phx-value-profile_path={person.profile_path}
-            class="group text-center cursor-pointer min-w-0"
+            class="group self-start text-center cursor-pointer min-w-0"
           >
             <%= if person.profile_path do %>
               <img
