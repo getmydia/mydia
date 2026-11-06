@@ -4,7 +4,7 @@
 // is lost while a detail page sits over Home.
 //
 // The real HomeScreen inside the shell's real content region (see
-// `tv_shell_harness.dart`), at 1920x1080. On Home a titled row's heading is
+// `tv_shell_harness.dart`), at 960x540 logical. On Home a titled row's heading is
 // itself a focus stop (it opens the full listing), so a vertical move from a
 // card reaches the next row's heading first and the row itself one press
 // later. The heading spans the screen's width, so what the geometric search
@@ -47,16 +47,28 @@ void main() {
     late List<ItemSummary> resuming;
     late TvShell shell;
 
-    Future<void> pumpHome(WidgetTester tester) async {
+    Future<void> pumpHome(WidgetTester tester, {bool manyRows = false}) async {
       // Mutable on purpose: the reorder case edits it and refetches.
       resuming = [for (var n = 0; n < 8; n++) resumingItem(n)];
+      List<ItemSummary> many(String prefix, {ItemKind kind = ItemKind.movie}) =>
+          [
+            for (var n = 0; n < 16; n++)
+              item(server, '$prefix$n',
+                  kind: kind, addedAt: DateTime.utc(2024, 1, 20 - n)),
+          ];
       final source = FakeMergedSource(
         server,
         resuming: resuming,
         recent: [
-          for (var n = 0; n < 16; n++)
-            item(server, 'mv$n', addedAt: DateTime.utc(2024, 1, 20 - n)),
+          ...many('mv'),
+          if (manyRows) ...many('sh', kind: ItemKind.show),
         ],
+        // Below Recent movies: Recent shows, Favorites, and a row per
+        // library, enough to scroll Continue Watching well out of the list's
+        // build cache on a television's logical height.
+        favs: manyRows ? many('fav') : const [],
+        movies: manyRows ? many('lm') : const [],
+        shows: manyRows ? many('ls', kind: ItemKind.show) : const [],
       );
       shell = TvShell();
       await shell.pump(
@@ -231,6 +243,72 @@ void main() {
       expectFocusIn(movie(1));
       await upIntoContinueWatching(tester);
       expectFocusIn(cw(5));
+    });
+
+    /// Whether focus is anywhere inside the widget keyed [key].
+    bool focusWithin(Key key) {
+      final element =
+          find.byKey(key, skipOffstage: false).evaluate().firstOrNull;
+      final focus = FocusManager.instance.primaryFocus;
+      if (element == null || focus == null) return false;
+      var inside = false;
+      focus.context?.visitAncestorElements((e) {
+        inside = identical(e, element);
+        return !inside;
+      });
+      return inside;
+    }
+
+    /// Whether focus is on a card of the row keyed [row], not its heading.
+    bool focusOnCardOf(WidgetTester tester, Key row) =>
+        focusWithin(row) && !nodeIn(tester, row).hasPrimaryFocus;
+
+    /// Down through every row to the last one (the Series library row), then
+    /// over and back, so a climb afterwards is the rows' memory rather than a
+    /// replay of Flutter's own up/down history.
+    Future<void> downToTheLastRow(WidgetTester tester) async {
+      for (var i = 0; i < 30; i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expectFocusIn(ValueKey('home-library-${server.id.value}-shows'));
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+    }
+
+    // A Chromecast with Google TV lays out at 960x540 logical pixels (see
+    // `tv_shell_harness.dart`), so a few rows down is past the home list's
+    // build cache. A row dropped there forgot its card and its offset.
+    testWidgets(
+        'a row scrolled far out of view keeps its card and its scroll offset',
+        (tester) async {
+      await pumpHome(tester, manyRows: true);
+      expect(tester.view.devicePixelRatio, 2.0);
+      await focusIn(tester, cw(5));
+      final offset = railPosition(tester, continueWatching).pixels;
+      expect(offset, greaterThan(0), reason: 'cw5 must scroll its rail');
+
+      await downToTheLastRow(tester);
+      for (var i = 0; i < 30 && !focusOnCardOf(tester, continueWatching); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+
+      expectFocusIn(cw(5));
+      expect(railPosition(tester, continueWatching).pixels, offset);
+    });
+
+    testWidgets('the hero buttons scrolled far out of view keep their place',
+        (tester) async {
+      await pumpHome(tester, manyRows: true);
+      await focusIn(tester, heroMore);
+
+      await downToTheLastRow(tester);
+      // The hero has no heading: the first stop in it is Play, so climb
+      // until focus is anywhere inside it.
+      for (var i = 0; i < 30 && !focusWithin(const Key('home-hero')); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+
+      expectFocusIn(heroMore);
     });
 
     testWidgets('rows keep their memory under a detail page and after it pops',

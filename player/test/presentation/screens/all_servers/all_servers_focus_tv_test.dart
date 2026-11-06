@@ -4,7 +4,7 @@
 // the bar and the grid never lands on "whatever is nearest".
 //
 // The real screens inside the shell's real content region (see
-// `tv_shell_harness.dart`), at 1920x1080.
+// `tv_shell_harness.dart`), at a Chromecast's 960x540 logical pixels.
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
@@ -83,10 +83,15 @@ void main() {
       await focusIn(tester, titleSort);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expectFocusIn(poster(0));
-      for (var i = 0; i < 4; i++) {
+      // Two over, not to the end of the row: at 960 logical pixels the last
+      // poster of the first row sits under the title row's cast button, and
+      // UP from there enters the title row, which overlaps it, rather than
+      // the chip bar, which does not. Which row UP enters is the geometric
+      // search's choice; what is under test is where in the bar it lands.
+      for (var i = 0; i < 2; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
       }
-      expectFocusIn(poster(4));
+      expectFocusIn(poster(2));
 
       await press(tester, LogicalKeyboardKey.arrowUp);
 
@@ -99,10 +104,10 @@ void main() {
       await pumpGrid(tester);
       await focusIn(tester, titleSort);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      for (var i = 0; i < 4; i++) {
+      for (var i = 0; i < 2; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
       }
-      expectFocusIn(poster(4));
+      expectFocusIn(poster(2));
       await press(tester, LogicalKeyboardKey.arrowUp);
       expectFocusIn(titleSort);
       // Leave the chip the viewer arrived on, so the next DOWN is not a
@@ -114,7 +119,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(poster(4));
+      expectFocusIn(poster(2));
     });
 
     testWidgets('Recently added: the kind bar is re-entered on its chip',
@@ -127,10 +132,10 @@ void main() {
       await focusIn(tester, const Key('all-listing-kind-all'));
       await press(tester, LogicalKeyboardKey.arrowDown);
       expectFocusIn(poster(0));
-      for (var i = 0; i < 4; i++) {
+      for (var i = 0; i < 2; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
       }
-      expectFocusIn(poster(4));
+      expectFocusIn(poster(2));
 
       await press(tester, LogicalKeyboardKey.arrowUp);
 

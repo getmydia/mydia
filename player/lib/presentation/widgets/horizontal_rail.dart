@@ -48,7 +48,21 @@ class HorizontalRail extends StatefulWidget {
   State<HorizontalRail> createState() => _HorizontalRailState();
 }
 
-class _HorizontalRailState extends State<HorizontalRail> {
+class _HorizontalRailState extends State<HorizontalRail>
+    with AutomaticKeepAliveClientMixin {
+  /// On the television tier a rail stays built while a vertical list scrolls
+  /// it out of view.
+  ///
+  /// Home is a lazy `ListView` of rails. On a television's logical height
+  /// (960x540 on a Chromecast) a few rows down is past its build cache, and a
+  /// rail dropped there loses both its `FocusMemoryRegion`, so focus coming
+  /// back lands on its first card, and its scroll offset, so that card is at
+  /// the start again. Keeping it alive is what lets a row remember its place
+  /// however far the viewer went. Elsewhere a rail is dropped as before:
+  /// pointer and touch have no memory to keep.
+  @override
+  bool get wantKeepAlive => InputCapabilities.directionalPrimary;
+
   /// How far past the viewport the list keeps items built.
   ///
   /// Focus traversal can only reach a widget that exists, and
@@ -117,6 +131,7 @@ class _HorizontalRailState extends State<HorizontalRail> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (widget.itemCount == 0) {
       return const SizedBox.shrink();
     }

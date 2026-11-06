@@ -5,7 +5,7 @@
 // under the control a move came from.
 //
 // The real DownloadsScreen inside the shell's real content region (see
-// `tv_shell_harness.dart`), at 1920x1080, where the grid is eight titles wide.
+// `tv_shell_harness.dart`), at a Chromecast's 960x540 logical pixels.
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
@@ -162,14 +162,24 @@ void main() {
         "LEFT from the grid's first column reaches the rail, RIGHT "
         'returns', (tester) async {
       await pumpDownloads(tester);
-      await focusIn(tester, group(8));
+      // The first title of the second row: the grid's width in titles
+      // depends on the screen, so find it rather than assume it.
+      final left = tester.getTopLeft(find.byKey(group(0))).dx;
+      final second = [
+        for (var n = 1; n < 20; n++)
+          if (find.byKey(group(n), skipOffstage: false).evaluate().isNotEmpty &&
+              tester.getTopLeft(find.byKey(group(n), skipOffstage: false)).dx ==
+                  left)
+            n,
+      ].first;
+      await focusIn(tester, group(second));
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(shell.sidebarRow.hasPrimaryFocus, isTrue,
           reason: 'focus is on ${describeFocus()}');
 
       await press(tester, LogicalKeyboardKey.arrowRight);
-      expectFocusIn(group(8));
+      expectFocusIn(group(second));
     });
   }, skip: tvSkipReason);
 }

@@ -70,6 +70,17 @@ matters for a list that scrolls under a translucent app bar
 (`extendBodyBehindAppBar`), whose rows behind the bar are laid out inside the
 viewport but cannot be read.
 
+A region's memory lives in its state, so a region that is itself a child of a
+lazy vertical list (a rail on Home, a hero's button bar) forgets everything
+when the list drops it from its build cache, and on a television's logical
+height (960x540 on a Chromecast) that is only a few rows away. On the
+television tier `HorizontalRail` keeps itself alive
+(`AutomaticKeepAliveClientMixin`, which also keeps its scroll offset), and
+Home keeps its hero alive the same way. A new row-shaped region placed
+directly in a lazy vertical list needs the same; one that wraps the whole list
+(Settings, the calendar) or sits in a `SliverToBoxAdapter` (detail pages) does
+not.
+
 A list whose sections are built by separate widgets (Settings) cannot number
 its rows from one builder. `SettingsFocusOrder` gives each section its place,
 and the section turns its rows into items indexed by section then row. A list
@@ -145,7 +156,10 @@ is a compile-time constant:
 ```
 
 CI runs every `test/**/*_tv_test.dart` file with that define in the
-"Run television-tier tests" step. Patterns to copy:
+"Run television-tier tests" step. Screen-level tests mount through
+`test/test_utils/tv_shell_harness.dart`, which lays out at a Chromecast's
+960x540 logical pixels (1920x1080 at device pixel ratio 2), so lazy lists drop
+rows where a real television does. Patterns to copy:
 `test/core/focus/focus_memory_tv_test.dart` (rows, reorder, removal, popups)
 and `test/presentation/widgets/tv_sidebar_traversal_tv_test.dart` (the sidebar
 edge). Label each focusable with its item id via `Focus(debugLabel: ...)` and

@@ -62,8 +62,12 @@ class TvShell {
     Widget screen, {
     List<Override> overrides = const [],
   }) async {
+    // What a Chromecast with Google TV reports: a 1080p panel at device
+    // pixel ratio 2, so 960x540 logical. At ratio 1 the logical screen is
+    // four times the area, and a lazy list keeps rows built that a real
+    // television drops.
     tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
+    tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.reset);
 
     container = ProviderContainer(overrides: overrides);
