@@ -209,8 +209,11 @@ void main() {
           reason: 'c10 must be unbuilt for this test to mean anything',
         );
 
+        // At offset 0 with no cache extent, c0 through c6 are built (c6
+        // straddles the right edge). The nearest built index to the
+        // remembered 10 is 6; plain geometry from r0-c0 would pick r1-c0.
         await press(tester, LogicalKeyboardKey.arrowDown);
-        expect(focused(), startsWith('r1-c'));
+        expect(focused(), 'r1-c6');
         final rect = FocusManager.instance.primaryFocus!.rect;
         const screen = Rect.fromLTWH(0, 0, 1920, 1080);
         expect(screen.overlaps(rect), isTrue,
