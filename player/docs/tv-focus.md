@@ -61,10 +61,16 @@ FocusMemoryRegion(
 
 The item's focus target is the outermost traversable node inside it, so a card
 with its own `Focus` or `InkWell` needs nothing else, and a control nested in
-the card (an episode card's watched menu) is never picked over the card. For a
+the card (an episode card's watched menu) is never picked over the card. Every
+focusable inside a region must sit inside one of its items: a move entering
+the region is always redirected to an item, so a stray focus stop beside the
+items can only be reached by moving to it from within the region. For a
 one-column vertical list pass `entry: FocusMemoryEntry.firstVisible`, so a
 first visit lands on the top on-screen row rather than a cached row above the
-viewport. On screen means the row's centre is inside the view, less the
+viewport. The Downloads grid uses it too, a deliberate exception to "a grid
+enters on its first item": that grid has no scroll view of its own and
+scrolls with the whole page, so its lowest built title can be one the viewer
+has already scrolled past. On screen means the row's centre is inside the view, less the
 `MediaQuery` padding, and inside every enclosing scroll viewport. The padding
 matters for a list that scrolls under a translucent app bar
 (`extendBodyBehindAppBar`), whose rows behind the bar are laid out inside the

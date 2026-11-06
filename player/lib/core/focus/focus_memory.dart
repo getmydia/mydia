@@ -211,18 +211,19 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
   /// [FocusMemoryColumn] (a move to the next section), so the two paths
   /// cannot disagree.
   FocusNode? entryTarget() {
+    // The common case, a region entered again, needs no candidate list.
+    final remembered = _items[_rememberedId]?._target;
+    if (remembered != null) return remembered;
+
+    final initial = _items[widget.initialId]?._target;
+    if (initial != null) return initial;
+
     final candidates = <({int index, FocusNode target})>[
       for (final item in _items.values)
         if (item._target case final target?)
           (index: item.widget.index, target: target),
     ]..sort((a, b) => a.index.compareTo(b.index));
     if (candidates.isEmpty) return null;
-
-    final remembered = _items[_rememberedId]?._target;
-    if (remembered != null) return remembered;
-
-    final initial = _items[widget.initialId]?._target;
-    if (initial != null) return initial;
 
     final rememberedIndex = _rememberedIndex;
     if (rememberedIndex != null) {

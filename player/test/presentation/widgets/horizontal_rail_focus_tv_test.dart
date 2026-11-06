@@ -116,8 +116,13 @@ void main() {
 
         await press(tester, LogicalKeyboardKey.arrowDown);
         expect(focused(), startsWith('b-'));
-        // Moving along rail B breaks Flutter's own up/down history, so the
-        // press below can only reach a-5 through the rail's memory.
+        // One card along rail B, off the card DOWN chose from a-5, so UP by
+        // geometry alone would now land on a-6 (without this press it lands
+        // on a-5 with or without the rail's memory). Flutter's
+        // own up/down history is not what this rules out; it never replays
+        // across two rails, because `popOrInvalidate` in focus_traversal.dart
+        // drops the history when the remembered node and the focused one sit
+        // in different Scrollables.
         await press(tester, LogicalKeyboardKey.arrowRight);
         expect(focused(), startsWith('b-'));
 
