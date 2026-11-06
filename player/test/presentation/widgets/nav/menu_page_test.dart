@@ -13,7 +13,7 @@ import '../../screens/sources/fake_media_source.dart';
 
 /// A stand-in for the shell: a page with a button that opens the menu the
 /// way `AppShell` does, recording what the menu asks of it.
-class _Host extends ConsumerWidget {
+class _Host extends StatelessWidget {
   const _Host({
     required this.state,
     required this.navigated,
@@ -25,12 +25,11 @@ class _Host extends ConsumerWidget {
   final List<String> switched;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+  Widget build(BuildContext context) => Scaffold(
         body: Center(
           child: TextButton(
             onPressed: () => MenuPage.open(
               context,
-              ref: ref,
               state: state,
               onNavigate: navigated.add,
               onSwitchSource: switched.add,
@@ -47,6 +46,7 @@ Future<
       List<String> navigated,
       List<String> switched,
       ProviderContainer container,
+      ValueNotifier<bool> hostShown,
     })> _openMenu(WidgetTester tester) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
@@ -62,13 +62,22 @@ Future<
     mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
   ]);
   addTearDown(container.dispose);
+  // Clearing it unmounts the host under the open menu, as a redirect
+  // replacing the shell does.
+  final hostShown = ValueNotifier(true);
+  addTearDown(hostShown.dispose);
 
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: _Host(state: state, navigated: navigated, switched: switched),
+      home: ValueListenableBuilder<bool>(
+        valueListenable: hostShown,
+        builder: (_, shown, __) => shown
+            ? _Host(state: state, navigated: navigated, switched: switched)
+            : const SizedBox.shrink(),
+      ),
     ),
   ));
   await tester.tap(find.text('open-menu'));
@@ -78,6 +87,7 @@ Future<
     navigated: navigated,
     switched: switched,
     container: container,
+    hostShown: hostShown,
   );
 }
 
@@ -143,6 +153,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MenuPage), findsNothing);
+    expect(menu.container.read(sidebarEditModeProvider), isFalse);
+  });
+
+  testWidgets('edit mode ends even when the opener is gone by then',
+      (tester) async {
+    final menu = await _openMenu(tester);
+    menu.container.read(sidebarEditModeProvider.notifier).toggle();
+    menu.hostShown.value = false;
+    await tester.pump();
+    expect(find.byType(_Host), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
     expect(menu.container.read(sidebarEditModeProvider), isFalse);
   });
 }

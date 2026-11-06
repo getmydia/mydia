@@ -568,8 +568,9 @@ From the shipped build:
 - [ ] Offline: every tab but Downloads is dimmed and does nothing.
 - [ ] The menu page hides the bar and the accessory; going back brings both
   back; content does not reflow.
-- [ ] A left-edge swipe on a shell screen does nothing (no drawer); on the
-  menu page it goes back.
+- [ ] A left-edge swipe on a shell screen does nothing (no drawer). The menu
+  page uses the app's fade-forwards transition, which has no swipe-back: its
+  back button returns to the shell.
 - [ ] The player hides the bar; leaving it brings the bar back.
 - [ ] Every accessory state while casting: ambient, offline, connecting,
   stale, idle, playing, paused, and syncing (background the app for a minute,

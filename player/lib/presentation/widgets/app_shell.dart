@@ -699,7 +699,6 @@ class _AppShellState extends ConsumerState<AppShell>
     );
     MenuPage.open(
       context,
-      ref: ref,
       state: _menuState,
       onNavigate: _navigateTo,
       onSwitchSource: _navigateTo,
@@ -805,6 +804,15 @@ class _AppShellState extends ConsumerState<AppShell>
     final location = shellNavLocation(widget.location, origin: _originLocation);
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
+    final usesMenu = AppShell.usesMenuPage(
+      platform: defaultTargetPlatform,
+      isWeb: kIsWeb,
+    );
+    // Before the layouts split: a menu page opened in the phone layout stays
+    // open if an iPad widens into the sidebar layout, and must keep following.
+    if (usesMenu) {
+      _syncMenuState((location: location, isOffline: isOffline));
+    }
 
     // Keeps the offline progress flush alive for the whole app session:
     // AppShell mounts for every reachable route before the immersive player
@@ -945,13 +953,6 @@ class _AppShellState extends ConsumerState<AppShell>
 
     final navEntries = ref.watch(sourceNavEntriesProvider(location));
     final native = NativeTabBarSupport.supported;
-    final usesMenu = AppShell.usesMenuPage(
-      platform: defaultTargetPlatform,
-      isWeb: kIsWeb,
-    );
-    if (usesMenu) {
-      _syncMenuState((location: location, isOffline: isOffline));
-    }
 
     final scaffold = Scaffold(
       key: AppShell.scaffoldKey,

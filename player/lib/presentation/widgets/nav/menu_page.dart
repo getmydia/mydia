@@ -36,16 +36,19 @@ class MenuPage extends StatelessWidget {
   /// server's rows, as the drawer stays open across a switch.
   final ValueChanged<String> onSwitchSource;
 
-  /// Pushes the page over the shell. [ref] is the shell's: when the page
-  /// closes, sidebar edit mode ends, which `AppShell.onDrawerVisibilityChanged`
-  /// does for the drawer.
+  /// Pushes the page over the shell. When the page closes, sidebar edit mode
+  /// ends, which `AppShell.onDrawerVisibilityChanged` does for the drawer.
+  ///
+  /// The provider container is taken before the push: a redirect (a source
+  /// relocking, say) can replace the shell while the page is open, and the
+  /// reset must still happen once it is gone.
   static Future<void> open(
     BuildContext context, {
-    required WidgetRef ref,
     required ValueListenable<MenuPageState> state,
     required ValueChanged<String> onNavigate,
     required ValueChanged<String> onSwitchSource,
   }) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'menu'),
@@ -56,7 +59,7 @@ class MenuPage extends StatelessWidget {
         ),
       ),
     );
-    if (context.mounted) ref.read(sidebarEditModeProvider.notifier).exit();
+    container.read(sidebarEditModeProvider.notifier).exit();
   }
 
   @override
