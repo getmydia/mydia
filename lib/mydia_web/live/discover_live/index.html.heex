@@ -364,6 +364,18 @@
     saved_country={@home_country}
   />
 
+  <%!-- Person popup. Sits below the detail modal, so a title opened from its
+       posters stacks on top; Escape belongs to whichever layer is uppermost. --%>
+  <MydiaWeb.PersonComponents.person_modal
+    id="person-modal"
+    person={@selected_person}
+    stub={@person_stub}
+    titles={@person_titles}
+    loading={@person_loading}
+    error={@person_error}
+    escape_enabled={is_nil(@selected_item) and is_nil(@add_config)}
+  />
+
   <%!-- Detail Modal --%>
   <.live_component
     module={MydiaWeb.Live.Components.TrendingDetailModal}
@@ -375,6 +387,7 @@
     current_scope={@current_scope}
     open={@selected_item != nil}
     config_open={@add_config != nil}
+    person_event="show_person"
   >
     <:rail>
       <.media_rail

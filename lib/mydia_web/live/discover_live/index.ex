@@ -23,6 +23,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
   alias Mydia.Media.RemoteFilter
   alias MydiaWeb.DiscoverLive.RegionalRows
 
@@ -61,6 +62,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:requesting_item_id, nil)
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
+      |> PersonModal.init()
+      # PersonModal reads its relay config from here.
+      |> assign(:metadata_config, Metadata.default_relay_config())
       |> assign(:load_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
@@ -477,11 +481,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
+    # The type is part of the lookup: a person's titles mix movies and shows,
+    # and TMDB numbers the two catalogs independently, so a movie and a show
+    # can share the clicked id.
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <-
            DetailModal.find_selectable_item(
              selectable_lists(socket.assigns),
-             id
+             id,
+             media_type
            ) do
       # Recommendations are not sent here: the TMDB cross-reference they need
       # only exists once the detail metadata comes back (see
@@ -496,6 +504,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event("close_details", _, socket) do
     {:noreply, DetailModal.close(socket)}
+  end
+
+  # Opening a person replaces the title dialog; opening a title from the
+  # person's posters stacks over the person instead (see show_details).
+  def handle_event("show_person", params, socket) do
+    {:noreply, socket |> DetailModal.close() |> PersonModal.open(params)}
+  end
+
+  def handle_event("close_person", _params, socket) do
+    {:noreply, PersonModal.close(socket)}
+  end
+
+  def handle_event("retry_person", _params, socket) do
+    {:noreply, PersonModal.retry(socket)}
   end
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
@@ -751,7 +773,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> refresh_lists(items, recommendations, fn row_items ->
+         |> refresh_lists(fn row_items ->
            row_items
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
@@ -783,7 +805,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> refresh_lists(items, recommendations, fn row_items ->
+         |> refresh_lists(fn row_items ->
            row_items
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
@@ -846,11 +868,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:items, items)
         |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
-        |> refresh_lists(
-          items,
-          recommendations,
-          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
-        )
+        |> refresh_lists(&MediaRequestHelpers.enrich_with_request_status(&1, request_status_map))
         |> put_flash(
           :info,
           gettext("%{title} requested. An admin will review it soon.", title: request.title)
@@ -864,6 +882,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_async(:load_person, result, socket) do
+    {:noreply, PersonModal.handle_result(socket, result)}
+  end
+
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end
@@ -990,20 +1012,32 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :regional_sources, RegionalSources.sources_for(country, services, media_type))
   end
 
-  # Country-tab rows are a third list of the same shape as the grid and the
-  # rail. Without re-enriching them a row keeps offering "Add" for a title
-  # that was just added from it, and a second click fails on the tmdb_id index.
-  defp refresh_lists(socket, items, recommendations, enrich_rows) do
-    socket = RegionalRows.map_items(socket, enrich_rows)
+  # Country-tab rows and the open person's titles are lists of the same shape
+  # as the grid and the rail. Without re-enriching them a row keeps offering
+  # "Add" for a title that was just added from it, a person's poster never
+  # gains its owned badge, and a second click fails on the tmdb_id index.
+  #
+  # Callers assign the re-enriched `:items` and `:selected_recommendations`
+  # first, so the selection is refreshed against every list as it now stands.
+  defp refresh_lists(socket, enrich_rows) do
+    socket =
+      socket
+      |> RegionalRows.map_items(enrich_rows)
+      |> assign(:person_titles, enrich_rows.(person_titles(socket.assigns)))
 
-    DetailModal.refresh_selected(socket, [
-      items,
-      recommendations | RegionalRows.item_lists(socket.assigns)
-    ])
+    DetailModal.refresh_selected(socket, selectable_lists(socket.assigns))
   end
 
-  defp selectable_lists(assigns),
-    do: [assigns.items, assigns.selected_recommendations | RegionalRows.item_lists(assigns)]
+  # The person's titles mix movies and shows, so a lookup here must pass the
+  # media type (see show_details and handle_info({:request_media, ...})).
+  defp selectable_lists(assigns) do
+    [assigns.items, assigns.selected_recommendations, person_titles(assigns)] ++
+      RegionalRows.item_lists(assigns)
+  end
+
+  # Tolerant of a socket built without the person assigns, as
+  # RegionalRows.item_lists/1 is of one without rows.
+  defp person_titles(assigns), do: Map.get(assigns, :person_titles, [])
 
   defp enrich(results, socket) do
     results
