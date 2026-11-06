@@ -23,9 +23,9 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   movie can be a franchise entry. An item that is in neither of the page's
   lists falls to the recommendation branch, which is correct: both paths add by
   TMDB id, and `RecommendationEvents.perform_add/5` inherits the viewed item's
-  monitored flag and quality profile, the right default for anything reached
-  from this page. The media type comes from the clicked item, not the viewed
-  one: a show opened from an actor on a movie's page is added as a show.
+  monitored flag and quality profile for a title of the same type. The media
+  type comes from the clicked item, not the viewed one: a show opened from an
+  actor on a movie's page is added as a show, with the TV add defaults.
   """
 
   import Phoenix.LiveView, only: [start_async: 3]

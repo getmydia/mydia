@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media
   alias Mydia.Media.Add
+  alias Mydia.Media.AddDefaults
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata.Ref
@@ -90,8 +91,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   @doc """
-  Adds a recommended title, inheriting the viewed item's quality profile and
-  monitored flag.
+  Adds a recommended title. One of the viewed item's type inherits its quality
+  profile and monitored flag; any other type gets that type's add defaults.
 
   Keyed per TMDB id so several can be in flight at once: `start_async/3`
   overwrites rather than cancels under an existing key, which would silently drop
@@ -106,7 +107,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     with :ok <- Authorization.authorize_create_media(socket),
          {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], media_type) do
-      dispatch_add(ref, Keyword.put(opts, :media_type, media_type), socket)
+      opts =
+        opts
+        |> Keyword.put(:media_type, media_type)
+        |> Keyword.put(:add_defaults_user, socket.assigns[:current_user])
+
+      dispatch_add(ref, opts, socket)
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
@@ -275,10 +281,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   live process.
 
   `opts[:media_type]` is the type of the title being added, defaulting to the
-  viewed `media_item`'s. The rest of `opts` goes to the add.
+  viewed `media_item`'s. `opts[:add_defaults_user]`, when present, asks for
+  the add defaults of a title whose type differs from the viewed item's. The
+  rest of `opts` goes to the add.
   """
   def perform_add(scope, media_item, ref, config, opts \\ []) do
     {media_type, opts} = Keyword.pop(opts, :media_type, item_type(media_item))
+    {defaults, opts} = default_add_opts(media_item, media_type, ref, opts)
 
     MediaAddHelpers.handle_add_media_to_library(
       scope,
@@ -286,10 +295,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       media_type,
       %{},
       config,
-      Keyword.merge(
-        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
-        opts
-      )
+      Keyword.merge(defaults, opts)
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}
@@ -339,6 +345,36 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   ## Private
+
+  # A title of the viewed item's own type inherits its monitored flag and
+  # quality profile. Any other type (a person's TV credit on a movie's page)
+  # must not: a one-click add (`:add_defaults_user` set) resolves that type's
+  # add defaults the way Discover does, and the configure dialog's opts already
+  # carry them. Resolved here, in the add task, because the franchise layer can
+  # reach the relay.
+  defp default_add_opts(media_item, media_type, ref, opts) do
+    {defaults_user, opts} = Keyword.pop(opts, :add_defaults_user, :none)
+
+    cond do
+      media_type == item_type(media_item) ->
+        {[monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
+         opts}
+
+      defaults_user == :none ->
+        {[], opts}
+
+      true ->
+        defaults =
+          defaults_user
+          |> AddDefaults.resolve(media_type,
+            library_path_id: opts[:library_path_id],
+            tmdb_id: Ref.tmdb_id(ref)
+          )
+          |> AddDefaults.to_add_opts_with_search()
+
+        {defaults, opts}
+    end
+  end
 
   # The library join lives here rather than in Mydia.Media.Recommendations
   # because it needs MediaAddHelpers, and a context under Mydia.* must not depend

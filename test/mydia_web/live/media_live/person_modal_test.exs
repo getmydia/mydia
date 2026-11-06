@@ -133,7 +133,12 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
       stub_show(bypass, show_id, "Tidewater Bureau")
       stub_person(bypass, person_id, [tv_credit(show_id, "Tidewater Bureau")])
 
-      movie = viewed_movie()
+      movie_profile = quality_profile_fixture()
+
+      movie =
+        viewed_movie()
+        |> Ecto.Changeset.change(quality_profile_id: movie_profile.id, monitored: false)
+        |> Repo.update!()
 
       {:ok, view, _html} = live(log_in_user(conn, create_admin_user()), ~p"/media/#{movie.id}")
       open_person(view, person_id)
@@ -146,8 +151,12 @@ defmodule MydiaWeb.MediaLive.PersonModalTest do
 
       render_async(view, 5000)
 
-      assert %MediaItem{} = Repo.get_by(MediaItem, tmdb_id: show_id, type: "tv_show")
+      assert %MediaItem{} = show = Repo.get_by(MediaItem, tmdb_id: show_id, type: "tv_show")
       refute Repo.get_by(MediaItem, tmdb_id: show_id, type: "movie")
+
+      # A show takes the TV add defaults, not the viewed movie's settings.
+      refute show.quality_profile_id == movie_profile.id
+      assert show.monitored
 
       # The person's poster gains its owned badge.
       assert has_element?(view, "#person-credit-tv_show-#{show_id} .badge-success")
