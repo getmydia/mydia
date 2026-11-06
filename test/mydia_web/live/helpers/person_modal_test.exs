@@ -7,7 +7,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModalTest do
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.RemoteSignals
-  alias Mydia.Metadata.Structs.{Person, PersonCredit}
+  alias Mydia.Metadata.Structs.{Person, PersonCredit, SearchResult}
   alias MydiaWeb.Live.Helpers.PersonModal
 
   defp person(movie_ids, show_ids) do
@@ -45,7 +45,7 @@ defmodule MydiaWeb.Live.Helpers.PersonModalTest do
         host_socket()
         |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
         |> PersonModal.close()
-        |> PersonModal.handle_result({:ok, {:ok, person([], [])}})
+        |> PersonModal.handle_result({:ok, {:ok, {person([], []), []}}})
 
       assert socket.assigns.selected_person == nil
       assert socket.assigns.person_stub == nil
@@ -55,10 +55,32 @@ defmodule MydiaWeb.Live.Helpers.PersonModalTest do
       socket =
         host_socket()
         |> PersonModal.open(%{"id" => "2", "name" => "Other"})
-        |> PersonModal.handle_result({:ok, {:ok, person([], [])}})
+        |> PersonModal.handle_result({:ok, {:ok, {person([], []), []}}})
 
       assert socket.assigns.selected_person == nil
       assert socket.assigns.person_loading
+    end
+
+    test "a result assigns the titles the fetch enriched, without re-reading them" do
+      # The enrichment (remote filter, library and request status) runs in the
+      # async fetch; handle_result must take its titles as given.
+      titles = [
+        %SearchResult{
+          provider: :metadata_relay,
+          provider_id: "77",
+          media_type: :movie,
+          title: "Given Title"
+        }
+      ]
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.handle_result({:ok, {:ok, {person([5], []), titles}}})
+
+      assert socket.assigns.person_titles == titles
+      assert %Person{tmdb_id: 1} = socket.assigns.selected_person
+      refute socket.assigns.person_loading
     end
   end
 

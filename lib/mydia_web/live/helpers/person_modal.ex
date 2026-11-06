@@ -101,20 +101,21 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
   @doc """
   Stores the fetch result, or records the failure.
 
+  A successful result is `{person, titles}`: the fetch enriches the titles
+  itself, off the LiveView process, so this only assigns.
+
   Returns the socket, not a `{:noreply, _}` tuple, so a host can pipe further.
   """
   def handle_result(%{assigns: %{person_stub: nil}} = socket, _result), do: socket
 
   def handle_result(
         %{assigns: %{person_stub: %{id: stub_id}}} = socket,
-        {:ok, {:ok, %Person{tmdb_id: id}}}
+        {:ok, {:ok, {%Person{tmdb_id: id}, _titles}}}
       )
       when id != stub_id,
       do: socket
 
-  def handle_result(socket, {:ok, {:ok, %Person{} = person}}) do
-    titles = enrich_titles(person, socket.assigns.current_scope)
-
+  def handle_result(socket, {:ok, {:ok, {%Person{} = person, titles}}}) when is_list(titles) do
     socket
     |> assign(:selected_person, person)
     |> assign(:person_titles, titles)
@@ -184,8 +185,12 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     for %SearchResult{media_type: ^type, provider_id: id} <- results, do: String.to_integer(id)
   end
 
+  # The enrichment runs in the task too: for a scope with a content-age limit
+  # the remote filter looks up every credit, and a prolific person on a cold
+  # cache would otherwise freeze the LiveView, Close included.
   defp start_fetch(socket, stub) do
     config = Map.get_lazy(socket.assigns, :metadata_config, &Metadata.default_relay_config/0)
+    scope = socket.assigns.current_scope
 
     socket
     |> assign(:person_stub, stub)
@@ -193,7 +198,13 @@ defmodule MydiaWeb.Live.Helpers.PersonModal do
     |> assign(:person_titles, [])
     |> assign(:person_error, nil)
     |> assign(:person_loading, true)
-    |> start_async(:load_person, fn -> People.fetch_person_cached(config, stub.id) end)
+    |> start_async(:load_person, fn -> fetch_and_enrich(config, stub.id, scope) end)
+  end
+
+  defp fetch_and_enrich(config, tmdb_id, scope) do
+    with {:ok, %Person{} = person} <- People.fetch_person_cached(config, tmdb_id) do
+      {:ok, {person, enrich_titles(person, scope)}}
+    end
   end
 
   defp fail(socket, reason) do
