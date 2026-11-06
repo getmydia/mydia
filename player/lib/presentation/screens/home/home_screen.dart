@@ -1,5 +1,5 @@
 /// Home, for every included server or for one: a hero, Continue Watching,
-/// Recently Added (movies, TV), Favorites, then a row per library.
+/// Recently Added (movies, TV), Trending (movies, TV), Favorites, then a row per library.
 library;
 
 import 'package:flutter/material.dart';
@@ -191,6 +191,16 @@ class HomeScreen extends ConsumerWidget {
                     items: rows.recentShows,
                     location: _listing(SourceListing.recentlyAdded,
                         '$allServersRecentlyAddedLocation?kind=shows')),
+              if (rows.trendingMovies.isNotEmpty)
+                _rail(context, rows,
+                    key: 'home-trending-movies',
+                    title: context.l10n.homeTrendingMovies,
+                    items: rows.trendingMovies),
+              if (rows.trendingShows.isNotEmpty)
+                _rail(context, rows,
+                    key: 'home-trending-shows',
+                    title: context.l10n.homeTrendingShows,
+                    items: rows.trendingShows),
               if (rows.favorites.isNotEmpty)
                 _rail(context, rows,
                     key: 'home-favorites',
@@ -242,14 +252,14 @@ class HomeScreen extends ConsumerWidget {
     required String key,
     required String title,
     required List<ItemSummary> items,
-    required String location,
+    String? location,
   }) =>
       SourcePosterRow(
         key: Key(key),
         title: title,
         railId: key,
         items: items,
-        onTitleTap: () => context.push(location),
+        onTitleTap: location == null ? null : () => context.push(location),
         posterFor: rows.labelled
             ? (context, item) => AllServersPoster(
                   item: item,

@@ -7,6 +7,7 @@ import '../../../core/cache/query_key.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../sources/source_browse_providers.dart';
 import 'home_rows.dart';
@@ -26,6 +27,8 @@ HomeFeeds _feedsOf(Ref ref, MediaSource source) {
     continueWatching: ref.watch(sourceContinueWatchingProvider(id)),
     recentlyAdded: ref.watch(sourceRecentlyAddedProvider(id)),
     favorites: ref.watch(sourceFavoritesRowProvider(id)),
+    trendingMovies: ref.watch(sourceTrendingProvider((id, ItemKind.movie))),
+    trendingShows: ref.watch(sourceTrendingProvider((id, ItemKind.show))),
     libraries: libraries,
     previews: {
       for (final library
@@ -42,6 +45,8 @@ List<QueryKey> homeQueryKeys(Iterable<SourceId> ids) => [
         SourceKeys.continueWatching(id),
         SourceKeys.recentlyAdded(id),
         SourceKeys.favoritesRow(id),
+        SourceKeys.trending(id, ItemKind.movie),
+        SourceKeys.trending(id, ItemKind.show),
       ],
     ];
 
@@ -52,6 +57,8 @@ Future<void> refreshHome(WidgetRef ref, Iterable<SourceId> ids) async {
     ref.invalidate(sourceContinueWatchingProvider(id));
     ref.invalidate(sourceRecentlyAddedProvider(id));
     ref.invalidate(sourceFavoritesRowProvider(id));
+    ref.invalidate(sourceTrendingProvider((id, ItemKind.movie)));
+    ref.invalidate(sourceTrendingProvider((id, ItemKind.show)));
     ref.invalidate(sourceLibrariesProvider(id));
   }
   ref.invalidate(sourceLibraryPreviewProvider);
