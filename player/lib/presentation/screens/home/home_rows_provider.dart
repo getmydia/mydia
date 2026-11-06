@@ -7,6 +7,7 @@ import '../../../core/cache/query_key.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../sources/source_browse_providers.dart';
 import 'home_rows.dart';
@@ -26,6 +27,8 @@ HomeFeeds _feedsOf(Ref ref, MediaSource source) {
     continueWatching: ref.watch(sourceContinueWatchingProvider(id)),
     recentlyAdded: ref.watch(sourceRecentlyAddedProvider(id)),
     favorites: ref.watch(sourceFavoritesRowProvider(id)),
+    trendingMovies: ref.watch(sourceTrendingProvider((id, ItemKind.movie))),
+    trendingShows: ref.watch(sourceTrendingProvider((id, ItemKind.show))),
     libraries: libraries,
     previews: {
       for (final library
@@ -35,7 +38,9 @@ HomeFeeds _feedsOf(Ref ref, MediaSource source) {
   );
 }
 
-/// Every cache key Home reads for [ids], for the freshness header.
+/// The cache keys Home's freshness header watches for [ids]. Trending is
+/// left out on purpose: it is optional, so a failed or slow trending refetch
+/// must not raise Home's "couldn't refresh" banner or refresh line.
 List<QueryKey> homeQueryKeys(Iterable<SourceId> ids) => [
       for (final id in ids) ...[
         SourceKeys.libraries(id),
@@ -52,6 +57,8 @@ Future<void> refreshHome(WidgetRef ref, Iterable<SourceId> ids) async {
     ref.invalidate(sourceContinueWatchingProvider(id));
     ref.invalidate(sourceRecentlyAddedProvider(id));
     ref.invalidate(sourceFavoritesRowProvider(id));
+    ref.invalidate(sourceTrendingProvider((id, ItemKind.movie)));
+    ref.invalidate(sourceTrendingProvider((id, ItemKind.show)));
     ref.invalidate(sourceLibrariesProvider(id));
   }
   ref.invalidate(sourceLibraryPreviewProvider);

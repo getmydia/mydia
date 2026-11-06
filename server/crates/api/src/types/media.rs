@@ -341,6 +341,8 @@ pub struct RecentlyAddedItem {
     pub tvdb_id: Option<i32>,
     /// `IMDb` id of the movie or show. Null for episodes and collections.
     pub imdb_id: Option<String>,
+    /// Position among the distinct TMDB trending then popular titles. Null outside trendingInLibrary.
+    pub trending_rank: Option<i32>,
     pub watch_status: Option<WatchStatus>,
 }
 

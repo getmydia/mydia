@@ -148,6 +148,13 @@ defmodule MydiaWeb.Schema.QueryTypes do
       resolve(&DiscoveryResolver.recently_added/3)
     end
 
+    @desc "Owned, unwatched titles ranked by TMDB trending, then popular. Episodes answer an empty list."
+    field :trending_in_library, list_of(:recently_added_item) do
+      arg(:type, non_null(:media_type))
+      arg(:first, :integer, default_value: 20)
+      resolve(&DiscoveryResolver.trending_in_library/3)
+    end
+
     @desc "Get next episodes to watch across all TV shows"
     field :up_next, list_of(:up_next_item) do
       deprecate("Merged into continueWatching, which now carries next episodes as well")
@@ -270,6 +277,9 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :tvdb_id, :integer
     @desc "IMDb id of the movie or show. Null for episodes and collections."
     field :imdb_id, :string
+
+    @desc "Position among the distinct TMDB trending then popular titles. Null outside trendingInLibrary."
+    field :trending_rank, :integer
 
     @desc "Rolled-up watch state"
     field :watch_status, :watch_status do

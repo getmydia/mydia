@@ -11,6 +11,7 @@ import '../../domain/navigation/media_filter.dart';
 import '../../domain/sources/collection.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../domain/sources/ranked_item.dart';
 import '../remote/remote_roster.dart';
 
 abstract interface class WatchedState {
@@ -57,6 +58,14 @@ abstract interface class NextUp {
 abstract interface class RecentlyAdded {
   /// Newest first, at most 20.
   Future<List<ItemSummary>> recentlyAdded();
+}
+
+/// What is trending among the titles the source holds. A source implementing
+/// this also lists [SourceCapability.trending].
+abstract interface class Trending {
+  /// Rank order, at most 20. Empty when the server has no list. [kind] is
+  /// [ItemKind.movie] or [ItemKind.show].
+  Future<List<RankedItem>> trending(ItemKind kind);
 }
 
 /// Intro and credits regions. A source implementing this also lists

@@ -24,6 +24,7 @@ abstract final class SourceRules {
           SourceOps.unwatched,
           SourceOps.favorites,
           SourceOps.recentlyAdded,
+          SourceOps.trending,
         ])
           SourceKeys.family(id, op),
       };
