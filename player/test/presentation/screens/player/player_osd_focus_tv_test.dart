@@ -13,6 +13,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
+import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
@@ -178,6 +179,25 @@ Future<void> _mountPlayingScreen(WidgetTester tester) async {
 Future<void> _waitForChromeToHide(WidgetTester tester) async {
   await pumpUntil(tester, () => _chromeOpacity(tester) == 1.0, maxTries: 750);
   await pumpUntil(tester, () => _chromeOpacity(tester) == 0.0, maxTries: 750);
+}
+
+/// The key of the `ControlButton` holding focus. Every OSD control shares
+/// the `ControlButton` debug label, so the key is what tells them apart.
+Key? _focusedControlKey() {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context == null) return null;
+  final button = context.findAncestorWidgetOfExactType<ControlButton>();
+  return button?.key;
+}
+
+/// Lets the OSD auto-hide, then presses RIGHT, which on a hidden OSD starts
+/// a scrub and puts focus straight on the scrubber.
+Future<void> _scrubFromHiddenOsd(WidgetTester tester) async {
+  await _waitForChromeToHide(tester);
+  await tester.pump();
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+  await tester.pump();
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'osd-scrubber');
 }
 
 void main() {
@@ -482,6 +502,70 @@ void main() {
               '(after press ${i + 1})',
         );
       }
+    });
+  }, skip: skipReason);
+
+  group('OSD rows remember their place (requires MYDIA_FORCE_TV=true)', () {
+    // The OSD has two rows: the control bar (transport and the track and
+    // picture buttons beside it) on top, the scrubber below. Geometry alone
+    // sends UP from the full-width scrubber to the one button it ranks
+    // nearest (-10s, in this layout), wherever the viewer was before.
+    //
+    // Each test reaches the scrubber the way a remote does with the OSD
+    // hidden: LEFT or RIGHT starts a scrub and moves focus straight onto the
+    // bar. No directional move leads there, so Flutter's own up/down history
+    // has nothing to replay, and only the remembered control can bring UP
+    // back to where the viewer was.
+
+    testWidgets(
+        'UP from the scrubber returns to the third transport control, '
+        'not the button geometry ranks nearest', (tester) async {
+      await _mountPlayingScreen(tester);
+      await _waitForChromeToHide(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(_focusedControlKey(), TransportSurface.forward10Key);
+
+      await _scrubFromHiddenOsd(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        _focusedControlKey(),
+        TransportSurface.forward10Key,
+        reason: 'UP from the scrubber must land on the control the viewer '
+            'last used, not the one geometry ranks nearest',
+      );
+    });
+
+    testWidgets(
+        'UP from the scrubber returns to a track button, across the '
+        'transport', (tester) async {
+      await _mountPlayingScreen(tester);
+      await _waitForChromeToHide(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      // play/pause, +10s, subtitles, audio.
+      for (var i = 0; i < 3; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump();
+      }
+      expect(_focusedControlKey(), SecondaryCluster.audioKey);
+
+      await _scrubFromHiddenOsd(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        _focusedControlKey(),
+        SecondaryCluster.audioKey,
+        reason: 'the transport and the track buttons are one row; UP must '
+            'return to the track button, not stop in the transport',
+      );
     });
   }, skip: skipReason);
 }

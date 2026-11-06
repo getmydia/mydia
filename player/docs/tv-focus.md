@@ -117,7 +117,13 @@ through. It is installed in two places only:
   (`RegionTraversalPolicy(onExit: ..., requestFocusCallback: FocusMemory.requestFocus)`).
   `_region` builds both the content and the sidebar region, so both carry it;
   only the content region holds rows, so in the sidebar it only delegates;
-- the player OSD's traversal group.
+- the player OSD's traversal group, which `PlaybackChrome` puts around the
+  whole chrome on the television tier, because the OSD renders over the
+  player route, outside the shell. The control bar (transport and the track
+  and picture buttons beside it) is one region, since it is one row on screen
+  and UP from the scrubber has to be able to return to either end of it. The
+  scrubber is a one-item region nested inside it; without its own region it
+  would belong to the bar's, and UP from it would never be redirected.
 
 A region outside both never redirects anything. Do not add per-screen arrow-key
 handlers to get the same effect; that is the pattern this replaced. Section

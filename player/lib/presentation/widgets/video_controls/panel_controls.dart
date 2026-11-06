@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
@@ -263,6 +264,15 @@ class SecondaryCluster extends StatelessWidget {
   /// still runs at the floor.
   final double gap;
 
+  /// The focus memory index of this cluster's first button.
+  ///
+  /// The buttons that can appear on the television tier are items of the OSD
+  /// control bar's region (see `PlaybackChrome`), alongside the transport's,
+  /// which take indexes 0 to 4. Starting past them keeps the bar's indexes in
+  /// left-to-right order. Fullscreen and always-on-top are never built on
+  /// that tier, so they are not items.
+  static const int _firstIndex = 10;
+
   @override
   Widget build(BuildContext context) {
     final audioEnabled = audioTrackCount > 0;
@@ -283,46 +293,58 @@ class SecondaryCluster extends StatelessWidget {
         // The audio button below keeps its count gate on purpose. No provider
         // will hand you an audio track, so a disabled button there is telling
         // the truth rather than hiding a way in.
-        ControlButton(
-          key: subtitlesKey,
-          icon: Icons.subtitles_rounded,
-          iconSize: 18,
-          size: 32,
-          enabled: onSubtitleTap != null,
-          tooltip: context.l10n.videoSubtitlesTooltip(
-            selectedSubtitleLabel ?? context.l10n.commonOff,
+        FocusMemoryItem(
+          id: subtitlesKey,
+          index: _firstIndex,
+          child: ControlButton(
+            key: subtitlesKey,
+            icon: Icons.subtitles_rounded,
+            iconSize: 18,
+            size: 32,
+            enabled: onSubtitleTap != null,
+            tooltip: context.l10n.videoSubtitlesTooltip(
+              selectedSubtitleLabel ?? context.l10n.commonOff,
+            ),
+            onTap: onSubtitleTap,
           ),
-          onTap: onSubtitleTap,
         ),
         SizedBox(width: gap),
-        ControlButton(
-          key: audioKey,
-          icon: Icons.audiotrack_rounded,
-          iconSize: 18,
-          size: 32,
-          enabled: audioEnabled,
-          tooltip: audioEnabled
-              ? context.l10n.videoAudioTooltip(
-                  selectedAudioLabel ?? context.l10n.commonDefault,
-                )
-              : context.l10n.videoNoAudioTracks,
-          onTap: audioEnabled ? onAudioTap : null,
+        FocusMemoryItem(
+          id: audioKey,
+          index: _firstIndex + 1,
+          child: ControlButton(
+            key: audioKey,
+            icon: Icons.audiotrack_rounded,
+            iconSize: 18,
+            size: 32,
+            enabled: audioEnabled,
+            tooltip: audioEnabled
+                ? context.l10n.videoAudioTooltip(
+                    selectedAudioLabel ?? context.l10n.commonDefault,
+                  )
+                : context.l10n.videoNoAudioTracks,
+            onTap: audioEnabled ? onAudioTap : null,
+          ),
         ),
         if (onQualityTap != null) ...[
           SizedBox(width: gap),
-          ControlButton(
-            key: qualityKey,
-            icon: Icons.hd_rounded,
-            iconSize: 18,
-            size: 32,
-            // No invented default. This used to read "Auto", describing
-            // adaptive streaming the server has never done — it emits a
-            // single rendition per session. A caller that cannot name the
-            // current rung gets the bare noun rather than a fiction.
-            tooltip: selectedQualityLabel == null
-                ? context.l10n.videoQuality
-                : context.l10n.videoQualityCurrent(selectedQualityLabel!),
-            onTap: onQualityTap,
+          FocusMemoryItem(
+            id: qualityKey,
+            index: _firstIndex + 2,
+            child: ControlButton(
+              key: qualityKey,
+              icon: Icons.hd_rounded,
+              iconSize: 18,
+              size: 32,
+              // No invented default. This used to read "Auto", describing
+              // adaptive streaming the server has never done — it emits a
+              // single rendition per session. A caller that cannot name the
+              // current rung gets the bare noun rather than a fiction.
+              tooltip: selectedQualityLabel == null
+                  ? context.l10n.videoQuality
+                  : context.l10n.videoQualityCurrent(selectedQualityLabel!),
+              onTap: onQualityTap,
+            ),
           ),
         ],
         // Omitted entirely when null, matching `onQualityTap` above: null
@@ -346,13 +368,17 @@ class SecondaryCluster extends StatelessWidget {
         ],
         if (onScalingTap != null) ...[
           SizedBox(width: gap),
-          ControlButton(
-            key: scalingKey,
-            icon: scalingIcon(scaling),
-            iconSize: 18,
-            size: 32,
-            tooltip: scalingTooltip(context.l10n, scaling),
-            onTap: onScalingTap,
+          FocusMemoryItem(
+            id: scalingKey,
+            index: _firstIndex + 3,
+            child: ControlButton(
+              key: scalingKey,
+              icon: scalingIcon(scaling),
+              iconSize: 18,
+              size: 32,
+              tooltip: scalingTooltip(context.l10n, scaling),
+              onTap: onScalingTap,
+            ),
           ),
         ],
         if (onAlwaysOnTopTap != null) ...[

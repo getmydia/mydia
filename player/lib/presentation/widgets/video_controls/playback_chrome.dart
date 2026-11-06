@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_time_format.dart';
@@ -785,6 +786,18 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   /// key does not rebuild the whole chrome on every repeat.
   bool _scrubbing = false;
 
+  /// The OSD's traversal policy on the television tier.
+  ///
+  /// The OSD renders over the player route, outside the app shell whose
+  /// region policy installs [FocusMemory.requestFocus], so without its own
+  /// group no move here would ever be redirected to a remembered control.
+  /// Held for the state's lifetime rather than built per frame: the
+  /// directional mixin keeps its up/down history on the policy instance, and
+  /// the chrome rebuilds on every play/pause.
+  final _osdPolicy = ReadingOrderTraversalPolicy(
+    requestFocusCallback: FocusMemory.requestFocus,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -910,108 +923,123 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                               hiddenOffsetY: 8,
                               child: Center(
                                 child: ChromeToastObstruction(
-                                  child: ChromePanel(
-                                    metrics: metrics,
-                                    transport: TransportCluster(
-                                      player: widget.player,
-                                      playPauseFocusNode:
-                                          widget.playPauseFocusNode,
-                                      onBack10: () =>
-                                          _seekBy(const Duration(seconds: -10)),
-                                      onForward10: () =>
-                                          _seekBy(const Duration(seconds: 10)),
-                                      onPreviousEpisode:
-                                          widget.onPreviousEpisode,
-                                      onNextEpisode: widget.onNextEpisode,
-                                      // Below the mobile breakpoint the in-bar
-                                      // transport is play/pause only (see
-                                      // `TransportSurface.compact`'s dartdoc for the
-                                      // full layout reasoning). `onPreviousEpisode`/
-                                      // `onNextEpisode` above are still passed
-                                      // through unconditionally (`compact` ignores
-                                      // them regardless), rather than gated to null
-                                      // here, so they reappear the moment the
-                                      // breakpoint is crossed without this widget
-                                      // needing to know why.
-                                      //
-                                      // NOTE, this is a real, currently-unresolved
-                                      // gap: unlike ±10s seek (which has an explicit
-                                      // gesture replacement, double-tap in
-                                      // `gesture_controls.dart`), episode nav has no
-                                      // touch-reachable equivalent once it's dropped
-                                      // from the bar. `UpNextOverlay` only offers
-                                      // *next*, and only near an episode's end; there
-                                      // is no touch path to the *previous* episode at
-                                      // all below this breakpoint. See this task's
-                                      // report for the open follow-up; do not read
-                                      // this comment as "handled".
-                                      compact: metrics.compactTransport,
-                                    ),
-                                    // Null on the remote tier, which has no volume
-                                    // control to show. Otherwise unconditional per
-                                    // ChromePanel's `volume` dartdoc: it already gates
-                                    // visibility internally via
-                                    // Visibility(maintainState: true), so
-                                    // VolumeCluster's `_lastVolume` survives a
-                                    // breakpoint crossing only if it isn't also
-                                    // rebuilt from scratch here. The tier itself never
-                                    // changes at runtime, so the null branch loses no
-                                    // state.
-                                    volume: remote
-                                        ? null
-                                        : VolumeCluster(player: widget.player),
-                                    secondary: SecondaryCluster(
-                                      onSubtitleTap: widget.onSubtitleTap,
-                                      onAudioTap: widget.onAudioTap,
-                                      // Passed through `metrics.showQuality` rather
-                                      // than bare, even though every tier shows it
-                                      // today: see that field's dartdoc; it stays a
-                                      // real per-tier lever for the tier that can't
-                                      // absorb a future 5th control.
-                                      onQualityTap: metrics.showQuality
-                                          ? widget.onQualityTap
-                                          : null,
-                                      onFullscreenTap: remote
+                                  // The control bar remembers the control
+                                  // the viewer left it from. UP from the
+                                  // full-width scrubber otherwise lands on
+                                  // whichever button geometry finds nearest
+                                  // the bar's centre. The transport and the
+                                  // track buttons beside it are one region:
+                                  // they are one row on screen, and UP has to
+                                  // be able to return to either. The scrubber
+                                  // is its own region inside this one (see
+                                  // `_ScrubberRow`), so leaving it counts as
+                                  // entering the bar.
+                                  child: FocusMemoryRegion(
+                                    debugLabel: 'osd-controls',
+                                    child: ChromePanel(
+                                      metrics: metrics,
+                                      transport: TransportCluster(
+                                        player: widget.player,
+                                        playPauseFocusNode:
+                                            widget.playPauseFocusNode,
+                                        onBack10: () => _seekBy(
+                                            const Duration(seconds: -10)),
+                                        onForward10: () => _seekBy(
+                                            const Duration(seconds: 10)),
+                                        onPreviousEpisode:
+                                            widget.onPreviousEpisode,
+                                        onNextEpisode: widget.onNextEpisode,
+                                        // Below the mobile breakpoint the in-bar
+                                        // transport is play/pause only (see
+                                        // `TransportSurface.compact`'s dartdoc for the
+                                        // full layout reasoning). `onPreviousEpisode`/
+                                        // `onNextEpisode` above are still passed
+                                        // through unconditionally (`compact` ignores
+                                        // them regardless), rather than gated to null
+                                        // here, so they reappear the moment the
+                                        // breakpoint is crossed without this widget
+                                        // needing to know why.
+                                        //
+                                        // NOTE, this is a real, currently-unresolved
+                                        // gap: unlike ±10s seek (which has an explicit
+                                        // gesture replacement, double-tap in
+                                        // `gesture_controls.dart`), episode nav has no
+                                        // touch-reachable equivalent once it's dropped
+                                        // from the bar. `UpNextOverlay` only offers
+                                        // *next*, and only near an episode's end; there
+                                        // is no touch path to the *previous* episode at
+                                        // all below this breakpoint. See this task's
+                                        // report for the open follow-up; do not read
+                                        // this comment as "handled".
+                                        compact: metrics.compactTransport,
+                                      ),
+                                      // Null on the remote tier, which has no volume
+                                      // control to show. Otherwise unconditional per
+                                      // ChromePanel's `volume` dartdoc: it already gates
+                                      // visibility internally via
+                                      // Visibility(maintainState: true), so
+                                      // VolumeCluster's `_lastVolume` survives a
+                                      // breakpoint crossing only if it isn't also
+                                      // rebuilt from scratch here. The tier itself never
+                                      // changes at runtime, so the null branch loses no
+                                      // state.
+                                      volume: remote
                                           ? null
-                                          : widget.onFullscreenTap,
-                                      onAlwaysOnTopTap:
-                                          PlatformFeatures.isDesktop &&
-                                                  metrics.showAlwaysOnTop
-                                              ? widget.onAlwaysOnTopTap
-                                              : null,
-                                      // TV only: the top bar takes no focus
-                                      // there, and remote never shows
-                                      // fullscreen, so scaling takes its slot.
-                                      onScalingTap:
-                                          remote ? widget.onScalingTap : null,
-                                      scaling: widget.scaling,
-                                      audioTrackCount: widget.audioTrackCount,
-                                      selectedAudioLabel:
-                                          widget.selectedAudioLabel,
-                                      selectedSubtitleLabel:
-                                          widget.selectedSubtitleLabel,
-                                      selectedQualityLabel:
-                                          widget.selectedQualityLabel,
-                                      isFullscreen: widget.isFullscreen,
-                                      isAlwaysOnTop: widget.isAlwaysOnTop,
-                                      gap: metrics.secondaryGap,
-                                    ),
-                                    scrubber: _ScrubberRow(
-                                      player: widget.player,
-                                      timeline: widget.timeline,
-                                      onSeekToReal: widget.onSeekToReal,
-                                      touchTargets: metrics.touchTargets,
-                                      onSeekStart: () =>
-                                          setState(() => _seeking = true),
-                                      onSeekEnd: () =>
-                                          setState(() => _seeking = false),
-                                      remote: remote,
-                                      scrub: widget.scrub,
-                                      scrubberFocusNode:
-                                          widget.scrubberFocusNode,
-                                      thumbnails: widget.scrubThumbnails,
-                                      onPlayPause: () =>
-                                          widget.player.playOrPause(),
+                                          : VolumeCluster(
+                                              player: widget.player),
+                                      secondary: SecondaryCluster(
+                                        onSubtitleTap: widget.onSubtitleTap,
+                                        onAudioTap: widget.onAudioTap,
+                                        // Passed through `metrics.showQuality` rather
+                                        // than bare, even though every tier shows it
+                                        // today: see that field's dartdoc; it stays a
+                                        // real per-tier lever for the tier that can't
+                                        // absorb a future 5th control.
+                                        onQualityTap: metrics.showQuality
+                                            ? widget.onQualityTap
+                                            : null,
+                                        onFullscreenTap: remote
+                                            ? null
+                                            : widget.onFullscreenTap,
+                                        onAlwaysOnTopTap:
+                                            PlatformFeatures.isDesktop &&
+                                                    metrics.showAlwaysOnTop
+                                                ? widget.onAlwaysOnTopTap
+                                                : null,
+                                        // TV only: the top bar takes no focus
+                                        // there, and remote never shows
+                                        // fullscreen, so scaling takes its slot.
+                                        onScalingTap:
+                                            remote ? widget.onScalingTap : null,
+                                        scaling: widget.scaling,
+                                        audioTrackCount: widget.audioTrackCount,
+                                        selectedAudioLabel:
+                                            widget.selectedAudioLabel,
+                                        selectedSubtitleLabel:
+                                            widget.selectedSubtitleLabel,
+                                        selectedQualityLabel:
+                                            widget.selectedQualityLabel,
+                                        isFullscreen: widget.isFullscreen,
+                                        isAlwaysOnTop: widget.isAlwaysOnTop,
+                                        gap: metrics.secondaryGap,
+                                      ),
+                                      scrubber: _ScrubberRow(
+                                        player: widget.player,
+                                        timeline: widget.timeline,
+                                        onSeekToReal: widget.onSeekToReal,
+                                        touchTargets: metrics.touchTargets,
+                                        onSeekStart: () =>
+                                            setState(() => _seeking = true),
+                                        onSeekEnd: () =>
+                                            setState(() => _seeking = false),
+                                        remote: remote,
+                                        scrub: widget.scrub,
+                                        scrubberFocusNode:
+                                            widget.scrubberFocusNode,
+                                        thumbnails: widget.scrubThumbnails,
+                                        onPlayPause: () =>
+                                            widget.player.playOrPause(),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1064,7 +1092,9 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
           focusNode: widget.chromeFocusNode,
           canRequestFocus: false,
           skipTraversal: true,
-          child: chrome,
+          child: remote
+              ? FocusTraversalGroup(policy: _osdPolicy, child: chrome)
+              : chrome,
         );
       },
     );
@@ -1143,14 +1173,24 @@ class _ScrubberRow extends StatelessWidget {
     final focusNode = scrubberFocusNode;
     if (!remote || scrub == null || focusNode == null) return progressBar();
 
-    return TvScrubber(
-      scrub: scrub,
-      focusNode: focusNode,
-      onPlayPause: onPlayPause,
-      builder: (context, focused) => ScrubBubbleAnchor(
-        scrub: scrub,
-        thumbnails: thumbnails,
-        child: progressBar(scrub: scrub, focused: focused),
+    // A region of its own with one item, inside the control bar's region.
+    // Without it the scrubber would belong to the bar's region, so UP from
+    // it would be a move inside one region and never redirected.
+    return FocusMemoryRegion(
+      debugLabel: 'osd-scrubber',
+      child: FocusMemoryItem(
+        id: 'osd-scrubber',
+        index: 0,
+        child: TvScrubber(
+          scrub: scrub,
+          focusNode: focusNode,
+          onPlayPause: onPlayPause,
+          builder: (context, focused) => ScrubBubbleAnchor(
+            scrub: scrub,
+            thumbnails: thumbnails,
+            child: progressBar(scrub: scrub, focused: focused),
+          ),
+        ),
       ),
     );
   }
