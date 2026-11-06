@@ -31,6 +31,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DashboardLive.Text,
     only: [format_bytes: 1, episode_line: 1, request_error_message: 1]
@@ -58,6 +59,9 @@ defmodule MydiaWeb.DashboardLive.Index do
       |> assign(:adding_item_ids, MapSet.new())
       |> assign(:requesting_item_id, nil)
       |> DetailModal.init()
+      |> PersonModal.init()
+      # PersonModal reads its relay config from here.
+      |> assign(:metadata_config, Metadata.default_relay_config())
       |> assign(:add_config, nil)
       |> assign_initial_widget_values()
 
@@ -416,6 +420,20 @@ defmodule MydiaWeb.DashboardLive.Index do
     {:noreply, DetailModal.close(socket)}
   end
 
+  # Opening a person replaces the title dialog; opening a title from the
+  # person's posters stacks over the person instead (see show_details).
+  def handle_event("show_person", params, socket) do
+    {:noreply, socket |> DetailModal.close() |> PersonModal.open(params)}
+  end
+
+  def handle_event("close_person", _params, socket) do
+    {:noreply, PersonModal.close(socket)}
+  end
+
+  def handle_event("retry_person", _params, socket) do
+    {:noreply, PersonModal.retry(socket)}
+  end
+
   def handle_event("rate_shelf_item", params, socket),
     do: {:noreply, ShelfFeedback.rate(socket, params)}
 
@@ -489,6 +507,10 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_async(:load_person, result, socket) do
+    {:noreply, PersonModal.handle_result(socket, result)}
+  end
+
   def handle_async({:regional_rail, param}, result, socket) do
     if param == socket.assigns.regional_selected do
       socket =
@@ -775,6 +797,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
          |> ShelfFeedback.record_add(ref, media_type)
+         |> refresh_person_titles(&MediaAddHelpers.enrich_with_library_status(&1, updated_map))
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(
            :info,
@@ -808,6 +831,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
+         |> refresh_person_titles(&MediaAddHelpers.enrich_with_library_status(&1, updated_map))
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(
            :info,
@@ -884,6 +908,9 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:regional_items, regional_items)
         |> reenrich_shelves()
         |> ShelfFeedback.record_add(Ref.from_search_result(item), media_type)
+        |> refresh_person_titles(
+          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
+        )
         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
         |> put_flash(
           :info,
@@ -925,13 +952,24 @@ defmodule MydiaWeb.DashboardLive.Index do
     )
   end
 
+  # An open person's titles are one more list of the same shape; without
+  # re-enriching them a poster never gains its owned or requested badge.
+  defp refresh_person_titles(socket, enrich) do
+    assign(socket, :person_titles, enrich.(person_titles(socket.assigns)))
+  end
+
+  # The person's titles mix movies and shows, so every lookup against these
+  # lists passes the media type (see show_details and {:request_media, ...}).
   defp rail_lists(assigns),
     do: [
       assigns.trending_movies,
       assigns.trending_tv,
       assigns.regional_items,
-      ShelfRail.items(assigns.shelves)
+      ShelfRail.items(assigns.shelves),
+      person_titles(assigns)
     ]
+
+  defp person_titles(assigns), do: Map.get(assigns, :person_titles, [])
 
   defp find_trending_item(socket, id, media_type),
     do: DetailModal.find_selectable_item(rail_lists(socket.assigns), id, media_type)
