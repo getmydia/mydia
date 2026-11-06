@@ -239,6 +239,7 @@ void main() {
   test('declares Continue Watching', () {
     final source = build().source;
     expect(source.capabilities, contains(SourceCapability.continueWatching));
+    expect(source.capabilities, isNot(contains(SourceCapability.trending)));
   });
 
   test('Continue Watching asks for resumable scenes, last played first',

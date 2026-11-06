@@ -877,6 +877,8 @@
   "detailOverview": "Sinopsis",
   "homeRecentMovies": "Películas agregadas recientemente",
   "homeRecentShows": "Series agregadas recientemente",
+  "homeTrendingMovies": "Películas en tendencia",
+  "homeTrendingShows": "Series en tendencia",
   "homeNothingToShow": "Aún no hay nada que mostrar.",
   "librarySortBy": "Ordenar por",
   "sortDirectionAsc": "Asc.",

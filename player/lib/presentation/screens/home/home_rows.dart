@@ -6,9 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/source.dart';
+import '../../../domain/merged/merge_key.dart' show Deduped;
 import '../../../domain/merged/merge_rows.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/ranked_item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
 import '../all_servers/all_servers_providers.dart' show isMovieRow;
@@ -17,6 +19,11 @@ import '../all_servers/all_servers_providers.dart' show isMovieRow;
 /// the movies and TV split has room.
 const homeContinueLimit = 20;
 const homeRecentLimit = 40;
+
+/// Each Trending row keeps up to 20 cards, and appears only with at least 5:
+/// a shorter list is a server with little to rank, not a row worth showing.
+const homeTrendingLimit = 20;
+const homeTrendingMinimum = 5;
 
 /// One server's Home feeds, as its providers last reported them.
 @immutable
@@ -29,6 +36,8 @@ class HomeFeeds {
     required this.favorites,
     required this.libraries,
     this.previews = const {},
+    this.trendingMovies = const AsyncValue.data(<RankedItem>[]),
+    this.trendingShows = const AsyncValue.data(<RankedItem>[]),
   });
 
   final SourceId id;
@@ -40,6 +49,11 @@ class HomeFeeds {
 
   /// The preview row of each library in [libraries].
   final Map<LibraryRef, AsyncValue<List<ItemSummary>>> previews;
+
+  /// Neither gates loading nor availability: a server whose trending fails
+  /// only loses these two rows.
+  final AsyncValue<List<RankedItem>> trendingMovies;
+  final AsyncValue<List<RankedItem>> trendingShows;
 }
 
 @immutable
@@ -76,6 +90,8 @@ class HomeRows {
     this.continueWatching = const [],
     this.recentMovies = const [],
     this.recentShows = const [],
+    this.trendingMovies = const [],
+    this.trendingShows = const [],
     this.favorites = const [],
     this.libraries = const [],
     this.unavailable = const [],
@@ -91,6 +107,8 @@ class HomeRows {
   final List<ItemSummary> continueWatching;
   final List<ItemSummary> recentMovies;
   final List<ItemSummary> recentShows;
+  final List<ItemSummary> trendingMovies;
+  final List<ItemSummary> trendingShows;
   final List<ItemSummary> favorites;
   final List<HomeLibraryRow> libraries;
 
@@ -113,6 +131,8 @@ class HomeRows {
       continueWatching.isEmpty &&
       recentMovies.isEmpty &&
       recentShows.isEmpty &&
+      trendingMovies.isEmpty &&
+      trendingShows.isEmpty &&
       favorites.isEmpty &&
       libraries.isEmpty;
 }
@@ -179,6 +199,9 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
     for (final i in recent.items)
       if (!isMovieRow(i)) i
   ];
+  final trendingMovies =
+      _trending([for (final f in up) f.trendingMovies], order);
+  final trendingShows = _trending([for (final f in up) f.trendingShows], order);
   final labelled = feeds.length > 1;
 
   return HomeRows(
@@ -188,6 +211,8 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
     continueWatching: resuming.items,
     recentMovies: movies,
     recentShows: shows,
+    trendingMovies: trendingMovies.items,
+    trendingShows: trendingShows.items,
     favorites: favorites.items,
     libraries: [
       for (final f in up)
@@ -198,10 +223,22 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
     extraCopies: {
       ...favorites.extraCopies,
       ...recent.extraCopies,
+      ...trendingMovies.extraCopies,
+      ...trendingShows.extraCopies,
       ...resuming.extraCopies,
     },
     names: names,
   );
+}
+
+/// Empty below [homeTrendingMinimum]. A failed or loading feed counts as empty.
+Deduped _trending(
+    List<AsyncValue<List<RankedItem>>> feeds, List<SourceId> order) {
+  final merged = mergeRanked([for (final f in feeds) _valueOf(f)], order,
+      limit: homeTrendingLimit);
+  return merged.items.length < homeTrendingMinimum
+      ? const Deduped([], {})
+      : merged;
 }
 
 /// Null once the preview has loaded empty: an empty library has no row.

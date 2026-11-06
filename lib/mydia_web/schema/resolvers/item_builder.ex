@@ -22,6 +22,7 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilder do
       caller's window. Nil for movies and for unwindowed views.
     * `:latest_episode` - an `%Mydia.Media.Episode{}` whose numbers are
       flattened onto the payload, or nil.
+    * `:trending_rank` - TMDB trending position, set only by `trendingInLibrary`.
   """
   @spec recently_added_item(struct(), keyword()) :: map()
   def recently_added_item(media_item, opts \\ []) do
@@ -39,7 +40,8 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilder do
       latest_episode_number: latest_episode && latest_episode.episode_number,
       tmdb_id: media_item.tmdb_id,
       tvdb_id: media_item.tvdb_id,
-      imdb_id: media_item.imdb_id
+      imdb_id: media_item.imdb_id,
+      trending_rank: Keyword.get(opts, :trending_rank)
     }
   end
 

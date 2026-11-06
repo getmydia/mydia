@@ -258,6 +258,52 @@ defmodule Mydia.MetadataCacheHelpers do
   end
 
   @doc """
+  Serves TMDB trending and popular lists for `media_type` from a Bypass relay,
+  so `Mydia.Media.TrendingInLibrary` walks them with no live request.
+
+  `lists` is `%{trending: [map], popular: [map]}` of raw TMDB result maps with
+  string keys. Every page answers `total_pages: 1`. Swaps `metadata_relay_url`
+  like `warm_trending_cache/2`, but restores it `on_exit` rather than
+  immediately, because the fetch happens inside the code under test. Also
+  deletes every cache key the walk could have filled.
+  """
+  def stub_curated_lists(media_type, %{trending: trending, popular: popular}) do
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn ->
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+
+      for list <- [:trending, :popular], page <- 1..5 do
+        Cache.delete("curated:#{list}:#{media_type}:#{page}")
+      end
+    end)
+
+    prefix = if media_type == :tv_show, do: "/tmdb/tv", else: "/tmdb/movies"
+
+    for {list, results} <- [trending: trending, popular: popular] do
+      Bypass.stub(bypass, "GET", "#{prefix}/#{list}", fn conn ->
+        body = %{
+          "page" => 1,
+          "total_pages" => 1,
+          "total_results" => length(results),
+          "results" => results
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+    end
+
+    bypass
+  end
+
+  @doc """
   Seeds the per-title certification and category `Mydia.Media.RemoteFilter`
   looks up for restricted accounts, so a restricted LiveView test makes no
   relay call.

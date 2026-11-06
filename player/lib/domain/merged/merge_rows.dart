@@ -5,6 +5,7 @@ library;
 
 import '../../core/sources/source.dart';
 import '../sources/item.dart';
+import '../sources/ranked_item.dart';
 import 'merge_key.dart';
 import 'shared_sort_keys.dart';
 
@@ -40,4 +41,26 @@ Deduped mergeAlphabetical(
       return s != 0 ? s : x.i.compareTo(y.i);
     });
   return dedupe([for (final e in entries) e.item], order);
+}
+
+/// Every server's trending list as one: by rank, ties in server order then
+/// each server's own order, one card per title, at most [limit]. Duplicates
+/// collapse before the cap so they do not use up places.
+Deduped mergeRanked(
+  List<List<RankedItem>> perSource,
+  List<SourceId> order, {
+  int limit = 20,
+}) {
+  final entries = [
+    for (var s = 0; s < perSource.length; s++)
+      for (var i = 0; i < perSource[s].length; i++)
+        (item: perSource[s][i], s: s, i: i),
+  ]..sort((x, y) {
+      final c = x.item.rank.compareTo(y.item.rank);
+      if (c != 0) return c;
+      final s = x.s.compareTo(y.s);
+      return s != 0 ? s : x.i.compareTo(y.i);
+    });
+  final d = dedupe([for (final e in entries) e.item.item], order);
+  return Deduped(d.items.take(limit).toList(), d.extraCopies);
 }

@@ -17,8 +17,10 @@ import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/ranked_item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_cards.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
@@ -67,7 +69,7 @@ Future<List<String>> pumpHome(
   List<MediaSource> sources, {
   HomeScope scope = const AllServers(),
   bool settle = true,
-  Size size = const Size(1280, 1800),
+  Size size = const Size(1280, 2400),
   List<Override> overrides = const [],
 }) async {
   final pushed = <String>[];
@@ -112,6 +114,13 @@ Future<List<String>> pumpHome(
   return pushed;
 }
 
+List<RankedItem> _ranked(Source s, ItemKind kind, [int n = 5]) => [
+      for (var r = 1; r <= n; r++)
+        RankedItem(
+            item: item(s, '${s.id.value}-${kind.name}-t$r', kind: kind),
+            rank: r),
+    ];
+
 FakeMergedSource serverWith(String id) {
   final s = fakeServer(id);
   return FakeMergedSource(
@@ -127,6 +136,8 @@ FakeMergedSource serverWith(String id) {
       item(s, '${id}3', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1, 1)),
     ],
     favs: [item(s, '${id}4')],
+    trendingMovies: _ranked(s, ItemKind.movie),
+    trendingShows: _ranked(s, ItemKind.show),
   );
 }
 
@@ -144,6 +155,8 @@ void main() {
         const Key('home-continue-watching'),
         const Key('home-recent-movies'),
         const Key('home-recent-shows'),
+        const Key('home-trending-movies'),
+        const Key('home-trending-shows'),
         const Key('home-favorites'),
         Key('home-library-row-${a.id.value}-movies'),
       ];
@@ -164,6 +177,8 @@ void main() {
         'home-continue-watching',
         'home-recent-movies',
         'home-recent-shows',
+        'home-trending-movies',
+        'home-trending-shows',
         'home-favorites',
       ]) {
         expect(find.byKey(Key(k)), findsOneWidget, reason: k);
@@ -195,6 +210,58 @@ void main() {
       expect(find.byKey(const Key('home-recent-shows')), findsNothing);
       expect(find.byKey(const Key('home-favorites')), findsNothing);
       expect(find.byKey(const Key('home-continue-watching')), findsNothing);
+    });
+
+    testWidgets('trending rails have no chevron and hide when empty',
+        (t) async {
+      final s = fakeServer('a');
+      await pumpHome(t, [
+        FakeMergedSource(s,
+            recent: [item(s, 'm', addedAt: DateTime.utc(2024))],
+            trendingMovies: _ranked(s, ItemKind.movie),
+            trendingShows: _ranked(s, ItemKind.show, 4)),
+      ]);
+      expect(find.byKey(const Key('home-trending-movies')), findsOneWidget);
+      expect(find.byKey(const Key('home-trending-shows')), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byKey(const Key('home-trending-movies')),
+              matching: find.byIcon(Icons.chevron_right)),
+          findsNothing);
+    });
+
+    testWidgets('pull to refresh refetches trending', (t) async {
+      final s = fakeServer('a');
+      final fake = FakeMergedSource(s,
+          recent: [item(s, 'm', addedAt: DateTime.utc(2024))],
+          trendingMovies: _ranked(s, ItemKind.movie));
+      await pumpHome(t, [fake], size: const Size(1280, 900));
+      final before = fake.trendingCalls;
+      await t.fling(
+          find.byKey(const Key('home-list')), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+      expect(fake.trendingCalls, greaterThan(before));
+    });
+
+    testWidgets(
+        'a trending refresh failure after cached rows leaves Home unbannered',
+        (t) async {
+      final s = fakeServer('a');
+      final fake = FakeMergedSource(s,
+          recent: [item(s, 'm', addedAt: DateTime.utc(2024))],
+          trendingMovies: _ranked(s, ItemKind.movie));
+      await pumpHome(t, [fake], size: const Size(1280, 900));
+      expect(find.byKey(const Key('home-trending-movies')), findsOneWidget);
+
+      fake.trendingFails = true;
+      final before = fake.trendingCalls;
+      await t.fling(
+          find.byKey(const Key('home-list')), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+
+      expect(fake.trendingCalls, greaterThan(before));
+      expect(find.byKey(const Key('freshness-banner')), findsNothing);
+      expect(find.byKey(const Key('home-recent-movies')), findsOneWidget);
     });
 
     testWidgets('no servers is empty, not an error', (t) async {
