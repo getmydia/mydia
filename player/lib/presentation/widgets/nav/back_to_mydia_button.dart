@@ -31,6 +31,7 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
       iconBox: FocusHighlight(
         onActivate: navigateToMydiaApp,
         borderRadius: const BorderRadius.all(Radius.circular(12)),
+        emphasis: true,
         child: Center(
           child: Icon(
             Icons.arrow_back_rounded,

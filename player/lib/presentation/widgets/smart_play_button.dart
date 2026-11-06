@@ -8,6 +8,7 @@ import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
 import '../../l10n/l10n.dart';
+import 'focus_emphasis.dart';
 import 'focus_highlight.dart';
 import 'next_up_labels.dart';
 import 'primary_play_button.dart';
@@ -176,7 +177,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         ),
         // Dropdown button (only when multiple files)
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: _pickerGap),
           _versionPicker(context),
         ],
       ],
@@ -193,39 +194,45 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         _remembered(
             _playId,
             0,
-            FilledButton.icon(
-              onPressed: _selectedFile != null
-                  ? () => widget.onFileSelected(_selectedFile!)
-                  : null,
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: Text(nextUpLabel(context.l10n, widget.state!)),
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: palette.background,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(
-                    Radius.circular(AppTheme.radiusButton),
-                  ),
+            FocusEmphasis(
+                borderRadius: const BorderRadius.all(
+                  Radius.circular(AppTheme.radiusButton),
                 ),
-                textStyle: const TextStyle(
-                  fontFamily: AppTheme.displayFamily,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ).copyWith(
-                // The default focus overlay is invisible on a white fill, so a
-                // focused pill gets a gold outline.
-                side: WidgetStateProperty.resolveWith(
-                  (states) => states.contains(WidgetState.focused)
-                      ? BorderSide(color: palette.primary, width: 2)
+                child: FilledButton.icon(
+                  onPressed: _selectedFile != null
+                      ? () => widget.onFileSelected(_selectedFile!)
                       : null,
-                ),
-              ),
-            )),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: Text(nextUpLabel(context.l10n, widget.state!)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: palette.background,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(AppTheme.radiusButton),
+                      ),
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: AppTheme.displayFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ).copyWith(
+                    // The default focus overlay is invisible on a white fill, so a
+                    // focused pill gets a gold outline. On a television
+                    // FocusEmphasis draws a larger ring outside it instead.
+                    side: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.focused) &&
+                              !InputCapabilities.directionalPrimary
+                          ? BorderSide(color: palette.primary, width: 2)
+                          : BorderSide.none,
+                    ),
+                  ),
+                ))),
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: _pickerGap),
           _versionPicker(context),
         ],
       ],
@@ -250,6 +257,11 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   static const _playId = 'play';
   static const _versionId = 'version';
+
+  /// Space between Play and the version picker. On a television both grow
+  /// and ring when focused (`FocusEmphasis`), which needs room enough that
+  /// Play's ring is not drawn under the picker.
+  static double get _pickerGap => InputCapabilities.directionalPrimary ? 18 : 6;
 
   /// On the television tier, Play and the version picker are separate items
   /// of the enclosing `FocusMemoryRegion` (the detail hero's Play section).
@@ -285,6 +297,7 @@ class _DropdownButton extends StatelessWidget {
     return FocusHighlight(
       onActivate: onTap,
       circular: true,
+      emphasis: true,
       child: GestureDetector(
         onTap: onTap,
         child: Container(

@@ -154,6 +154,23 @@ void main() {
       expectFocusIn(_action('watched'));
     });
 
+    testWidgets('the page opens with focus on Play', (tester) async {
+      await pumpShow(tester);
+      expectFocusIn(HeroPlayControl.sectionKey);
+    });
+
+    testWidgets('picking an episode moves focus to Play', (tester) async {
+      await pumpShow(tester);
+      await focusIn(tester, _episodeCard(1, 1));
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      _expectOnEpisode(1, 3);
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expectFocusIn(HeroPlayControl.sectionKey);
+    });
+
     testWidgets('UP from the episodes returns to the season that left',
         (tester) async {
       await pumpShow(tester);

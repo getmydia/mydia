@@ -33,7 +33,14 @@ class BrowseGrid extends StatelessWidget {
     required this.scrollTopPadding,
     this.controller,
     this.itemId,
+    this.landing = true,
   });
+
+  /// Whether focus lands on the grid when its page opens on the television
+  /// tier (see `FocusMemoryRegion.landing`). A grid is what a browse page is
+  /// for, so it is on by default; search turns it off, because there the
+  /// query field is where the viewer starts.
+  final bool landing;
 
   final int itemCount;
   final Widget? Function(BuildContext context, int index) itemBuilder;
@@ -89,7 +96,9 @@ class BrowseGrid extends StatelessWidget {
       },
     );
 
-    return directional ? FocusMemoryRegion(child: grid) : grid;
+    return directional
+        ? FocusMemoryRegion(landing: landing, child: grid)
+        : grid;
   }
 
   /// [itemBuilder]'s cell wrapped as an item of the grid's region. A null

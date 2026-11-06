@@ -52,7 +52,11 @@ class HeroPlayControl extends StatelessWidget {
     // other side of the hero. Play and the version picker beside it are its
     // items (see `SmartPlayButton`), so a first entry lands on Play and a
     // return lands on whichever of the two the viewer left.
+    //
+    // It is also the page's landing region: opening a movie or episode puts
+    // focus on Play, and picking another episode puts it back there.
     return FocusMemoryRegion(
+      landing: true,
       debugLabel: 'hero-play',
       child: KeyedSubtree(key: sectionKey, child: button),
     );

@@ -312,6 +312,7 @@ class CollectionDetailScreen extends ConsumerWidget {
     // its ref, so focus coming down from the header returns to the poster
     // that left it. Both widgets are inert off the television tier.
     return FocusMemoryRegion(
+      landing: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);

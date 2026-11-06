@@ -19,6 +19,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/focus_emphasis.dart';
 import '../../widgets/glass/glass_badge.dart';
 import '../../widgets/glass/glass_button.dart';
 import '../../widgets/primary_play_button.dart';
@@ -349,12 +350,20 @@ class _HeroActions extends StatelessWidget {
             onPressed: onPlay,
             grouped: grouped,
           )
-        : FilledButton.icon(
-            key: const Key('source-home-hero-play'),
-            onPressed: onPlay,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(context.l10n.commonPlay),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
+        : FocusEmphasis(
+            borderRadius:
+                const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+            child: FilledButton.icon(
+              key: const Key('source-home-hero-play'),
+              onPressed: onPlay,
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: Text(context.l10n.commonPlay),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, _height),
+                // FocusEmphasis draws the television focus ring.
+                side: BorderSide.none,
+              ),
+            ),
           );
     Widget secondary = GlassButton(
       buttonKey: const Key('source-home-hero-more'),

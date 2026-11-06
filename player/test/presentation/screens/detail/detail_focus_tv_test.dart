@@ -164,6 +164,8 @@ void main() {
         MediaVersion(id: 'v2', height: 2160),
       ]);
       expect(find.byKey(SmartPlayButton.versionPickerKey), findsOneWidget);
+      // The page opens on Play, not on the picker that was focusable first.
+      expectOnPlay();
       // First entry lands on Play. Play's focus node attaches once the
       // version is picked, after the picker's, so a section that took its
       // first node in focus-tree order would land on the picker.

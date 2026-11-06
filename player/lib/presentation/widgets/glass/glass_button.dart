@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
+import '../focus_emphasis.dart';
 import '../glass_surface.dart';
 import 'glass_hit_target.dart';
 import 'glass_interaction.dart';
@@ -44,8 +45,12 @@ class GlassButton extends StatelessWidget {
     final icon = this.icon;
     if (!GlassStyle.of(context)) {
       final style = OutlinedButton.styleFrom(
-          minimumSize: Size(0, height ?? _frostedHeight));
-      return icon == null
+        minimumSize: Size(0, height ?? _frostedHeight),
+        // FocusEmphasis below draws the television focus ring; the theme's
+        // focus border would sit inside it as a second one.
+        side: BorderSide.none,
+      );
+      final button = icon == null
           ? OutlinedButton(
               key: buttonKey,
               onPressed: onPressed,
@@ -59,6 +64,11 @@ class GlassButton extends StatelessWidget {
               icon: Icon(icon),
               label: Text(label),
             );
+      return FocusEmphasis(
+        borderRadius:
+            const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+        child: button,
+      );
     }
     final glassHeight = height ?? LiquidGeometry.buttonMedium;
     final radius = BorderRadius.circular(glassHeight / 2);
@@ -112,6 +122,10 @@ class GlassButton extends StatelessWidget {
         ),
       ),
     );
-    return GlassHitTarget(height: glassHeight, onTap: onPressed, child: glass);
+    return GlassHitTarget(
+      height: glassHeight,
+      onTap: onPressed,
+      child: FocusEmphasis(borderRadius: radius, child: glass),
+    );
   }
 }
