@@ -151,6 +151,10 @@ abstract interface class MediaInfo {
 /// Choosing by hand which TMDB title an item is (Fix match). A source
 /// implementing this also lists [SourceCapability.matchEditing].
 abstract interface class MatchEditing {
+  /// Whether [ref] can be matched by hand: a movie or show, or a loose file
+  /// whose name could be read. Fix match is hidden when this is false.
+  bool canEditMatch(ItemRef ref);
+
   /// TMDB titles of [ref]'s kind (movies for a movie or a loose file, shows
   /// for a show) matching [query].
   Future<List<TmdbCandidate>> searchMatches(

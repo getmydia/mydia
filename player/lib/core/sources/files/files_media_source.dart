@@ -357,6 +357,21 @@ class FilesMediaSource extends MediaSource
   // MatchEditing
 
   @override
+  bool canEditMatch(ItemRef ref) {
+    if (ref.kind != ItemKind.movie &&
+        ref.kind != ItemKind.show &&
+        ref.kind != ItemKind.video) {
+      return false;
+    }
+    try {
+      _groupsOf(ref, _catalog());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<List<TmdbCandidate>> searchMatches(
     ItemRef ref,
     String query, {

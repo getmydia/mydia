@@ -117,6 +117,7 @@ class RelayTmdb {
                 title: (raw[titleKey] as String?) ?? '',
                 originalTitle: raw[originalKey] as String?,
                 year: _year(raw[dateKey] as String?),
+                posterPath: raw['poster_path'] as String?,
               ),
           ]);
 

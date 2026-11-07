@@ -9,6 +9,8 @@ import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_actions.dart';
+import '../../widgets/files/fix_match_sheet.dart';
+
 import '../detail/detail_links.dart';
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
@@ -361,6 +363,7 @@ class ShowDetailScreen extends ConsumerWidget {
               episode.files.isEmpty
           ? null
           : () => showMediaInfo(context: context, item: item),
+      onFixMatch: fixMatchAction(context, ref, target.ref, show.title),
     );
   }
 

@@ -11,6 +11,7 @@ import '../../../domain/sources/item.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/files/fix_match_sheet.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
@@ -77,6 +78,9 @@ class _Body extends ConsumerWidget {
     final watched =
         ref.watch(mediaSourceProvider(item.sourceId))?.as<WatchedState>();
     final version = detail.versions.firstOrNull;
+    final fixMatch = item.kind == ItemKind.video
+        ? fixMatchAction(context, ref, item, summary.title)
+        : null;
     final resume = (summary.userState.progressSeconds ?? 0) > 0 &&
         !summary.userState.watched;
     final meta = [
@@ -145,6 +149,13 @@ class _Body extends ConsumerWidget {
                 label: Text(summary.userState.watched
                     ? l10n.commonWatched
                     : l10n.commonMarkWatched),
+              ),
+            if (fixMatch != null)
+              OutlinedButton.icon(
+                key: const Key('source-item-fix-match'),
+                onPressed: fixMatch,
+                icon: const Icon(Icons.manage_search_rounded),
+                label: Text(l10n.filesFixMatch),
               ),
           ],
         ),

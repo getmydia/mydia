@@ -11,6 +11,8 @@ import '../../../l10n/l10n.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_links.dart';
+import '../../widgets/files/fix_match_sheet.dart';
+
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
@@ -127,6 +129,7 @@ class MovieDetailScreen extends ConsumerWidget {
               movie.files.isEmpty
           ? null
           : () => showMediaInfo(context: context, item: item),
+      onFixMatch: fixMatchAction(context, ref, movie.target.ref, movie.title),
     );
   }
 

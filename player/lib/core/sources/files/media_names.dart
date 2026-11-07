@@ -60,12 +60,16 @@ class TmdbCandidate {
     required this.title,
     this.originalTitle,
     this.year,
+    this.posterPath,
   });
 
   final int id;
   final String title;
   final String? originalTitle;
   final int? year;
+
+  /// TMDB `poster_path`, for the Fix match list. Never sent to the matcher.
+  final String? posterPath;
 }
 
 class TmdbMatch {

@@ -21,7 +21,9 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../l10n/l10n.dart';
+import '../../../core/sources/source.dart' show SourceKind;
 import '../../widgets/browse_grid.dart';
+import '../../widgets/files/files_scan_banner.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/source_artwork.dart';
@@ -335,49 +337,75 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
             ),
       onRefresh: () async =>
           ref.read(invalidatorProvider).invalidate([key.target]),
-      body: (context, scrollTopPadding) => switch (browse) {
-        AsyncData(:final value) when value.items.isEmpty => _EmptyState(
-            title: isShows
-                ? context.l10n.sourcesLibraryEmptyShows
-                : context.l10n.sourcesLibraryEmptyMovies,
-            icon: isShows ? Icons.live_tv_rounded : Icons.movie_filter_rounded,
+      body: (context, scrollTopPadding) => _withScanBanner(
+          scrollTopPadding,
+          switch (browse) {
+            AsyncData(:final value) when value.items.isEmpty => _EmptyState(
+                title: isShows
+                    ? context.l10n.sourcesLibraryEmptyShows
+                    : context.l10n.sourcesLibraryEmptyMovies,
+                icon: isShows
+                    ? Icons.live_tv_rounded
+                    : Icons.movie_filter_rounded,
+              ),
+            AsyncData(:final value) => NotificationListener<ScrollNotification>(
+                onNotification: (n) {
+                  if (n.metrics.extentAfter < 800) {
+                    ref.read(sourcePagesProvider(pages).notifier).loadMore();
+                  }
+                  return false;
+                },
+                child: isList
+                    ? _ItemList(
+                        items: value.items,
+                        scrollTopPadding: scrollTopPadding,
+                      )
+                    : BrowseGrid(
+                        scrollTopPadding: scrollTopPadding,
+                        itemCount: value.items.length,
+                        itemId: (index) => value.items[index].ref,
+                        itemBuilder: (context, index) {
+                          final item = value.items[index];
+                          return SourcePoster(
+                            key: ValueKey(
+                                'source-poster-${item.ref.externalId}'),
+                            item: item,
+                            onTap: () =>
+                                context.push(sourceItemLocation(item.ref)),
+                          );
+                        },
+                      ),
+              ),
+            AsyncError(:final error) => SourceErrorView(
+                error: error,
+                account: ref
+                    .watch(mediaSourceProvider(library.sourceId))
+                    ?.source
+                    .account,
+                onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
+              ),
+            _ => const Center(child: CircularProgressIndicator()),
+          }),
+    );
+  }
+
+  /// Files libraries show scan progress over the top of the list.
+  Widget _withScanBanner(double top, Widget content) {
+    final source = ref.watch(mediaSourceProvider(widget.library.sourceId));
+    if (source?.kind != SourceKind.files) return content;
+    return Stack(
+      children: [
+        content,
+        Positioned(
+          top: top,
+          left: 0,
+          right: 0,
+          child: Material(
+            color: context.palette.surface.withValues(alpha: 0.92),
+            child: FilesScanBanner(sourceId: widget.library.sourceId),
           ),
-        AsyncData(:final value) => NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              if (n.metrics.extentAfter < 800) {
-                ref.read(sourcePagesProvider(pages).notifier).loadMore();
-              }
-              return false;
-            },
-            child: isList
-                ? _ItemList(
-                    items: value.items,
-                    scrollTopPadding: scrollTopPadding,
-                  )
-                : BrowseGrid(
-                    scrollTopPadding: scrollTopPadding,
-                    itemCount: value.items.length,
-                    itemId: (index) => value.items[index].ref,
-                    itemBuilder: (context, index) {
-                      final item = value.items[index];
-                      return SourcePoster(
-                        key: ValueKey('source-poster-${item.ref.externalId}'),
-                        item: item,
-                        onTap: () => context.push(sourceItemLocation(item.ref)),
-                      );
-                    },
-                  ),
-          ),
-        AsyncError(:final error) => SourceErrorView(
-            error: error,
-            account: ref
-                .watch(mediaSourceProvider(library.sourceId))
-                ?.source
-                .account,
-            onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
-          ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+        ),
+      ],
     );
   }
 }

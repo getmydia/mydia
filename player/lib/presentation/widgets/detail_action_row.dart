@@ -51,6 +51,10 @@ class DetailActionRow extends StatelessWidget {
   /// row takes only the width its buttons need, however many are showing.
   final bool compact;
 
+  /// Opens Fix match. Null hides the action, which is what callers pass when
+  /// the source cannot edit matches or the title cannot be matched.
+  final VoidCallback? onFixMatch;
+
   /// False hides Watched, for a server that cannot record it.
   final bool showWatched;
 
@@ -68,6 +72,7 @@ class DetailActionRow extends StatelessWidget {
     this.showDownload = true,
     this.isDownloaded = false,
     this.onShowMediaInfo,
+    this.onFixMatch,
     this.compact = false,
     this.showWatched = true,
     this.showFavorite = true,
@@ -141,6 +146,17 @@ class DetailActionRow extends StatelessWidget {
             highlighted: false,
             highlightColor: palette.textPrimary,
             onTap: onShowMediaInfo!,
+          ),
+        ),
+      if (onFixMatch != null)
+        (
+          'fixMatch',
+          _ActionButton(
+            icon: Icons.manage_search_rounded,
+            label: context.l10n.filesFixMatch,
+            highlighted: false,
+            highlightColor: palette.textPrimary,
+            onTap: onFixMatch!,
           ),
         ),
     ];
