@@ -107,7 +107,10 @@ Color? decodePortalAccent(DBusValue value) {
   if (v is! DBusStruct || v.children.length != 3) return null;
   final components = <double>[];
   for (final c in v.children) {
-    if (c is! DBusDouble || c.value < 0 || c.value > 1) return null;
+    // NaN passes both range comparisons, so check finiteness first.
+    if (c is! DBusDouble || !c.value.isFinite || c.value < 0 || c.value > 1) {
+      return null;
+    }
     components.add(c.value);
   }
   int byte(double d) => (d * 255).round();

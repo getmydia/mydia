@@ -87,6 +87,11 @@ void main() {
           const Color(0xFFFF0000));
     });
 
+    test('non-finite components are rejected, not thrown on', () {
+      expect(decodePortalAccent(rgb(double.nan, 0.5, 0.5)), isNull);
+      expect(decodePortalAccent(rgb(0.5, double.infinity, 0.5)), isNull);
+    });
+
     test('out of range means unset', () {
       expect(decodePortalAccent(rgb(-1, -1, -1)), isNull);
       expect(decodePortalAccent(rgb(0.5, 1.2, 0.5)), isNull);
