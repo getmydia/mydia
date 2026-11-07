@@ -43,15 +43,25 @@ class FilesScanController extends Notifier<ScanState> {
 
   final SourceId sourceId;
   Future<void>? _running;
+  Future<void>? _queued;
 
   @override
   ScanState build() => const ScanState();
 
   /// Scans every root, then matches what is new, then records the scan time.
-  /// A call while a scan runs joins it.
-  Future<void> rescan() => _running ??= _run().whenComplete(() {
-        _running = null;
-      });
+  /// A call while a scan runs queues one more pass after it, since the
+  /// running one read its roots before a folder just added; further calls
+  /// join that queued pass.
+  Future<void> rescan() {
+    final running = _running;
+    if (running == null) {
+      return _running = _run().whenComplete(() => _running = null);
+    }
+    return _queued ??= running.then((_) {
+      _queued = null;
+      return rescan();
+    });
+  }
 
   Future<void> _run() async {
     final media = ref.read(mediaSourceProvider(sourceId));

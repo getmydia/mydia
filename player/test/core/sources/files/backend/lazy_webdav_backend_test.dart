@@ -41,6 +41,17 @@ void main() {
     expect(reads, 2);
   });
 
+  test('close_closes_the_client_it_made', () async {
+    final backend = LazyWebDavBackend(
+      base: Uri.parse('https://nas.example.test/media'),
+      credentials: () async =>
+          const WebDavCredentials(user: 'u', password: 'p').toJson(),
+    );
+    backend.close();
+    // A closed client refuses before any socket is opened.
+    await expectLater(backend.probe(), throwsA(isA<BackendUnreachable>()));
+  });
+
   test('missing_credentials_are_refused_and_not_cached', () async {
     String? stored;
     final backend = LazyWebDavBackend(

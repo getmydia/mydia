@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import '../../../core/sources/connection/source_connection.dart'
     show isPrivateHost;
 import '../../../core/sources/files/backend/file_system_backend.dart';
+import '../../../core/sources/files/backend/webdav_backend.dart'
+    show webDavDecodePath;
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
@@ -85,8 +87,12 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     super.dispose();
   }
 
-  String get _rootDir {
-    final path = _base?.path ?? '';
+  String get _rootDir => _dirOf(_base);
+
+  /// The share's own folder as a backend path: decoded, since the backend
+  /// encodes what it is given (`/my%20share` would go out as `my%2520share`).
+  static String _dirOf(Uri? base) {
+    final path = webDavDecodePath(base?.path ?? '');
     return path.isEmpty ? '/' : path;
   }
 
@@ -116,7 +122,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ref.read(webDavConnectorProvider)(base, user, password, _client);
     try {
       await backend.probe();
-      final dir = base.path.isEmpty ? '/' : base.path;
+      final dir = _dirOf(base);
       final folders = await _listFolders(backend, dir);
       if (!mounted) return;
       final id = webDavAccountId(base);

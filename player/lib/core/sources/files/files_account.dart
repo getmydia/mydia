@@ -21,7 +21,10 @@ String normalizeWebDavUrl(Uri url) {
   while (path.endsWith('/')) {
     path = path.substring(0, path.length - 1);
   }
-  return '${url.scheme.toLowerCase()}://${url.host.toLowerCase()}$port$path';
+  // `Uri.host` drops an IPv6 address's brackets, which the URL needs back.
+  final host = url.host.toLowerCase();
+  final authority = host.contains(':') ? '[$host]' : host;
+  return '${url.scheme.toLowerCase()}://$authority$port$path';
 }
 
 /// `w` + the first 16 hex characters of SHA-256 over [normalizeWebDavUrl].

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/webdav_backend.dart';
+import 'package:player/core/sources/files/files_accounts.dart' show webDavBase;
 
 WebDavBackend backend(MockClient client) => WebDavBackend(
       base: Uri.parse('https://dav.example.com/media/'),
@@ -112,6 +113,82 @@ void main() {
       backend(MockClient((_) async => throw TimeoutException('x'))).probe(),
       throwsA(isA<BackendUnreachable>()),
     );
+  });
+
+  test('an_ipv6_host_keeps_its_brackets', () async {
+    late http.Request seen;
+    final b = WebDavBackend(
+      base: Uri.parse('http://[fd00::1]:8080/media/'),
+      user: 'user',
+      password: 'pass',
+      client: okClient(onRequest: (r) => seen = r),
+    );
+    final p = await b.playable('/media/A Film.mkv');
+    expect(p.url, 'http://[fd00::1]:8080/media/A%20Film.mkv');
+    await b.probe();
+    expect(seen.url.host, 'fd00::1');
+    expect(seen.url.port, 8080);
+  });
+
+  test('an_ipv6_share_url_normalizes_to_a_parsable_base', () {
+    final base = webDavBase(Uri.parse('http://[FD00::1]:8080/dav/'));
+    expect(base.host, 'fd00::1');
+    expect(base.port, 8080);
+    expect(base.path, '/dav');
+  });
+
+  test('an_encoded_base_path_is_probed_once_encoded', () async {
+    late http.Request seen;
+    await WebDavBackend(
+      base: Uri.parse('https://dav.example.com/my%20share/'),
+      user: 'user',
+      password: 'pass',
+      client: okClient(onRequest: (r) => seen = r),
+    ).probe();
+    expect(seen.url.path, '/my%20share/');
+  });
+
+  test('well_formed_xml_that_is_not_a_multistatus_is_unreachable', () {
+    final b = backend(MockClient((_) async => http.Response(
+        '<?xml version="1.0"?><html><body>Sign in</body></html>', 200)));
+    expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
+  });
+
+  test('an_entry_whose_type_is_denied_fails_the_listing', () {
+    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+        '<D:response><D:href>/media/</D:href><D:propstat><D:prop>'
+        '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
+        '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
+        '<D:response><D:href>/media/Private</D:href><D:propstat><D:prop>'
+        '<D:resourcetype/></D:prop>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat>'
+        '</D:response></D:multistatus>';
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
+  });
+
+  test('an_entry_answered_with_an_error_status_fails_the_listing', () {
+    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+        '<D:response><D:href>/media/Private</D:href>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
+        '</D:multistatus>';
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
+  });
+
+  test('a_404_propstat_for_other_properties_still_lists', () async {
+    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+        '<D:response><D:href>/media/A.mkv</D:href>'
+        '<D:propstat><D:prop><D:resourcetype/>'
+        '<D:getcontentlength>5</D:getcontentlength></D:prop>'
+        '<D:status>HTTP/1.1 200 OK</D:status></D:propstat>'
+        '<D:propstat><D:prop><D:getlastmodified/></D:prop>'
+        '<D:status>HTTP/1.1 404 Not Found</D:status></D:propstat>'
+        '</D:response></D:multistatus>';
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    final entries = await b.list('/media/');
+    expect(entries.single.name, 'A.mkv');
+    expect(entries.single.size, 5);
   });
 
   test('probe_is_propfind_depth_0_on_the_base_path', () async {

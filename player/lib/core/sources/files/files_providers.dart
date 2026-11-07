@@ -105,35 +105,48 @@ FilesMediaSource buildFilesSource(
         invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
   );
   late final FilesMediaSource media;
-  final events = ref
-      .read(connectionRefreshBusProvider)
-      .events
-      .listen((_) => unawaited(media.probe()));
+  // A resume or a network change probes again, and scans when the app sat
+  // in the background past the rescan interval: the source is not rebuilt
+  // then, so the check on open alone would not see it.
+  final events = ref.read(connectionRefreshBusProvider).events.listen((_) {
+    unawaited(media.probe());
+    _scanIfDue(ref, source, index);
+  });
+  final backend = ref.read(filesBackendBuilderProvider)(ref, source);
   media = FilesMediaSource(
     source: source,
-    backend: ref.read(filesBackendBuilderProvider)(ref, source),
+    backend: backend,
     index: index,
     progress: progress,
     matcher: matcher,
     tmdb: tmdb,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
-    onDispose: events.cancel,
+    onDispose: () {
+      unawaited(events.cancel());
+      if (backend is LazyWebDavBackend) backend.close();
+    },
   );
   unawaited(media.probe());
-  if (filesRescanDue(index.lastScanAt(), ref.read(filesClockProvider)())) {
-    // After this build: the scan reads the source back from its provider.
-    scheduleMicrotask(() {
-      if (!ref.mounted) return;
-      unawaited(ref
-          .read(filesScanProvider(source.id).notifier)
-          .rescan()
-          .catchError((Object e) {
-        debugPrint('[FilesSource] Scan on open failed: $e');
-      }));
-    });
-  }
+  _scanIfDue(ref, source, index);
   return media;
+}
+
+/// Starts a scan when the last one is older than [kFilesRescanAfter]. A
+/// scan already running is left to finish, with nothing queued after it.
+void _scanIfDue(Ref ref, Source source, FileLibraryIndex index) {
+  if (!filesRescanDue(index.lastScanAt(), ref.read(filesClockProvider)())) {
+    return;
+  }
+  // After this build: the scan reads the source back from its provider.
+  scheduleMicrotask(() {
+    if (!ref.mounted) return;
+    final scan = ref.read(filesScanProvider(source.id).notifier);
+    if (ref.read(filesScanProvider(source.id)).running) return;
+    unawaited(scan.rescan().catchError((Object e) {
+      debugPrint('[FilesSource] Scan on open failed: $e');
+    }));
+  });
 }
 
 /// Folders on this device: plain paths, and a probe that checks every root,
@@ -173,17 +186,28 @@ class LocalFoldersBackend implements FileSystemBackend {
 /// missing or unreadable credential is a refused one, and a refused call
 /// drops the built backend, so the next call reads the credentials again
 /// (after the viewer signs in anew).
+///
+/// Every backend it builds shares one HTTP client, so dropping one leaks
+/// nothing and a request still in flight on it finishes. [close] closes that
+/// client unless it was given one, which its owner closes.
 class LazyWebDavBackend implements FileSystemBackend {
   LazyWebDavBackend({
     required this.base,
     required this.credentials,
     http.Client? client,
-  }) : _client = client;
+  })  : _owned = client == null ? http.Client() : null,
+        _given = client;
 
   final Uri base;
   final Future<String?> Function() credentials;
-  final http.Client? _client;
+  final http.Client? _owned;
+  final http.Client? _given;
   Future<WebDavBackend>? _backend;
+
+  http.Client get _client => (_given ?? _owned)!;
+
+  /// Closes the client this backend made. Called when its source goes.
+  void close() => _owned?.close();
 
   Future<T> _call<T>(Future<T> Function(WebDavBackend b) run) async {
     final b = await _resolve();

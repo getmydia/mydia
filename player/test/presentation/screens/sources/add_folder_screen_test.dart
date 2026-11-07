@@ -79,6 +79,7 @@ void main() {
     final box = (await tester.runAsync(() =>
         Hive.openBox<Map<dynamic, dynamic>>('add_folder_screen',
             bytes: Uint8List(0))))!;
+    addTearDown(() => tester.runAsync(box.close));
     final store = InMemorySourceStore();
     final router = GoRouter(
       initialLocation: '/add',

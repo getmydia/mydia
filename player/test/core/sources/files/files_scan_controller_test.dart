@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/connection/connection_refresh_bus.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -26,6 +28,7 @@ Future<void> _settle() async {
 
 void main() {
   final now = DateTime.utc(2026, 6, 1, 12);
+  var clock = now;
   late FilesFixture f;
   late FakeBackend backend;
 
@@ -44,7 +47,7 @@ void main() {
       relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
       if (!realBackend)
         filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
-      filesClockProvider.overrideWithValue(() => now),
+      filesClockProvider.overrideWithValue(() => clock),
     ]);
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
@@ -52,6 +55,7 @@ void main() {
   }
 
   setUp(() async {
+    clock = now;
     f = await FilesFixture.create(seed: false);
     await f.index.putRoot(const LibraryRoot(
       id: 'rm',
@@ -150,6 +154,55 @@ void main() {
     expect(index.lastScanAt()?.toUtc(), now);
   });
 
+  test('a_resume_past_the_interval_scans', () async {
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    c.read(mediaSourceProvider(filesLocalSource.id));
+    await _settle();
+    expect(backend.listed, isEmpty);
+
+    c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
+    await _settle();
+    expect(backend.listed, isEmpty);
+
+    clock = now.add(const Duration(hours: 7));
+    c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
+    await _settle();
+    expect(backend.listed, ['/media/films']);
+  });
+
+  test('a_rescan_asked_for_during_a_scan_runs_again_after_it', () async {
+    final gated = _GatedBackend({
+      '/media/films/Amber Tide (2019).mkv': 10,
+      '/media/new/Low Orbit (2022).mkv': 20,
+    });
+    backend = gated;
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    final scans = c.read(filesScanProvider(id).notifier);
+
+    // The container's own index, which the scans read.
+    final index = c.read(filesIndexProvider(filesLocalSource.account.id));
+    final first = scans.rescan();
+    await _settle();
+    await index.putRoot(const LibraryRoot(
+      id: 'rn',
+      path: '/media/new',
+      kind: FilesLibraryKind.movies,
+      title: 'New',
+    ));
+    final second = scans.rescan();
+    final third = scans.rescan();
+    gated.gate.complete();
+    await Future.wait([first, second, third]);
+
+    expect(gated.listed.where((d) => d == '/media/films'), hasLength(2));
+    expect(gated.listed.where((d) => d == '/media/new'), hasLength(1));
+    expect(index.files(), hasLength(2));
+  });
+
   test('a_scan_that_throws_still_finishes', () async {
     await f.index.setLastScanAt(now);
     final c = await container(names: _ThrowingNames());
@@ -232,6 +285,19 @@ void main() {
       expect(media.connection, SourceConnectionStatus.local);
     });
   });
+}
+
+/// Holds every listing until [gate] completes.
+class _GatedBackend extends FakeBackend {
+  _GatedBackend(super.files);
+
+  final gate = Completer<void>();
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    await gate.future;
+    return super.list(dir);
+  }
 }
 
 class _ThrowingNames extends FakeMediaNames {

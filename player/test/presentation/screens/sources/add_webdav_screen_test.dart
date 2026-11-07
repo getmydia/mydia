@@ -42,10 +42,15 @@ int _boxes = 0;
 /// restart of the app would.
 Future<_Harness> _pump(WidgetTester tester,
     {String? reauthAccountId, _Harness? reuse}) async {
-  final box = reuse?.box ??
-      (await tester.runAsync(() => Hive.openBox<Map<dynamic, dynamic>>(
-          'webdav_screen_${_boxes++}',
-          bytes: Uint8List(0))))!;
+  var box = reuse?.box;
+  if (box == null) {
+    final opened = (await tester.runAsync(() =>
+        Hive.openBox<Map<dynamic, dynamic>>('webdav_screen_${_boxes++}',
+            bytes: Uint8List(0))))!;
+    // Only a box this pump opened: a reused one belongs to the first pump.
+    addTearDown(() => tester.runAsync(opened.close));
+    box = opened;
+  }
   final h = _Harness(
     box,
     reuse?.store ?? InMemorySourceStore(),
@@ -211,6 +216,13 @@ void main() {
     expect(roots['/dav/Films']!.title, 'Films');
     expect(roots['/dav/Shows']!.kind, FilesLibraryKind.series);
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
+  });
+
+  testWidgets('an encoded share path is listed decoded', (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester, url: 'https://nas.example.test/my%20dav/');
+    expect(h.connects.single.$1.path, '/my%20dav');
+    expect(h.backend.listed.first, '/my dav');
   });
 
   testWidgets('signing in again fills the address and replaces the password',

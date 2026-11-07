@@ -11,6 +11,20 @@ import 'file_system_backend.dart';
 /// unreachable.
 const kWebDavTimeout = Duration(seconds: 20);
 
+/// [path], a URL path as typed or as a server sends it (`/my%20share`), in
+/// the decoded form [WebDavBackend] takes and hands out (`/my share`). A
+/// segment that is not valid UTF-8 (a Latin-1 name, say) is kept as sent,
+/// so the backend sends the same bytes back.
+String webDavDecodePath(String path) => path.split('/').map((s) {
+      try {
+        return Uri.decodeComponent(s);
+      } on FormatException {
+        return s;
+      } on ArgumentError {
+        return s;
+      }
+    }).join('/');
+
 const _propfindBody = '<?xml version="1.0" encoding="utf-8"?>'
     '<d:propfind xmlns:d="DAV:"><d:prop>'
     '<d:resourcetype/><d:getcontentlength/><d:getlastmodified/>'
@@ -63,7 +77,7 @@ class WebDavBackend implements FileSystemBackend {
 
   @override
   Future<void> probe() async {
-    await _propfind(_asCollection(_base.path), depth: 0);
+    await _propfind(_asCollection(webDavDecodePath(_base.path)), depth: 0);
   }
 
   /// [dir] as a collection URL, with its trailing slash (RFC 4918, 5.2).
@@ -71,11 +85,17 @@ class WebDavBackend implements FileSystemBackend {
   /// requested without one with a 301, which reads as unreachable.
   static String _asCollection(String dir) => dir.endsWith('/') ? dir : '$dir/';
 
+  /// [path] is decoded, as [list] hands it out. Built with [Uri.new], which
+  /// brackets an IPv6 host and keeps the escapes [_encodeSegment] wrote.
   Uri _url(String path) {
     final encoded = path.split('/').map(_encodeSegment).join('/');
     final withSlash = encoded.startsWith('/') ? encoded : '/$encoded';
-    final port = _base.hasPort ? ':${_base.port}' : '';
-    return Uri.parse('${_base.scheme}://${_base.host}$port$withSlash');
+    return Uri(
+      scheme: _base.scheme,
+      host: _base.host,
+      port: _base.hasPort ? _base.port : null,
+      path: withSlash,
+    );
   }
 
   Future<String> _propfind(String path, {required int depth}) async {
@@ -111,8 +131,14 @@ class WebDavBackend implements FileSystemBackend {
     } on XmlException catch (e) {
       throw BackendUnreachable('malformed multistatus: ${e.message}');
     }
+    // A login page or a proxy's error page is well-formed XML too; read as
+    // an empty folder it would drop every indexed file under it.
+    final root = doc.childElements.firstOrNull;
+    if (root == null || !_isDav('multistatus')(root)) {
+      throw const BackendUnreachable('not a WebDAV multistatus response');
+    }
     final entries = <FileEntry>[];
-    for (final response in doc.descendantElements.where(_isDav('response'))) {
+    for (final response in root.childElements.where(_isDav('response'))) {
       final href = response.descendantElements
           .where(_isDav('href'))
           .map((e) => e.innerText.trim())
@@ -121,6 +147,12 @@ class WebDavBackend implements FileSystemBackend {
       final path = _decodePath(href);
       final isDir = href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
+      // Without a readable resourcetype a folder (one the server denies,
+      // say) cannot be told from a file. Skipping it would drop what is
+      // indexed under it, so the listing fails instead.
+      if (!isDir && !_classified(response)) {
+        throw BackendUnreachable('cannot tell what $href is');
+      }
       final length = response.descendantElements
           .where(_isDav('getcontentlength'))
           .map((e) => int.tryParse(e.innerText.trim()))
@@ -146,19 +178,34 @@ class WebDavBackend implements FileSystemBackend {
       e.name.local == local &&
       (e.name.namespaceUri == null || e.name.namespaceUri == 'DAV:');
 
+  static final _statusCode = RegExp(r'^HTTP/\S+\s+(\d{3})');
+
+  /// Whether a `<status>` child of [e], if any, is 2xx.
+  static bool _statusOk(XmlElement e) {
+    final text = e.childElements
+        .where(_isDav('status'))
+        .map((s) => s.innerText.trim())
+        .firstOrNull;
+    if (text == null) return true;
+    final code = int.tryParse(_statusCode.firstMatch(text)?.group(1) ?? '');
+    return code != null && code >= 200 && code < 300;
+  }
+
+  /// Whether [response] says what its resource is: the response itself is
+  /// not an error, and the propstat holding `resourcetype` (when the server
+  /// sent one) is 2xx.
+  static bool _classified(XmlElement response) {
+    if (!_statusOk(response)) return false;
+    final typed = response.childElements
+        .where(_isDav('propstat'))
+        .where((p) => p.descendantElements.any(_isDav('resourcetype')))
+        .firstOrNull;
+    return typed == null || _statusOk(typed);
+  }
+
   static String _decodePath(String href) {
     final raw = href.contains('://') ? Uri.parse(href).path : href;
-    return raw.split('/').map((s) {
-      try {
-        return Uri.decodeComponent(s);
-      } on FormatException {
-        // Not valid UTF-8 (a Latin-1 name, say): keep the segment as the
-        // server sent it so [_encodeSegment] can send the same bytes back.
-        return s;
-      } on ArgumentError {
-        return s;
-      }
-    }).join('/');
+    return webDavDecodePath(raw);
   }
 
   static final _percentByte = RegExp(r'%[0-9A-Fa-f]{2}');
