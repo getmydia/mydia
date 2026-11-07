@@ -9,7 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.OverviewComponents do
   import MydiaWeb.MediaLive.Show.Helpers,
     only: [get_cast: 2, get_crew: 1, get_overview: 1, trailer_videos: 1]
 
-  alias MydiaWeb.PersonComponents
+  alias MydiaWeb.{PersonComponents, PosterCardComponents}
 
   # The row scrolls sideways, so this reaches past the leads without costing
   # height; TMDB metadata stores the first 20 billed.
@@ -79,12 +79,11 @@ defmodule MydiaWeb.MediaLive.Show.OverviewComponents do
 
       <%!-- Its own id prefix: the title dialog can render the same actor at
             the same time, under the default prefix. --%>
-      <div
+      <PosterCardComponents.poster_rail
         :if={@cast != []}
         id="media-cast-row"
         role="list"
         aria-label={gettext("Cast")}
-        class="flex gap-3 overflow-x-auto pb-2 snap-x"
       >
         <div
           :for={{actor, index} <- Enum.with_index(@cast)}
@@ -98,7 +97,7 @@ defmodule MydiaWeb.MediaLive.Show.OverviewComponents do
             id_prefix="media-cast-person"
           />
         </div>
-      </div>
+      </PosterCardComponents.poster_rail>
     </div>
     """
   end
