@@ -32,6 +32,25 @@ class ExperimentalBadge extends StatelessWidget {
   }
 }
 
+/// A tile title followed by an [ExperimentalBadge]. The badge wraps under the
+/// title on a narrow screen or with large text, instead of taking width from
+/// the title and subtitle the way a trailing widget would.
+class ExperimentalTitle extends StatelessWidget {
+  const ExperimentalTitle({super.key, required this.title});
+
+  final Widget title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [title, const ExperimentalBadge()],
+    );
+  }
+}
+
 /// The notice at the top of the Add folder and Add WebDAV screens.
 class FilesExperimentalNotice extends StatelessWidget {
   const FilesExperimentalNotice({super.key});

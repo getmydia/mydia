@@ -114,6 +114,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('add-folder-experimental')),
+            matching: find.textContaining('very experimental')),
+        findsOneWidget);
     final save = find.byKey(const Key('add-folder-save'));
     expect(tester.widget<FilledButton>(save).onPressed, isNull);
 

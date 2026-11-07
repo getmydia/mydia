@@ -62,18 +62,18 @@ class AddSourceScreen extends ConsumerWidget {
                 ListTile(
                   key: const Key('add-source-folder'),
                   leading: const Icon(Icons.folder_rounded),
-                  title: Text(context.l10n.sourcesAddFolderTitle),
+                  title: ExperimentalTitle(
+                      title: Text(context.l10n.sourcesAddFolderTitle)),
                   subtitle: Text(context.l10n.sourcesAddFolderSubtitle),
-                  trailing: const ExperimentalBadge(),
                   onTap: () => context.push('/sources/add/folder'),
                 ),
               if (!isWeb)
                 ListTile(
                   key: const Key('add-source-webdav'),
                   leading: const Icon(Icons.folder_shared_rounded),
-                  title: const Text('WebDAV'), // l10n-ignore: protocol name
+                  title: const ExperimentalTitle(
+                      title: Text('WebDAV')), // l10n-ignore: protocol name
                   subtitle: Text(context.l10n.sourcesAddWebDavSubtitle),
-                  trailing: const ExperimentalBadge(),
                   onTap: () => context.push('/sources/add/webdav'),
                 ),
               ListTile(

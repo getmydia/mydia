@@ -80,13 +80,17 @@ void main() {
       ),
     ));
     for (final key in ['add-source-folder', 'add-source-webdav']) {
-      expect(
-          find.descendant(
-              of: find.byKey(Key(key)),
-              matching: find.byType(ExperimentalBadge)),
-          findsOneWidget);
+      final label = find.descendant(
+          of: find.byKey(Key(key)), matching: find.text('Experimental'));
+      expect(label, findsOneWidget);
+      expect(label.hitTestable(), findsOneWidget);
     }
-    for (final key in ['add-source-plex', 'add-source-mydia']) {
+    for (final key in [
+      'add-source-plex',
+      'add-source-jellyfin',
+      'add-source-stash',
+      'add-source-mydia',
+    ]) {
       expect(
           find.descendant(
               of: find.byKey(Key(key)),
