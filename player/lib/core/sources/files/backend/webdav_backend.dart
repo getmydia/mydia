@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
@@ -147,11 +148,15 @@ class WebDavBackend implements FileSystemBackend {
       final path = _decodePath(href);
       final isDir = href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
-      // Without a readable resourcetype a folder (one the server denies,
-      // say) cannot be told from a file. Skipping it would drop what is
-      // indexed under it, so the listing fails instead.
-      if (!isDir && !_classified(response)) {
-        throw BackendUnreachable('cannot tell what $href is');
+      // An entry the server answers with an error. A folder must not be
+      // read as absent, which would drop what is indexed under it, so the
+      // listing fails. Anything else (one file the server denies) owns
+      // nothing indexed, and failing for it would freeze the library: it
+      // is left out.
+      if (!_classified(response)) {
+        if (isDir) throw BackendUnreachable('cannot read folder $href');
+        debugPrint('[WebDavBackend] Skipping $href: the server refused it');
+        continue;
       }
       final length = response.descendantElements
           .where(_isDav('getcontentlength'))

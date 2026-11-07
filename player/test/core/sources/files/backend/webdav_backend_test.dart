@@ -154,24 +154,41 @@ void main() {
     expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
   });
 
-  test('an_entry_whose_type_is_denied_fails_the_listing', () {
+  test('a_denied_file_is_left_out_and_the_rest_lists', () async {
     const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/</D:href><D:propstat><D:prop>'
         '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
         '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
-        '<D:response><D:href>/media/Private</D:href><D:propstat><D:prop>'
+        '<D:response><D:href>/media/Locked.mkv</D:href><D:propstat><D:prop>'
         '<D:resourcetype/></D:prop>'
         '<D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat>'
+        '</D:response>'
+        '<D:response><D:href>/media/Gone.mkv</D:href>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
+        '<D:response><D:href>/media/Open.mkv</D:href><D:propstat><D:prop>'
+        '<D:resourcetype/><D:getcontentlength>5</D:getcontentlength>'
+        '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>'
         '</D:response></D:multistatus>';
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    final entries = await b.list('/media/');
+    expect(entries.map((e) => e.name), ['Open.mkv']);
+  });
+
+  test('a_denied_folder_fails_the_listing', () {
+    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+        '<D:response><D:href>/media/Private/</D:href>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
+        '</D:multistatus>';
     final b = backend(MockClient((_) async => http.Response(xml, 207)));
     expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
   });
 
-  test('an_entry_answered_with_an_error_status_fails_the_listing', () {
+  test('a_folder_whose_type_is_denied_fails_the_listing', () {
     const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
-        '<D:response><D:href>/media/Private</D:href>'
-        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
-        '</D:multistatus>';
+        '<D:response><D:href>/media/Private</D:href><D:propstat><D:prop>'
+        '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat>'
+        '</D:response></D:multistatus>';
     final b = backend(MockClient((_) async => http.Response(xml, 207)));
     expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
   });
