@@ -61,10 +61,18 @@ class FileMatcher {
     String groupKey, {
     required bool isShow,
     int? tmdbId,
+  }) =>
+      _serialized(
+          groupKey, () => _pin(groupKey, isShow: isShow, tmdbId: tmdbId));
+
+  Future<void> _pin(
+    String groupKey, {
+    required bool isShow,
+    int? tmdbId,
   }) async {
     final files = _filesOf(groupKey, isShow);
-    final previous = _index.group(groupKey);
     if (tmdbId == null) {
+      final previous = _index.group(groupKey);
       await _migrateToFiles(_Group(groupKey, isShow, files), previous?.tmdbId);
       await _index.putGroup(GroupMatch(
         groupKey: groupKey,
@@ -75,6 +83,9 @@ class FileMatcher {
     } else {
       final group = _Group(groupKey, isShow, files);
       await _fetchAndStore(group, tmdbId);
+      // Read after the fetch: what the group resolves to now is where its
+      // state is.
+      final previous = _index.group(groupKey);
       await _migrateProgress(group, tmdbId, previous?.tmdbId);
       await _index.putGroup(GroupMatch(
         groupKey: groupKey,
@@ -135,12 +146,36 @@ class FileMatcher {
 
   // Matching
 
-  Future<void> _matchOne(_Group g) async {
+  /// The last operation queued on each group key.
+  final _locks = <String, Future<void>>{};
+
+  /// Runs [body] after every earlier [pin] or automatic match of [key] has
+  /// ended, so the two never interleave on one group: a pin either lands
+  /// before the search (and the search sees it) or after it (and moves the
+  /// state from what the search chose).
+  Future<T> _serialized<T>(String key, Future<T> Function() body) {
+    final previous = _locks[key] ?? Future<void>.value();
+    final done = previous.then((_) => body());
+    final settled = done.then<void>((_) {}, onError: (Object _) {});
+    _locks[key] = settled;
+    unawaited(settled.then((_) {
+      if (identical(_locks[key], settled)) _locks.remove(key);
+    }));
+    return done;
+  }
+
+  Future<void> _matchOne(_Group g) => _serialized(g.key, () => _matchOneNow(g));
+
+  Future<void> _matchOneNow(_Group g) async {
     try {
       final existing = _index.group(g.key);
       if (existing != null && existing.pinned) {
-        await _fetchAndStore(g, existing.tmdbId!,
-            onlySeasons: _missingSeasons(g, existing.tmdbId!));
+        // Pinned, possibly by a pin queued ahead of this match.
+        final pinnedTo = existing.tmdbId;
+        if (pinnedTo == null) return;
+        final missing = _missingSeasons(g, pinnedTo);
+        if (!g.isShow || missing.isEmpty) return;
+        await _fetchAndStore(g, pinnedTo, onlySeasons: missing);
         await _onGroupLanded?.call();
         return;
       }

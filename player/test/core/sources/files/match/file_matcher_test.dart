@@ -532,9 +532,9 @@ void main() {
     final pending = matcher.matchPending();
     await Future<void>.delayed(Duration.zero);
 
-    await matcher.pin('coppervalley|2018', isShow: false);
+    final pinned = matcher.pin('coppervalley|2018', isShow: false);
     relay.gate!.complete();
-    await pending;
+    await Future.wait([pending, pinned]);
 
     final g = index.group('coppervalley|2018')!;
     expect((g.tmdbId, g.pinned), (null, true));
@@ -567,13 +567,49 @@ void main() {
     // The automatic match is now inside its migration, holding a save.
     await gated.held.future;
 
-    await m.pin('coppervalley|2018', isShow: false, tmdbId: 8);
+    final pinned = m.pin('coppervalley|2018', isShow: false, tmdbId: 8);
     gated.release();
-    await pending;
+    await Future.wait([pending, pinned]);
 
     final g = index.group('coppervalley|2018')!;
     expect((g.tmdbId, g.pinned), (8, true));
     expect(gated.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
+    expect(gated.get(progressKey(ref(ItemKind.movie, '7'))), isNull);
+  });
+
+  test('a pin slower than the automatic match takes its state along', () async {
+    final slow = _SlowFor(relay, 8);
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['Copper Valley (2018).mkv']);
+    final m = FileMatcher(
+      tmdb: slow,
+      names: FakeMediaNames(),
+      index: index,
+      progress: progress,
+      sourceId: source,
+      now: () => t0.add(const Duration(days: 1)),
+    );
+    final p = provisionalKey('coppervalley|2018');
+    await saveProgress(ItemKind.movie, p, 'movie');
+    await index.setWatched(p, true);
+
+    // Started together; the pin's details come back only after the
+    // automatic match has finished.
+    final automatic = m.matchPending();
+    final pinned = m.pin('coppervalley|2018', isShow: false, tmdbId: 8);
+    await automatic;
+    slow.gate.complete();
+    await pinned;
+
+    final g = index.group('coppervalley|2018')!;
+    expect((g.tmdbId, g.pinned), (8, true));
+    expect(progress.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
+    expect(index.watched(), contains('8'));
+    for (final stale in [p, '7']) {
+      expect(progress.get(progressKey(ref(ItemKind.movie, stale))), isNull,
+          reason: stale);
+      expect(index.watched(), isNot(contains(stale)), reason: stale);
+    }
   });
 
   test('rematching one of two groups on a movie copies its state', () async {
@@ -611,6 +647,24 @@ class _FirstSaveHeld extends InMemoryPlaybackProgressStore {
       await gate.future;
     }
     return super.save(progress);
+  }
+}
+
+/// Holds the details of movie [held] until [gate] completes.
+class _SlowFor extends RelayTmdb {
+  _SlowFor(this.inner, this.held) : super();
+  final FakeRelay inner;
+  final int held;
+  final gate = Completer<void>();
+
+  @override
+  Future<List<TmdbCandidate>> searchMovies(String query, {int? year}) =>
+      inner.searchMovies(query, year: year);
+
+  @override
+  Future<MatchedMovie> movie(int id) async {
+    if (id == held) await gate.future;
+    return inner.movie(id);
   }
 }
 
