@@ -146,9 +146,12 @@ class FileMatcher {
       }
 
       final first = g.files.first.parsed!;
+      // A show's search leaves the year out: TMDB's first_air_date_year
+      // drops every show that premiered in another year, while the year in
+      // a file name is often a later season's, so the scorer weighs it
+      // instead.
       final candidates = g.isShow
-          ? await _limited(
-              () => _tmdb.searchShows(first.title, year: first.year))
+          ? await _limited(() => _tmdb.searchShows(first.title))
           : await _limited(
               () => _tmdb.searchMovies(first.title, year: first.year));
       final hit = _names.score(
@@ -157,7 +160,11 @@ class FileMatcher {
         isShow: g.isShow,
         candidates: candidates,
       );
+      if (_pinnedMeanwhile(g.key)) return;
       if (hit == null) {
+        // State kept under the provisional id (or a previous match) while
+        // the group waited goes to the files, which is where Folders reads.
+        await _migrateToFiles(g, existing?.tmdbId);
         await _index.putGroup(GroupMatch(
           groupKey: g.key,
           isShow: g.isShow,
@@ -165,6 +172,7 @@ class FileMatcher {
         ));
       } else {
         await _fetchAndStore(g, hit.id);
+        if (_pinnedMeanwhile(g.key)) return;
         await _migrateProgress(g, hit.id, existing?.tmdbId);
         await _index.putGroup(GroupMatch(
           groupKey: g.key,
@@ -177,6 +185,22 @@ class FileMatcher {
     } on RelayUnavailable catch (e) {
       debugPrint('[FileMatcher] ${g.key} stays provisional: $e');
     }
+  }
+
+  /// Whether Fix match pinned [key] while an automatic search for it was
+  /// under way: the viewer's choice stands, and the search result is
+  /// dropped.
+  bool _pinnedMeanwhile(String key) => _index.group(key)?.pinned ?? false;
+
+  /// Whether a group other than [g] still resolves to [tmdbId]: the state
+  /// under that id is then theirs too, and is copied rather than moved.
+  bool _sharedWithOtherGroup(_Group g, int tmdbId) {
+    for (final key in _groups().keys) {
+      if (key == g.key) continue;
+      final m = _index.group(key);
+      if (m != null && m.tmdbId == tmdbId && m.isShow == g.isShow) return true;
+    }
+    return false;
   }
 
   Future<void> _fetchAndStore(
@@ -238,29 +262,45 @@ class FileMatcher {
   Future<void> _migrateProgress(
       _Group g, int newTmdbId, int? previousTmdb) async {
     final newBase = tmdbBase(newTmdbId);
+    final sharedBase = previousTmdb != null &&
+            previousTmdb != newTmdbId &&
+            _sharedWithOtherGroup(g, previousTmdb)
+        ? tmdbBase(previousTmdb)
+        : null;
     final oldBases = <String>{
       provisionalKey(g.key),
       if (previousTmdb != null && previousTmdb != newTmdbId)
         tmdbBase(previousTmdb),
     };
     final watched = _index.watched();
+    // A file holding several episodes (S01E01-E02) stands in for each of
+    // them, so its state goes to all of them in one move: one move per
+    // episode would delete it after the first.
+    final fromFiles = <String, List<String>>{};
+    final type = g.isShow ? 'episode' : 'movie';
     for (final item in _items(g)) {
       final target = item.id(newBase);
-      final type = _mediaType(item.kind);
       for (final oldBase in oldBases) {
         await _move(item.kind, item.id(oldBase), [target], watched,
-            mediaType: type);
+            mediaType: type, keepSource: oldBase == sharedBase);
       }
       for (final key in item.fileIds) {
-        await _move(ItemKind.video, unmatchedFileId(key), [target], watched,
-            mediaType: type);
+        fromFiles.putIfAbsent(key, () => []).add(target);
       }
+    }
+    for (final MapEntry(key: key, value: targets) in fromFiles.entries) {
+      await _move(ItemKind.video, unmatchedFileId(key), targets, watched,
+          mediaType: type);
     }
   }
 
   /// The reverse: a matched group is unmatched, so each movie or episode's
   /// progress is copied to every one of its files' unmatched ids.
   Future<void> _migrateToFiles(_Group g, int? previousTmdb) async {
+    final sharedBase =
+        previousTmdb != null && _sharedWithOtherGroup(g, previousTmdb)
+            ? tmdbBase(previousTmdb)
+            : null;
     final oldBases = <String>{
       provisionalKey(g.key),
       if (previousTmdb != null) tmdbBase(previousTmdb),
@@ -270,26 +310,23 @@ class FileMatcher {
       if (item.fileIds.isEmpty) continue;
       final targets = [for (final k in item.fileIds) unmatchedFileId(k)];
       for (final oldBase in oldBases) {
-        await _move(item.kind, item.id(oldBase), targets, watched);
+        await _move(item.kind, item.id(oldBase), targets, watched,
+            keepSource: oldBase == sharedBase);
       }
     }
   }
 
-  static String? _mediaType(ItemKind kind) => switch (kind) {
-        ItemKind.movie => 'movie',
-        ItemKind.episode => 'episode',
-        _ => null,
-      };
-
   /// Moves one item's record and watched flag from [oldId] to every id in
   /// [newIds]. Where a record already exists at a target, the newer
-  /// `updatedAt` wins.
+  /// `updatedAt` wins. With [keepSource] the state is copied: another group
+  /// still shows [oldId].
   Future<void> _move(
     ItemKind kind,
     String oldId,
     List<String> newIds,
     Set<String> watched, {
     String? mediaType,
+    bool keepSource = false,
   }) async {
     ItemRef ref(ItemKind k, String id) =>
         ItemRef(sourceId: _sourceId, kind: k, externalId: id);
@@ -311,13 +348,13 @@ class FileMatcher {
           syncedAt: old.syncedAt,
         ));
       }
-      await _progress.delete(oldKey);
+      if (!keepSource) await _progress.delete(oldKey);
     }
     if (watched.contains(oldId)) {
       for (final newId in newIds) {
         await _index.setWatched(newId, true);
       }
-      await _index.setWatched(oldId, false);
+      if (!keepSource) await _index.setWatched(oldId, false);
     }
   }
 

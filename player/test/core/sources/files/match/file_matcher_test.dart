@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -24,11 +25,21 @@ class FakeRelay extends RelayTmdb {
   Duration delay = Duration.zero;
   final Map<String, int> ids = {};
 
+  /// The year each search asked for, shows under `tv:`.
+  final searchYears = <String, int?>{};
+
+  /// Titles a search returns besides [ids], each with the id given.
+  final Map<String, int> extra = {};
+
+  /// When set, every call waits for it.
+  Completer<void>? gate;
+
   Future<T> _call<T>(T Function() body) async {
     inFlight++;
     if (inFlight > maxInFlight) maxInFlight = inFlight;
     try {
       await Future<void>.delayed(delay);
+      await gate?.future;
       if (down) throw RelayUnavailable('down');
       return body();
     } finally {
@@ -38,17 +49,24 @@ class FakeRelay extends RelayTmdb {
 
   @override
   Future<List<TmdbCandidate>> searchMovies(String query, {int? year}) =>
+      _search(query, year);
+
+  Future<List<TmdbCandidate>> _search(String query, int? year,
+          {String label = ''}) =>
       _call(() {
         searches.add(query);
+        searchYears['$label$query'] = year;
         final id = ids[query];
         return [
-          if (id != null) TmdbCandidate(id: id, title: query, year: year)
+          if (id != null) TmdbCandidate(id: id, title: query, year: year),
+          for (final e in extra.entries)
+            TmdbCandidate(id: e.value, title: e.key, year: year),
         ];
       });
 
   @override
   Future<List<TmdbCandidate>> searchShows(String query, {int? year}) =>
-      searchMovies(query, year: year);
+      _search(query, year, label: 'tv:');
 
   @override
   Future<MatchedMovie> movie(int id) =>
@@ -428,6 +446,115 @@ void main() {
     expect(progress.get(progressKey(ref(ItemKind.show, '8'))), isNull);
     expect(index.watched(), contains('7'));
     expect(index.watched(), isNot(contains('8')));
+  });
+
+  test('candidates_below_the_threshold_leave_the_group_unmatched', () async {
+    relay.extra['Some Other Film'] = 41;
+    await addFiles(['Copper Valley (2018).mkv']);
+    await matcher.matchPending();
+    final g = index.group('coppervalley|2018')!;
+    expect(g.tmdbId, isNull);
+    expect(g.pinned, isFalse);
+    expect(index.movie(41), isNull);
+  });
+
+  test('a provisional group searched with no winner hands its state to files',
+      () async {
+    await addFiles(['Copper Valley (2018).mkv']);
+    final p = provisionalKey('coppervalley|2018');
+    await saveProgress(ItemKind.movie, movieId(p), 'movie');
+    await index.setWatched(movieId(p), true);
+
+    await matcher.matchPending();
+
+    final fid = unmatchedFileId(fkey('Copper Valley (2018).mkv'));
+    expect(index.group('coppervalley|2018')!.tmdbId, isNull);
+    expect(progress.get(progressKey(ref(ItemKind.video, fid)))!.positionSeconds,
+        60);
+    expect(progress.get(progressKey(ref(ItemKind.movie, p))), isNull);
+    expect(index.watched(), contains(fid));
+    expect(index.watched(), isNot(contains(p)));
+  });
+
+  test('a multi-episode file hands its state to every episode on match',
+      () async {
+    const parsed = ParsedName(
+      path: 'Moon Harbor S01E01E02.mkv',
+      isEpisode: true,
+      title: 'Moon Harbor',
+      groupKey: 'tv:moonharbor|',
+      season: 1,
+      episode: 1,
+      episodeEnd: 2,
+    );
+    await index.putFiles([
+      IndexedFile(
+        key: fkey(parsed.path),
+        rootId: 'r',
+        path: parsed.path,
+        size: 1,
+        modified: t0,
+        firstSeen: t0,
+        parsed: parsed,
+      ),
+    ]);
+    await matcher.matchPending();
+    expect(index.group('tv:moonharbor|')!.tmdbId, isNull);
+    final fid = unmatchedFileId(fkey(parsed.path));
+    await saveProgress(ItemKind.video, fid, 'episode');
+    await index.setWatched(fid, true);
+
+    await matcher.pin('tv:moonharbor|', isShow: true, tmdbId: 3);
+
+    for (final id in ['3-1-1', '3-1-2']) {
+      expect(progress.get(progressKey(ref(ItemKind.episode, id))), isNotNull,
+          reason: id);
+      expect(index.watched(), contains(id));
+    }
+    expect(progress.get(progressKey(ref(ItemKind.video, fid))), isNull);
+  });
+
+  test('a show search leaves the year to the scorer', () async {
+    relay.ids['Moon Harbor'] = 3;
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(
+        ['Moon Harbor (2019) S02E01.mkv', 'Copper Valley (2018).mkv']);
+    await matcher.matchPending();
+    expect(relay.searchYears['tv:Moon Harbor'], isNull);
+    expect(relay.searchYears['Copper Valley'], 2018);
+    expect(index.group('tv:moonharbor|2019')!.tmdbId, 3);
+  });
+
+  test('a pin made while the search runs is not overwritten', () async {
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['Copper Valley (2018).mkv']);
+    relay.gate = Completer<void>();
+    final pending = matcher.matchPending();
+    await Future<void>.delayed(Duration.zero);
+
+    await matcher.pin('coppervalley|2018', isShow: false);
+    relay.gate!.complete();
+    await pending;
+
+    final g = index.group('coppervalley|2018')!;
+    expect((g.tmdbId, g.pinned), (null, true));
+  });
+
+  test('rematching one of two groups on a movie copies its state', () async {
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['A/Copper Valley (2018).mkv', 'B/Copper Valley.mkv']);
+    await matcher.matchPending();
+    expect(index.group('coppervalley|2018')!.tmdbId, 7);
+    expect(index.group('coppervalley|')!.tmdbId, 7);
+    await saveProgress(ItemKind.movie, '7', 'movie');
+    await index.setWatched('7', true);
+
+    await matcher.pin('coppervalley|', isShow: false, tmdbId: 8);
+
+    expect(progress.get(progressKey(ref(ItemKind.movie, '7'))), isNotNull);
+    expect(index.watched(), contains('7'));
+    expect(progress.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
+    expect(index.watched(), contains('8'));
   });
 }
 
