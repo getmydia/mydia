@@ -87,9 +87,11 @@ Header nav becomes: Player, Server, Download, Blog, Docs (external), GitHub
    native hardware-accelerated playback; continue watching across servers.
    Each claim is checked against the player code during implementation; a
    claim that does not hold is replaced, not softened.
-4. **Screenshots.** Phone and desktop mockups (retaken against the demo
-   library), plus the multi-source shot: the source switcher listing Mydia
-   Server and a Jellyfin server.
+4. **Screenshots.** Phone and desktop mockups, retaken against the demo
+   library. There is no multi-source screenshot: the web build, which the
+   capture script drives, hides third-party sources entirely
+   (`add_source_screen.dart`). The sources row above carries that message as
+   an illustration instead.
 5. **Pick your look.** `ThemeShowcase` with the player presets Projection
    Booth, OLED Black and Slate.
 6. **Platforms strip.** The existing platform chips, linking to `/download`.
@@ -184,30 +186,34 @@ library.
 - Poster and backdrop art is generated: SVG templates (title, gradient,
   simple shapes) rendered with `rsvg-convert`. No real artwork, no
   metadata-relay calls.
-- Also writes a matching folder of tiny placeholder video files with poster
-  images. It backs the Jellyfin source for the multi-source shot, and later
-  the player's local-folders source.
-- Open question for the plan: how the server serves locally stored artwork
-  as opposed to a remote `poster_url`. The plan resolves this before the
-  seed task is written.
+- Artwork is served by Phoenix itself. `Mydia.Metadata.ImageUrl` passes any
+  `http…` value through untouched, so the seed stores
+  `MydiaWeb.Endpoint.url() <> "/images/demo/<file>.png"` as `poster_path` and
+  `backdrop_path`, and writes the PNGs to `priv/static/images/demo/`
+  (gitignored; `images` is already a static path). Same origin, so the
+  Flutter web build can load them without CORS.
+- Media files are database rows only, under a demo library path; nothing is
+  written to a media folder.
 
 ### Capture: `assets/screenshots.js`, extended
 
 - Server pages (dashboard, movies, TV, calendar) as today, against the demo
   seed.
 - **Server theme set:** the dashboard in the six curated themes. The
-  script's `setTheme` still passes `DARK`/`LIGHT`; it is checked against the
-  current theme API and moved to theme ids.
+  script's `setTheme` calls `window.mydiaTheme`, which no longer exists, so
+  every shot silently used the user's saved theme. It is replaced by setting
+  `data-theme`, `data-color-scheme` and the background colour on `<html>`
+  after each navigation; LiveView never patches `<html>`, so the theme holds
+  for the shot. No user setting is written.
 - **Player theme set:** home at desktop and phone sizes in Projection Booth,
-  OLED Black and Slate. The script writes the stored preset into the web
-  build's storage before boot; no test hooks are added to the app. The macOS
-  preset exists only in the native Mac app and is not captured.
-- **Multi-source shot:** the player's source switcher showing Mydia Server
-  and a Jellyfin server. Jellyfin runs in a throwaway container over the demo
-  folder. Plex needs a plex.tv account, so it is not in the automated shot;
-  the copy names it.
-- Output goes to `screenshots/` (README) and, as WebP, to `site/public/img/`,
-  so the site does not serve 1920px PNGs.
+  OLED Black and Slate. Before boot the script sets localStorage
+  `mydia_auth_theme_preset` to the enum name (`projectionBooth`,
+  `oledBlack`, `slate`), which is where the web build's `SettingsService`
+  reads it. No test hooks are added to the app. The macOS preset exists only
+  in the native Mac app and is not captured.
+- Output goes to `screenshots/` (README) and to
+  `site/src/assets/screenshots/`, where Astro's image pipeline emits sized
+  WebP at build time, so the site does not serve 1920px PNGs.
 
 ### `ThemeShowcase.astro`
 
