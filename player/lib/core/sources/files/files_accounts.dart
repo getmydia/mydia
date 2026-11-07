@@ -17,6 +17,7 @@ import '../sources_providers.dart';
 import '../store/source_records.dart';
 import '../store/source_secrets.dart';
 import 'backend/file_system_backend.dart';
+import 'backend/local_path_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
@@ -29,10 +30,13 @@ import 'media_names.dart';
 String filesRootId(String path) =>
     'r${sha256.convert(utf8.encode(path)).toString().substring(0, 12)}';
 
-/// [path] without trailing separators, except a bare `/`.
+/// [path] without trailing separators, except a bare `/` or a drive root
+/// (`C:/`, since `C:` alone means the drive's current directory).
 String trimRootPath(String path) {
   var p = path;
-  while (p.length > 1 && (p.endsWith('/') || p.endsWith(r'\'))) {
+  while (p.length > 1 &&
+      (p.endsWith('/') || p.endsWith(r'\')) &&
+      !RegExp(r'^[A-Za-z]:[/\\]$').hasMatch(p)) {
     p = p.substring(0, p.length - 1);
   }
   return p;
@@ -149,7 +153,8 @@ class FilesAccounts {
       );
     }
     final sourceId = await _save(record);
-    await _addRoot(sourceId, kFilesLocalAccountId, path: path, kind: kind);
+    await _addRoot(sourceId, kFilesLocalAccountId,
+        path: portableLocalPath(path), kind: kind);
     return sourceId;
   }
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/files/backend/local_path_backend.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/files/scan/file_scanner.dart';
@@ -126,6 +127,61 @@ void main() {
     final b = _CyclicBackend({'/lib/A/Movie.mkv': 1});
     final delta = await scanner(b).scan(root);
     expect([for (final f in delta.added) f.path], ['A/Movie.mkv']);
+  });
+
+  group('local_folder_links', () {
+    late Directory tmp;
+    late LibraryRoot local;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('scanner_links_');
+      // Resolved, so the root is where its links lead (macOS keeps temp
+      // folders behind /var -> /private/var).
+      final base = tmp.resolveSymbolicLinksSync();
+      Directory('$base/lib/real').createSync(recursive: true);
+      File('$base/lib/real/Copper Valley (2018).mkv').writeAsBytesSync([1]);
+      Directory('$base/outside').createSync();
+      File('$base/outside/Harbor Lights (2020).mkv').writeAsBytesSync([1]);
+      File('$base/lib/Glass Orchard S01E01.mkv').writeAsBytesSync([1]);
+      Link('$base/lib/alias').createSync('$base/lib/real');
+      Link('$base/lib/elsewhere').createSync('$base/outside');
+      Link('$base/lib/real/up').createSync('$base/lib');
+      local = LibraryRoot(
+        id: 'r1',
+        path: '$base/lib',
+        kind: FilesLibraryKind.mixed,
+        title: 'Lib',
+      );
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('a_linked_directory_is_walked_and_its_files_found_once', () async {
+      final delta = await FileScanner(
+              backend: LocalPathBackend(), names: names, index: index)
+          .scan(local);
+      final paths = [for (final f in delta.added) f.path];
+      expect(paths, hasLength(3));
+      expect(paths, contains('Glass Orchard S01E01.mkv'));
+      expect(paths, contains('elsewhere/Harbor Lights (2020).mkv'));
+      expect(paths.where((p) => p.endsWith('/Copper Valley (2018).mkv')),
+          hasLength(1));
+    });
+
+    test('a_root_reached_through_a_link_is_walked_once', () async {
+      Link('${tmp.path}/via').createSync(local.path);
+      final delta = await FileScanner(
+              backend: LocalPathBackend(), names: names, index: index)
+          .scan(LibraryRoot(
+              id: 'r1',
+              path: '${tmp.path}/via',
+              kind: FilesLibraryKind.mixed,
+              title: 'Lib'));
+      // Without the root's own identity, `real/up` would walk it again and
+      // find the top-level episode a second time.
+      final paths = [for (final f in delta.added) f.path];
+      expect(paths, hasLength(3));
+      expect(paths, contains('Glass Orchard S01E01.mkv'));
+    });
   });
 
   test('directories_deeper_than_32_levels_are_skipped', () async {

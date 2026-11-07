@@ -135,7 +135,16 @@ class FileScanner {
     Map<String, List<FileEntry>> sidecarsByDir,
   ) async {
     final queue = <(String, int)>[(start, 0)];
-    final visited = <String>{_trimSlash(start)};
+    // Directories are told apart by where they really are, so one reached
+    // through a symbolic link as well as directly is walked once, and a
+    // link back up the tree ends rather than looping to the depth cap.
+    FileEntry? self;
+    try {
+      self = await _backend.stat(start);
+    } on BackendFailure {
+      // The list below throws the failure that matters.
+    }
+    final visited = <String>{_identity(self) ?? _trimSlash(start)};
     while (queue.isNotEmpty) {
       final (dir, depth) = queue.removeLast();
       final entries = await _backend.list(dir);
@@ -143,7 +152,7 @@ class FileScanner {
         if (e.name.startsWith('.')) continue;
         if (e.isDir) {
           if (_skippedDirs.contains(e.name) || depth >= _maxDepth) continue;
-          if (visited.add(_trimSlash(e.path))) queue.add((e.path, depth + 1));
+          if (visited.add(_identity(e)!)) queue.add((e.path, depth + 1));
           continue;
         }
         final ext = _ext(e.name);
@@ -171,6 +180,9 @@ class FileScanner {
         if (s.name.startsWith(prefix)) _relative(rootPath, s.path),
     ]..sort();
   }
+
+  static String? _identity(FileEntry? e) =>
+      e == null ? null : _trimSlash(e.identity ?? e.path);
 
   static String _trimSlash(String p) =>
       p.length > 1 && p.endsWith('/') ? p.substring(0, p.length - 1) : p;

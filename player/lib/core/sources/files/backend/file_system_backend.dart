@@ -6,10 +6,16 @@ class FileEntry {
     required this.isDir,
     required this.size,
     required this.modified,
+    this.identity,
   });
 
   /// Absolute path for local folders, decoded server path for WebDAV.
   final String path;
+
+  /// Where a directory really is, when more than one [path] can lead to it
+  /// (a local folder reached through a symbolic link): its resolved path. A
+  /// walk visits each identity once. Null means [path] is the identity.
+  final String? identity;
 
   /// The last path segment.
   final String name;

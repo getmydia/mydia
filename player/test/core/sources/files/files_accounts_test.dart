@@ -57,6 +57,8 @@ void main() {
     expect(filesRootTitle(r'C:\Media\Films'), 'Films');
     expect(trimRootPath('/dav/Films/'), '/dav/Films');
     expect(trimRootPath('/'), '/');
+    expect(trimRootPath('C:/'), 'C:/');
+    expect(trimRootPath('C:/Media/'), 'C:/Media');
   });
 
   test('adding_a_local_root_creates_the_device_account_once', () async {
