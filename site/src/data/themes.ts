@@ -5,6 +5,10 @@ export interface ThemeShot {
   image: string;
 }
 
+// Number of themes in lib/mydia/accounts/themes.ex (checked by themes.test.ts).
+export const SERVER_THEME_COUNT = 14;
+export const serverThemesHeading = `${SERVER_THEME_COUNT} themes, light and dark, or follow your system`;
+
 // Curated server themes, ids and bases from lib/mydia/accounts/themes.ex.
 export const serverThemes: ThemeShot[] = [
   { id: 'mydia-dark', label: 'Mydia Dark', swatch: '#0f172a' },

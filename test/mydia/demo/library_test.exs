@@ -49,6 +49,8 @@ defmodule Mydia.Demo.LibraryTest do
       items = Repo.all(MediaItem)
       assert length(items) == m + s
       assert Enum.all?(items, &(&1.title in titles))
+      assert Enum.all?(items, &(&1.tmdb_id >= 2_000_000_000))
+      assert Enum.all?(items, &(&1.monitored == false))
 
       movies = Enum.filter(items, &(&1.type == "movie"))
       assert length(movies) == m

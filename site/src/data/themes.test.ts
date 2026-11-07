@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { playerThemes, serverThemes } from './themes';
+import { SERVER_THEME_COUNT, playerThemes, serverThemes, serverThemesHeading } from './themes';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -17,6 +17,13 @@ describe('themes', () => {
       expect(bases.has(t.id), t.id).toBe(true);
       expect(t.swatch.toLowerCase()).toBe(bases.get(t.id));
     }
+  });
+
+  it('the /server heading count matches Mydia.Accounts.Themes', () => {
+    const src = read('../../../lib/mydia/accounts/themes.ex');
+    const count = [...src.matchAll(/id: "/g)].length;
+    expect(SERVER_THEME_COUNT).toBe(count);
+    expect(serverThemesHeading.startsWith(`${count} themes`)).toBe(true);
   });
 
   it('every player preset exists in ThemePreset', () => {

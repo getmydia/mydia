@@ -12,7 +12,9 @@
 # Phoenix is not on the default port, since artwork URLs are stored in the DB).
 # Use a neutral host so the player does not title the server "localhost": e.g.
 # `./dev mix mydia.demo_seed --base-url http://mydia-demo:4320` and then
-# BASE_URL=http://mydia-demo:4320 (the capture maps the name to 127.0.0.1).
+# the demo capture is:
+#   MAP_HOST_TO_LOOPBACK=1 BASE_URL=http://mydia-demo:4320 ./take-screenshots
+# MAP_HOST_TO_LOOPBACK=1 maps a non-IP host to 127.0.0.1 (opt-in).
 # Every file is written to screenshots/ and to site/src/assets/screenshots/.
 
 set -e
@@ -28,7 +30,12 @@ BASE_URL="${BASE_URL:-http://localhost:4000}"
 echo -e "${GREEN}📸 Mydia Screenshot Tool${NC}\n"
 echo -e "Target: ${BASE_URL}\n"
 
-if ! curl -fsS -o /dev/null --max-time 5 --connect-to "::127.0.0.1:" "${BASE_URL}/auth/login"; then
+CONNECT_TO=()
+if [ "${MAP_HOST_TO_LOOPBACK:-}" = "1" ]; then
+    CONNECT_TO=(--connect-to "::127.0.0.1:")
+fi
+
+if ! curl -fsS -o /dev/null --max-time 5 ${CONNECT_TO[@]+"${CONNECT_TO[@]}"} "${BASE_URL}/auth/login"; then
     echo -e "${YELLOW}App is not answering at ${BASE_URL}.${NC}"
     echo -e "Start it with ${GREEN}./dev up -d${NC}, then re-run with"
     echo -e "${GREEN}BASE_URL=http://localhost:<port> ./take-screenshots${NC}"

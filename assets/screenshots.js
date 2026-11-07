@@ -360,11 +360,14 @@ async function takeScreenshots() {
   console.log("🎬 Starting Mydia screenshot capture...\n");
 
   // The player titles its server by the URL host, so a BASE_URL on localhost
-  // shows "localhost" in the app bar. Point BASE_URL at a neutral name and map
-  // it to loopback here (reseed with --base-url so artwork uses the same host).
+  // shows "localhost" in the app bar. Point BASE_URL at a neutral name and set
+  // MAP_HOST_TO_LOOPBACK=1 to map it to loopback here (reseed with --base-url so artwork uses the same host).
   const host = new URL(config.baseUrl).hostname;
   const args = [];
-  if (!/^(localhost|[\d.]+|\[.*\])$/.test(host)) {
+  if (
+    process.env.MAP_HOST_TO_LOOPBACK === "1" &&
+    !/^(localhost|[\d.]+|\[.*\])$/.test(host)
+  ) {
     args.push(`--host-resolver-rules=MAP ${host} 127.0.0.1`);
   }
 

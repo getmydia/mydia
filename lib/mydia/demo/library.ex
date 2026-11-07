@@ -247,7 +247,8 @@ defmodule Mydia.Demo.Library do
     "The Hollow Month"
   ]
 
-  @provider_id_base 900_000
+  # Far above any real TMDB id, so a refresh job can never match a real title.
+  @provider_id_base 2_000_000_000
   @episode_seconds 2700
 
   @doc "Every movie and show title `seed/1` can write."
@@ -374,6 +375,9 @@ defmodule Mydia.Demo.Library do
 
     future_count = 1 + rem(index, 2)
     aired_count = length(slots) - future_count
+    # Per-show offsets spread the calendar instead of stacking every show on one day.
+    aired_offset = rem(index * 3, 7)
+    future_offset = rem(index * 5, 11)
 
     episodes =
       slots
@@ -381,8 +385,8 @@ defmodule Mydia.Demo.Library do
       |> Enum.map(fn {{season, number}, pos} ->
         air_date =
           if pos < aired_count,
-            do: Date.add(today, -7 * (aired_count - 1 - pos) - 1),
-            else: Date.add(today, 1 + 3 * (pos - aired_count))
+            do: Date.add(today, -7 * (aired_count - 1 - pos) - 1 - aired_offset),
+            else: Date.add(today, 1 + future_offset + 3 * (pos - aired_count))
 
         {:ok, episode} =
           Media.create_episode(%{
@@ -391,7 +395,7 @@ defmodule Mydia.Demo.Library do
             episode_number: number,
             title: episode_title(index, pos),
             air_date: air_date,
-            monitored: true
+            monitored: false
           })
 
         if pos < aired_count do
@@ -434,7 +438,7 @@ defmodule Mydia.Demo.Library do
       year: entry.year,
       tmdb_id: @provider_id_base + index,
       metadata_source: :tmdb,
-      monitored: true,
+      monitored: false,
       library_path_id: library_path.id,
       metadata: metadata
     }

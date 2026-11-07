@@ -6,7 +6,7 @@ import Screenshots from '../components/Screenshots.astro';
 import ThemeShowcase from '../components/ThemeShowcase.astro';
 import Install from '../components/Install.astro';
 import CrossSell from '../components/CrossSell.astro';
-import { serverThemes } from '../data/themes';
+import { serverThemes, serverThemesHeading } from '../data/themes';
 
 const features = [
   { icon: 'film', title: 'Library and metadata', description: 'Organizes your movies and TV, and fills in posters, descriptions and episode details for you.' },
@@ -40,7 +40,7 @@ const features = [
 
   <ThemeShowcase
     id="themes"
-    heading="14 themes, light and dark, or follow your system"
+    heading={serverThemesHeading}
     themes={serverThemes}
     aspect="desktop"
   />
