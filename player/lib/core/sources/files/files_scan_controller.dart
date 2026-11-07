@@ -73,7 +73,9 @@ class FilesScanController extends Notifier<ScanState> {
     var before = 0;
     var latest = (done: 0, total: 0);
     try {
-      for (final root in index.roots()) {
+      final roots = index.roots();
+      var scanned = 0;
+      for (final root in roots) {
         try {
           await scanner.scan(root, onProgress: (done, total) {
             latest = (done: before + done, total: before + total);
@@ -82,6 +84,7 @@ class FilesScanController extends Notifier<ScanState> {
                   running: true, done: latest.done, total: latest.total);
             }
           });
+          scanned++;
         } on BackendFailure catch (e) {
           debugPrint('[FilesScan] ${root.id} not scanned: $e');
           error = e;
@@ -101,7 +104,10 @@ class FilesScanController extends Notifier<ScanState> {
         debugPrint('[FilesScan] Matching failed: $e');
         error ??= e;
       }
-      await index.setLastScanAt(now());
+      // A run where every root failed (an unplugged drive, a share that is
+      // down) is not a scan: leave the time alone so the next open tries
+      // again instead of waiting out the rescan interval.
+      if (roots.isEmpty || scanned > 0) await index.setLastScanAt(now());
       await invalidator
           .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
     } catch (e) {

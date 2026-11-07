@@ -132,6 +132,24 @@ void main() {
     expect(media.connection, SourceConnectionStatus.unreachable);
   });
 
+  test('a_run_where_every_root_fails_keeps_the_last_scan_time', () async {
+    final earlier = now.subtract(const Duration(hours: 1));
+    await f.index.setLastScanAt(earlier);
+    backend.failures['/media/films'] = const BackendNotFound('unplugged');
+    final c = await container();
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    final index = c.read(filesIndexProvider(filesLocalSource.account.id));
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(c.read(filesScanProvider(id)).error, isA<BackendNotFound>());
+    expect(index.lastScanAt()?.toUtc(), earlier);
+
+    // Once one root reads again, the scan counts.
+    backend.failures.clear();
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(index.lastScanAt()?.toUtc(), now);
+  });
+
   test('a_scan_that_throws_still_finishes', () async {
     await f.index.setLastScanAt(now);
     final c = await container(names: _ThrowingNames());
