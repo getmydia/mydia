@@ -410,6 +410,25 @@ void main() {
     expect(index.group('moonharbor')!.tmdbId, 3);
     expect(index.show(3)!.seasons.keys, unorderedEquals([0, 1]));
   });
+
+  test('rematching a show leaves the movie with its TMDB number alone',
+      () async {
+    relay.ids['Copper Valley'] = 7;
+    relay.ids['Moon Harbor'] = 7;
+    await addFiles(['Copper Valley (2018).mkv', 'Moon Harbor S01E01.mkv']);
+    await matcher.matchPending();
+    expect(index.group('coppervalley|2018')!.tmdbId, 7);
+    expect(index.group('moonharbor')!.tmdbId, 7);
+    await saveProgress(ItemKind.movie, '7', 'movie');
+    await index.setWatched('7', true);
+
+    await matcher.pin('moonharbor', isShow: true, tmdbId: 8);
+
+    expect(progress.get(progressKey(ref(ItemKind.movie, '7'))), isNotNull);
+    expect(progress.get(progressKey(ref(ItemKind.show, '8'))), isNull);
+    expect(index.watched(), contains('7'));
+    expect(index.watched(), isNot(contains('8')));
+  });
 }
 
 class _FailsFor extends RelayTmdb {

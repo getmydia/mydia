@@ -258,6 +258,29 @@ void main() {
     expect(() => b.source.setMatch(unreadable, null), throwsArgumentError);
   });
 
+  test('a_movie_and_a_show_sharing_a_tmdb_number_are_matched_apart', () async {
+    final b = await _build();
+    final f = b.fixture;
+    b.relay.down = false;
+    // TMDB numbers movies and shows separately: show 101 is not movie 101.
+    await f.match('glassorchard', 101, isShow: true);
+    await f.index.putShow(const MatchedShow(tmdbId: 101, title: 'Orchard'));
+
+    expect(b.source.canEditMatch(f.ref(ItemKind.show, _movie)), isTrue);
+    await b.source.searchMatches(f.ref(ItemKind.show, _movie), 'Glass');
+    expect(b.relay.searched, ['show:Glass']);
+
+    await b.source.setMatch(f.ref(ItemKind.movie, _movie), null);
+    expect(f.index.group('coppervalley|2018')!.tmdbId, isNull);
+    final show = f.index.group('glassorchard')!;
+    expect((show.tmdbId, show.isShow, show.pinned), (101, true, false));
+
+    await b.source.setMatch(f.ref(ItemKind.show, _movie),
+        const TmdbCandidate(id: 900, title: 'Pinned 900'));
+    expect(f.index.group('glassorchard')!.tmdbId, 900);
+    expect(f.index.group('coppervalley|2018')!.isShow, isFalse);
+  });
+
   test('search_matches_asks_the_relay_by_kind', () async {
     final b = await _build();
     b.relay.down = false;

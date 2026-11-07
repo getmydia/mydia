@@ -131,8 +131,10 @@ class FilesCatalog {
   /// Files no movie or show claims, by file key.
   final unmatched = <String, IndexedFile>{};
 
-  /// The group keys behind each movie or show base.
-  final groupsOfBase = <String, Set<String>>{};
+  /// The group keys behind each movie or show base, keyed by kind as well:
+  /// TMDB numbers movies and shows separately, so movie 1399 and show 1399
+  /// share a base and are different titles.
+  final groupsOfBase = <(bool isShow, String base), Set<String>>{};
 
   /// Whether each group is a show.
   final groupIsShow = <String, bool>{};
@@ -162,7 +164,7 @@ class FilesCatalog {
       }
       final tmdbId = match?.tmdbId;
       final base = tmdbId != null ? tmdbBase(tmdbId) : provisionalKey(key);
-      groupsOfBase.putIfAbsent(base, () => {}).add(key);
+      groupsOfBase.putIfAbsent((isShow, base), () => {}).add(key);
       if (!isShow) {
         movies
             .putIfAbsent(

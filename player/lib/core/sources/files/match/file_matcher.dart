@@ -204,8 +204,8 @@ class FileMatcher {
 
   // Progress migration
 
-  /// The items a group's files make up, with the file ids that stand in for
-  /// each when the group is unmatched.
+  /// The items a group's files make up that carry state, with the file ids
+  /// that stand in for each when the group is unmatched.
   List<_Item> _items(_Group g) {
     if (!g.isShow) {
       return [
@@ -222,10 +222,10 @@ class FileMatcher {
         eps.putIfAbsent((s, n), () => []).add(f.key);
       }
     }
+    // A show and its seasons hold no progress or watched flag of their own,
+    // and a show's id is its bare base, which is also the id of the movie
+    // with the same TMDB number: moving it would carry that movie's state.
     return [
-      _Item(ItemKind.show, showId, const []),
-      for (final s in _seasons(g))
-        _Item(ItemKind.season, (b) => seasonId(b, s), const []),
       for (final e in eps.entries)
         _Item(
             ItemKind.episode, (b) => episodeId(b, e.key.$1, e.key.$2), e.value),

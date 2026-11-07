@@ -414,12 +414,12 @@ class FilesMediaSource extends MediaSource
       }
       return ([group], catalog.groupIsShow[group] ?? false);
     }
-    final groups = catalog.groupsOfBase[parsed.base];
+    final isShow = ref.kind == ItemKind.show;
+    final groups = catalog.groupsOfBase[(isShow, parsed.base!)];
     if (groups == null || groups.isEmpty) {
       throw const SourceException.notFound();
     }
-    final list = groups.toList()..sort();
-    return (list, catalog.groupIsShow[list.first] ?? false);
+    return (groups.toList()..sort(), isShow);
   }
 
   bool _disposed = false;
