@@ -124,6 +124,16 @@ class FileLibraryIndex {
     await _box.put(_key(_group, g.groupKey), g.toMap());
   }
 
+  /// Writes [g] unless the group it replaces is pinned, and says whether it
+  /// did. For automatic results only: a Fix match pin made while one was
+  /// worked out must stand. The check and the in-memory write happen with
+  /// no await between them, so no pin can land in between.
+  Future<bool> putGroupUnlessPinned(GroupMatch g) async {
+    if (_groups[g.groupKey]?.pinned ?? false) return false;
+    await putGroup(g);
+    return true;
+  }
+
   MatchedMovie? movie(int id) => _movies[id];
 
   Future<void> putMovie(MatchedMovie m) async {

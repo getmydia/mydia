@@ -160,28 +160,33 @@ class FileMatcher {
         isShow: g.isShow,
         candidates: candidates,
       );
-      if (_pinnedMeanwhile(g.key)) return;
+      // A Fix match pin can land at any await from here on. The migrations
+      // stop before their next move once it has, and the group is written
+      // only if it is still unpinned, checked and written in one step.
+      bool pinned() => _pinnedMeanwhile(g.key);
+      if (pinned()) return;
+      final bool wrote;
       if (hit == null) {
         // State kept under the provisional id (or a previous match) while
         // the group waited goes to the files, which is where Folders reads.
-        await _migrateToFiles(g, existing?.tmdbId);
-        await _index.putGroup(GroupMatch(
+        await _migrateToFiles(g, existing?.tmdbId, stop: pinned);
+        wrote = await _index.putGroupUnlessPinned(GroupMatch(
           groupKey: g.key,
           isShow: g.isShow,
           matchedAt: _now(),
         ));
       } else {
         await _fetchAndStore(g, hit.id);
-        if (_pinnedMeanwhile(g.key)) return;
-        await _migrateProgress(g, hit.id, existing?.tmdbId);
-        await _index.putGroup(GroupMatch(
+        if (pinned()) return;
+        await _migrateProgress(g, hit.id, existing?.tmdbId, stop: pinned);
+        wrote = await _index.putGroupUnlessPinned(GroupMatch(
           groupKey: g.key,
           isShow: g.isShow,
           tmdbId: hit.id,
           matchedAt: _now(),
         ));
       }
-      await _onGroupLanded?.call();
+      if (wrote) await _onGroupLanded?.call();
     } on RelayUnavailable catch (e) {
       debugPrint('[FileMatcher] ${g.key} stays provisional: $e');
     }
@@ -258,9 +263,11 @@ class FileMatcher {
 
   /// Moves progress and watched flags from the ids this group had before
   /// (provisional, a previous TMDB id when it changed, and each file's
-  /// unmatched id) to [newTmdbId].
-  Future<void> _migrateProgress(
-      _Group g, int newTmdbId, int? previousTmdb) async {
+  /// unmatched id) to [newTmdbId]. Ends early, before any further move,
+  /// once [stop] says so.
+  Future<void> _migrateProgress(_Group g, int newTmdbId, int? previousTmdb,
+      {bool Function()? stop}) async {
+    bool stopped() => stop?.call() ?? false;
     final newBase = tmdbBase(newTmdbId);
     final sharedBase = previousTmdb != null &&
             previousTmdb != newTmdbId &&
@@ -281,6 +288,7 @@ class FileMatcher {
     for (final item in _items(g)) {
       final target = item.id(newBase);
       for (final oldBase in oldBases) {
+        if (stopped()) return;
         await _move(item.kind, item.id(oldBase), [target], watched,
             mediaType: type, keepSource: oldBase == sharedBase);
       }
@@ -289,6 +297,7 @@ class FileMatcher {
       }
     }
     for (final MapEntry(key: key, value: targets) in fromFiles.entries) {
+      if (stopped()) return;
       await _move(ItemKind.video, unmatchedFileId(key), targets, watched,
           mediaType: type);
     }
@@ -296,7 +305,8 @@ class FileMatcher {
 
   /// The reverse: a matched group is unmatched, so each movie or episode's
   /// progress is copied to every one of its files' unmatched ids.
-  Future<void> _migrateToFiles(_Group g, int? previousTmdb) async {
+  Future<void> _migrateToFiles(_Group g, int? previousTmdb,
+      {bool Function()? stop}) async {
     final sharedBase =
         previousTmdb != null && _sharedWithOtherGroup(g, previousTmdb)
             ? tmdbBase(previousTmdb)
@@ -310,6 +320,7 @@ class FileMatcher {
       if (item.fileIds.isEmpty) continue;
       final targets = [for (final k in item.fileIds) unmatchedFileId(k)];
       for (final oldBase in oldBases) {
+        if (stop?.call() ?? false) return;
         await _move(item.kind, item.id(oldBase), targets, watched,
             keepSource: oldBase == sharedBase);
       }

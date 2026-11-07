@@ -540,6 +540,42 @@ void main() {
     expect((g.tmdbId, g.pinned), (null, true));
   });
 
+  test('a pin made while progress migrates is not overwritten', () async {
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['Copper Valley (2018).mkv']);
+    final gated = _FirstSaveHeld();
+    final m = FileMatcher(
+      tmdb: relay,
+      names: FakeMediaNames(),
+      index: index,
+      progress: gated,
+      sourceId: source,
+      now: () => t0.add(const Duration(days: 1)),
+    );
+    final p = provisionalKey('coppervalley|2018');
+    await gated.save(LocalPlaybackProgress(
+      sourceId: source.value,
+      mediaId: p,
+      mediaType: 'movie',
+      positionSeconds: 60,
+      durationSeconds: 600,
+      updatedAt: t0,
+    ));
+    gated.holdNext();
+
+    final pending = m.matchPending();
+    // The automatic match is now inside its migration, holding a save.
+    await gated.held.future;
+
+    await m.pin('coppervalley|2018', isShow: false, tmdbId: 8);
+    gated.release();
+    await pending;
+
+    final g = index.group('coppervalley|2018')!;
+    expect((g.tmdbId, g.pinned), (8, true));
+    expect(gated.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
+  });
+
   test('rematching one of two groups on a movie copies its state', () async {
     relay.ids['Copper Valley'] = 7;
     await addFiles(['A/Copper Valley (2018).mkv', 'B/Copper Valley.mkv']);
@@ -556,6 +592,26 @@ void main() {
     expect(progress.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
     expect(index.watched(), contains('8'));
   });
+}
+
+/// Holds the next save after [holdNext] until [release]; [held] completes
+/// once that save has started.
+class _FirstSaveHeld extends InMemoryPlaybackProgressStore {
+  Completer<void>? _gate;
+  final held = Completer<void>();
+
+  void holdNext() => _gate = Completer<void>();
+  void release() => _gate?.complete();
+
+  @override
+  Future<void> save(LocalPlaybackProgress progress) async {
+    final gate = _gate;
+    if (gate != null && !held.isCompleted) {
+      held.complete();
+      await gate.future;
+    }
+    return super.save(progress);
+  }
 }
 
 class _FailsFor extends RelayTmdb {
