@@ -1,6 +1,6 @@
 defmodule Mydia.Metadata.Structs.Person do
   @moduledoc """
-  A TMDB person with their filmography split into movies and TV, newest first.
+  A TMDB person with their filmography split into movies and TV, best-known first.
   """
 
   alias Mydia.Metadata.Structs.PersonCredit
@@ -111,11 +111,16 @@ defmodule Mydia.Metadata.Structs.Person do
   defp sum_counts(a, nil), do: a
   defp sum_counts(a, b), do: a + b
 
-  # Newest first; undated (upcoming or unannounced) titles go last.
+  # Best-known first: TMDB's vote_count measures how widely a title was seen
+  # over its lifetime, where popularity tracks this week's traffic. Ties go to
+  # the newest, and undated (upcoming or unannounced) titles, which have no
+  # votes yet either, end up last.
   defp sort_credits(credits) do
-    {dated, undated} = Enum.split_with(credits, & &1.date)
-    Enum.sort_by(dated, & &1.date, {:desc, Date}) ++ undated
+    Enum.sort_by(credits, &{&1.vote_count || 0, date_rank(&1.date)}, :desc)
   end
+
+  defp date_rank(nil), do: -1
+  defp date_rank(%Date{} = date), do: Date.to_gregorian_days(date)
 
   defp parse_date(value) when is_binary(value) do
     case Date.from_iso8601(value) do
