@@ -50,6 +50,7 @@ class FileScanner {
     LibraryRoot root, {
     void Function(int done, int total)? onProgress,
   }) async {
+    final registered = _registered(root);
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
     await _walk(root.path, videos, sidecarsByDir);
@@ -75,7 +76,8 @@ class FileScanner {
       if (old == null) {
         pending.add(_Pending(v, rel, key, sidecars, null));
       } else if (old.size != v.size ||
-          !old.modified.isAtSameMomentAs(v.modified)) {
+          !old.modified.isAtSameMomentAs(v.modified) ||
+          old.parsedAs != root.kind) {
         pending.add(_Pending(v, rel, key, sidecars, old));
       } else if (!_sameList(old.sidecars, sidecars)) {
         changed.add(
@@ -112,10 +114,16 @@ class FileScanner {
         if (!seen.contains(k)) k,
     ];
 
+    // The root was removed while it was being walked: writing now would
+    // bring its files back under a root that is gone.
+    if (registered && !_registered(root)) return const ScanDelta();
     await _index.putFiles([...added, ...changed]);
     if (removed.isNotEmpty) await _index.removeFiles(removed);
     return ScanDelta(added: added, changed: changed, removedKeys: removed);
   }
+
+  bool _registered(LibraryRoot root) =>
+      _index.roots().any((r) => r.id == root.id);
 
   IndexedFile _build(LibraryRoot root, _Pending p, ParsedName? parsed) =>
       IndexedFile(
@@ -127,6 +135,7 @@ class FileScanner {
         firstSeen: p.old?.firstSeen ?? _now(),
         parsed: parsed,
         sidecars: p.sidecars,
+        parsedAs: root.kind,
       );
 
   Future<void> _walk(

@@ -88,6 +88,33 @@ void main() {
     expect(delta.changed.every((f) => f.firstSeen == first), isTrue);
   });
 
+  test('a_root_whose_kind_changes_is_read_again', () async {
+    final b = FakeBackend({'/lib/A.mkv': 1});
+    await scanner(b).scan(root);
+    final delta = await scanner(b).scan(const LibraryRoot(
+      id: 'r1',
+      path: '/lib',
+      kind: FilesLibraryKind.series,
+      title: 'Lib',
+    ));
+    expect(delta.changed, hasLength(1));
+    expect(delta.changed.single.parsedAs, FilesLibraryKind.series);
+    expect(names.parsedPaths, hasLength(2));
+    expect(
+      index.files().values.single.parsedAs,
+      FilesLibraryKind.series,
+    );
+  });
+
+  test('a_root_removed_while_it_is_walked_gets_no_files_back', () async {
+    await index.putRoot(root);
+    final b =
+        _RemovesRootOnList({'/lib/A.mkv': 1}, () => index.removeRoot(root.id));
+    final delta = await scanner(b).scan(root);
+    expect(delta.isEmpty, isTrue);
+    expect(index.files(), isEmpty);
+  });
+
   test('missing_files_are_reported_removed', () async {
     final b = FakeBackend({'/lib/A.mkv': 1, '/lib/B.mkv': 2});
     await scanner(b).scan(root);
@@ -226,5 +253,18 @@ class _CyclicBackend extends FakeBackend {
         modified: t,
       ),
     ];
+  }
+}
+
+/// Runs [onList] (the viewer removing the root) during the walk.
+class _RemovesRootOnList extends FakeBackend {
+  _RemovesRootOnList(super.files, this.onList);
+
+  final Future<void> Function() onList;
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    await onList();
+    return super.list(dir);
   }
 }

@@ -42,6 +42,7 @@ class IndexedFile {
     required this.firstSeen,
     this.parsed,
     this.sidecars = const [],
+    this.parsedAs,
   });
 
   final String key;
@@ -53,6 +54,10 @@ class IndexedFile {
   final ParsedName? parsed;
   final List<String> sidecars;
 
+  /// The root's kind when [parsed] was read: a root whose kind changes has
+  /// its files read again, since the kind steers the parser.
+  final FilesLibraryKind? parsedAs;
+
   Map<String, dynamic> toMap() => {
         'key': key,
         'rootId': rootId,
@@ -62,11 +67,16 @@ class IndexedFile {
         'firstSeen': firstSeen.millisecondsSinceEpoch,
         'parsed': parsed?.toMap(),
         'sidecars': sidecars,
+        'parsedAs': parsedAs?.name,
       };
 
   factory IndexedFile.fromMap(Map<dynamic, dynamic> m) {
     final parsed = m['parsed'] as Map<dynamic, dynamic>?;
+    final parsedAs = m['parsedAs'] as String?;
     return IndexedFile(
+      parsedAs: parsedAs == null
+          ? null
+          : FilesLibraryKind.values.asNameMap()[parsedAs],
       key: m['key'] as String,
       rootId: m['rootId'] as String,
       path: m['path'] as String,
@@ -216,7 +226,9 @@ class MatchedShow {
   final Map<int, List<MatchedEpisode>> seasons;
 
   /// Seasons are stored as a flat episode list (each episode carries its
-  /// season), so no map has a non-string key.
+  /// season), so no map has a non-string key. The season numbers are kept
+  /// beside it: a season TMDB lists with no episodes would otherwise vanish
+  /// on reload and be fetched again on every scan.
   Map<String, dynamic> toMap() => {
         'tmdbId': tmdbId,
         'title': title,
@@ -224,6 +236,7 @@ class MatchedShow {
         'overview': overview,
         'posterPath': posterPath,
         'backdropPath': backdropPath,
+        'seasonNumbers': seasons.keys.toList(),
         'episodes': [
           for (final eps in seasons.values)
             for (final e in eps) e.toMap(),
@@ -231,7 +244,9 @@ class MatchedShow {
       };
 
   factory MatchedShow.fromMap(Map<dynamic, dynamic> m) {
-    final seasons = <int, List<MatchedEpisode>>{};
+    final seasons = <int, List<MatchedEpisode>>{
+      for (final n in m['seasonNumbers'] as List? ?? const []) n as int: [],
+    };
     for (final raw in m['episodes'] as List) {
       final e = MatchedEpisode.fromMap(raw as Map<dynamic, dynamic>);
       seasons.putIfAbsent(e.season, () => []).add(e);

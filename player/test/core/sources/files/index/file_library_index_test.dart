@@ -140,4 +140,71 @@ void main() {
     expect(b.roots(), isEmpty);
     expect(b.files(), isEmpty);
   });
+
+  test('a_season_with_no_episodes_survives_a_reload', () async {
+    final a = FileLibraryIndex(box, accountId: 'a');
+    await a.putShow(const MatchedShow(tmdbId: 2, title: 'Harbor', seasons: {
+      0: [],
+      1: [MatchedEpisode(season: 1, episode: 1)],
+    }));
+    final b = FileLibraryIndex(box, accountId: 'a');
+    expect(b.show(2)!.seasons.keys, unorderedEquals([0, 1]));
+    expect(b.show(2)!.seasons[0], isEmpty);
+  });
+
+  test('a_show_stored_without_season_numbers_still_loads', () async {
+    await box.put('a/show/3', {
+      'tmdbId': 3,
+      'title': 'Older',
+      'episodes': [
+        {'season': 1, 'episode': 1},
+      ],
+    });
+    final b = FileLibraryIndex(box, accountId: 'a');
+    expect(b.show(3)!.seasons.keys, [1]);
+  });
+
+  test('a_file_write_that_fails_leaves_memory_unchanged', () async {
+    final a = FileLibraryIndex(_FailingPutAll(box), accountId: 'a');
+    await expectLater(
+      a.putFiles([file('r1', 'a.mkv')]),
+      throwsA(isA<HiveError>()),
+    );
+    expect(a.files(), isEmpty);
+  });
+
+  test('parsed_as_round_trips', () async {
+    final a = FileLibraryIndex(box, accountId: 'a');
+    final f = file('r1', 'a.mkv');
+    await a.putFiles([
+      IndexedFile(
+        key: f.key,
+        rootId: f.rootId,
+        path: f.path,
+        size: f.size,
+        modified: f.modified,
+        firstSeen: f.firstSeen,
+        parsedAs: FilesLibraryKind.series,
+      ),
+    ]);
+    final b = FileLibraryIndex(box, accountId: 'a');
+    expect(b.files()[f.key]!.parsedAs, FilesLibraryKind.series);
+  });
+}
+
+/// A box whose batch write fails, as a full disk would.
+class _FailingPutAll implements Box<Map<dynamic, dynamic>> {
+  _FailingPutAll(this._inner);
+
+  final Box<Map<dynamic, dynamic>> _inner;
+
+  @override
+  Iterable<dynamic> get keys => _inner.keys;
+
+  @override
+  Future<void> putAll(Map<dynamic, Map<dynamic, dynamic>> entries) =>
+      Future.error(HiveError('disk full'));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

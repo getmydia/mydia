@@ -102,10 +102,11 @@ class FileLibraryIndex {
 
   Future<void> putFiles(Iterable<IndexedFile> files) async {
     final batch = {for (final f in files) f.key: f};
-    _files.addAll(batch);
+    // Stored first, so a write that fails leaves memory matching the box.
     await _box.putAll({
       for (final f in batch.values) _key(_file, f.key): f.toMap(),
     });
+    _files.addAll(batch);
   }
 
   Future<void> removeFiles(Iterable<String> keys) async {
