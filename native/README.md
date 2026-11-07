@@ -130,7 +130,8 @@ environment and restart it:
 | `MYDIA_P2P_TRACE_MAX_BYTES` | Size at which the file moves to `<path>.1`. Default 512 MiB. |
 
 `noq_proto=trace` logs every packet, so a server streaming media fills the cap in
-minutes. The file sits beside the Elixir forwarding rather than replacing it,
+minutes. A file that cannot rotate stops growing rather than filling the disk.
+Give each process its own path: rotation counts only the writing process's bytes. The file sits beside the Elixir forwarding rather than replacing it,
 and `RUST_LOG` still sets the level that forwarding uses.
 
 To reproduce a stalled first request against a server, run the `startup_burst`

@@ -511,7 +511,24 @@ fn init_tracing(event_tx: mpsc::Sender<Event>) {
         // at `trace` while the Elixir forwarding stays at the level above.
         let registry = tracing_subscriber::registry().with(ElixirLogLayer.with_filter(filter));
         #[cfg(not(target_arch = "wasm32"))]
-        let registry = registry.with(trace_file::layer());
+        {
+            let trace_file = trace_file::layer();
+            let trace_requested = trace_file.is_some();
+            if let Err(e) = registry.with(trace_file).try_init() {
+                // Another subscriber got there first, so the requested trace
+                // file will stay empty. Nothing else would say so.
+                if trace_requested {
+                    #[expect(
+                        clippy::print_stderr,
+                        reason = "the subscriber that would carry this failed to install"
+                    )]
+                    {
+                        eprintln!("mydia_p2p_core: MYDIA_P2P_TRACE_FILE is set but tracing could not be installed: {e}");
+                    }
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
         let _ = registry.try_init();
     });
 }

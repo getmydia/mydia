@@ -33,6 +33,8 @@ where
     let max_bytes = std::env::var("MYDIA_P2P_TRACE_MAX_BYTES")
         .ok()
         .and_then(|v| v.parse().ok())
+        // Zero would rotate on every write.
+        .filter(|&bytes| bytes > 0)
         .unwrap_or(DEFAULT_MAX_BYTES);
     let filter = std::env::var("MYDIA_P2P_TRACE")
         .ok()
@@ -104,9 +106,10 @@ impl RotatingFile {
 impl Write for RotatingFile {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.written >= self.max_bytes {
-            // A failed rotation keeps writing to the current file rather than
-            // losing the trace.
-            let _ = self.rotate();
+            // A file that cannot rotate stops growing: losing the rest of a
+            // trace is better than filling a server's disk. The next write
+            // tries the rotation again.
+            self.rotate()?;
         }
         let n = self.file.write(buf)?;
         self.written = self.written.saturating_add(n as u64);
@@ -138,6 +141,28 @@ mod tests {
         let current = std::fs::read(&path).expect("current file");
         assert_eq!(rotated, b"0123456789");
         assert_eq!(current, b"abc");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reopened_file_counts_its_existing_size_and_replaces_the_old_backup() {
+        let dir = std::env::temp_dir().join(format!("mydia_trace_reopen_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("trace.log");
+        std::fs::write(&path, b"0123456789").expect("existing trace");
+        std::fs::write(dir.join("trace.log.1"), b"stale").expect("stale backup");
+
+        let mut file = RotatingFile::open(path.clone(), 10).expect("open");
+        file.write_all(b"new").expect("write rotates at once");
+        file.flush().expect("flush");
+
+        assert_eq!(
+            std::fs::read(dir.join("trace.log.1")).expect("backup"),
+            b"0123456789"
+        );
+        assert_eq!(std::fs::read(&path).expect("current"), b"new");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
