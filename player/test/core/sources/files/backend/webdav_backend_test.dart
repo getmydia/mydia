@@ -120,4 +120,68 @@ void main() {
     expect(seen.headers['Depth'], '0');
     expect(seen.url.path, '/media/');
   });
+
+  group('collections_are_requested_with_a_trailing_slash', () {
+    WebDavBackend slashless(List<http.Request> seen) => WebDavBackend(
+          base: Uri.parse('https://dav.example.com/media'),
+          user: 'user',
+          password: 'pass',
+          client: okClient(onRequest: seen.add),
+        );
+
+    test('probe', () async {
+      final seen = <http.Request>[];
+      await slashless(seen).probe();
+      expect(seen.single.url.path, '/media/');
+    });
+
+    test('root_list', () async {
+      final seen = <http.Request>[];
+      await slashless(seen).list('/media');
+      expect(seen.single.url.path, '/media/');
+    });
+
+    test('subdirectory_list', () async {
+      final seen = <http.Request>[];
+      await slashless(seen).list('/media/Movies/Café Nights');
+      expect(seen.single.url.path, '/media/Movies/Caf%C3%A9%20Nights/');
+    });
+
+    test('empty_base_path', () async {
+      final seen = <http.Request>[];
+      await WebDavBackend(
+        base: Uri.parse('https://dav.example.com'),
+        user: 'user',
+        password: 'pass',
+        client: okClient(onRequest: seen.add),
+      ).probe();
+      expect(seen.single.url.path, '/');
+    });
+  });
+
+  group('a_server_that_never_answers_times_out_as_unreachable', () {
+    WebDavBackend hung(MockClient client) => WebDavBackend(
+          base: Uri.parse('https://dav.example.com/media/'),
+          user: 'user',
+          password: 'pass',
+          client: client,
+          timeout: const Duration(milliseconds: 50),
+        );
+
+    test('no_response_headers', () async {
+      final b = hung(MockClient((_) => Completer<http.Response>().future));
+      await expectLater(b.probe(), throwsA(isA<BackendUnreachable>()));
+      await expectLater(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
+    });
+
+    test('headers_then_a_body_that_never_ends', () async {
+      final b = hung(MockClient.streaming((_, __) async =>
+          http.StreamedResponse(StreamController<List<int>>().stream, 207)));
+      await expectLater(b.probe(), throwsA(isA<BackendUnreachable>()));
+    });
+
+    test('defaults_to_twenty_seconds', () {
+      expect(kWebDavTimeout, const Duration(seconds: 20));
+    });
+  });
 }

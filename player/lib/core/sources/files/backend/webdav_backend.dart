@@ -7,6 +7,10 @@ import 'package:xml/xml.dart';
 
 import 'file_system_backend.dart';
 
+/// How long a WebDAV request may take before the server counts as
+/// unreachable.
+const kWebDavTimeout = Duration(seconds: 20);
+
 const _propfindBody = '<?xml version="1.0" encoding="utf-8"?>'
     '<d:propfind xmlns:d="DAV:"><d:prop>'
     '<d:resourcetype/><d:getcontentlength/><d:getlastmodified/>'
@@ -19,17 +23,24 @@ class WebDavBackend implements FileSystemBackend {
     required String user,
     required String password,
     http.Client? client,
+    Duration timeout = kWebDavTimeout,
   })  : _base = base,
         _client = client ?? http.Client(),
+        _timeout = timeout,
         _auth = 'Basic ${base64.encode(utf8.encode('$user:$password'))}';
 
   final Uri _base;
   final http.Client _client;
   final String _auth;
 
+  /// How long one request may take, headers and body each: a server that
+  /// accepts the connection and never answers would otherwise hold a probe,
+  /// a folder check or a whole scan open for good.
+  final Duration _timeout;
+
   @override
   Future<List<FileEntry>> list(String dir) async {
-    final body = await _propfind(dir, depth: 1);
+    final body = await _propfind(_asCollection(dir), depth: 1);
     final self = _normalize(dir);
     return _parse(body).where((e) => _normalize(e.path) != self).toList();
   }
@@ -52,8 +63,13 @@ class WebDavBackend implements FileSystemBackend {
 
   @override
   Future<void> probe() async {
-    await _propfind(_base.path.isEmpty ? '/' : _base.path, depth: 0);
+    await _propfind(_asCollection(_base.path), depth: 0);
   }
+
+  /// [dir] as a collection URL, with its trailing slash (RFC 4918, 5.2).
+  /// Apache mod_dav, behind most NAS WebDAV shares, answers a collection
+  /// requested without one with a 301, which reads as unreachable.
+  static String _asCollection(String dir) => dir.endsWith('/') ? dir : '$dir/';
 
   Uri _url(String path) {
     final encoded = path.split('/').map(_encodeSegment).join('/');
@@ -70,7 +86,8 @@ class WebDavBackend implements FileSystemBackend {
       ..body = _propfindBody;
     final http.Response response;
     try {
-      response = await http.Response.fromStream(await _client.send(request));
+      final streamed = await _client.send(request).timeout(_timeout);
+      response = await http.Response.fromStream(streamed).timeout(_timeout);
     } on SocketException catch (e) {
       throw BackendUnreachable(e.message);
     } on http.ClientException catch (e) {
