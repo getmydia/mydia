@@ -148,15 +148,13 @@ class WebDavBackend implements FileSystemBackend {
       final path = _decodePath(href);
       final isDir = href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
-      // An entry the server answers with an error. A folder must not be
-      // read as absent, which would drop what is indexed under it, so the
-      // listing fails. Anything else (one file the server denies) owns
-      // nothing indexed, and failing for it would freeze the library: it
-      // is left out.
-      if (!_classified(response)) {
-        if (isDir) throw BackendUnreachable('cannot read folder $href');
-        debugPrint('[WebDavBackend] Skipping $href: the server refused it');
-        continue;
+      // An entry the server answers with an error (one file or folder it
+      // denies) is listed as unreadable: left out, it would read as deleted
+      // and take its indexed files with it; failing the listing would
+      // freeze the whole library on it.
+      final unreadable = !_classified(response);
+      if (unreadable) {
+        debugPrint('[WebDavBackend] $href refused; listed as unreadable');
       }
       final length = response.descendantElements
           .where(_isDav('getcontentlength'))
@@ -174,6 +172,7 @@ class WebDavBackend implements FileSystemBackend {
         isDir: isDir,
         size: isDir ? 0 : (length ?? 0),
         modified: _parseDate(modifiedText),
+        unreadable: unreadable,
       ));
     }
     return entries;
@@ -197,15 +196,18 @@ class WebDavBackend implements FileSystemBackend {
   }
 
   /// Whether [response] says what its resource is: the response itself is
-  /// not an error, and the propstat holding `resourcetype` (when the server
-  /// sent one) is 2xx.
+  /// not an error, and the propstat holding `resourcetype` is 2xx, or, with
+  /// no `resourcetype` sent, not every propstat failed.
   static bool _classified(XmlElement response) {
     if (!_statusOk(response)) return false;
-    final typed = response.childElements
-        .where(_isDav('propstat'))
+    final propstats = response.childElements.where(_isDav('propstat'));
+    final typed = propstats
         .where((p) => p.descendantElements.any(_isDav('resourcetype')))
         .firstOrNull;
-    return typed == null || _statusOk(typed);
+    if (typed != null) return _statusOk(typed);
+    // No resourcetype anywhere: readable only if some propstat succeeded
+    // (or the server sent none at all).
+    return propstats.isEmpty || propstats.any(_statusOk);
   }
 
   static String _decodePath(String href) {

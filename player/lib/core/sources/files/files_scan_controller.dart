@@ -21,13 +21,14 @@ class ScanState {
     this.done = 0,
     this.total = 0,
     this.error,
-    this.skippedFolders = 0,
+    this.skippedCount = 0,
   });
 
   final bool running;
 
-  /// Folders the last run could not read and left out, over every root.
-  final int skippedFolders;
+  /// Folders and files the last run could not read and left out, over
+  /// every root.
+  final int skippedCount;
 
   /// Files handled so far, over every root scanned in this run.
   final int done;
@@ -99,7 +100,7 @@ class FilesScanController extends Notifier<ScanState> {
                   running: true, done: latest.done, total: latest.total);
             }
           });
-          skipped += delta.skippedFolders.length;
+          skipped += delta.skippedPaths.length;
           scanned++;
         } on BackendFailure catch (e) {
           debugPrint('[FilesScan] ${root.id} not scanned: $e');
@@ -135,7 +136,7 @@ class FilesScanController extends Notifier<ScanState> {
           done: latest.done,
           total: latest.total,
           error: error,
-          skippedFolders: skipped,
+          skippedCount: skipped,
         );
       }
     }

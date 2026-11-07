@@ -10,16 +10,16 @@ class ScanDelta {
     this.added = const [],
     this.changed = const [],
     this.removedKeys = const [],
-    this.skippedFolders = const [],
+    this.skippedPaths = const [],
   });
 
   final List<IndexedFile> added;
   final List<IndexedFile> changed;
   final List<String> removedKeys;
 
-  /// Folders below the root that could not be read, relative to it. What
-  /// is under them was left as it was.
-  final List<String> skippedFolders;
+  /// Folders and files below the root that could not be read, relative to
+  /// it. What the index held for them, and under them, was left as it was.
+  final List<String> skippedPaths;
 
   bool get isEmpty => added.isEmpty && changed.isEmpty && removedKeys.isEmpty;
 }
@@ -63,10 +63,11 @@ class FileScanner {
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
     final skipped = [
-      for (final dir in await _walk(root.path, videos, sidecarsByDir))
-        _relative(root.path, dir),
+      for (final path in await _walk(root.path, videos, sidecarsByDir))
+        _relative(root.path, path),
     ];
-    final unreadable = [for (final dir in skipped) '$dir/'];
+    bool wasSkipped(String rel) =>
+        skipped.any((s) => rel == s || rel.startsWith('$s/'));
 
     final existing = {
       for (final f in _index.files().values)
@@ -122,11 +123,11 @@ class FileScanner {
     }
     if (pending.isEmpty && total == 0) onProgress?.call(0, 0);
 
-    // A file under a folder that could not be read was not looked for, so
-    // it is kept rather than reported gone.
+    // A file that could not be read, or is under a folder that could not
+    // be, was not looked at, so it is kept rather than reported gone.
     final removed = [
       for (final MapEntry(key: k, value: f) in existing.entries)
-        if (!seen.contains(k) && !unreadable.any(f.path.startsWith)) k,
+        if (!seen.contains(k) && !wasSkipped(f.path)) k,
     ];
 
     // The root was removed while it was being walked: writing now would
@@ -138,7 +139,7 @@ class FileScanner {
       added: added,
       changed: changed,
       removedKeys: removed,
-      skippedFolders: skipped,
+      skippedPaths: skipped,
     );
   }
 
@@ -158,13 +159,14 @@ class FileScanner {
         parsedAs: root.kind,
       );
 
-  /// Walks [start] and returns the folders below it that could not be read.
+  /// Walks [start] and returns the paths below it that could not be read.
   ///
   /// A folder below the root that refuses access or vanished (`lost+found`
-  /// at the top of an ext4 drive, a WebDAV folder answering 403) is left out
-  /// with what is under it, and the walk goes on: one such folder must not
-  /// fail every scan or ask the viewer to sign in again. The root failing,
-  /// or the backend going unreachable anywhere, still ends the walk.
+  /// at the top of an ext4 drive, a WebDAV folder answering 403), or an
+  /// entry its listing marks [FileEntry.unreadable], is left out with what
+  /// is under it, and the walk goes on: one such path must not fail every
+  /// scan or ask the viewer to sign in again. The root failing, or the
+  /// backend going unreachable anywhere, still ends the walk.
   Future<List<String>> _walk(
     String start,
     List<FileEntry> videos,
@@ -199,6 +201,16 @@ class FileScanner {
       }
       for (final e in entries) {
         if (e.name.startsWith('.')) continue;
+        if (e.unreadable) {
+          // Neither read nor descended into, and kept as indexed. Only what
+          // could hold media is reported: a folder, a video, or a name with
+          // no extension, which may well be a folder.
+          final ext = _ext(e.name);
+          if (e.isDir || ext.isEmpty || videoExtensions.contains(ext)) {
+            unreadable.add(_trimSlash(e.path));
+          }
+          continue;
+        }
         if (e.isDir) {
           if (_skippedDirs.contains(e.name) || depth >= _maxDepth) continue;
           if (visited.add(_identity(e)!)) queue.add((e.path, depth + 1));

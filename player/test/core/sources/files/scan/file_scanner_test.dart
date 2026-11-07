@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:player/core/sources/files/backend/webdav_backend.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/local_path_backend.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
@@ -171,7 +174,7 @@ void main() {
 
       expect(delta.added.map((f) => f.path), ['open/E.mkv']);
       expect(delta.removedKeys, [fileKeyFor('r1', 'A.mkv')]);
-      expect(delta.skippedFolders, ['locked']);
+      expect(delta.skippedPaths, ['locked']);
       expect(index.files().values.map((f) => f.path).toSet(), {
         'locked/B.mkv',
         'locked/deep/C.mkv',
@@ -180,6 +183,84 @@ void main() {
       });
     });
   }
+
+  group('webdav entries the server refuses', () {
+    const davRoot = LibraryRoot(
+      id: 'rd',
+      path: '/media',
+      kind: FilesLibraryKind.mixed,
+      title: 'Share',
+    );
+
+    /// Serves `PROPFIND` from [listings], by request path.
+    FileScanner davScanner(Map<String, String> listings) => FileScanner(
+          backend: WebDavBackend(
+            base: Uri.parse('https://dav.example.test/media/'),
+            user: 'u',
+            password: 'p',
+            client: MockClient((r) async {
+              final body = listings[r.url.path];
+              return body == null
+                  ? http.Response('', 404)
+                  : http.Response(body, 207);
+            }),
+          ),
+          names: names,
+          index: index,
+        );
+
+    Set<String> indexed() => index.files().values.map((f) => f.path).toSet();
+
+    final readable = {
+      '/media/':
+          _ms([_dir('/media/'), _dir('/media/Show/'), _file('/media/A.mkv')]),
+      '/media/Show/': _ms([
+        _dir('/media/Show/'),
+        _file('/media/Show/Show S01E01.mkv'),
+        _file('/media/Show/Show S01E02.mkv'),
+      ]),
+    };
+
+    test('an_indexed_file_later_refused_is_kept_and_reported', () async {
+      await davScanner(readable).scan(davRoot);
+      expect(indexed(), hasLength(3));
+
+      final delta = await davScanner({
+        ...readable,
+        '/media/Show/': _ms([
+          _dir('/media/Show/'),
+          _file('/media/Show/Show S01E01.mkv'),
+          _denied('/media/Show/Show S01E02.mkv'),
+        ]),
+      }).scan(davRoot);
+
+      expect(delta.removedKeys, isEmpty);
+      expect(delta.skippedPaths, ['Show/Show S01E02.mkv']);
+      expect(indexed(), contains('Show/Show S01E02.mkv'));
+    });
+
+    for (final href in ['/media/Show/', '/media/Show']) {
+      test('a_refused_folder_entry_keeps_its_subtree ($href)', () async {
+        await davScanner(readable).scan(davRoot);
+
+        final delta = await davScanner({
+          '/media/': _ms([
+            _dir('/media/'),
+            _denied(href),
+            _file('/media/A.mkv'),
+          ]),
+        }).scan(davRoot);
+
+        expect(delta.removedKeys, isEmpty);
+        expect(delta.skippedPaths, ['Show']);
+        expect(indexed(), {
+          'A.mkv',
+          'Show/Show S01E01.mkv',
+          'Show/Show S01E02.mkv',
+        });
+      });
+    }
+  });
 
   test('a_root_that_cannot_be_read_still_fails_the_scan', () async {
     final b = FakeBackend({'/lib/A.mkv': 1});
@@ -213,7 +294,7 @@ void main() {
       index: index,
     ).scan(local);
     expect(delta.added.map((f) => f.path), ['Open Film (2001).mkv']);
-    expect(delta.skippedFolders, ['locked']);
+    expect(delta.skippedPaths, ['locked']);
   }, skip: Platform.isWindows || _runningAsRoot());
 
   test('cyclic_listing_terminates_with_files_found_once', () async {
@@ -321,6 +402,25 @@ class _CyclicBackend extends FakeBackend {
     ];
   }
 }
+
+String _ms(List<String> responses) =>
+    '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+    '${responses.join()}</D:multistatus>';
+
+String _dir(String href) => '<D:response><D:href>$href</D:href>'
+    '<D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype>'
+    '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>';
+
+String _file(String href) => '<D:response><D:href>$href</D:href>'
+    '<D:propstat><D:prop><D:resourcetype/>'
+    '<D:getcontentlength>10</D:getcontentlength>'
+    '<D:getlastmodified>Sun, 01 Nov 2026 12:00:00 GMT</D:getlastmodified>'
+    '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>';
+
+/// Refused, with no resourcetype: nothing says whether it is a folder.
+String _denied(String href) => '<D:response><D:href>$href</D:href>'
+    '<D:propstat><D:prop/><D:status>HTTP/1.1 403 Forbidden</D:status>'
+    '</D:propstat></D:response>';
 
 /// Root reads a chmod 000 folder anyway, so the permission tests mean
 /// nothing under uid 0.

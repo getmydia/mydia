@@ -7,7 +7,13 @@ class FileEntry {
     required this.size,
     required this.modified,
     this.identity,
+    this.unreadable = false,
   });
+
+  /// Listed, but the server refused to say what it is (a WebDAV entry
+  /// answered 403). It is neither read nor descended into, and what the
+  /// index holds for it, and under it, is kept as it was.
+  final bool unreadable;
 
   /// Absolute path for local folders, decoded server path for WebDAV.
   final String path;
@@ -26,7 +32,8 @@ class FileEntry {
   final DateTime modified;
 
   @override
-  String toString() => 'FileEntry($path, dir: $isDir, size: $size)';
+  String toString() => 'FileEntry($path, dir: $isDir, size: $size'
+      '${unreadable ? ', unreadable' : ''})';
 }
 
 /// What the player needs to open a file: a URL and the headers it requires.

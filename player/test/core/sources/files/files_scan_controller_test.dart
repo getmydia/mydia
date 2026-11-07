@@ -195,6 +195,26 @@ void main() {
     expect(reopened.files(), isEmpty);
   });
 
+  test('a_refused_file_keeps_its_record_and_the_source_local', () async {
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final id = filesLocalSource.id;
+    final media = c.read(mediaSourceProvider(id))!;
+    final index = c.read(filesIndexProvider(filesLocalSource.account.id));
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(index.files(), hasLength(2));
+
+    backend.unreadable.add('/media/films/Low Orbit (2022).mkv');
+    await c.read(filesScanProvider(id).notifier).rescan();
+
+    final state = c.read(filesScanProvider(id));
+    expect(state.error, isNull);
+    expect(state.skippedCount, 1);
+    expect(media.connection, SourceConnectionStatus.local);
+    expect(index.files().values.map((f) => f.path),
+        containsAll(['Amber Tide (2019).mkv', 'Low Orbit (2022).mkv']));
+  });
+
   test('a_resume_past_the_interval_scans', () async {
     await f.index.setLastScanAt(now);
     final c = await container();
@@ -331,7 +351,7 @@ void main() {
       await c.read(filesScanProvider(filesLocalSource.id).notifier).rescan();
 
       expect(c.read(filesScanProvider(filesLocalSource.id)).error, isNull);
-      expect(c.read(filesScanProvider(filesLocalSource.id)).skippedFolders, 1);
+      expect(c.read(filesScanProvider(filesLocalSource.id)).skippedCount, 1);
       expect(media.connection, SourceConnectionStatus.local);
       expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
           isFalse);

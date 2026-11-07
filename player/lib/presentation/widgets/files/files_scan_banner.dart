@@ -9,10 +9,10 @@ import '../../../l10n/l10n.dart';
 
 /// Whether [scan] has something for [FilesScanBanner] to say.
 bool filesScanBannerShows(ScanState scan) =>
-    scan.running || scan.skippedFolders > 0;
+    scan.running || scan.skippedCount > 0;
 
 /// "Scanning 312 of 2,040" above a files library while its folders are read,
-/// and afterwards how many folders the scan could not read, if any. Takes no
+/// and afterwards how many folders and files the scan could not read, if any. Takes no
 /// space otherwise.
 class FilesScanBanner extends ConsumerWidget {
   const FilesScanBanner({super.key, required this.sourceId});
@@ -37,7 +37,7 @@ class FilesScanBanner extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                l10n.filesScanSkippedFolders(scan.skippedFolders),
+                l10n.filesScanSkippedItems(scan.skippedCount),
                 style: TextStyle(color: palette.textSecondary),
               ),
             ),

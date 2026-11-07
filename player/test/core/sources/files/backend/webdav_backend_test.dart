@@ -154,7 +154,7 @@ void main() {
     expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
   });
 
-  test('a_denied_file_is_left_out_and_the_rest_lists', () async {
+  test('a_denied_file_is_listed_unreadable_and_the_rest_lists', () async {
     const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/</D:href><D:propstat><D:prop>'
         '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
@@ -171,26 +171,26 @@ void main() {
         '</D:response></D:multistatus>';
     final b = backend(MockClient((_) async => http.Response(xml, 207)));
     final entries = await b.list('/media/');
-    expect(entries.map((e) => e.name), ['Open.mkv']);
+    expect(
+      [for (final e in entries) (e.name, e.unreadable)],
+      [('Locked.mkv', true), ('Gone.mkv', true), ('Open.mkv', false)],
+    );
   });
 
-  test('a_denied_folder_fails_the_listing', () {
+  test('a_denied_folder_is_listed_unreadable', () async {
     const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/Private/</D:href>'
         '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
-        '</D:multistatus>';
-    final b = backend(MockClient((_) async => http.Response(xml, 207)));
-    expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
-  });
-
-  test('a_folder_whose_type_is_denied_fails_the_listing', () {
-    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
-        '<D:response><D:href>/media/Private</D:href><D:propstat><D:prop>'
+        '<D:response><D:href>/media/Typed</D:href><D:propstat><D:prop>'
         '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
         '<D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat>'
         '</D:response></D:multistatus>';
     final b = backend(MockClient((_) async => http.Response(xml, 207)));
-    expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
+    final entries = await b.list('/media/');
+    expect(
+      [for (final e in entries) (e.name, e.isDir, e.unreadable)],
+      [('Private', true, true), ('Typed', true, true)],
+    );
   });
 
   test('a_404_propstat_for_other_properties_still_lists', () async {

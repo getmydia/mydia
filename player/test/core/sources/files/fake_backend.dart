@@ -21,6 +21,9 @@ class FakeBackend implements FileSystemBackend {
   /// Directory path -> failure thrown by [list] for it.
   final Map<String, BackendFailure> failures = {};
 
+  /// Files [list] marks [FileEntry.unreadable], as a server refusing them.
+  final Set<String> unreadable = {};
+
   /// When set, [probe] throws it.
   BackendFailure? probeFailure;
 
@@ -77,6 +80,7 @@ class FakeBackend implements FileSystemBackend {
           isDir: false,
           size: e.value,
           modified: _mtime(e.key),
+          unreadable: unreadable.contains(e.key),
         ),
       );
     }
