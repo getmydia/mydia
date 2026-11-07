@@ -19,6 +19,9 @@ serde_json = "1.0"
 # unconditionally rather than split by target because `sync` alone compiles
 # unchanged on wasm32-unknown-unknown, same as it does for mydia_p2p_core.
 tokio = { version = "1.49", features = ["sync"] }
+# Pure regex crate shared with the server. Unconditional because FRB generates
+# bindings for every target, so gating it would break the web build.
+mydia-media-names = { path = "../../../native/mydia_media_names" }
 
 # mydia_p2p_core is named only inside the target sections below, never here.
 # Cargo unifies features additively, so one untargeted line taking the core

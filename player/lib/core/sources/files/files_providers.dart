@@ -1,0 +1,269 @@
+/// Wiring for files libraries: the index box, one index per account, the
+/// backends, and building a [FilesMediaSource] for a stored [Source].
+library;
+
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ce/hive.dart';
+import 'package:http/http.dart' as http;
+
+import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../playback/playback_progress_store.dart';
+import '../connection/connection_refresh_bus.dart';
+import '../source.dart';
+import '../sources_providers.dart' show sourceSecretsProvider;
+import 'backend/file_system_backend.dart';
+import 'backend/local_path_backend.dart';
+import 'backend/webdav_backend.dart';
+import 'files_account.dart';
+import 'files_media_source.dart';
+import 'files_scan_controller.dart';
+import 'index/file_library_index.dart';
+import 'match/file_matcher.dart';
+import 'media_names.dart';
+
+/// Opens the boxes a files source reads synchronously while it builds: its
+/// index and the playback progress store. Called at startup after
+/// `initAppHive()`; Hive hands back an already-open box.
+Future<void> openFilesLibraryBoxes() async {
+  await Hive.openBox<Map<dynamic, dynamic>>(FileLibraryIndex.boxName);
+  await Hive.openBox<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName);
+}
+
+/// The `files_index` box, opened by [openFilesLibraryBoxes].
+final filesIndexBoxProvider = Provider<Box<Map<dynamic, dynamic>>>(
+    (ref) => Hive.box<Map<dynamic, dynamic>>(FileLibraryIndex.boxName));
+
+/// One index per account, shared by its source, its scans and the add flows:
+/// a second instance would hold its own copy of the records.
+final filesIndexProvider = Provider.family<FileLibraryIndex, String>(
+  (ref, accountId) =>
+      FileLibraryIndex(ref.watch(filesIndexBoxProvider), accountId: accountId),
+);
+
+/// The playback progress store, read synchronously. It wraps the same open
+/// box `playbackProgressStoreProvider` resolves to, so both see one set of
+/// records.
+final filesProgressStoreProvider = Provider<PlaybackProgressStore>((ref) =>
+    HivePlaybackProgressStore(
+        Hive.box<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName)));
+
+/// Whether the boxes [openFilesLibraryBoxes] opens are there. False when
+/// that failed at startup: files sources are then left out (see
+/// `canBuildSource`) instead of throwing from every list that reads them.
+final filesStorageOpenProvider = Provider<bool>((ref) {
+  try {
+    ref.read(filesIndexBoxProvider);
+    ref.read(filesProgressStoreProvider);
+    return true;
+  } catch (e) {
+    debugPrint('[FilesSource] Files library storage is not open: $e');
+    return false;
+  }
+});
+
+final relayTmdbProvider = Provider<RelayTmdb>((ref) => RelayTmdb());
+
+/// Overridable so tests can tell the time a scan is due.
+final filesClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
+
+typedef FilesBackendBuilder = FileSystemBackend Function(
+    Ref ref, Source source);
+
+/// How a files source reaches its files. Tests override it with a fake.
+final filesBackendBuilderProvider =
+    Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
+
+/// Folders on this device probe each of the account's roots. A WebDAV share
+/// reads its credentials on first use.
+FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
+  if (source.account.id == kFilesLocalAccountId ||
+      source.server.connections.isEmpty) {
+    final index = ref.read(filesIndexProvider(source.account.id));
+    return LocalFoldersBackend(roots: index.roots);
+  }
+  final secrets = ref.read(sourceSecretsProvider);
+  return LazyWebDavBackend(
+    base: source.server.connections.first.uri,
+    credentials: () => secrets.accountToken(source.account),
+  );
+}
+
+/// How long the index may go unscanned before opening the source scans it.
+const kFilesRescanAfter = Duration(hours: 6);
+
+bool filesRescanDue(DateTime? lastScanAt, DateTime now) =>
+    lastScanAt == null || now.difference(lastScanAt) > kFilesRescanAfter;
+
+/// A files source over its account's index. Probes the backend at once and
+/// on every resume or network change, and starts a scan when the last one
+/// is older than [kFilesRescanAfter].
+FilesMediaSource buildFilesSource(
+  Ref ref,
+  Source source, {
+  required void Function() onReauthNeeded,
+}) {
+  final index = ref.read(filesIndexProvider(source.account.id));
+  final progress = ref.read(filesProgressStoreProvider);
+  final tmdb = ref.read(relayTmdbProvider);
+  final invalidator = ref.read(invalidatorProvider);
+  final matcher = FileMatcher(
+    tmdb: tmdb,
+    names: ref.read(mediaNamesProvider),
+    index: index,
+    progress: progress,
+    sourceId: source.id,
+    onGroupLanded: () =>
+        invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
+  );
+  late final FilesMediaSource media;
+  // A resume or a network change probes again, and scans when the app sat
+  // in the background past the rescan interval: the source is not rebuilt
+  // then, so the check on open alone would not see it.
+  final events = ref.read(connectionRefreshBusProvider).events.listen((_) {
+    unawaited(media.probe());
+    _scanIfDue(ref, source, index);
+  });
+  final backend = ref.read(filesBackendBuilderProvider)(ref, source);
+  media = FilesMediaSource(
+    source: source,
+    backend: backend,
+    index: index,
+    progress: progress,
+    matcher: matcher,
+    tmdb: tmdb,
+    onReauthNeeded: onReauthNeeded,
+    invalidate: invalidator.invalidate,
+    onDispose: () {
+      unawaited(events.cancel());
+      if (backend is LazyWebDavBackend) backend.close();
+    },
+  );
+  unawaited(media.probe());
+  _scanIfDue(ref, source, index);
+  return media;
+}
+
+/// Starts a scan when the last one is older than [kFilesRescanAfter]. A
+/// scan already running is left to finish, with nothing queued after it.
+void _scanIfDue(Ref ref, Source source, FileLibraryIndex index) {
+  if (!filesRescanDue(index.lastScanAt(), ref.read(filesClockProvider)())) {
+    return;
+  }
+  // After this build: the scan reads the source back from its provider.
+  scheduleMicrotask(() {
+    if (!ref.mounted) return;
+    final scan = ref.read(filesScanProvider(source.id).notifier);
+    if (ref.read(filesScanProvider(source.id)).running) return;
+    unawaited(scan.rescan().catchError((Object e) {
+      debugPrint('[FilesSource] Scan on open failed: $e');
+    }));
+  });
+}
+
+/// Folders on this device: plain paths, and a probe that checks every root,
+/// so a drive that is unplugged or a folder that is gone shows as
+/// unreachable. A root that refuses access wins over one that is missing,
+/// since only the first asks the viewer to choose the folder again.
+class LocalFoldersBackend implements FileSystemBackend {
+  LocalFoldersBackend({required this.roots});
+
+  final List<LibraryRoot> Function() roots;
+  final _files = LocalPathBackend();
+
+  @override
+  Future<List<FileEntry>> list(String dir) => _files.list(dir);
+
+  @override
+  Future<FileEntry?> stat(String path) => _files.stat(path);
+
+  @override
+  Future<PlayableFile> playable(String path) => _files.playable(path);
+
+  @override
+  Future<void> probe() async {
+    BackendFailure? failure;
+    for (final r in roots()) {
+      try {
+        await LocalPathBackend(root: r.path).probe();
+      } on BackendFailure catch (e) {
+        if (failure == null || e is BackendPermissionLost) failure = e;
+      }
+    }
+    if (failure != null) throw failure;
+  }
+}
+
+/// A [WebDavBackend] built on first use from the stored credentials. A
+/// missing or unreadable credential is a refused one, and a refused call
+/// drops the built backend, so the next call reads the credentials again
+/// (after the viewer signs in anew).
+///
+/// Every backend it builds shares one HTTP client, so dropping one leaks
+/// nothing and a request still in flight on it finishes. [close] closes that
+/// client unless it was given one, which its owner closes.
+class LazyWebDavBackend implements FileSystemBackend {
+  LazyWebDavBackend({
+    required this.base,
+    required this.credentials,
+    http.Client? client,
+  })  : _owned = client == null ? http.Client() : null,
+        _given = client;
+
+  final Uri base;
+  final Future<String?> Function() credentials;
+  final http.Client? _owned;
+  final http.Client? _given;
+  Future<WebDavBackend>? _backend;
+
+  http.Client get _client => (_given ?? _owned)!;
+
+  /// Closes the client this backend made. Called when its source goes.
+  void close() => _owned?.close();
+
+  Future<T> _call<T>(Future<T> Function(WebDavBackend b) run) async {
+    final b = await _resolve();
+    try {
+      return await run(b);
+    } on BackendUnauthorized {
+      _backend = null;
+      rethrow;
+    }
+  }
+
+  Future<WebDavBackend> _resolve() => _backend ??= _build().then(
+        (b) => b,
+        onError: (Object e, StackTrace st) {
+          _backend = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
+
+  Future<WebDavBackend> _build() async {
+    final stored = await credentials();
+    if (stored == null) throw const BackendUnauthorized('no credentials');
+    final WebDavCredentials c;
+    try {
+      c = WebDavCredentials.fromJson(stored);
+    } on FormatException catch (e) {
+      debugPrint('[FilesSource] Unreadable WebDAV credentials: $e');
+      throw const BackendUnauthorized('unreadable credentials');
+    }
+    return WebDavBackend(
+        base: base, user: c.user, password: c.password, client: _client);
+  }
+
+  @override
+  Future<List<FileEntry>> list(String dir) => _call((b) => b.list(dir));
+
+  @override
+  Future<FileEntry?> stat(String path) => _call((b) => b.stat(path));
+
+  @override
+  Future<PlayableFile> playable(String path) => _call((b) => b.playable(path));
+
+  @override
+  Future<void> probe() => _call((b) => b.probe());
+}

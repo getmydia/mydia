@@ -9,6 +9,7 @@ import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'lib.dart';
+import 'media_names.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
@@ -70,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1236579695;
+  int get rustContentHash => 1636034117;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -149,6 +150,17 @@ abstract class RustLibApi extends BaseApi {
 
   Future<ClaimPayload> cratePairingKeysOpen(
       {required PairingKeys that, required String sealed});
+
+  List<FfiParsed> crateMediaNamesParseBatch(
+      {required String root,
+      required List<String> paths,
+      required FfiKind kind});
+
+  FfiMatch? crateMediaNamesScoreCandidates(
+      {required String title,
+      int? year,
+      required bool isShow,
+      required List<FfiCandidate> candidates});
 
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_HlsStreamHandle;
@@ -746,6 +758,65 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["that", "sealed"],
       );
 
+  @override
+  List<FfiParsed> crateMediaNamesParseBatch(
+      {required String root,
+      required List<String> paths,
+      required FfiKind kind}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(root, serializer);
+        sse_encode_list_String(paths, serializer);
+        sse_encode_ffi_kind(kind, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_ffi_parsed,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateMediaNamesParseBatchConstMeta,
+      argValues: [root, paths, kind],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateMediaNamesParseBatchConstMeta => const TaskConstMeta(
+        debugName: "parse_batch",
+        argNames: ["root", "paths", "kind"],
+      );
+
+  @override
+  FfiMatch? crateMediaNamesScoreCandidates(
+      {required String title,
+      int? year,
+      required bool isShow,
+      required List<FfiCandidate> candidates}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(title, serializer);
+        sse_encode_opt_box_autoadd_i_32(year, serializer);
+        sse_encode_bool(isShow, serializer);
+        sse_encode_list_ffi_candidate(candidates, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_box_autoadd_ffi_match,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateMediaNamesScoreCandidatesConstMeta,
+      argValues: [title, year, isShow, candidates],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateMediaNamesScoreCandidatesConstMeta =>
+      const TaskConstMeta(
+        debugName: "score_candidates",
+        argNames: ["title", "year", "isShow", "candidates"],
+      );
+
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_HlsStreamHandle => wire
           .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle;
@@ -848,6 +919,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FfiMatch dco_decode_box_autoadd_ffi_match(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ffi_match(raw);
+  }
+
+  @protected
   FlutterGraphQLRequest dco_decode_box_autoadd_flutter_graph_ql_request(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -903,6 +980,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   PairingKeys dco_decode_box_autoadd_pairing_keys(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_pairing_keys(raw);
@@ -930,6 +1013,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double dco_decode_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
+  }
+
+  @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  FfiCandidate dco_decode_ffi_candidate(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return FfiCandidate(
+      id: dco_decode_i_64(arr[0]),
+      title: dco_decode_String(arr[1]),
+      originalTitle: dco_decode_opt_String(arr[2]),
+      year: dco_decode_opt_box_autoadd_i_32(arr[3]),
+    );
+  }
+
+  @protected
+  FfiKind dco_decode_ffi_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return FfiKind.values[raw as int];
+  }
+
+  @protected
+  FfiMatch dco_decode_ffi_match(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return FfiMatch(
+      id: dco_decode_i_64(arr[0]),
+      confidence: dco_decode_f_64(arr[1]),
+    );
+  }
+
+  @protected
+  FfiParsed dco_decode_ffi_parsed(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return FfiParsed(
+      path: dco_decode_String(arr[0]),
+      isEpisode: dco_decode_bool(arr[1]),
+      title: dco_decode_String(arr[2]),
+      year: dco_decode_opt_box_autoadd_i_32(arr[3]),
+      season: dco_decode_opt_box_autoadd_i_32(arr[4]),
+      episode: dco_decode_opt_box_autoadd_i_32(arr[5]),
+      episodeEnd: dco_decode_opt_box_autoadd_i_32(arr[6]),
+      groupKey: dco_decode_String(arr[7]),
+    );
   }
 
   @protected
@@ -1138,13 +1277,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           protocolVersion: dco_decode_u_32(raw[2]),
         );
       case 1:
-        return const FlutterRemoteControlRequest_GetState();
+        return FlutterRemoteControlRequest_GetState();
       case 2:
-        return const FlutterRemoteControlRequest_Play();
+        return FlutterRemoteControlRequest_Play();
       case 3:
-        return const FlutterRemoteControlRequest_Pause();
+        return FlutterRemoteControlRequest_Pause();
       case 4:
-        return const FlutterRemoteControlRequest_Stop();
+        return FlutterRemoteControlRequest_Stop();
       case 5:
         return FlutterRemoteControlRequest_Seek(
           positionMs: dco_decode_u_64(raw[1]),
@@ -1166,9 +1305,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           id: dco_decode_opt_String(raw[1]),
         );
       case 10:
-        return const FlutterRemoteControlRequest_NextEpisode();
+        return FlutterRemoteControlRequest_NextEpisode();
       case 11:
-        return const FlutterRemoteControlRequest_PreviousEpisode();
+        return FlutterRemoteControlRequest_PreviousEpisode();
       case 12:
         return FlutterRemoteControlRequest_LoadContent(
           dco_decode_box_autoadd_flutter_load_content_request(raw[1]),
@@ -1195,13 +1334,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           dco_decode_box_autoadd_flutter_playback_snapshot(raw[1]),
         );
       case 2:
-        return const FlutterRemoteControlResponse_Accepted();
+        return FlutterRemoteControlResponse_Accepted();
       case 3:
-        return const FlutterRemoteControlResponse_NotAuthorized();
+        return FlutterRemoteControlResponse_NotAuthorized();
       case 4:
-        return const FlutterRemoteControlResponse_NotPlaying();
+        return FlutterRemoteControlResponse_NotPlaying();
       case 5:
-        return const FlutterRemoteControlResponse_Unsupported();
+        return FlutterRemoteControlResponse_Unsupported();
       case 6:
         return FlutterRemoteControlResponse_Error(
           dco_decode_String(raw[1]),
@@ -1245,9 +1384,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<FfiCandidate> dco_decode_list_ffi_candidate(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ffi_candidate).toList();
+  }
+
+  @protected
+  List<FfiParsed> dco_decode_list_ffi_parsed(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ffi_parsed).toList();
   }
 
   @protected
@@ -1272,6 +1429,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double? dco_decode_opt_box_autoadd_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_f_32(raw);
+  }
+
+  @protected
+  FfiMatch? dco_decode_opt_box_autoadd_ffi_match(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_ffi_match(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
   }
 
   @protected
@@ -1447,6 +1616,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FfiMatch sse_decode_box_autoadd_ffi_match(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ffi_match(deserializer));
+  }
+
+  @protected
   FlutterGraphQLRequest sse_decode_box_autoadd_flutter_graph_ql_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1505,6 +1680,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
   PairingKeys sse_decode_box_autoadd_pairing_keys(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1529,6 +1710,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double sse_decode_f_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat32();
+  }
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  FfiCandidate sse_decode_ffi_candidate(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_originalTitle = sse_decode_opt_String(deserializer);
+    var var_year = sse_decode_opt_box_autoadd_i_32(deserializer);
+    return FfiCandidate(
+        id: var_id,
+        title: var_title,
+        originalTitle: var_originalTitle,
+        year: var_year);
+  }
+
+  @protected
+  FfiKind sse_decode_ffi_kind(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return FfiKind.values[inner];
+  }
+
+  @protected
+  FfiMatch sse_decode_ffi_match(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_confidence = sse_decode_f_64(deserializer);
+    return FfiMatch(id: var_id, confidence: var_confidence);
+  }
+
+  @protected
+  FfiParsed sse_decode_ffi_parsed(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_isEpisode = sse_decode_bool(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_year = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_season = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_episode = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_episodeEnd = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_groupKey = sse_decode_String(deserializer);
+    return FfiParsed(
+        path: var_path,
+        isEpisode: var_isEpisode,
+        title: var_title,
+        year: var_year,
+        season: var_season,
+        episode: var_episode,
+        episodeEnd: var_episodeEnd,
+        groupKey: var_groupKey);
   }
 
   @protected
@@ -1759,13 +1997,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             controllerName: var_controllerName,
             protocolVersion: var_protocolVersion);
       case 1:
-        return const FlutterRemoteControlRequest_GetState();
+        return FlutterRemoteControlRequest_GetState();
       case 2:
-        return const FlutterRemoteControlRequest_Play();
+        return FlutterRemoteControlRequest_Play();
       case 3:
-        return const FlutterRemoteControlRequest_Pause();
+        return FlutterRemoteControlRequest_Pause();
       case 4:
-        return const FlutterRemoteControlRequest_Stop();
+        return FlutterRemoteControlRequest_Stop();
       case 5:
         var var_positionMs = sse_decode_u_64(deserializer);
         return FlutterRemoteControlRequest_Seek(positionMs: var_positionMs);
@@ -1782,9 +2020,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_id = sse_decode_opt_String(deserializer);
         return FlutterRemoteControlRequest_SelectSubtitleTrack(id: var_id);
       case 10:
-        return const FlutterRemoteControlRequest_NextEpisode();
+        return FlutterRemoteControlRequest_NextEpisode();
       case 11:
-        return const FlutterRemoteControlRequest_PreviousEpisode();
+        return FlutterRemoteControlRequest_PreviousEpisode();
       case 12:
         var var_field0 =
             sse_decode_box_autoadd_flutter_load_content_request(deserializer);
@@ -1815,13 +2053,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_decode_box_autoadd_flutter_playback_snapshot(deserializer);
         return FlutterRemoteControlResponse_State(var_field0);
       case 2:
-        return const FlutterRemoteControlResponse_Accepted();
+        return FlutterRemoteControlResponse_Accepted();
       case 3:
-        return const FlutterRemoteControlResponse_NotAuthorized();
+        return FlutterRemoteControlResponse_NotAuthorized();
       case 4:
-        return const FlutterRemoteControlResponse_NotPlaying();
+        return FlutterRemoteControlResponse_NotPlaying();
       case 5:
-        return const FlutterRemoteControlResponse_Unsupported();
+        return FlutterRemoteControlResponse_Unsupported();
       case 6:
         var var_field0 = sse_decode_String(deserializer);
         return FlutterRemoteControlResponse_Error(var_field0);
@@ -1860,6 +2098,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1867,6 +2111,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FfiCandidate> sse_decode_list_ffi_candidate(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FfiCandidate>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ffi_candidate(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FfiParsed> sse_decode_list_ffi_parsed(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FfiParsed>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ffi_parsed(deserializer));
     }
     return ans_;
   }
@@ -1908,6 +2177,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_f_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  FfiMatch? sse_decode_opt_box_autoadd_ffi_match(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_ffi_match(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_32(deserializer));
     } else {
       return null;
     }
@@ -2101,6 +2392,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_ffi_match(
+      FfiMatch self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ffi_match(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_flutter_graph_ql_request(
       FlutterGraphQLRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2157,6 +2455,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_pairing_keys(
       PairingKeys self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2180,6 +2484,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_f_32(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat32(self);
+  }
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_ffi_candidate(FfiCandidate self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_opt_String(self.originalTitle, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.year, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_kind(FfiKind self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_match(FfiMatch self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_f_64(self.confidence, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_parsed(FfiParsed self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_bool(self.isEpisode, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.year, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.season, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.episode, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.episodeEnd, serializer);
+    sse_encode_String(self.groupKey, serializer);
   }
 
   @protected
@@ -2431,11 +2776,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ffi_candidate(
+      List<FfiCandidate> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ffi_candidate(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ffi_parsed(
+      List<FfiParsed> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ffi_parsed(item, serializer);
     }
   }
 
@@ -2474,6 +2845,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_f_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_ffi_match(
+      FfiMatch? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_ffi_match(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_32(self, serializer);
     }
   }
 
@@ -2615,7 +3007,7 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
       RustLib.instance.api.crateP2PHostAddAddressHint(
           that: this, endpointAddrJson: endpointAddrJson);
 
-  /// Dial a peer using their EndpointAddr JSON.
+  /// Dial a peer using their `EndpointAddr` JSON.
   Future<void> dial({required String endpointAddrJson}) => RustLib.instance.api
       .crateP2PHostDial(that: this, endpointAddrJson: endpointAddrJson);
 
@@ -2636,7 +3028,7 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
         that: this,
       );
 
-  /// Get this node's EndpointAddr as JSON for sharing.
+  /// Get this node's `EndpointAddr` as JSON for sharing.
   Future<String> getNodeAddr() => RustLib.instance.api.crateP2PHostGetNodeAddr(
         that: this,
       );

@@ -21,7 +21,10 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../l10n/l10n.dart';
+import '../../../core/sources/source.dart' show SourceKind;
 import '../../widgets/browse_grid.dart';
+import '../../../core/sources/files/files_scan_controller.dart';
+import '../../widgets/files/files_scan_banner.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/source_artwork.dart';
@@ -109,6 +112,10 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
 
   _ViewMode _viewMode = _ViewMode.grid;
   bool _seeded = false;
+
+  /// Keeps the list's state (scroll, focus) when [_withScanBanner] changes
+  /// the widget that wraps it.
+  final _contentKey = GlobalKey();
 
   /// A plain library remembers its sort across visits; a saved filter's own
   /// query wins and is never stored.
@@ -335,49 +342,81 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
             ),
       onRefresh: () async =>
           ref.read(invalidatorProvider).invalidate([key.target]),
-      body: (context, scrollTopPadding) => switch (browse) {
-        AsyncData(:final value) when value.items.isEmpty => _EmptyState(
-            title: isShows
-                ? context.l10n.sourcesLibraryEmptyShows
-                : context.l10n.sourcesLibraryEmptyMovies,
-            icon: isShows ? Icons.live_tv_rounded : Icons.movie_filter_rounded,
-          ),
-        AsyncData(:final value) => NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              if (n.metrics.extentAfter < 800) {
-                ref.read(sourcePagesProvider(pages).notifier).loadMore();
-              }
-              return false;
-            },
-            child: isList
-                ? _ItemList(
-                    items: value.items,
-                    scrollTopPadding: scrollTopPadding,
-                  )
-                : BrowseGrid(
-                    scrollTopPadding: scrollTopPadding,
-                    itemCount: value.items.length,
-                    itemId: (index) => value.items[index].ref,
-                    itemBuilder: (context, index) {
-                      final item = value.items[index];
-                      return SourcePoster(
-                        key: ValueKey('source-poster-${item.ref.externalId}'),
-                        item: item,
-                        onTap: () => context.push(sourceItemLocation(item.ref)),
-                      );
-                    },
+      body: (context, scrollTopPadding) => _withScanBanner(
+          scrollTopPadding,
+          (scrollTopPadding) => switch (browse) {
+                AsyncData(:final value) when value.items.isEmpty => _EmptyState(
+                    title: isShows
+                        ? context.l10n.sourcesLibraryEmptyShows
+                        : context.l10n.sourcesLibraryEmptyMovies,
+                    icon: isShows
+                        ? Icons.live_tv_rounded
+                        : Icons.movie_filter_rounded,
                   ),
-          ),
-        AsyncError(:final error) => SourceErrorView(
-            error: error,
-            account: ref
-                .watch(mediaSourceProvider(library.sourceId))
-                ?.source
-                .account,
-            onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
-          ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+                AsyncData(:final value) =>
+                  NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n.metrics.extentAfter < 800) {
+                        ref
+                            .read(sourcePagesProvider(pages).notifier)
+                            .loadMore();
+                      }
+                      return false;
+                    },
+                    child: isList
+                        ? _ItemList(
+                            items: value.items,
+                            scrollTopPadding: scrollTopPadding,
+                          )
+                        : BrowseGrid(
+                            scrollTopPadding: scrollTopPadding,
+                            itemCount: value.items.length,
+                            itemId: (index) => value.items[index].ref,
+                            itemBuilder: (context, index) {
+                              final item = value.items[index];
+                              return SourcePoster(
+                                key: ValueKey(
+                                    'source-poster-${item.ref.externalId}'),
+                                item: item,
+                                onTap: () =>
+                                    context.push(sourceItemLocation(item.ref)),
+                              );
+                            },
+                          ),
+                  ),
+                AsyncError(:final error) => SourceErrorView(
+                    error: error,
+                    account: ref
+                        .watch(mediaSourceProvider(library.sourceId))
+                        ?.source
+                        .account,
+                    onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
+                  ),
+                _ => const Center(child: CircularProgressIndicator()),
+              }),
+    );
+  }
+
+  /// Files libraries show scan progress above the list while a scan runs,
+  /// and after one that skipped folders, in its own band, so it never covers
+  /// the first rows. [content] is built
+  /// with the top padding its scroll view should keep.
+  Widget _withScanBanner(double top, Widget Function(double top) content) {
+    final sourceId = widget.library.sourceId;
+    final source = ref.watch(mediaSourceProvider(sourceId));
+    if (source?.kind != SourceKind.files ||
+        !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)))) {
+      return KeyedSubtree(key: _contentKey, child: content(top));
+    }
+    return Column(
+      children: [
+        SizedBox(height: top),
+        Material(
+          color: context.palette.surface,
+          child: FilesScanBanner(sourceId: sourceId),
+        ),
+        Expanded(child: KeyedSubtree(key: _contentKey, child: content(0))),
+      ],
     );
   }
 }

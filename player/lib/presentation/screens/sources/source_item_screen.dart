@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/files/fix_match_sheet.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
@@ -74,9 +76,16 @@ class _Body extends ConsumerWidget {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final summary = detail.summary;
-    final watched =
-        ref.watch(mediaSourceProvider(item.sourceId))?.as<WatchedState>();
+    final source = ref.watch(mediaSourceProvider(item.sourceId));
+    // A files library's folder is a directory, not a title: it holds no
+    // watched state of its own.
+    final folderOfFiles =
+        item.kind == ItemKind.folder && source?.kind == SourceKind.files;
+    final watched = folderOfFiles ? null : source?.as<WatchedState>();
     final version = detail.versions.firstOrNull;
+    final fixMatch = item.kind == ItemKind.video
+        ? fixMatchAction(context, ref, item, summary.title)
+        : null;
     final resume = (summary.userState.progressSeconds ?? 0) > 0 &&
         !summary.userState.watched;
     final meta = [
@@ -145,6 +154,13 @@ class _Body extends ConsumerWidget {
                 label: Text(summary.userState.watched
                     ? l10n.commonWatched
                     : l10n.commonMarkWatched),
+              ),
+            if (fixMatch != null)
+              OutlinedButton.icon(
+                key: const Key('source-item-fix-match'),
+                onPressed: fixMatch,
+                icon: const Icon(Icons.manage_search_rounded),
+                label: Text(l10n.filesFixMatch),
               ),
           ],
         ),

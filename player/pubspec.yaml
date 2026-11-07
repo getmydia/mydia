@@ -57,6 +57,8 @@ dependencies:
   # 1.5.0 added AbortableRequest, which the crash reporter uses to cancel a
   # send that timed out instead of leaving it running.
   http: ^1.5.0
+  # WebDAV multistatus responses (files library backend).
+  xml: ^7.0.1
   shimmer: ^4.0.0
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
@@ -94,6 +96,8 @@ dependencies:
   # Direct, not transitive: window geometry restore needs the display work
   # areas to decide whether a saved rect is still reachable.
   screen_retriever: ^0.2.2
+  # The folder picker of Add folder (files libraries, desktop).
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

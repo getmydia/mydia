@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/domain/sources/item.dart';
@@ -55,6 +56,11 @@ class _NoWatchedSource extends FakeMediaSource {
   T? as<T extends Object>() => null;
 }
 
+class _FilesKindSource extends FakeMediaSource {
+  @override
+  SourceKind get kind => SourceKind.files;
+}
+
 class _FailingWatchedSource extends FakeMediaSource {
   @override
   Future<void> setWatched(ItemRef ref, bool watched) async =>
@@ -76,6 +82,25 @@ void main() {
             sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
     expect(find.byKey(const Key('source-item-play')), findsOneWidget);
     expect(find.byKey(const Key('source-item-watched')), findsNothing);
+  });
+
+  testWidgets('a files folder offers no watched toggle', (tester) async {
+    await pumpItem(
+        tester,
+        _FilesKindSource(),
+        const ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.folder, externalId: 'm3'));
+    expect(find.text('Invented Film 3'), findsOneWidget);
+    expect(find.byKey(const Key('source-item-watched')), findsNothing);
+  });
+
+  testWidgets('a files video keeps its watched toggle', (tester) async {
+    await pumpItem(
+        tester,
+        _FilesKindSource(),
+        const ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
+    expect(find.byKey(const Key('source-item-watched')), findsOneWidget);
   });
 
   testWidgets('a failing setWatched shows a toast', (tester) async {

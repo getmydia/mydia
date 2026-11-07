@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "server/**"
+      - "native/mydia_media_names/**"
       - "clippy.toml"
       - "rust-lints.toml"
       # player/lib/graphql/schema.graphql is a symlink to priv/graphql/schema.graphql,
@@ -18,6 +19,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "server/**"
+      - "native/mydia_media_names/**"
       - "clippy.toml"
       - "rust-lints.toml"
       # See the push.paths comment above: this entry is inert for the same

@@ -595,6 +595,9 @@ jobs:
       - name: Subsync tests
         run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml
 
+      - name: Media names tests
+        run: devenv shell -- cargo test --manifest-path native/mydia_media_names/Cargo.toml
+
   test-postgres:
     name: Test / PostgreSQL (${{ matrix.partition }}/3)
     needs: changes

@@ -13,6 +13,7 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
+import 'files/files_providers.dart' show filesIndexProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -135,6 +136,18 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       await ref.read(sourceCacheProvider).deleteAccount(accountId);
     } catch (e) {
       debugPrint('[Sources] Could not clear cached data for $accountId: $e');
+    }
+  }
+
+  /// Deletes a files account's index: its folders, file names, matches and
+  /// watched flags. The local account's id is fixed, so an index left behind
+  /// would come back with the next folder added. Best effort, like
+  /// [_dropCache].
+  Future<void> _dropFilesIndex(String accountId) async {
+    try {
+      await ref.read(filesIndexProvider(accountId)).clear();
+    } catch (e) {
+      debugPrint('[Sources] Could not clear the files index of $accountId: $e');
     }
   }
 
@@ -277,6 +290,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         });
         await ref.read(sourceSecretsProvider).deleteAll(record);
         await _dropCache(id);
+        if (record.account.kind == SourceKind.files) await _dropFilesIndex(id);
         ids.add(id);
       }
       return ids;
@@ -498,7 +512,9 @@ final activeSourceIdProvider = Provider<SourceId?>((ref) {
       sources.firstOrNull?.id;
 });
 
-/// The [MediaSource] for [id], or null when no such source exists.
+/// The [MediaSource] for [id], or null when no such source exists, or when
+/// it cannot be built on this launch (a files source whose storage failed to
+/// open), so the lists that read every source carry on without it.
 ///
 /// Watches only whether the source exists. A third-party source owns a
 /// connection race and timers, so a change to its stored record (a
@@ -509,6 +525,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
       ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
+  if (!canBuildSource(ref, source)) return null;
   final MediaSource media = buildThirdPartySource(ref, source);
   ref.onDispose(media.dispose);
   return media;

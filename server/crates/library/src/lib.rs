@@ -5,12 +5,12 @@
 //! calls stat, and opens files for reading through ffprobe. Nothing else.
 
 pub mod ffprobe;
-pub mod names;
-pub mod parser;
 pub mod ranking;
 pub mod scan;
 pub mod sidecar;
 pub mod walk;
+
+pub use mydia_media_names::{names, parser};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {

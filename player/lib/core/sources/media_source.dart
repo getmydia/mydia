@@ -31,6 +31,7 @@ enum SourceCapability {
   favoritesListing,
   mediaInfo,
   remoteTargets,
+  matchEditing,
 }
 
 /// How the player currently reaches a source.

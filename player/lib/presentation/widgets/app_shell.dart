@@ -694,8 +694,7 @@ class _AppShellState extends ConsumerState<AppShell>
   void _openMenu() {
     _menuState.value = (
       location: shellNavLocation(widget.location, origin: _originLocation),
-      isOffline:
-          isOffline(ref.read(routeSourceStatusProvider(widget.location))),
+      isOffline: ref.read(routeNavigationOfflineProvider(widget.location)),
     );
     MenuPage.open(
       context,
@@ -727,7 +726,8 @@ class _AppShellState extends ConsumerState<AppShell>
 
   void _navigateTo(String route) {
     if (openSettingsForRoute(context, route)) return;
-    if (_isOfflineMode() && !offlineRouteAllowed(route)) {
+    if (ref.read(routeNavigationOfflineProvider(widget.location)) &&
+        !offlineRouteAllowed(route)) {
       _showOfflineToast();
       return;
     }
@@ -804,6 +804,10 @@ class _AppShellState extends ConsumerState<AppShell>
     final location = shellNavLocation(widget.location, origin: _originLocation);
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
+    // The banner shows the real status; navigation is held back only for a
+    // source that serves nothing without its server.
+    final navOffline =
+        ref.watch(routeNavigationOfflineProvider(widget.location));
     final usesMenu = AppShell.usesMenuPage(
       platform: defaultTargetPlatform,
       isWeb: kIsWeb,
@@ -811,7 +815,7 @@ class _AppShellState extends ConsumerState<AppShell>
     // Before the layouts split: a menu page opened in the phone layout stays
     // open if an iPad widens into the sidebar layout, and must keep following.
     if (usesMenu) {
-      _syncMenuState((location: location, isOffline: isOffline));
+      _syncMenuState((location: location, isOffline: navOffline));
     }
 
     // Keeps the offline progress flush alive for the whole app session:
@@ -916,7 +920,7 @@ class _AppShellState extends ConsumerState<AppShell>
                           shellPopup: shellPopup,
                           coveredByPage: coveredByPage,
                         ),
-                        isOffline: isOffline,
+                        isOffline: navOffline,
                         showBackToMydia: showBackToMydia,
                         settingsBadge: settingsTabBadge(
                             updatePending: settingsUpdatePending(ref)),
@@ -925,7 +929,7 @@ class _AppShellState extends ConsumerState<AppShell>
                         location: location,
                         onNavigate: _navigateTo,
                         showBackToMydia: showBackToMydia,
-                        isOffline: isOffline,
+                        isOffline: navOffline,
                         // Gated like the regions: off-tier the sidebar row falls
                         // back to the per-row node FocusHighlight creates, which
                         // is what keeps `region`'s "unchanged off-tier" claim
@@ -978,7 +982,7 @@ class _AppShellState extends ConsumerState<AppShell>
               // new server's nav and the viewer sees the switch land.
               onSwitchSource: _navigateTo,
               showBackToMydia: showBackToMydia,
-              isOffline: isOffline,
+              isOffline: navOffline,
             ),
       body: Stack(
         children: [
@@ -1008,7 +1012,7 @@ class _AppShellState extends ConsumerState<AppShell>
           downloadSupported: isDownloadSupported,
         ),
         libraryEntries: libraryNavEntries(navEntries),
-        isOffline: isOffline,
+        isOffline: navOffline,
         showBackToMydia: showBackToMydia,
         settingsBadge: native
             ? settingsTabBadge(updatePending: settingsUpdatePending(ref))

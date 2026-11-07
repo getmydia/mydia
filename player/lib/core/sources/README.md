@@ -511,6 +511,44 @@ Each server's "Include in All servers" switch (Manage servers) is stored by
 through `mediaSourceProvider` like any other server, and every item opens
 `/s/<sourceId>/...` for its own source, whatever the kind.
 
+## Files libraries
+
+`SourceKind.files` (`files/`) is media in folders on this device (account
+`flocal`, server `local`, one per device) or on a WebDAV share (account and
+server `w<sha16 of the normalized URL>`, `connections[0]` the share's URL,
+`WebDavCredentials` JSON as the account token). There is no server: every
+listing is read from the account's `FileLibraryIndex` (Hive box
+`files_index`, opened at startup with the progress box so the source builds
+synchronously; `filesIndexProvider` holds one index per account, which
+scans and add flows must share).
+
+`files_queries.dart` turns one read of the index into items: matched groups
+by TMDB id, groups the relay has not answered for under a provisional id with
+their parsed title and no artwork, and files with no readable name or no
+winning match as `video` items in the Folders library, which exists only
+while there is one. Ids are built and parsed only in `files_ids.dart`.
+Watched is the index's flag or a stored position at 90%; resume needs 30
+seconds. Positions are the shared `PlaybackProgressStore`'s.
+
+The backend is only probed for the status: reachable is `local`, a refused
+WebDAV login or a lost folder permission flags `needsReauth`, anything else is
+`unreachable`, and browsing reads the index either way. Opening the source
+scans when the last scan is over six hours old (`filesScanProvider`); each
+group that lands, and each finished scan, invalidates the source's listings.
+Artwork is TMDB's image CDN, which needs no key.
+
+Accounts and roots are added and removed only through `FilesAccounts`
+(`filesAccountsProvider`): Add server, Folder (`/sources/add/folder`, Linux,
+Windows and macOS only) and WebDAV (`/sources/add/webdav`, everywhere but
+web). A root's id is `r` + the first 12 hex characters of the SHA-256 of its
+path, so adding the same folder twice keeps one root, and adding one starts a
+scan. The WebDAV form probes the share before anything is written, then
+writes the credentials, then the record; saving a URL already saved reuses
+its account, replaces the credentials and clears `needsReauth`. Signing a
+files account in again (`/sources/add/files?account=`) redirects to the
+folder picker for `flocal` and to the prefilled WebDAV form otherwise.
+`removeFilesAccount` removes the record and secrets, then clears the index.
+
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the

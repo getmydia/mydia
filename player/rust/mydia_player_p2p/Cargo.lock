@@ -1868,6 +1868,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mydia-media-names"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "mydia_p2p_core"
 version = "0.1.0"
 dependencies = [
@@ -1902,6 +1911,7 @@ dependencies = [
  "flutter_rust_bridge",
  "fs4",
  "log",
+ "mydia-media-names",
  "mydia_p2p_core",
  "serde_json",
  "tokio",

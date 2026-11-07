@@ -18,6 +18,7 @@ import 'jellyfin/jellyfin_identity.dart';
 import 'jellyfin/jellyfin_media_source.dart';
 import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
+import 'files/files_providers.dart';
 import 'media_source.dart';
 import 'mydia/mydia_gql_transport.dart';
 import 'mydia/mydia_client.dart';
@@ -39,12 +40,20 @@ import '../player/device_profile_provider.dart'
 
 final sourceHttpProvider = Provider<SourceHttp>((ref) => SourceHttp());
 
+/// Whether [source] can be built on this launch. Only a files source can
+/// fail to: its storage is opened at startup, and a failure there leaves
+/// files libraries out while every other source carries on.
+bool canBuildSource(Ref ref, Source source) =>
+    source.kind != SourceKind.files || ref.read(filesStorageOpenProvider);
+
 MediaSource buildThirdPartySource(Ref ref, Source source) =>
     switch (source.kind) {
       SourceKind.plex => _plex(ref, source),
       SourceKind.stash => _stash(ref, source),
       SourceKind.jellyfin => _jellyfin(ref, source),
       SourceKind.mydia => buildMydiaSource(ref, source),
+      SourceKind.files => buildFilesSource(ref, source,
+          onReauthNeeded: () => _flagReauth(ref, source)),
     };
 
 /// A credential read once from secure storage and held until the server
