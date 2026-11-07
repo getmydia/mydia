@@ -154,7 +154,7 @@ void main() {
       [1, 3],
     ]);
     expect(index.show(3)!.seasons.keys, unorderedEquals([1, 3]));
-    expect(index.group('moonharbor')!.isShow, isTrue);
+    expect(index.group('moonharbor|')!.isShow, isTrue);
   });
 
   test('never_more_than_four_requests_in_flight', () async {
@@ -184,7 +184,7 @@ void main() {
   test('pinned show still fetches seasons it lacks', () async {
     await addFiles(['Moon Harbor S02E01.mkv']);
     await index.putGroup(GroupMatch(
-      groupKey: 'moonharbor',
+      groupKey: 'moonharbor|',
       isShow: true,
       tmdbId: 3,
       pinned: true,
@@ -224,7 +224,7 @@ void main() {
   test('provisional episode progress migrates', () async {
     relay.ids['Moon Harbor'] = 3;
     await addFiles(['Moon Harbor S01E02.mkv']);
-    final p = provisionalKey('moonharbor');
+    final p = provisionalKey('moonharbor|');
     await saveProgress(ItemKind.episode, episodeId(p, 1, 2), 'episode');
     await matcher.matchPending();
     expect(
@@ -338,7 +338,7 @@ void main() {
     await addFiles(['Moon Harbor S01E02.mkv']);
     await matcher.matchPending();
     await saveProgress(ItemKind.episode, '3-1-2', 'episode');
-    await matcher.pin('moonharbor', isShow: true);
+    await matcher.pin('moonharbor|', isShow: true);
     final id = unmatchedFileId(fkey('Moon Harbor S01E02.mkv'));
     expect(progress.get(progressKey(ref(ItemKind.video, id))), isNotNull);
   });
@@ -349,7 +349,7 @@ void main() {
       path: 'Moon Harbor S01E01E02.mkv',
       isEpisode: true,
       title: 'Moon Harbor',
-      groupKey: 'moonharbor',
+      groupKey: 'moonharbor|',
       season: 1,
       episode: 1,
       episodeEnd: 2,
@@ -365,7 +365,7 @@ void main() {
         parsed: parsed,
       ),
     ]);
-    final p = provisionalKey('moonharbor');
+    final p = provisionalKey('moonharbor|');
     await saveProgress(ItemKind.episode, episodeId(p, 1, 1), 'episode');
     await saveProgress(ItemKind.episode, episodeId(p, 1, 2), 'episode');
     await matcher.matchPending();
@@ -407,7 +407,7 @@ void main() {
     );
     await addFiles(['Moon Harbor S00E01.mkv', 'Moon Harbor S01E01.mkv']);
     await m.matchPending();
-    expect(index.group('moonharbor')!.tmdbId, 3);
+    expect(index.group('moonharbor|')!.tmdbId, 3);
     expect(index.show(3)!.seasons.keys, unorderedEquals([0, 1]));
   });
 
@@ -418,11 +418,11 @@ void main() {
     await addFiles(['Copper Valley (2018).mkv', 'Moon Harbor S01E01.mkv']);
     await matcher.matchPending();
     expect(index.group('coppervalley|2018')!.tmdbId, 7);
-    expect(index.group('moonharbor')!.tmdbId, 7);
+    expect(index.group('moonharbor|')!.tmdbId, 7);
     await saveProgress(ItemKind.movie, '7', 'movie');
     await index.setWatched('7', true);
 
-    await matcher.pin('moonharbor', isShow: true, tmdbId: 8);
+    await matcher.pin('moonharbor|', isShow: true, tmdbId: 8);
 
     expect(progress.get(progressKey(ref(ItemKind.movie, '7'))), isNotNull);
     expect(progress.get(progressKey(ref(ItemKind.show, '8'))), isNull);

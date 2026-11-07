@@ -57,23 +57,21 @@ pub fn parse_batch(root: String, paths: Vec<String>, kind: FfiKind) -> Vec<FfiPa
         .into_iter()
         .filter_map(|path| {
             let parsed = parse(Path::new(&path), root, kind)?;
-            let key = identity_key(&parsed.title);
-            let (is_episode, season, episode, episode_end, group_key) = match parsed.kind {
-                ParsedKind::Movie => (
-                    false,
-                    None,
-                    None,
-                    None,
-                    format!(
-                        "{key}|{}",
-                        parsed.year.map(|y| y.to_string()).unwrap_or_default()
-                    ),
-                ),
+            // Movies by title and year, episodes by show title and year:
+            // two shows sharing a name are told apart by the year when the
+            // files carry one.
+            let group_key = format!(
+                "{}|{}",
+                identity_key(&parsed.title),
+                parsed.year.map(|y| y.to_string()).unwrap_or_default()
+            );
+            let (is_episode, season, episode, episode_end) = match parsed.kind {
+                ParsedKind::Movie => (false, None, None, None),
                 ParsedKind::Episode {
                     season,
                     episode,
                     episode_end,
-                } => (true, Some(season), Some(episode), episode_end, key),
+                } => (true, Some(season), Some(episode), episode_end),
             };
             Some(FfiParsed {
                 path,
@@ -136,5 +134,23 @@ mod tests {
         assert_eq!(out[0].title, "Copper Valley");
         assert_eq!(out[0].year, Some(2018));
         assert_eq!(out[0].group_key, "coppervalley|2018");
+    }
+
+    #[test]
+    fn episodes_group_by_show_title_and_year() {
+        let out = parse_batch(
+            "/lib".to_string(),
+            vec![
+                "/lib/Moon Harbor (2019)/Season 01/Moon Harbor (2019) S01E01.mkv".to_string(),
+                "/lib/Moon Harbor/Season 01/Moon Harbor S01E02.mkv".to_string(),
+            ],
+            FfiKind::Series,
+        );
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|p| p.is_episode));
+        assert_eq!(out[0].year, Some(2019));
+        assert_eq!(out[0].group_key, "moonharbor|2019");
+        assert_eq!(out[1].year, None);
+        assert_eq!(out[1].group_key, "moonharbor|");
     }
 }

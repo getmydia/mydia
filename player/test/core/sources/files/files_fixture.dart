@@ -141,7 +141,7 @@ class FilesFixture {
     ]);
     await match('coppervalley|2018', 101);
     await match('harborlights|2020', 102);
-    await match('glassorchard', 201, isShow: true);
+    await match('glassorchard|', 201, isShow: true);
     await index.putMovie(const MatchedMovie(
       tmdbId: 101,
       title: 'Copper Valley',

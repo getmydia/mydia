@@ -263,7 +263,7 @@ void main() {
     final f = b.fixture;
     b.relay.down = false;
     // TMDB numbers movies and shows separately: show 101 is not movie 101.
-    await f.match('glassorchard', 101, isShow: true);
+    await f.match('glassorchard|', 101, isShow: true);
     await f.index.putShow(const MatchedShow(tmdbId: 101, title: 'Orchard'));
 
     expect(b.source.canEditMatch(f.ref(ItemKind.show, _movie)), isTrue);
@@ -272,12 +272,12 @@ void main() {
 
     await b.source.setMatch(f.ref(ItemKind.movie, _movie), null);
     expect(f.index.group('coppervalley|2018')!.tmdbId, isNull);
-    final show = f.index.group('glassorchard')!;
+    final show = f.index.group('glassorchard|')!;
     expect((show.tmdbId, show.isShow, show.pinned), (101, true, false));
 
     await b.source.setMatch(f.ref(ItemKind.show, _movie),
         const TmdbCandidate(id: 900, title: 'Pinned 900'));
-    expect(f.index.group('glassorchard')!.tmdbId, 900);
+    expect(f.index.group('glassorchard|')!.tmdbId, 900);
     expect(f.index.group('coppervalley|2018')!.isShow, isFalse);
   });
 
