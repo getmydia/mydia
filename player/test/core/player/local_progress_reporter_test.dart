@@ -16,7 +16,7 @@ void main() {
     final reporter = LocalProgressReporter(
       store: store,
       item: item,
-      onSaved: () async => saved++,
+      onChanged: () async => saved++,
       clock: () => DateTime.utc(2026, 1, 2),
     );
 

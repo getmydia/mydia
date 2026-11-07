@@ -70,7 +70,9 @@ class FilesPlaybackSession extends SourcePlaybackSession {
   ProgressReporter createProgress() => LocalProgressReporter(
         store: _files.progressStore,
         item: item,
-        onSaved: () => _files
+        resumeMinSeconds: kFilesResumeMinSeconds,
+        watchedFraction: kFilesWatchedFraction,
+        onChanged: () => _files
             .invalidateTargets(SourceRules.watchedChanged(_files.source.id)),
       );
 

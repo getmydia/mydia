@@ -136,4 +136,33 @@ void main() {
         containsAll(SourceRules.watchedChanged(b.fixture.sourceId)));
     reporter.dispose();
   });
+
+  test('lists are told only on a threshold crossing and on stop', () async {
+    final b = await _build(FakeBackend({_file: 10}));
+    final session =
+        FilesPlaybackSession(source: b.source, item: movie(b), fileId: key);
+    final reporter = session.createProgress() as LocalProgressReporter;
+    final perCall = SourceRules.watchedChanged(b.fixture.sourceId).length;
+    int told() => b.invalidated.length ~/ perCall;
+    Future<void> tick(int position) => reporter.sendProgress(
+        positionSeconds: position, durationSeconds: 6000, paused: false);
+
+    await tick(10);
+    expect(told(), 0, reason: 'under 30s is not in progress yet');
+    await tick(20);
+    expect(told(), 0);
+    await tick(40);
+    expect(told(), 1, reason: 'now in Continue Watching');
+    await tick(50);
+    await tick(60);
+    await tick(4000);
+    expect(told(), 1, reason: 'still in progress');
+    await tick(5400);
+    expect(told(), 2, reason: 'crossed the watched line');
+    await tick(5500);
+    expect(told(), 2);
+    await reporter.sendStopped(positionSeconds: 5510, durationSeconds: 6000);
+    expect(told(), 3, reason: 'stopping always tells');
+    reporter.dispose();
+  });
 }
