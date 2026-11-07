@@ -9,6 +9,7 @@ import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/router/app_router.dart' show filesReauthLocation;
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_providers.dart';
+import 'package:player/core/sources/files/files_scan_controller.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -26,8 +27,18 @@ import '../../../test_utils/toast_harness.dart';
 
 int _boxes = 0;
 
+class _FixedScan extends FilesScanController {
+  _FixedScan(super.sourceId, this.fixed);
+
+  final ScanState fixed;
+
+  @override
+  ScanState build() => fixed;
+}
+
 Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
-    WidgetTester tester) async {
+    WidgetTester tester,
+    {ScanState? scan}) async {
   final box = (await tester.runAsync(() => Hive.openBox<Map<dynamic, dynamic>>(
       'manage_files_${_boxes++}',
       bytes: Uint8List(0))))!;
@@ -60,6 +71,9 @@ Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
       relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
       filesBackendBuilderProvider
           .overrideWithValue((ref, source) => FakeBackend({})),
+      if (scan != null)
+        filesScanProvider(filesLocalSource.id)
+            .overrideWith(() => _FixedScan(filesLocalSource.id, scan)),
     ],
     child: MaterialApp.router(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -82,7 +96,14 @@ Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
       ),
     ),
   ));
-  await tester.pumpAndSettle();
+  if (scan?.running ?? false) {
+    // A running scan's spinner never settles.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  } else {
+    await tester.pumpAndSettle();
+  }
   return (store, box);
 }
 
@@ -103,6 +124,18 @@ void main() {
             .roots()
             .map((r) => r.id),
         ['rshows']);
+  });
+
+  testWidgets('a running scan shows its progress in place of Rescan',
+      (tester) async {
+    await _pump(tester,
+        scan: const ScanState(running: true, walking: true, foldersRead: 12));
+    final rescan =
+        find.byKey(const ValueKey('manage-rescan-$kFilesLocalAccountId'));
+    expect(
+        find.descendant(of: rescan, matching: find.text('Reading folders: 12')),
+        findsOneWidget);
+    expect(find.text('Rescan'), findsNothing);
   });
 
   testWidgets('removing the account clears its index', (tester) async {

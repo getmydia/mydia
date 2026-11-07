@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../connection/app_foreground.dart';
 import '../source.dart';
 import '../sources_providers.dart' show mediaSourceProvider;
 import 'backend/file_system_backend.dart';
@@ -22,9 +23,18 @@ class ScanState {
     this.total = 0,
     this.error,
     this.skippedCount = 0,
+    this.walking = false,
+    this.foldersRead = 0,
   });
 
   final bool running;
+
+  /// The folders of a root are still being listed, so [total] does not
+  /// count its files yet. Over a network share this is most of the run.
+  final bool walking;
+
+  /// Folders listed so far in this run, over every root.
+  final int foldersRead;
 
   /// Folders and files the last run could not read and left out, over
   /// every root.
@@ -76,6 +86,7 @@ class FilesScanController extends Notifier<ScanState> {
       backend: media.backend,
       names: ref.read(mediaNamesProvider),
       index: index,
+      foreground: ref.read(appForegroundProvider),
     );
     final invalidator = ref.read(invalidatorProvider);
     final now = ref.read(filesClockProvider);
@@ -88,22 +99,50 @@ class FilesScanController extends Notifier<ScanState> {
     var before = 0;
     var latest = (done: 0, total: 0);
     var skipped = 0;
+    var foldersBefore = 0;
+    var folders = 0;
+    void report({required bool walking}) {
+      if (!ref.mounted) return;
+      state = ScanState(
+        running: true,
+        walking: walking,
+        done: latest.done,
+        total: latest.total,
+        foldersRead: folders,
+      );
+    }
+
+    final clock = Stopwatch()..start();
     try {
       final roots = index.roots();
+      debugPrint('[FilesScan] $sourceId: scanning ${roots.length} folders '
+          '(${roots.map((r) => '${r.id} ${r.kind.name} ${r.path}').join('; ')})'
+          ', last scan ${index.lastScanAt()?.toIso8601String() ?? 'never'}');
       var scanned = 0;
       for (final root in roots) {
+        final rootClock = Stopwatch()..start();
         try {
-          final delta = await scanner.scan(root, onProgress: (done, total) {
-            latest = (done: before + done, total: before + total);
-            if (ref.mounted) {
-              state = ScanState(
-                  running: true, done: latest.done, total: latest.total);
-            }
-          });
+          final delta = await scanner.scan(
+            root,
+            onFolderRead: (n) {
+              folders = foldersBefore + n;
+              report(walking: true);
+            },
+            onProgress: (done, total) {
+              latest = (done: before + done, total: before + total);
+              report(walking: false);
+            },
+          );
           skipped += delta.skippedPaths.length;
           scanned++;
+          debugPrint('[FilesScan] ${root.id} scanned in '
+              '${rootClock.elapsed.inSeconds}s: ${delta.added.length} added, '
+              '${delta.changed.length} changed, '
+              '${delta.removedKeys.length} removed, '
+              '${delta.skippedPaths.length} skipped');
         } on BackendFailure catch (e) {
-          debugPrint('[FilesScan] ${root.id} not scanned: $e');
+          debugPrint('[FilesScan] ${root.id} not scanned after '
+              '${rootClock.elapsed.inSeconds}s: $e');
           error = e;
           if (unreachable == null || e is BackendPermissionLost) {
             unreachable = e;
@@ -113,6 +152,7 @@ class FilesScanController extends Notifier<ScanState> {
           error = e;
         }
         before = latest.total;
+        foldersBefore = folders;
       }
       media.reportReachability(unreachable);
       try {
@@ -127,6 +167,14 @@ class FilesScanController extends Notifier<ScanState> {
       if (roots.isEmpty || scanned > 0) await index.setLastScanAt(now());
       await invalidator
           .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
+      final files = index.files().values;
+      final perRoot = {
+        for (final r in roots) r.id: files.where((f) => f.rootId == r.id).length
+      };
+      debugPrint('[FilesScan] $sourceId: done in ${clock.elapsed.inSeconds}s, '
+          '$scanned of ${roots.length} folders scanned, ${files.length} files '
+          'indexed $perRoot, ${files.where((f) => f.parsed == null).length} '
+          'with names that did not parse');
     } catch (e) {
       debugPrint('[FilesScan] Scan failed: $e');
       error ??= e;
@@ -137,6 +185,7 @@ class FilesScanController extends Notifier<ScanState> {
           total: latest.total,
           error: error,
           skippedCount: skipped,
+          foldersRead: folders,
         );
       }
     }

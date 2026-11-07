@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/connection/app_foreground.dart';
 import 'package:player/core/sources/connection/connection_refresh_bus.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
@@ -36,6 +38,7 @@ void main() {
   Future<ProviderContainer> container({
     MediaNames? names,
     bool realBackend = false,
+    AppForeground? foreground,
   }) async {
     final store = InMemorySourceStore();
     await store.putAccount(filesLocalRecord);
@@ -49,6 +52,8 @@ void main() {
       if (!realBackend)
         filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
       filesClockProvider.overrideWithValue(() => clock),
+      if (foreground != null)
+        appForegroundProvider.overrideWithValue(foreground),
     ]);
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
@@ -264,6 +269,41 @@ void main() {
     expect(index.files(), hasLength(2));
   });
 
+  test('the_walk_is_exposed_as_folders_read', () async {
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    final states = <ScanState>[];
+    c.listen(filesScanProvider(id), (_, s) => states.add(s));
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(states.any((s) => s.running && s.walking && s.foldersRead == 1),
+        isTrue);
+    expect(states.last.walking, isFalse);
+  });
+
+  test('a_scan_cut_off_by_the_app_leaving_finishes_when_it_returns', () async {
+    final app = AppForeground();
+    backend = _LeavingBackend(app, {
+      '/media/films/Amber Tide (2019).mkv': 10,
+      '/media/films/Low Orbit (2022).mkv': 20,
+    });
+    await f.index.setLastScanAt(now);
+    final c = await container(foreground: app);
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    final scan = c.read(filesScanProvider(id).notifier).rescan();
+    await _settle();
+    expect(c.read(filesScanProvider(id)).running, isTrue);
+
+    app.onLifecycle(AppLifecycleState.resumed);
+    await scan;
+    final state = c.read(filesScanProvider(id));
+    expect(state.error, isNull);
+    expect(c.read(filesIndexProvider(filesLocalSource.account.id)).files(),
+        hasLength(2));
+  });
+
   test('a_scan_that_throws_still_finishes', () async {
     await f.index.setLastScanAt(now);
     final c = await container(names: _ThrowingNames());
@@ -397,6 +437,23 @@ class _GatedBackend extends FakeBackend {
   Future<List<FileEntry>> list(String dir) async {
     await gate.future;
     return super.list(dir);
+  }
+}
+
+/// The app leaves the foreground during the first listing, which then fails
+/// the way a request frozen by iOS does once the app is back.
+class _LeavingBackend extends FakeBackend {
+  _LeavingBackend(this.app, super.files);
+
+  final AppForeground app;
+  var _left = false;
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    if (_left) return super.list(dir);
+    _left = true;
+    app.onLifecycle(AppLifecycleState.hidden);
+    throw const BackendUnreachable('timed out');
   }
 }
 

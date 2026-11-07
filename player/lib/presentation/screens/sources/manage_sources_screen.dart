@@ -22,6 +22,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/files/files_scan_banner.dart' show filesScanProgressText;
 import '../../widgets/toast/toaster.dart';
 import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
@@ -201,7 +202,8 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
     final source = widget.source;
     final roots = ref.watch(filesIndexProvider(source.account.id)).roots()
       ..sort((a, b) => a.title.compareTo(b.title));
-    final scanning = ref.watch(filesScanProvider(source.id)).running;
+    final scan = ref.watch(filesScanProvider(source.id));
+    final scanning = scan.running;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -231,8 +233,17 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
                       .catchError((Object e) {
                     debugPrint('[Sources] Rescan failed: $e');
                   })),
-          icon: const Icon(Icons.refresh_rounded),
-          label: Text(context.l10n.filesManageRescan),
+          // A disabled Rescan alone reads as broken: while a scan runs, the
+          // button says how far it has got.
+          icon: scanning
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+          label: Text(scanning
+              ? filesScanProgressText(context.l10n, scan)
+              : context.l10n.filesManageRescan),
         ),
       ],
     );

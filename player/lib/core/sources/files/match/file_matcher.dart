@@ -48,10 +48,21 @@ class FileMatcher {
   /// [GroupMatch]); the others carry on.
   Future<void> matchPending() async {
     final groups = _groups();
-    await Future.wait([
+    final pending = [
       for (final g in groups.values)
-        if (_needsWork(g)) _matchOne(g),
-    ]);
+        if (_needsWork(g)) g,
+    ];
+    final clock = Stopwatch()..start();
+    await Future.wait([for (final g in pending) _matchOne(g)]);
+    if (pending.isEmpty) return;
+    final matched =
+        pending.where((g) => _index.group(g.key)?.tmdbId != null).length;
+    final provisional =
+        pending.where((g) => _index.group(g.key) == null).length;
+    debugPrint('[FileMatcher] matched ${pending.length} of ${groups.length} '
+        'groups in ${clock.elapsed.inSeconds}s: $matched found, '
+        '${pending.length - matched - provisional} with no match, '
+        '$provisional left provisional');
   }
 
   /// Fixes a group to [tmdbId], or to "no match" when null. A pinned group is

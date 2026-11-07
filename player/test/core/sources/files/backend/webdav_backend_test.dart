@@ -53,6 +53,35 @@ void main() {
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
   });
 
+  test('webdav_server_rs_reply_lists_its_video', () async {
+    // webdav-server-rs, as captured: parentheses escaped in hrefs the
+    // client sent raw, a split 200/404 propstat on the folder, and both D:
+    // and d: bound to DAV:.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/Amber%20Tide%20%282019%29/</D:href>'
+        '<D:propstat><D:prop><d:resourcetype xmlns:d="DAV:"><D:collection>'
+        '</D:collection></d:resourcetype><D:getlastmodified>Tue, 20 Oct 2026 '
+        '12:29:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat><D:propstat><D:prop><D:getcontentlength>'
+        '</D:getcontentlength></D:prop><D:status>HTTP/1.1 404 Not Found'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>/media/Movies/Amber%20Tide%20%282019%29/'
+        'Amber.Tide.2019.1080p.BluRay.x264.mkv</D:href><D:propstat><D:prop>'
+        '<d:resourcetype xmlns:d="DAV:"></d:resourcetype><D:getcontentlength>'
+        '9036244507</D:getcontentlength><D:getlastmodified>Tue, 20 Oct 2026 '
+        '12:30:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response></D:multistatus>';
+    final entries =
+        await backend(MockClient((_) async => http.Response(xml, 207)))
+            .list('/media/Movies/Amber Tide (2019)');
+    expect(entries, hasLength(1));
+    final video = entries.single;
+    expect(video.name, 'Amber.Tide.2019.1080p.BluRay.x264.mkv');
+    expect(video.isDir, isFalse);
+    expect(video.unreadable, isFalse);
+    expect(video.size, 9036244507);
+  });
+
   test('playable_reencodes_the_path_and_carries_auth', () async {
     final p = await backend(okClient())
         .playable('/media/Movies/Night Train #2 (2011).mkv');

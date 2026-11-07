@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../connection/app_foreground.dart';
 import '../backend/file_system_backend.dart';
 import '../index/file_library_index.dart';
 import '../media_names.dart';
@@ -32,10 +33,16 @@ class FileScanner {
     required MediaNames names,
     required FileLibraryIndex index,
     DateTime Function()? now,
+    AppForeground? foreground,
   })  : _backend = backend,
         _names = names,
         _index = index,
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        _foreground = foreground;
+
+  /// How many times one folder is listed when each failure comes with the
+  /// app having left the foreground, before the walk gives up on it.
+  static const maxReadsAcrossSuspensions = 4;
 
   static const _batchSize = 200;
   static const videoExtensions = {
@@ -50,20 +57,25 @@ class FileScanner {
   final MediaNames _names;
   final FileLibraryIndex _index;
   final DateTime Function() _now;
+  final AppForeground? _foreground;
 
   /// Scans [root] and writes the outcome to the index before returning.
   /// A [BackendFailure] reading the root, or the backend going unreachable,
   /// is rethrown with the index untouched; a folder below the root that
-  /// cannot be read is skipped (see [_walk]).
+  /// cannot be read is skipped (see [_walk]). [onFolderRead] counts the
+  /// folders listed so far while the tree is walked, before [onProgress]
+  /// has a total to report.
   Future<ScanDelta> scan(
     LibraryRoot root, {
     void Function(int done, int total)? onProgress,
+    void Function(int folders)? onFolderRead,
   }) async {
     final registered = _registered(root);
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
     final skipped = [
-      for (final path in await _walk(root.path, videos, sidecarsByDir))
+      for (final path
+          in await _walk(root.path, videos, sidecarsByDir, onFolderRead))
         _relative(root.path, path),
     ];
     bool wasSkipped(String rel) =>
@@ -166,13 +178,18 @@ class FileScanner {
   /// entry its listing marks [FileEntry.unreadable], is left out with what
   /// is under it, and the walk goes on: one such path must not fail every
   /// scan or ask the viewer to sign in again. The root failing, or the
-  /// backend going unreachable anywhere, still ends the walk.
+  /// backend going unreachable anywhere, still ends the walk, unless the app
+  /// left the foreground meanwhile (see [_list]).
   Future<List<String>> _walk(
     String start,
     List<FileEntry> videos,
     Map<String, List<FileEntry>> sidecarsByDir,
+    void Function(int folders)? onFolderRead,
   ) async {
     final unreadable = <String>[];
+    var foldersRead = 0;
+    final stats = WalkStats();
+    final clock = Stopwatch()..start();
     final queue = <(String, int)>[(start, 0)];
     // Directories are told apart by where they really are, so one reached
     // through a symbolic link as well as directly is walked once, and a
@@ -188,18 +205,31 @@ class FileScanner {
       final (dir, depth) = queue.removeLast();
       final List<FileEntry> entries;
       try {
-        entries = await _backend.list(dir);
+        entries = await _list(dir);
+        onFolderRead?.call(++foldersRead);
       } on BackendFailure catch (e) {
         final belowRoot = depth > 0;
         final refusedOrGone = e is BackendPermissionLost ||
             e is BackendUnauthorized ||
             e is BackendNotFound;
-        if (!belowRoot || !refusedOrGone) rethrow;
+        if (!belowRoot || !refusedOrGone) {
+          debugPrint('[FileScanner] $start walk failed at $dir after '
+              '${clock.elapsed.inSeconds}s, ${stats.summary()}: $e');
+          rethrow;
+        }
         debugPrint('[FileScanner] Skipping $dir: $e');
         unreadable.add(_trimSlash(dir));
         continue;
       }
+      stats.folders++;
+      if (depth == 0) {
+        // What the root holds, as the backend handed it over: the first
+        // thing to look at when a library comes up empty.
+        debugPrint('[FileScanner] $start lists ${entries.length} entries: '
+            '${describeEntries(entries)}');
+      }
       for (final e in entries) {
+        stats.count(e);
         if (e.name.startsWith('.')) continue;
         if (e.unreadable) {
           // Neither read nor descended into, and kept as indexed. Only what
@@ -225,7 +255,34 @@ class FileScanner {
       }
     }
     videos.sort((a, b) => a.path.compareTo(b.path));
+    debugPrint('[FileScanner] $start walked in ${clock.elapsed.inSeconds}s: '
+        '${stats.summary()}, ${unreadable.length} skipped as unreadable');
     return unreadable;
+  }
+
+  /// Lists [dir]. A walk over a network share can take minutes, and on iOS
+  /// leaving the app freezes it: the request in flight then fails as
+  /// unreachable once the app is back. Such a failure, with the app having
+  /// left during the request, waits for the foreground and lists the same
+  /// folder again, so the walk goes on where it was instead of the whole
+  /// root being dropped and started over from nothing.
+  Future<List<FileEntry>> _list(String dir) async {
+    final foreground = _foreground;
+    for (var reads = 1;; reads++) {
+      final departures = foreground?.departures;
+      try {
+        return await _backend.list(dir);
+      } on BackendUnreachable catch (e) {
+        if (foreground == null ||
+            foreground.departures == departures ||
+            reads >= maxReadsAcrossSuspensions) {
+          rethrow;
+        }
+        debugPrint('[FileScanner] $dir cut off while the app was away '
+            '($e); reading it again on return');
+        await foreground.whenForeground();
+      }
+    }
   }
 
   List<String> _sidecarsFor(
@@ -277,6 +334,65 @@ class FileScanner {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+/// Up to [max] of [entries] as `name/` for a folder, `name (size)` for a
+/// file, with `!` after an entry the server refused, for the log.
+@visibleForTesting
+String describeEntries(List<FileEntry> entries, {int max = 12}) {
+  final shown = [
+    for (final e in entries.take(max))
+      '${e.name}${e.isDir ? '/' : ' (${e.size})'}${e.unreadable ? '!' : ''}',
+  ];
+  final more = entries.length - shown.length;
+  return [...shown, if (more > 0) '... $more more'].join(', ');
+}
+
+/// What a walk saw, for the log line that ends it: how many entries were
+/// folders, videos, subtitles and other files (by extension), hidden, or
+/// refused by the server.
+@visibleForTesting
+class WalkStats {
+  var folders = 0;
+  var dirs = 0;
+  var videos = 0;
+  var subtitles = 0;
+  var hidden = 0;
+  var unreadable = 0;
+  final other = <String, int>{};
+
+  void count(FileEntry e) {
+    if (e.name.startsWith('.')) {
+      hidden++;
+    } else if (e.unreadable) {
+      unreadable++;
+    } else if (e.isDir) {
+      dirs++;
+    } else {
+      final ext = FileScanner._ext(e.name);
+      if (FileScanner.videoExtensions.contains(ext)) {
+        videos++;
+      } else if (FileScanner.subtitleExtensions.contains(ext)) {
+        subtitles++;
+      } else {
+        final key = ext.isEmpty ? '(none)' : ext;
+        other[key] = (other[key] ?? 0) + 1;
+      }
+    }
+  }
+
+  String summary() {
+    final top = (other.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value)))
+        .take(6)
+        .map((e) => '${e.key} ${e.value}')
+        .join(', ');
+    final others = other.values.fold(0, (a, b) => a + b);
+    return '$folders folders read, $dirs subfolders, $videos videos, '
+        '$subtitles subtitles, $others other files'
+        '${top.isEmpty ? '' : ' [$top]'}, $hidden hidden, '
+        '$unreadable refused';
   }
 }
 

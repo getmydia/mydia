@@ -11,6 +11,16 @@ import '../../../l10n/l10n.dart';
 bool filesScanBannerShows(ScanState scan) =>
     scan.running || scan.skippedCount > 0;
 
+/// What a running [scan] is doing: the folders read while they are still
+/// being listed, then the files handled out of the total.
+String filesScanProgressText(AppLocalizations l10n, ScanState scan) {
+  final format = NumberFormat.decimalPattern(l10n.localeName);
+  return scan.walking
+      ? l10n.filesScanReadingFolders(format.format(scan.foldersRead))
+      : l10n.filesScanProgress(
+          format.format(scan.done), format.format(scan.total));
+}
+
 /// "Scanning 312 of 2,040" above a files library while its folders are read,
 /// and afterwards how many folders and files the scan could not read, if any. Takes no
 /// space otherwise.
@@ -24,7 +34,6 @@ class FilesScanBanner extends ConsumerWidget {
     final scan = ref.watch(filesScanProvider(sourceId));
     if (!filesScanBannerShows(scan)) return const SizedBox.shrink();
     final l10n = context.l10n;
-    final format = NumberFormat.decimalPattern(l10n.localeName);
     final palette = context.palette;
     if (!scan.running) {
       return Padding(
@@ -57,8 +66,7 @@ class FilesScanBanner extends ConsumerWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              l10n.filesScanProgress(
-                  format.format(scan.done), format.format(scan.total)),
+              filesScanProgressText(l10n, scan),
               style: TextStyle(color: palette.textSecondary),
             ),
           ),

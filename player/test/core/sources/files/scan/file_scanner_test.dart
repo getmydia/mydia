@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:player/core/sources/connection/app_foreground.dart';
 import 'package:player/core/sources/files/backend/webdav_backend.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/local_path_backend.dart';
@@ -41,8 +44,92 @@ void main() {
     await dir.delete(recursive: true);
   });
 
-  FileScanner scanner(FakeBackend b, {DateTime Function()? now}) =>
-      FileScanner(backend: b, names: names, index: index, now: now);
+  FileScanner scanner(
+    FakeBackend b, {
+    DateTime Function()? now,
+    AppForeground? foreground,
+  }) =>
+      FileScanner(
+        backend: b,
+        names: names,
+        index: index,
+        now: now,
+        foreground: foreground,
+      );
+
+  group('the app leaving the foreground mid-walk', () {
+    // iOS freezes a backgrounded app; the request in flight then times out
+    // the moment it comes back, before the resume is even reported.
+    test('a_folder_that_failed_while_away_is_read_again_on_return', () async {
+      final app = AppForeground();
+      final b = _SuspendingBackend(
+          {
+            '/lib/A.mkv': 1,
+            '/lib/sub/B.mkv': 1,
+            '/lib/sub/deeper/C.mkv': 1,
+          },
+          app: app,
+          suspendOn: {'/lib/sub': 1});
+
+      var finished = false;
+      final scan = scanner(b, foreground: app)
+          .scan(root)
+          .whenComplete(() => finished = true);
+      await pumpEventQueue();
+      expect(finished, isFalse, reason: 'waits for the app to come back');
+      expect(index.files(), isEmpty);
+
+      app.onLifecycle(AppLifecycleState.resumed);
+      final delta = await scan;
+
+      expect([for (final f in delta.added) f.path],
+          unorderedEquals(['A.mkv', 'sub/B.mkv', 'sub/deeper/C.mkv']));
+      // Picked up at the folder that failed, not walked again from the top.
+      expect(b.listed.where((d) => d == '/lib'), hasLength(1));
+      expect(b.listed.where((d) => d == '/lib/sub'), hasLength(2));
+    });
+
+    test('a_folder_that_fails_in_the_foreground_still_fails_the_scan',
+        () async {
+      final app = AppForeground();
+      final b = FakeBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1});
+      b.failures['/lib/sub'] = const BackendUnreachable('timed out');
+      await expectLater(scanner(b, foreground: app).scan(root),
+          throwsA(isA<BackendUnreachable>()));
+      expect(b.listed.where((d) => d == '/lib/sub'), hasLength(1));
+      expect(index.files(), isEmpty);
+    });
+
+    test('a_folder_that_fails_after_every_return_ends_the_scan', () async {
+      final app = AppForeground();
+      final b = _SuspendingBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1},
+          app: app, suspendOn: {'/lib/sub': 100}, resumeAfter: true);
+      await expectLater(scanner(b, foreground: app).scan(root),
+          throwsA(isA<BackendUnreachable>()));
+      expect(b.listed.where((d) => d == '/lib/sub'),
+          hasLength(FileScanner.maxReadsAcrossSuspensions));
+    });
+
+    test('a_refusal_while_away_is_not_retried', () async {
+      final app = AppForeground()..onLifecycle(AppLifecycleState.paused);
+      final b = FakeBackend({'/lib/A.mkv': 1, '/lib/locked/B.mkv': 1});
+      b.failures['/lib/locked'] = const BackendUnauthorized('HTTP 403');
+      final delta = await scanner(b, foreground: app).scan(root);
+      expect([for (final f in delta.added) f.path], ['A.mkv']);
+      expect(b.listed.where((d) => d == '/lib/locked'), hasLength(1));
+    });
+  });
+
+  test('the_walk_reports_each_folder_it_reads', () async {
+    final b = FakeBackend({
+      '/lib/A.mkv': 1,
+      '/lib/x/B.mkv': 1,
+      '/lib/y/C.mkv': 1,
+    });
+    final folders = <int>[];
+    await scanner(b).scan(root, onFolderRead: folders.add);
+    expect(folders, [1, 2, 3]);
+  });
 
   test('first_scan_adds_videos_and_attaches_sidecars', () async {
     final b = FakeBackend({
@@ -379,6 +466,35 @@ void main() {
     final dones = [for (final c in calls) c.$1];
     expect(dones, orderedEquals([...dones]..sort()));
   });
+}
+
+/// Leaves the foreground while listing a folder in [suspendOn], as iOS
+/// suspending the app mid-request, and fails that listing the way the
+/// overdue timeout does. With [resumeAfter], the app comes back right after.
+class _SuspendingBackend extends FakeBackend {
+  _SuspendingBackend(
+    super.files, {
+    required this.app,
+    required Map<String, int> suspendOn,
+    this.resumeAfter = false,
+  }) : _suspendOn = Map.of(suspendOn);
+
+  final AppForeground app;
+  final Map<String, int> _suspendOn;
+  final bool resumeAfter;
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    final left = _suspendOn[dir] ?? 0;
+    if (left == 0) return super.list(dir);
+    _suspendOn[dir] = left - 1;
+    listed.add(dir);
+    app.onLifecycle(AppLifecycleState.hidden);
+    if (resumeAfter) {
+      scheduleMicrotask(() => app.onLifecycle(AppLifecycleState.resumed));
+    }
+    throw const BackendUnreachable('timed out');
+  }
 }
 
 /// Lists an extra entry in `/lib/A` that points back at `/lib`, and one that

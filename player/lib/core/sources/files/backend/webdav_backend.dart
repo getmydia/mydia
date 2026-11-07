@@ -53,11 +53,40 @@ class WebDavBackend implements FileSystemBackend {
   /// a folder check or a whole scan open for good.
   final Duration _timeout;
 
+  /// Whether a listing's raw reply has been logged by this backend yet.
+  var _loggedRawListing = false;
+  var _loggedMissingSelf = false;
+
+  /// How much of the first listing's raw reply goes to the log.
+  static const rawListingLogChars = 1500;
+
   @override
   Future<List<FileEntry>> list(String dir) async {
     final body = await _propfind(_asCollection(dir), depth: 1);
+    if (!_loggedRawListing) {
+      // One raw reply per backend: how this server writes hrefs, folders and
+      // sizes, without a capture on the server side.
+      _loggedRawListing = true;
+      final excerpt = body.length > rawListingLogChars
+          ? '${body.substring(0, rawListingLogChars)}... '
+              '(${body.length} chars)'
+          : body;
+      debugPrint('[WebDavBackend] PROPFIND $dir replied: $excerpt');
+    }
     final self = _normalize(dir);
-    return _parse(body).where((e) => _normalize(e.path) != self).toList();
+    final all = _parse(body);
+    final children = all.where((e) => _normalize(e.path) != self).toList();
+    if (all.length == children.length &&
+        all.isNotEmpty &&
+        !_loggedMissingSelf) {
+      _loggedMissingSelf = true;
+      // The folder itself always comes back first; when nothing matched it,
+      // the server's hrefs are not the paths asked for, and every child
+      // path built from them will be wrong too.
+      debugPrint('[WebDavBackend] $dir: no entry for the folder itself '
+          'among ${all.length} (first href ${all.first.path})');
+    }
+    return children;
   }
 
   @override
@@ -139,12 +168,16 @@ class WebDavBackend implements FileSystemBackend {
       throw const BackendUnreachable('not a WebDAV multistatus response');
     }
     final entries = <FileEntry>[];
+    var withoutHref = 0;
     for (final response in root.childElements.where(_isDav('response'))) {
       final href = response.descendantElements
           .where(_isDav('href'))
           .map((e) => e.innerText.trim())
           .firstOrNull;
-      if (href == null || href.isEmpty) continue;
+      if (href == null || href.isEmpty) {
+        withoutHref++;
+        continue;
+      }
       final path = _decodePath(href);
       final isDir = href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
@@ -174,6 +207,10 @@ class WebDavBackend implements FileSystemBackend {
         modified: _parseDate(modifiedText),
         unreadable: unreadable,
       ));
+    }
+    if (withoutHref > 0) {
+      debugPrint('[WebDavBackend] dropped $withoutHref responses without '
+          'an href');
     }
     return entries;
   }
