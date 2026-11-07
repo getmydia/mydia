@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const { chromium } = require("@playwright/test");
 
@@ -303,8 +304,9 @@ async function capturePlayer(browser) {
 
   // Each preset at both sizes. The preset is read from localStorage at boot,
   // so seed it before any page script runs, in a fresh context.
-  for (const preset of playerPresets) {
-    for (const size of playerSizes) {
+  const hashes = new Map();
+  for (const size of playerSizes) {
+    for (const preset of playerPresets) {
       const name = `player-theme-${preset}${size.suffix}`;
       console.log(`📸 Capturing: ${name}`);
 
@@ -325,7 +327,26 @@ async function capturePlayer(browser) {
       });
       await page.waitForTimeout(6000);
 
+      const stored = await page.evaluate(() =>
+        window.localStorage.getItem("mydia_auth_theme_preset"),
+      );
+      if (stored !== preset) {
+        throw new Error(
+          `${name}: localStorage mydia_auth_theme_preset is ${JSON.stringify(stored)}, expected "${preset}"`,
+        );
+      }
+
       await save(page, name);
+      const digest = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(`${config.outputDir}/${name}.png`))
+        .digest("hex");
+      for (const [other, otherDigest] of hashes) {
+        if (otherDigest === digest) {
+          throw new Error(`${name} is byte-identical to ${other}: the preset did not apply`);
+        }
+      }
+      hashes.set(name, digest);
       console.log("");
       await context.close();
     }
@@ -338,9 +359,19 @@ async function capturePlayer(browser) {
 async function takeScreenshots() {
   console.log("🎬 Starting Mydia screenshot capture...\n");
 
+  // The player titles its server by the URL host, so a BASE_URL on localhost
+  // shows "localhost" in the app bar. Point BASE_URL at a neutral name and map
+  // it to loopback here (reseed with --base-url so artwork uses the same host).
+  const host = new URL(config.baseUrl).hostname;
+  const args = [];
+  if (!/^(localhost|[\d.]+|\[.*\])$/.test(host)) {
+    args.push(`--host-resolver-rules=MAP ${host} 127.0.0.1`);
+  }
+
   const browser = await chromium.launch({
     headless: true,
     executablePath: config.executablePath,
+    args,
   });
 
   try {

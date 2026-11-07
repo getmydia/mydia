@@ -63,14 +63,13 @@ defmodule Mydia.Demo.Artwork do
     line_height = round(font * 1.15)
     first_y = round(h / 2 - (length(lines) - 1) * line_height / 2 + font / 3)
 
+    # Backdrops carry no text: the apps draw the title over them, so a
+    # rendered copy shows up as a giant ghost behind the real one.
     text =
-      lines
-      |> Enum.with_index()
-      |> Enum.map_join("\n", fn {line, i} ->
-        ~s(<text x="#{round(w / 2)}" y="#{first_y + i * line_height}" text-anchor="middle" ) <>
-          ~s(font-family="sans-serif" font-weight="bold" font-size="#{font}" fill="#ffffff">) <>
-          escape(line) <> "</text>"
-      end)
+      case kind do
+        :backdrop -> ""
+        :poster -> poster_text(lines, w, first_y, line_height, font)
+      end
 
     """
     <svg xmlns="http://www.w3.org/2000/svg" width="#{w}" height="#{h}" viewBox="0 0 #{w} #{h}">
@@ -87,6 +86,16 @@ defmodule Mydia.Demo.Artwork do
       #{text}
     </svg>
     """
+  end
+
+  defp poster_text(lines, w, first_y, line_height, font) do
+    lines
+    |> Enum.with_index()
+    |> Enum.map_join("\n", fn {line, i} ->
+      ~s(<text x="#{round(w / 2)}" y="#{first_y + i * line_height}" text-anchor="middle" ) <>
+        ~s(font-family="sans-serif" font-weight="bold" font-size="#{font}" fill="#ffffff">) <>
+        escape(line) <> "</text>"
+    end)
   end
 
   defp wrap(title, max) do

@@ -10,6 +10,9 @@
 # Run it against an invented demo library, never a real one. On a fresh DB run
 # `./dev mix mydia.demo_seed` first (pass --base-url http://localhost:<port> if
 # Phoenix is not on the default port, since artwork URLs are stored in the DB).
+# Use a neutral host so the player does not title the server "localhost": e.g.
+# `./dev mix mydia.demo_seed --base-url http://mydia-demo:4320` and then
+# BASE_URL=http://mydia-demo:4320 (the capture maps the name to 127.0.0.1).
 # Every file is written to screenshots/ and to site/src/assets/screenshots/.
 
 set -e
@@ -25,7 +28,7 @@ BASE_URL="${BASE_URL:-http://localhost:4000}"
 echo -e "${GREEN}📸 Mydia Screenshot Tool${NC}\n"
 echo -e "Target: ${BASE_URL}\n"
 
-if ! curl -fsS -o /dev/null --max-time 5 "${BASE_URL}/auth/login"; then
+if ! curl -fsS -o /dev/null --max-time 5 --connect-to "::127.0.0.1:" "${BASE_URL}/auth/login"; then
     echo -e "${YELLOW}App is not answering at ${BASE_URL}.${NC}"
     echo -e "Start it with ${GREEN}./dev up -d${NC}, then re-run with"
     echo -e "${GREEN}BASE_URL=http://localhost:<port> ./take-screenshots${NC}"
