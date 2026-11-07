@@ -357,6 +357,86 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     end
   end
 
+  # qBittorrent 5.3 caps WebUI sessions (15 by default) and evicts the idlest
+  # one, so logging in per request pushed the operator's own browser session
+  # out (#1360). config/test.exs turns the cache off so a Bypass port reused
+  # by a later test can never see an earlier test's cookie; these tests turn
+  # it back on per config.
+  describe "session reuse (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      config = put_in(bypass_config(bypass), [:options, :session_cache], true)
+      {:ok, bypass: bypass, config: config}
+    end
+
+    test "logs in once across many calls", %{bypass: bypass, config: config} do
+      logins = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=reused-sid; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        assert ["SID=reused-sid"] == Plug.Conn.get_req_header(conn, "cookie")
+        json_resp(conn, 200, [])
+      end)
+
+      for _ <- 1..5, do: assert({:ok, []} = QBittorrent.list_torrents(config))
+
+      assert :counters.get(logins, 1) == 1
+    end
+
+    test "replaces a cookie qBittorrent no longer accepts", %{bypass: bypass, config: config} do
+      logins = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+        sid = "SID=sid-#{:counters.get(logins, 1)}"
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", sid <> "; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      # Only the second session is valid, as after a qBittorrent restart.
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        case Plug.Conn.get_req_header(conn, "cookie") do
+          ["SID=sid-2"] -> json_resp(conn, 200, [])
+          _ -> Plug.Conn.resp(conn, 403, "Forbidden")
+        end
+      end)
+
+      assert {:ok, []} = QBittorrent.list_torrents(config)
+      assert {:ok, []} = QBittorrent.list_torrents(config)
+      assert {:ok, []} = QBittorrent.list_torrents(config)
+
+      assert :counters.get(logins, 1) == 2
+    end
+
+    test "keeps separate sessions for different credentials", %{bypass: bypass, config: config} do
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"username" => user} = URI.decode_query(body)
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=sid-#{user}; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        [cookie] = Plug.Conn.get_req_header(conn, "cookie")
+        json_resp(conn, 200, [torrent_payload(String.replace(cookie, "SID=sid-", ""))])
+      end)
+
+      assert {:ok, [%{id: "admin"}]} = QBittorrent.list_torrents(config)
+      assert {:ok, [%{id: "other"}]} = QBittorrent.list_torrents(%{config | username: "other"})
+    end
+  end
+
   describe "add_torrent/3 (Bypass)" do
     setup do
       bypass = Bypass.open()

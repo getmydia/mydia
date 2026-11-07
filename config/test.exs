@@ -29,6 +29,10 @@ config :mydia, Mydia.Storage.S3,
 # FlareSolverr retries a crashed tab once; tests must not wait out the pause.
 config :mydia, :flaresolverr_retry_delay_ms, 0
 
+# Bypass reuses ports, so a cached qBittorrent cookie could outlive its test
+# and skip a later test's login. Tests that cover reuse opt back in per config.
+config :mydia, Mydia.Downloads.Client.QBittorrent.SessionCache, enabled: false
+
 case database_adapter do
   Ecto.Adapters.Postgres ->
     config :mydia, Mydia.Repo,

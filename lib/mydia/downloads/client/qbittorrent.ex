@@ -33,8 +33,11 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   holds exactly one key at a time and generating a new one immediately
   invalidates the previous one, so mydia never generates keys itself.
 
-  Otherwise the adapter logs in with the username and password and maintains
-  the session cookie, re-authenticating once when a request comes back 403.
+  Otherwise the adapter logs in with the username and password and reuses the
+  session cookie across calls (`QBittorrent.SessionCache`), logging in again
+  once when a request comes back 403. Logging in per call is not an option:
+  qBittorrent 5.3 caps WebUI sessions and evicts the idlest, which logged
+  operators out of their own browser session (#1360).
 
   ## State Mapping
 
@@ -72,6 +75,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   require Logger
 
   alias Mydia.Downloads.Client.{Error, HTTP}
+  alias Mydia.Downloads.Client.QBittorrent.SessionCache
   alias Mydia.Downloads.Priority
   alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
@@ -266,10 +270,13 @@ defmodule Mydia.Downloads.Client.QBittorrent do
          hint: "Regenerate the key in qBittorrent under Preferences, WebUI, API Key"
        })}
     else
-      with {:ok, fresh_req} <- authenticate(config) do
+      SessionCache.delete(config)
+
+      with {:ok, fresh_req} <- login(config) do
         case fun.(fresh_req) do
           # Never leak the internal marker: it is meaningless to an operator.
           {:error, %Error{type: :stale_session}} ->
+            SessionCache.delete(config)
             {:error, Error.authentication_failed("qBittorrent session could not be established")}
 
           other ->
@@ -297,13 +304,35 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
   defp authenticate(config) do
     if config[:username] && config[:password] do
-      do_authenticate(config)
+      cached_session_or_login(config)
     else
       {:error,
        Error.invalid_config(
          "qBittorrent requires either an API key (5.2+) or a username and password"
        )}
     end
+  end
+
+  # A cached cookie may have expired or been evicted; the 403 it then draws is
+  # handled by `retry_after_stale_session/2`, which logs in again.
+  defp cached_session_or_login(config) do
+    case SessionCache.enabled?(config) && SessionCache.get(config) do
+      cookie when is_binary(cookie) -> {:ok, session_request(config, cookie)}
+      _ -> login(config)
+    end
+  end
+
+  defp login(config) do
+    with {:ok, cookie} <- do_authenticate(config) do
+      if SessionCache.enabled?(config), do: SessionCache.put(config, cookie)
+      {:ok, session_request(config, cookie)}
+    end
+  end
+
+  defp session_request(config, cookie) do
+    config
+    |> HTTP.new_request()
+    |> Req.Request.put_header("cookie", cookie)
   end
 
   defp do_authenticate(config) do
@@ -317,7 +346,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
         else
           case extract_session_cookie(response) do
             {:ok, cookie} ->
-              {:ok, Req.Request.put_header(req, "cookie", cookie)}
+              {:ok, cookie}
 
             :error ->
               {:error,
