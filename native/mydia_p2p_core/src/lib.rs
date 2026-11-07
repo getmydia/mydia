@@ -61,6 +61,8 @@ pub mod blocking;
 pub mod pairing_seal;
 pub mod remote_control;
 pub mod runtime;
+#[cfg(not(target_arch = "wasm32"))]
+mod trace_file;
 
 pub use remote_control::{
     LoadContentRequest, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
@@ -505,10 +507,29 @@ fn init_tracing(event_tx: mpsc::Sender<Event>) {
         let filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
 
-        let _ = tracing_subscriber::registry()
-            .with(filter)
-            .with(ElixirLogLayer)
-            .try_init();
+        // Each layer carries its own filter, so the opt-in trace file can run
+        // at `trace` while the Elixir forwarding stays at the level above.
+        let registry = tracing_subscriber::registry().with(ElixirLogLayer.with_filter(filter));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let trace_file = trace_file::layer();
+            let trace_requested = trace_file.is_some();
+            if let Err(e) = registry.with(trace_file).try_init() {
+                // Another subscriber got there first, so the requested trace
+                // file will stay empty. Nothing else would say so.
+                if trace_requested {
+                    #[expect(
+                        clippy::print_stderr,
+                        reason = "the subscriber that would carry this failed to install"
+                    )]
+                    {
+                        eprintln!("mydia_p2p_core: MYDIA_P2P_TRACE_FILE is set but tracing could not be installed: {e}");
+                    }
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = registry.try_init();
     });
 }
 
