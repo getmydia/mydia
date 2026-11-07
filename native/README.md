@@ -105,15 +105,52 @@ dials; it dials only when handed a full EndpointAddr JSON.
 A request that goes unanswered is handled per kind in `send_request_on`. Remote
 control keeps the fixed `CONTROL_REQUEST_TIMEOUT` of 4s and closes the connection
 when it expires. GraphQL can legitimately run long, so it has no deadline. Instead
-the core waits `STALL_PROBE_AFTER` (6s), sends a `Ping` on the same connection, and
-gives it `STALL_PROBE_TIMEOUT` (3s). A `Pong` means the request is merely slow and
-the wait continues. No `Pong` closes the connection and fails the request with an
-error prefixed `connection_stalled:`; the closed connection is pruned, so the next
-request dials a fresh one. The Dart GraphQL transport resends a query once when
-it fails after reaching the connection (`connection_stalled`, or the connection
-closing under it). It never retries a connect or dial failure, which a second
+the core waits `STALL_PROBE_AFTER` (1.5s), sends a `Ping` on the same connection, and
+gives it `STALL_PROBE_TIMEOUT` (3s). A `Pong` means the request is merely slow: the
+wait continues, and the probe repeats every `STALL_PROBE_AFTER` while the request is
+pending, since a path can die after answering once. No `Pong` closes the connection
+and fails the request with an error prefixed `connection_stalled:`; the closed
+connection is pruned, so the next request dials a fresh one.
+
+The first probe runs early because the commonest dead path is a startup one. A
+client on the same LAN as its server switches from the relay to a direct path
+within milliseconds of connecting, while its first requests are in flight. On a
+Wi-Fi mesh (measured on a TP-Link Deco: a wired client behind a satellite, the
+server wired to the main unit) the backhaul can drop nearly all of that flow's
+packets, and iroh keeps sending on the selected path instead of falling back to
+the relay. Until the probe closes the connection every request waits; at the old
+6s + 3s that was a 9 second launch, and it now costs about 4.5. The probe timeout
+stays at 3s because a failed probe closes the whole connection, interrupting any
+media stream on it.
+
+The Dart GraphQL transport resends a query once when it fails after reaching the
+connection (`connection_stalled`, or the connection closing under it). It never retries a connect or dial failure, which a second
 dial to the same address rarely fixes, and never a mutation, which may already
 have run. Media streams have their own recovery and are not probed.
+
+## Tracing the transport on a running server
+
+The NIF's logs reach the journal only through the Elixir Logger, which drops
+`debug` and `trace` and keeps just each event's message. A noq trace read that
+way has lost the span context (`drive{id}:pkt{path_id}:recv{pn}`) that makes it
+readable. To trace the server's QUIC traffic, set these in the server's
+environment and restart it:
+
+| Variable | Meaning |
+| --- | --- |
+| `MYDIA_P2P_TRACE_FILE` | Path to write full `tracing` output to. Unset, nothing changes. |
+| `MYDIA_P2P_TRACE` | Filter for that file. Default `info,mydia_p2p_core=debug,iroh=debug,noq_proto=trace,noq=debug`. |
+| `MYDIA_P2P_TRACE_MAX_BYTES` | Size at which the file moves to `<path>.1`. Default 512 MiB. |
+
+`noq_proto=trace` logs every packet, so a server streaming media fills the cap in
+minutes. A file that cannot rotate stops growing rather than filling the disk.
+Give each process its own path: rotation counts only the writing process's bytes. The file sits beside the Elixir forwarding rather than replacing it,
+and `RUST_LOG` still sets the level that forwarding uses.
+
+To reproduce a stalled first request against a server, run the `startup_burst`
+example in `native/mydia_p2p_core/examples/` (`--listen` for a stand-in server):
+it dials over the relay and fires a batch of GraphQL requests the moment the
+connection comes up, while iroh is still moving to a direct path.
 
 ## E2E pairing breaks typed codes on older players, by design
 

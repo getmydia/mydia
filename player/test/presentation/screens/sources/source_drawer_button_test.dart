@@ -8,6 +8,7 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/nav/menu_page.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -91,6 +92,40 @@ void main() {
     );
     expect(_menu, findsNothing);
     expect(_back, findsOneWidget);
+  });
+
+  testWidgets('where the shell opens a menu page, the button opens that',
+      (tester) async {
+    var opened = 0;
+    tester.view.physicalSize = const Size(599, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        _settings,
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        // The iOS phone shell: its Scaffold has no drawer.
+        home: ShellMenuScope(
+          open: () => opened++,
+          child: Scaffold(
+            key: AppShell.scaffoldKey,
+            body: const SourceLibraryScreen(library: FakeMediaSource.movies),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(_menu, findsOneWidget);
+
+    await tester.tap(_menu);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+    expect(find.byType(Drawer), findsNothing);
   });
 
   testWidgets('no drawer button on the wide layout', (tester) async {

@@ -529,6 +529,20 @@ POST /crashes/report
 
 **Rate limiting:** 10 requests per minute per IP address.
 
+**Rejections:** every rejected crash report or feedback submission logs one
+`[Ingest] rejected` warning with the endpoint, status, reason, validation
+errors, body size (`bytes`, from `Content-Length`; absent for a chunked
+body), content type, user agent and `CF-Connecting-IP`. The body
+itself is never logged. Each rejection also increments
+`metadata_relay_ingest_rejected_total{endpoint, reason}`, where `reason` is
+one of `validation`, `message_too_long`, `not_json`, `too_large`,
+`rate_limited` or `store_failed`. Rate-limited requests are counted but not
+logged. See `MetadataRelay.IngestRejection`.
+
+```bash
+kubectl logs -n metadata-relay "$POD" --since=1h | grep '\[Ingest\] rejected'
+```
+
 ### Player Log Ingestion
 
 Mydia players upload their logs here when their user shares them from the
@@ -636,11 +650,14 @@ The metadata-relay includes integrated error tracking with the ErrorTracker dash
 
 The service uses Elixir's built-in Logger for structured logging. Logs include:
 
-- **Request/Response Logging**: Automatic via `Plug.Logger`
+- **Request/Response Logging**: Automatic via the Phoenix endpoint's
+  `Plug.Telemetry`, one line per request and one per response
 
   - HTTP method, path, status code
   - Response time
-  - Client IP address
+
+- **Ingest Rejections**: `[Ingest] rejected` warnings from
+  `MetadataRelay.IngestRejection` (see Crash Report Ingestion)
 
 - **Cache Events**: Logged by `MetadataRelay.Plug.Cache`
 

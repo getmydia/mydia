@@ -8,6 +8,7 @@ defmodule MydiaWeb.DiscoverLive.UrlParams do
 
   @doc "An unknown `?type=` falls back to movies."
   def parse_media_type("tv_show"), do: :tv_show
+  def parse_media_type("person"), do: :person
   def parse_media_type(_), do: :movie
 
   @doc "A category that does not exist for the media type falls back to trending."
@@ -20,14 +21,6 @@ defmodule MydiaWeb.DiscoverLive.UrlParams do
   def parse_category("on_the_air", :tv_show), do: :on_the_air
   def parse_category("airing_today", :tv_show), do: :airing_today
   def parse_category(_, _), do: :trending
-
-  @doc """
-  People is a scope of the search, not a third media type: without a query
-  there is nothing to scope, so a stray `?scope=people` is ignored. Anything
-  but "people" searches titles.
-  """
-  def parse_search_scope(true = _search_mode, "people"), do: :people
-  def parse_search_scope(_search_mode, _scope), do: :titles
 
   def parse_genres_param(nil), do: []
   def parse_genres_param(""), do: []

@@ -39,6 +39,10 @@ A modal in the same style and with the same host mechanics as
 
 ### 2. People search on Discover
 
+> Superseded by `2026-11-06-discover-people-tab-design.md` (#1350): People is
+> now a third Discover type with a popular-people browse grid, and the scope
+> toggle described below is removed.
+
 People is a **search scope only** (maintainer's decision). It is not a third
 option of Discover's page-wide Movies / TV Shows `segmented_control`
 (`discover-media-type`, the `type` URL param), which drives the category tabs,

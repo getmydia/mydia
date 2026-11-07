@@ -350,8 +350,9 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       button = LazyHTML.query(doc, "#cast-person-4242-0")
       assert LazyHTML.attribute(button, "phx-click") == ["show_person"]
       assert LazyHTML.attribute(button, "phx-value-name") == ["Linked Actor"]
-      assert LazyHTML.query(doc, "[id^=cast-person-]") |> Enum.count() == 1
-      assert LazyHTML.query(doc, ".opacity-60") |> Enum.count() == 1
+      assert LazyHTML.query(doc, "button[id^=cast-person-]") |> Enum.count() == 1
+      assert LazyHTML.query(doc, "a[id^=cast-person-search-]") |> Enum.count() == 1
+      assert Enum.empty?(LazyHTML.query(doc, ".opacity-60"))
     end
 
     test "without person_event the cast is not interactive" do

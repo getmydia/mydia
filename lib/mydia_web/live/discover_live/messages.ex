@@ -7,6 +7,14 @@ defmodule MydiaWeb.DiscoverLive.Messages do
 
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
+  def page_subtitle(:movie), do: gettext("Find new movies to add to your library")
+  def page_subtitle(:tv_show), do: gettext("Find new TV shows to add to your library")
+  def page_subtitle(:person), do: gettext("Find people and the titles they appear in")
+
+  def search_placeholder(:movie), do: gettext("Search for a movie to add")
+  def search_placeholder(:tv_show), do: gettext("Search for a show to add")
+  def search_placeholder(:person), do: gettext("Search people")
+
   def movie_categories do
     [
       {:trending, gettext("Trending")},

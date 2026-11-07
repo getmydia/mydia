@@ -234,4 +234,47 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       assert button |> LazyHTML.text() |> String.trim() == "Add"
     end
   end
+
+  describe "load_more_sentinel/1" do
+    defp sentinel(overrides) do
+      assigns =
+        Map.merge(%{id: "x", has_more: true, loading_more: false, error?: false}, overrides)
+
+      render_component(&DiscoverComponents.load_more_sentinel/1, assigns)
+      |> LazyHTML.from_fragment()
+    end
+
+    test "has more and idle arms the hook" do
+      doc = sentinel(%{})
+      hook = LazyHTML.query(doc, "#x")
+
+      assert LazyHTML.attribute(hook, "phx-hook") == ["LoadMoreSentinel"]
+      assert LazyHTML.attribute(hook, "data-has-more") == ["true"]
+      assert LazyHTML.attribute(hook, "data-event") == ["load_more"]
+      refute Enum.empty?(LazyHTML.query(doc, ".loading-spinner"))
+      assert Enum.empty?(LazyHTML.query(doc, "#x-error"))
+    end
+
+    test "a page in flight disarms the hook" do
+      assert sentinel(%{loading_more: true})
+             |> LazyHTML.query("#x")
+             |> LazyHTML.attribute("data-has-more") == ["false"]
+    end
+
+    test "a failed page disarms the hook and offers Retry" do
+      doc = sentinel(%{error?: true})
+
+      assert doc |> LazyHTML.query("#x") |> LazyHTML.attribute("data-has-more") == ["false"]
+      assert doc |> LazyHTML.query("#x-retry") |> LazyHTML.attribute("phx-click") == ["load_more"]
+    end
+
+    test "a custom event is carried on the hook and Retry" do
+      doc = sentinel(%{error?: true, event: "more_people"})
+
+      assert doc |> LazyHTML.query("#x") |> LazyHTML.attribute("data-event") == ["more_people"]
+
+      assert doc |> LazyHTML.query("#x-retry") |> LazyHTML.attribute("phx-click") ==
+               ["more_people"]
+    end
+  end
 end

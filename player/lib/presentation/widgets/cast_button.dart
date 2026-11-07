@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_providers.dart';
 import '../../l10n/l10n.dart';
+import 'cast_bar/cast_bar_state.dart';
 import 'cast_visuals.dart';
 import 'glass/glass_icon_button.dart';
 
@@ -34,7 +35,7 @@ class CastButton extends ConsumerWidget {
     final visuals = castVisualsFor(context.l10n, connection, device?.name);
     final glyph = visuals.connected ? Icons.cast_connected : Icons.cast;
 
-    final icon = connection == CastConnection.connecting
+    final glyphIcon = connection == CastConnection.connecting
         ? Stack(
             alignment: Alignment.center,
             children: [
@@ -50,6 +51,17 @@ class CastButton extends ConsumerWidget {
             ],
           )
         : Icon(glyph, color: visuals.color);
+
+    // A "Playing on X" banner the user hid is still current. The dot is the
+    // only hint; opening the picker is what brings the banner back.
+    final icon = ref.watch(castBarAmbientHiddenProvider)
+        ? Badge(
+            key: const Key('cast-button-ambient-dot'),
+            smallSize: 6,
+            backgroundColor: visuals.color,
+            child: glyphIcon,
+          )
+        : glyphIcon;
 
     if (glass) {
       return GlassIconButton(
