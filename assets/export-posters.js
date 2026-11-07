@@ -10,10 +10,12 @@ const path = require("path");
  * as site/src/assets/posters/poster-NN.jpg. Every poster is converted into a
  * staging directory first; only once all succeed are the earlier exports
  * removed and the new ones moved in, so a failed download leaves the existing
- * set untouched and a smaller library leaves no stale files behind.
+ * set untouched and a smaller export (20 to 30 posters) leaves no stale files
+ * behind. Fewer than 20 is refused before anything is replaced.
  */
 
 const POSTER_LIMIT = 30;
+const MIN_POSTERS = 20;
 const WIDTH = 360;
 const HEIGHT = 540;
 const LISTINGS = ["/movies", "/tv"];
@@ -49,8 +51,12 @@ async function exportPosters(page, { baseUrl, outputDir }) {
   const lists = [];
   for (const listing of LISTINGS) lists.push(await listingPosterUrls(page, baseUrl, listing));
   const urls = [...new Set(interleave(lists))].slice(0, POSTER_LIMIT);
-  if (urls.length === 0) {
-    throw new Error("No poster images found on the movie or TV listings. Is the library empty?");
+  // The site's poster wall test requires at least this many, and the homepage
+  // picks individual posters by number. Fail before the committed set is touched.
+  if (urls.length < MIN_POSTERS) {
+    throw new Error(
+      `Found ${urls.length} poster images on the movie and TV listings; at least ${MIN_POSTERS} are needed before the poster set is replaced.`,
+    );
   }
 
   fs.mkdirSync(outputDir, { recursive: true });
