@@ -96,6 +96,24 @@ defmodule Mydia.Metadata.PeopleTest do
     assert Enum.map(person.tv_credits, & &1.title) == ["Long Runner", "Small Show"]
   end
 
+  test "unreleased credits go last even when they have votes", %{bypass: bypass, config: config} do
+    id = new_id()
+
+    expect_person(bypass, id, [
+      Map.put(movie(1, "Quiet Debut", "2001-04-01"), "vote_count", 40),
+      Map.put(movie(2, "Undated Epic", ""), "vote_count", 5_000),
+      Map.put(movie(3, "Future Sequel", "2099-06-01"), "vote_count", 40)
+    ])
+
+    assert {:ok, %Person{} = person} = People.fetch_person_cached(config, id)
+
+    assert Enum.map(person.movie_credits, & &1.title) == [
+             "Quiet Debut",
+             "Undated Epic",
+             "Future Sequel"
+           ]
+  end
+
   test "parses a person with split, sorted filmography", %{bypass: bypass, config: config} do
     id = new_id()
 

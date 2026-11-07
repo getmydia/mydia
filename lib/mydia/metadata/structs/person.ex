@@ -111,13 +111,22 @@ defmodule Mydia.Metadata.Structs.Person do
   defp sum_counts(a, nil), do: a
   defp sum_counts(a, b), do: a + b
 
-  # Best-known first: TMDB's vote_count measures how widely a title was seen
-  # over its lifetime, where popularity tracks this week's traffic. Ties go to
-  # the newest, and undated (upcoming or unannounced) titles, which have no
-  # votes yet either, end up last.
+  # Released titles first, then unreleased (undated or future-dated) ones,
+  # which can carry hype votes. Within each, best-known first: TMDB's
+  # vote_count measures how widely a title was seen over its lifetime, where
+  # popularity tracks this week's traffic. Ties go to the newest.
   defp sort_credits(credits) do
-    Enum.sort_by(credits, &{&1.vote_count || 0, date_rank(&1.date)}, :desc)
+    today = Date.utc_today()
+
+    Enum.sort_by(
+      credits,
+      &{released?(&1.date, today), &1.vote_count || 0, date_rank(&1.date)},
+      :desc
+    )
   end
+
+  defp released?(nil, _today), do: false
+  defp released?(%Date{} = date, today), do: Date.compare(date, today) != :gt
 
   defp date_rank(nil), do: -1
   defp date_rank(%Date{} = date), do: Date.to_gregorian_days(date)
