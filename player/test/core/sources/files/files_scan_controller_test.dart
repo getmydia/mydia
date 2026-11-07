@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/domain/sources/library.dart';
 import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/files_scan_controller.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
@@ -24,7 +29,10 @@ void main() {
   late FilesFixture f;
   late FakeBackend backend;
 
-  Future<ProviderContainer> container() async {
+  Future<ProviderContainer> container({
+    MediaNames? names,
+    bool realBackend = false,
+  }) async {
     final store = InMemorySourceStore();
     await store.putAccount(filesLocalRecord);
     final c = ProviderContainer(overrides: [
@@ -32,9 +40,10 @@ void main() {
       sourceStoreProvider.overrideWith((ref) async => store),
       filesIndexBoxProvider.overrideWithValue(f.box),
       filesProgressStoreProvider.overrideWithValue(f.progress),
-      mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+      mediaNamesProvider.overrideWithValue(names ?? FakeMediaNames()),
       relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
+      if (!realBackend)
+        filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
       filesClockProvider.overrideWithValue(() => now),
     ]);
     addTearDown(c.dispose);
@@ -113,9 +122,106 @@ void main() {
     final c = await container();
     final id = filesLocalSource.id;
     c.read(mediaSourceProvider(id));
+    final media = c.read(mediaSourceProvider(id))!;
+    await _settle();
+    expect(media.connection, SourceConnectionStatus.local);
     await c.read(filesScanProvider(id).notifier).rescan();
     final state = c.read(filesScanProvider(id));
-    expect(state.error, isA<Object>());
+    expect(state.error, isA<BackendNotFound>());
     expect(state.total, 2);
+    expect(media.connection, SourceConnectionStatus.unreachable);
   });
+
+  test('a_scan_that_throws_still_finishes', () async {
+    await f.index.setLastScanAt(now);
+    final c = await container(names: _ThrowingNames());
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    await c.read(filesScanProvider(id).notifier).rescan();
+    final state = c.read(filesScanProvider(id));
+    expect(state.running, isFalse);
+    expect(state.error, isA<Exception>());
+  });
+
+  group('local folders through the real backend', () {
+    late Directory tmp;
+    setUp(() async {
+      // Only the roots each test adds: the fake backend's root is not on disk.
+      await f.index.removeRoot('rm');
+      tmp = await Directory.systemTemp.createTemp('files_local_roots');
+      addTearDown(() async {
+        await Process.run('chmod', ['-R', 'u+rwx', tmp.path]);
+        await tmp.delete(recursive: true);
+      });
+    });
+
+    Future<FilesMediaSource> open(ProviderContainer c) async {
+      final media =
+          c.read(mediaSourceProvider(filesLocalSource.id))! as FilesMediaSource;
+      await _settle();
+      return media;
+    }
+
+    test('a_missing_root_is_unreachable_and_still_browses', () async {
+      final gone = '${tmp.path}/unplugged';
+      await f.index.putRoot(LibraryRoot(
+        id: 'rgone',
+        path: gone,
+        kind: FilesLibraryKind.movies,
+        title: 'Gone',
+      ));
+      await f.addFiles(['Amber Tide (2019).mkv'], rootId: 'rgone');
+      await f.index.setLastScanAt(now);
+      final c = await container(realBackend: true);
+      final media = await open(c);
+      expect(media.backend, isA<LocalFoldersBackend>());
+      expect(media.connection, SourceConnectionStatus.unreachable);
+      expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
+          isFalse);
+      final page = await media.browse(
+          LibraryRef(sourceId: filesLocalSource.id, id: 'rgone'),
+          const BrowseQuery());
+      expect(page.items.single.title, 'Amber Tide');
+    });
+
+    test('a_root_that_refuses_access_flags_sign_in', () async {
+      final locked = Directory('${tmp.path}/locked')..createSync();
+      await Process.run('chmod', ['000', locked.path]);
+      await f.index.putRoot(LibraryRoot(
+        id: 'rlocked',
+        path: locked.path,
+        kind: FilesLibraryKind.movies,
+        title: 'Locked',
+      ));
+      await f.index.setLastScanAt(now);
+      final c = await container(realBackend: true);
+      final media = await open(c);
+      expect(media.connection, SourceConnectionStatus.unreachable);
+      expect(
+          c.read(thirdPartySourcesProvider).single.account.needsReauth, isTrue);
+    }, skip: Platform.isWindows);
+
+    test('present_roots_are_local', () async {
+      await f.index.putRoot(LibraryRoot(
+        id: 'rhere',
+        path: tmp.path,
+        kind: FilesLibraryKind.movies,
+        title: 'Here',
+      ));
+      await f.index.setLastScanAt(now);
+      final c = await container(realBackend: true);
+      final media = await open(c);
+      expect(media.connection, SourceConnectionStatus.local);
+    });
+  });
+}
+
+class _ThrowingNames extends FakeMediaNames {
+  @override
+  List<ParsedName> parseBatch(
+    String root,
+    List<String> paths,
+    FilesLibraryKind kind,
+  ) =>
+      throw Exception('parser crashed');
 }

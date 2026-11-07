@@ -127,14 +127,25 @@ class FilesMediaSource extends MediaSource
   Future<void> probe() async {
     try {
       await backend.probe();
-      _setStatus(SourceConnectionStatus.local);
+      reportReachability(null);
     } on BackendFailure catch (e) {
-      debugPrint('[FilesMediaSource] ${source.id} unreachable: $e');
-      if (e is BackendUnauthorized || e is BackendPermissionLost) {
-        _onReauthNeeded?.call();
-      }
-      _setStatus(SourceConnectionStatus.unreachable);
+      reportReachability(e);
     }
+  }
+
+  /// Applies what a probe or a scan learned: no [failure] is `local`; a
+  /// refused credential or a lost permission flags the account for sign-in;
+  /// any failure is `unreachable`.
+  void reportReachability(BackendFailure? failure) {
+    if (failure == null) {
+      _setStatus(SourceConnectionStatus.local);
+      return;
+    }
+    debugPrint('[FilesMediaSource] ${source.id} unreachable: $failure');
+    if (failure is BackendUnauthorized || failure is BackendPermissionLost) {
+      _onReauthNeeded?.call();
+    }
+    _setStatus(SourceConnectionStatus.unreachable);
   }
 
   void _setStatus(SourceConnectionStatus s) {

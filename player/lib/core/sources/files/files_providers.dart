@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
 import '../../playback/playback_progress_store.dart';
@@ -61,16 +62,16 @@ typedef FilesBackendBuilder = FileSystemBackend Function(
 final filesBackendBuilderProvider =
     Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
 
-/// Folders on this device have many roots and no single one to probe, so the
-/// local backend has none; a root that is gone shows up when it is scanned.
-/// A WebDAV share reads its credentials on first use.
+/// Folders on this device probe each of the account's roots. A WebDAV share
+/// reads its credentials on first use.
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
   if (source.account.id == kFilesLocalAccountId ||
       source.server.connections.isEmpty) {
-    return LocalPathBackend();
+    final index = ref.read(filesIndexProvider(source.account.id));
+    return LocalFoldersBackend(roots: index.roots);
   }
   final secrets = ref.read(sourceSecretsProvider);
-  return _LazyWebDavBackend(
+  return LazyWebDavBackend(
     base: source.server.connections.first.uri,
     credentials: () => secrets.accountToken(source.account),
   );
@@ -124,20 +125,75 @@ FilesMediaSource buildFilesSource(
     // After this build: the scan reads the source back from its provider.
     scheduleMicrotask(() {
       if (!ref.mounted) return;
-      unawaited(ref.read(filesScanProvider(source.id).notifier).rescan());
+      unawaited(ref
+          .read(filesScanProvider(source.id).notifier)
+          .rescan()
+          .catchError((Object e) {
+        debugPrint('[FilesSource] Scan on open failed: $e');
+      }));
     });
   }
   return media;
 }
 
+/// Folders on this device: plain paths, and a probe that checks every root,
+/// so a drive that is unplugged or a folder that is gone shows as
+/// unreachable. A root that refuses access wins over one that is missing,
+/// since only the first asks the viewer to choose the folder again.
+class LocalFoldersBackend implements FileSystemBackend {
+  LocalFoldersBackend({required this.roots});
+
+  final List<LibraryRoot> Function() roots;
+  final _files = LocalPathBackend();
+
+  @override
+  Future<List<FileEntry>> list(String dir) => _files.list(dir);
+
+  @override
+  Future<FileEntry?> stat(String path) => _files.stat(path);
+
+  @override
+  Future<PlayableFile> playable(String path) => _files.playable(path);
+
+  @override
+  Future<void> probe() async {
+    BackendFailure? failure;
+    for (final r in roots()) {
+      try {
+        await LocalPathBackend(root: r.path).probe();
+      } on BackendFailure catch (e) {
+        if (failure == null || e is BackendPermissionLost) failure = e;
+      }
+    }
+    if (failure != null) throw failure;
+  }
+}
+
 /// A [WebDavBackend] built on first use from the stored credentials. A
-/// missing or unreadable credential is a refused one.
-class _LazyWebDavBackend implements FileSystemBackend {
-  _LazyWebDavBackend({required this.base, required this.credentials});
+/// missing or unreadable credential is a refused one, and a refused call
+/// drops the built backend, so the next call reads the credentials again
+/// (after the viewer signs in anew).
+class LazyWebDavBackend implements FileSystemBackend {
+  LazyWebDavBackend({
+    required this.base,
+    required this.credentials,
+    http.Client? client,
+  }) : _client = client;
 
   final Uri base;
   final Future<String?> Function() credentials;
+  final http.Client? _client;
   Future<WebDavBackend>? _backend;
+
+  Future<T> _call<T>(Future<T> Function(WebDavBackend b) run) async {
+    final b = await _resolve();
+    try {
+      return await run(b);
+    } on BackendUnauthorized {
+      _backend = null;
+      rethrow;
+    }
+  }
 
   Future<WebDavBackend> _resolve() => _backend ??= _build().then(
         (b) => b,
@@ -157,20 +213,19 @@ class _LazyWebDavBackend implements FileSystemBackend {
       debugPrint('[FilesSource] Unreadable WebDAV credentials: $e');
       throw const BackendUnauthorized('unreadable credentials');
     }
-    return WebDavBackend(base: base, user: c.user, password: c.password);
+    return WebDavBackend(
+        base: base, user: c.user, password: c.password, client: _client);
   }
 
   @override
-  Future<List<FileEntry>> list(String dir) async =>
-      (await _resolve()).list(dir);
+  Future<List<FileEntry>> list(String dir) => _call((b) => b.list(dir));
 
   @override
-  Future<FileEntry?> stat(String path) async => (await _resolve()).stat(path);
+  Future<FileEntry?> stat(String path) => _call((b) => b.stat(path));
 
   @override
-  Future<PlayableFile> playable(String path) async =>
-      (await _resolve()).playable(path);
+  Future<PlayableFile> playable(String path) => _call((b) => b.playable(path));
 
   @override
-  Future<void> probe() async => (await _resolve()).probe();
+  Future<void> probe() => _call((b) => b.probe());
 }

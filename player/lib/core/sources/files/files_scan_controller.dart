@@ -66,34 +66,51 @@ class FilesScanController extends Notifier<ScanState> {
     final now = ref.read(filesClockProvider);
     state = const ScanState(running: true);
 
+    // Every failure is recorded, never thrown: the scan is started unawaited,
+    // and the final state must always land so the banner stops.
     Object? error;
+    BackendFailure? unreachable;
     var before = 0;
     var latest = (done: 0, total: 0);
-    for (final root in index.roots()) {
-      try {
-        await scanner.scan(root, onProgress: (done, total) {
-          latest = (done: before + done, total: before + total);
-          if (ref.mounted) {
-            state = ScanState(
-                running: true, done: latest.done, total: latest.total);
-          }
-        });
-      } on BackendFailure catch (e) {
-        debugPrint('[FilesScan] ${root.id} not scanned: $e');
-        error = e;
-      }
-      before = latest.total;
-    }
     try {
-      await media.matcher.matchPending();
+      for (final root in index.roots()) {
+        try {
+          await scanner.scan(root, onProgress: (done, total) {
+            latest = (done: before + done, total: before + total);
+            if (ref.mounted) {
+              state = ScanState(
+                  running: true, done: latest.done, total: latest.total);
+            }
+          });
+        } on BackendFailure catch (e) {
+          debugPrint('[FilesScan] ${root.id} not scanned: $e');
+          error = e;
+          if (unreachable == null || e is BackendPermissionLost) {
+            unreachable = e;
+          }
+        } catch (e) {
+          debugPrint('[FilesScan] ${root.id} failed: $e');
+          error = e;
+        }
+        before = latest.total;
+      }
+      media.reportReachability(unreachable);
+      try {
+        await media.matcher.matchPending();
+      } catch (e) {
+        debugPrint('[FilesScan] Matching failed: $e');
+        error ??= e;
+      }
+      await index.setLastScanAt(now());
+      await invalidator
+          .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
     } catch (e) {
-      debugPrint('[FilesScan] Matching failed: $e');
+      debugPrint('[FilesScan] Scan failed: $e');
       error ??= e;
-    }
-    await index.setLastScanAt(now());
-    await invalidator.invalidate(FilesMediaSource.groupLandedTargets(sourceId));
-    if (ref.mounted) {
-      state = ScanState(done: latest.done, total: latest.total, error: error);
+    } finally {
+      if (ref.mounted) {
+        state = ScanState(done: latest.done, total: latest.total, error: error);
+      }
     }
   }
 }
