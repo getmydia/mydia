@@ -247,12 +247,12 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   # we re-authenticate once and retry (matching the pattern used by the
   # Transmission adapter for 409 session-id retries). Under API-key auth a 403
   # means the key itself was rejected, so it is terminal: see
-  # `retry_after_stale_session/2`.
+  # `retry_after_stale_session/3`.
   defp with_authenticated_session(config, fun) when is_function(fun, 1) do
     with {:ok, req} <- authenticate(config) do
       case fun.(req) do
         {:error, %Error{type: :stale_session}} ->
-          retry_after_stale_session(config, fun)
+          retry_after_stale_session(config, fun, session_cookie(req))
 
         other ->
           other
@@ -260,23 +260,34 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end
   end
 
+  defp session_cookie(req) do
+    case Req.Request.get_header(req, "cookie") do
+      [cookie | _] -> cookie
+      [] -> nil
+    end
+  end
+
   # API-key auth has no session to refresh: a 403 means the key was rejected.
   # Re-running `fun` would also resend mutating requests such as
   # POST /torrents/add, so fail fast rather than retrying.
-  defp retry_after_stale_session(config, fun) do
+  #
+  # In cookie mode the dead cookie is dropped only if it is still the cached
+  # one, and a cookie another caller has cached since is used before logging
+  # in, so concurrent callers hitting the same expiry share one new session.
+  defp retry_after_stale_session(config, fun, stale_cookie) do
     if api_key?(config) do
       {:error,
        Error.authentication_failed("qBittorrent rejected the API key", %{
          hint: "Regenerate the key in qBittorrent under Preferences, WebUI, API Key"
        })}
     else
-      SessionCache.delete(config)
+      SessionCache.delete(config, stale_cookie)
 
-      with {:ok, fresh_req} <- login(config) do
+      with {:ok, fresh_req} <- cached_session_or_login(config) do
         case fun.(fresh_req) do
           # Never leak the internal marker: it is meaningless to an operator.
           {:error, %Error{type: :stale_session}} ->
-            SessionCache.delete(config)
+            SessionCache.delete(config, session_cookie(fresh_req))
             {:error, Error.authentication_failed("qBittorrent session could not be established")}
 
           other ->
@@ -314,7 +325,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   end
 
   # A cached cookie may have expired or been evicted; the 403 it then draws is
-  # handled by `retry_after_stale_session/2`, which logs in again.
+  # handled by `retry_after_stale_session/3`, which logs in again.
   defp cached_session_or_login(config) do
     case SessionCache.enabled?(config) && SessionCache.get(config) do
       cookie when is_binary(cookie) -> {:ok, session_request(config, cookie)}
@@ -329,9 +340,13 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end
   end
 
+  # No Basic header: qBittorrent answers a dead cookie sent with valid Basic
+  # credentials by opening a fresh session instead of a 403, so the expiry
+  # would go unnoticed and every request would add a session to the cap.
   defp session_request(config, cookie) do
     config
     |> HTTP.new_request()
+    |> Req.Request.delete_header("authorization")
     |> Req.Request.put_header("cookie", cookie)
   end
 

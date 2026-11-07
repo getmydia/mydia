@@ -417,6 +417,51 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert :counters.get(logins, 1) == 2
     end
 
+    # qBittorrent answers a dead cookie sent with valid Basic credentials by
+    # opening a new session (200 plus Set-Cookie) rather than a 403, so a
+    # Basic header would hide the expiry and open a session on every call.
+    test "starts one new session after qBittorrent forgets the cached one", %{
+      bypass: bypass,
+      config: config
+    } do
+      sessions = :counters.new(1, [])
+      live = :atomics.new(1, [])
+
+      new_session = fn conn ->
+        :counters.add(sessions, 1, 1)
+        n = :counters.get(sessions, 1)
+        :atomics.put(live, 1, n)
+        Plug.Conn.put_resp_header(conn, "set-cookie", "SID=sid-#{n}; HttpOnly")
+      end
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn |> new_session.() |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        valid = "SID=sid-#{:atomics.get(live, 1)}"
+
+        cond do
+          Plug.Conn.get_req_header(conn, "cookie") == [valid] ->
+            json_resp(conn, 200, [])
+
+          Plug.Conn.get_req_header(conn, "authorization") != [] ->
+            new_session.(conn) |> json_resp(200, [])
+
+          true ->
+            Plug.Conn.resp(conn, 403, "Forbidden")
+        end
+      end)
+
+      assert {:ok, []} = QBittorrent.list_torrents(config)
+      # qBittorrent restarts and forgets every session.
+      :atomics.put(live, 1, -1)
+
+      for _ <- 1..3, do: assert({:ok, []} = QBittorrent.list_torrents(config))
+
+      assert :counters.get(sessions, 1) == 2
+    end
+
     test "keeps separate sessions for different credentials", %{bypass: bypass, config: config} do
       Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)

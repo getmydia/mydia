@@ -57,9 +57,16 @@ defmodule Mydia.Downloads.Client.QBittorrent.SessionCache do
     ArgumentError -> :ok
   end
 
-  @spec delete(map()) :: :ok
-  def delete(config) do
-    :ets.delete(@table_name, key(config))
+  @doc """
+  Drops `cookie` for `config`, but only while it is still the cached one: a
+  caller holding a dead cookie must not throw away the session another caller
+  just logged in for.
+  """
+  @spec delete(map(), String.t() | nil) :: :ok
+  def delete(_config, nil), do: :ok
+
+  def delete(config, cookie) do
+    :ets.delete_object(@table_name, {key(config), cookie})
     :ok
   rescue
     ArgumentError -> :ok
