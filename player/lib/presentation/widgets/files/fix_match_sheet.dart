@@ -5,6 +5,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
 import '../glass/glass_sheet.dart';
 import '../../../core/sources/sources_providers.dart' show mediaSourceProvider;
@@ -21,16 +22,17 @@ bool canFixMatch(MediaSource? source, ItemRef ref) {
 }
 
 /// Opens the Fix match sheet for [ref]: search TMDB, pin a result, or
-/// unmatch. [title] prefills the search.
-Future<void> showFixMatchSheet(
+/// unmatch. [title] prefills the search. Completes with true when a match
+/// was set.
+Future<bool> showFixMatchSheet(
   BuildContext context,
   MediaSource source,
   ItemRef ref, {
   String title = '',
-}) {
+}) async {
   final editing = source.as<MatchEditing>();
-  if (editing == null) return Future.value();
-  return showGlassSheet<void>(
+  if (editing == null) return false;
+  final changed = await showGlassSheet<bool>(
     context: context,
     isScrollControlled: true,
     builder: (_) => FixMatchSheet(
@@ -39,6 +41,7 @@ Future<void> showFixMatchSheet(
       initialTitle: title,
     ),
   );
+  return changed ?? false;
 }
 
 class FixMatchSheet extends ConsumerStatefulWidget {
@@ -64,6 +67,11 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
   Object? _error;
   bool _busy = false;
 
+  /// Bumped by every search and pick: an answer for an older one is
+  /// dropped, so it can neither show stale results nor end the busy state
+  /// of the newer one.
+  int _attempt = 0;
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +88,7 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
   Future<void> _search() async {
     final query = _title.text.trim();
     if (query.isEmpty) return;
+    final attempt = ++_attempt;
     setState(() {
       _busy = true;
       _error = null;
@@ -90,13 +99,13 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
         query,
         year: int.tryParse(_year.text.trim()),
       );
-      if (!mounted) return;
+      if (!mounted || attempt != _attempt) return;
       setState(() {
         _results = found;
         _busy = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || attempt != _attempt) return;
       setState(() {
         _error = e;
         _busy = false;
@@ -105,6 +114,7 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
   }
 
   Future<void> _pick(TmdbCandidate? choice) async {
+    _attempt++;
     setState(() {
       _busy = true;
       _error = null;
@@ -112,7 +122,7 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
     try {
       // The source invalidates its listings and items once the match lands.
       await widget.editing.setMatch(widget.item, choice);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -234,6 +244,11 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
 
 /// The Fix match action for a detail screen's button row: null when the
 /// item's source cannot edit matches or the item cannot be matched.
+///
+/// A new match usually moves the item to another id (the new TMDB number,
+/// or its files in Folders). The detail page showing the old one then has
+/// nothing left to show, so it is closed rather than left on a not-found
+/// error.
 VoidCallback? fixMatchAction(
   BuildContext context,
   WidgetRef ref,
@@ -242,5 +257,19 @@ VoidCallback? fixMatchAction(
 ) {
   final source = ref.watch(mediaSourceProvider(item.sourceId));
   if (source == null || !canFixMatch(source, item)) return null;
-  return () => showFixMatchSheet(context, source, item, title: title);
+  return () async {
+    final changed =
+        await showFixMatchSheet(context, source, item, title: title);
+    if (!changed || !context.mounted) return;
+    try {
+      await source.item(item);
+    } on SourceException catch (e) {
+      if (e.kind == SourceErrorKind.notFound && context.mounted) {
+        await Navigator.of(context).maybePop();
+      }
+    } catch (e) {
+      // Any other failure is the detail page's own to show on refetch.
+      debugPrint('[FixMatch] Could not recheck ${item.externalId}: $e');
+    }
+  };
 }

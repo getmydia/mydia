@@ -58,3 +58,19 @@ final routeSourceStatusProvider = Provider.autoDispose
 /// Whether [status] means the source cannot be reached right now.
 bool isOffline(SourceConnectionStatus? status) =>
     status == SourceConnectionStatus.unreachable;
+
+/// Whether the shell holds navigation from [location] to the routes an
+/// offline viewer may open. A files source browses its local index whatever
+/// its status, so an unreachable one (a folder unplugged, a share down)
+/// still shows as offline but never holds navigation back.
+final routeNavigationOfflineProvider =
+    Provider.autoDispose.family<bool, String>((ref, location) {
+  final id = statusSourceIdFor(
+    location,
+    active: ref.watch(activeSourceIdProvider),
+  );
+  if (id == null || !isOffline(ref.watch(sourceStatusProvider(id)))) {
+    return false;
+  }
+  return ref.watch(mediaSourceProvider(id))?.kind != SourceKind.files;
+});

@@ -10,35 +10,36 @@ import '../../screens/sources/fake_media_source.dart';
 class _FixedScan extends FilesScanController {
   _FixedScan(super.sourceId);
 
-  static ScanState next = const ScanState();
-
   @override
-  ScanState build() => next;
-}
+  ScanState build() => const ScanState(running: true, done: 312, total: 2040);
 
-Future<void> _pump(WidgetTester tester, ScanState state) async {
-  _FixedScan.next = state;
-  await tester.pumpWidget(ProviderScope(
-    key: UniqueKey(),
-    overrides: [
-      filesScanProvider(fakeSourceId)
-          .overrideWith(() => _FixedScan(fakeSourceId))
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
-    ),
-  ));
+  void set(ScanState next) => state = next;
 }
 
 void main() {
-  testWidgets('banner_shows_grouped_counts_and_hides_when_idle',
-      (tester) async {
-    await _pump(tester, const ScanState(running: true, done: 312, total: 2040));
+  testWidgets('banner_follows_the_scan_and_hides_when_it_ends', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        filesScanProvider(fakeSourceId)
+            .overrideWith(() => _FixedScan(fakeSourceId))
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+      ),
+    ));
     expect(find.text('Scanning 312 of 2,040'), findsOneWidget);
 
-    await _pump(tester, const ScanState(done: 2040, total: 2040));
+    // The same banner, still mounted, follows the controller.
+    final scan =
+        ProviderScope.containerOf(tester.element(find.byType(FilesScanBanner)))
+            .read(filesScanProvider(fakeSourceId).notifier) as _FixedScan;
+    scan.set(const ScanState(running: true, done: 1500, total: 2040));
+    await tester.pump();
+    expect(find.text('Scanning 1,500 of 2,040'), findsOneWidget);
+
+    scan.set(const ScanState(done: 2040, total: 2040));
     await tester.pump();
     expect(find.byKey(const Key('files-scan-banner')), findsNothing);
     expect(find.textContaining('Scanning'), findsNothing);

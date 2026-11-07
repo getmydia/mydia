@@ -13,6 +13,7 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
+import 'files/files_providers.dart' show filesIndexProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -135,6 +136,18 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       await ref.read(sourceCacheProvider).deleteAccount(accountId);
     } catch (e) {
       debugPrint('[Sources] Could not clear cached data for $accountId: $e');
+    }
+  }
+
+  /// Deletes a files account's index: its folders, file names, matches and
+  /// watched flags. The local account's id is fixed, so an index left behind
+  /// would come back with the next folder added. Best effort, like
+  /// [_dropCache].
+  Future<void> _dropFilesIndex(String accountId) async {
+    try {
+      await ref.read(filesIndexProvider(accountId)).clear();
+    } catch (e) {
+      debugPrint('[Sources] Could not clear the files index of $accountId: $e');
     }
   }
 
@@ -277,6 +290,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         });
         await ref.read(sourceSecretsProvider).deleteAll(record);
         await _dropCache(id);
+        if (record.account.kind == SourceKind.files) await _dropFilesIndex(id);
         ids.add(id);
       }
       return ids;

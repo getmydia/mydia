@@ -12,6 +12,7 @@ import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/files_scan_controller.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
@@ -169,6 +170,29 @@ void main() {
     expect(c.read(sourcesProvider).map((s) => s.id), [filesLocalSource.id]);
     expect(c.read(mediaSourceProvider(filesLocalSource.id)), isNull);
     expect(c.read(allServersSourcesProvider), isEmpty);
+  });
+
+  test('forgot_pin_removes_a_locked_files_account_with_its_index', () async {
+    final store = InMemorySourceStore();
+    await store.putAccount(filesLocalRecord.copyWith(
+        serverLocks: {filesLocalSource.server.id: SourceLock.hidden}));
+    final c = ProviderContainer(overrides: [
+      ...noHiveOverrides,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      filesIndexBoxProvider.overrideWithValue(f.box),
+      filesProgressStoreProvider.overrideWithValue(f.progress),
+    ]);
+    addTearDown(c.dispose);
+    await c.read(sourceRecordsProvider.future);
+    await f.addFiles(['Amber Tide (2019).mkv'], rootId: 'rm');
+
+    await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+
+    expect((await store.load()).accounts, isEmpty);
+    final reopened =
+        FileLibraryIndex(f.box, accountId: filesLocalSource.account.id);
+    expect(reopened.roots(), isEmpty);
+    expect(reopened.files(), isEmpty);
   });
 
   test('a_resume_past_the_interval_scans', () async {

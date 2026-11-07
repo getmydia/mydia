@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
+import 'package:player/core/sources/files/files_scan_controller.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/sources/library.dart';
@@ -72,7 +74,47 @@ class _UnnamedLibrariesSource extends FakeMediaSource {
       ];
 }
 
+class _FilesSource extends FakeMediaSource {
+  @override
+  SourceKind get kind => SourceKind.files;
+}
+
+class _Scanning extends FilesScanController {
+  _Scanning(super.sourceId);
+
+  @override
+  ScanState build() => const ScanState(running: true, done: 1, total: 4);
+}
+
 void main() {
+  testWidgets('the scan banner sits above the first row, not over it',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(_FilesSource()),
+        coreSettingsServiceProvider
+            .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        filesScanProvider(fakeSourceId)
+            .overrideWith(() => _Scanning(fakeSourceId)),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+      ),
+    ));
+    // The banner's spinner never settles.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final banner = tester.getRect(find.byKey(const Key('files-scan-banner')));
+    final firstPoster = tester.getRect(find.byType(MediaPoster).first);
+    expect(banner.bottom, lessThanOrEqualTo(firstPoster.top));
+  });
+
   testWidgets('a library its server did not name is titled by its kind',
       (tester) async {
     await pumpLibrary(tester, _UnnamedLibrariesSource());
