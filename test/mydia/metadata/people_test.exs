@@ -72,6 +72,48 @@ defmodule Mydia.Metadata.PeopleTest do
     id
   end
 
+  test "credits are ordered best-known first, then newest", %{bypass: bypass, config: config} do
+    id = new_id()
+
+    expect_person(bypass, id, [
+      Map.put(movie(1, "Quiet Debut", "2001-04-01"), "vote_count", 40),
+      Map.put(movie(2, "Breakout Hit", "1998-09-12"), "vote_count", 25_000),
+      Map.put(movie(3, "Recent Drama", "2024-01-20"), "vote_count", 40),
+      movie(4, "Announced Sequel", ""),
+      tv(5, "Small Show", %{"vote_count" => 12}),
+      tv(6, "Long Runner", %{"vote_count" => 9_000})
+    ])
+
+    assert {:ok, %Person{} = person} = People.fetch_person_cached(config, id)
+
+    assert Enum.map(person.movie_credits, & &1.title) == [
+             "Breakout Hit",
+             "Recent Drama",
+             "Quiet Debut",
+             "Announced Sequel"
+           ]
+
+    assert Enum.map(person.tv_credits, & &1.title) == ["Long Runner", "Small Show"]
+  end
+
+  test "unreleased credits go last even when they have votes", %{bypass: bypass, config: config} do
+    id = new_id()
+
+    expect_person(bypass, id, [
+      Map.put(movie(1, "Quiet Debut", "2001-04-01"), "vote_count", 40),
+      Map.put(movie(2, "Undated Epic", ""), "vote_count", 5_000),
+      Map.put(movie(3, "Future Sequel", "2099-06-01"), "vote_count", 40)
+    ])
+
+    assert {:ok, %Person{} = person} = People.fetch_person_cached(config, id)
+
+    assert Enum.map(person.movie_credits, & &1.title) == [
+             "Quiet Debut",
+             "Undated Epic",
+             "Future Sequel"
+           ]
+  end
+
   test "parses a person with split, sorted filmography", %{bypass: bypass, config: config} do
     id = new_id()
 

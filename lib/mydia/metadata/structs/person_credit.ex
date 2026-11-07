@@ -21,6 +21,7 @@ defmodule Mydia.Metadata.Structs.PersonCredit do
     :overview,
     :original_language,
     :vote_average,
+    :vote_count,
     genre_ids: [],
     origin_country: []
   ]
@@ -38,6 +39,7 @@ defmodule Mydia.Metadata.Structs.PersonCredit do
           overview: String.t() | nil,
           original_language: String.t() | nil,
           vote_average: float() | nil,
+          vote_count: non_neg_integer() | nil,
           genre_ids: [integer()],
           origin_country: [String.t()]
         }
@@ -70,6 +72,7 @@ defmodule Mydia.Metadata.Structs.PersonCredit do
         overview: data["overview"],
         original_language: data["original_language"],
         vote_average: data["vote_average"],
+        vote_count: data["vote_count"],
         genre_ids: list(data["genre_ids"]),
         origin_country: list(data["origin_country"])
       }
