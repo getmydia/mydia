@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:dbus/dbus.dart';
 import 'package:flutter/foundation.dart';
@@ -22,6 +23,11 @@ typedef PortalSettingChange = ({
 /// The slice of `org.freedesktop.portal.Settings` the theme needs. A seam so
 /// tests can script the portal without a session bus.
 abstract interface class PortalSettingsClient {
+  /// Opens the connection. Must succeed before any other call: the `dbus`
+  /// client reports a missing bus only to whoever first triggers the
+  /// connect, and every later call on it waits forever.
+  Future<void> connect();
+
   /// `ReadOne`, portal version 2 and later.
   Future<DBusValue> readOne(String namespace, String key);
 
@@ -55,6 +61,9 @@ class DBusPortalSettingsClient implements PortalSettingsClient {
     );
     return reply.returnValues[0];
   }
+
+  @override
+  Future<void> connect() => _client.ping();
 
   @override
   Future<DBusValue> readOne(String namespace, String key) =>
@@ -125,13 +134,19 @@ class LinuxAccent extends Notifier<Color?> {
   @visibleForTesting
   static bool? debugIsNativeLinux;
 
+  /// Native Linux, and not a `flutter test` run that merely overrides the
+  /// target platform: those must never reach the developer's real portal.
   static bool get _isNativeLinux =>
       debugIsNativeLinux ??
-      (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux);
+      (!kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.linux &&
+          !Platform.environment.containsKey('FLUTTER_TEST'));
 
   /// Set once a signal lands, so the initial read answering later cannot
   /// put back an older accent.
   bool _signalled = false;
+
+  StreamSubscription<PortalSettingChange>? _sub;
 
   @override
   Color? build() {
@@ -144,7 +159,23 @@ class LinuxAccent extends Notifier<Color?> {
       debugPrint('[LinuxAccent] No session bus: $e');
       return null;
     }
-    final sub = client.changes
+    ref.onDispose(() => _sub?.cancel());
+    unawaited(_start(client));
+    return null;
+  }
+
+  /// Connects, then subscribes before reading so a change that lands while
+  /// the read is in flight is not lost. Nothing else is called on a client
+  /// whose connect failed.
+  Future<void> _start(PortalSettingsClient client) async {
+    try {
+      await client.connect();
+    } catch (e) {
+      debugPrint('[LinuxAccent] No session bus: $e');
+      return;
+    }
+    if (!ref.mounted) return;
+    _sub = client.changes
         .where((c) => c.namespace == _appearance && c.key == _accentKey)
         .listen(
       (c) {
@@ -153,12 +184,6 @@ class LinuxAccent extends Notifier<Color?> {
       },
       onError: (Object e) => debugPrint('[LinuxAccent] Signal failed: $e'),
     );
-    ref.onDispose(sub.cancel);
-    unawaited(_initialRead(client));
-    return null;
-  }
-
-  Future<void> _initialRead(PortalSettingsClient client) async {
     try {
       DBusValue value;
       try {

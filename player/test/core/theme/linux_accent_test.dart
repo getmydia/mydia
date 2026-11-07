@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show SocketException;
 
 import 'package:dbus/dbus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +27,9 @@ class _FakePortal implements PortalSettingsClient {
   final _changes = StreamController<PortalSettingChange>.broadcast();
 
   void emit(PortalSettingChange c) => _changes.add(c);
+
+  @override
+  Future<void> connect() async {}
 
   @override
   Future<DBusValue> readOne(String namespace, String key) {
@@ -164,6 +168,46 @@ void main() {
       expect(c.read(linuxAccentProvider), isNull);
     });
 
+    // The real client never throws on construction: a missing bus surfaces
+    // as a failed connect behind the first call or subscription. flutter_test
+    // fails the test on any error that escapes the notifier.
+    test('an unreachable bus with the real client stays null quietly',
+        () async {
+      LinuxAccent.debugIsNativeLinux = true;
+      final logs = <String?>[];
+      final previous = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message);
+      addTearDown(() => debugPrint = previous);
+      final client = DBusPortalSettingsClient(
+        client: DBusClient(DBusAddress('unix:path=/nonexistent/mydia-bus')),
+      );
+      final c = ProviderContainer(overrides: [
+        portalSettingsClientProvider.overrideWith((ref) => client),
+      ]);
+      addTearDown(c.dispose);
+      expect(c.read(linuxAccentProvider), isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(c.read(linuxAccentProvider), isNull);
+      expect(logs.where((l) => l?.startsWith('[LinuxAccent]') ?? false),
+          hasLength(1));
+    });
+
+    test('under flutter test it never touches the bus unless forced', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var built = false;
+      final c = ProviderContainer(overrides: [
+        portalSettingsClientProvider.overrideWith((ref) {
+          built = true;
+          return _FakePortal();
+        }),
+      ]);
+      addTearDown(c.dispose);
+      expect(c.read(linuxAccentProvider), isNull);
+      await settle();
+      expect(built, isFalse);
+    });
+
     test('ignores other keys and namespaces', () async {
       LinuxAccent.debugIsNativeLinux = true;
       final portal = _FakePortal();
@@ -183,6 +227,7 @@ void main() {
       final portal = _FakePortal();
       final c = container(portal);
       c.read(linuxAccentProvider);
+      await settle(); // connected and subscribed; the read is in flight
       portal.emit(change(rgb(0, 1, 0)));
       await settle();
       portal.readOneResult.complete(DBusVariant(rgb(1, 0, 0)));
