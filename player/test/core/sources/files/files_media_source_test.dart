@@ -225,6 +225,45 @@ void main() {
     expect(await watched('201-1-5'), isFalse);
   });
 
+  test('overlapping_multi_episode_files_link_no_episode_to_another', () async {
+    final b = await _build();
+    final f = b.fixture;
+    IndexedFile file(String path, int first, int end) => IndexedFile(
+          key: fileKeyFor(FilesFixture.rootId, path),
+          rootId: FilesFixture.rootId,
+          path: path,
+          size: 10,
+          modified: filesT0,
+          firstSeen: filesT0,
+          parsed: ParsedName(
+            path: path,
+            isEpisode: true,
+            title: 'Glass Orchard',
+            groupKey: 'tv:glassorchard|',
+            season: 1,
+            episode: first,
+            episodeEnd: end,
+          ),
+        );
+    await f.index.putFiles([
+      file('Glass Orchard/Glass Orchard S01E04-E05.mkv', 4, 5),
+      file('Glass Orchard/Glass Orchard S01E05-E06.mkv', 5, 6),
+    ]);
+    Future<UserState> state(String id) async =>
+        (await b.source.item(f.ref(ItemKind.episode, id))).summary.userState;
+    await f.saveProgress('201-1-4', 300, 1000);
+    await f.saveProgress('201-1-6', 400, 1000);
+
+    await b.source.setWatched(f.ref(ItemKind.episode, '201-1-5'), true);
+
+    expect((await state('201-1-5')).watched, isTrue);
+    for (final (id, at) in [('201-1-4', 300), ('201-1-6', 400)]) {
+      final s = await state(id);
+      expect(s.watched, isFalse, reason: id);
+      expect(s.progressSeconds, at, reason: id);
+    }
+  });
+
   test('continue_watching_ignores_under_thirty_seconds', () async {
     final b = await _build();
     final f = b.fixture;

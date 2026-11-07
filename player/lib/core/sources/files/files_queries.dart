@@ -141,7 +141,43 @@ class FilesCatalog {
 
   /// For an episode held in a multi-episode file (S01E01-E02), the other
   /// episodes of that file. Playing it to the end plays them all.
+  ///
+  /// Progress is kept per episode, not per file, so two episodes are linked
+  /// only when every file of each also holds the other: then whichever was
+  /// played, both were. With overlapping files (S01E01-E02 and
+  /// S01E02-E03), E02's progress may come from either file, so E02 links to
+  /// neither neighbour, and E01 and E03, which share no file, never link.
   final _sameFile = <String, Set<String>>{};
+
+  void _linkSameFileEpisodes(FilesShow show) {
+    // For each episode, the other episodes in every one of its files.
+    final always = <String, Set<String>>{};
+    for (final MapEntry(key: s, value: eps) in show.seasons.entries) {
+      for (final MapEntry(key: n, value: files) in eps.entries) {
+        Set<String>? common;
+        for (final f in files) {
+          final p = f.parsed!;
+          final first = p.episode!;
+          final end = p.episodeEnd ?? first;
+          final others = {
+            for (var k = first; k <= end; k++)
+              if (k != n) episodeId(show.base, s, k),
+          };
+          common = common == null ? others : common.intersection(others);
+        }
+        if (common != null && common.isNotEmpty) {
+          always[episodeId(show.base, s, n)] = common;
+        }
+      }
+    }
+    for (final MapEntry(key: id, value: others) in always.entries) {
+      final mutual = {
+        for (final o in others)
+          if (always[o]?.contains(id) ?? false) o,
+      };
+      if (mutual.isNotEmpty) _sameFile[id] = mutual;
+    }
+  }
 
   /// The episodes sharing a file with [id], which a watched toggle on [id]
   /// carries to as well.
@@ -199,19 +235,12 @@ class FilesCatalog {
         for (var n = e; n <= end; n++) {
           show.seasons.putIfAbsent(s, () => {}).putIfAbsent(n, () => []).add(f);
         }
-        if (end > e) {
-          final ids = [
-            for (var n = e; n <= end; n++) episodeId(base, s, n),
-          ];
-          for (final id in ids) {
-            _sameFile
-                .putIfAbsent(id, () => {})
-                .addAll(ids.where((o) => o != id));
-          }
-        }
       }
     }
     shows.removeWhere((_, s) => s.seasons.isEmpty);
+    for (final s in shows.values) {
+      _linkSameFileEpisodes(s);
+    }
     for (final m in movies.values) {
       m.files.sort(_byPath);
     }
