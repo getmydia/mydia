@@ -3,6 +3,7 @@ import 'package:material_color_utilities/material_color_utilities.dart';
 
 import 'contrast.dart';
 import 'depth_tokens.dart';
+import 'linux_desktop.dart';
 
 /// Every colour that changes between theme presets. Colours that never
 /// change (semantic error/warning/info/success, OSD tones, overlays) stay
@@ -229,19 +230,19 @@ abstract final class Palettes {
   static const double _accentTarget = 4.55;
 
   /// [accent] with its tone raised, in steps of one, until it clears the text
-  /// floor on both the macOS window and the OSD fill. Hue and chroma are
-  /// kept, so the colour stays the viewer's accent; only its lightness moves.
+  /// floor on both [background] and the OSD fill. Hue and chroma are kept,
+  /// so the colour stays the viewer's accent; only its lightness moves.
   /// Accents that already clear it come through unchanged.
   ///
   /// The system's own accent is tuned for controls on the window, and a few
-  /// (system blue is the common one) measure about 3.7:1 on the playback
-  /// controls, which sit on the OSD fill. The player draws the accent as text
-  /// and icon colour there, so it is lifted slightly rather than left
-  /// unreadable.
+  /// (macOS system blue is the common one) measure about 3.7:1 on the
+  /// playback controls, which sit on the OSD fill. The player draws the
+  /// accent as text and icon colour there, so it is lifted slightly rather
+  /// than left unreadable.
   @visibleForTesting
-  static Color legibleAccent(Color accent) {
+  static Color legibleAccent(Color accent, {required Color background}) {
     bool clears(Color c) =>
-        contrastRatio(c, _macosBackground) >= _accentTarget &&
+        contrastRatio(c, background) >= _accentTarget &&
         contrastRatio(c, _osdWorstCase) >= _accentTarget;
     if (clears(accent)) return accent;
     final hct = Hct.fromInt(accent.toARGB32());
@@ -256,9 +257,113 @@ abstract final class Palettes {
   /// when needed so it stays legible on the playback controls (see
   /// [legibleAccent]).
   static MydiaPalette macos(Color systemAccent) {
-    final accent = legibleAccent(systemAccent);
+    final accent = legibleAccent(systemAccent, background: _macosBackground);
     return _macos(accent);
   }
+
+  /// The detected Linux desktop's dark greys with the desktop's accent, or
+  /// its stock accent when the desktop reports none, lifted like the macOS
+  /// one. Ramp anchors come from libadwaita `_colors.scss`, Breeze
+  /// `BreezeDark.colors` and granite `_lighting.scss`; the steps between
+  /// them are interpolated.
+  static MydiaPalette linux(LinuxDesktop desktop, Color? accent) {
+    final ramp = switch (desktop) {
+      LinuxDesktop.gnome || LinuxDesktop.other => _adwaita,
+      LinuxDesktop.kde => _breeze,
+      LinuxDesktop.elementary => _elementary,
+    };
+    final lifted = legibleAccent(
+      accent ?? desktop.stockAccent,
+      background: ramp.background,
+    );
+    return ramp.copyWith(
+      primary: lifted,
+      primaryFocus: Color.lerp(lifted, const Color(0xFF000000), 0.15) ?? lifted,
+      onPrimary: onColorFor(lifted),
+    );
+  }
+
+  /// A Linux ramp; [linux] fills in the accent fields.
+  static MydiaPalette _linuxRamp({
+    required int background,
+    required int surfaceDim,
+    required int surfaceLow,
+    required int surface,
+    required int surfaceHigh,
+    required int surfaceVariant,
+    required int surfaceBright,
+    required int textPrimary,
+    required int textSecondary,
+    required int textDisabled,
+    required int divider,
+    required int border,
+  }) =>
+      MydiaPalette(
+        background: Color(background),
+        surfaceDim: Color(surfaceDim),
+        surfaceLow: Color(surfaceLow),
+        surface: Color(surface),
+        surfaceHigh: Color(surfaceHigh),
+        surfaceVariant: Color(surfaceVariant),
+        surfaceBright: Color(surfaceBright),
+        primary: const Color(0xFF000000),
+        primaryFocus: const Color(0xFF000000),
+        onPrimary: const Color(0xFFFFFFFF),
+        textPrimary: Color(textPrimary),
+        textSecondary: Color(textSecondary),
+        textDisabled: Color(textDisabled),
+        divider: Color(divider),
+        border: Color(border),
+        cardHover: Color(surfaceVariant),
+        shimmerBase: Color(surface),
+        shimmerHighlight: Color(surfaceVariant),
+        ambientTint: false,
+      );
+
+  static final MydiaPalette _adwaita = _linuxRamp(
+    background: 0xFF1D1D20,
+    surfaceDim: 0xFF202023,
+    surfaceLow: 0xFF222226,
+    surface: 0xFF28282C,
+    surfaceHigh: 0xFF2E2E32,
+    surfaceVariant: 0xFF36363A,
+    surfaceBright: 0xFF3E3E43,
+    textPrimary: 0xFFFFFFFF,
+    textSecondary: 0xFFB4B4B6,
+    textDisabled: 0xFF8E8E91,
+    divider: 0xFF2A2A2E,
+    border: 0xFF3A3A3E,
+  );
+
+  static final MydiaPalette _breeze = _linuxRamp(
+    background: 0xFF141618,
+    surfaceDim: 0xFF1A1C1E,
+    surfaceLow: 0xFF202326,
+    surface: 0xFF25282B,
+    surfaceHigh: 0xFF292C30,
+    surfaceVariant: 0xFF31363B,
+    surfaceBright: 0xFF3B4045,
+    textPrimary: 0xFFFCFCFC,
+    textSecondary: 0xFFA1A9B1,
+    textDisabled: 0xFF7F8C8D,
+    divider: 0xFF25282B,
+    border: 0xFF3F444A,
+  );
+
+  static final MydiaPalette _elementary = _linuxRamp(
+    background: 0xFF1A1A1A,
+    surfaceDim: 0xFF202020,
+    surfaceLow: 0xFF262626,
+    surface: 0xFF2C2C2C,
+    surfaceHigh: 0xFF333333,
+    surfaceVariant: 0xFF3A3A3A,
+    surfaceBright: 0xFF404040,
+    textPrimary: 0xFFFFFFFF,
+    textSecondary: 0xFFABACAE,
+    textDisabled: 0xFF8A8A8A,
+    divider: 0xFF2B2B2B,
+    border: 0xFF474747,
+  );
 
   static MydiaPalette _macos(Color accent) => MydiaPalette(
         background: _macosBackground,

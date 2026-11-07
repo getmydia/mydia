@@ -17,9 +17,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/contrast.dart';
+import 'package:player/core/theme/linux_desktop.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import '../../test_utils/linux_accents.dart';
 import '../../test_utils/mac_accents.dart';
 
 /// SC 1.4.3 Contrast (Minimum), normal-size text.
@@ -31,6 +33,12 @@ Map<String, MydiaPalette> _palettes() => {
       for (final accent in macAccents.entries)
         'macos/${accent.key}':
             ThemePreset.macos.palette(systemAccent: accent.value),
+      for (final desktop in LinuxDesktop.values) ...{
+        'linux/${desktop.name}/stock': Palettes.linux(desktop, null),
+        for (final accent in linuxAccents.entries)
+          'linux/${desktop.name}/${accent.key}':
+              Palettes.linux(desktop, accent.value),
+      },
     };
 
 void _floor(Color fg, Color bg, String what) {
