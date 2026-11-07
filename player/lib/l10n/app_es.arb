@@ -167,6 +167,8 @@
   "themePresetOledBlack": "Negro OLED",
   "themePresetSlate": "Pizarra",
   "themePresetMacos": "macOS",
+  "themePresetLinux": "Sistema ({desktop})",
+  "themePresetLinuxGeneric": "Sistema",
   "glassMaterialLiquid": "Liquid Glass",
   "glassMaterialFrosted": "Esmerilado",
   "subtitleSizeSmall": "Pequeño",

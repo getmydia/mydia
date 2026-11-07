@@ -5,6 +5,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../settings/settings_providers.dart';
 import 'glass_material.dart';
+import 'linux_accent.dart';
+import 'linux_desktop.dart';
 import 'palette.dart';
 import 'system_accent.dart';
 import 'theme_preset.dart';
@@ -87,10 +89,21 @@ class GlassMaterialSetting extends _$GlassMaterialSetting {
   }
 }
 
+/// The colours [preset] draws with right now. Watches the desktop only for
+/// the presets that follow it, so a fixed preset never touches D-Bus or the
+/// native channel. Shared by the app theme and the picker's swatches.
+@Riverpod(keepAlive: true)
+MydiaPalette presetPalette(Ref ref, ThemePreset preset) => switch (preset) {
+      ThemePreset.macos =>
+        preset.palette(systemAccent: ref.watch(systemAccentProvider)),
+      ThemePreset.linux => preset.palette(
+          linuxDesktop: ref.watch(linuxDesktopProvider),
+          linuxAccent: ref.watch(linuxAccentProvider),
+        ),
+      _ => preset.palette(),
+    };
+
 /// The colours the app is drawn with right now.
 @Riverpod(keepAlive: true)
-MydiaPalette palette(Ref ref) {
-  final preset = ref.watch(themePresetSettingProvider);
-  if (preset != ThemePreset.macos) return preset.palette();
-  return preset.palette(systemAccent: ref.watch(systemAccentProvider));
-}
+MydiaPalette palette(Ref ref) =>
+    ref.watch(presetPaletteProvider(ref.watch(themePresetSettingProvider)));
