@@ -90,6 +90,15 @@ defmodule Mydia.Demo.LibraryTest do
       end
     end
 
+    test "episode titles are whole phrases", ctx do
+      {:ok, _} = Library.seed(opts(ctx))
+
+      titles = Repo.all(from e in Episode, select: e.title)
+      assert Enum.any?(titles, &String.contains?(&1, " "))
+      refute "Way" in titles
+      refute "The" in titles
+    end
+
     test "populates Continue Watching and the calendar", ctx do
       {:ok, _} = Library.seed(opts(ctx))
 

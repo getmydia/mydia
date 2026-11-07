@@ -228,9 +228,24 @@ defmodule Mydia.Demo.Library do
     }
   ]
 
-  @episode_titles ~w(Arrivals Low\ Tide The\ Long\ Way\ Round Unsent\ Letters Borrowed\ Time Paper\ Boats
-                     Second\ Wind Quiet\ Hours Small\ Hours The\ Other\ Door Thin\ Ice Lost\ and\ Found
-                     Open\ Water A\ Fair\ Trade Last\ Light The\ Hollow\ Month)
+  @episode_titles [
+    "Arrivals",
+    "Low Tide",
+    "The Long Way Round",
+    "Unsent Letters",
+    "Borrowed Time",
+    "Paper Boats",
+    "Second Wind",
+    "Quiet Hours",
+    "Small Hours",
+    "The Other Door",
+    "Thin Ice",
+    "Lost and Found",
+    "Open Water",
+    "A Fair Trade",
+    "Last Light",
+    "The Hollow Month"
+  ]
 
   @provider_id_base 900_000
   @episode_seconds 2700
