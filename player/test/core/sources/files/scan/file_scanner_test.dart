@@ -171,6 +171,7 @@ void main() {
 
       expect(delta.added.map((f) => f.path), ['open/E.mkv']);
       expect(delta.removedKeys, [fileKeyFor('r1', 'A.mkv')]);
+      expect(delta.skippedFolders, ['locked']);
       expect(index.files().values.map((f) => f.path).toSet(), {
         'locked/B.mkv',
         'locked/deep/C.mkv',
@@ -212,6 +213,7 @@ void main() {
       index: index,
     ).scan(local);
     expect(delta.added.map((f) => f.path), ['Open Film (2001).mkv']);
+    expect(delta.skippedFolders, ['locked']);
   }, skip: Platform.isWindows || _runningAsRoot());
 
   test('cyclic_listing_terminates_with_files_found_once', () async {

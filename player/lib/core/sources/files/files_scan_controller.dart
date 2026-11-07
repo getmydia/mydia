@@ -21,9 +21,13 @@ class ScanState {
     this.done = 0,
     this.total = 0,
     this.error,
+    this.skippedFolders = 0,
   });
 
   final bool running;
+
+  /// Folders the last run could not read and left out, over every root.
+  final int skippedFolders;
 
   /// Files handled so far, over every root scanned in this run.
   final int done;
@@ -82,18 +86,20 @@ class FilesScanController extends Notifier<ScanState> {
     BackendFailure? unreachable;
     var before = 0;
     var latest = (done: 0, total: 0);
+    var skipped = 0;
     try {
       final roots = index.roots();
       var scanned = 0;
       for (final root in roots) {
         try {
-          await scanner.scan(root, onProgress: (done, total) {
+          final delta = await scanner.scan(root, onProgress: (done, total) {
             latest = (done: before + done, total: before + total);
             if (ref.mounted) {
               state = ScanState(
                   running: true, done: latest.done, total: latest.total);
             }
           });
+          skipped += delta.skippedFolders.length;
           scanned++;
         } on BackendFailure catch (e) {
           debugPrint('[FilesScan] ${root.id} not scanned: $e');
@@ -125,7 +131,12 @@ class FilesScanController extends Notifier<ScanState> {
       error ??= e;
     } finally {
       if (ref.mounted) {
-        state = ScanState(done: latest.done, total: latest.total, error: error);
+        state = ScanState(
+          done: latest.done,
+          total: latest.total,
+          error: error,
+          skippedFolders: skipped,
+        );
       }
     }
   }

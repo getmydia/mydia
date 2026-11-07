@@ -331,6 +331,7 @@ void main() {
       await c.read(filesScanProvider(filesLocalSource.id).notifier).rescan();
 
       expect(c.read(filesScanProvider(filesLocalSource.id)).error, isNull);
+      expect(c.read(filesScanProvider(filesLocalSource.id)).skippedFolders, 1);
       expect(media.connection, SourceConnectionStatus.local);
       expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
           isFalse);

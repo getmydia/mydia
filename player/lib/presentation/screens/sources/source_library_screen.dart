@@ -394,13 +394,14 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   }
 
   /// Files libraries show scan progress above the list while a scan runs,
-  /// in its own band, so it never covers the first rows. [content] is built
+  /// and after one that skipped folders, in its own band, so it never covers
+  /// the first rows. [content] is built
   /// with the top padding its scroll view should keep.
   Widget _withScanBanner(double top, Widget Function(double top) content) {
     final sourceId = widget.library.sourceId;
     final source = ref.watch(mediaSourceProvider(sourceId));
     if (source?.kind != SourceKind.files ||
-        !ref.watch(filesScanProvider(sourceId)).running) {
+        !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)))) {
       return content(top);
     }
     return Column(

@@ -1582,6 +1582,8 @@
   "@filesThisDevice": {"description": "Name of the files library made of folders on this device."},
   "filesScanProgress": "Scanning {done} of {total}",
   "@filesScanProgress": {"description": "Banner above a files library while it scans its folders: how many files are handled out of the total, both already formatted with digit grouping, such as 312 and 2,040.", "placeholders": {"done": {"type": "String"}, "total": {"type": "String"}}},
+  "filesScanSkippedFolders": "{count, plural, one{{count} folder skipped: it could not be read} other{{count} folders skipped: they could not be read}}",
+  "@filesScanSkippedFolders": {"description": "Banner above a files library after a scan that had to leave out folders it was not allowed to read (or that vanished). Their files stay as they were.", "placeholders": {"count": {"type": "int"}}},
   "filesFixMatch": "Fix match",
   "@filesFixMatch": {"description": "Action on a files library item that opens a search to choose by hand which movie or show it is."},
   "filesFixMatchTitleLabel": "Title",

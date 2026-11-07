@@ -43,5 +43,23 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('files-scan-banner')), findsNothing);
     expect(find.textContaining('Scanning'), findsNothing);
+    expect(find.byKey(const Key('files-scan-skipped')), findsNothing);
+
+    // A finished scan that left folders out says so.
+    scan.set(const ScanState(done: 2040, total: 2040, skippedFolders: 1));
+    await tester.pump();
+    expect(find.text('1 folder skipped: it could not be read'), findsOneWidget);
+
+    scan.set(const ScanState(done: 2040, total: 2040, skippedFolders: 3));
+    await tester.pump();
+    expect(
+        find.text('3 folders skipped: they could not be read'), findsOneWidget);
+
+    // The next scan's progress replaces it.
+    scan.set(const ScanState(
+        running: true, done: 1, total: 2040, skippedFolders: 3));
+    await tester.pump();
+    expect(find.text('Scanning 1 of 2,040'), findsOneWidget);
+    expect(find.byKey(const Key('files-scan-skipped')), findsNothing);
   });
 }

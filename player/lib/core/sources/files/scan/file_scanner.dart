@@ -10,11 +10,16 @@ class ScanDelta {
     this.added = const [],
     this.changed = const [],
     this.removedKeys = const [],
+    this.skippedFolders = const [],
   });
 
   final List<IndexedFile> added;
   final List<IndexedFile> changed;
   final List<String> removedKeys;
+
+  /// Folders below the root that could not be read, relative to it. What
+  /// is under them was left as it was.
+  final List<String> skippedFolders;
 
   bool get isEmpty => added.isEmpty && changed.isEmpty && removedKeys.isEmpty;
 }
@@ -57,10 +62,11 @@ class FileScanner {
     final registered = _registered(root);
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
-    final unreadable = [
+    final skipped = [
       for (final dir in await _walk(root.path, videos, sidecarsByDir))
-        '${_relative(root.path, dir)}/',
+        _relative(root.path, dir),
     ];
+    final unreadable = [for (final dir in skipped) '$dir/'];
 
     final existing = {
       for (final f in _index.files().values)
@@ -128,7 +134,12 @@ class FileScanner {
     if (registered && !_registered(root)) return const ScanDelta();
     await _index.putFiles([...added, ...changed]);
     if (removed.isNotEmpty) await _index.removeFiles(removed);
-    return ScanDelta(added: added, changed: changed, removedKeys: removed);
+    return ScanDelta(
+      added: added,
+      changed: changed,
+      removedKeys: removed,
+      skippedFolders: skipped,
+    );
   }
 
   bool _registered(LibraryRoot root) =>
