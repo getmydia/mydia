@@ -5,9 +5,10 @@ defmodule Mix.Tasks.Mydia.DemoSeed do
       mix mydia.demo_seed [--base-url URL]
 
   Writes about 20 movies and 8 shows (every title made up), their episodes,
-  media files, playback progress for the first admin, and rendered poster and
-  backdrop images under `priv/static/images/demo/`. Refuses to run unless the
-  database holds no media, and needs `rsvg-convert` (librsvg) on the PATH.
+  media files and playback progress for the first admin, and copies the
+  committed AI-generated poster and backdrop images from `assets/demo/art/`
+  to `priv/static/images/demo/`. Run it from the repository root. Refuses to
+  run unless the database holds no media and every art file is present.
 
   Items store absolute image URLs. They default to the endpoint's URL, which in
   dev is the self-signed https one; pass `--base-url http://localhost:PORT` when
@@ -35,8 +36,12 @@ defmodule Mix.Tasks.Mydia.DemoSeed do
         Mix.shell().error("No admin user exists. Create one first (mix mydia.user add).")
         exit({:shutdown, 1})
 
-      {:error, {:renderer_missing, renderer}} ->
-        Mix.shell().error("Image renderer not found: #{renderer} (install librsvg).")
+      {:error, {:art_missing, files}} ->
+        Mix.shell().error(
+          "Demo artwork missing from assets/demo/art (#{length(files)} files); nothing was written:\n" <>
+            Enum.map_join(files, "\n", &("  " <> &1))
+        )
+
         exit({:shutdown, 1})
 
       {:error, reason} ->

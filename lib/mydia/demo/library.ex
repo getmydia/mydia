@@ -3,14 +3,15 @@ defmodule Mydia.Demo.Library do
   Seeds an invented demo library (movies, shows, episodes, files, watch
   progress and artwork) for website screenshots. Every title is made up.
 
-  `seed/1` refuses a database that already holds media. Artwork is rendered
-  before any row is written, so a rendering failure leaves the database alone.
+  `seed/1` refuses a database that already holds media. The artwork is
+  AI-generated and committed under `assets/demo/art` as `<slug>-poster.jpg`
+  and `<slug>-backdrop.jpg`. It is checked and copied before any row is
+  written, so missing art leaves the database alone.
   """
 
   import Ecto.Query
 
   alias Mydia.Accounts.{Scope, User}
-  alias Mydia.Demo.Artwork
   alias Mydia.Library.MediaFiles
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -256,43 +257,64 @@ defmodule Mydia.Demo.Library do
   def titles, do: Enum.map(@movies ++ @shows, & &1.title)
 
   @doc """
+  The art file names for `title`: `{poster, backdrop}`.
+
+  The slug is the lowercased title with each run of other characters turned
+  into `-`, trimmed of leading and trailing `-`.
+  """
+  @spec art_files(String.t()) :: {String.t(), String.t()}
+  def art_files(title) do
+    slug =
+      title
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9]+/u, "-")
+      |> String.trim("-")
+
+    {slug <> "-poster.jpg", slug <> "-backdrop.jpg"}
+  end
+
+  @doc """
   Seeds the demo library. See the module doc.
 
   ## Options
 
-    * `:art_dir` - where artwork is written (default `priv/static/images/demo`)
+    * `:art_source` - where the committed artwork is read from
+      (default `assets/demo/art` under the current directory)
+    * `:art_dir` - where artwork is copied to (default `priv/static/images/demo`)
     * `:base_url` - prefix of the artwork URLs stored on items (default the endpoint URL)
-    * `:renderer` - SVG to PNG command (default `"rsvg-convert"`)
     * `:user` - the user who gets watch progress (default the first admin)
   """
   @spec seed(keyword()) ::
           {:ok,
            %{movies: non_neg_integer(), shows: non_neg_integer(), episodes: non_neg_integer()}}
-          | {:error, :not_empty | :no_admin_user | {:renderer_missing, String.t()} | term()}
+          | {:error, :not_empty | :no_admin_user | {:art_missing, [String.t()]} | term()}
   def seed(opts \\ []) do
+    art_source =
+      Keyword.get_lazy(opts, :art_source, fn -> Path.expand("assets/demo/art", File.cwd!()) end)
+
     art_dir =
       Keyword.get_lazy(opts, :art_dir, fn ->
         Application.app_dir(:mydia, "priv/static/images/demo")
       end)
 
     base_url = Keyword.get_lazy(opts, :base_url, fn -> MydiaWeb.Endpoint.url() end)
-    renderer = Keyword.get(opts, :renderer, "rsvg-convert")
 
-    with :ok <- check_renderer(renderer),
+    with :ok <- check_art(art_source),
          :ok <- check_empty(),
          {:ok, user} <- resolve_user(Keyword.get(opts, :user)),
-         {:ok, art} <- render_artwork(art_dir, base_url, renderer) do
+         {:ok, art} <- copy_artwork(art_source, art_dir, base_url) do
       write(user, art)
     end
   end
 
-  defp check_renderer(renderer) do
-    found? =
-      if Path.type(renderer) == :absolute,
-        do: File.exists?(renderer),
-        else: System.find_executable(renderer) != nil
+  defp check_art(source) do
+    missing =
+      for title <- titles(),
+          file <- Tuple.to_list(art_files(title)),
+          not File.regular?(Path.join(source, file)),
+          do: file
 
-    if found?, do: :ok, else: {:error, {:renderer_missing, renderer}}
+    if missing == [], do: :ok, else: {:error, {:art_missing, missing}}
   end
 
   defp check_empty do
@@ -311,20 +333,31 @@ defmodule Mydia.Demo.Library do
   end
 
   # Returns %{title => %{poster_path: url, backdrop_path: url}}.
-  defp render_artwork(art_dir, base_url, renderer) do
-    Enum.reduce_while(titles(), {:ok, %{}}, fn title, {:ok, acc} ->
-      with {:ok, poster} <- Artwork.render(title, :poster, art_dir, renderer),
-           {:ok, backdrop} <- Artwork.render(title, :backdrop, art_dir, renderer) do
-        urls = %{
-          poster_path: image_url(base_url, poster),
-          backdrop_path: image_url(base_url, backdrop)
-        }
+  defp copy_artwork(source, art_dir, base_url) do
+    with :ok <- File.mkdir_p(art_dir) do
+      Enum.reduce_while(titles(), {:ok, %{}}, fn title, {:ok, acc} ->
+        {poster, backdrop} = art_files(title)
 
-        {:cont, {:ok, Map.put(acc, title, urls)}}
-      else
-        {:error, reason} -> {:halt, {:error, {:artwork_failed, title, reason}}}
-      end
-    end)
+        with :ok <- copy(source, art_dir, poster),
+             :ok <- copy(source, art_dir, backdrop) do
+          urls = %{
+            poster_path: image_url(base_url, poster),
+            backdrop_path: image_url(base_url, backdrop)
+          }
+
+          {:cont, {:ok, Map.put(acc, title, urls)}}
+        else
+          {:error, reason} -> {:halt, {:error, {:artwork_failed, title, reason}}}
+        end
+      end)
+    end
+  end
+
+  defp copy(source, dest, file) do
+    case File.cp(Path.join(source, file), Path.join(dest, file)) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {file, reason}}
+    end
   end
 
   defp image_url(base_url, file),

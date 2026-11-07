@@ -8,11 +8,8 @@ defmodule Mydia.Demo.LibraryTest do
 
   @base_url "http://demo.test"
 
-  # A 1x1 PNG, so the suite does not need librsvg.
-  @png_b64 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-
   defp opts(ctx) do
-    [art_dir: ctx.art_dir, renderer: ctx.renderer, base_url: @base_url, user: ctx.user]
+    [art_source: ctx.art_source, art_dir: ctx.art_dir, base_url: @base_url, user: ctx.user]
   end
 
   describe "seed/1" do
@@ -20,23 +17,17 @@ defmodule Mydia.Demo.LibraryTest do
 
     setup %{tmp_dir: tmp_dir} do
       art_dir = Path.join(tmp_dir, "art")
-      renderer = Path.join(tmp_dir, "fake-rsvg")
+      art_source = Path.join(tmp_dir, "source")
+      File.mkdir_p!(art_source)
 
-      File.write!(renderer, """
-      #!/bin/sh
-      out=""
-      while [ $# -gt 0 ]; do
-        if [ "$1" = "-o" ]; then out="$2"; fi
-        shift
-      done
-      printf '%s' '#{@png_b64}' | base64 -d > "$out"
-      """)
-
-      File.chmod!(renderer, 0o755)
+      # Tiny stand-ins for the committed JPEGs, one pair per title.
+      for title <- Library.titles(),
+          file <- Tuple.to_list(Library.art_files(title)),
+          do: File.write!(Path.join(art_source, file), "jpg:" <> file)
 
       user = insert(:user, role: "admin")
 
-      {:ok, art_dir: art_dir, renderer: renderer, user: user}
+      {:ok, art_dir: art_dir, art_source: art_source, user: user}
     end
 
     test "seeds an empty database", ctx do
@@ -55,10 +46,29 @@ defmodule Mydia.Demo.LibraryTest do
       movies = Enum.filter(items, &(&1.type == "movie"))
       assert length(movies) == m
 
-      for movie <- movies do
-        poster = movie.metadata.poster_path
-        assert String.starts_with?(poster, @base_url <> "/images/demo/")
-        assert File.exists?(Path.join(ctx.art_dir, Path.basename(poster)))
+      for item <- items do
+        {poster_file, backdrop_file} = Library.art_files(item.title)
+
+        for {url, file} <- [
+              {item.metadata.poster_path, poster_file},
+              {item.metadata.backdrop_path, backdrop_file}
+            ] do
+          assert url == @base_url <> "/images/demo/" <> file
+          assert File.read!(Path.join(ctx.art_dir, file)) == "jpg:" <> file
+        end
+      end
+    end
+
+    test "art file names follow the slug rule" do
+      assert Library.art_files("Fennick's Wager") ==
+               {"fennick-s-wager-poster.jpg", "fennick-s-wager-backdrop.jpg"}
+    end
+
+    test "the committed art covers every title" do
+      source = Path.expand("assets/demo/art", File.cwd!())
+
+      for title <- Library.titles(), file <- Tuple.to_list(Library.art_files(title)) do
+        assert File.regular?(Path.join(source, file)), "missing #{file}"
       end
     end
 
@@ -70,11 +80,16 @@ defmodule Mydia.Demo.LibraryTest do
       assert File.ls(ctx.art_dir) in [{:error, :enoent}, {:ok, []}]
     end
 
-    test "fails before writing when the renderer is missing", ctx do
-      opts = Keyword.put(opts(ctx), :renderer, "/nonexistent/rsvg-convert")
+    test "fails before writing when art is missing", ctx do
+      [title | _] = Library.titles()
+      {_poster, backdrop} = Library.art_files(title)
+      File.rm!(Path.join(ctx.art_source, backdrop))
 
-      assert {:error, {:renderer_missing, _}} = Library.seed(opts)
+      assert {:error, {:art_missing, [^backdrop]}} = Library.seed(opts(ctx))
       assert Repo.aggregate(MediaItem, :count) == 0
+      assert Repo.aggregate(MediaFile, :count) == 0
+      assert Repo.aggregate(Episode, :count) == 0
+      assert File.ls(ctx.art_dir) in [{:error, :enoent}, {:ok, []}]
     end
 
     test "episode files hang off episodes", ctx do
