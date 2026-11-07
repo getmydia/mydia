@@ -2,7 +2,8 @@ import 'package:player/core/sources/files/media_names.dart';
 
 /// Deterministic stand-in for [RustMediaNames]: `S01E02` names are episodes,
 /// everything else is a movie. Either takes an optional `(yyyy)` year, and
-/// groups by title and year, as the Rust parser does.
+/// groups by title and year, episodes under a `tv:` prefix, as the Rust
+/// parser does.
 class FakeMediaNames implements MediaNames {
   /// Every path ever passed to [parseBatch], in order.
   final List<String> parsedPaths = [];
@@ -38,7 +39,7 @@ class FakeMediaNames implements MediaNames {
             year: year,
             season: int.parse(ep.group(2)!),
             episode: int.parse(ep.group(3)!),
-            groupKey: '${_alnum(title)}|${year ?? ''}',
+            groupKey: 'tv:${_alnum(title)}|${year ?? ''}',
           ),
         );
         continue;

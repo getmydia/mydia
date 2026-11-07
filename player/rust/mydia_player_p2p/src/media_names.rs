@@ -59,9 +59,15 @@ pub fn parse_batch(root: String, paths: Vec<String>, kind: FfiKind) -> Vec<FfiPa
             let parsed = parse(Path::new(&path), root, kind)?;
             // Movies by title and year, episodes by show title and year:
             // two shows sharing a name are told apart by the year when the
-            // files carry one.
+            // files carry one. Episodes carry a `tv:` prefix, so a movie and
+            // a show with the same title and year (a mixed library) stay
+            // two groups.
+            let prefix = match parsed.kind {
+                ParsedKind::Movie => "",
+                ParsedKind::Episode { .. } => "tv:",
+            };
             let group_key = format!(
-                "{}|{}",
+                "{prefix}{}|{}",
                 identity_key(&parsed.title),
                 parsed.year.map(|y| y.to_string()).unwrap_or_default()
             );
@@ -149,8 +155,22 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|p| p.is_episode));
         assert_eq!(out[0].year, Some(2019));
-        assert_eq!(out[0].group_key, "moonharbor|2019");
+        assert_eq!(out[0].group_key, "tv:moonharbor|2019");
         assert_eq!(out[1].year, None);
-        assert_eq!(out[1].group_key, "moonharbor|");
+        assert_eq!(out[1].group_key, "tv:moonharbor|");
+    }
+
+    #[test]
+    fn a_movie_and_a_show_with_one_title_and_year_are_two_groups() {
+        let out = parse_batch(
+            "/lib".to_string(),
+            vec![
+                "/lib/Moon Harbor (2019)/Moon Harbor (2019).mkv".to_string(),
+                "/lib/Moon Harbor (2019)/Season 01/Moon Harbor (2019) S01E01.mkv".to_string(),
+            ],
+            FfiKind::Mixed,
+        );
+        assert_eq!(out.len(), 2);
+        assert_ne!(out[0].group_key, out[1].group_key);
     }
 }

@@ -48,7 +48,10 @@ fn tokens(s: &str) -> HashSet<String> {
     reason = "token counts are tiny, well within f64 precision"
 )]
 fn title_sim(a: &str, b: &str) -> f64 {
-    if identity_key(a) == identity_key(b) {
+    // Two titles with no letters or digits ("!!!", "???") share the empty
+    // key without being the same title.
+    let key = identity_key(a);
+    if !key.is_empty() && key == identity_key(b) {
         return 1.0;
     }
     let (ta, tb) = (tokens(a), tokens(b));
@@ -180,6 +183,12 @@ mod tests {
         ];
         let m = score(&want("Copper Valley", Some(2018), false), &cs).unwrap();
         assert_eq!(m.id, 7);
+    }
+
+    #[test]
+    fn titles_without_letters_or_digits_do_not_match() {
+        let cs = [cand(9, "???", None, 2018)];
+        assert_eq!(score(&want("!!!", Some(2018), false), &cs), None);
     }
 
     #[test]
