@@ -44,13 +44,14 @@ allows) and WebDAV shares into a matched library, with:
 New crate with no database, async or filesystem dependency (only `regex`,
 `serde`, `thiserror`).
 
-- `parse(path, kind) -> ParsedFile`. The code in
+- `parse(path, root, kind) -> Option<ParsedFile>`. The code in
   `server/crates/library/src/parser.rs`, `parser/episode.rs` and `names.rs`
   moves here unchanged, with its tests. `LibraryKind` (`Movies`, `Series`,
   `Mixed`) moves with it.
 - `score(parsed, candidates) -> Option<Match>`. A pure function: given a parsed
   file group and the TMDB search results, it weighs normalized title
-  similarity, year (exact, off by one, missing) and kind, and returns the best
+  similarity and year (exact, off by one, missing; shows tolerate more year
+  drift than movies), and returns the best
   candidate with a confidence in `0.0..=1.0`. A result under the threshold is
   `None`, which means unmatched.
 - `server/crates/library` depends on the new crate and re-exports `parser` and
@@ -149,11 +150,15 @@ No transcoding.
 
 Matched items are keyed by TMDB, not by path:
 
-- `movie:<tmdbId>`, `show:<tmdbId>`, `season:<tmdbId>:<n>`,
-  `episode:<tmdbId>:<season>:<episode>`.
+- movie and show `<tmdbId>`, season `<tmdbId>-<n>`, episode
+  `<tmdbId>-<season>-<episode>`.
 - Every file that resolves to the same movie or episode is one of its
   `versions`.
-- Unmatched files are `file:<hash of the library-relative path>`.
+- A group not yet searched because the relay was down gets a provisional id,
+  `p<hash of the group key>` with the same suffixes. When it later matches, its
+  progress and watched flags move to the TMDB id.
+- Files searched with no winner are `video` items, `f<hash of the
+  library-relative path>`, shown in Folders.
 
 Watch state and resume key on the `ItemRef`, so renaming a file, moving it, or
 replacing it with a better copy keeps its history. The kind prefix is carried
@@ -189,8 +194,7 @@ by `ItemRef.kind`; the strings above are the `externalId`s.
 
 | Platform | Local folders | WebDAV |
 | --- | --- | --- |
-| Linux, Windows | path picker | yes |
-| macOS | path picker, security-scoped bookmark | yes |
+| Linux, Windows, macOS | path picker (the macOS app is not sandboxed) | yes |
 | iOS, iPadOS | Files picker, security-scoped bookmark | yes |
 | Android phone and tablet | SAF tree URI, played as `content://` | yes |
 | Android TV | no (most devices have no document picker) | yes |
