@@ -30,8 +30,8 @@ function resolvePage(path, pages) {
 // Script and style bodies are raw text, not markup, so an id="..." inside one
 // names no element.
 function extractIds(html) {
-  const markup = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
-  return new Set([...markup.matchAll(/\sid=["']([^"']+)["']/g)].map((m) => m[1]));
+  const parts = html.split(/<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>/i);
+  return new Set(parts.flatMap((part) => [...part.matchAll(/\sid=["']([^"']+)["']/g)].map((m) => m[1])));
 }
 
 function extractHrefs(html) {
