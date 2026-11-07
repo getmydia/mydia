@@ -12,6 +12,15 @@ import playerHome from '../assets/screenshots/player-home.png';
 import playerShows from '../assets/screenshots/player-shows.png';
 import playerDesktop from '../assets/screenshots/player-desktop.png';
 
+// Movies first, for a cinema feel behind the player hero.
+const wallPosters = [
+  'lanternfall-station', 'copper-weather', 'paper-lighthouse', 'hollow-meridian',
+  'a-kettle-for-two-moons', 'midnight-at-pellwick-pier', 'orbit-of-small-things',
+  'thessaly-rides-alone', 'tidewrack', 'the-last-tram-to-ovelle', 'wintergreen-protocol',
+  'saltmarsh-radio', 'quillfeather-road', 'ashgrove-after-dark', 'dunmore-drift',
+  'marrow-and-thistle',
+];
+
 const features = [
   { icon: 'devices', title: 'Every platform', description: 'Phone, tablet, TV, desktop and web, with the same library on each.' },
   { icon: 'download', title: 'Offline downloads', description: 'Save movies and episodes to your device and watch without a connection.' },
@@ -32,6 +41,7 @@ const features = [
     subtitle="Plex, Jellyfin, your Mydia Server, and soon your own folders, in one app on every screen."
     primary={{ label: 'Download', href: '/download' }}
     secondary={{ label: 'See platforms', href: '/download#platforms' }}
+    wall={{ rows: 3, height: '34rem', posters: wallPosters }}
   />
 
   <Sources />
@@ -47,7 +57,7 @@ const features = [
       <h2 class="text-3xl sm:text-4xl font-bold text-center mb-12">On the couch and on the go</h2>
       <div class="flex justify-center gap-6 mb-16">
         <div class="relative">
-          <div class="w-[240px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
+          <div class="w-[280px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
             <div class="w-full rounded-[1.5rem] overflow-hidden">
               <Image src={playerHome} alt="Mydia Player home screen" width={480} class="w-full h-auto" loading="lazy" />
             </div>
@@ -55,7 +65,7 @@ const features = [
           <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
         </div>
         <div class="relative hidden sm:block mt-12">
-          <div class="w-[240px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
+          <div class="w-[280px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
             <div class="w-full rounded-[1.5rem] overflow-hidden">
               <Image src={playerShows} alt="Mydia Player shows library" width={480} class="w-full h-auto" loading="lazy" />
             </div>
@@ -63,7 +73,7 @@ const features = [
           <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
         </div>
       </div>
-      <div class="rounded-xl overflow-hidden border border-base-300 shadow-2xl">
+      <div class="rounded-2xl overflow-hidden border border-base-content/15 shadow-2xl shadow-black/60">
         <Image src={playerDesktop} alt="Mydia Player on a desktop, showing the library home screen" width={1600} class="w-full h-auto" loading="lazy" />
       </div>
       <p class="text-sm text-base-content/50 text-center mt-3">On desktop, and in any browser.</p>

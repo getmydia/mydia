@@ -1,8 +1,16 @@
 ---
+import PosterWall from './PosterWall.astro';
+
 interface Link {
   label: string;
   href: string;
   external?: boolean;
+}
+
+interface Wall {
+  rows?: number;
+  height?: string;
+  posters?: string[];
 }
 
 interface Props {
@@ -12,28 +20,47 @@ interface Props {
   subtitle: string;
   primary?: Link;
   secondary?: Link;
+  /** Draw a drifting poster wall behind the hero. */
+  wall?: Wall;
 }
 
-const { badge, title, accent, subtitle, primary, secondary } = Astro.props;
+const { badge, title, accent, subtitle, primary, secondary, wall } = Astro.props;
 
 const external = (link: Link) =>
   link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 ---
 
-<section class="py-24 px-4">
-  <div class="max-w-4xl mx-auto text-center">
-    {badge && <span class="badge badge-primary badge-outline mb-6">{badge}</span>}
-    <h1 class="text-5xl sm:text-6xl font-extrabold tracking-tight mb-6">
+<section
+  class:list={['relative px-4 isolate', wall ? 'overflow-hidden flex items-center' : 'py-24']}
+  style={wall ? `min-height:${wall.height ?? '36rem'}` : undefined}
+>
+  {wall && (
+    <div class="absolute inset-0 -z-10">
+      <PosterWall rows={wall.rows} posters={wall.posters} />
+      <div class="absolute inset-0 bg-base-100/65"></div>
+      <div class="absolute inset-0 hero-spotlight"></div>
+      <div class="absolute inset-x-0 top-0 h-24 bg-linear-to-b from-base-100 to-transparent"></div>
+      <div class="absolute inset-x-0 bottom-0 h-48 bg-linear-to-t from-base-100 via-base-100/80 to-transparent"></div>
+    </div>
+  )}
+  <div class:list={['max-w-4xl mx-auto text-center', wall && 'py-28 sm:py-32']}>
+    {badge && <span class="badge badge-primary mb-6 shadow-lg">{badge}</span>}
+    <h1
+      class:list={[
+        'font-extrabold tracking-tight mb-6',
+        wall ? 'text-5xl sm:text-7xl drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)]' : 'text-5xl sm:text-6xl',
+      ]}
+    >
       {title}
       {accent && (<><br /><span class="text-primary">{accent}</span></>)}
     </h1>
-    <p class="text-lg sm:text-xl text-base-content/70 max-w-2xl mx-auto leading-relaxed">
+    <p class="text-lg sm:text-xl text-base-content/80 max-w-2xl mx-auto leading-relaxed">
       {subtitle}
     </p>
     {(primary || secondary) && (
       <div class="flex flex-wrap justify-center gap-3 mt-10">
-        {primary && <a href={primary.href} class="btn btn-primary btn-lg" {...external(primary)}>{primary.label}</a>}
-        {secondary && <a href={secondary.href} class="btn btn-outline btn-lg" {...external(secondary)}>{secondary.label}</a>}
+        {primary && <a href={primary.href} class="btn btn-primary btn-lg shadow-lg shadow-primary/30" {...external(primary)}>{primary.label}</a>}
+        {secondary && <a href={secondary.href} class="btn btn-outline btn-lg bg-base-100/40 backdrop-blur" {...external(secondary)}>{secondary.label}</a>}
       </div>
     )}
   </div>

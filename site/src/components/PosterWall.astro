@@ -1,0 +1,56 @@
+---
+import { getImage } from 'astro:assets';
+import { poster, posterSlugs } from '../data/posters';
+
+interface Props {
+  /** Number of poster rows (density). */
+  rows?: number;
+  /** CSS height of the wall; it fills its positioned parent by default. */
+  height?: string;
+  /** Poster slugs to use, in order; defaults to every demo poster. */
+  posters?: string[];
+}
+
+const { rows = 3, height = '100%', posters = posterSlugs } = Astro.props;
+
+// Each row repeats its set until it is wider than any viewport, then renders
+// the set twice so the -50% drift loops without a seam.
+const MIN_PER_SET = 14;
+
+if (posters.length === 0) throw new Error('PosterWall needs at least one poster');
+
+const images = await Promise.all(
+  posters.map(async (slug) => getImage({ src: poster(slug), width: 180, format: 'webp' })),
+);
+
+const rowSets = Array.from({ length: rows }, (_, row) => {
+  const offset = (row * 5) % images.length;
+  const rotated = [...images.slice(offset), ...images.slice(0, offset)];
+  const set = [];
+  while (set.length < MIN_PER_SET) set.push(...rotated);
+  return set;
+});
+---
+
+<div class="poster-wall" style={`height:${height}`} aria-hidden="true" data-poster-wall>
+  <div class="poster-wall-tilt">
+    {rowSets.map((set, row) => (
+      <div
+        class="poster-row"
+        data-reverse={row % 2 === 1 ? '' : undefined}
+        style={`--drift-duration:${set.length * 7}s`}
+      >
+        {[...set, ...set].map((img) => (
+          <img
+            src={img.src}
+            width={img.attributes.width}
+            height={img.attributes.height}
+            alt=""
+            decoding="async"
+            class="poster-tile"
+          />
+        ))}
+      </div>
+    ))}
+  </div>
+</div>

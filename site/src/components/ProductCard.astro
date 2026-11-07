@@ -1,30 +1,28 @@
 ---
-import { Image } from 'astro:assets';
-import type { ImageMetadata } from 'astro';
-
 interface Props {
   id?: string;
   name: string;
-  image: ImageMetadata;
-  imageAlt: string;
   bullets: string[];
   primary: { label: string; href: string };
   secondary: { label: string; href: string };
 }
 
-const { id, name, image, imageAlt, bullets, primary, secondary } = Astro.props;
+const { id, name, bullets, primary, secondary } = Astro.props;
 ---
 
-<div id={id} class="card bg-base-100 border border-base-300 hover:border-primary/30 transition-colors scroll-mt-20">
-  <figure class="bg-base-200/50 px-6 pt-6 h-72 overflow-hidden items-end justify-center">
-    <Image src={image} alt={imageAlt} width={900} class="max-h-full w-auto rounded-t-lg shadow-2xl" />
+<div
+  id={id}
+  class="card bg-base-100 border border-base-300 overflow-hidden shadow-xl hover:border-primary/40 hover:shadow-primary/10 transition scroll-mt-20"
+>
+  <figure class="relative h-80 sm:h-[26rem] overflow-hidden bg-linear-to-b from-base-300 to-base-200">
+    <slot name="media" />
   </figure>
   <div class="card-body">
-    <h3 class="card-title text-2xl">{name}</h3>
+    <h3 class="card-title text-3xl">{name}</h3>
     <ul class="space-y-2 my-2">
       {bullets.map(bullet => (
-        <li class="flex gap-3 text-sm text-base-content/70">
-          <span class="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <li class="flex gap-3 text-base-content/75">
+          <span class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-primary" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
             </svg>

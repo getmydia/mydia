@@ -2,6 +2,8 @@
 import { defineConfig } from 'astro/config';
 
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
+import { searchForWorkspaceRoot } from 'vite';
 
 // https://astro.build/config
 export default defineConfig({
@@ -15,7 +17,12 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
     server: {
-      allowedHosts: ['.ts.net']
+      allowedHosts: ['.ts.net'],
+      // The demo posters live in assets/demo/art at the repository root,
+      // shared with the demo seed rather than copied into site/.
+      fs: {
+        allow: [searchForWorkspaceRoot(process.cwd()), fileURLToPath(new URL('../assets/demo/art', import.meta.url))]
+      }
     }
   }
 });

@@ -34,16 +34,16 @@ const shots = await Promise.all(
 );
 ---
 
-<section id={id} class="py-20 px-4 scroll-mt-16" data-theme-showcase>
-  <div class="max-w-6xl mx-auto">
-    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">{heading}</h2>
+<section id={id} class="py-20 px-4 scroll-mt-16 overflow-x-clip" data-theme-showcase>
+  <div class="max-w-7xl mx-auto">
+    <h2 class="text-3xl sm:text-5xl font-bold text-center mb-4">{heading}</h2>
     {subheading && <p class="text-base-content/60 text-center mb-10 max-w-xl mx-auto">{subheading}</p>}
 
     <div class:list={['mb-8', !subheading && 'mt-10']}>
       {aspect === 'phone' ? (
         <div class="flex justify-center">
-          <div class="relative">
-            <div class="w-[260px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
+          <div class="relative isolate">
+            <div class="w-[300px] sm:w-[340px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
               <div class="w-full rounded-[1.5rem] overflow-hidden">
                 {shots.map(({ theme, optimized }, i) => (
                   <img
@@ -59,23 +59,31 @@ const shots = await Promise.all(
                 ))}
               </div>
             </div>
-            <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
+            <div class="shot-glow"></div>
           </div>
         </div>
       ) : (
-        <div class="rounded-xl overflow-hidden border border-base-300 shadow-2xl">
-          {shots.map(({ theme, optimized }, i) => (
-            <img
-              src={optimized.src}
-              width={optimized.attributes.width}
-              height={optimized.attributes.height}
-              alt={`${theme.label} theme`}
-              class="w-full"
-              data-theme-image={theme.id}
-              loading={i === 0 ? undefined : 'lazy'}
-              hidden={i === 0 ? undefined : true}
-            />
-          ))}
+        <div class="relative isolate">
+          <div class="shot-glow"></div>
+          <div class="rounded-2xl overflow-hidden border border-base-content/15 bg-base-300 shadow-2xl shadow-black/60">
+            <div class="flex items-center gap-1.5 px-4 py-2.5 bg-base-200 border-b border-base-content/10">
+              <span class="w-3 h-3 rounded-full bg-error/70"></span>
+              <span class="w-3 h-3 rounded-full bg-warning/70"></span>
+              <span class="w-3 h-3 rounded-full bg-success/70"></span>
+            </div>
+            {shots.map(({ theme, optimized }, i) => (
+              <img
+                src={optimized.src}
+                width={optimized.attributes.width}
+                height={optimized.attributes.height}
+                alt={`${theme.label} theme`}
+                class="w-full"
+                data-theme-image={theme.id}
+                loading={i === 0 ? undefined : 'lazy'}
+                hidden={i === 0 ? undefined : true}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

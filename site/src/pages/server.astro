@@ -8,6 +8,14 @@ import Install from '../components/Install.astro';
 import CrossSell from '../components/CrossSell.astro';
 import { serverThemes, serverThemesHeading } from '../data/themes';
 
+// Shows first: a library that keeps itself up to date.
+const wallPosters = [
+  'harbor-lights-of-vennmoor', 'the-brightwater-files', 'nightshift-at-corvane',
+  'tenders-of-the-gloam', 'pebble-creek-pioneers', 'the-understudy-hours', 'kestrel-court',
+  'borrowed-summers', 'brannock-heights', 'the-quiet-orchard-job', 'fennick-s-wager',
+  'the-velvet-quorum', 'copper-weather', 'hollow-meridian', 'saltmarsh-radio', 'tidewrack',
+];
+
 const features = [
   { icon: 'film', title: 'Library and metadata', description: 'Organizes your movies and TV, and fills in posters, descriptions and episode details for you.' },
   { icon: 'sparkles', title: 'Automated downloads', description: 'Finds what is missing and grabs it, with quality profiles and automatic upgrades when something better appears.' },
@@ -28,6 +36,7 @@ const features = [
     subtitle="A self-hosted server that organizes your movies and TV, finds what's missing, and streams it to Mydia Player anywhere."
     primary={{ label: 'Get started', href: '#install' }}
     secondary={{ label: 'Docs', href: 'https://docs.mydia.dev/latest/', external: true }}
+    wall={{ rows: 3, height: '34rem', posters: wallPosters }}
   />
 
   <Features

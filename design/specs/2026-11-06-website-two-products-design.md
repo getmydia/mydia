@@ -55,21 +55,25 @@ Header nav becomes: Player, Server, Download, Blog, Docs (external), GitHub
 1. **Hero.** A headline covering both products (working copy: "Your media,
    played and managed your way") and one sentence: "A player for every server
    you use, and a server that runs your library." No GitHub button in the
-   hero; it stays in the nav.
-2. **Two product cards**, side by side on desktop and stacked on mobile, equal
-   size.
+   hero; it stays in the nav. Behind it, a full-bleed poster wall of four
+   rows of every demo poster.
+2. **Product shot.** A large framed `player-desktop.png` with a window bar
+   and a subtle glow, overlapping the foot of the hero.
+3. **Two product cards**, side by side on desktop and stacked on mobile, equal
+   size, each with a tall image area.
    - *Mydia Player* (card carries `id="player"` so `/#player` links still
-     land here): phone screenshot; bullets "Works with Plex, Jellyfin and
+     land here): phone screenshot over a fan of three tilted demo posters;
+     bullets "Works with Plex, Jellyfin and
      Mydia Server", "Offline downloads", "On every platform"; buttons
      **Download** (`/download`) and *Learn more* (`/player`).
-   - *Mydia Server*: `homepage.png`; bullets "Organizes your library and
+   - *Mydia Server*: a large crop of `homepage.png` (the dashboard); bullets "Organizes your library and
      fetches metadata", "Finds and downloads what you're missing", "Remote
      access without port forwarding"; buttons **Get started**
      (`/server#install`) and *Learn more* (`/server`).
-3. **Better together strip.** Three short items on what running both adds:
+4. **Better together strip.** Three short items on what running both adds:
    secure remote streaming from anywhere, offline downloads with transcoding,
    casting. Links to `/server`.
-4. **Latest posts.** Existing `LatestPosts` component.
+5. **Latest posts.** Existing `LatestPosts` component.
 
 `Features`, `Screenshots`, `Player` and `GetStarted` leave the homepage.
 
@@ -78,6 +82,7 @@ Header nav becomes: Player, Server, Download, Blog, Docs (external), GitHub
 1. **Hero.** "One player for all your media." Subhead: "Plex, Jellyfin, your
    Mydia Server, and soon your own folders, in one app on every screen." CTAs:
    **Download** (`/download`), *See platforms* (`/download#platforms`).
+   Behind it, a three-row poster wall led by the demo movies.
 2. **Sources row.** Tiles for Mydia Server, Plex, Jellyfin, and a dimmed
    "Local folders, coming soon" tile. A line beneath: sign in to the servers
    you already have; nothing to install on them. Links to the docs page
@@ -103,6 +108,7 @@ Header nav becomes: Player, Server, Download, Blog, Docs (external), GitHub
 1. **Hero.** "Your library, on autopilot." Subhead: "A self-hosted server that
    organizes your movies and TV, finds what's missing, and streams it to Mydia
    Player anywhere." CTAs: **Get started** (`#install`), *Docs* (external).
+   Behind it, a three-row poster wall led by the demo shows.
 2. **Features grid**, six cards drawn from the README in plain language:
    library and metadata; automated downloads with quality profiles and
    upgrades; works with your download clients and indexers (naming
@@ -183,15 +189,27 @@ library.
   entries.
 - Runs against a fresh dev database and refuses to run on one that already
   holds media.
-- Poster and backdrop art is generated: SVG templates (title, gradient,
-  simple shapes) rendered with `rsvg-convert`. No real artwork, no
-  metadata-relay calls.
+- Poster and backdrop art is AI-generated and committed under
+  `assets/demo/art/` (see its README): for each title a
+  `<slug>-poster.jpg` (500x750, title lettered in) and a
+  `<slug>-backdrop.jpg` (1280x720, no text, left side kept dark for
+  overlays). The slug is the lowercased title with each run of other
+  characters turned into `-`. Every title, story and face is invented; no
+  real artwork, no metadata-relay calls. A first version drew flat SVG
+  gradients; the maintainer found the screenshots lacked flash, so it was
+  replaced.
+- The seed copies the art. Before any database write it checks that the
+  source (`:art_source`, default `assets/demo/art`) holds both files for
+  every title, and otherwise returns `{:error, {:art_missing, files}}`,
+  which the mix task prints, having written nothing.
 - Artwork is served by Phoenix itself. `Mydia.Metadata.ImageUrl` passes any
   `http…` value through untouched, so the seed stores
-  `MydiaWeb.Endpoint.url() <> "/images/demo/<file>.png"` as `poster_path` and
-  `backdrop_path`, and writes the PNGs to `priv/static/images/demo/`
+  `MydiaWeb.Endpoint.url() <> "/images/demo/<file>.jpg"` as `poster_path` and
+  `backdrop_path`, and copies the JPEGs to `priv/static/images/demo/`
   (gitignored; `images` is already a static path). Same origin, so the
   Flutter web build can load them without CORS.
+- The website reuses the same posters (see "Poster wall" below), so the
+  JPEGs exist once in the repository.
 - Media files are database rows only, under a demo library path; nothing is
   written to a media folder.
 
@@ -223,3 +241,19 @@ library.
   default theme's image still shows.
 - Props: a heading and a list of `{ id, label, swatch, image }`.
 - Theme lists live in `site/src/data/themes.ts`.
+- Large frames: up to `max-w-7xl` wide, a window bar on desktop shots, a
+  340px phone frame, and a soft primary-colour glow behind.
+
+### Poster wall: `PosterWall.astro`
+
+- Rows of demo posters behind a hero, drifting slowly sideways in
+  alternating directions (a CSS animation; static under
+  `prefers-reduced-motion`). The wall is tilted slightly, dimmed, darkened
+  in the middle and faded into the page background top and bottom so the
+  headline stays readable. Decorative: `aria-hidden`, empty `alt`.
+- Props: `rows` (density), `height`, and `posters` (slugs; default all 28).
+  `Hero` takes a `wall` prop with the same fields and draws it behind.
+- `site/src/data/posters.ts` loads the posters from `assets/demo/art` with
+  `import.meta.glob` (outside `site/`; `vite.server.fs.allow` lists the
+  directory for the dev server). Astro emits each as a 180px WebP, so the
+  JPEGs are never copied into `site/`. An unknown slug fails the build.
