@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../backend/file_system_backend.dart';
 import '../index/file_library_index.dart';
 import '../media_names.dart';
@@ -45,7 +47,9 @@ class FileScanner {
   final DateTime Function() _now;
 
   /// Scans [root] and writes the outcome to the index before returning.
-  /// A [BackendFailure] during the walk is rethrown with the index untouched.
+  /// A [BackendFailure] reading the root, or the backend going unreachable,
+  /// is rethrown with the index untouched; a folder below the root that
+  /// cannot be read is skipped (see [_walk]).
   Future<ScanDelta> scan(
     LibraryRoot root, {
     void Function(int done, int total)? onProgress,
@@ -53,7 +57,10 @@ class FileScanner {
     final registered = _registered(root);
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
-    await _walk(root.path, videos, sidecarsByDir);
+    final unreadable = [
+      for (final dir in await _walk(root.path, videos, sidecarsByDir))
+        '${_relative(root.path, dir)}/',
+    ];
 
     final existing = {
       for (final f in _index.files().values)
@@ -109,9 +116,11 @@ class FileScanner {
     }
     if (pending.isEmpty && total == 0) onProgress?.call(0, 0);
 
+    // A file under a folder that could not be read was not looked for, so
+    // it is kept rather than reported gone.
     final removed = [
-      for (final k in existing.keys)
-        if (!seen.contains(k)) k,
+      for (final MapEntry(key: k, value: f) in existing.entries)
+        if (!seen.contains(k) && !unreadable.any(f.path.startsWith)) k,
     ];
 
     // The root was removed while it was being walked: writing now would
@@ -138,11 +147,19 @@ class FileScanner {
         parsedAs: root.kind,
       );
 
-  Future<void> _walk(
+  /// Walks [start] and returns the folders below it that could not be read.
+  ///
+  /// A folder below the root that refuses access or vanished (`lost+found`
+  /// at the top of an ext4 drive, a WebDAV folder answering 403) is left out
+  /// with what is under it, and the walk goes on: one such folder must not
+  /// fail every scan or ask the viewer to sign in again. The root failing,
+  /// or the backend going unreachable anywhere, still ends the walk.
+  Future<List<String>> _walk(
     String start,
     List<FileEntry> videos,
     Map<String, List<FileEntry>> sidecarsByDir,
   ) async {
+    final unreadable = <String>[];
     final queue = <(String, int)>[(start, 0)];
     // Directories are told apart by where they really are, so one reached
     // through a symbolic link as well as directly is walked once, and a
@@ -156,7 +173,19 @@ class FileScanner {
     final visited = <String>{_identity(self) ?? _trimSlash(start)};
     while (queue.isNotEmpty) {
       final (dir, depth) = queue.removeLast();
-      final entries = await _backend.list(dir);
+      final List<FileEntry> entries;
+      try {
+        entries = await _backend.list(dir);
+      } on BackendFailure catch (e) {
+        final belowRoot = depth > 0;
+        final refusedOrGone = e is BackendPermissionLost ||
+            e is BackendUnauthorized ||
+            e is BackendNotFound;
+        if (!belowRoot || !refusedOrGone) rethrow;
+        debugPrint('[FileScanner] Skipping $dir: $e');
+        unreadable.add(_trimSlash(dir));
+        continue;
+      }
       for (final e in entries) {
         if (e.name.startsWith('.')) continue;
         if (e.isDir) {
@@ -173,6 +202,7 @@ class FileScanner {
       }
     }
     videos.sort((a, b) => a.path.compareTo(b.path));
+    return unreadable;
   }
 
   List<String> _sidecarsFor(

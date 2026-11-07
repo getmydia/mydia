@@ -150,6 +150,70 @@ void main() {
     });
   });
 
+  for (final (name, failure) in const [
+    ('refused', BackendPermissionLost('/lib/locked')),
+    ('unauthorized', BackendUnauthorized('HTTP 403')),
+    ('gone', BackendNotFound('/lib/locked')),
+  ]) {
+    test('a_${name}_subfolder_is_skipped_and_its_files_kept', () async {
+      final b = FakeBackend({
+        '/lib/A.mkv': 1,
+        '/lib/locked/B.mkv': 1,
+        '/lib/locked/deep/C.mkv': 1,
+        '/lib/open/D.mkv': 1,
+      });
+      await scanner(b).scan(root);
+      b.failures['/lib/locked'] = failure;
+      b.setFile('/lib/open/E.mkv', 1);
+      b.removeFile('/lib/A.mkv');
+
+      final delta = await scanner(b).scan(root);
+
+      expect(delta.added.map((f) => f.path), ['open/E.mkv']);
+      expect(delta.removedKeys, [fileKeyFor('r1', 'A.mkv')]);
+      expect(index.files().values.map((f) => f.path).toSet(), {
+        'locked/B.mkv',
+        'locked/deep/C.mkv',
+        'open/D.mkv',
+        'open/E.mkv',
+      });
+    });
+  }
+
+  test('a_root_that_cannot_be_read_still_fails_the_scan', () async {
+    final b = FakeBackend({'/lib/A.mkv': 1});
+    await scanner(b).scan(root);
+    b.setFile('/lib/B.mkv', 1);
+    b.failures['/lib'] = const BackendPermissionLost('/lib');
+    await expectLater(
+        scanner(b).scan(root), throwsA(isA<BackendPermissionLost>()));
+    expect(index.files().values.map((f) => f.path), ['A.mkv']);
+  });
+
+  test('a_real_folder_without_permissions_is_skipped', () async {
+    final tmp = await Directory.systemTemp.createTemp('scan_locked');
+    final locked = Directory('${tmp.path}/locked')..createSync();
+    File('${tmp.path}/Open Film (2001).mkv').writeAsBytesSync([1]);
+    File('${locked.path}/Hidden Film (2002).mkv').writeAsBytesSync([1]);
+    await Process.run('chmod', ['000', locked.path]);
+    addTearDown(() async {
+      await Process.run('chmod', ['-R', 'u+rwx', tmp.path]);
+      await tmp.delete(recursive: true);
+    });
+    final local = LibraryRoot(
+      id: 'rl',
+      path: tmp.path,
+      kind: FilesLibraryKind.movies,
+      title: 'Local',
+    );
+    final delta = await FileScanner(
+      backend: LocalPathBackend(),
+      names: names,
+      index: index,
+    ).scan(local);
+    expect(delta.added.map((f) => f.path), ['Open Film (2001).mkv']);
+  }, skip: Platform.isWindows || _runningAsRoot());
+
   test('cyclic_listing_terminates_with_files_found_once', () async {
     final b = _CyclicBackend({'/lib/A/Movie.mkv': 1});
     final delta = await scanner(b).scan(root);
@@ -254,6 +318,14 @@ class _CyclicBackend extends FakeBackend {
       ),
     ];
   }
+}
+
+/// Root reads a chmod 000 folder anyway, so the permission tests mean
+/// nothing under uid 0.
+bool _runningAsRoot() {
+  if (Platform.isWindows) return false;
+  final id = Process.runSync('id', ['-u']);
+  return id.exitCode == 0 && (id.stdout as String).trim() == '0';
 }
 
 /// Runs [onList] (the viewer removing the root) during the walk.

@@ -313,6 +313,36 @@ void main() {
           c.read(thirdPartySourcesProvider).single.account.needsReauth, isTrue);
     }, skip: Platform.isWindows);
 
+    test('a_subfolder_that_refuses_access_neither_fails_nor_flags_sign_in',
+        () async {
+      // Like lost+found at the top of an ext4 drive.
+      final locked = Directory('${tmp.path}/lost+found')..createSync();
+      File('${tmp.path}/Amber Tide (2019).mkv').writeAsBytesSync([1]);
+      await Process.run('chmod', ['000', locked.path]);
+      await f.index.putRoot(LibraryRoot(
+        id: 'rdrive',
+        path: tmp.path,
+        kind: FilesLibraryKind.movies,
+        title: 'Drive',
+      ));
+      await f.index.setLastScanAt(now);
+      final c = await container(realBackend: true);
+      final media = await open(c);
+      await c.read(filesScanProvider(filesLocalSource.id).notifier).rescan();
+
+      expect(c.read(filesScanProvider(filesLocalSource.id)).error, isNull);
+      expect(media.connection, SourceConnectionStatus.local);
+      expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
+          isFalse);
+      expect(
+          c
+              .read(filesIndexProvider(filesLocalSource.account.id))
+              .files()
+              .values
+              .map((f) => f.path),
+          ['Amber Tide (2019).mkv']);
+    }, skip: Platform.isWindows || _runningAsRoot());
+
     test('present_roots_are_local', () async {
       await f.index.putRoot(LibraryRoot(
         id: 'rhere',
@@ -326,6 +356,14 @@ void main() {
       expect(media.connection, SourceConnectionStatus.local);
     });
   });
+}
+
+/// Root reads a chmod 000 folder anyway, so the permission tests mean
+/// nothing under uid 0.
+bool _runningAsRoot() {
+  if (Platform.isWindows) return false;
+  final id = Process.runSync('id', ['-u']);
+  return id.exitCode == 0 && (id.stdout as String).trim() == '0';
 }
 
 /// Holds every listing until [gate] completes.
