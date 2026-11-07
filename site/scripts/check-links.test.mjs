@@ -26,10 +26,17 @@ describe('findBrokenLinks', () => {
     expect(broken.join('\n')).not.toContain('/player#intro');
   });
 
-  it('accepts one-segment paths under a Pages Function prefix', () => {
-    const p = new Map([['index.html', '<a href="/dl/ios">a</a><a href="/dl/a/b">b</a>']]);
-    const broken = findBrokenLinks(p, new Set(['index.html']), [], ['/dl/']);
-    expect(broken).toHaveLength(1);
-    expect(broken[0]).toContain('/dl/a/b');
+  it('accepts only known function routes, and never with a fragment', () => {
+    const p = new Map([
+      [
+        'index.html',
+        '<a href="/dl/ios">a</a><a href="/dl/typo">b</a><a href="/dl/ios#x">c</a>' +
+          '<a data-href="/nope" href="/dl/ios">d</a>',
+      ],
+    ]);
+    const broken = findBrokenLinks(p, new Set(['index.html']), [], new Set(['/dl/ios']));
+    expect(broken).toHaveLength(2);
+    expect(broken.join('\n')).toContain('/dl/typo');
+    expect(broken.join('\n')).toContain('/dl/ios#x');
   });
 });

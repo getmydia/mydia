@@ -32,7 +32,7 @@ function extractIds(html) {
 }
 
 function extractHrefs(html) {
-  return [...html.matchAll(/<a\s[^>]*?href=["']([^"']*)["']/g)].map((m) => m[1]);
+  return [...html.matchAll(/<a(?=\s)[^>]*?\shref=["']([^"']*)["']/g)].map((m) => m[1]);
 }
 
 function isInternal(href) {
@@ -41,9 +41,9 @@ function isInternal(href) {
 
 // pages: Map<"player/index.html", html>; files: Set of every file path in dist.
 // Returns one message per broken link.
-// dynamicPrefixes: URL prefixes served by Pages Functions ("/download/" for
-// functions/download/[platform].ts); a one-segment path under one is not broken.
-export function findBrokenLinks(pages, files, required = REQUIRED_LINKS, dynamicPrefixes = []) {
+// functionRoutes: exact paths served by Pages Functions (e.g. "/download/ios").
+// They redirect, so a link to one is fine only without a fragment.
+export function findBrokenLinks(pages, files, required = REQUIRED_LINKS, functionRoutes = new Set()) {
   const ids = new Map([...pages].map(([key, html]) => [key, extractIds(html)]));
   const broken = [];
 
@@ -57,8 +57,7 @@ export function findBrokenLinks(pages, files, required = REQUIRED_LINKS, dynamic
       target = resolvePage(path, pages);
       if (!target) {
         const file = path.replace(/^\/+/, '');
-        if (dynamicPrefixes.some((p) => /^[^/]+$/.test(path.slice(p.length)) && path.startsWith(p))) return;
-        if (!fragment && files.has(file)) return;
+        if (!fragment && (files.has(file) || functionRoutes.has(path.replace(/\/$/, '')))) return;
         broken.push(`${pageUrl(from)}: ${href} (no such page or file)`);
         return;
       }
@@ -77,16 +76,16 @@ export function findBrokenLinks(pages, files, required = REQUIRED_LINKS, dynamic
   return broken;
 }
 
-// functions/<dir>/[param].ts serves /<dir>/<anything>.
-function functionPrefixes(root) {
-  try {
-    return walk(root)
-      .map((f) => relative(root, f).split(sep).join('/'))
-      .filter((f) => /\/\[[^/]+\]\.[a-z]+$/.test(f))
-      .map((f) => '/' + f.slice(0, f.lastIndexOf('/') + 1));
-  } catch {
-    return [];
-  }
+// /download/<slug> is served by functions/download/[platform].ts, which only
+// redirects for the slugs listed in src/lib/release-assets.ts. That file is
+// TypeScript, so read its slug arrays from the source rather than import it.
+function downloadRoutes(source) {
+  const slugs = ['ASSET_PLATFORMS', 'STATIC_PLATFORMS'].flatMap((name) => {
+    const m = source.match(new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`));
+    if (!m) throw new Error(`${name} not found in release-assets.ts`);
+    return [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1]);
+  });
+  return new Set(slugs.map((slug) => `/download/${slug}`));
 }
 
 function main() {
@@ -99,7 +98,9 @@ function main() {
     pages,
     new Set(all),
     REQUIRED_LINKS,
-    functionPrefixes(fileURLToPath(new URL('../functions', import.meta.url))),
+    downloadRoutes(
+      readFileSync(fileURLToPath(new URL('../src/lib/release-assets.ts', import.meta.url)), 'utf8'),
+    ),
   );
   for (const line of broken) console.error(line);
   console.log(`${pages.size} pages checked, ${broken.length} broken links`);
