@@ -60,6 +60,26 @@ void main() {
     expect(p.headers['Authorization'], 'Basic dXNlcjpwYXNz');
   });
 
+  test('non_utf8_percent_name_lists_and_round_trips_through_playable',
+      () async {
+    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+        '<D:response><D:href>/media/Movies/</D:href><D:propstat><D:prop>'
+        '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
+        '</D:propstat></D:response>'
+        '<D:response><D:href>/media/Movies/Caf%E9%20Nuit%20(2012).mkv</D:href>'
+        '<D:propstat><D:prop><D:resourcetype/>'
+        '<D:getcontentlength>10</D:getcontentlength></D:prop></D:propstat>'
+        '</D:response></D:multistatus>';
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    final entries = await b.list('/media/Movies/');
+    expect(entries, hasLength(1));
+    final p = await b.playable(entries.single.path);
+    expect(
+      p.url,
+      'https://dav.example.com/media/Movies/Caf%E9%20Nuit%20(2012).mkv',
+    );
+  });
+
   test('status_401_throws_unauthorized', () {
     final b = backend(MockClient((_) async => http.Response('', 401)));
     expect(b.list('/media/'), throwsA(isA<BackendUnauthorized>()));

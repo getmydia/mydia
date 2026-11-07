@@ -56,7 +56,7 @@ class WebDavBackend implements FileSystemBackend {
   }
 
   Uri _url(String path) {
-    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
+    final encoded = path.split('/').map(_encodeSegment).join('/');
     final withSlash = encoded.startsWith('/') ? encoded : '/$encoded';
     final port = _base.hasPort ? ':${_base.port}' : '';
     return Uri.parse('${_base.scheme}://${_base.host}$port$withSlash');
@@ -134,10 +134,32 @@ class WebDavBackend implements FileSystemBackend {
     return raw.split('/').map((s) {
       try {
         return Uri.decodeComponent(s);
+      } on FormatException {
+        // Not valid UTF-8 (a Latin-1 name, say): keep the segment as the
+        // server sent it so [_encodeSegment] can send the same bytes back.
+        return s;
       } on ArgumentError {
         return s;
       }
     }).join('/');
+  }
+
+  static final _percentByte = RegExp(r'%[0-9A-Fa-f]{2}');
+
+  /// Encodes one decoded path segment. A segment that still holds percent
+  /// escapes which are not valid UTF-8 is a raw leftover from [_decodePath],
+  /// so it is passed through rather than double-encoded.
+  static String _encodeSegment(String s) {
+    if (_percentByte.hasMatch(s)) {
+      try {
+        Uri.decodeComponent(s);
+      } on FormatException {
+        return s;
+      } on ArgumentError {
+        return s;
+      }
+    }
+    return Uri.encodeComponent(s);
   }
 
   static String _normalize(String path) {
