@@ -56,13 +56,14 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
       _busy = true;
       _failed = false;
     });
+    // Read before the await: the screen may be gone by the time it ends.
+    final accounts = ref.read(filesAccountsProvider);
+    final selected = ref.read(selectedSourceIdProvider.notifier);
+    final accountName = context.l10n.filesThisDevice;
     try {
-      final id = await ref.read(filesAccountsProvider).addLocalRoot(
-            path: path,
-            kind: _kind,
-            accountName: context.l10n.filesThisDevice,
-          );
-      ref.read(selectedSourceIdProvider.notifier).select(id);
+      final id = await accounts.addLocalRoot(
+          path: path, kind: _kind, accountName: accountName);
+      selected.select(id);
       if (!mounted) return;
       context.go(sourceHomeLocation(id));
     } catch (e) {

@@ -1622,6 +1622,8 @@
   "@filesWebDavPasswordLabel": {"description": "Label of the password field when connecting a WebDAV share."},
   "filesWebDavAddressInvalid": "Enter an address that starts with http:// or https://.",
   "@filesWebDavAddressInvalid": {"description": "Error shown when the WebDAV share address cannot be read."},
+  "filesWebDavHttpsRequired": "Use https:// for a WebDAV share outside your network, so your password is not sent in the clear.",
+  "@filesWebDavHttpsRequired": {"description": "Error on the WebDAV connect screen when a plain http address points outside the home network and a user or password is set. WebDAV is a protocol name and is not translated."},
   "filesWebDavUnauthorized": "Wrong user or password.",
   "@filesWebDavUnauthorized": {"description": "Error shown when the WebDAV server refuses the user name and password."},
   "filesWebDavUnreachable": "Can't reach the server.",

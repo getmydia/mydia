@@ -5,7 +5,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
+import '../../../core/sources/connection/source_connection.dart'
+    show isPrivateHost;
 import '../../../core/sources/files/backend/file_system_backend.dart';
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
@@ -16,7 +19,7 @@ import '../detail/detail_links.dart';
 import 'files_library_kind_picker.dart';
 import 'server_url.dart';
 
-enum _Problem { address, unauthorized, unreachable, save }
+enum _Problem { address, httpsRequired, unauthorized, unreachable, save }
 
 class AddWebDavScreen extends ConsumerStatefulWidget {
   const AddWebDavScreen({super.key, this.reauthAccountId});
@@ -34,6 +37,9 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   final _password = TextEditingController();
   _Problem? _problem;
   bool _busy = false;
+
+  /// Shared by every backend this screen builds, closed with it.
+  final _client = http.Client();
 
   /// Set once the share answered; null while the form is being filled.
   FileSystemBackend? _backend;
@@ -72,6 +78,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
 
   @override
   void dispose() {
+    _client.close();
     _url.dispose();
     _user.dispose();
     _password.dispose();
@@ -93,12 +100,20 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       return;
     }
     final base = webDavBase(parsed);
+    final user = _user.text.trim();
+    final password = _password.text;
+    if (base.scheme == 'http' &&
+        (user.isNotEmpty || password.isNotEmpty) &&
+        !isPrivateHost(base.host)) {
+      setState(() => _problem = _Problem.httpsRequired);
+      return;
+    }
     setState(() {
       _busy = true;
       _problem = null;
     });
-    final backend = ref.read(webDavConnectorProvider)(
-        base, _user.text.trim(), _password.text);
+    final backend =
+        ref.read(webDavConnectorProvider)(base, user, password, _client);
     try {
       await backend.probe();
       final dir = base.path.isEmpty ? '/' : base.path;
@@ -165,13 +180,15 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       _problem = null;
     });
     final accounts = ref.read(filesAccountsProvider);
+    // Read before the awaits: the screen may be gone by the time they end.
+    final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
       final id = await accounts.addWebDavAccount(
           url: base, user: _user.text.trim(), password: _password.text);
       for (final MapEntry(key: path, value: kind) in _chosen.entries) {
         await accounts.addWebDavRoot(id, path: path, kind: kind);
       }
-      ref.read(selectedSourceIdProvider.notifier).select(id);
+      selected.select(id);
       if (!mounted) return;
       context.go(sourceHomeLocation(id));
     } catch (e) {
@@ -184,6 +201,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
 
   String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
         _Problem.address => l10n.filesWebDavAddressInvalid,
+        _Problem.httpsRequired => l10n.filesWebDavHttpsRequired,
         _Problem.unauthorized => l10n.filesWebDavUnauthorized,
         _Problem.unreachable => l10n.filesWebDavUnreachable,
         _Problem.save => l10n.filesWebDavSaveFailed,

@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
 import '../connection/source_connection.dart' show isPrivateHost;
@@ -50,13 +51,14 @@ String filesRootTitle(String path) {
 Uri webDavBase(Uri url) => Uri.parse(normalizeWebDavUrl(url));
 
 /// Builds a WebDAV backend from what the viewer typed, before anything is
-/// saved. Tests override it with a fake.
+/// saved, over [client], which the caller owns and closes. Tests override it
+/// with a fake.
 typedef WebDavConnector = FileSystemBackend Function(
-    Uri base, String user, String password);
+    Uri base, String user, String password, http.Client client);
 
 final webDavConnectorProvider = Provider<WebDavConnector>(
-  (_) => (base, user, password) =>
-      WebDavBackend(base: base, user: user, password: password),
+  (_) => (base, user, password, client) =>
+      WebDavBackend(base: base, user: user, password: password, client: client),
 );
 
 final filesAccountsProvider =

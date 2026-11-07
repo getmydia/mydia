@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,4 +139,62 @@ void main() {
     expect(find.text('opened $kFilesLocalAccountId:owner:$kFilesLocalServerId'),
         findsOneWidget);
   });
+
+  testWidgets('selects the folder even when the screen left mid-save',
+      (tester) async {
+    final gate = Completer<void>();
+    final router = GoRouter(
+      initialLocation: '/add',
+      routes: [
+        GoRoute(path: '/add', builder: (_, __) => const AddFolderScreen()),
+        GoRoute(path: '/elsewhere', builder: (_, __) => const Text('away')),
+        GoRoute(path: '/s/:id', builder: (_, __) => const Text('opened')),
+      ],
+    );
+    final container = ProviderContainer(overrides: [
+      filesAccountsProvider.overrideWith((ref) => _GatedAccounts(ref, gate)),
+      directoryPickerProvider.overrideWithValue(() async => '/media/films'),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-folder-choose')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-folder-save')));
+    await tester.pump();
+
+    router.go('/elsewhere');
+    await tester.pumpAndSettle();
+    expect(find.byType(AddFolderScreen), findsNothing);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(container.read(selectedSourceIdProvider), _GatedAccounts.id);
+    expect(find.text('away'), findsOneWidget);
+  });
+}
+
+/// Adds nothing, and answers only once [gate] completes.
+class _GatedAccounts extends FilesAccounts {
+  _GatedAccounts(super.ref, this.gate);
+
+  static const id = SourceId('$kFilesLocalAccountId:owner:local');
+  final Completer<void> gate;
+
+  @override
+  Future<SourceId> addLocalRoot({
+    required String path,
+    required FilesLibraryKind kind,
+    required String accountName,
+  }) async {
+    await gate.future;
+    return id;
+  }
 }

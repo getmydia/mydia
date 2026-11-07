@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:http/http.dart' as http;
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
@@ -32,6 +33,7 @@ class _Harness {
   final MockAuthStorage storage;
   final FakeBackend backend;
   final connects = <(Uri, String, String)>[];
+  final clients = <http.Client>[];
 }
 
 int _boxes = 0;
@@ -80,8 +82,9 @@ Future<_Harness> _pump(WidgetTester tester,
       relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
       filesBackendBuilderProvider
           .overrideWithValue((ref, source) => FakeBackend({})),
-      webDavConnectorProvider.overrideWithValue((base, user, password) {
+      webDavConnectorProvider.overrideWithValue((base, user, password, client) {
         h.connects.add((base, user, password));
+        h.clients.add(client);
         return h.backend;
       }),
     ],
@@ -95,9 +98,10 @@ Future<_Harness> _pump(WidgetTester tester,
   return h;
 }
 
-Future<void> _connect(WidgetTester tester, {String password = 'pw'}) async {
-  await tester.enterText(find.byKey(const Key('webdav-url-field')),
-      'https://nas.example.test/dav/');
+Future<void> _connect(WidgetTester tester,
+    {String password = 'pw',
+    String url = 'https://nas.example.test/dav/'}) async {
+  await tester.enterText(find.byKey(const Key('webdav-url-field')), url);
   await tester.enterText(find.byKey(const Key('webdav-user-field')), 'viewer');
   await tester.enterText(
       find.byKey(const Key('webdav-password-field')), password);
@@ -106,6 +110,38 @@ Future<void> _connect(WidgetTester tester, {String password = 'pw'}) async {
 }
 
 void main() {
+  testWidgets('refuses a password over http to a host outside the network',
+      (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester, url: 'http://nas.example.test/dav');
+
+    expect(h.connects, isEmpty);
+    expect(
+        find.textContaining('Use https:// for a WebDAV share'), findsOneWidget);
+    expect((await h.store.load()).accounts, isEmpty);
+    expect(h.storage.keys, isEmpty);
+  });
+
+  testWidgets('lets a password go over http on the home network',
+      (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester, url: 'http://192.168.1.20:8080/dav');
+
+    expect(h.connects.single.$1, Uri.parse('http://192.168.1.20:8080/dav'));
+    expect(find.textContaining('Use https://'), findsNothing);
+    expect(find.byKey(const Key('webdav-save-button')), findsOneWidget);
+  });
+
+  testWidgets('every connect attempt shares one http client', (tester) async {
+    final h = await _pump(tester);
+    h.backend.probeFailure = const BackendUnreachable('down');
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-connect-button')));
+    await tester.pumpAndSettle();
+    expect(h.clients, hasLength(2));
+    expect(identical(h.clients[0], h.clients[1]), isTrue);
+  });
+
   testWidgets('webdav_connect_tests_the_root_before_saving', (tester) async {
     final h = await _pump(tester);
     h.backend.probeFailure = const BackendUnauthorized('HTTP 401');
