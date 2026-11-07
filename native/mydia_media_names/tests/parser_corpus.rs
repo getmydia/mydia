@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use mydia_library::parser::{parse, LibraryKind, ParsedKind};
+use mydia_media_names::parser::{parse, LibraryKind, ParsedKind};
 use serde::Deserialize;
 
 /// A Tier A case: a path relative to the library root, the library kind, and

@@ -1601,6 +1601,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "mydia-db",
+ "mydia-media-names",
  "regex",
  "serde",
  "serde_json",
@@ -1611,6 +1612,15 @@ dependencies = [
  "tracing",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "mydia-media-names"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

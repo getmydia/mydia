@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 chrono.workspace = true
 mydia-db = { path = "../db" }
+mydia-media-names = { path = "../../../native/mydia_media_names" }
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
