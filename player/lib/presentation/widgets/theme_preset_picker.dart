@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/linux_desktop.dart';
 import '../../core/theme/palette.dart';
-import '../../core/theme/system_accent.dart';
 import '../../core/theme/theme_preset.dart';
+import '../../core/theme/theme_providers.dart';
 import '../../l10n/l10n.dart';
 import 'osd_dialog.dart';
 
 /// Shows the presets offered here and returns the one picked, or null if the
 /// viewer dismissed the dialog. Same tile shape as the subtitle size picker,
-/// so it works with D-pad focus on TV.
+/// so it works with D-pad focus on TV. [linuxDesktop] names the `linux`
+/// preset.
 Future<ThemePreset?> showThemePresetPicker(
   BuildContext context,
   ThemePreset current,
-  List<ThemePreset> options,
-) {
+  List<ThemePreset> options, {
+  LinuxDesktop linuxDesktop = LinuxDesktop.other,
+}) {
   return showDialog<ThemePreset>(
     context: context,
     builder: (context) {
@@ -35,7 +38,8 @@ Future<ThemePreset?> showThemePresetPicker(
                     autofocus: preset == current,
                     leading: _Swatch(preset: preset),
                     title: Text(
-                      context.l10n.themePresetName(preset),
+                      context.l10n
+                          .themePresetName(preset, linuxDesktop: linuxDesktop),
                       style: TextStyle(
                         color: palette.textPrimary,
                         fontWeight: preset == current
@@ -65,9 +69,7 @@ class _Swatch extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final p = preset == ThemePreset.macos
-        ? preset.palette(systemAccent: ref.watch(systemAccentProvider))
-        : preset.palette();
+    final p = ref.watch(presetPaletteProvider(preset));
     return Container(
       width: 36,
       height: 36,

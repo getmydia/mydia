@@ -21,6 +21,7 @@ import '../core/player/video_scaling.dart';
 import '../core/remote/registration_status.dart';
 import '../core/router/push_route.dart';
 import '../core/theme/glass_material.dart';
+import '../core/theme/linux_desktop.dart';
 import '../core/theme/theme_preset.dart';
 import '../core/update/update_problem.dart';
 import '../core/update/update_provider.dart';
@@ -279,11 +280,20 @@ extension AppFormatters on AppLocalizations {
         RemoteDeviceStatus.inactive => settingsDevicesStatusInactive,
       };
 
-  String themePresetName(ThemePreset preset) => switch (preset) {
+  /// [linuxDesktop] names the desktop the `linux` preset follows.
+  String themePresetName(
+    ThemePreset preset, {
+    LinuxDesktop linuxDesktop = LinuxDesktop.other,
+  }) =>
+      switch (preset) {
         ThemePreset.projectionBooth => themePresetProjectionBooth,
         ThemePreset.oledBlack => themePresetOledBlack,
         ThemePreset.slate => themePresetSlate,
         ThemePreset.macos => themePresetMacos,
+        ThemePreset.linux => switch (linuxDesktop.displayName) {
+            final name? => themePresetLinux(name),
+            null => themePresetLinuxGeneric,
+          },
       };
 
   String glassMaterialName(GlassMaterial material) => switch (material) {

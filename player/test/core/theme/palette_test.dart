@@ -205,11 +205,53 @@ void main() {
       expect(
           ThemePreset.macos.isAvailableOn(TargetPlatform.android, isWeb: false),
           isFalse);
-      expect(ThemePreset.availableOn(TargetPlatform.linux, isWeb: false), [
+      expect(ThemePreset.availableOn(TargetPlatform.android, isWeb: false), [
         ThemePreset.projectionBooth,
         ThemePreset.oledBlack,
         ThemePreset.slate
       ]);
+    });
+
+    test('linux is offered only on native Linux', () {
+      expect(
+          ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: false),
+          isTrue);
+      expect(ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: true),
+          isFalse);
+      for (final platform in [
+        TargetPlatform.macOS,
+        TargetPlatform.android,
+        TargetPlatform.windows,
+      ]) {
+        expect(ThemePreset.linux.isAvailableOn(platform, isWeb: false), isFalse,
+            reason: platform.name);
+      }
+      expect(ThemePreset.availableOn(TargetPlatform.linux, isWeb: false), [
+        ThemePreset.projectionBooth,
+        ThemePreset.oledBlack,
+        ThemePreset.slate,
+        ThemePreset.linux,
+      ]);
+      expect(ThemePreset.availableOn(TargetPlatform.macOS, isWeb: false),
+          isNot(contains(ThemePreset.linux)));
+    });
+
+    test('defaults to linux on native Linux', () {
+      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: false),
+          ThemePreset.linux);
+      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: true),
+          ThemePreset.projectionBooth);
+    });
+
+    test('a stored linux elsewhere falls back', () {
+      expect(ThemePreset.resolve('linux', TargetPlatform.macOS, isWeb: false),
+          ThemePreset.macos);
+      expect(ThemePreset.resolve('linux', TargetPlatform.android, isWeb: false),
+          ThemePreset.projectionBooth);
+      expect(ThemePreset.resolve('linux', TargetPlatform.linux, isWeb: true),
+          ThemePreset.projectionBooth);
+      expect(ThemePreset.resolve('slate', TargetPlatform.linux, isWeb: false),
+          ThemePreset.slate);
     });
 
     test('defaults to macOS on native macOS, Projection Booth elsewhere', () {
@@ -225,6 +267,8 @@ void main() {
       expect(ThemePreset.resolve(null, TargetPlatform.macOS, isWeb: false),
           ThemePreset.macos);
       expect(ThemePreset.resolve('bogus', TargetPlatform.linux, isWeb: false),
+          ThemePreset.linux);
+      expect(ThemePreset.resolve('bogus', TargetPlatform.windows, isWeb: false),
           ThemePreset.projectionBooth);
       expect(ThemePreset.resolve('macos', TargetPlatform.android, isWeb: false),
           ThemePreset.projectionBooth);
