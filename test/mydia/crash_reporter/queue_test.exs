@@ -231,7 +231,7 @@ defmodule Mydia.CrashReporter.QueueTest do
         Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
         test_pid = self()
 
-        Bypass.stub(bypass, "POST", "/crashes/report", fn conn ->
+        Bypass.expect_once(bypass, "POST", "/crashes/report", fn conn ->
           send(test_pid, :relay_hit)
 
           conn

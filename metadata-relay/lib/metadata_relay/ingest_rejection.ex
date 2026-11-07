@@ -26,7 +26,10 @@ defmodule MetadataRelay.IngestRejection do
 
   The line carries the body's size, content type, user agent, the
   `CF-Connecting-IP` header, the peer `MetadataRelay.ClientIp` resolved, and
-  the body's `source` and `version` fields when they are strings. Never the
+  the body's `source` and `version` fields when they are strings. Absent
+  values are left out. `bytes` is the `Content-Length` header, so a chunked
+  body has none: by the time a parse error reaches the error renderer the
+  body has been consumed and its length is gone. Never the
   body itself: a crash report can hold whatever the client failed to scrub.
   `CF-Connecting-IP` is logged as the caller sent it. A request reaching the
   origin without Cloudflare can set it to anything, so it identifies, and

@@ -531,7 +531,8 @@ POST /crashes/report
 
 **Rejections:** every rejected crash report or feedback submission logs one
 `[Ingest] rejected` warning with the endpoint, status, reason, validation
-errors, body size, content type, user agent and `CF-Connecting-IP`. The body
+errors, body size (`bytes`, from `Content-Length`; absent for a chunked
+body), content type, user agent and `CF-Connecting-IP`. The body
 itself is never logged. Each rejection also increments
 `metadata_relay_ingest_rejected_total{endpoint, reason}`, where `reason` is
 one of `validation`, `message_too_long`, `not_json`, `too_large`,
