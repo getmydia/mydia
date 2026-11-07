@@ -53,41 +53,49 @@ class WebDavBackend implements FileSystemBackend {
   /// a folder check or a whole scan open for good.
   final Duration _timeout;
 
-  /// Whether a listing's raw reply has been logged by this backend yet.
-  var _loggedRawListing = false;
+  // Each oddity is logged once per backend: a scan lists hundreds of
+  // folders, and one line says how this server behaves.
+  var _loggedReplyShape = false;
   var _loggedMissingSelf = false;
-
-  /// How much of the first listing's raw reply goes to the log.
-  static const rawListingLogChars = 1500;
+  var _loggedForeignChild = false;
 
   @override
   Future<List<FileEntry>> list(String dir) async {
     final body = await _propfind(_asCollection(dir), depth: 1);
-    if (!_loggedRawListing) {
-      // One raw reply per backend: how this server writes hrefs, folders and
-      // sizes, without a capture on the server side.
-      _loggedRawListing = true;
-      final excerpt = body.length > rawListingLogChars
-          ? '${body.substring(0, rawListingLogChars)}... '
-              '(${body.length} chars)'
-          : body;
-      debugPrint('[WebDavBackend] PROPFIND $dir replied: $excerpt');
-    }
     final self = _normalize(dir);
     final all = _parse(body);
+    if (!_loggedReplyShape) {
+      // How this server shapes a reply, without its content: a reply can
+      // carry signed URLs, and logs are shared.
+      _loggedReplyShape = true;
+      debugPrint('[WebDavBackend] PROPFIND $dir: ${body.length} chars, '
+          '${all.length} entries, ${all.where((e) => e.isDir).length} '
+          'folders, ${all.where((e) => !e.isDir && e.size > 0).length} sized '
+          'files, ${all.where((e) => e.unreadable).length} unreadable, '
+          '${_absoluteHref.allMatches(body).length} absolute hrefs');
+    }
     final children = all.where((e) => _normalize(e.path) != self).toList();
-    if (all.length == children.length &&
-        all.isNotEmpty &&
+    if (all.isNotEmpty &&
+        all.length == children.length &&
         !_loggedMissingSelf) {
       _loggedMissingSelf = true;
-      // The folder itself always comes back first; when nothing matched it,
-      // the server's hrefs are not the paths asked for, and every child
-      // path built from them will be wrong too.
-      debugPrint('[WebDavBackend] $dir: no entry for the folder itself '
-          'among ${all.length} (first href ${all.first.path})');
+      debugPrint('[WebDavBackend] $dir: no entry for the folder itself among '
+          '${all.length}');
+    }
+    // A child outside the folder asked for means the server's hrefs are not
+    // the paths the client sent, and every path built from them is wrong.
+    final foreign = children
+        .where((e) => !_normalize(e.path).startsWith('$self/'))
+        .firstOrNull;
+    if (foreign != null && !_loggedForeignChild) {
+      _loggedForeignChild = true;
+      debugPrint('[WebDavBackend] $dir: entry outside the folder asked for: '
+          '${foreign.path}');
     }
     return children;
   }
+
+  static final _absoluteHref = RegExp(r'href>\s*https?://');
 
   @override
   Future<FileEntry?> stat(String path) async {

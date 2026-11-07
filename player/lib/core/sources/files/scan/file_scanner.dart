@@ -265,10 +265,13 @@ class FileScanner {
   /// unreachable once the app is back. Such a failure, with the app having
   /// left during the request, waits for the foreground and lists the same
   /// folder again, so the walk goes on where it was instead of the whole
-  /// root being dropped and started over from nothing.
+  /// root being dropped and started over from nothing. A listing is only
+  /// started in the foreground: one started in the seconds iOS grants after
+  /// leaving would be frozen with no departure during it to tell why.
   Future<List<FileEntry>> _list(String dir) async {
     final foreground = _foreground;
     for (var reads = 1;; reads++) {
+      await foreground?.whenForeground();
       final departures = foreground?.departures;
       try {
         return await _backend.list(dir);
@@ -280,7 +283,6 @@ class FileScanner {
         }
         debugPrint('[FileScanner] $dir cut off while the app was away '
             '($e); reading it again on return');
-        await foreground.whenForeground();
       }
     }
   }

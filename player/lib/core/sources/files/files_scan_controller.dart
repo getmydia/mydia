@@ -121,6 +121,9 @@ class FilesScanController extends Notifier<ScanState> {
       var scanned = 0;
       for (final root in roots) {
         final rootClock = Stopwatch()..start();
+        // The root's first listing can take a while: say so before it lands
+        // rather than keep showing the previous root's count.
+        report(walking: true);
         try {
           final delta = await scanner.scan(
             root,

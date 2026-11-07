@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -71,15 +72,43 @@ void main() {
         '9036244507</D:getcontentlength><D:getlastmodified>Tue, 20 Oct 2026 '
         '12:30:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
         '</D:status></D:propstat></D:response></D:multistatus>';
-    final entries =
-        await backend(MockClient((_) async => http.Response(xml, 207)))
-            .list('/media/Movies/Amber Tide (2019)');
+    late http.Request seen;
+    final entries = await backend(MockClient((request) async {
+      seen = request;
+      return http.Response(xml, 207);
+    })).list('/media/Movies/Amber Tide (2019)');
+    expect(
+        Uri.decodeComponent(seen.url.path), '/media/Movies/Amber Tide (2019)/');
     expect(entries, hasLength(1));
     final video = entries.single;
     expect(video.name, 'Amber.Tide.2019.1080p.BluRay.x264.mkv');
     expect(video.isDir, isFalse);
     expect(video.unreadable, isFalse);
     expect(video.size, 9036244507);
+  });
+
+  test('a_listing_logs_its_shape_not_its_content', () async {
+    // Logs are shared; a reply can carry signed URLs.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
+        '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>https://dav.example.com/media/Movies/a.mkv?sig=SECRET</D:href>'
+        '<D:propstat><D:prop><D:resourcetype/><D:getcontentlength>5'
+        '</D:getcontentlength></D:prop><D:status>HTTP/1.1 200 OK</D:status>'
+        '</D:propstat></D:response></D:multistatus>';
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
+    addTearDown(() => debugPrint = original);
+
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    await b.list('/media/Movies');
+    await b.list('/media/Movies');
+
+    expect(logged.where((l) => l.contains('PROPFIND')), hasLength(1));
+    expect(logged.single, contains('1 absolute hrefs'));
+    expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
   test('playable_reencodes_the_path_and_carries_auth', () async {

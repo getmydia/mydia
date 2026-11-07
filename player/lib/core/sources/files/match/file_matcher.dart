@@ -52,17 +52,26 @@ class FileMatcher {
       for (final g in groups.values)
         if (_needsWork(g)) g,
     ];
+    // Outcomes are told by whether this run wrote the group: one the relay
+    // could not answer keeps its previous match, which is not a new find.
+    final before = {for (final g in pending) g.key: _index.group(g.key)};
     final clock = Stopwatch()..start();
     await Future.wait([for (final g in pending) _matchOne(g)]);
     if (pending.isEmpty) return;
-    final matched =
-        pending.where((g) => _index.group(g.key)?.tmdbId != null).length;
-    final provisional =
-        pending.where((g) => _index.group(g.key) == null).length;
+    var found = 0, noMatch = 0, unanswered = 0;
+    for (final g in pending) {
+      final after = _index.group(g.key);
+      if (after == null || identical(after, before[g.key])) {
+        unanswered++;
+      } else if (after.tmdbId != null) {
+        found++;
+      } else {
+        noMatch++;
+      }
+    }
     debugPrint('[FileMatcher] matched ${pending.length} of ${groups.length} '
-        'groups in ${clock.elapsed.inSeconds}s: $matched found, '
-        '${pending.length - matched - provisional} with no match, '
-        '$provisional left provisional');
+        'groups in ${clock.elapsed.inSeconds}s: $found found, '
+        '$noMatch with no match, $unanswered not answered');
   }
 
   /// Fixes a group to [tmdbId], or to "no match" when null. A pinned group is

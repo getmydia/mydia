@@ -111,12 +111,39 @@ void main() {
     });
 
     test('a_refusal_while_away_is_not_retried', () async {
-      final app = AppForeground()..onLifecycle(AppLifecycleState.paused);
-      final b = FakeBackend({'/lib/A.mkv': 1, '/lib/locked/B.mkv': 1});
-      b.failures['/lib/locked'] = const BackendUnauthorized('HTTP 403');
+      // The app leaves during the refused listing, and never comes back:
+      // the scan still ends, with the folder skipped rather than retried.
+      final app = AppForeground();
+      final b = _SuspendingBackend({'/lib/A.mkv': 1, '/lib/locked/B.mkv': 1},
+          app: app,
+          suspendOn: {'/lib/locked': 1},
+          failure: const BackendUnauthorized('HTTP 403'));
       final delta = await scanner(b, foreground: app).scan(root);
       expect([for (final f in delta.added) f.path], ['A.mkv']);
+      expect(delta.skippedPaths, ['locked']);
       expect(b.listed.where((d) => d == '/lib/locked'), hasLength(1));
+      expect(app.foreground, isFalse);
+    });
+
+    test('no_listing_starts_while_the_app_is_away', () async {
+      // iOS grants a few seconds after leaving; a listing started then is
+      // frozen with no departure during it, so it must wait instead.
+      final app = AppForeground();
+      final b = _LeaveAfterBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1}, app,
+          after: '/lib');
+      var finished = false;
+      final scan = scanner(b, foreground: app)
+          .scan(root)
+          .whenComplete(() => finished = true);
+      await pumpEventQueue();
+      expect(b.listed, ['/lib']);
+      expect(finished, isFalse);
+
+      app.onLifecycle(AppLifecycleState.resumed);
+      final delta = await scan;
+      expect(b.listed, ['/lib', '/lib/sub']);
+      expect([for (final f in delta.added) f.path],
+          unorderedEquals(['A.mkv', 'sub/B.mkv']));
     });
   });
 
@@ -477,11 +504,13 @@ class _SuspendingBackend extends FakeBackend {
     required this.app,
     required Map<String, int> suspendOn,
     this.resumeAfter = false,
+    this.failure = const BackendUnreachable('timed out'),
   }) : _suspendOn = Map.of(suspendOn);
 
   final AppForeground app;
   final Map<String, int> _suspendOn;
   final bool resumeAfter;
+  final BackendFailure failure;
 
   @override
   Future<List<FileEntry>> list(String dir) async {
@@ -493,7 +522,22 @@ class _SuspendingBackend extends FakeBackend {
     if (resumeAfter) {
       scheduleMicrotask(() => app.onLifecycle(AppLifecycleState.resumed));
     }
-    throw const BackendUnreachable('timed out');
+    throw failure;
+  }
+}
+
+/// Lists normally, but the app leaves right after listing [after].
+class _LeaveAfterBackend extends FakeBackend {
+  _LeaveAfterBackend(super.files, this.app, {required this.after});
+
+  final AppForeground app;
+  final String after;
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    final entries = await super.list(dir);
+    if (dir == after) app.onLifecycle(AppLifecycleState.hidden);
+    return entries;
   }
 }
 
