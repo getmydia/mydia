@@ -79,6 +79,13 @@ class FilesMediaSource extends MediaSource
   final RelayTmdb _tmdb;
   final void Function()? _onReauthNeeded;
   final FilesInvalidate? _invalidate;
+
+  /// The store this source reads positions from; playback writes through it.
+  PlaybackProgressStore get progressStore => _progress;
+
+  /// Invalidates cache targets; a no-op when the source was built without one.
+  Future<void> invalidateTargets(Iterable<InvalidationTarget> targets) async =>
+      _invalidate?.call(targets);
   final AppLocalizations Function() _l10n;
   final void Function()? _onDispose;
 

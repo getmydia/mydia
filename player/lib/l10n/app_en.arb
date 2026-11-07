@@ -1582,6 +1582,8 @@
   "@filesThisDevice": {"description": "Name of the files library made of folders on this device."},
   "filesFoldersLibrary": "Folders",
   "@filesFoldersLibrary": {"description": "Name of the library in a files library that lists, folder by folder, the files that matched no movie or show."},
+  "filesFolderUnavailable": "Folder unavailable",
+  "@filesFolderUnavailable": {"description": "Shown when playback cannot start because the folder or share holding the file cannot be reached."},
   "filesSeasonTitle": "Season {number}",
   "@filesSeasonTitle": {"description": "Name of a season in a files library, for example Season 2.", "placeholders": {"number": {"type": "int"}}},
   "filesSpecialsTitle": "Specials",
