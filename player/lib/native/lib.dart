@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
+// These functions are ignored because they are not marked as `pub`: `collect_hls_body`, `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Space on the volume holding `path`, for sizing the playback spool.
@@ -37,7 +37,7 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// a discovery lookup.
   Future<void> addAddressHint({required String endpointAddrJson});
 
-  /// Dial a peer using their EndpointAddr JSON.
+  /// Dial a peer using their `EndpointAddr` JSON.
   Future<void> dial({required String endpointAddrJson});
 
   /// Start streaming events to Flutter.
@@ -52,7 +52,7 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Get network statistics.
   Future<FlutterNetworkStats> getNetworkStats();
 
-  /// Get this node's EndpointAddr as JSON for sharing.
+  /// Get this node's `EndpointAddr` as JSON for sharing.
   Future<String> getNodeAddr();
 
   /// Initialize a new P2P host with custom relay URLs, in preference

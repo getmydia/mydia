@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1236579695;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1636034117;
 
 // Section: executor
 
@@ -1107,6 +1107,79 @@ fn wire__crate__pairing_keys_open_impl(
         },
     )
 }
+fn wire__crate__media_names__parse_batch_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "parse_batch",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_root = <String>::sse_decode(&mut deserializer);
+            let api_paths = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_kind = <crate::media_names::FfiKind>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::media_names::parse_batch(
+                    api_root, api_paths, api_kind,
+                ))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__media_names__score_candidates_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "score_candidates",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_title = <String>::sse_decode(&mut deserializer);
+            let api_year = <Option<i32>>::sse_decode(&mut deserializer);
+            let api_is_show = <bool>::sse_decode(&mut deserializer);
+            let api_candidates =
+                <Vec<crate::media_names::FfiCandidate>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::media_names::score_candidates(
+                    api_title,
+                    api_year,
+                    api_is_show,
+                    api_candidates,
+                ))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 
 // Section: related_funcs
 
@@ -1217,6 +1290,78 @@ impl SseDecode for f32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_f32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::media_names::FfiCandidate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <i64>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_originalTitle = <Option<String>>::sse_decode(deserializer);
+        let mut var_year = <Option<i32>>::sse_decode(deserializer);
+        return crate::media_names::FfiCandidate {
+            id: var_id,
+            title: var_title,
+            original_title: var_originalTitle,
+            year: var_year,
+        };
+    }
+}
+
+impl SseDecode for crate::media_names::FfiKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::media_names::FfiKind::Movies,
+            1 => crate::media_names::FfiKind::Series,
+            2 => crate::media_names::FfiKind::Mixed,
+            _ => unreachable!("Invalid variant for FfiKind: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::media_names::FfiMatch {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <i64>::sse_decode(deserializer);
+        let mut var_confidence = <f64>::sse_decode(deserializer);
+        return crate::media_names::FfiMatch {
+            id: var_id,
+            confidence: var_confidence,
+        };
+    }
+}
+
+impl SseDecode for crate::media_names::FfiParsed {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_isEpisode = <bool>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_year = <Option<i32>>::sse_decode(deserializer);
+        let mut var_season = <Option<i32>>::sse_decode(deserializer);
+        let mut var_episode = <Option<i32>>::sse_decode(deserializer);
+        let mut var_episodeEnd = <Option<i32>>::sse_decode(deserializer);
+        let mut var_groupKey = <String>::sse_decode(deserializer);
+        return crate::media_names::FfiParsed {
+            path: var_path,
+            is_episode: var_isEpisode,
+            title: var_title,
+            year: var_year,
+            season: var_season,
+            episode: var_episode,
+            episode_end: var_episodeEnd,
+            group_key: var_groupKey,
+        };
     }
 }
 
@@ -1611,6 +1756,13 @@ impl SseDecode for i32 {
     }
 }
 
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1618,6 +1770,30 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::media_names::FfiCandidate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::media_names::FfiCandidate>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::media_names::FfiParsed> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::media_names::FfiParsed>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1663,6 +1839,28 @@ impl SseDecode for Option<f32> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<f32>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::media_names::FfiMatch> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::media_names::FfiMatch>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<i32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<i32>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -1794,6 +1992,8 @@ fn pde_ffi_dispatcher_sync_impl(
         2 => wire__crate__HlsStreamHandle_header_impl(ptr, rust_vec_len, data_len),
         9 => wire__crate__P2PHost_init_impl(ptr, rust_vec_len, data_len),
         19 => wire__crate__pairing_keys_derive_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__media_names__parse_batch_impl(ptr, rust_vec_len, data_len),
+        23 => wire__crate__media_names__score_candidates_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1843,6 +2043,90 @@ impl flutter_rust_bridge::IntoDart for crate::ClaimPayload {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::ClaimPayload {}
 impl flutter_rust_bridge::IntoIntoDart<crate::ClaimPayload> for crate::ClaimPayload {
     fn into_into_dart(self) -> crate::ClaimPayload {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::media_names::FfiCandidate {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.original_title.into_into_dart().into_dart(),
+            self.year.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::media_names::FfiCandidate
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiCandidate>
+    for crate::media_names::FfiCandidate
+{
+    fn into_into_dart(self) -> crate::media_names::FfiCandidate {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::media_names::FfiKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Movies => 0.into_dart(),
+            Self::Series => 1.into_dart(),
+            Self::Mixed => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::media_names::FfiKind {}
+impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiKind>
+    for crate::media_names::FfiKind
+{
+    fn into_into_dart(self) -> crate::media_names::FfiKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::media_names::FfiMatch {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.confidence.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::media_names::FfiMatch {}
+impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiMatch>
+    for crate::media_names::FfiMatch
+{
+    fn into_into_dart(self) -> crate::media_names::FfiMatch {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::media_names::FfiParsed {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.path.into_into_dart().into_dart(),
+            self.is_episode.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.year.into_into_dart().into_dart(),
+            self.season.into_into_dart().into_dart(),
+            self.episode.into_into_dart().into_dart(),
+            self.episode_end.into_into_dart().into_dart(),
+            self.group_key.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::media_names::FfiParsed {}
+impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiParsed>
+    for crate::media_names::FfiParsed
+{
+    fn into_into_dart(self) -> crate::media_names::FfiParsed {
         self
     }
 }
@@ -2383,6 +2667,62 @@ impl SseEncode for f32 {
     }
 }
 
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::media_names::FfiCandidate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <Option<String>>::sse_encode(self.original_title, serializer);
+        <Option<i32>>::sse_encode(self.year, serializer);
+    }
+}
+
+impl SseEncode for crate::media_names::FfiKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::media_names::FfiKind::Movies => 0,
+                crate::media_names::FfiKind::Series => 1,
+                crate::media_names::FfiKind::Mixed => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::media_names::FfiMatch {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.id, serializer);
+        <f64>::sse_encode(self.confidence, serializer);
+    }
+}
+
+impl SseEncode for crate::media_names::FfiParsed {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.path, serializer);
+        <bool>::sse_encode(self.is_episode, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <Option<i32>>::sse_encode(self.year, serializer);
+        <Option<i32>>::sse_encode(self.season, serializer);
+        <Option<i32>>::sse_encode(self.episode, serializer);
+        <Option<i32>>::sse_encode(self.episode_end, serializer);
+        <String>::sse_encode(self.group_key, serializer);
+    }
+}
+
 impl SseEncode for crate::FlutterConnectionType {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2682,12 +3022,39 @@ impl SseEncode for i32 {
     }
 }
 
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::media_names::FfiCandidate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::media_names::FfiCandidate>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::media_names::FfiParsed> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::media_names::FfiParsed>::sse_encode(item, serializer);
         }
     }
 }
@@ -2728,6 +3095,26 @@ impl SseEncode for Option<f32> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <f32>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::media_names::FfiMatch> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::media_names::FfiMatch>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<i32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <i32>::sse_encode(value, serializer);
         }
     }
 }
