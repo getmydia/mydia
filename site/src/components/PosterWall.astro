@@ -1,17 +1,17 @@
 ---
 import { getImage } from 'astro:assets';
-import { poster, posterSlugs } from '../data/posters';
+import { poster, posterNumbers } from '../data/posters';
 
 interface Props {
   /** Number of poster rows (density). */
   rows?: number;
   /** CSS height of the wall; it fills its positioned parent by default. */
   height?: string;
-  /** Poster slugs to use, in order; defaults to every demo poster. */
-  posters?: string[];
+  /** Poster numbers to use, in order; defaults to every exported poster. */
+  posters?: number[];
 }
 
-const { rows = 3, height = '100%', posters = posterSlugs } = Astro.props;
+const { rows = 3, height = '100%', posters = posterNumbers } = Astro.props;
 
 // Each row repeats its set until it is wider than any viewport, then renders
 // the set twice so the -50% drift loops without a seam.
@@ -20,7 +20,7 @@ const MIN_PER_SET = 14;
 if (posters.length === 0) throw new Error('PosterWall needs at least one poster');
 
 const images = await Promise.all(
-  posters.map(async (slug) => getImage({ src: poster(slug), width: 180, format: 'webp' })),
+  posters.map(async (n) => getImage({ src: poster(n), width: 180, format: 'webp' })),
 );
 
 const rowSets = Array.from({ length: rows }, (_, row) => {

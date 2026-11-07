@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const { chromium } = require("@playwright/test");
+const { exportPosters } = require("./export-posters");
 
 /**
  * Screenshot configuration
@@ -11,6 +12,8 @@ const config = {
   // The website's copies. Every file is written to both directories.
   siteOutputDir:
     process.env.SITE_OUTPUT_DIR || "../site/src/assets/screenshots",
+  // The website's poster wall, exported from the seeded library.
+  posterOutputDir: process.env.POSTER_OUTPUT_DIR || "../site/src/assets/posters",
   viewport: {
     width: 1920,
     height: 1080,
@@ -187,6 +190,41 @@ function themeById(id) {
   return theme;
 }
 
+/**
+ * Waits until every image in the viewport has finished loading. Posters load
+ * from a remote CDN, so a fixed settle delay can catch them half drawn.
+ * Lazy images below the fold never start loading, so only on-screen ones
+ * count. A broken on-screen image is reported as a warning.
+ */
+async function waitForImages(page, timeoutMs = 20000) {
+  const imageState = () => {
+    const h = window.innerHeight;
+    const w = window.innerWidth;
+    const visible = Array.from(document.images).filter((img) => {
+      const r = img.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < h && r.left < w;
+    });
+    return {
+      pending: visible.filter((img) => !img.complete).length,
+      broken: visible
+        .filter((img) => img.complete && img.naturalWidth === 0)
+        .map((img) => img.currentSrc || img.src),
+    };
+  };
+
+  const deadline = Date.now() + timeoutMs;
+  let state = await page.evaluate(imageState);
+  while (state.pending > 0 && Date.now() < deadline) {
+    await page.waitForTimeout(250);
+    state = await page.evaluate(imageState);
+  }
+
+  if (state.pending > 0) {
+    console.log(`  ⚠ Warning: ${state.pending} images still loading after ${timeoutMs / 1000}s`);
+  }
+  for (const src of state.broken) console.log(`  ⚠ Warning: broken image ${src}`);
+}
+
 /** Saves a screenshot to the README and website directories. */
 async function save(page, name, options = {}) {
   for (const dir of [config.outputDir, config.siteOutputDir]) {
@@ -253,6 +291,7 @@ async function captureWebUi(browser) {
       await applyServerTheme(page, theme.id, theme.base, theme.scheme);
     }
 
+    await waitForImages(page);
     await save(page, screenshot.name, { fullPage: screenshot.fullPage || false });
     console.log("");
   }
@@ -268,9 +307,14 @@ async function captureWebUi(browser) {
       });
     await page.waitForTimeout(2000);
     await applyServerTheme(page, theme.id, theme.base, theme.scheme);
+    await waitForImages(page);
     await save(page, `server-theme-${theme.id}`);
     console.log("");
   }
+
+  console.log("🖼  Exporting posters for the website's poster wall");
+  await exportPosters(page, { baseUrl: config.baseUrl, outputDir: config.posterOutputDir });
+  console.log("");
 
   await context.close();
 }
@@ -361,7 +405,7 @@ async function takeScreenshots() {
 
   // The player titles its server by the URL host, so a BASE_URL on localhost
   // shows "localhost" in the app bar. Point BASE_URL at a neutral name and set
-  // MAP_HOST_TO_LOOPBACK=1 to map it to loopback here (reseed with --base-url so artwork uses the same host).
+  // MAP_HOST_TO_LOOPBACK=1 to map it to loopback here.
   const host = new URL(config.baseUrl).hostname;
   const args = [];
   if (

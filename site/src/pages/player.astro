@@ -8,18 +8,14 @@ import Platforms from '../components/Platforms.astro';
 import CrossSell from '../components/CrossSell.astro';
 import { Image } from 'astro:assets';
 import { playerThemes } from '../data/themes';
+import { postersFrom } from '../data/posters';
 import playerHome from '../assets/screenshots/player-home.png';
 import playerShows from '../assets/screenshots/player-shows.png';
 import playerDesktop from '../assets/screenshots/player-desktop.png';
 
-// Movies first, for a cinema feel behind the player hero.
-const wallPosters = [
-  'lanternfall-station', 'copper-weather', 'paper-lighthouse', 'hollow-meridian',
-  'a-kettle-for-two-moons', 'midnight-at-pellwick-pier', 'orbit-of-small-things',
-  'thessaly-rides-alone', 'tidewrack', 'the-last-tram-to-ovelle', 'wintergreen-protocol',
-  'saltmarsh-radio', 'quillfeather-road', 'ashgrove-after-dark', 'dunmore-drift',
-  'marrow-and-thistle',
-];
+// A third of the way in, so the wall opens on different posters than the
+// homepage and server walls.
+const wallPosters = postersFrom(1 / 3);
 
 const features = [
   { icon: 'devices', title: 'Every platform', description: 'Phone, tablet, TV, desktop and web, with the same library on each.' },

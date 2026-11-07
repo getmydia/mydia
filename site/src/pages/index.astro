@@ -10,9 +10,9 @@ import playerDesktop from '../assets/screenshots/player-desktop.png';
 import serverHome from '../assets/screenshots/homepage.png';
 
 const fan = [
-  { slug: 'copper-weather', class: '-rotate-12 -translate-x-[7.5rem] translate-y-6' },
-  { slug: 'lanternfall-station', class: 'rotate-0 -translate-y-1' },
-  { slug: 'paper-lighthouse', class: 'rotate-12 translate-x-[7.5rem] translate-y-6' },
+  { poster: 1, class: '-rotate-12 -translate-x-[7.5rem] translate-y-6' },
+  { poster: 3, class: 'rotate-0 -translate-y-1' },
+  { poster: 5, class: 'rotate-12 translate-x-[7.5rem] translate-y-6' },
 ];
 
 const together = [
@@ -68,7 +68,7 @@ const together = [
         <div slot="media" class="absolute inset-0">
           {fan.map((p) => (
             <Image
-              src={poster(p.slug)}
+              src={poster(p.poster)}
               alt=""
               width={320}
               loading="lazy"

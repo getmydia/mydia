@@ -7,14 +7,11 @@ import ThemeShowcase from '../components/ThemeShowcase.astro';
 import Install from '../components/Install.astro';
 import CrossSell from '../components/CrossSell.astro';
 import { serverThemes, serverThemesHeading } from '../data/themes';
+import { postersFrom } from '../data/posters';
 
-// Shows first: a library that keeps itself up to date.
-const wallPosters = [
-  'harbor-lights-of-vennmoor', 'the-brightwater-files', 'nightshift-at-corvane',
-  'tenders-of-the-gloam', 'pebble-creek-pioneers', 'the-understudy-hours', 'kestrel-court',
-  'borrowed-summers', 'brannock-heights', 'the-quiet-orchard-job', 'fennick-s-wager',
-  'the-velvet-quorum', 'copper-weather', 'hollow-meridian', 'saltmarsh-radio', 'tidewrack',
-];
+// Two thirds of the way in, so the wall opens on different posters than the
+// homepage and player walls.
+const wallPosters = postersFrom(2 / 3);
 
 const features = [
   { icon: 'film', title: 'Library and metadata', description: 'Organizes your movies and TV, and fills in posters, descriptions and episode details for you.' },

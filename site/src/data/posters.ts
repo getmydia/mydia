@@ -1,24 +1,36 @@
 import type { ImageMetadata } from 'astro';
 
-// The demo library's AI-generated posters, committed once under
-// assets/demo/art (outside site/) and shared with the demo seed.
-const modules = import.meta.glob<{ default: ImageMetadata }>('../../../assets/demo/art/*-poster.jpg', {
+// Poster thumbnails exported from the demo library at screenshot time
+// (assets/export-posters.js), numbered poster-01.jpg, poster-02.jpg, ...
+const modules = import.meta.glob<{ default: ImageMetadata }>('../assets/posters/poster-*.jpg', {
   eager: true,
 });
 
-const bySlug: Record<string, ImageMetadata> = Object.fromEntries(
+const byNumber: Record<number, ImageMetadata> = Object.fromEntries(
   Object.entries(modules).map(([path, mod]) => [
-    path.split('/').pop()!.replace(/-poster\.jpg$/, ''),
+    Number(path.match(/poster-(\d+)\.jpg$/)![1]),
     mod.default,
   ]),
 );
 
-/** Every poster slug, sorted. */
-export const posterSlugs: string[] = Object.keys(bySlug).sort();
+/** Every poster number, ascending. */
+export const posterNumbers: number[] = Object.keys(byNumber)
+  .map(Number)
+  .sort((a, b) => a - b);
 
-/** The poster for `slug`; throws at build time when it does not exist. */
-export function poster(slug: string): ImageMetadata {
-  const image = bySlug[slug];
-  if (!image) throw new Error(`Poster "${slug}" is missing from assets/demo/art/`);
+/**
+ * Every poster number, starting a fraction of the way through the list and
+ * wrapping around, so two walls drawn from the same posters do not open on
+ * the same ones.
+ */
+export function postersFrom(fraction: number): number[] {
+  const start = Math.floor(posterNumbers.length * fraction);
+  return [...posterNumbers.slice(start), ...posterNumbers.slice(0, start)];
+}
+
+/** Poster `n`; throws at build time when it does not exist. */
+export function poster(n: number): ImageMetadata {
+  const image = byNumber[n];
+  if (!image) throw new Error(`Poster ${n} is missing from site/src/assets/posters/`);
   return image;
 }
