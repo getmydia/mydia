@@ -1,5 +1,7 @@
 # Website: two products, demo screenshots, theme showcases. Implementation Plan
 
+> **Historical record.** This plan describes the original approach. The demo seed changed during implementation: it now reads a local, git-ignored list of TMDB ids and fetches metadata and artwork through the metadata relay, rather than generating invented artwork. See the spec, `design/specs/2026-11-06-website-two-products-design.md`, for the current design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rebuild mydia.dev around Mydia Player and Mydia Server as equal products, with every screenshot retaken against an invented demo library and theme showcases for both products.

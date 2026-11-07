@@ -58,8 +58,13 @@ const steps = [
     const source = root.querySelector<HTMLElement>('[data-copy-source]');
     if (!button || !source) return;
     button.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(source.textContent ?? '');
-      button.textContent = 'Copied';
+      try {
+        await navigator.clipboard.writeText(source.textContent ?? '');
+        button.textContent = 'Copied';
+      } catch {
+        // No clipboard outside a secure context, or permission denied.
+        button.textContent = 'Copy failed, select the text above';
+      }
       setTimeout(() => {
         button.textContent = 'Copy';
       }, 2000);

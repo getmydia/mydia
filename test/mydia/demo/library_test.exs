@@ -7,6 +7,7 @@ defmodule Mydia.Demo.LibraryTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Playback.Progress
+  alias Mydia.Settings.{LibraryPath, LibraryPaths}
 
   defp write_titles(tmp_dir, lines) do
     path = Path.join(tmp_dir, "titles.local")
@@ -65,6 +66,8 @@ defmodule Mydia.Demo.LibraryTest do
         assert item.metadata.backdrop_path =~ ~r{^/demo-.*-backdrop\.jpg$}
       end
 
+      # Every season of the stub catalog: 6 + 5 for the first show, 5 for the second.
+      assert episodes == 16
       assert episodes == Repo.aggregate(Episode, :count)
       refute Repo.exists?(from e in Episode, where: e.season_number == 0)
     end
@@ -88,6 +91,20 @@ defmodule Mydia.Demo.LibraryTest do
       missing = {:movie, Stub.missing_id()}
 
       assert {:error, {:fetch_failed, ^missing, _reason}} = seed(%{ctx | titles: titles})
+      assert {0, 0, 0, 0} = counts()
+    end
+
+    test "reuses demo library paths left over from an earlier run", ctx do
+      {:ok, _} = LibraryPaths.create_library_path(%{path: "/demo/movies", type: :movies})
+
+      assert {:ok, %{movies: 3}} = seed(ctx)
+      assert Repo.aggregate(from(l in LibraryPath, where: l.path == "/demo/movies"), :count) == 1
+    end
+
+    test "refuses a demo library path of the wrong type and writes nothing", ctx do
+      {:ok, _} = LibraryPaths.create_library_path(%{path: "/demo/tv", type: :movies})
+
+      assert {:error, {:library_path_conflict, "/demo/tv", :movies}} = seed(ctx)
       assert {0, 0, 0, 0} = counts()
     end
 

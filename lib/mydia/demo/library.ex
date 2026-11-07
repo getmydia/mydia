@@ -31,7 +31,7 @@ defmodule Mydia.Demo.Library do
   alias Mydia.Metadata
   alias Mydia.Playback
   alias Mydia.Repo
-  alias Mydia.Settings.LibraryPaths
+  alias Mydia.Settings.{LibraryPath, LibraryPaths}
 
   @default_titles ".demo-titles.local"
   @episode_seconds 2700
@@ -99,6 +99,7 @@ defmodule Mydia.Demo.Library do
              | {:titles_file, String.t(), File.posix()}
              | {:invalid_line, pos_integer(), String.t()}
              | {:fetch_failed, entry(), term()}
+             | {:library_path_conflict, String.t(), atom()}
              | term()}
   def seed(opts \\ []) do
     path = Keyword.get_lazy(opts, :titles, fn -> Path.expand(@default_titles, File.cwd!()) end)
@@ -204,10 +205,8 @@ defmodule Mydia.Demo.Library do
 
   defp write(user, fetched) do
     Repo.transaction(fn ->
-      {:ok, movies_path} =
-        LibraryPaths.create_library_path(%{path: "/demo/movies", type: :movies})
-
-      {:ok, tv_path} = LibraryPaths.create_library_path(%{path: "/demo/tv", type: :series})
+      movies_path = demo_library_path!("/demo/movies", :movies)
+      tv_path = demo_library_path!("/demo/tv", :series)
 
       {movie_entries, show_entries} = Enum.split_with(fetched, &match?({:movie, _}, &1.entry))
 
@@ -222,6 +221,22 @@ defmodule Mydia.Demo.Library do
         episodes: shows |> Enum.map(&length(&1.episodes)) |> Enum.sum()
       }
     end)
+  end
+
+  # A rerun after the demo media was deleted finds its library paths still
+  # configured: reuse them when the type matches, and refuse otherwise.
+  defp demo_library_path!(path, type) do
+    case Repo.get_by(LibraryPath, path: path) do
+      nil ->
+        {:ok, library_path} = LibraryPaths.create_library_path(%{path: path, type: type})
+        library_path
+
+      %LibraryPath{type: ^type} = library_path ->
+        library_path
+
+      %LibraryPath{type: other} ->
+        Repo.rollback({:library_path_conflict, path, other})
+    end
   end
 
   defp seed_movie({%{attrs: attrs}, index}, library_path) do

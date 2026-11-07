@@ -26,6 +26,19 @@ describe('findBrokenLinks', () => {
     expect(broken.join('\n')).not.toContain('/player#intro');
   });
 
+  it('ignores ids that appear only inside script or style text', () => {
+    const p = new Map([
+      [
+        'index.html',
+        '<a href="#install">i</a><a href="#real">r</a><div id="real"></div>' +
+          '<script>el.innerHTML = \'<div id="install"></div>\';</script>',
+      ],
+    ]);
+    const broken = findBrokenLinks(p, new Set(['index.html']), []);
+    expect(broken).toHaveLength(1);
+    expect(broken[0]).toContain('#install');
+  });
+
   it('accepts only known function routes, and never with a fragment', () => {
     const p = new Map([
       [

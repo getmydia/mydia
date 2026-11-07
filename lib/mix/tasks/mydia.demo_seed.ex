@@ -23,7 +23,10 @@ defmodule Mix.Tasks.Mydia.DemoSeed do
 
   @impl Mix.Task
   def run(args) do
-    {opts, _rest, _invalid} = OptionParser.parse(args, strict: [titles: :string])
+    # parse! raises on an unknown or malformed switch, so a misspelt --titles
+    # cannot fall through to the default list.
+    {opts, rest} = OptionParser.parse!(args, strict: [titles: :string])
+    if rest != [], do: Mix.raise("Unexpected arguments: #{Enum.join(rest, " ")}")
     Mix.Task.run("app.start")
 
     seed_opts =
@@ -60,6 +63,9 @@ defmodule Mix.Tasks.Mydia.DemoSeed do
 
   defp message({:fetch_failed, {kind, id}, reason}),
     do: "Fetching #{kind} #{id} failed; nothing was written: #{inspect(reason)}"
+
+  defp message({:library_path_conflict, path, type}),
+    do: "The library path #{path} already exists with type #{type}; remove it and rerun."
 
   defp message(reason), do: "Demo seed failed: #{inspect(reason)}"
 end

@@ -7,11 +7,10 @@ const path = require("path");
  * Called by screenshots.js with a logged-in page. The poster URLs come from
  * the app itself (the <img> srcs on the movie and TV listings), so nothing
  * here names a title or a URL. Each poster is resized to 360x540 and written
- * as site/src/assets/posters/poster-NN.jpg; earlier exports are removed first
- * so a smaller library leaves no stale files behind.
- *
- * sharp is loaded from site/node_modules, where the website already depends
- * on it, rather than added to the app's own asset dependencies.
+ * as site/src/assets/posters/poster-NN.jpg. Every poster is converted into a
+ * staging directory first; only once all succeed are the earlier exports
+ * removed and the new ones moved in, so a failed download leaves the existing
+ * set untouched and a smaller library leaves no stale files behind.
  */
 
 const POSTER_LIMIT = 30;
@@ -39,7 +38,7 @@ function interleave(lists) {
 }
 
 async function exportPosters(page, { baseUrl, outputDir }) {
-  const sharp = require(path.resolve(__dirname, "../site/node_modules/sharp"));
+  const sharp = require("sharp");
 
   const lists = [];
   for (const listing of LISTINGS) lists.push(await listingPosterUrls(page, baseUrl, listing));
@@ -49,19 +48,30 @@ async function exportPosters(page, { baseUrl, outputDir }) {
   }
 
   fs.mkdirSync(outputDir, { recursive: true });
-  for (const file of fs.readdirSync(outputDir)) {
-    if (/^poster-\d+\.jpg$/.test(file)) fs.rmSync(path.join(outputDir, file));
-  }
+  // Staged beside outputDir so the final renames stay on one filesystem.
+  const stagingDir = fs.mkdtempSync(path.join(path.dirname(outputDir), ".posters-staging-"));
+  try {
+    const names = [];
+    for (const [index, url] of urls.entries()) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Poster download failed (${response.status}): ${url}`);
+      const input = Buffer.from(await response.arrayBuffer());
+      const name = `poster-${String(index + 1).padStart(2, "0")}.jpg`;
+      await sharp(input)
+        .resize(WIDTH, HEIGHT, { fit: "cover" })
+        .jpeg({ quality: 80, mozjpeg: true })
+        .toFile(path.join(stagingDir, name));
+      names.push(name);
+    }
 
-  for (const [index, url] of urls.entries()) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Poster download failed (${response.status}): ${url}`);
-    const input = Buffer.from(await response.arrayBuffer());
-    const name = `poster-${String(index + 1).padStart(2, "0")}.jpg`;
-    await sharp(input)
-      .resize(WIDTH, HEIGHT, { fit: "cover" })
-      .jpeg({ quality: 80, mozjpeg: true })
-      .toFile(path.join(outputDir, name));
+    for (const file of fs.readdirSync(outputDir)) {
+      if (/^poster-\d+\.jpg$/.test(file)) fs.rmSync(path.join(outputDir, file));
+    }
+    for (const name of names) {
+      fs.renameSync(path.join(stagingDir, name), path.join(outputDir, name));
+    }
+  } finally {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
 
   console.log(`  ✓ Exported ${urls.length} posters to ${outputDir}`);

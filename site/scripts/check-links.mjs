@@ -27,8 +27,11 @@ function resolvePage(path, pages) {
   return null;
 }
 
+// Script and style bodies are raw text, not markup, so an id="..." inside one
+// names no element.
 function extractIds(html) {
-  return new Set([...html.matchAll(/\sid=["']([^"']+)["']/g)].map((m) => m[1]));
+  const markup = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+  return new Set([...markup.matchAll(/\sid=["']([^"']+)["']/g)].map((m) => m[1]));
 }
 
 function extractHrefs(html) {
