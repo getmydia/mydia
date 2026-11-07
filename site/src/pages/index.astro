@@ -1,12 +1,72 @@
 ---
 import Base from '../layouts/Base.astro';
 import Hero from '../components/Hero.astro';
-import Screenshots from '../components/Screenshots.astro';
+import ProductCard from '../components/ProductCard.astro';
 import LatestPosts from '../components/LatestPosts.astro';
+import playerHome from '../assets/screenshots/player-home.png';
+import serverHome from '../assets/screenshots/homepage.png';
+
+const together = [
+  { title: 'Remote streaming', body: 'Watch from anywhere, securely, with no port forwarding.' },
+  { title: 'Offline downloads', body: 'Save titles to your device, transcoded to fit.' },
+  { title: 'Casting', body: 'Send playback to your TV from the player.' },
+];
 ---
 
-<Base title="Mydia - Self-hosted media management">
-  <Hero />
-  <Screenshots />
+<Base
+  title="Mydia: a player for every server, and a server for your library"
+  description="Mydia Player plays your Plex, Jellyfin and Mydia Server libraries on every screen. Mydia Server organizes your movies and TV and automates downloads."
+>
+  <Hero
+    title="Your media,"
+    accent="played and managed your way"
+    subtitle="A player for every server you use, and a server that runs your library."
+  />
+
+  <section class="pb-20 px-4">
+    <div class="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
+      <ProductCard
+        id="player"
+        name="Mydia Player"
+        image={playerHome}
+        imageAlt="Mydia Player home screen on a phone"
+        bullets={[
+          'Works with Plex, Jellyfin and Mydia Server',
+          'Offline downloads',
+          'On every platform',
+        ]}
+        primary={{ label: 'Download', href: '/download' }}
+        secondary={{ label: 'Learn more', href: '/player' }}
+      />
+      <ProductCard
+        name="Mydia Server"
+        image={serverHome}
+        imageAlt="Mydia Server dashboard"
+        bullets={[
+          'Organizes your library and fetches metadata',
+          "Finds and downloads what you're missing",
+          'Remote access without port forwarding',
+        ]}
+        primary={{ label: 'Get started', href: '/server#install' }}
+        secondary={{ label: 'Learn more', href: '/server' }}
+      />
+    </div>
+  </section>
+
+  <section id="together" class="py-16 px-4 bg-base-200/50 scroll-mt-16">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl sm:text-3xl font-bold mb-10">Better together</h2>
+      <div class="grid sm:grid-cols-3 gap-6 mb-8">
+        {together.map(item => (
+          <div>
+            <h3 class="font-semibold mb-1">{item.title}</h3>
+            <p class="text-sm text-base-content/60">{item.body}</p>
+          </div>
+        ))}
+      </div>
+      <a href="/server" class="link link-primary text-sm">See what Mydia Server adds</a>
+    </div>
+  </section>
+
   <LatestPosts />
 </Base>

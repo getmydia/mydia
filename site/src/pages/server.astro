@@ -1,0 +1,55 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import Screenshots from '../components/Screenshots.astro';
+import ThemeShowcase from '../components/ThemeShowcase.astro';
+import Install from '../components/Install.astro';
+import CrossSell from '../components/CrossSell.astro';
+import { serverThemes } from '../data/themes';
+
+const features = [
+  { icon: 'film', title: 'Library and metadata', description: 'Organizes your movies and TV, and fills in posters, descriptions and episode details for you.' },
+  { icon: 'sparkles', title: 'Automated downloads', description: 'Finds what is missing and grabs it, with quality profiles and automatic upgrades when something better appears.' },
+  { icon: 'download', title: 'Your clients and indexers', description: 'Works with qBittorrent, SABnzbd, Prowlarr and debrid providers.' },
+  { icon: 'users', title: 'Multi-user', description: 'Give family and friends their own accounts, with requests and single sign-on.' },
+  { icon: 'globe', title: 'Remote access', description: 'Reach your library from anywhere with Mydia Player. No port forwarding, no VPN.' },
+  { icon: 'sliders', title: 'Configure it your way', description: 'Set everything in the web interface, or in files and environment variables.' },
+];
+---
+
+<Base
+  title="Mydia Server: self-hosted library and automation"
+  description="Mydia Server organizes your movies and TV, finds what's missing, and streams it to Mydia Player anywhere. Self-hosted with Docker."
+>
+  <Hero
+    badge="Mydia Server"
+    title="Your library, on autopilot."
+    subtitle="A self-hosted server that organizes your movies and TV, finds what's missing, and streams it to Mydia Player anywhere."
+    primary={{ label: 'Get started', href: '#install' }}
+    secondary={{ label: 'Docs', href: 'https://docs.mydia.dev/latest/', external: true }}
+  />
+
+  <Features
+    title="Everything your library needs"
+    subtitle="From the first scan to the next episode, handled."
+    items={features}
+  />
+
+  <Screenshots />
+
+  <ThemeShowcase
+    id="themes"
+    heading="14 themes, light and dark, or follow your system"
+    themes={serverThemes}
+    aspect="desktop"
+  />
+
+  <Install />
+
+  <CrossSell
+    text="Watch it with Mydia Player."
+    href="/player"
+    label="Meet Mydia Player"
+  />
+</Base>
