@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-enum SourceKind { mydia, plex, stash, jellyfin }
+enum SourceKind { mydia, plex, stash, jellyfin, files }
 
 /// How a server is kept from whoever else uses this device. `locked` shows
 /// it with a badge and asks to authenticate on open; `hidden` leaves it out

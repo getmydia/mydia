@@ -13,6 +13,7 @@ import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
 import '../../domain/sources/ranked_item.dart';
 import '../remote/remote_roster.dart';
+import 'files/media_names.dart' show TmdbCandidate;
 
 abstract interface class WatchedState {
   Future<void> setWatched(ItemRef ref, bool watched);
@@ -145,6 +146,22 @@ abstract interface class FavoritesListing {
 abstract interface class MediaInfo {
   /// One entry per file of a movie or episode. Empty when it has none.
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref);
+}
+
+/// Choosing by hand which TMDB title an item is (Fix match). A source
+/// implementing this also lists [SourceCapability.matchEditing].
+abstract interface class MatchEditing {
+  /// TMDB titles of [ref]'s kind (movies for a movie or a loose file, shows
+  /// for a show) matching [query].
+  Future<List<TmdbCandidate>> searchMatches(
+    ItemRef ref,
+    String query, {
+    int? year,
+  });
+
+  /// Pins [ref] to [choice]; null unmatches it, which moves its files to
+  /// Folders.
+  Future<void> setMatch(ItemRef ref, TmdbCandidate? choice);
 }
 
 /// Other players signed into the same server, and this device's entry in

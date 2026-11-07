@@ -16,6 +16,7 @@ import 'core/migration/legacy_mydia_migration.dart';
 import 'core/migration/legacy_storage_purge.dart';
 import 'core/playback/playback_progress_store.dart';
 import 'core/config/web_config.dart';
+import 'core/sources/files/files_providers.dart';
 import 'core/sources/mydia/web_config_account.dart';
 import 'core/sources/store/source_secrets.dart';
 import 'core/sources/store/source_store.dart';
@@ -229,6 +230,15 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
         // `initHiveForFlutter` hard-wires it to the user's Documents folder.
         // See `core/storage/app_hive.dart`.
         await initAppHive();
+        // Files sources build synchronously over these. A failure leaves
+        // files libraries unusable, never the rest of the app.
+        if (!kIsWeb) {
+          try {
+            await openFilesLibraryBoxes();
+          } catch (e) {
+            debugPrint('[Startup] Files library boxes failed to open: $e');
+          }
+        }
       },
       fetchLog: HiveFetchLog.open,
       sourceCache: HiveSourceCache.open,

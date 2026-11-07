@@ -197,6 +197,7 @@ class _AccountCard extends ConsumerWidget {
                   SourceKind.stash => context.l10n.sourcesAccountStash,
                   SourceKind.jellyfin => context.l10n.sourcesAccountJellyfin,
                   SourceKind.mydia => context.l10n.sourcesAccountMydia,
+                  SourceKind.files => context.l10n.sourcesAccountFiles,
                 },
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
@@ -267,7 +268,8 @@ class _AccountCard extends ConsumerWidget {
                           SourceKind.jellyfin =>
                             context.l10n.sourcesReauthJellyfin,
                           SourceKind.stash ||
-                          SourceKind.mydia =>
+                          SourceKind.mydia ||
+                          SourceKind.files =>
                             context.l10n.sourcesReauthKey,
                         }),
                 ),

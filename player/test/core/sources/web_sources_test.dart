@@ -17,6 +17,7 @@ import 'package:player/core/sources/store/source_store.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/no_downloads.dart';
+import 'files/files_fixture.dart' show filesLocalRecord;
 import 'store/source_json_test.dart' show plexRecord;
 
 MydiaWebConfig _config({
@@ -84,6 +85,14 @@ void main() {
   test('only Mydia is allowed on web', () {
     expect(sourceKindAllowedOnWeb(SourceKind.mydia), isTrue);
     expect(sourceKindAllowedOnWeb(SourceKind.plex), isFalse);
+    expect(sourceKindAllowedOnWeb(SourceKind.files), isFalse);
+  });
+
+  test('web drops files libraries', () async {
+    await store.putAccount(filesLocalRecord);
+    final c = _container(store, storage, isWeb: true);
+    final snapshot = await c.read(sourceRecordsProvider.future);
+    expect(snapshot.accounts, isEmpty);
   });
 
   test('web keeps Mydia accounts and drops third-party ones', () async {

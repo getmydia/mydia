@@ -30,6 +30,24 @@ String episodeId(String base, int season, int episode) =>
 /// The id of a file that belongs to no matched group.
 String unmatchedFileId(String fileKey) => 'f$fileKey';
 
+/// The library listing, root by root, the files no movie or show claims.
+const kFilesFoldersLibraryId = 'folders';
+
+/// A directory of the Folders library: `d<rootId>` for a root, and
+/// `d<rootId>/<dir>` for [dir], relative to that root, below it.
+String folderId(String rootId, [String dir = '']) =>
+    dir.isEmpty ? 'd$rootId' : 'd$rootId/$dir';
+
+/// Null when [id] is not a [folderId].
+({String rootId, String dir})? parseFolderId(String id) {
+  if (id.length < 2 || !id.startsWith('d')) return null;
+  final rest = id.substring(1);
+  final slash = rest.indexOf('/');
+  if (slash < 0) return (rootId: rest, dir: '');
+  if (slash == 0) return null;
+  return (rootId: rest.substring(0, slash), dir: rest.substring(slash + 1));
+}
+
 /// An id taken apart.
 class FilesId {
   const FilesId({

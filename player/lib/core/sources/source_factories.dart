@@ -18,6 +18,7 @@ import 'jellyfin/jellyfin_identity.dart';
 import 'jellyfin/jellyfin_media_source.dart';
 import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
+import 'files/files_providers.dart';
 import 'media_source.dart';
 import 'mydia/mydia_gql_transport.dart';
 import 'mydia/mydia_client.dart';
@@ -45,6 +46,8 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
       SourceKind.stash => _stash(ref, source),
       SourceKind.jellyfin => _jellyfin(ref, source),
       SourceKind.mydia => buildMydiaSource(ref, source),
+      SourceKind.files => buildFilesSource(ref, source,
+          onReauthNeeded: () => _flagReauth(ref, source)),
     };
 
 /// A credential read once from secure storage and held until the server

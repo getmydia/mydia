@@ -1,0 +1,121 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/files/files_providers.dart';
+import 'package:player/core/sources/files/files_scan_controller.dart';
+import 'package:player/core/sources/files/index/file_library_index.dart';
+import 'package:player/core/sources/files/media_names.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_store.dart';
+
+import '../../../test_utils/no_downloads.dart';
+import 'fake_backend.dart';
+import 'fake_media_names.dart';
+import 'files_fixture.dart';
+
+Future<void> _settle() async {
+  for (var i = 0; i < 50; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
+void main() {
+  final now = DateTime.utc(2026, 6, 1, 12);
+  late FilesFixture f;
+  late FakeBackend backend;
+
+  Future<ProviderContainer> container() async {
+    final store = InMemorySourceStore();
+    await store.putAccount(filesLocalRecord);
+    final c = ProviderContainer(overrides: [
+      ...noHiveOverrides,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      filesIndexBoxProvider.overrideWithValue(f.box),
+      filesProgressStoreProvider.overrideWithValue(f.progress),
+      mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+      relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+      filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
+      filesClockProvider.overrideWithValue(() => now),
+    ]);
+    addTearDown(c.dispose);
+    await c.read(sourceRecordsProvider.future);
+    return c;
+  }
+
+  setUp(() async {
+    f = await FilesFixture.create(seed: false);
+    await f.index.putRoot(const LibraryRoot(
+      id: 'rm',
+      path: '/media/films',
+      kind: FilesLibraryKind.movies,
+      title: 'Films',
+    ));
+    backend = FakeBackend({
+      '/media/films/Amber Tide (2019).mkv': 10,
+      '/media/films/Low Orbit (2022).mkv': 20,
+    });
+  });
+
+  test('rescan_on_open_only_when_older_than_six_hours', () async {
+    // Shares the index the container builds, so the scan writes are seen.
+    Future<FileLibraryIndex> open(DateTime? lastScan) async {
+      backend.listed.clear();
+      final c = await container();
+      final index = c.read(filesIndexProvider(filesLocalSource.account.id));
+      if (lastScan != null) await index.setLastScanAt(lastScan);
+      expect(c.read(mediaSourceProvider(filesLocalSource.id)),
+          isA<FilesMediaSource>());
+      await _settle();
+      return index;
+    }
+
+    await open(now.subtract(const Duration(hours: 2)));
+    expect(backend.listed, isEmpty);
+
+    final index = await open(now.subtract(const Duration(hours: 7)));
+    expect(backend.listed, ['/media/films']);
+    expect(index.lastScanAt(), now);
+    expect(index.files(), hasLength(2));
+  });
+
+  test('a_never_scanned_library_scans_on_open', () async {
+    final c = await container();
+    c.read(mediaSourceProvider(filesLocalSource.id));
+    await _settle();
+    expect(backend.listed, ['/media/films']);
+  });
+
+  test('scan_progress_is_exposed', () async {
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    final states = <ScanState>[];
+    c.listen(filesScanProvider(id), (_, s) => states.add(s),
+        fireImmediately: true);
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(states.first.running, isFalse);
+    expect(states.any((s) => s.running && s.total == 2 && s.done == 2), isTrue);
+    expect(states.last.running, isFalse);
+    expect((states.last.done, states.last.total), (2, 2));
+    expect(states.last.error, isNull);
+  });
+
+  test('a_root_that_cannot_be_read_is_reported_and_others_still_scan',
+      () async {
+    await f.index.putRoot(const LibraryRoot(
+      id: 'rgone',
+      path: '/media/gone',
+      kind: FilesLibraryKind.movies,
+      title: 'Gone',
+    ));
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+    await c.read(filesScanProvider(id).notifier).rescan();
+    final state = c.read(filesScanProvider(id));
+    expect(state.error, isA<Object>());
+    expect(state.total, 2);
+  });
+}
