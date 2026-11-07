@@ -30,6 +30,28 @@ class ParsedName {
 
   /// Files describing the same movie or show share a key.
   final String groupKey;
+
+  Map<String, dynamic> toMap() => {
+        'path': path,
+        'isEpisode': isEpisode,
+        'title': title,
+        'groupKey': groupKey,
+        'year': year,
+        'season': season,
+        'episode': episode,
+        'episodeEnd': episodeEnd,
+      };
+
+  factory ParsedName.fromMap(Map<dynamic, dynamic> m) => ParsedName(
+        path: m['path'] as String,
+        isEpisode: m['isEpisode'] as bool,
+        title: m['title'] as String,
+        groupKey: m['groupKey'] as String,
+        year: m['year'] as int?,
+        season: m['season'] as int?,
+        episode: m['episode'] as int?,
+        episodeEnd: m['episodeEnd'] as int?,
+      );
 }
 
 class TmdbCandidate {

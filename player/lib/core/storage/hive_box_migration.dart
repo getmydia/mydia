@@ -48,6 +48,7 @@ const kMydiaHiveBoxes = <String>[
   'collection_sync',
   'source_accounts',
   'source_cache',
+  'files_index',
   'video_scaling',
 ];
 
