@@ -1,10 +1,15 @@
 ---
+import { Image } from 'astro:assets';
+import homepage from '../assets/screenshots/homepage.png';
+import tvShows from '../assets/screenshots/tv-shows.png';
+import movies from '../assets/screenshots/movies.png';
+import calendar from '../assets/screenshots/calendar.png';
+
 const screenshots = [
-  { src: '/img/homepage.png', alt: 'Mydia homepage dashboard', label: 'Dashboard' },
-  { src: '/img/tv-shows.png', alt: 'TV shows library', label: 'TV Shows' },
-  { src: '/img/movies.png', alt: 'Movies library', label: 'Movies' },
-  { src: '/img/calendar.png', alt: 'Episode calendar', label: 'Calendar' },
-  { src: '/img/series.png', alt: 'Series detail with seasons and episodes', label: 'Series' },
+  { src: homepage, alt: 'Mydia Server dashboard', label: 'Dashboard' },
+  { src: tvShows, alt: 'TV shows library', label: 'TV Shows' },
+  { src: movies, alt: 'Movies library', label: 'Movies' },
+  { src: calendar, alt: 'Episode calendar', label: 'Calendar' },
 ];
 ---
 
@@ -19,23 +24,25 @@ const screenshots = [
 
     <!-- Featured screenshot -->
     <div class="mb-8 rounded-xl overflow-hidden border border-base-300 shadow-2xl">
-      <img
+      <Image
         src={screenshots[0].src}
         alt={screenshots[0].alt}
-        class="w-full"
+        width={1600}
+        class="w-full h-auto"
         loading="lazy"
       />
     </div>
 
     <!-- Thumbnail grid -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {screenshots.slice(1).map(screenshot => (
         <div class="group">
           <div class="rounded-lg overflow-hidden border border-base-300 hover:border-primary/30 transition-colors shadow-lg">
-            <img
+            <Image
               src={screenshot.src}
               alt={screenshot.alt}
-              class="w-full"
+              width={800}
+              class="w-full h-auto"
               loading="lazy"
             />
           </div>

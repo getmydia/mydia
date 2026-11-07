@@ -1,18 +1,124 @@
 ---
 import Base from '../layouts/Base.astro';
 import Hero from '../components/Hero.astro';
-import Features from '../components/Features.astro';
-import Screenshots from '../components/Screenshots.astro';
-import Player from '../components/Player.astro';
-import GetStarted from '../components/GetStarted.astro';
+import ProductCard from '../components/ProductCard.astro';
 import LatestPosts from '../components/LatestPosts.astro';
+import { Image } from 'astro:assets';
+import { poster } from '../data/posters';
+import playerHome from '../assets/screenshots/player-home.png';
+import playerDesktop from '../assets/screenshots/player-desktop.png';
+import serverHome from '../assets/screenshots/homepage.png';
+
+const fan = [
+  { poster: 1, class: '-rotate-12 -translate-x-[7.5rem] translate-y-6' },
+  { poster: 3, class: 'rotate-0 -translate-y-1' },
+  { poster: 5, class: 'rotate-12 translate-x-[7.5rem] translate-y-6' },
+];
+
+const together = [
+  { title: 'Remote streaming', body: 'Watch from anywhere, securely, with no port forwarding.' },
+  { title: 'Offline downloads', body: 'Save titles to your device, transcoded to fit.' },
+  { title: 'Casting', body: 'Send playback to your TV from the player.' },
+];
 ---
 
-<Base title="Mydia - Self-hosted media management">
-  <Hero />
-  <Features />
-  <Screenshots />
-  <Player />
-  <GetStarted />
+<Base
+  title="Mydia: a player for every server, and a server for your library"
+  description="Mydia Player plays your Plex, Jellyfin and Mydia Server libraries on every screen. Mydia Server organizes your movies and TV and automates downloads."
+>
+  <Hero
+    title="Your media,"
+    accent="played and managed your way"
+    subtitle="A player for every server you use, and a server that runs your library."
+    wall={{ rows: 4, height: '40rem' }}
+  />
+
+  <section class="px-4 -mt-16 sm:-mt-20 pb-24 relative overflow-x-clip">
+    <div class="max-w-6xl mx-auto relative isolate">
+      <div class="shot-glow"></div>
+      <div class="rounded-2xl overflow-hidden border border-base-content/15 bg-base-300 shadow-2xl shadow-black/60">
+        <div class="flex items-center gap-1.5 px-4 py-2.5 bg-base-200 border-b border-base-content/10">
+          <span class="w-3 h-3 rounded-full bg-error/70"></span>
+          <span class="w-3 h-3 rounded-full bg-warning/70"></span>
+          <span class="w-3 h-3 rounded-full bg-success/70"></span>
+        </div>
+        <Image
+          src={playerDesktop}
+          alt="Mydia Player on a desktop, showing the library home screen"
+          width={1600}
+          class="w-full h-auto"
+        />
+      </div>
+    </div>
+  </section>
+
+  <section class="pb-24 px-4">
+    <div class="max-w-6xl mx-auto grid md:grid-cols-2 gap-8">
+      <ProductCard
+        id="player"
+        name="Mydia Player"
+        bullets={[
+          'Works with Plex, Jellyfin and Mydia Server',
+          'Offline downloads',
+          'On every platform',
+        ]}
+        primary={{ label: 'Download', href: '/download' }}
+        secondary={{ label: 'Learn more', href: '/player' }}
+      >
+        <div slot="media" class="absolute inset-0">
+          {fan.map((p) => (
+            <Image
+              src={poster(p.poster)}
+              alt=""
+              width={320}
+              loading="lazy"
+              class={`absolute left-1/2 top-8 -ml-[4.5rem] w-36 rounded-lg shadow-2xl shadow-black/60 ${p.class}`}
+            />
+          ))}
+          <div class="absolute left-1/2 -translate-x-1/2 top-24 w-48 rounded-[1.75rem] border-4 border-base-content/25 bg-base-300 p-1 shadow-2xl shadow-black/70">
+            <div class="rounded-[1.4rem] overflow-hidden">
+              <Image src={playerHome} alt="Mydia Player home screen on a phone" width={480} class="w-full h-auto" loading="lazy" />
+            </div>
+          </div>
+        </div>
+      </ProductCard>
+      <ProductCard
+        name="Mydia Server"
+        bullets={[
+          'Organizes your library and fetches metadata',
+          "Finds and downloads what you're missing",
+          'Remote access without port forwarding',
+        ]}
+        primary={{ label: 'Get started', href: '/server#install' }}
+        secondary={{ label: 'Learn more', href: '/server' }}
+      >
+        <div slot="media" class="absolute inset-0">
+          <Image
+            src={serverHome}
+            alt="Mydia Server dashboard"
+            width={1400}
+            loading="lazy"
+            class="absolute top-10 left-8 w-[165%] max-w-none rounded-tl-xl border border-base-content/15 shadow-2xl shadow-black/60"
+          />
+        </div>
+      </ProductCard>
+    </div>
+  </section>
+
+  <section id="together" class="py-16 px-4 bg-base-200/50 scroll-mt-16">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl sm:text-3xl font-bold mb-10">Better together</h2>
+      <div class="grid sm:grid-cols-3 gap-6 mb-8">
+        {together.map(item => (
+          <div>
+            <h3 class="font-semibold mb-1">{item.title}</h3>
+            <p class="text-sm text-base-content/60">{item.body}</p>
+          </div>
+        ))}
+      </div>
+      <a href="/server" class="link link-primary text-sm">See what Mydia Server adds</a>
+    </div>
+  </section>
+
   <LatestPosts />
 </Base>

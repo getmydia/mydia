@@ -181,3 +181,7 @@ dryrun-live/
 dryrun-dest/
 repofiles/
 bench/cardigann/data/
+
+# The demo seed's local title list (mix mydia.demo_seed). Real titles stay out
+# of the repository.
+/.demo-titles.local
