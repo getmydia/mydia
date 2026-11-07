@@ -13,6 +13,7 @@ import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
+import '../../widgets/files/experimental_badge.dart';
 import 'files_library_kind_picker.dart';
 
 /// Whether this platform can add a folder on this device: Linux, Windows
@@ -86,6 +87,9 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
             padding: const EdgeInsets.all(24),
             shrinkWrap: true,
             children: [
+              const FilesExperimentalNotice(
+                  key: Key('add-folder-experimental')),
+              const SizedBox(height: 16),
               OutlinedButton.icon(
                 key: const Key('add-folder-choose'),
                 autofocus: true,

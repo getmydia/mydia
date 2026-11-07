@@ -11,6 +11,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
+import 'package:player/presentation/widgets/files/experimental_badge.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 
@@ -67,6 +68,31 @@ void main() {
     final mydia =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
     expect(mydia.enabled, isTrue);
+  });
+
+  testWidgets('Folder and WebDAV are marked experimental', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: false, foldersSupported: true),
+      ),
+    ));
+    for (final key in ['add-source-folder', 'add-source-webdav']) {
+      expect(
+          find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(ExperimentalBadge)),
+          findsOneWidget);
+    }
+    for (final key in ['add-source-plex', 'add-source-mydia']) {
+      expect(
+          find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(ExperimentalBadge)),
+          findsNothing);
+    }
   });
 
   testWidgets('with a Mydia account, the tile is enabled and adds another',
