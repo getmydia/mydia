@@ -1,36 +1,11 @@
 ---
-const features = [
-  {
-    title: 'Media Library',
-    description: 'Organize your movies and TV shows with automatic file detection and library management.',
-    icon: 'film',
-  },
-  {
-    title: 'Automatic Metadata',
-    description: 'Fetches artwork, descriptions, ratings, and episode data from TVDB and TMDB automatically.',
-    icon: 'sparkles',
-  },
-  {
-    title: 'P2P Remote Access',
-    description: 'Stream your media from anywhere with decentralized peer-to-peer connectivity. No port forwarding needed.',
-    icon: 'globe',
-  },
-  {
-    title: 'Self-Hosted',
-    description: 'Run on your own hardware. Your data stays yours with complete privacy and control.',
-    icon: 'server',
-  },
-  {
-    title: 'Episode Tracking',
-    description: 'Track seasons, episodes, and watch progress across your entire TV collection.',
-    icon: 'list',
-  },
-  {
-    title: 'Docker Deploy',
-    description: 'Get up and running in minutes with a single Docker Compose file. Zero configuration hassle.',
-    icon: 'box',
-  },
-];
+interface Props {
+  title: string;
+  subtitle: string;
+  items: { title: string; description: string; icon: string }[];
+}
+
+const { title, subtitle, items } = Astro.props;
 
 const iconPaths: Record<string, string> = {
   film: 'M7 4v16M17 4v16M3 8h4m6 0h4m2 0h4M3 12h18M3 16h4m6 0h4m2 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z',
@@ -45,13 +20,13 @@ const iconPaths: Record<string, string> = {
 <section class="py-20 px-4 bg-base-200/50">
   <div class="max-w-6xl mx-auto">
     <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">
-      Everything you need
+      {title}
     </h2>
     <p class="text-base-content/60 text-center mb-14 max-w-xl mx-auto">
-      A complete media management solution built for self-hosters.
+      {subtitle}
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {features.map(feature => (
+      {items.map(feature => (
         <div class="card bg-base-100 border border-base-300 hover:border-primary/30 transition-colors">
           <div class="card-body">
             <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">

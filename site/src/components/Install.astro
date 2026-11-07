@@ -1,0 +1,68 @@
+---
+import { composeYaml } from '../data/compose';
+
+const steps = [
+  {
+    title: 'Generate your secrets',
+    body: 'Run openssl rand -base64 48 twice, once for SECRET_KEY_BASE and once for GUARDIAN_SECRET_KEY.',
+  },
+  {
+    title: 'Create the file',
+    body: 'Save the Compose file below as docker-compose.yml and point the media paths at your library.',
+  },
+  {
+    title: 'Start Mydia Server',
+    body: 'Run docker compose up -d, then open http://localhost:4000.',
+  },
+];
+---
+
+<section id="install" class="py-20 px-4 scroll-mt-16">
+  <div class="max-w-3xl mx-auto">
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">Get started in minutes</h2>
+    <p class="text-base-content/60 text-center mb-10 max-w-xl mx-auto">
+      Deploy Mydia Server with Docker Compose. Point it at your media and you're done.
+    </p>
+
+    <ol class="space-y-4 mb-8">
+      {steps.map((step, i) => (
+        <li class="flex gap-4">
+          <span class="w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+          <div>
+            <h3 class="font-semibold">{step.title}</h3>
+            <p class="text-base-content/60 text-sm">{step.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+
+    <div class="relative" data-install-code>
+      <button type="button" class="btn btn-sm btn-ghost absolute top-2 right-2" data-copy-button>Copy</button>
+      <pre class="bg-base-300 rounded-xl p-4 pr-20 overflow-x-auto text-sm"><code data-copy-source>{composeYaml}</code></pre>
+    </div>
+
+    <div class="text-center mt-8">
+      <a
+        href="https://docs.mydia.dev/latest/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-primary"
+      >Full guide</a>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-install-code]').forEach((root) => {
+    const button = root.querySelector<HTMLButtonElement>('[data-copy-button]');
+    const source = root.querySelector<HTMLElement>('[data-copy-source]');
+    if (!button || !source) return;
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(source.textContent ?? '');
+      button.textContent = 'Copied';
+      setTimeout(() => {
+        button.textContent = 'Copy';
+      }, 2000);
+    });
+  });
+</script>

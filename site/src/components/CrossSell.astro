@@ -1,0 +1,16 @@
+---
+interface Props {
+  text: string;
+  href: string;
+  label: string;
+}
+
+const { text, href, label } = Astro.props;
+---
+
+<section class="py-16 px-4">
+  <div class="max-w-3xl mx-auto rounded-2xl border border-base-300 bg-base-200/50 p-8 text-center">
+    <p class="text-lg mb-5">{text}</p>
+    <a href={href} class="btn btn-primary">{label}</a>
+  </div>
+</section>

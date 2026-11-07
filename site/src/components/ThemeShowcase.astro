@@ -1,0 +1,113 @@
+---
+import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import type { ThemeShot } from '../data/themes';
+
+interface Props {
+  id: string;
+  heading: string;
+  subheading?: string;
+  themes: ThemeShot[];
+  aspect: 'desktop' | 'phone';
+}
+
+const { id, heading, subheading, themes, aspect } = Astro.props;
+
+const modules = import.meta.glob<{ default: ImageMetadata }>('../assets/screenshots/*.png', { eager: true });
+
+function resolve(filename: string): ImageMetadata {
+  const mod = modules[`../assets/screenshots/${filename}`];
+  if (!mod) throw new Error(`ThemeShowcase "${id}": screenshot ${filename} is missing from src/assets/screenshots/`);
+  return mod.default;
+}
+
+const shots = await Promise.all(
+  themes.map(async (theme) => {
+    const filename = aspect === 'phone' ? theme.image.replace(/\.png$/, '-phone.png') : theme.image;
+    const optimized = await getImage({
+      src: resolve(filename),
+      format: 'webp',
+      width: aspect === 'phone' ? 900 : 1600,
+    });
+    return { theme, optimized };
+  }),
+);
+---
+
+<section id={id} class="py-20 px-4 scroll-mt-16" data-theme-showcase>
+  <div class="max-w-6xl mx-auto">
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">{heading}</h2>
+    {subheading && <p class="text-base-content/60 text-center mb-10 max-w-xl mx-auto">{subheading}</p>}
+
+    <div class:list={['mb-8', !subheading && 'mt-10']}>
+      {aspect === 'phone' ? (
+        <div class="flex justify-center">
+          <div class="relative">
+            <div class="w-[260px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
+              <div class="w-full rounded-[1.5rem] overflow-hidden">
+                {shots.map(({ theme, optimized }, i) => (
+                  <img
+                    src={optimized.src}
+                    width={optimized.attributes.width}
+                    height={optimized.attributes.height}
+                    alt={`${theme.label} theme`}
+                    class="w-full"
+                    data-theme-image={theme.id}
+                    loading={i === 0 ? undefined : 'lazy'}
+                    hidden={i === 0 ? undefined : true}
+                  />
+                ))}
+              </div>
+            </div>
+            <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
+          </div>
+        </div>
+      ) : (
+        <div class="rounded-xl overflow-hidden border border-base-300 shadow-2xl">
+          {shots.map(({ theme, optimized }, i) => (
+            <img
+              src={optimized.src}
+              width={optimized.attributes.width}
+              height={optimized.attributes.height}
+              alt={`${theme.label} theme`}
+              class="w-full"
+              data-theme-image={theme.id}
+              loading={i === 0 ? undefined : 'lazy'}
+              hidden={i === 0 ? undefined : true}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div class="flex flex-wrap justify-center gap-2">
+      {themes.map((theme, i) => (
+        <button
+          type="button"
+          class="btn btn-sm gap-2"
+          data-theme-id={theme.id}
+          aria-pressed={i === 0 ? 'true' : 'false'}
+        >
+          <span class="inline-block w-3 h-3 rounded-full border border-base-content/30" style={`background:${theme.swatch}`}></span>
+          {theme.label}
+        </button>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-theme-showcase]').forEach((root) => {
+    const buttons = root.querySelectorAll<HTMLButtonElement>('button[data-theme-id]');
+    const images = root.querySelectorAll<HTMLImageElement>('img[data-theme-image]');
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const selected = button.dataset.themeId;
+        buttons.forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        images.forEach((img) => {
+          img.hidden = img.dataset.themeImage !== selected;
+        });
+      });
+    });
+  });
+</script>
