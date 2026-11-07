@@ -2,6 +2,7 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Downloads.Client.{Error, QBittorrent}
+  alias Mydia.Downloads.Client.QBittorrent.SessionCache
 
   @config %{
     type: :qbittorrent,
@@ -366,6 +367,15 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     setup do
       bypass = Bypass.open()
       config = put_in(bypass_config(bypass), [:options, :session_cache], true)
+
+      # Another test here could be given this Bypass port later.
+      on_exit(fn ->
+        for user <- ["admin", "other"] do
+          user_config = %{config | username: user}
+          SessionCache.delete(user_config, SessionCache.get(user_config))
+        end
+      end)
+
       {:ok, bypass: bypass, config: config}
     end
 
