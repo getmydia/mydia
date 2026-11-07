@@ -75,6 +75,8 @@ class _UnnamedLibrariesSource extends FakeMediaSource {
 }
 
 class _FilesSource extends FakeMediaSource {
+  _FilesSource({super.movieCount});
+
   @override
   SourceKind get kind => SourceKind.files;
 }
@@ -86,7 +88,64 @@ class _Scanning extends FilesScanController {
   ScanState build() => const ScanState(running: true, done: 1, total: 4);
 }
 
+class _ToggledScan extends FilesScanController {
+  _ToggledScan(super.sourceId);
+
+  @override
+  ScanState build() => const ScanState();
+
+  void set(ScanState next) => state = next;
+}
+
 void main() {
+  testWidgets('the list keeps its scroll when the scan banner comes and goes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final container = ProviderContainer(overrides: [
+      mediaSourceProvider(fakeSourceId)
+          .overrideWithValue(_FilesSource(movieCount: 60)),
+      coreSettingsServiceProvider
+          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+      sourceArtworkProvider.overrideWith((ref, key) async => null),
+      filesScanProvider(fakeSourceId)
+          .overrideWith(() => _ToggledScan(fakeSourceId)),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.byType(Scrollable).first;
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(scrollable).position;
+    position().jumpTo(400);
+    await tester.pump();
+    expect(position().pixels, 400);
+
+    final scan = container.read(filesScanProvider(fakeSourceId).notifier)
+        as _ToggledScan;
+    scan.set(const ScanState(running: true, done: 1, total: 4));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('files-scan-banner')), findsOneWidget);
+    expect(position().pixels, 400);
+
+    scan.set(const ScanState());
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('files-scan-banner')), findsNothing);
+    expect(position().pixels, 400);
+  });
+
   testWidgets('the scan banner sits above the first row, not over it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));

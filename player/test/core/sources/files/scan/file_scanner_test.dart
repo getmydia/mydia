@@ -277,11 +277,13 @@ void main() {
     final locked = Directory('${tmp.path}/locked')..createSync();
     File('${tmp.path}/Open Film (2001).mkv').writeAsBytesSync([1]);
     File('${locked.path}/Hidden Film (2002).mkv').writeAsBytesSync([1]);
-    await Process.run('chmod', ['000', locked.path]);
     addTearDown(() async {
       await Process.run('chmod', ['-R', 'u+rwx', tmp.path]);
       await tmp.delete(recursive: true);
     });
+    final chmod = await Process.run('chmod', ['000', locked.path]);
+    expect(chmod.exitCode, 0,
+        reason: 'could not lock the folder: ${chmod.stderr}');
     final local = LibraryRoot(
       id: 'rl',
       path: tmp.path,

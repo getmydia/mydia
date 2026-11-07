@@ -113,6 +113,10 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   _ViewMode _viewMode = _ViewMode.grid;
   bool _seeded = false;
 
+  /// Keeps the list's state (scroll, focus) when [_withScanBanner] changes
+  /// the widget that wraps it.
+  final _contentKey = GlobalKey();
+
   /// A plain library remembers its sort across visits; a saved filter's own
   /// query wins and is never stored.
   bool get _remembers => widget.initialQuery == null;
@@ -402,7 +406,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     final source = ref.watch(mediaSourceProvider(sourceId));
     if (source?.kind != SourceKind.files ||
         !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)))) {
-      return content(top);
+      return KeyedSubtree(key: _contentKey, child: content(top));
     }
     return Column(
       children: [
@@ -411,7 +415,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           color: context.palette.surface,
           child: FilesScanBanner(sourceId: sourceId),
         ),
-        Expanded(child: content(0)),
+        Expanded(child: KeyedSubtree(key: _contentKey, child: content(0))),
       ],
     );
   }
