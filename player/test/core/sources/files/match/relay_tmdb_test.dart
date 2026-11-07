@@ -131,4 +131,31 @@ void main() {
     expect(eps[0].stillPath, '/s.jpg');
     expect(s.year, 2001);
   });
+
+  test('a 404 season is empty and the other seasons are kept', () async {
+    final tmdb = RelayTmdb(
+      baseUrl: 'https://relay.test',
+      client: MockClient((r) async {
+        if (r.url.path == '/tmdb/tv/shows/3') {
+          return json({'name': 'Moon Harbor'});
+        }
+        if (r.url.path.endsWith('/0')) return http.Response('nope', 404);
+        return json({
+          'episodes': [
+            {'episode_number': 1},
+          ],
+        });
+      }),
+    );
+    final s = await tmdb.show(3, seasons: [0, 1]);
+    expect(s.seasons[0], isEmpty);
+    expect(s.seasons[1]!.length, 1);
+  });
+
+  test('a 404 show is RelayUnavailable', () async {
+    final tmdb = RelayTmdb(
+      client: MockClient((_) async => http.Response('nope', 404)),
+    );
+    expect(tmdb.show(3, seasons: [1]), throwsA(isA<RelayUnavailable>()));
+  });
 }

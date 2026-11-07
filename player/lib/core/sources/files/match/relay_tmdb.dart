@@ -72,11 +72,15 @@ class RelayTmdb {
         : null;
     final bySeason = <int, List<MatchedEpisode>>{};
     for (final n in seasons.toSet()) {
-      final s = await _get('/tmdb/tv/shows/$id/$n', const {});
-      bySeason[n] = _guard(() => [
-            for (final raw in (s['episodes'] as List? ?? const []))
-              _episode(raw as Map<String, dynamic>, n, showRuntime),
-          ]);
+      // A season TMDB lacks (specials, a wrong number) is empty, not a
+      // failure: its files still belong to the show.
+      final s = await _getSeason('/tmdb/tv/shows/$id/$n');
+      bySeason[n] = s == null
+          ? const []
+          : _guard(() => [
+                for (final raw in (s['episodes'] as List? ?? const []))
+                  _episode(raw as Map<String, dynamic>, n, showRuntime),
+              ]);
     }
     return _guard(() => MatchedShow(
           tmdbId: id,
@@ -119,7 +123,17 @@ class RelayTmdb {
   Future<Map<String, dynamic>> _get(
     String path,
     Map<String, String> query,
-  ) async {
+  ) async =>
+      (await _getOrNull(path, query, missingOk: false))!;
+
+  Future<Map<String, dynamic>?> _getSeason(String path) =>
+      _getOrNull(path, const {}, missingOk: true);
+
+  Future<Map<String, dynamic>?> _getOrNull(
+    String path,
+    Map<String, String> query, {
+    required bool missingOk,
+  }) async {
     final uri = Uri.parse('$_base$path')
         .replace(queryParameters: query.isEmpty ? null : query);
     final http.Response res;
@@ -128,6 +142,7 @@ class RelayTmdb {
     } on Object catch (e) {
       throw RelayUnavailable('$path: $e');
     }
+    if (missingOk && res.statusCode == 404) return null;
     if (res.statusCode != 200) {
       throw RelayUnavailable('$path: HTTP ${res.statusCode}');
     }

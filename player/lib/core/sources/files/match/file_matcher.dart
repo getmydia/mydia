@@ -65,6 +65,7 @@ class FileMatcher {
     final files = _filesOf(groupKey, isShow);
     final previous = _index.group(groupKey);
     if (tmdbId == null) {
+      await _migrateToFiles(_Group(groupKey, isShow, files), previous?.tmdbId);
       await _index.putGroup(GroupMatch(
         groupKey: groupKey,
         isShow: isShow,
@@ -203,8 +204,37 @@ class FileMatcher {
 
   // Progress migration
 
+  /// The items a group's files make up, with the file ids that stand in for
+  /// each when the group is unmatched.
+  List<_Item> _items(_Group g) {
+    if (!g.isShow) {
+      return [
+        _Item(ItemKind.movie, movieId, [for (final f in g.files) f.key]),
+      ];
+    }
+    final eps = <(int, int), List<String>>{};
+    for (final f in g.files) {
+      final p = f.parsed!;
+      final s = p.season;
+      final e = p.episode;
+      if (s == null || e == null) continue;
+      for (var n = e; n <= (p.episodeEnd ?? e); n++) {
+        eps.putIfAbsent((s, n), () => []).add(f.key);
+      }
+    }
+    return [
+      _Item(ItemKind.show, showId, const []),
+      for (final s in _seasons(g))
+        _Item(ItemKind.season, (b) => seasonId(b, s), const []),
+      for (final e in eps.entries)
+        _Item(
+            ItemKind.episode, (b) => episodeId(b, e.key.$1, e.key.$2), e.value),
+    ];
+  }
+
   /// Moves progress and watched flags from the ids this group had before
-  /// (provisional, and a previous TMDB id when it changed) to [newTmdbId].
+  /// (provisional, a previous TMDB id when it changed, and each file's
+  /// unmatched id) to [newTmdbId].
   Future<void> _migrateProgress(
       _Group g, int newTmdbId, int? previousTmdb) async {
     final newBase = tmdbBase(newTmdbId);
@@ -213,46 +243,80 @@ class FileMatcher {
       if (previousTmdb != null && previousTmdb != newTmdbId)
         tmdbBase(previousTmdb),
     };
-    for (final oldBase in oldBases) {
-      if (g.isShow) {
-        await _move(ItemKind.show, showId(oldBase), showId(newBase));
-        for (final s in _seasons(g)) {
-          await _move(
-              ItemKind.season, seasonId(oldBase, s), seasonId(newBase, s));
-        }
-        final eps = {
-          for (final f in g.files)
-            if (f.parsed!.season != null && f.parsed!.episode != null)
-              (f.parsed!.season!, f.parsed!.episode!),
-        };
-        for (final (s, e) in eps) {
-          await _move(ItemKind.episode, episodeId(oldBase, s, e),
-              episodeId(newBase, s, e));
-        }
-      } else {
-        await _move(ItemKind.movie, movieId(oldBase), movieId(newBase));
+    final watched = _index.watched();
+    for (final item in _items(g)) {
+      final target = item.id(newBase);
+      final type = _mediaType(item.kind);
+      for (final oldBase in oldBases) {
+        await _move(item.kind, item.id(oldBase), [target], watched,
+            mediaType: type);
+      }
+      for (final key in item.fileIds) {
+        await _move(ItemKind.video, unmatchedFileId(key), [target], watched,
+            mediaType: type);
       }
     }
   }
 
-  Future<void> _move(ItemKind kind, String oldId, String newId) async {
-    ItemRef ref(String id) =>
-        ItemRef(sourceId: _sourceId, kind: kind, externalId: id);
-    final old = _progress.get(progressKey(ref(oldId)));
-    if (old != null) {
-      await _progress.save(LocalPlaybackProgress(
-        sourceId: old.sourceId,
-        mediaId: newId,
-        mediaType: old.mediaType,
-        positionSeconds: old.positionSeconds,
-        durationSeconds: old.durationSeconds,
-        updatedAt: old.updatedAt,
-        syncedAt: old.syncedAt,
-      ));
-      await _progress.delete(progressKey(ref(oldId)));
+  /// The reverse: a matched group is unmatched, so each movie or episode's
+  /// progress is copied to every one of its files' unmatched ids.
+  Future<void> _migrateToFiles(_Group g, int? previousTmdb) async {
+    final oldBases = <String>{
+      provisionalKey(g.key),
+      if (previousTmdb != null) tmdbBase(previousTmdb),
+    };
+    final watched = _index.watched();
+    for (final item in _items(g)) {
+      if (item.fileIds.isEmpty) continue;
+      final targets = [for (final k in item.fileIds) unmatchedFileId(k)];
+      for (final oldBase in oldBases) {
+        await _move(item.kind, item.id(oldBase), targets, watched);
+      }
     }
-    if (_index.watched().contains(oldId)) {
-      await _index.setWatched(newId, true);
+  }
+
+  static String? _mediaType(ItemKind kind) => switch (kind) {
+        ItemKind.movie => 'movie',
+        ItemKind.episode => 'episode',
+        _ => null,
+      };
+
+  /// Moves one item's record and watched flag from [oldId] to every id in
+  /// [newIds]. Where a record already exists at a target, the newer
+  /// `updatedAt` wins.
+  Future<void> _move(
+    ItemKind kind,
+    String oldId,
+    List<String> newIds,
+    Set<String> watched, {
+    String? mediaType,
+  }) async {
+    ItemRef ref(ItemKind k, String id) =>
+        ItemRef(sourceId: _sourceId, kind: k, externalId: id);
+    final oldKey = progressKey(ref(kind, oldId));
+    final old = _progress.get(oldKey);
+    if (old != null) {
+      for (final newId in newIds) {
+        final existing = _progress.get(progressKey(ref(kind, newId)));
+        if (existing != null && !old.updatedAt.isAfter(existing.updatedAt)) {
+          continue;
+        }
+        await _progress.save(LocalPlaybackProgress(
+          sourceId: old.sourceId,
+          mediaId: newId,
+          mediaType: mediaType ?? old.mediaType,
+          positionSeconds: old.positionSeconds,
+          durationSeconds: old.durationSeconds,
+          updatedAt: old.updatedAt,
+          syncedAt: old.syncedAt,
+        ));
+      }
+      await _progress.delete(oldKey);
+    }
+    if (watched.contains(oldId)) {
+      for (final newId in newIds) {
+        await _index.setWatched(newId, true);
+      }
       await _index.setWatched(oldId, false);
     }
   }
@@ -267,6 +331,13 @@ class FileMatcher {
       _slots.release();
     }
   }
+}
+
+class _Item {
+  _Item(this.kind, this.id, this.fileIds);
+  final ItemKind kind;
+  final String Function(String base) id;
+  final List<String> fileIds;
 }
 
 class _Group {
