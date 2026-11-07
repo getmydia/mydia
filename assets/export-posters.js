@@ -24,7 +24,13 @@ async function listingPosterUrls(page, baseUrl, listing) {
   const srcs = await page.$$eval('main a[href^="/media/"] img', (imgs) =>
     imgs.map((img) => img.currentSrc || img.src),
   );
-  return [...new Set(srcs.filter((src) => /^https?:\/\//.test(src)))];
+  // Only remote poster art. Anything the app serves itself, such as the
+  // no-poster placeholder for a title without art, is skipped: Node cannot
+  // reach a neutral capture host like http://mydia-demo:4320.
+  const appOrigin = new URL(baseUrl).origin;
+  return [
+    ...new Set(srcs.filter((src) => /^https?:\/\//.test(src) && new URL(src).origin !== appOrigin)),
+  ];
 }
 
 /** Alternates movies and shows so neither kind clumps on the wall. */
