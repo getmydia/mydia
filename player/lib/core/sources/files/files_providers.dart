@@ -50,6 +50,20 @@ final filesProgressStoreProvider = Provider<PlaybackProgressStore>((ref) =>
     HivePlaybackProgressStore(
         Hive.box<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName)));
 
+/// Whether the boxes [openFilesLibraryBoxes] opens are there. False when
+/// that failed at startup: files sources are then left out (see
+/// `canBuildSource`) instead of throwing from every list that reads them.
+final filesStorageOpenProvider = Provider<bool>((ref) {
+  try {
+    ref.read(filesIndexBoxProvider);
+    ref.read(filesProgressStoreProvider);
+    return true;
+  } catch (e) {
+    debugPrint('[FilesSource] Files library storage is not open: $e');
+    return false;
+  }
+});
+
 final relayTmdbProvider = Provider<RelayTmdb>((ref) => RelayTmdb());
 
 /// Overridable so tests can tell the time a scan is due.

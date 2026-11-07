@@ -225,6 +225,31 @@ class FilesMediaSource extends MediaSource
     return filesPage(items, query.pageSize, cursor: cursor);
   }
 
+  /// What [ref], played from the file [fileKey], is called now. A scan that
+  /// matches (or unmatches) the file's group while it plays moves its state
+  /// to another id; progress saved after that must follow it there.
+  ItemRef currentRef(ItemRef ref, String fileKey) {
+    final parsed = index.files()[fileKey]?.parsed;
+    if (parsed == null) return ref;
+    final match = index.group(parsed.groupKey);
+    ItemRef make(ItemKind kind, String externalId) =>
+        ItemRef(sourceId: id, kind: kind, externalId: externalId);
+    if (match != null && match.tmdbId == null) {
+      return make(ItemKind.video, unmatchedFileId(fileKey));
+    }
+    final base = match?.tmdbId != null
+        ? tmdbBase(match!.tmdbId!)
+        : provisionalKey(parsed.groupKey);
+    if (!(match?.isShow ?? parsed.isEpisode)) {
+      return make(ItemKind.movie, movieId(base));
+    }
+    final was = parseFilesId(ref.externalId);
+    final season = was?.season ?? parsed.season;
+    final episode = was?.episode ?? parsed.episode;
+    if (season == null || episode == null) return ref;
+    return make(ItemKind.episode, episodeId(base, season, episode));
+  }
+
   @override
   Future<ItemDetail> item(ItemRef ref) async =>
       _catalog().detail(ref) ?? (throw const SourceException.notFound());

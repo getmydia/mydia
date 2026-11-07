@@ -154,6 +154,23 @@ void main() {
     expect(index.lastScanAt()?.toUtc(), now);
   });
 
+  test('storage_that_failed_to_open_leaves_files_sources_out', () async {
+    final store = InMemorySourceStore();
+    await store.putAccount(filesLocalRecord);
+    final c = ProviderContainer(overrides: [
+      ...noHiveOverrides,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      filesIndexBoxProvider
+          .overrideWith((ref) => throw StateError('box not open')),
+      filesProgressStoreProvider.overrideWithValue(f.progress),
+    ]);
+    addTearDown(c.dispose);
+    await c.read(sourceRecordsProvider.future);
+    expect(c.read(sourcesProvider).map((s) => s.id), [filesLocalSource.id]);
+    expect(c.read(mediaSourceProvider(filesLocalSource.id)), isNull);
+    expect(c.read(allServersSourcesProvider), isEmpty);
+  });
+
   test('a_resume_past_the_interval_scans', () async {
     await f.index.setLastScanAt(now);
     final c = await container();

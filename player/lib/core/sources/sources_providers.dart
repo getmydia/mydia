@@ -498,7 +498,9 @@ final activeSourceIdProvider = Provider<SourceId?>((ref) {
       sources.firstOrNull?.id;
 });
 
-/// The [MediaSource] for [id], or null when no such source exists.
+/// The [MediaSource] for [id], or null when no such source exists, or when
+/// it cannot be built on this launch (a files source whose storage failed to
+/// open), so the lists that read every source carry on without it.
 ///
 /// Watches only whether the source exists. A third-party source owns a
 /// connection race and timers, so a change to its stored record (a
@@ -509,6 +511,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
       ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
+  if (!canBuildSource(ref, source)) return null;
   final MediaSource media = buildThirdPartySource(ref, source);
   ref.onDispose(media.dispose);
   return media;

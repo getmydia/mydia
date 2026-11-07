@@ -19,12 +19,21 @@ class LocalProgressReporter extends PeriodicProgressReporter {
     required this.onChanged,
     this.resumeMinSeconds = 30,
     this.watchedFraction = ProgressService.watchedThreshold,
+    this.currentItem,
     DateTime Function()? clock,
     super.interval,
   }) : _clock = clock ?? DateTime.now;
 
   final PlaybackProgressStore store;
+
+  /// The item playback started on.
   final ItemRef item;
+
+  /// What [item] is called now, read on every save: a files library can
+  /// move an item to a new id (a match landing) while it plays.
+  final ItemRef Function()? currentItem;
+
+  ItemRef get _item => currentItem?.call() ?? item;
 
   /// Called when playback stops, and when a save moves the item into or out
   /// of Continue Watching or across the watched line. Not on every periodic
@@ -39,7 +48,7 @@ class LocalProgressReporter extends PeriodicProgressReporter {
 
   final DateTime Function() _clock;
 
-  String get _mediaType => item.kind == ItemKind.episode ? 'episode' : 'movie';
+  String get _mediaType => _item.kind == ItemKind.episode ? 'episode' : 'movie';
 
   _Standing _standing(int position, int duration) {
     if (duration > 0 && position / duration >= watchedFraction) {
@@ -51,7 +60,7 @@ class LocalProgressReporter extends PeriodicProgressReporter {
   }
 
   _Standing _stored() {
-    final p = store.get(progressKey(item));
+    final p = store.get(progressKey(_item));
     return p == null
         ? _Standing.notStarted
         : _standing(p.positionSeconds, p.durationSeconds);
@@ -62,7 +71,7 @@ class LocalProgressReporter extends PeriodicProgressReporter {
     final before = _stored();
     await recordLocalProgress(
       store: store,
-      item: item,
+      item: _item,
       mediaType: _mediaType,
       position: Duration(seconds: positionSeconds),
       duration: Duration(seconds: durationSeconds),

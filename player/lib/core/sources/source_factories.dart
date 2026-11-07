@@ -40,6 +40,12 @@ import '../player/device_profile_provider.dart'
 
 final sourceHttpProvider = Provider<SourceHttp>((ref) => SourceHttp());
 
+/// Whether [source] can be built on this launch. Only a files source can
+/// fail to: its storage is opened at startup, and a failure there leaves
+/// files libraries out while every other source carries on.
+bool canBuildSource(Ref ref, Source source) =>
+    source.kind != SourceKind.files || ref.read(filesStorageOpenProvider);
+
 MediaSource buildThirdPartySource(Ref ref, Source source) =>
     switch (source.kind) {
       SourceKind.plex => _plex(ref, source),

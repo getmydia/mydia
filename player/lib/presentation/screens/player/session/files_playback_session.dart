@@ -3,6 +3,7 @@
 /// transcode, no cast and no server to report to. Progress is kept locally.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -36,6 +37,13 @@ class FilesPlaybackSession extends SourcePlaybackSession {
   final FilesMediaSource _files;
   final http.Client? _client;
 
+  /// Always: an unreachable files source (one folder of several unplugged,
+  /// a share that is down) is no reason to refuse every file.
+  /// [prepareStreaming] checks the chosen file itself and says "Folder
+  /// unavailable" when that one is gone.
+  @override
+  bool get reachable => true;
+
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [
         CandidateStrategy(
@@ -60,16 +68,26 @@ class FilesPlaybackSession extends SourcePlaybackSession {
       if (response.statusCode != 200) {
         throw HttpException('HTTP ${response.statusCode}', uri: uri);
       }
-      return response.body;
+      // `body` reads a reply with no declared charset as Latin-1, which
+      // garbles UTF-8 subtitles, and that is what servers send them as.
+      return _declaresCharset(response.headers['content-type'])
+          ? response.body
+          : utf8.decode(response.bodyBytes, allowMalformed: true);
     } finally {
       if (_client == null) client.close();
     }
   }
 
+  static final _charset = RegExp(r';\s*charset\s*=', caseSensitive: false);
+
+  static bool _declaresCharset(String? contentType) =>
+      contentType != null && _charset.hasMatch(contentType);
+
   @override
   ProgressReporter createProgress() => LocalProgressReporter(
         store: _files.progressStore,
         item: item,
+        currentItem: () => _files.currentRef(item, fileId),
         resumeMinSeconds: kFilesResumeMinSeconds,
         watchedFraction: kFilesWatchedFraction,
         onChanged: () => _files

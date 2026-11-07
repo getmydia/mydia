@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -5,7 +7,9 @@ import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/player/local_progress_reporter.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/files/files_ids.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/match/file_matcher.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
@@ -121,6 +125,63 @@ void main() {
     final text = await session.subtitleContent(track.id);
     expect(text, contains('Hi'));
     expect(auth, 'Basic x');
+  });
+
+  test('a subtitle with no declared charset is read as UTF-8', () async {
+    final b = await _build(_AuthBackend({_file: 10, _sidecar: 5}));
+    Future<String?> fetch(Map<String, String> headers) async {
+      final client = MockClient((_) async => http.Response.bytes(
+          utf8.encode('1\n00:00:01,000 --> 00:00:02,000\nCafé\n'), 200,
+          headers: headers));
+      final session = FilesPlaybackSession(
+          source: b.source, item: movie(b), fileId: key, client: client);
+      final detail = (await session.detail())!;
+      return session.subtitleContent(detail.serverSubtitleTracks!.single.id);
+    }
+
+    expect(await fetch({'content-type': 'application/x-subrip'}),
+        contains('Café'));
+    expect(await fetch(const {}), contains('Café'));
+    expect(await fetch({'content-type': 'text/plain; charset=utf-8'}),
+        contains('Café'));
+  });
+
+  test('an unreachable source still lets a present file play', () async {
+    final b = await _build(FakeBackend({_file: 10})
+      ..probeFailure = const BackendUnreachable('one folder unplugged'));
+    await b.source.probe();
+    expect(b.source.connection, SourceConnectionStatus.unreachable);
+    final session =
+        FilesPlaybackSession(source: b.source, item: movie(b), fileId: key);
+    expect(session.reachable, isTrue);
+  });
+
+  test('progress follows the item to the id a match moved it to', () async {
+    final b = await _build(FakeBackend({_file: 10}));
+    final session =
+        FilesPlaybackSession(source: b.source, item: movie(b), fileId: key);
+    final reporter = session.createProgress() as LocalProgressReporter;
+    await reporter.sendProgress(
+        positionSeconds: 60, durationSeconds: 6000, paused: false);
+    expect(b.fixture.progress.get(progressKey(movie(b))), isNotNull);
+
+    // The group is matched again mid-playback, and its record moved.
+    await b.fixture.match('coppervalley|2018', 555);
+    await b.fixture.progress.delete(progressKey(movie(b)));
+    await reporter.sendProgress(
+        positionSeconds: 120, durationSeconds: 6000, paused: false);
+
+    expect(b.fixture.progress.get(progressKey(movie(b))), isNull);
+    final moved = b.fixture.ref(ItemKind.movie, '555');
+    expect(b.fixture.progress.get(progressKey(moved))!.positionSeconds, 120);
+
+    // Unmatched, it is the file's own id.
+    await b.fixture.match('coppervalley|2018', null);
+    await reporter.sendProgress(
+        positionSeconds: 180, durationSeconds: 6000, paused: false);
+    final file = b.fixture.ref(ItemKind.video, unmatchedFileId(key));
+    expect(b.fixture.progress.get(progressKey(file))!.positionSeconds, 180);
+    reporter.dispose();
   });
 
   test('progress is saved under the item key into the source store', () async {
