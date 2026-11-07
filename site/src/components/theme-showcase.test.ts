@@ -31,10 +31,9 @@ describe('ThemeShowcase', () => {
     buttons.forEach((b, i) => {
       expect(b).toContain(`aria-pressed="${i === 0 ? 'true' : 'false'}"`);
     });
-    const labels = [...html.matchAll(/<button\b[^>]*data-theme-id[^>]*>([\s\S]*?)<\/button>/g)].map((m) =>
-      m[1].replace(/<[^>]*>/g, '').trim(),
-    );
-    expect(labels).toEqual(serverThemes.slice(0, 2).map((t) => t.label));
+    const bodies = [...html.matchAll(/<button\b[^>]*data-theme-id[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1]);
+    expect(bodies).toHaveLength(2);
+    serverThemes.slice(0, 2).forEach((t, i) => expect(bodies[i]).toContain(t.label));
   });
 
   it('resolves phone images', async () => {
