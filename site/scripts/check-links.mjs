@@ -29,8 +29,28 @@ function resolvePage(path, pages) {
 
 // Script and style bodies are raw text, not markup, so an id="..." inside one
 // names no element.
+// Walks the page with indexOf rather than a regex: the build's own output is
+// all this reads, and a scan states the intent without HTML-filtering patterns.
+function markupOutsideRawText(html) {
+  const lower = html.toLowerCase();
+  const parts = [];
+  let pos = 0;
+  while (pos < html.length) {
+    const starts = ['<script', '<style'].map((t) => [t, lower.indexOf(t, pos)]).filter(([, i]) => i !== -1);
+    if (starts.length === 0) break;
+    const [tag, start] = starts.reduce((a, b) => (b[1] < a[1] ? b : a));
+    parts.push(html.slice(pos, start));
+    const close = lower.indexOf(`</${tag.slice(1)}`, start);
+    if (close === -1) return parts;
+    const end = lower.indexOf('>', close);
+    pos = end === -1 ? html.length : end + 1;
+  }
+  parts.push(html.slice(pos));
+  return parts;
+}
+
 function extractIds(html) {
-  const parts = html.split(/<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>/i);
+  const parts = markupOutsideRawText(html);
   return new Set(parts.flatMap((part) => [...part.matchAll(/\sid=["']([^"']+)["']/g)].map((m) => m[1])));
 }
 
