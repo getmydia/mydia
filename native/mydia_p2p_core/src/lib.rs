@@ -2943,15 +2943,28 @@ const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_m
 /// probe promptly, so a probe tells a dead path from a slow query, and only
 /// the dead path is given up on.
 ///
+/// The probe is cheap and a live connection always answers it, so it runs
+/// early. A dead path shows up hardest at startup: a client on the same LAN
+/// as its server moves from the relay to a direct path within milliseconds of
+/// connecting, while its first batch of requests is in flight, and a Wi-Fi
+/// mesh backhaul that drops most of that flow's packets leaves every one of
+/// them unanswered. iroh keeps sending on the selected path rather than
+/// falling back to the relay, so this probe is what ends the stall. At 6s
+/// plus a 3s probe it cost every such launch 9 seconds; now it costs about 3.
+///
 /// Shrunk under `cfg(test)` to stay below the test `RESPONSE_TIMEOUT`.
 #[cfg(not(test))]
-const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
+const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_millis(1500);
 #[cfg(test)]
 const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// How long the `Ping` sent after [`STALL_PROBE_AFTER`] may take.
+///
+/// Long enough for a relayed or cellular round trip with a spike in it
+/// (relay RTTs here run 20 to 150ms), short enough that a dead path is not
+/// waited on for long. A falsely failed probe costs one redial, not data.
 #[cfg(not(test))]
-const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 #[cfg(test)]
 const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
