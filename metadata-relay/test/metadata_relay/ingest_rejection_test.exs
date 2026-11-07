@@ -50,7 +50,7 @@ defmodule MetadataRelay.IngestRejectionTest do
       assert log =~ "status=400"
       assert log =~ "reason=validation"
       assert log =~ "Missing required field: error_type"
-      assert log =~ "bytes=#{byte_size(body)}"
+      assert log =~ ~s(bytes="#{byte_size(body)}")
       assert log =~ ~s(user_agent="probe/1.0")
       assert log =~ ~s(cf_connecting_ip="2001:db8::1")
       assert log =~ ~s(source="player")
@@ -82,16 +82,80 @@ defmodule MetadataRelay.IngestRejectionTest do
       assert log =~ ~s(user_agent="probe/1.0")
     end
 
-    test "a rate-limited report is counted" do
+    test "a rate-limited report is counted but not logged" do
       before = count("crash_reports", "rate_limited")
       body = ~s({"stacktrace":[]})
 
-      capture_log(fn ->
-        statuses = for _ <- 1..11, do: post_json("/crashes/report", body).status
-        assert List.last(statuses) == 429
-      end)
+      for _ <- 1..10, do: capture_log(fn -> post_json("/crashes/report", body) end)
+
+      log =
+        capture_log(fn -> assert post_json("/crashes/report", body).status == 429 end)
 
       assert count("crash_reports", "rate_limited") == before + 1
+      refute log =~ "[Ingest] rejected"
+    end
+
+    test "a caller-chosen header cannot break the line or forge a field" do
+      body = ~s({"stacktrace":[]})
+
+      log =
+        capture_log(fn ->
+          build_conn()
+          |> put_req_header("content-type", "application/json")
+          |> put_req_header("user-agent", "probe\n[Ingest] rejected reason=store_failed")
+          |> put_req_header("x-forwarded-for", "9.9.9.9 reason=store_failed")
+          |> post("/crashes/report", body)
+        end)
+
+      assert log =~ "reason=validation"
+      assert log =~ ~s(client_ip="9.9.9.9 reason=store_failed")
+      # Outside the quoted values, only the relay's own fields remain.
+      unquoted = String.replace(log, ~r/"(?:[^"\\]|\\.)*"/, ~s(""))
+      refute unquoted =~ "store_failed"
+      assert [_one_line] = log |> String.trim() |> String.split("\n")
+    end
+
+    test "absent fields are left out instead of printed as nil" do
+      log =
+        capture_log(fn ->
+          build_conn()
+          |> put_req_header("content-type", "application/json")
+          |> post("/crashes/report", ~s({"stacktrace":[]}))
+        end)
+
+      assert log =~ "reason=validation"
+      refute log =~ "=nil"
+      refute log =~ "user_agent="
+    end
+
+    test "a browser asking for HTML gets a 400 page, not a 500, and is counted" do
+      before = count("crash_reports", "not_json")
+
+      capture_log(fn ->
+        assert {400, _headers, _resp} =
+                 assert_error_sent(400, fn ->
+                   build_conn()
+                   |> put_req_header("accept", "text/html,application/xhtml+xml")
+                   |> put_req_header("content-type", "application/json")
+                   |> post("/crashes/report", "not json")
+                 end)
+      end)
+
+      assert count("crash_reports", "not_json") == before + 1
+    end
+
+    test "a body over the parser's limit is a 413, counted as too_large" do
+      before = count("crash_reports", "too_large")
+      body = ~s({"error_message":") <> String.duplicate("a", 8_000_001) <> ~s("})
+
+      capture_log(fn ->
+        assert {413, _headers, resp} =
+                 assert_error_sent(413, fn -> post_json("/crashes/report", body) end)
+
+        assert %{"error" => "Request body too large"} = Jason.decode!(resp)
+      end)
+
+      assert count("crash_reports", "too_large") == before + 1
     end
   end
 

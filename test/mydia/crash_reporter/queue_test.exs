@@ -225,24 +225,26 @@ defmodule Mydia.CrashReporter.QueueTest do
     # The relay answers 400 when it rejects the body. Resending the same body
     # can never succeed, so the queue drops it instead of retrying it up to
     # max_retries times.
-    test "a report the relay rejects with 400 is dropped, not retried" do
-      bypass = Bypass.open()
-      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
-      test_pid = self()
+    for status <- [400, 413] do
+      test "a report the relay rejects with #{status} is dropped, not retried" do
+        bypass = Bypass.open()
+        Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+        test_pid = self()
 
-      Bypass.stub(bypass, "POST", "/crashes/report", fn conn ->
-        send(test_pid, :relay_hit)
+        Bypass.stub(bypass, "POST", "/crashes/report", fn conn ->
+          send(test_pid, :relay_hit)
 
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.resp(400, Jason.encode!(%{"error" => "Validation failed"}))
-      end)
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(unquote(status), Jason.encode!(%{"error" => "Rejected"}))
+        end)
 
-      Queue.enqueue(%{error_type: "Rejected", error_message: "x", stacktrace: []})
-      assert_receive :relay_hit, 2_000
-      Queue.process_all()
+        Queue.enqueue(%{error_type: "Rejected", error_message: "x", stacktrace: []})
+        assert_receive :relay_hit, 2_000
+        Queue.process_all()
 
-      assert Queue.count() == 0
+        assert Queue.count() == 0
+      end
     end
 
     test "a report that fails with 503 stays queued for retry" do

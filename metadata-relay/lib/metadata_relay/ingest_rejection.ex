@@ -54,6 +54,18 @@ defmodule MetadataRelay.IngestRejection do
     log(conn, endpoint, reason, status, detail)
   end
 
+  @doc """
+  Counts and logs a body the endpoint's `Plug.Parsers` refused, given the
+  exception the error renderer received. Any other exception is ignored.
+  """
+  @spec record_parser_error(Plug.Conn.t(), term()) :: :ok
+  def record_parser_error(conn, %Plug.Parsers.ParseError{}), do: record(conn, :not_json, 400)
+
+  def record_parser_error(conn, %Plug.Parsers.RequestTooLargeError{}),
+    do: record(conn, :too_large, 413)
+
+  def record_parser_error(_conn, _reason), do: :ok
+
   defp log(_conn, _endpoint, :rate_limited, _status, _detail), do: :ok
 
   defp log(conn, endpoint, reason, status, detail) do
@@ -62,18 +74,20 @@ defmodule MetadataRelay.IngestRejection do
     Logger.log(level, fn ->
       [
         "[Ingest] rejected",
-        field("endpoint", endpoint),
-        field("path", conn.request_path),
-        field("status", status),
-        field("reason", reason),
-        detail && field("detail", text(detail, 300)),
-        field("bytes", header(conn, "content-length") || "?"),
-        field("content_type", text(header(conn, "content-type"), 100)),
-        field("user_agent", text(header(conn, "user-agent"), 200)),
-        field("cf_connecting_ip", text(header(conn, "cf-connecting-ip"), 64)),
-        field("client_ip", MetadataRelay.ClientIp.resolve(conn)),
-        field("source", text(body_field(conn, "source"), 40)),
-        field("version", text(body_field(conn, "version"), 40))
+        "endpoint=#{endpoint}",
+        "status=#{status}",
+        "reason=#{reason}",
+        field("path", conn.request_path, 100),
+        field("detail", detail, 300),
+        field("bytes", header(conn, "content-length"), 20),
+        field("content_type", header(conn, "content-type"), 100),
+        field("user_agent", header(conn, "user-agent"), 200),
+        field("cf_connecting_ip", header(conn, "cf-connecting-ip"), 64),
+        # The rightmost X-Forwarded-For hop when the peer is a trusted proxy,
+        # which can be text the caller wrote. Quoted like every other field.
+        field("client_ip", MetadataRelay.ClientIp.resolve(conn), 64),
+        field("source", body_field(conn, "source"), 40),
+        field("version", body_field(conn, "version"), 40)
       ]
       |> Enum.reject(&is_nil/1)
       |> Enum.join(" ")
@@ -82,7 +96,11 @@ defmodule MetadataRelay.IngestRejection do
 
   defp endpoint(path), do: Map.get(@endpoints, path, "other")
 
-  defp field(name, value), do: "#{name}=#{value}"
+  # Absent values are left out rather than printed as `nil`. Present ones are
+  # quoted and escaped by `inspect`, so a caller-chosen value cannot break the
+  # line in two or forge another field.
+  defp field(_name, nil, _limit), do: nil
+  defp field(name, value, limit), do: "#{name}=#{text(value, limit)}"
 
   defp header(conn, name) do
     case Plug.Conn.get_req_header(conn, name) do
@@ -101,9 +119,6 @@ defmodule MetadataRelay.IngestRejection do
 
   defp body_field(_conn, _key), do: nil
 
-  # Quoted and escaped, so a caller-chosen value cannot break the line into
-  # two or forge a field.
-  defp text(nil, _limit), do: "nil"
   defp text(value, limit) when is_binary(value), do: inspect(String.slice(value, 0, limit))
   defp text(value, limit), do: value |> inspect(limit: 20, printable_limit: limit)
 end
