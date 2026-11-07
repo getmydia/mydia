@@ -290,7 +290,12 @@ class FilesMediaSource extends MediaSource
         }
       case ItemKind.folder:
         throw const SourceException.unsupported();
-      case ItemKind.movie || ItemKind.episode || ItemKind.video:
+      case ItemKind.episode:
+        // Its file may hold other episodes, whose state is read from it.
+        ids
+          ..add(ref.externalId)
+          ..addAll(catalog.episodesSharingAFile(ref.externalId));
+      case ItemKind.movie || ItemKind.video:
         ids.add(ref.externalId);
     }
     for (final i in ids) {

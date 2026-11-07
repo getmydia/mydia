@@ -139,6 +139,14 @@ class FilesCatalog {
   /// Whether each group is a show.
   final groupIsShow = <String, bool>{};
 
+  /// For an episode held in a multi-episode file (S01E01-E02), the other
+  /// episodes of that file. Playing it to the end plays them all.
+  final _sameFile = <String, Set<String>>{};
+
+  /// The episodes sharing a file with [id], which a watched toggle on [id]
+  /// carries to as well.
+  Set<String> episodesSharingAFile(String id) => _sameFile[id] ?? const {};
+
   void _build(FileLibraryIndex index) {
     final byGroup = <String, List<IndexedFile>>{};
     for (final f in index.files().values) {
@@ -187,8 +195,19 @@ class FilesCatalog {
           unmatched[f.key] = f;
           continue;
         }
-        for (var n = e; n <= (p.episodeEnd ?? e); n++) {
+        final end = p.episodeEnd ?? e;
+        for (var n = e; n <= end; n++) {
           show.seasons.putIfAbsent(s, () => {}).putIfAbsent(n, () => []).add(f);
+        }
+        if (end > e) {
+          final ids = [
+            for (var n = e; n <= end; n++) episodeId(base, s, n),
+          ];
+          for (final id in ids) {
+            _sameFile
+                .putIfAbsent(id, () => {})
+                .addAll(ids.where((o) => o != id));
+          }
         }
       }
     }
@@ -213,8 +232,14 @@ class FilesCatalog {
   LocalPlaybackProgress? progressOf(String id) =>
       _progress.get(progressKey(ref(ItemKind.movie, id)));
 
-  bool watched(String id) {
-    if (_watched.contains(id)) return true;
+  bool watched(String id) =>
+      _watched.contains(id) ||
+      _playedThrough(id) ||
+      // Finishing a multi-episode file, played as any one of its episodes,
+      // finishes each of them.
+      episodesSharingAFile(id).any(_playedThrough);
+
+  bool _playedThrough(String id) {
     final p = progressOf(id);
     return p != null &&
         p.durationSeconds > 0 &&

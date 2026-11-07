@@ -181,6 +181,50 @@ void main() {
     expect(show.summary.userState.unwatchedCount, 0);
   });
 
+  test('finishing_a_multi_episode_file_finishes_each_episode', () async {
+    final b = await _build();
+    final f = b.fixture;
+    const path = 'Glass Orchard/Glass Orchard S01E04-E05.mkv';
+    await f.index.putFiles([
+      IndexedFile(
+        key: fileKeyFor(FilesFixture.rootId, path),
+        rootId: FilesFixture.rootId,
+        path: path,
+        size: 10,
+        modified: filesT0,
+        firstSeen: filesT0,
+        parsed: const ParsedName(
+          path: path,
+          isEpisode: true,
+          title: 'Glass Orchard',
+          groupKey: 'tv:glassorchard|',
+          season: 1,
+          episode: 4,
+          episodeEnd: 5,
+        ),
+      ),
+    ]);
+    Future<bool> watched(String id) async =>
+        (await b.source.item(f.ref(ItemKind.episode, id)))
+            .summary
+            .userState
+            .watched;
+    final show = f.ref(ItemKind.show, _show);
+    await f.index.setWatched('201-1-3', true);
+    expect((await b.source.nextUp(show))!.ref.externalId, '201-1-4');
+
+    // Played as episode 4, to the end.
+    await f.saveProgress('201-1-4', 95, 100);
+    expect(await watched('201-1-4'), isTrue);
+    expect(await watched('201-1-5'), isTrue);
+    expect(await b.source.nextUp(show), isNull);
+
+    // Unmarking either clears what the file recorded.
+    await b.source.setWatched(f.ref(ItemKind.episode, '201-1-5'), false);
+    expect(await watched('201-1-4'), isFalse);
+    expect(await watched('201-1-5'), isFalse);
+  });
+
   test('continue_watching_ignores_under_thirty_seconds', () async {
     final b = await _build();
     final f = b.fixture;

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../core/layout/dock_insets.dart';
@@ -75,8 +76,12 @@ class _Body extends ConsumerWidget {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final summary = detail.summary;
-    final watched =
-        ref.watch(mediaSourceProvider(item.sourceId))?.as<WatchedState>();
+    final source = ref.watch(mediaSourceProvider(item.sourceId));
+    // A files library's folder is a directory, not a title: it holds no
+    // watched state of its own.
+    final folderOfFiles =
+        item.kind == ItemKind.folder && source?.kind == SourceKind.files;
+    final watched = folderOfFiles ? null : source?.as<WatchedState>();
     final version = detail.versions.firstOrNull;
     final fixMatch = item.kind == ItemKind.video
         ? fixMatchAction(context, ref, item, summary.title)
