@@ -12,8 +12,12 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.OpenLibrary.Handler, as: OpenLibraryHandler
   alias MetadataRelay.SubDL.Handler, as: SubtitlesHandler
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
+  alias MetadataRelay.IngestRejection
 
-  plug(Plug.Logger)
+  # No Plug.Logger: every request arrives through MetadataRelayWeb.Endpoint,
+  # whose Plug.Telemetry already logs it, so a second logger here printed each
+  # request and response line twice.
+  #
   # application/x-ndjson passes through unread: POST /player-logs reads its
   # own gzipped body (MetadataRelay.PlayerLogs.Handler).
   plug(Plug.Parsers,
@@ -702,6 +706,7 @@ defmodule MetadataRelay.Router do
     case MetadataRelay.RateLimiter.check_rate_limit(client_ip) do
       {:error, :rate_limited} ->
         MetadataRelay.Metrics.inc("metadata_relay_rate_limited_total")
+        IngestRejection.record(conn, :rate_limited, 429)
 
         error_response = %{
           error: "Too many requests",
@@ -734,6 +739,8 @@ defmodule MetadataRelay.Router do
       |> send_resp(201, Jason.encode!(%{status: "created", message: "Crash report received"}))
     else
       {:error, :invalid_json} ->
+        IngestRejection.record(conn, :not_json, 400)
+
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(
@@ -742,11 +749,15 @@ defmodule MetadataRelay.Router do
         )
 
       {:error, {:validation, errors}} ->
+        IngestRejection.record(conn, :validation, 400, errors)
+
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(400, Jason.encode!(%{error: "Validation failed", errors: errors}))
 
       {:error, reason} ->
+        IngestRejection.record(conn, :store_failed, 500, reason)
+
         error_response = %{
           error: "Internal server error",
           message: "Failed to store crash report: #{inspect(reason)}"
@@ -913,6 +924,7 @@ defmodule MetadataRelay.Router do
     else
       {:error, :rate_limited} ->
         MetadataRelay.Metrics.inc("metadata_relay_rate_limited_total")
+        IngestRejection.record(conn, :rate_limited, 429)
 
         conn
         |> put_resp_header("retry-after", "3600")
@@ -938,6 +950,8 @@ defmodule MetadataRelay.Router do
       |> send_resp(201, Jason.encode!(%{status: "created", id: submission.id}))
     else
       {:error, :invalid_json} ->
+        IngestRejection.record(conn, :not_json, 400)
+
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(
@@ -946,28 +960,29 @@ defmodule MetadataRelay.Router do
         )
 
       {:error, :message_too_long} ->
+        IngestRejection.record(conn, :message_too_long, 400)
+
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(400, Jason.encode!(%{error: "Message too long", limit_bytes: 4096}))
 
       {:error, {:validation, errors}} ->
+        IngestRejection.record(conn, :validation, 400, errors)
+
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(400, Jason.encode!(%{error: "Validation failed", errors: errors}))
 
       {:error, %Ecto.Changeset{} = changeset} ->
+        errors = changeset_error_messages(changeset)
+        IngestRejection.record(conn, :validation, 400, errors)
+
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(
-          400,
-          Jason.encode!(%{
-            error: "Validation failed",
-            errors: changeset_error_messages(changeset)
-          })
-        )
+        |> send_resp(400, Jason.encode!(%{error: "Validation failed", errors: errors}))
 
       {:error, reason} ->
-        Logger.error("Failed to store feedback", reason: inspect(reason))
+        IngestRejection.record(conn, :store_failed, 500, reason)
 
         conn
         |> put_resp_content_type("application/json")

@@ -54,8 +54,9 @@ defmodule Mydia.CrashReporter.Sender do
         Logger.debug("Crash report sent successfully", response: response)
         {:ok, extract_report_id(response)}
 
-      {:ok, %{status: 400, body: response}} ->
-        # Validation error
+      {:ok, %{status: status, body: response}} when status in [400, 413] ->
+        # The relay refused the body (invalid, or over its size limit).
+        # Sending the same body again can never succeed.
         Logger.warning("Crash report validation failed", response: response)
         {:error, {:validation_error, response}}
 

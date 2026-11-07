@@ -40,7 +40,7 @@ config :metadata_relay, MetadataRelayWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [html: MetadataRelayWeb.Layouts],
+    formats: [json: MetadataRelayWeb.ErrorJSON, html: MetadataRelayWeb.ErrorHTML],
     layout: false
   ],
   pubsub_server: MetadataRelay.PubSub,
