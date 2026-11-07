@@ -6,6 +6,11 @@
 # The dev stack is native devenv, not Docker, so this drives the app over HTTP
 # rather than shelling into a container. Point BASE_URL at the worktree's
 # Phoenix (devenv derives a port per worktree; `./dev ps` and `ss -ltn` show it).
+#
+# Run it against an invented demo library, never a real one. On a fresh DB run
+# `./dev mix mydia.demo_seed` first (pass --base-url http://localhost:<port> if
+# Phoenix is not on the default port, since artwork URLs are stored in the DB).
+# Every file is written to screenshots/ and to site/src/assets/screenshots/.
 
 set -e
 
@@ -53,5 +58,5 @@ echo -e "${GREEN}Capturing screenshots...${NC}\n"
 (cd assets && BASE_URL="$BASE_URL" npm run screenshots)
 
 echo ""
-echo -e "${GREEN}✅ Done! Screenshots saved to screenshots/${NC}"
-echo -e "Copy the ones the site uses into ${GREEN}site/public/img/${NC} as well."
+echo -e "${GREEN}✅ Done! Screenshots saved to screenshots/ and site/src/assets/screenshots/${NC}"
+echo -e "Website copies are in ${GREEN}site/src/assets/screenshots/${NC}."
