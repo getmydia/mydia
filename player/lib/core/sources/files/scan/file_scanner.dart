@@ -36,6 +36,7 @@ class FileScanner {
     'mpeg', 'ogv',
   };
   static const subtitleExtensions = {'srt', 'ass', 'ssa', 'vtt'};
+  static const _maxDepth = 32;
   static const _skippedDirs = {'@eaDir', '#recycle'};
 
   final FileSystemBackend _backend;
@@ -133,14 +134,16 @@ class FileScanner {
     List<FileEntry> videos,
     Map<String, List<FileEntry>> sidecarsByDir,
   ) async {
-    final queue = <String>[start];
+    final queue = <(String, int)>[(start, 0)];
+    final visited = <String>{_trimSlash(start)};
     while (queue.isNotEmpty) {
-      final dir = queue.removeLast();
+      final (dir, depth) = queue.removeLast();
       final entries = await _backend.list(dir);
       for (final e in entries) {
         if (e.name.startsWith('.')) continue;
         if (e.isDir) {
-          if (!_skippedDirs.contains(e.name)) queue.add(e.path);
+          if (_skippedDirs.contains(e.name) || depth >= _maxDepth) continue;
+          if (visited.add(_trimSlash(e.path))) queue.add((e.path, depth + 1));
           continue;
         }
         final ext = _ext(e.name);
@@ -168,6 +171,9 @@ class FileScanner {
         if (s.name.startsWith(prefix)) _relative(rootPath, s.path),
     ]..sort();
   }
+
+  static String _trimSlash(String p) =>
+      p.length > 1 && p.endsWith('/') ? p.substring(0, p.length - 1) : p;
 
   static String _ext(String name) {
     final dot = name.lastIndexOf('.');

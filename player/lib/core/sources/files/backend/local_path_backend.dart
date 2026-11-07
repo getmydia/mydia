@@ -16,9 +16,14 @@ class LocalPathBackend implements FileSystemBackend {
       if (!await directory.exists()) {
         throw BackendNotFound(dir);
       }
-      final entities = await directory.list(followLinks: true).toList();
+      // Links to directories are skipped so a symlink loop cannot send a
+      // recursive walk around forever; links to files resolve normally.
+      final entities = await directory.list(followLinks: false).toList();
       final entries = <FileEntry>[];
       for (final entity in entities) {
+        if (entity is Link && await FileSystemEntity.isDirectory(entity.path)) {
+          continue;
+        }
         final entry = await _entry(entity.path);
         if (entry != null) entries.add(entry);
       }

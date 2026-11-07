@@ -26,6 +26,18 @@ void main() {
     expect(entries[1].size, 0);
   });
 
+  test('directory_symlink_loops_are_not_followed', () async {
+    File('${tmp.path}/a.mkv').writeAsBytesSync([1]);
+    Directory('${tmp.path}/sub').createSync();
+    Link('${tmp.path}/sub/loop').createSync(tmp.path);
+    Link('${tmp.path}/alias.mkv').createSync('${tmp.path}/a.mkv');
+
+    final sub = await LocalPathBackend().list('${tmp.path}/sub');
+    expect(sub, isEmpty);
+    final top = await LocalPathBackend().list(tmp.path);
+    expect(top.map((e) => e.name).toSet(), {'a.mkv', 'sub', 'alias.mkv'});
+  });
+
   test('list_of_missing_dir_throws_not_found', () {
     expect(
       LocalPathBackend().list('${tmp.path}/nope'),

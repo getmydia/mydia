@@ -122,6 +122,19 @@ void main() {
     });
   });
 
+  test('cyclic_listing_terminates_with_files_found_once', () async {
+    final b = _CyclicBackend({'/lib/A/Movie.mkv': 1});
+    final delta = await scanner(b).scan(root);
+    expect([for (final f in delta.added) f.path], ['A/Movie.mkv']);
+  });
+
+  test('directories_deeper_than_32_levels_are_skipped', () async {
+    final deep = [for (var i = 0; i < 40; i++) 'd$i'].join('/');
+    final b = FakeBackend({'/lib/top.mkv': 1, '/lib/$deep/deep.mkv': 1});
+    final delta = await scanner(b).scan(root);
+    expect([for (final f in delta.added) f.path], ['top.mkv']);
+  });
+
   test('progress_reports_done_of_total', () async {
     final b = FakeBackend({
       for (var i = 0; i < 450; i++) '/lib/Film $i.mkv': i,
@@ -134,4 +147,28 @@ void main() {
     final dones = [for (final c in calls) c.$1];
     expect(dones, orderedEquals([...dones]..sort()));
   });
+}
+
+/// Lists an extra entry in `/lib/A` that points back at `/lib`, and one that
+/// points at `/lib/A` itself.
+class _CyclicBackend extends FakeBackend {
+  _CyclicBackend(super.files);
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    final entries = await super.list(dir);
+    if (dir != '/lib/A') return entries;
+    final t = FakeBackend.defaultModified;
+    return [
+      ...entries,
+      FileEntry(path: '/lib', name: 'up', isDir: true, size: 0, modified: t),
+      FileEntry(
+        path: '/lib/A',
+        name: 'self',
+        isDir: true,
+        size: 0,
+        modified: t,
+      ),
+    ];
+  }
 }
