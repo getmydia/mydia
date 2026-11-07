@@ -18,6 +18,7 @@ import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
+import '../../widgets/files/experimental_badge.dart';
 import 'files_library_kind_picker.dart';
 import 'server_url.dart';
 
@@ -257,6 +258,9 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
             padding: const EdgeInsets.all(24),
             shrinkWrap: true,
             children: [
+              const FilesExperimentalNotice(
+                  key: Key('add-webdav-experimental')),
+              const SizedBox(height: 16),
               TextField(
                 key: const Key('webdav-url-field'),
                 controller: _url,

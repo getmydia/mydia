@@ -115,6 +115,15 @@ Future<void> _connect(WidgetTester tester,
 }
 
 void main() {
+  testWidgets('warns that WebDAV libraries are experimental', (tester) async {
+    await _pump(tester);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('add-webdav-experimental')),
+            matching: find.textContaining('very experimental')),
+        findsOneWidget);
+  });
+
   testWidgets('refuses a password over http to a host outside the network',
       (tester) async {
     final h = await _pump(tester);

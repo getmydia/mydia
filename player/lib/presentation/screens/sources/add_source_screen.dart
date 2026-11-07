@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/files/experimental_badge.dart';
 import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
@@ -61,7 +62,8 @@ class AddSourceScreen extends ConsumerWidget {
                 ListTile(
                   key: const Key('add-source-folder'),
                   leading: const Icon(Icons.folder_rounded),
-                  title: Text(context.l10n.sourcesAddFolderTitle),
+                  title: ExperimentalTitle(
+                      title: Text(context.l10n.sourcesAddFolderTitle)),
                   subtitle: Text(context.l10n.sourcesAddFolderSubtitle),
                   onTap: () => context.push('/sources/add/folder'),
                 ),
@@ -69,7 +71,8 @@ class AddSourceScreen extends ConsumerWidget {
                 ListTile(
                   key: const Key('add-source-webdav'),
                   leading: const Icon(Icons.folder_shared_rounded),
-                  title: const Text('WebDAV'), // l10n-ignore: protocol name
+                  title: const ExperimentalTitle(
+                      title: Text('WebDAV')), // l10n-ignore: protocol name
                   subtitle: Text(context.l10n.sourcesAddWebDavSubtitle),
                   onTap: () => context.push('/sources/add/webdav'),
                 ),
