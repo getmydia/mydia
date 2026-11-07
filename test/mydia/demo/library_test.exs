@@ -1,123 +1,129 @@
 defmodule Mydia.Demo.LibraryTest do
+  # async: false because the stub provider is registered process-globally.
   use Mydia.DataCase, async: false
 
   alias Mydia.Demo.Library
+  alias Mydia.DemoMetadataStubProvider, as: Stub
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Playback.Progress
 
-  @base_url "http://demo.test"
+  defp write_titles(tmp_dir, lines) do
+    path = Path.join(tmp_dir, "titles.local")
+    File.write!(path, Enum.join(lines, "\n"))
+    path
+  end
 
-  defp opts(ctx) do
-    [art_source: ctx.art_source, art_dir: ctx.art_dir, base_url: @base_url, user: ctx.user]
+  defp catalog_lines do
+    ["# demo list, comments name titles"] ++
+      Enum.map(Stub.movie_ids(), &"movie #{&1}  # a movie") ++
+      [""] ++ Enum.map(Stub.show_ids(), &"tv #{&1}")
+  end
+
+  defp counts do
+    {Repo.aggregate(MediaItem, :count), Repo.aggregate(Episode, :count),
+     Repo.aggregate(MediaFile, :count), Repo.aggregate(Progress, :count)}
+  end
+
+  describe "parse_titles/1" do
+    test "reads movie and tv entries, skipping comments and blank lines" do
+      assert {:ok, [{:movie, 12}, {:tv, 34}]} =
+               Library.parse_titles("# header\nmovie 12 # name\n\n  tv 34\n")
+    end
+
+    test "rejects an unknown kind or a non-numeric id" do
+      assert {:error, {:invalid_line, 2, "show 5"}} = Library.parse_titles("movie 1\nshow 5")
+      assert {:error, {:invalid_line, 1, "movie abc"}} = Library.parse_titles("movie abc")
+    end
+
+    test "rejects a list with no entries" do
+      assert {:error, :no_titles} = Library.parse_titles("# nothing yet\n")
+    end
   end
 
   describe "seed/1" do
     @describetag :tmp_dir
 
     setup %{tmp_dir: tmp_dir} do
-      art_dir = Path.join(tmp_dir, "art")
-      art_source = Path.join(tmp_dir, "source")
-      File.mkdir_p!(art_source)
-
-      # Tiny stand-ins for the committed JPEGs, one pair per title.
-      for title <- Library.titles(),
-          file <- Tuple.to_list(Library.art_files(title)),
-          do: File.write!(Path.join(art_source, file), "jpg:" <> file)
-
+      :ok = Stub.setup()
       user = insert(:user, role: "admin")
-
-      {:ok, art_dir: art_dir, art_source: art_source, user: user}
+      {:ok, user: user, titles: write_titles(tmp_dir, catalog_lines())}
     end
 
-    test "seeds an empty database", ctx do
-      assert {:ok, %{movies: m, shows: s, episodes: e}} = Library.seed(opts(ctx))
-      assert m >= 18
-      assert s >= 6
-      assert e > 0
+    defp seed(ctx, opts \\ []), do: Library.seed([titles: ctx.titles, user: ctx.user] ++ opts)
 
-      titles = Library.titles()
+    test "seeds every listed title with its fetched metadata", ctx do
+      assert {:ok, %{movies: 3, shows: 2, episodes: episodes}} = seed(ctx)
+
       items = Repo.all(MediaItem)
-      assert length(items) == m + s
-      assert Enum.all?(items, &(&1.title in titles))
-      assert Enum.all?(items, &(&1.tmdb_id >= 2_000_000_000))
-      assert Enum.all?(items, &(&1.monitored == false))
-
-      movies = Enum.filter(items, &(&1.type == "movie"))
-      assert length(movies) == m
+      assert length(items) == 5
+      assert Enum.sort(Enum.map(items, & &1.title)) == Enum.sort(Stub.titles())
+      assert Enum.sort(Enum.map(items, & &1.tmdb_id)) == Stub.movie_ids() ++ Stub.show_ids()
 
       for item <- items do
-        {poster_file, backdrop_file} = Library.art_files(item.title)
-
-        for {url, file} <- [
-              {item.metadata.poster_path, poster_file},
-              {item.metadata.backdrop_path, backdrop_file}
-            ] do
-          assert url == @base_url <> "/images/demo/" <> file
-          assert File.read!(Path.join(ctx.art_dir, file)) == "jpg:" <> file
-        end
+        assert item.metadata.poster_path =~ ~r{^/demo-.*-poster\.jpg$}
+        assert item.metadata.backdrop_path =~ ~r{^/demo-.*-backdrop\.jpg$}
       end
+
+      assert episodes == Repo.aggregate(Episode, :count)
+      refute Repo.exists?(from e in Episode, where: e.season_number == 0)
     end
 
-    test "art file names follow the slug rule" do
-      assert Library.art_files("Fennick's Wager") ==
-               {"fennick-s-wager-poster.jpg", "fennick-s-wager-backdrop.jpg"}
+    test "items and episodes are unmonitored", ctx do
+      {:ok, _} = seed(ctx)
+
+      assert Repo.all(from i in MediaItem, select: i.monitored) |> Enum.uniq() == [false]
+      assert Repo.all(from e in Episode, select: e.monitored) |> Enum.uniq() == [false]
     end
 
-    test "the committed art covers every title" do
-      source = Path.expand("assets/demo/art", File.cwd!())
-
-      for title <- Library.titles(), file <- Tuple.to_list(Library.art_files(title)) do
-        assert File.regular?(Path.join(source, file)), "missing #{file}"
-      end
-    end
-
-    test "refuses a database that already holds media", ctx do
+    test "refuses a database that already holds media and writes nothing", ctx do
       insert(:media_item)
 
-      assert {:error, :not_empty} = Library.seed(opts(ctx))
-      assert Repo.aggregate(MediaItem, :count) == 1
-      assert File.ls(ctx.art_dir) in [{:error, :enoent}, {:ok, []}]
+      assert {:error, :not_empty} = seed(ctx)
+      assert {1, 0, 0, 0} = counts()
     end
 
-    test "fails before writing when art is missing", ctx do
-      [title | _] = Library.titles()
-      {_poster, backdrop} = Library.art_files(title)
-      File.rm!(Path.join(ctx.art_source, backdrop))
+    test "a failed fetch writes nothing", ctx do
+      titles = write_titles(ctx.tmp_dir, catalog_lines() ++ ["movie #{Stub.missing_id()}"])
+      missing = {:movie, Stub.missing_id()}
 
-      assert {:error, {:art_missing, [^backdrop]}} = Library.seed(opts(ctx))
-      assert Repo.aggregate(MediaItem, :count) == 0
-      assert Repo.aggregate(MediaFile, :count) == 0
-      assert Repo.aggregate(Episode, :count) == 0
-      assert File.ls(ctx.art_dir) in [{:error, :enoent}, {:ok, []}]
+      assert {:error, {:fetch_failed, ^missing, _reason}} = seed(%{ctx | titles: titles})
+      assert {0, 0, 0, 0} = counts()
     end
 
-    test "episode files hang off episodes", ctx do
-      {:ok, _} = Library.seed(opts(ctx))
+    test "a missing title list is reported", ctx do
+      path = Path.join(ctx.tmp_dir, "absent.local")
+      assert {:error, {:titles_file, ^path, :enoent}} = seed(%{ctx | titles: path})
+    end
 
-      episode_files = Repo.all(from f in MediaFile, where: not is_nil(f.episode_id))
-      assert episode_files != []
-      assert Enum.all?(episode_files, &is_nil(&1.media_item_id))
+    test "movies get one file; TV files hang off aired episodes only", ctx do
+      {:ok, _} = seed(ctx)
+      today = Date.utc_today()
 
-      movies = Repo.all(from m in MediaItem, where: m.type == "movie")
-
-      for movie <- movies do
+      for movie <- Repo.all(from m in MediaItem, where: m.type == "movie") do
         assert Repo.aggregate(from(f in MediaFile, where: f.media_item_id == ^movie.id), :count) ==
                  1
       end
-    end
 
-    test "episode titles are whole phrases", ctx do
-      {:ok, _} = Library.seed(opts(ctx))
+      episode_files =
+        Repo.all(
+          from f in MediaFile,
+            join: e in Episode,
+            on: e.id == f.episode_id,
+            select: {f, e}
+        )
 
-      titles = Repo.all(from e in Episode, select: e.title)
-      assert Enum.any?(titles, &String.contains?(&1, " "))
-      refute "Way" in titles
-      refute "The" in titles
+      aired = Repo.aggregate(from(e in Episode, where: e.air_date <= ^today), :count)
+      assert length(episode_files) == aired
+
+      for {file, episode} <- episode_files do
+        assert is_nil(file.media_item_id)
+        assert Date.compare(episode.air_date, today) != :gt
+      end
     end
 
     test "populates Continue Watching and the calendar", ctx do
-      {:ok, _} = Library.seed(opts(ctx))
+      {:ok, _} = seed(ctx)
 
       in_progress =
         Repo.all(
@@ -127,26 +133,31 @@ defmodule Mydia.Demo.LibraryTest do
                 p.position_seconds < p.duration_seconds
         )
 
-      assert length(in_progress) >= 3
+      # Two movies and one episode in each of two shows.
+      assert length(in_progress) == 4
+      assert Enum.count(in_progress, &(not is_nil(&1.media_item_id))) == 2
+      assert Enum.count(in_progress, &(not is_nil(&1.episode_id))) == 2
+
+      watched =
+        Repo.aggregate(
+          from(p in Progress,
+            where: p.user_id == ^ctx.user.id and p.position_seconds >= p.duration_seconds
+          ),
+          :count
+        )
+
+      assert watched > 0
 
       today = Date.utc_today()
       limit = Date.add(today, 14)
 
       upcoming =
         Repo.aggregate(
-          from(e in Episode, where: e.air_date >= ^today and e.air_date <= ^limit),
+          from(e in Episode, where: e.air_date > ^today and e.air_date <= ^limit),
           :count
         )
 
-      assert upcoming >= 3
-    end
-  end
-
-  describe "titles/0" do
-    test "titles are unique and fit a poster" do
-      titles = Library.titles()
-      assert titles == Enum.uniq(titles)
-      assert Enum.all?(titles, &(String.length(&1) <= 40))
+      assert upcoming == Stub.upcoming_count()
     end
   end
 end

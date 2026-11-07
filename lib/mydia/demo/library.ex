@@ -1,12 +1,25 @@
 defmodule Mydia.Demo.Library do
   @moduledoc """
-  Seeds an invented demo library (movies, shows, episodes, files, watch
-  progress and artwork) for website screenshots. Every title is made up.
+  Seeds a demo library (movies, shows, episodes, files and watch progress) for
+  website screenshots, from a local list of TMDB ids.
 
-  `seed/1` refuses a database that already holds media. The artwork is
-  AI-generated and committed under `assets/demo/art` as `<slug>-poster.jpg`
-  and `<slug>-backdrop.jpg`. It is checked and copied before any row is
-  written, so missing art leaves the database alone.
+  The list is an untracked file, `.demo-titles.local` at the repository root by
+  default, so no title is ever committed. One entry per line:
+
+      movie 12345
+      tv 67890   # comments may follow, or fill a line
+
+  Every entry is fetched through the metadata relay, the same way the add-media
+  flow fetches it (`Mydia.Metadata.fetch_by_ref/3` and
+  `Mydia.Media.Add.build_media_item_attrs/3`), so items carry the real
+  `tmdb_id`, poster and backdrop. Shows also get their real seasons and
+  episodes. All network work happens before the transaction: a failed fetch
+  returns `{:error, {:fetch_failed, entry, reason}}` and writes nothing.
+
+  `seed/1` refuses a database that already holds media. Every item and episode
+  is unmonitored, so scheduled jobs leave them alone. Media files are database
+  rows only: one per movie, and one per aired episode, hanging off the episode
+  with a NULL `media_item_id`.
   """
 
   import Ecto.Query
@@ -14,263 +27,57 @@ defmodule Mydia.Demo.Library do
   alias Mydia.Accounts.{Scope, User}
   alias Mydia.Library.MediaFiles
   alias Mydia.Media
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{Add, Episode, EpisodeSync, MediaItem}
+  alias Mydia.Metadata
   alias Mydia.Playback
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPaths
 
-  @movies [
-    %{
-      title: "Lanternfall Station",
-      year: 2019,
-      genres: ["Drama", "Mystery"],
-      runtime: 112,
-      overview:
-        "A night clerk at a failing rail depot finds a lantern that glows only for lost travelers."
-    },
-    %{
-      title: "The Quiet Orchard Job",
-      year: 2021,
-      genres: ["Comedy", "Crime"],
-      runtime: 98,
-      overview: "Three retired pickers plan one last heist: the county's prize apple harvest."
-    },
-    %{
-      title: "Saltmarsh Radio",
-      year: 2017,
-      genres: ["Drama"],
-      runtime: 104,
-      overview: "A pirate radio host keeps a drowning village connected, one broadcast at a time."
-    },
-    %{
-      title: "Midnight at Pellwick Pier",
-      year: 2022,
-      genres: ["Thriller", "Mystery"],
-      runtime: 109,
-      overview: "The last ferry never arrives, and the pier's regulars begin to disappear."
-    },
-    %{
-      title: "A Kettle for Two Moons",
-      year: 2020,
-      genres: ["Fantasy", "Adventure"],
-      runtime: 121,
-      overview: "A tea merchant crosses a double-mooned desert to deliver one very old pot."
-    },
-    %{
-      title: "Brannock Heights",
-      year: 2018,
-      genres: ["Drama", "Romance"],
-      runtime: 116,
-      overview: "Two neighbors on opposite floors fall in love through a broken intercom."
-    },
-    %{
-      title: "Copper Weather",
-      year: 2023,
-      genres: ["Science Fiction"],
-      runtime: 127,
-      overview:
-        "When the sky turns to metal, a weather forecaster is the only one still counting days."
-    },
-    %{
-      title: "The Last Tram to Ovelle",
-      year: 2016,
-      genres: ["Drama", "History"],
-      runtime: 133,
-      overview:
-        "On the final night of a city's tram line, a conductor carries one passenger's secret."
-    },
-    %{
-      title: "Wintergreen Protocol",
-      year: 2024,
-      genres: ["Action", "Thriller"],
-      runtime: 118,
-      overview:
-        "A greenhouse engineer is the only witness to a sabotage on a polar research base."
-    },
-    %{
-      title: "Hollow Meridian",
-      year: 2021,
-      genres: ["Science Fiction", "Mystery"],
-      runtime: 124,
-      overview: "A survey crew drilling at the equator breaks into a room that should not exist."
-    },
-    %{
-      title: "Marrow and Thistle",
-      year: 2015,
-      genres: ["Fantasy", "Drama"],
-      runtime: 107,
-      overview: "A bone-setter and a herbalist share a village and a long, quiet feud."
-    },
-    %{
-      title: "Paper Lighthouse",
-      year: 2022,
-      genres: ["Animation", "Family"],
-      runtime: 92,
-      overview: "A girl folds a lighthouse from old maps, and ships begin to find their way home."
-    },
-    %{
-      title: "Dunmore Drift",
-      year: 2019,
-      genres: ["Action", "Comedy"],
-      runtime: 101,
-      overview: "A getaway driver with a fear of highways has one night to cross the country."
-    },
-    %{
-      title: "Thessaly Rides Alone",
-      year: 2018,
-      genres: ["Western"],
-      runtime: 119,
-      overview: "A surveyor rides into a boomtown that has quietly stopped drawing its own maps."
-    },
-    %{
-      title: "Orbit of Small Things",
-      year: 2023,
-      genres: ["Science Fiction", "Family"],
-      runtime: 96,
-      overview: "A lonely station caretaker adopts every lost object that drifts past his window."
-    },
-    %{
-      title: "Quillfeather Road",
-      year: 2017,
-      genres: ["Adventure", "Family"],
-      runtime: 103,
-      overview:
-        "Two siblings follow a trail of feathers across a country that is slowly forgetting itself."
-    },
-    %{
-      title: "Fennick's Wager",
-      year: 2020,
-      genres: ["Comedy", "Drama"],
-      runtime: 110,
-      overview: "A gambler bets his entire inheritance that he can stay honest for a month."
-    },
-    %{
-      title: "Tidewrack",
-      year: 2024,
-      genres: ["Horror", "Thriller"],
-      runtime: 99,
-      overview: "What the tide leaves behind on a remote beach starts leaving again, on its own."
-    },
-    %{
-      title: "The Velvet Quorum",
-      year: 2016,
-      genres: ["Comedy", "Drama"],
-      runtime: 114,
-      overview:
-        "A theater committee must pick a new season before the roof, quite literally, falls in."
-    },
-    %{
-      title: "Ashgrove After Dark",
-      year: 2021,
-      genres: ["Horror", "Mystery"],
-      runtime: 105,
-      overview:
-        "A night-shift nurse notices the hospital's lights dim whenever someone is about to wake."
-    }
-  ]
-
-  @shows [
-    %{
-      title: "Harbor Lights of Vennmoor",
-      year: 2020,
-      genres: ["Drama"],
-      seasons: [8, 10],
-      overview: "Keepers of a small island lighthouse trade stories with every ship that passes."
-    },
-    %{
-      title: "The Brightwater Files",
-      year: 2022,
-      genres: ["Mystery", "Crime"],
-      seasons: [8, 8, 6],
-      overview: "A records clerk in a river town reopens cases the town agreed to forget."
-    },
-    %{
-      title: "Nightshift at Corvane",
-      year: 2021,
-      genres: ["Comedy"],
-      seasons: [10, 8],
-      overview:
-        "The overnight crew of a failing observatory keeps finding better things to watch."
-    },
-    %{
-      title: "Tenders of the Gloam",
-      year: 2023,
-      genres: ["Fantasy", "Drama"],
-      seasons: [8, 6],
-      overview: "A guild of lamplighters keeps the dusk from lasting too long."
-    },
-    %{
-      title: "Pebble Creek Pioneers",
-      year: 2019,
-      genres: ["Family", "Comedy"],
-      seasons: [10],
-      overview: "A cul-de-sac of unlikely neighbors builds a town from a single shared garden."
-    },
-    %{
-      title: "The Understudy Hours",
-      year: 2024,
-      genres: ["Drama", "Comedy"],
-      seasons: [6, 6],
-      overview: "Every night, the backup cast of a failing theater has one chance to shine."
-    },
-    %{
-      title: "Kestrel Court",
-      year: 2018,
-      genres: ["Drama", "Crime"],
-      seasons: [8, 8, 8],
-      overview: "A small-town magistrate and her clerk settle disputes the law never saw coming."
-    },
-    %{
-      title: "Borrowed Summers",
-      year: 2022,
-      genres: ["Romance", "Drama"],
-      seasons: [6],
-      overview: "A swap of holiday homes between strangers turns into a decade of letters."
-    }
-  ]
-
-  @episode_titles [
-    "Arrivals",
-    "Low Tide",
-    "The Long Way Round",
-    "Unsent Letters",
-    "Borrowed Time",
-    "Paper Boats",
-    "Second Wind",
-    "Quiet Hours",
-    "Small Hours",
-    "The Other Door",
-    "Thin Ice",
-    "Lost and Found",
-    "Open Water",
-    "A Fair Trade",
-    "Last Light",
-    "The Hollow Month"
-  ]
-
-  # Far above any real TMDB id, so a refresh job can never match a real title.
-  @provider_id_base 2_000_000_000
+  @default_titles ".demo-titles.local"
   @episode_seconds 2700
+  @movie_seconds 6600
+  @fetch_concurrency 4
 
-  @doc "Every movie and show title `seed/1` can write."
-  @spec titles() :: [String.t()]
-  def titles, do: Enum.map(@movies ++ @shows, & &1.title)
+  @type entry :: {:movie | :tv, pos_integer()}
 
   @doc """
-  The art file names for `title`: `{poster, backdrop}`.
-
-  The slug is the lowercased title with each run of other characters turned
-  into `-`, trimmed of leading and trailing `-`.
+  Parses a title list: `movie <tmdb_id>` or `tv <tmdb_id>` per line, `#`
+  starting a comment, blank lines ignored.
   """
-  @spec art_files(String.t()) :: {String.t(), String.t()}
-  def art_files(title) do
-    slug =
-      title
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9]+/u, "-")
-      |> String.trim("-")
+  @spec parse_titles(String.t()) ::
+          {:ok, [entry()]} | {:error, {:invalid_line, pos_integer(), String.t()} | :no_titles}
+  def parse_titles(contents) do
+    contents
+    |> String.split(~r/\R/)
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, []}, fn {line, number}, {:ok, acc} ->
+      case parse_line(line) do
+        :skip -> {:cont, {:ok, acc}}
+        {:ok, entry} -> {:cont, {:ok, [entry | acc]}}
+        :error -> {:halt, {:error, {:invalid_line, number, line}}}
+      end
+    end)
+    |> case do
+      {:ok, []} -> {:error, :no_titles}
+      {:ok, entries} -> {:ok, entries |> Enum.reverse() |> Enum.uniq()}
+      error -> error
+    end
+  end
 
-    {slug <> "-poster.jpg", slug <> "-backdrop.jpg"}
+  defp parse_line(line) do
+    case line |> String.split("#", parts: 2) |> hd() |> String.split() do
+      [] -> :skip
+      ["movie", id] -> parse_id(:movie, id)
+      ["tv", id] -> parse_id(:tv, id)
+      _ -> :error
+    end
+  end
+
+  defp parse_id(kind, id) do
+    case Integer.parse(id) do
+      {n, ""} when n > 0 -> {:ok, {kind, n}}
+      _ -> :error
+    end
   end
 
   @doc """
@@ -278,43 +85,30 @@ defmodule Mydia.Demo.Library do
 
   ## Options
 
-    * `:art_source` - where the committed artwork is read from
-      (default `assets/demo/art` under the current directory)
-    * `:art_dir` - where artwork is copied to (default `priv/static/images/demo`)
-    * `:base_url` - prefix of the artwork URLs stored on items (default the endpoint URL)
+    * `:titles` - path of the title list (default `.demo-titles.local` under
+      the current directory)
     * `:user` - the user who gets watch progress (default the first admin)
   """
   @spec seed(keyword()) ::
           {:ok,
            %{movies: non_neg_integer(), shows: non_neg_integer(), episodes: non_neg_integer()}}
-          | {:error, :not_empty | :no_admin_user | {:art_missing, [String.t()]} | term()}
+          | {:error,
+             :not_empty
+             | :no_admin_user
+             | :no_titles
+             | {:titles_file, String.t(), File.posix()}
+             | {:invalid_line, pos_integer(), String.t()}
+             | {:fetch_failed, entry(), term()}
+             | term()}
   def seed(opts \\ []) do
-    art_source =
-      Keyword.get_lazy(opts, :art_source, fn -> Path.expand("assets/demo/art", File.cwd!()) end)
+    path = Keyword.get_lazy(opts, :titles, fn -> Path.expand(@default_titles, File.cwd!()) end)
 
-    art_dir =
-      Keyword.get_lazy(opts, :art_dir, fn ->
-        Application.app_dir(:mydia, "priv/static/images/demo")
-      end)
-
-    base_url = Keyword.get_lazy(opts, :base_url, fn -> MydiaWeb.Endpoint.url() end)
-
-    with :ok <- check_art(art_source),
-         :ok <- check_empty(),
+    with :ok <- check_empty(),
          {:ok, user} <- resolve_user(Keyword.get(opts, :user)),
-         {:ok, art} <- copy_artwork(art_source, art_dir, base_url) do
-      write(user, art)
+         {:ok, entries} <- read_titles(path),
+         {:ok, fetched} <- fetch_all(entries) do
+      write(user, fetched)
     end
-  end
-
-  defp check_art(source) do
-    missing =
-      for title <- titles(),
-          file <- Tuple.to_list(art_files(title)),
-          not File.regular?(Path.join(source, file)),
-          do: file
-
-    if missing == [], do: :ok, else: {:error, {:art_missing, missing}}
   end
 
   defp check_empty do
@@ -332,153 +126,167 @@ defmodule Mydia.Demo.Library do
     end
   end
 
-  # Returns %{title => %{poster_path: url, backdrop_path: url}}.
-  defp copy_artwork(source, art_dir, base_url) do
-    with :ok <- File.mkdir_p(art_dir) do
-      Enum.reduce_while(titles(), {:ok, %{}}, fn title, {:ok, acc} ->
-        {poster, backdrop} = art_files(title)
-
-        with :ok <- copy(source, art_dir, poster),
-             :ok <- copy(source, art_dir, backdrop) do
-          urls = %{
-            poster_path: image_url(base_url, poster),
-            backdrop_path: image_url(base_url, backdrop)
-          }
-
-          {:cont, {:ok, Map.put(acc, title, urls)}}
-        else
-          {:error, reason} -> {:halt, {:error, {:artwork_failed, title, reason}}}
-        end
-      end)
+  defp read_titles(path) do
+    case File.read(path) do
+      {:ok, contents} -> parse_titles(contents)
+      {:error, reason} -> {:error, {:titles_file, path, reason}}
     end
   end
 
-  defp copy(source, dest, file) do
-    case File.cp(Path.join(source, file), Path.join(dest, file)) do
-      :ok -> :ok
-      {:error, reason} -> {:error, {file, reason}}
+  ## Fetching (no database writes)
+
+  defp fetch_all(entries) do
+    config = Metadata.default_relay_config()
+
+    entries
+    |> Task.async_stream(&fetch_entry(&1, config),
+      max_concurrency: @fetch_concurrency,
+      timeout: :infinity
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, fetched}}, {:ok, acc} -> {:cont, {:ok, [fetched | acc]}}
+      {:ok, {:error, _} = error}, _acc -> {:halt, error}
+    end)
+    |> case do
+      {:ok, fetched} -> {:ok, Enum.reverse(fetched)}
+      error -> error
     end
   end
 
-  defp image_url(base_url, file),
-    do: String.trim_trailing(base_url, "/") <> "/images/demo/" <> file
+  defp fetch_entry({kind, id} = entry, config) do
+    media_type = media_type(kind)
+    ref = {:tmdb, id}
 
-  defp write(user, art) do
+    with {:ok, metadata} <-
+           Metadata.fetch_by_ref(config, ref,
+             media_type: media_type,
+             append_to_response: Metadata.default_append_to_response(media_type)
+           ),
+         {:ok, seasons} <- fetch_seasons(kind, metadata, ref, config) do
+      # metadata_source is recorded for shows only; build_media_item_attrs
+      # drops it for movies. Seasons were fetched from TMDB, so that is the
+      # provenance that keeps a later refresh on the same episode numbering.
+      attrs =
+        Add.build_media_item_attrs(metadata, media_type,
+          tmdb_id: id,
+          metadata_source: :tmdb,
+          monitored: false
+        )
+
+      {:ok, %{entry: entry, attrs: attrs, seasons: seasons}}
+    else
+      {:error, reason} -> {:error, {:fetch_failed, entry, reason}}
+    end
+  end
+
+  defp fetch_seasons(:movie, _metadata, _ref, _config), do: {:ok, []}
+
+  defp fetch_seasons(:tv, metadata, ref, config) do
+    (metadata.seasons || [])
+    |> Enum.map(& &1.season_number)
+    |> Enum.filter(&(is_integer(&1) and &1 > 0))
+    |> Enum.reduce_while({:ok, []}, fn number, {:ok, acc} ->
+      case Metadata.fetch_season_by_ref(config, ref, number) do
+        {:ok, season} -> {:cont, {:ok, [season | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, seasons} -> {:ok, Enum.reverse(seasons)}
+      error -> error
+    end
+  end
+
+  defp media_type(:movie), do: :movie
+  defp media_type(:tv), do: :tv_show
+
+  ## Writing
+
+  defp write(user, fetched) do
     Repo.transaction(fn ->
       {:ok, movies_path} =
         LibraryPaths.create_library_path(%{path: "/demo/movies", type: :movies})
 
       {:ok, tv_path} = LibraryPaths.create_library_path(%{path: "/demo/tv", type: :series})
 
-      movies =
-        @movies
-        |> Enum.with_index()
-        |> Enum.map(fn {movie, index} -> seed_movie(movie, index, movies_path, art) end)
+      {movie_entries, show_entries} = Enum.split_with(fetched, &match?({:movie, _}, &1.entry))
 
-      shows =
-        @shows
-        |> Enum.with_index(length(@movies))
-        |> Enum.map(fn {show, index} -> seed_show(show, index, tv_path, art) end)
-
-      episodes = Enum.flat_map(shows, & &1.episodes)
+      movies = movie_entries |> Enum.with_index() |> Enum.map(&seed_movie(&1, movies_path))
+      shows = show_entries |> Enum.with_index() |> Enum.map(&seed_show(&1, tv_path))
 
       seed_progress(user, movies, shows)
 
-      %{movies: length(movies), shows: length(shows), episodes: length(episodes)}
+      %{
+        movies: length(movies),
+        shows: length(shows),
+        episodes: shows |> Enum.map(&length(&1.episodes)) |> Enum.sum()
+      }
     end)
   end
 
-  defp seed_movie(movie, index, library_path, art) do
-    item = create_item!(movie, "movie", index, library_path, art, %{runtime: movie.runtime})
+  defp seed_movie({%{attrs: attrs}, index}, library_path) do
+    item = create_item!(attrs, library_path)
+    name = folder_name(item)
 
-    relative = "#{movie.title} (#{movie.year})/#{movie.title} (#{movie.year}).mkv"
-    create_file!(library_path, relative, %{media_item_id: item.id}, index)
+    create_file!(library_path, "#{name}/#{name}.mkv", %{media_item_id: item.id}, index)
 
-    %{item: item, runtime: movie.runtime}
+    runtime = item.metadata && item.metadata.runtime
+
+    %{
+      item: item,
+      seconds: if(is_integer(runtime) and runtime > 0, do: runtime * 60, else: @movie_seconds)
+    }
   end
 
-  defp seed_show(show, index, library_path, art) do
-    item = create_item!(show, "tv_show", index, library_path, art, %{status: "Returning Series"})
+  defp seed_show({%{attrs: attrs, seasons: seasons}, index}, library_path) do
+    item = create_item!(attrs, library_path)
+
+    for season <- seasons do
+      {:ok, _count} = EpisodeSync.upsert_episodes_from_season(item, season, monitor_new?: false)
+    end
+
     today = Date.utc_today()
 
-    slots =
-      for {count, season_idx} <- Enum.with_index(show.seasons, 1),
-          number <- 1..count,
-          do: {season_idx, number}
-
-    future_count = 1 + rem(index, 2)
-    aired_count = length(slots) - future_count
-    # Per-show offsets spread the calendar instead of stacking every show on one day.
-    aired_offset = rem(index * 3, 7)
-    future_offset = rem(index * 5, 11)
-
     episodes =
-      slots
-      |> Enum.with_index()
-      |> Enum.map(fn {{season, number}, pos} ->
-        air_date =
-          if pos < aired_count,
-            do: Date.add(today, -7 * (aired_count - 1 - pos) - 1 - aired_offset),
-            else: Date.add(today, 1 + future_offset + 3 * (pos - aired_count))
-
-        {:ok, episode} =
-          Media.create_episode(%{
-            media_item_id: item.id,
-            season_number: season,
-            episode_number: number,
-            title: episode_title(index, pos),
-            air_date: air_date,
-            monitored: false
-          })
-
-        if pos < aired_count do
-          relative =
-            "#{show.title}/Season #{pad(season)}/#{show.title} - S#{pad(season)}E#{pad(number)}.mkv"
-
-          # TV files carry episode_id only; the show hangs off the episode.
-          create_file!(library_path, relative, %{episode_id: episode.id}, index + pos)
-        end
-
-        episode
-      end)
-
-    %{item: item, episodes: episodes, aired: aired_count}
-  end
-
-  defp create_item!(entry, type, index, library_path, art, extra_metadata) do
-    urls = Map.fetch!(art, entry.title)
-
-    metadata =
-      Map.merge(
-        %{
-          provider: :tmdb,
-          provider_id: Integer.to_string(@provider_id_base + index),
-          media_type: String.to_atom(type),
-          title: entry.title,
-          year: entry.year,
-          overview: entry.overview,
-          genres: entry.genres,
-          poster_path: urls.poster_path,
-          backdrop_path: urls.backdrop_path,
-          vote_average: 6.0 + :erlang.phash2({entry.title, :vote}, 30) / 10
-        },
-        extra_metadata
+      Repo.all(
+        from e in Episode,
+          where: e.media_item_id == ^item.id,
+          order_by: [asc: e.season_number, asc: e.episode_number]
       )
 
-    attrs = %{
-      type: type,
-      title: entry.title,
-      year: entry.year,
-      tmdb_id: @provider_id_base + index,
-      metadata_source: :tmdb,
-      monitored: false,
-      library_path_id: library_path.id,
-      metadata: metadata
-    }
+    aired = Enum.filter(episodes, &aired?(&1, today))
+    name = folder_name(item)
+
+    aired
+    |> Enum.with_index()
+    |> Enum.each(fn {episode, pos} ->
+      season = pad(episode.season_number)
+      number = pad(episode.episode_number)
+
+      # TV files carry episode_id only; the show hangs off the episode.
+      create_file!(
+        library_path,
+        "#{name}/Season #{season}/#{name} - S#{season}E#{number}.mkv",
+        %{episode_id: episode.id},
+        index + pos
+      )
+    end)
+
+    %{item: item, episodes: episodes, aired: aired}
+  end
+
+  defp aired?(%Episode{air_date: %Date{} = date}, today), do: Date.compare(date, today) != :gt
+  defp aired?(_episode, _today), do: false
+
+  defp create_item!(attrs, library_path) do
+    attrs = Map.put(attrs, :library_path_id, library_path.id)
 
     {:ok, item} = Media.create_media_item(Scope.system(), attrs, skip_episode_refresh: true)
     item
   end
+
+  defp folder_name(%MediaItem{title: title, year: nil}), do: title
+  defp folder_name(%MediaItem{title: title, year: year}), do: "#{title} (#{year})"
 
   defp create_file!(library_path, relative_path, parent, seed) do
     attrs =
@@ -495,29 +303,54 @@ defmodule Mydia.Demo.Library do
     file
   end
 
-  # Two movies part-way through, plus, for two shows, a run of watched episodes
-  # followed by one in progress.
+  # Two movies part-way through, plus, for the first two shows with enough
+  # aired episodes, a run of watched episodes followed by one in progress.
   defp seed_progress(user, movies, shows) do
-    for {%{item: item, runtime: runtime}, fraction} <- Enum.zip(Enum.take(movies, 2), [0.4, 0.15]) do
-      duration = runtime * 60
-      save!(user, [media_item_id: item.id], round(duration * fraction), duration)
+    for {%{item: item, seconds: seconds}, fraction} <- Enum.zip(movies, [0.4, 0.15]) do
+      save!(user, [media_item_id: item.id], round(seconds * fraction), seconds)
     end
 
-    for {show, current} <- Enum.zip(Enum.take(shows, 2), [3, 2]) do
-      show.episodes
+    shows
+    |> Enum.map(&latest_aired_season/1)
+    |> Enum.filter(&(length(&1) >= 2))
+    |> Enum.zip([3, 2])
+    |> Enum.each(fn {season_episodes, target} ->
+      current = min(target, length(season_episodes) - 1)
+
+      season_episodes
       |> Enum.take(current + 1)
       |> Enum.with_index()
       |> Enum.each(fn
         {episode, ^current} ->
-          save!(user, [episode_id: episode.id], round(@episode_seconds * 0.45), @episode_seconds)
+          seconds = episode_seconds(episode)
+          save!(user, [episode_id: episode.id], round(seconds * 0.45), seconds)
 
         {episode, _earlier} ->
-          save!(user, [episode_id: episode.id], @episode_seconds, @episode_seconds)
+          seconds = episode_seconds(episode)
+          save!(user, [episode_id: episode.id], seconds, seconds)
       end)
-    end
+    end)
 
     :ok
   end
+
+  # The aired episodes of the newest season that has any, in order.
+  defp latest_aired_season(%{aired: []}), do: []
+
+  defp latest_aired_season(%{aired: aired}) do
+    season = aired |> Enum.map(& &1.season_number) |> Enum.max()
+    Enum.filter(aired, &(&1.season_number == season))
+  end
+
+  defp episode_seconds(%Episode{metadata: %{runtime: runtime}})
+       when is_integer(runtime) and runtime > 0,
+       do: runtime * 60
+
+  defp episode_seconds(%Episode{metadata: %{"runtime" => runtime}})
+       when is_integer(runtime) and runtime > 0,
+       do: runtime * 60
+
+  defp episode_seconds(_episode), do: @episode_seconds
 
   defp save!(user, content_id, position, duration) do
     {:ok, _} =
@@ -525,10 +358,6 @@ defmodule Mydia.Demo.Library do
         position_seconds: position,
         duration_seconds: duration
       })
-  end
-
-  defp episode_title(show_index, pos) do
-    Enum.at(@episode_titles, rem(show_index * 5 + pos, length(@episode_titles)))
   end
 
   defp pad(n), do: n |> Integer.to_string() |> String.pad_leading(2, "0")
