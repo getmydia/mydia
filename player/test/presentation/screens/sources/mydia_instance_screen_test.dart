@@ -25,6 +25,8 @@ import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 
 import '../../../core/sources/mydia/mydia_account_harness.dart'
     show mydiaRecord;
+import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
+
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -125,6 +127,9 @@ void main() {
         else
           downloadManagerProvider.overrideWith((ref) async => downloads),
         noCollectionSyncOverride,
+        // The cast button's hidden-banner dot reaches the ambient roster,
+        // which `_Targets.roster` leaves unimplemented.
+        castBarAmbientHiddenProvider.overrideWithValue(false),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(secrets),
         mediaSourceProvider

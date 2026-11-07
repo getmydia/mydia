@@ -29,6 +29,10 @@ class AmbientDismissal {
 
 /// Banners closed this app session. In memory on purpose: a restart is a
 /// fresh look at what is playing.
+///
+/// A dismissal lasts one viewing. [forgetNode] drops it once that player is
+/// seen stopped, so the next time it plays, even the same title, the banner
+/// is back. [clear] is the manual way back: opening the cast picker.
 class AmbientDismissals extends Notifier<Set<AmbientDismissal>> {
   @override
   Set<AmbientDismissal> build() => const {};
@@ -39,6 +43,22 @@ class AmbientDismissals extends Notifier<Set<AmbientDismissal>> {
   /// [key]'s node id must already be lower-cased, as [AmbientDismissal.of]
   /// does.
   void dismissKey(AmbientDismissal key) => state = {...state, key};
+
+  /// Drops every dismissal for [nodeId], which was found not playing.
+  /// Leaves state untouched when none match: the probe reports every idle
+  /// device on every sweep, and most were never dismissed.
+  void forgetNode(String nodeId) {
+    final id = nodeId.toLowerCase();
+    if (!state.any((d) => d.nodeId == id)) return;
+    state = {
+      for (final d in state)
+        if (d.nodeId != id) d,
+    };
+  }
+
+  void clear() {
+    if (state.isNotEmpty) state = const {};
+  }
 }
 
 final ambientDismissalsProvider =
