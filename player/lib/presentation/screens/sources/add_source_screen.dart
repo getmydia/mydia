@@ -8,13 +8,19 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
+import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
-  const AddSourceScreen({super.key, this.isWeb = kIsWeb});
+  const AddSourceScreen(
+      {super.key, this.isWeb = kIsWeb, this.foldersSupported});
 
   /// Third-party sources do not exist on web, so a second Mydia added there
   /// would vanish. Overridable for tests.
   final bool isWeb;
+
+  /// Whether Folder is offered; [localFoldersSupported] when null.
+  /// Overridable for tests.
+  final bool? foldersSupported;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,6 +57,22 @@ class AddSourceScreen extends ConsumerWidget {
                 subtitle: Text(context.l10n.sourcesAddStashSubtitle),
                 onTap: () => context.push('/sources/add/stash'),
               ),
+              if (!isWeb && (foldersSupported ?? localFoldersSupported))
+                ListTile(
+                  key: const Key('add-source-folder'),
+                  leading: const Icon(Icons.folder_rounded),
+                  title: Text(context.l10n.sourcesAddFolderTitle),
+                  subtitle: Text(context.l10n.sourcesAddFolderSubtitle),
+                  onTap: () => context.push('/sources/add/folder'),
+                ),
+              if (!isWeb)
+                ListTile(
+                  key: const Key('add-source-webdav'),
+                  leading: const Icon(Icons.folder_shared_rounded),
+                  title: const Text('WebDAV'), // l10n-ignore: protocol name
+                  subtitle: Text(context.l10n.sourcesAddWebDavSubtitle),
+                  onTap: () => context.push('/sources/add/webdav'),
+                ),
               ListTile(
                 key: const Key('add-source-mydia'),
                 leading: const Icon(Icons.dns_rounded),

@@ -96,6 +96,8 @@ dependencies:
   # Direct, not transitive: window geometry restore needs the display work
   # areas to decide whether a saved rect is still reachable.
   screen_retriever: ^0.2.2
+  # The folder picker of Add folder (files libraries, desktop).
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

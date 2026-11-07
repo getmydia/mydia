@@ -537,6 +537,18 @@ scans when the last scan is over six hours old (`filesScanProvider`); each
 group that lands, and each finished scan, invalidates the source's listings.
 Artwork is TMDB's image CDN, which needs no key.
 
+Accounts and roots are added and removed only through `FilesAccounts`
+(`filesAccountsProvider`): Add server, Folder (`/sources/add/folder`, Linux,
+Windows and macOS only) and WebDAV (`/sources/add/webdav`, everywhere but
+web). A root's id is `r` + the first 12 hex characters of the SHA-256 of its
+path, so adding the same folder twice keeps one root, and adding one starts a
+scan. The WebDAV form probes the share before anything is written, then
+writes the credentials, then the record; saving a URL already saved reuses
+its account, replaces the credentials and clears `needsReauth`. Signing a
+files account in again (`/sources/add/files?account=`) redirects to the
+folder picker for `flocal` and to the prefilled WebDAV form otherwise.
+`removeFilesAccount` removes the record and secrets, then clears the index.
+
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the
