@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/widgets/files/remote_folder_picker.dart';
 
@@ -44,6 +45,25 @@ void main() {
     expect(find.text('A'), findsOneWidget);
     expect(tester.widget<IconButton>(up).onPressed, isNull);
   });
+
+  for (final (failure, text) in <(BackendFailure, String)>[
+    (const BackendUnauthorized(), 'Wrong user or password.'),
+    (
+      const BackendNotFound(),
+      'That shared folder no longer exists on this server.'
+    ),
+    (const BackendPermissionLost(), "This account can't open that folder."),
+    (const BackendUnreachable(), "Can't reach the server."),
+  ]) {
+    testWidgets('a ${failure.runtimeType} has its own message', (tester) async {
+      final backend = FakeBackend({'/f.mkv': 1})..failures['/'] = failure;
+      await _pump(tester, backend, []);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('folder-picker-error'))).data,
+        text,
+      );
+    });
+  }
 
   testWidgets('shows the empty text when a folder has no subfolders',
       (tester) async {

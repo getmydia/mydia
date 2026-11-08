@@ -149,7 +149,11 @@ FilesMediaSource buildFilesSource(
     onDispose: () {
       unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
-      if (backend is LazySmbBackend) unawaited(backend.close());
+      if (backend is LazySmbBackend) {
+        unawaited(backend.close().catchError((Object e) {
+          debugPrint('[FilesSource] Could not close the SMB account: $e');
+        }));
+      }
     },
   );
   unawaited(media.probe());

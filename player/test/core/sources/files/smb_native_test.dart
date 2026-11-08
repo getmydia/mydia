@@ -67,6 +67,20 @@ void main() {
       }
     });
 
+    test('any other error, such as a Rust panic, is unreachable', () async {
+      final smb = FfiSmbNative.forTest(
+        () async => throw StateError('task panicked'),
+      );
+      Object? caught;
+      try {
+        await smb.probe(_target, _creds, '/');
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught, isA<BackendUnreachable>());
+      expect((caught! as BackendUnreachable).message, contains('panicked'));
+    });
+
     test('a success passes through', () async {
       final smb = FfiSmbNative.forTest(() async => null);
       await smb.probe(_target, _creds, '/');

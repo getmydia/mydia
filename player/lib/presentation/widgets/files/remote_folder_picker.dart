@@ -52,8 +52,8 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   late String _dir = trimRootPath(widget.root);
   List<FileEntry> _folders = const [];
   bool _busy = false;
-  bool _unauthorized = false;
-  bool _failed = false;
+  Object? _failure;
+  bool get _failed => _failure != null;
 
   @override
   void initState() {
@@ -74,8 +74,7 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   Future<void> _open(String dir) async {
     setState(() {
       _busy = true;
-      _failed = false;
-      _unauthorized = false;
+      _failure = null;
     });
     try {
       final folders = _sortedFolders(await widget.backend.list(dir));
@@ -86,12 +85,7 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
       });
     } catch (e) {
       debugPrint('[RemoteFolderPicker] Listing $dir failed: $e');
-      if (mounted) {
-        setState(() {
-          _failed = true;
-          _unauthorized = e is BackendUnauthorized;
-        });
-      }
+      if (mounted) setState(() => _failure = e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -146,9 +140,12 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-                _unauthorized
-                    ? l10n.filesPickUnauthorized
-                    : l10n.filesPickUnreachable,
+                switch (_failure) {
+                  BackendUnauthorized() => l10n.filesPickUnauthorized,
+                  BackendNotFound() => l10n.filesSmbNotFound,
+                  BackendPermissionLost() => l10n.filesSmbAccessDenied,
+                  _ => l10n.filesPickUnreachable,
+                },
                 key: const Key('folder-picker-error'),
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),

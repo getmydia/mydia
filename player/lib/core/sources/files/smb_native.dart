@@ -68,6 +68,11 @@ class FfiSmbNative implements SmbNative {
       return override != null ? await override() as T : await call();
     } on native.FfiSmbError catch (e) {
       throw _mapError(e);
+    } on BackendFailure {
+      rethrow;
+    } catch (e) {
+      // A Rust panic reaches Dart as a PanicException, not an FfiSmbError.
+      throw BackendUnreachable(e.toString());
     }
   }
 

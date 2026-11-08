@@ -201,19 +201,26 @@ class FilesAccounts {
 
   /// Saves an SMB share. The credentials are written before the record. A
   /// URL already saved reuses its account: the credentials are replaced and
-  /// `needsReauth` clears.
+  /// `needsReauth` clears and the saved name is kept.
+  ///
+  /// A new account is named [displayName], or `<host>/<share>` with the share
+  /// as typed, so two shares on one server are told apart.
   Future<SourceId> addSmbAccount({
     required Uri url,
     required SmbCredentials credentials,
+    String? displayName,
   }) async {
     final id = smbAccountId(url);
     final base = Uri.parse(normalizeSmbUrl(url));
+    final typedShare =
+        url.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '';
+    final name = displayName ?? '${base.host}/$typedShare';
     final existing = await _stored(id);
     final account = existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
           kind: SourceKind.files,
-          displayName: base.host,
+          displayName: name,
           storageNamespace: SourceSecrets.newStorageNamespace(id),
           activeProfileId: kOwnerProfileId,
         );
@@ -229,7 +236,7 @@ class FilesAccounts {
               id: id,
               accountId: id,
               profileId: kOwnerProfileId,
-              name: base.host,
+              name: name,
               connections: [
                 ServerConnection(uri: base, local: isPrivateHost(base.host)),
               ],

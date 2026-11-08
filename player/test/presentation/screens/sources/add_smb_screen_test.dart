@@ -226,6 +226,34 @@ void main() {
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
+  testWidgets('a discovered server names the account with its own name',
+      (tester) async {
+    final h = await _pump(tester);
+    await _viaDiscovery(tester, h);
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-save-button');
+
+    final record = (await h.store.load()).accounts.single;
+    expect(record.account.displayName, 'Attic NAS / media');
+  });
+
+  testWidgets('a typed server names the account host/share', (tester) async {
+    final h = await _pump(tester);
+    await _tap(tester, 'smb-manual');
+    await _enter(tester, 'smb-host-field', '10.0.0.9');
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-save-button');
+
+    final record = (await h.store.load()).accounts.single;
+    expect(record.account.displayName, '10.0.0.9/media');
+  });
+
   testWidgets('leaving the folder step unsaved closes the account',
       (tester) async {
     final h = await _pump(tester);
@@ -257,6 +285,46 @@ void main() {
     testWidgets('unauthorized', (tester) async {
       await failing(tester, const BackendUnauthorized());
       expect(find.text('The username or password is wrong.'), findsOneWidget);
+    });
+
+    testWidgets('not found', (tester) async {
+      await failing(tester, const BackendNotFound('gone'));
+      expect(find.text('That shared folder no longer exists on this server.'),
+          findsOneWidget);
+    });
+
+    testWidgets('access denied', (tester) async {
+      await failing(tester, const BackendPermissionLost('no'));
+      expect(find.text("This account can't open that folder."), findsOneWidget);
+    });
+
+    testWidgets('a host:port address is split, not read as IPv6',
+        (tester) async {
+      for (final (typed, host, port) in [
+        ('nas.local:4455', 'nas.local', 4455),
+        ('192.168.1.5:445', '192.168.1.5', 445),
+        ('fe80::1', 'fe80::1', 445),
+        ('[fe80::1]', 'fe80::1', 445),
+      ]) {
+        final h = await _pump(tester);
+        await _tap(tester, 'smb-manual');
+        await _enter(tester, 'smb-host-field', typed);
+        await _tap(tester, 'smb-guest');
+        final (gotHost, gotPort, _) = h.native.listed.single;
+        expect((gotHost, gotPort), (host, port), reason: typed);
+      }
+    });
+
+    testWidgets('a bad inline port is an invalid address', (tester) async {
+      for (final typed in ['nas.local:0', 'nas.local:70000', 'nas.local:x']) {
+        final h = await _pump(tester);
+        await _tap(tester, 'smb-manual');
+        await _enter(tester, 'smb-host-field', typed);
+        await _tap(tester, 'smb-guest');
+        expect(h.native.listed, isEmpty, reason: typed);
+        expect(find.textContaining('between 1 and 65535'), findsOneWidget,
+            reason: typed);
+      }
     });
 
     testWidgets('SMB1 only', (tester) async {

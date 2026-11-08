@@ -29,6 +29,8 @@ enum _Step { servers, login, shares, folders }
 enum _Problem {
   address,
   unauthorized,
+  notFound,
+  accessDenied,
   unreachable,
   smb1Only,
   noShares,
@@ -70,6 +72,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   /// True when the server came from discovery or the saved share, so its
   /// address is not editable.
   bool _addressFixed = false;
+
+  /// The discovered server's own name, when that is how it was picked.
+  String? _discoveredName;
 
   // Discovery.
   StreamSubscription<List<DiscoveredSmbServer>>? _browse;
@@ -194,6 +199,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       _host.text = server.host;
       _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
       _addressFixed = true;
+      _discoveredName = server.name;
       _problem = null;
       _step = _Step.login;
     });
@@ -203,6 +209,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     _stopBrowsing();
     setState(() {
       _addressFixed = false;
+      _discoveredName = null;
       _problem = null;
       _step = _Step.login;
     });
@@ -210,33 +217,46 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
 
   _Problem _problemOf(Object e) => switch (e) {
         BackendUnauthorized() => _Problem.unauthorized,
+        BackendNotFound() => _Problem.notFound,
+        BackendPermissionLost() => _Problem.accessDenied,
         BackendUnreachable(message: kSmb1OnlyReason) => _Problem.smb1Only,
         _ => _Problem.unreachable,
       };
 
-  /// The typed host, without the brackets of an IPv6 literal, or null.
-  String? _typedHost() {
+  static bool _validPort(int? port) =>
+      port != null && port >= 1 && port <= 65535;
+
+  /// The typed host and port, or null when they cannot be used. An IPv6
+  /// literal loses its brackets. Text with exactly one colon and no brackets
+  /// is `host:port` (`nas.local:4455`); more colons are an IPv6 literal. A
+  /// port given that way wins over the port field.
+  ({String host, int port})? _typedAddress() {
     var host = _host.text.trim();
+    int? inlinePort;
     if (host.startsWith('[') && host.endsWith(']')) {
       host = host.substring(1, host.length - 1);
+    } else if (':'.allMatches(host).length == 1) {
+      final colon = host.indexOf(':');
+      inlinePort = int.tryParse(host.substring(colon + 1));
+      if (!_validPort(inlinePort)) return null;
+      host = host.substring(0, colon);
     }
-    return host.isEmpty || host.contains(RegExp(r'[\s/]')) ? null : host;
-  }
-
-  int? _typedPort() {
+    if (host.isEmpty || host.contains(RegExp(r'[\s/]'))) return null;
     final text = _port.text.trim();
-    if (text.isEmpty) return kSmbDefaultPort;
-    final port = int.tryParse(text);
-    return port != null && port >= 1 && port <= 65535 ? port : null;
+    final fieldPort = text.isEmpty ? kSmbDefaultPort : int.tryParse(text);
+    final port = inlinePort ?? fieldPort;
+    if (!_validPort(port)) return null;
+    return (host: host, port: port!);
   }
 
   Future<void> _connect({required bool guest}) async {
-    final host = _typedHost();
-    final port = _typedPort();
-    if (host == null || port == null) {
+    final address = _typedAddress();
+    if (address == null) {
       setState(() => _problem = _Problem.address);
       return;
     }
+    final host = address.host;
+    final port = address.port;
     final domain = _domain.text.trim();
     final credentials = guest
         ? const SmbCredentials(user: '', password: '', domain: null)
@@ -328,8 +348,12 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     final accounts = ref.read(filesAccountsProvider);
     final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
+      final discovered = _discoveredName;
       final id = await accounts.addSmbAccount(
-          url: _urlOf(_hostName, _portNumber, share), credentials: credentials);
+        url: _urlOf(_hostName, _portNumber, share),
+        credentials: credentials,
+        displayName: discovered == null ? null : '$discovered / $share',
+      );
       // Saved: its playback tokens now belong to the source, not this screen.
       _saved = true;
       for (final MapEntry(key: path, value: kind) in _chosen.entries) {
@@ -349,6 +373,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
         _Problem.address => l10n.filesSmbAddressInvalid,
         _Problem.unauthorized => l10n.filesSmbUnauthorized,
+        _Problem.notFound => l10n.filesSmbNotFound,
+        _Problem.accessDenied => l10n.filesSmbAccessDenied,
         _Problem.unreachable => l10n.filesSmbUnreachable,
         _Problem.smb1Only => l10n.filesSmbSmb1Only,
         _Problem.noShares => l10n.filesSmbNoShares,

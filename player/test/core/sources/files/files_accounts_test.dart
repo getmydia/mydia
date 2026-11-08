@@ -135,7 +135,8 @@ void main() {
     expect(second, first);
     final after = (await store.load()).accounts.single;
     expect(after.account.id, smbAccountId(Uri.parse('smb://nas.local/media')));
-    expect(after.account.displayName, 'nas.local');
+    // The saved name wins, with the share as it was first typed.
+    expect(after.account.displayName, 'nas.local/Media');
     expect(after.account.needsReauth, isFalse);
     final conn = after.servers.single.connections.single;
     expect(conn.uri, Uri.parse('smb://nas.local/media'));
@@ -144,6 +145,34 @@ void main() {
         await storage.read('${after.account.storageNamespace}/account_token');
     final stored = SmbCredentials.fromJson(secret!);
     expect((stored.password, stored.domain), ('new', 'HOME'));
+  });
+
+  test('two_smb_shares_on_one_host_get_distinct_names', () async {
+    final c = await container();
+    final accounts = c.read(filesAccountsProvider);
+    const creds = SmbCredentials(user: 'viewer', password: 'pw');
+    await accounts.addSmbAccount(
+        url: Uri.parse('smb://nas.local/Movies'), credentials: creds);
+    await accounts.addSmbAccount(
+        url: Uri.parse('smb://nas.local/Shows'), credentials: creds);
+
+    final records = (await store.load()).accounts;
+    final names = {for (final r in records) r.account.displayName};
+    expect(names, {'nas.local/Movies', 'nas.local/Shows'});
+    expect({for (final r in records) r.servers.single.name}, names);
+  });
+
+  test('an_smb_display_name_is_used_when_given', () async {
+    final c = await container();
+    final accounts = c.read(filesAccountsProvider);
+    await accounts.addSmbAccount(
+        url: Uri.parse('smb://192.168.1.20/media'),
+        credentials: const SmbCredentials(user: '', password: ''),
+        displayName: 'Attic NAS / media');
+
+    final record = (await store.load()).accounts.single;
+    expect(record.account.displayName, 'Attic NAS / media');
+    expect(record.servers.single.name, 'Attic NAS / media');
   });
 
   test('smb_roots_are_share_relative_paths', () async {
