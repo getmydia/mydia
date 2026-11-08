@@ -178,6 +178,21 @@ void main() {
     await sub.cancel();
   });
 
+  test('servers told apart only by link-local IPv6 are both listed', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(_resolved('A', addresses: ['172.17.0.1', 'fe80::a']));
+    events.add(_resolved('B', addresses: ['172.17.0.1', 'fe80::b']));
+    events.add(_resolved('A again', addresses: ['fe80::a', '172.17.0.1']));
+    await pumpEventQueue();
+    expect(seen.last.map((s) => '${s.name} ${s.addresses.join(',')}'), [
+      'A 172.17.0.1',
+      'B 172.17.0.1',
+    ]);
+    await sub.cancel();
+  });
+
   test('a failed resolve is contained and the browse carries on', () async {
     final failing = BonsoirSmbDiscovery.forTest(
       events.stream,

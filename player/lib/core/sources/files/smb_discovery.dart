@@ -116,7 +116,7 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     _BrowseSession? session;
     var cancelled = false;
     // Resolved servers keyed by instance name; a lost event only carries it.
-    final byName = <String, DiscoveredSmbServer>{};
+    final byName = <String, _Resolved>{};
 
     void emit() {
       if (!controller.isClosed) controller.add(_snapshot(byName.values));
@@ -153,7 +153,10 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
         case BonsoirDiscoveryServiceResolvedEvent():
           final server = _serverFrom(event.service);
           if (server == null) return;
-          byName[event.service.name] = server;
+          byName[event.service.name] = (
+            server: server,
+            endpoint: _endpoint(event.service, server),
+          );
           emit();
         case BonsoirDiscoveryServiceLostEvent():
           if (byName.remove(event.service.name) != null) emit();
@@ -236,18 +239,34 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
         lower.contains('%');
   }
 
-  /// De-duplicated by endpoint, every advertised address and the port (first
-  /// name wins), and sorted by name. Two services on one host but different
-  /// ports both stay, and so do two servers that share only their first
-  /// address (the same container bridge on two boxes).
-  static List<DiscoveredSmbServer> _snapshot(
-    Iterable<DiscoveredSmbServer> servers,
+  /// What tells two services apart: every advertised address, including the
+  /// link-local ones left out of the connection candidates, and the port. A
+  /// service that advertised no address falls back to its hostname.
+  static (String, int) _endpoint(
+    BonsoirService service,
+    DiscoveredSmbServer server,
   ) {
-    final sorted = servers.toList()..sort((a, b) => a.name.compareTo(b.name));
+    final advertised = {
+      for (final a in service.hostAddresses) a.trim(),
+    }..remove('');
+    final key = advertised.isEmpty ? server.addresses : advertised.toList();
+    return ((key..sort()).join(' '), server.port);
+  }
+
+  /// De-duplicated by endpoint (see [_endpoint]; first name wins), and sorted
+  /// by name. Two services on one host but different ports both stay, and so
+  /// do two servers that share only some addresses (the same container
+  /// bridge on two boxes, told apart only by their link-local IPv6).
+  static List<DiscoveredSmbServer> _snapshot(Iterable<_Resolved> resolved) {
+    final sorted = resolved.toList()
+      ..sort((a, b) => a.server.name.compareTo(b.server.name));
     final seen = <(String, int)>{};
     return [
-      for (final s in sorted)
-        if (seen.add(((s.addresses.toList()..sort()).join(' '), s.port))) s,
+      for (final r in sorted)
+        if (seen.add(r.endpoint)) r.server,
     ];
   }
 }
+
+/// A resolved server and the endpoint it is de-duplicated by.
+typedef _Resolved = ({DiscoveredSmbServer server, (String, int) endpoint});
