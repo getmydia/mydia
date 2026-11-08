@@ -233,7 +233,6 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     setState(() {
       _busy = true;
       _problem = null;
-      _climbFailed = false;
     });
     final accounts = ref.read(filesAccountsProvider);
     // Read before the awaits: the screen may be gone by the time they end.
