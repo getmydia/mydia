@@ -48,8 +48,18 @@ EXP
 # the program name as well as the exact argument keeps this from picking up a
 # shell whose command line merely mentions $DIR, or a pid reused since a
 # stale state file was written.
+#
+# smbd retitles its children ("smbd: client [127.0.0.1]", "smbd: notifyd",
+# "smbd: cleanupd"), so their command lines name no $DIR at all. Each smbd
+# leads its own process group, though (pgid = its pid), so the rest of every
+# group led by a live smbd of ours comes along too, filtered by program name.
+# The pidfiles add the groups of a smbd that already died and left children
+# behind: a pgid stays taken while any member lives, so a pidfile pid that is
+# not running names our orphans, and one that is running but is not one of
+# ours (a reused pid) is skipped.
 harness_pids() {
-  local pid exe args
+  local pid exe args pgid
+  local ours=" " pgids=""
   for pid in $(pgrep -f -- "$DIR/" 2>/dev/null || true); do
     [ "$pid" = "$$" ] && continue
     args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
@@ -61,8 +71,28 @@ harness_pids() {
     case "$args" in
       *" --configfile=$DIR/"* | *" -s $DIR/smb.conf "* | *" -s $DIR/smb1.conf "*)
         echo "$pid"
+        if [ "${exe##*/}" = smbd ]; then
+          ours="$ours$pid "
+          pgids="$pgids $pid"
+        fi
         ;;
     esac
+  done
+  for pid in $(cat "$DIR"/main/run/smbd.pid "$DIR"/smb1/run/smbd.pid 2>/dev/null || true); do
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
+    case "$ours" in *" $pid "*) continue ;; esac
+    [ -e "/proc/$pid" ] && continue
+    pgids="$pgids $pid"
+  done
+  # Callers dedupe: a pgid named twice only repeats its members.
+  for pgid in $pgids; do
+    for pid in $(pgrep -g "$pgid" 2>/dev/null || true); do
+      args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
+      exe=${args%% *}
+      case "${exe##*/}" in
+        smbd | smbd: | samba-dcerpcd | rpcd_*) echo "$pid" ;;
+      esac
+    done
   done
 }
 
@@ -97,7 +127,7 @@ wait_gone() {
 # restart never races an old smbd still holding its pidfile lock or port.
 kill_pids() {
   local pids
-  pids=$(harness_pids)
+  pids=$(harness_pids | sort -un)
   [ -n "$pids" ] || return 0
   # shellcheck disable=SC2086
   sudo kill $pids 2>/dev/null || true
@@ -105,9 +135,25 @@ kill_pids() {
   wait_gone $pids
 }
 
-# A smbd that never listened leaves nothing else to debug from in CI.
+# A smbd that never listened leaves nothing else to debug from in CI. Says
+# whether each one died (and how) or is still alive and stuck (and where),
+# then prints its output and logs.
 dump_diagnostics() {
-  local f
+  local f pid status
+  for pid in $PIDS; do
+    if kill -0 "$pid" 2>/dev/null; then
+      log "sudo wrapper $pid still running"
+    else
+      status=0
+      wait "$pid" 2>/dev/null || status=$?
+      log "sudo wrapper $pid exited with status $status (128+N is signal N)"
+    fi
+  done
+  for pid in $(harness_pids | sort -un); do
+    echo "--- live harness process $pid" >&2
+    ps -o pid=,pgid=,stat=,wchan:32=,args= -p "$pid" >&2 || true
+    sudo cat "/proc/$pid/stack" >&2 2>/dev/null || true
+  done
   for f in "$DIR"/smbd-*.out "$DIR"/main/log/* "$DIR"/smb1/log/*; do
     [ -f "$f" ] || continue
     echo "--- $f" >&2
@@ -122,6 +168,18 @@ wait_port() {
     sleep 0.1
   done
   log "port $port never accepted"
+  return 1
+}
+
+# The other way round: until nothing accepts on the port any more, an old
+# listener is still around and a new smbd cannot bind it.
+wait_port_closed() {
+  local port=$1 _
+  for _ in $(seq 1 50); do
+    if ! (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then return 0; fi
+    sleep 0.1
+  done
+  log "port $port still accepting after the old smbd was stopped"
   return 1
 }
 
@@ -153,6 +211,8 @@ write_conf() {
   ncalrpc dir = $DIR/$sub/ncalrpc
   log file = $DIR/$sub/log/log.%m
   logging = file
+  # Level 0 says only "started", even when smbd then dies; 1 says why.
+  log level = 1
   $extra
 
 [guest]
@@ -334,6 +394,8 @@ case "$cmd" in
   restart)
     load_state
     kill_pids
+    wait_port_closed "$PORT"
+    wait_port_closed "$PORT_SMB1"
     start_smbd
     export_lines
     ;;
