@@ -12,8 +12,12 @@ PORT=4455
 PORT_SMB1=4456
 SMB_USER=mydia
 SMB_PASS=mydia-test
-STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/mydia-smb-harness-$(id -un).env"
 UNIX_USER="$(id -un)"
+# The state names a directory this script later deletes with sudo, so it
+# lives where only this user can write: XDG_RUNTIME_DIR, or a private
+# directory of our own under the temp dir when that is unset.
+STATE_DIR="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}/mydia-smb-harness-$(id -u)}"
+STATE_FILE="$STATE_DIR/mydia-smb-harness-$UNIX_USER.env"
 
 if command -v smbd >/dev/null 2>&1; then
   SMBD=(smbd)
@@ -233,22 +237,77 @@ start_smbd() {
   } >"$STATE_FILE"
 }
 
+ensure_state_dir() {
+  [ -n "${XDG_RUNTIME_DIR:-}" ] && return 0
+  # Fails harmlessly when it already exists; the checks below decide.
+  mkdir -m 700 "$STATE_DIR" 2>/dev/null || true
+  if [ -L "$STATE_DIR" ] || [ ! -d "$STATE_DIR" ] || [ ! -O "$STATE_DIR" ]; then
+    log "$STATE_DIR is not a directory of our own; refusing to use it"
+    exit 1
+  fi
+  chmod 700 "$STATE_DIR"
+}
+
+# Reads the state as data (never sourced), and only from a file of our own
+# naming a directory this script could have made.
 load_state() {
   if [ ! -f "$STATE_FILE" ]; then
     log "no harness state at $STATE_FILE"
     return 1
   fi
-  # shellcheck disable=SC1090
-  . "$STATE_FILE"
+  if [ ! -O "$STATE_FILE" ]; then
+    log "$STATE_FILE is not ours; ignoring it"
+    return 1
+  fi
+  local key value
+  DIR=""
+  PIDS=""
+  while IFS='=' read -r key value; do
+    value=${value#\"}
+    value=${value%\"}
+    case "$key" in
+      DIR) DIR=$value ;;
+      PIDS) PIDS=$value ;;
+    esac
+  done <"$STATE_FILE"
+  case "$DIR" in
+    /*/mydia-smb-??????) ;;
+    *)
+      log "unexpected harness dir in $STATE_FILE: $DIR"
+      return 1
+      ;;
+  esac
+  case "$DIR$PIDS" in
+    *..* | *[!0-9A-Za-z/._\ -]*)
+      log "unexpected characters in $STATE_FILE"
+      return 1
+      ;;
+  esac
+  case "$PIDS" in
+    *[!0-9\ ]*)
+      log "unexpected pids in $STATE_FILE: $PIDS"
+      return 1
+      ;;
+  esac
 }
+
+ensure_state_dir
 
 cmd=${1:-start}
 case "$cmd" in
   start)
     if load_state 2>/dev/null && [ -d "$DIR" ]; then
-      log "already running (dir $DIR); run stop first"
-      export_lines
-      exit 0
+      if smbd_alive; then
+        log "already running (dir $DIR); run stop first"
+        export_lines
+        exit 0
+      fi
+      # A reboot, an OOM kill or a crashed smbd leaves the state behind:
+      # exporting its ports would point the tests at nothing.
+      log "smbd from $DIR is gone; cleaning up and starting afresh"
+      kill_pids || true
+      sudo rm -rf "$DIR" 2>/dev/null || rm -rf "$DIR"
+      rm -f "$STATE_FILE"
     fi
     DIR="$(mktemp -d "${TMPDIR:-/tmp}/mydia-smb-XXXXXX")"
     chmod 755 "$DIR"
