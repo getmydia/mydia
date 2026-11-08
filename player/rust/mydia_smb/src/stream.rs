@@ -383,7 +383,9 @@ async fn sweep_loop(shared: Weak<Shared>) {
 
 /// Marks a token in use for as long as one response holds it, so the sweep
 /// never expires a token under a body that is still streaming (a playback
-/// paused for longer than [`TOKEN_TTL`] holds its connection open).
+/// paused for longer than [`TOKEN_TTL`] holds its connection open). The
+/// response body owns it, not the reader: a reader that has queued the
+/// final chunk is done, while the body is not until hyper drops it.
 struct ActiveResponse {
     shared: Arc<Shared>,
     token: String,
@@ -417,7 +419,6 @@ struct Cursor {
     info: TokenTarget,
     file: Arc<SmbFile>,
     reconnected: bool,
-    _active: ActiveResponse,
 }
 
 impl Cursor {
@@ -527,7 +528,6 @@ async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<Stre
         info,
         file,
         reconnected,
-        _active: active,
     };
 
     let range = req
@@ -564,6 +564,7 @@ async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<Stre
         StreamBody {
             first: Some(first_chunk),
             rx,
+            _active: Some(active),
         }
     };
 
@@ -670,6 +671,8 @@ fn insert(resp: &mut Response<StreamBody>, name: hyper::header::HeaderName, valu
 struct StreamBody {
     first: Option<Bytes>,
     rx: Option<mpsc::Receiver<io::Result<Bytes>>>,
+    /// Keeps the token in use until the body is dropped.
+    _active: Option<ActiveResponse>,
 }
 
 impl StreamBody {
@@ -677,6 +680,7 @@ impl StreamBody {
         Self {
             first: None,
             rx: None,
+            _active: None,
         }
     }
 }
@@ -784,6 +788,35 @@ mod tests {
         assert!(table.contains("tok"), "idle time starts at the end");
         table.sweep(long_after + TOKEN_TTL + Duration::from_secs(1));
         assert!(!table.contains("tok"));
+    }
+
+    #[test]
+    fn the_body_holds_its_token_in_use_until_dropped() {
+        let shared = Arc::new(Shared {
+            client: SmbClient::new(),
+            tokens: Mutex::new(TokenTable::default()),
+            port: AtomicU16::new(0),
+            #[cfg(feature = "test-introspection")]
+            min_read_offset: std::sync::atomic::AtomicU64::new(u64::MAX),
+            #[cfg(feature = "test-introspection")]
+            active_readers: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let active = |s: &Shared| s.tokens.lock().unwrap().entries["tok"].active;
+        shared
+            .tokens
+            .lock()
+            .unwrap()
+            .insert("tok".to_string(), info("acct"), Instant::now());
+        // The final chunk is queued and the reader is gone: the body alone
+        // still counts as use until hyper drops it.
+        let body = StreamBody {
+            first: Some(Bytes::from_static(b"last")),
+            rx: None,
+            _active: Some(ActiveResponse::new(&shared, "tok")),
+        };
+        assert_eq!(active(&shared), 1);
+        drop(body);
+        assert_eq!(active(&shared), 0);
     }
 
     #[test]

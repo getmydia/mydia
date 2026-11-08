@@ -144,11 +144,10 @@ async fn lists_and_stats_awkward_names() {
 
 /// A password that differs from the harness one. Derived rather than written
 /// out, so no password literal sits in the tests for scanners to flag. One
-/// character longer than a non-empty `right`, so it differs even for a
-/// palindrome.
+/// character longer than `right`, so it differs for any input, a palindrome
+/// or an empty password included.
 fn wrong_password(right: &str) -> String {
-    assert!(!right.is_empty(), "harness password must not be empty");
-    right.chars().rev().chain(right.chars().take(1)).collect()
+    right.chars().rev().chain(['~']).collect()
 }
 
 #[tokio::test]
