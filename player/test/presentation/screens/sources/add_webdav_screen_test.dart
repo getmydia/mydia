@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -38,10 +40,23 @@ class _Harness {
 
 int _boxes = 0;
 
+/// A store whose writes wait on [gate], as a slow disk would.
+class _SlowStore extends InMemorySourceStore {
+  final gate = Completer<void>();
+
+  @override
+  Future<void> putAccount(SourceAccountRecord record) async {
+    await gate.future;
+    return super.putAccount(record);
+  }
+}
+
 /// [reuse] keeps the box, records and secrets of an earlier pump, as a
 /// restart of the app would.
 Future<_Harness> _pump(WidgetTester tester,
-    {String? reauthAccountId, _Harness? reuse}) async {
+    {String? reauthAccountId,
+    _Harness? reuse,
+    InMemorySourceStore? store}) async {
   var box = reuse?.box;
   if (box == null) {
     final opened = (await tester.runAsync(() =>
@@ -53,7 +68,7 @@ Future<_Harness> _pump(WidgetTester tester,
   }
   final h = _Harness(
     box,
-    reuse?.store ?? InMemorySourceStore(),
+    reuse?.store ?? store ?? InMemorySourceStore(),
     reuse?.storage ?? MockAuthStorage(),
     FakeBackend({
       '/dav/Films/Amber Tide (2019).mkv': 10,
@@ -63,9 +78,12 @@ Future<_Harness> _pump(WidgetTester tester,
   );
   await tester.binding.setSurfaceSize(const Size(900, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
+  // Pushed over a home route, as the add-source screen does, so back has
+  // somewhere to go.
   final router = GoRouter(
-    initialLocation: '/add',
+    initialLocation: '/home',
     routes: [
+      GoRoute(path: '/home', builder: (_, __) => const Text('home')),
       GoRoute(
           path: '/add',
           builder: (_, __) =>
@@ -99,6 +117,8 @@ Future<_Harness> _pump(WidgetTester tester,
       routerConfig: router,
     ),
   ));
+  await tester.pumpAndSettle();
+  unawaited(router.push('/add'));
   await tester.pumpAndSettle();
   return h;
 }
@@ -269,5 +289,249 @@ void main() {
         .read('${record.account.storageNamespace}/account_token');
     expect(WebDavCredentials.fromJson(secret!).password, 'new');
     expect(FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
+  });
+
+  testWidgets('back from a subfolder lists its parent and stays',
+      (tester) async {
+    await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const Key('webdav-folder-/dav/Shows/Low Orbit')));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows/Low Orbit'), findsOneWidget);
+
+    // The app bar arrow climbs one folder.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+
+    // So does the system back gesture.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+    expect(find.byKey(const Key('webdav-folder-/dav/Films')), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+
+    // At the share's root, back leaves the setup.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('back abandons a slow folder listing', (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+
+    final slow = Completer<void>();
+    h.backend.holds['/dav/Shows/Low Orbit'] = slow;
+    await tester
+        .tap(find.byKey(const Key('webdav-folder-/dav/Shows/Low Orbit')));
+    await tester.pump();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+
+    // The abandoned answer arrives late and is dropped.
+    slow.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+
+    // Back is live again and climbs.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+  });
+
+  testWidgets('back leaves once climbing has failed', (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+
+    h.backend.failures['/dav'] = const BackendUnreachable('down');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    expect(find.byKey(const Key('webdav-error')), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('a failed folder shows its problem and back still climbs',
+      (tester) async {
+    final h = await _pump(tester);
+    for (var i = 0; i < 40; i++) {
+      h.backend.setFile('/dav/Folder ${i.toString().padLeft(2, '0')}/a.mkv', 1);
+    }
+    h.backend.setFile('/dav/Films/Broken/a.mkv', 1);
+    h.backend.failures['/dav/Films/Broken'] = const BackendUnreachable('x');
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Films')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Films/Broken')));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Films'), findsOneWidget);
+
+    // The problem sits in the pinned bar, not the scrolled-away form.
+    final error = find.byKey(const Key('webdav-error'));
+    expect(error, findsOneWidget);
+    expect(
+        tester
+            .getRect(find.byType(Scaffold))
+            .contains(tester.getRect(error).center),
+        isTrue);
+
+    // Opening a child failed, not climbing, so back still climbs.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+  });
+
+  testWidgets('back waits for a save at the root', (tester) async {
+    final store = _SlowStore();
+    await _pump(tester, store: store);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-tick-/dav/Films')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('webdav-save-button')));
+    await tester.pump();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    expect(find.text('home'), findsNothing);
+
+    store.gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('opened '), findsOneWidget);
+  });
+
+  testWidgets('a share address ending in an encoded slash is its own root',
+      (tester) async {
+    await _pump(tester);
+    await _connect(tester, url: 'https://nas.example.test/dav%2F');
+    expect(find.text('/dav'), findsOneWidget);
+    expect(
+        tester.widget<IconButton>(find.byKey(const Key('webdav-up'))).onPressed,
+        isNull);
+
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+
+    // Back at the root leaves rather than climbing above the share.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('back at the root abandons a slow listing before leaving',
+      (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-tick-/dav/Films')));
+    await tester.pumpAndSettle();
+
+    final slow = Completer<void>();
+    h.backend.holds['/dav/Shows'] = slow;
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pump();
+
+    // The first back abandons the listing; the ticked folder survives.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsNothing);
+    expect(find.text('/dav'), findsOneWidget);
+    expect(
+        tester
+            .widget<Checkbox>(find.byKey(const Key('webdav-tick-/dav/Films')))
+            .value,
+        isTrue);
+    slow.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+
+    // The next one leaves.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('connecting jumps to the folders under reduced motion',
+      (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final h = await _pump(tester);
+    for (var i = 0; i < 40; i++) {
+      h.backend.setFile('/dav/Folder ${i.toString().padLeft(2, '0')}/a.mkv', 1);
+    }
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.enterText(find.byKey(const Key('webdav-url-field')),
+        'https://nas.example.test/dav/');
+    await tester.tap(find.byKey(const Key('webdav-connect-button')));
+    // Two frames with no time passing: the listing lands, then the
+    // post-frame scroll. An animated scroll would still be at its start.
+    await tester.pump();
+    await tester.pump();
+    expect(
+        tester.getRect(find.byKey(const Key('webdav-up'))).top, lessThan(250));
+  });
+
+  testWidgets('back before connecting leaves the setup', (tester) async {
+    await _pump(tester);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('the up button and save stay on screen in a long folder list',
+      (tester) async {
+    final h = await _pump(tester);
+    for (var i = 0; i < 40; i++) {
+      h.backend.setFile('/dav/Folder ${i.toString().padLeft(2, '0')}/a.mkv', 1);
+    }
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await _connect(tester);
+    // Connecting scrolls the spent form away so the folders fill the screen.
+    expect(
+        tester.getRect(find.byKey(const Key('webdav-up'))).top, lessThan(250));
+
+    await tester.drag(
+        find.byKey(const Key('webdav-folder-list')), const Offset(0, -3000));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('webdav-folder-/dav/Shows')), findsOneWidget);
+    // The list scrolled under the location bar rather than taking it along.
+    expect(find.byKey(const Key('webdav-folder-/dav/Folder 00')), findsNothing);
+    final screen = tester.getRect(find.byType(Scaffold));
+    for (final key in ['webdav-up', 'webdav-dir', 'webdav-save-button']) {
+      final rect = tester.getRect(find.byKey(Key(key)));
+      expect(screen.contains(rect.center), isTrue,
+          reason: '$key is off screen');
+    }
+    expect(
+        tester.getRect(find.byKey(const Key('webdav-save-button'))).top,
+        greaterThanOrEqualTo(tester
+            .getRect(find.byKey(const Key('webdav-folder-list')))
+            .bottom));
+
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('webdav-up')));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
   });
 }
