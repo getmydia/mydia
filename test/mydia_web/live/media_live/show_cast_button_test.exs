@@ -47,13 +47,13 @@ defmodule MydiaWeb.MediaLive.ShowCastButtonTest do
     assert has_element?(view, "#media-cast-row #media-cast-person-900-0", "Deckhand 0")
   end
 
-  test "the cast row holds the first 15 billed", %{conn: conn} do
+  test "the cast row holds the first 8 billed", %{conn: conn} do
     item = show(Enum.map(0..19, &actor/1), [])
 
     {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-    assert has_element?(view, "#media-cast-person-914-14")
-    refute has_element?(view, "#media-cast-person-915-15")
+    assert has_element?(view, "#media-cast-person-907-7")
+    refute has_element?(view, "#media-cast-person-908-8")
   end
 
   test "the Crew dropdown lists crew and no cast", %{conn: conn} do
