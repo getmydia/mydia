@@ -40,6 +40,7 @@ class RemoteFolderPicker extends StatefulWidget {
     this.busy = false,
     this.problem,
     this.keyPrefix = 'folder-picker',
+    this.onExit,
   });
 
   final FileSystemBackend backend;
@@ -76,6 +77,11 @@ class RemoteFolderPicker extends StatefulWidget {
   /// view (`-folder-list`).
   final String keyPrefix;
 
+  /// Called in place of leaving the route when back is pressed at [root]
+  /// (or after a failed climb), for a caller with a step of its own before
+  /// the picker, such as SMB's share list. Null lets back leave the route.
+  final VoidCallback? onExit;
+
   @override
   State<RemoteFolderPicker> createState() => _RemoteFolderPickerState();
 }
@@ -96,8 +102,14 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   /// rather than retrying against a share that stopped answering.
   bool _climbFailed = false;
 
+  /// Whether the open folder has been listed. Until it has, its own row
+  /// cannot be picked: a root whose listing failed would be saved as a
+  /// library that cannot be read.
+  bool _listed = false;
+
   bool get _busy => _opening || widget.busy;
-  bool get _atRoot => _dir == trimRootPath(widget.root);
+  String get _root => trimRootPath(widget.root);
+  bool get _atRoot => _dir == _root;
 
   @override
   void initState() {
@@ -105,14 +117,26 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
     final initial = widget.initialFolders;
     if (initial != null) {
       _folders = _sortedFolders(initial);
+      _listed = true;
     } else {
       _open(widget.root);
     }
   }
 
-  static List<FileEntry> _sortedFolders(List<FileEntry> entries) => [
+  /// Whether [path] is [RemoteFolderPicker.root] or below it.
+  bool _withinRoot(String path) {
+    final p = trimRootPath(path);
+    final root = _root;
+    if (root == '/') return p.startsWith('/');
+    return p == root || p.startsWith('$root/');
+  }
+
+  /// The readable subfolders, sorted. A server that lists a folder outside
+  /// the root (a WebDAV href elsewhere on the host) does not get a row:
+  /// opening it would strand back outside the root, where it never stops.
+  List<FileEntry> _sortedFolders(List<FileEntry> entries) => [
         for (final e in entries)
-          if (e.isDir && !e.unreadable) e,
+          if (e.isDir && !e.unreadable && _withinRoot(e.path)) e,
       ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   /// Opens the folder above the current one.
@@ -134,6 +158,7 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
       setState(() {
         _dir = trimRootPath(dir);
         _folders = folders;
+        _listed = true;
       });
     } catch (e) {
       debugPrint('[RemoteFolderPicker] Listing $dir failed: $e');
@@ -155,7 +180,9 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   }
 
   /// While a folder is still listing, back abandons it: a slow server never
-  /// leaves back dead for the length of its timeout. Otherwise it climbs.
+  /// leaves back dead for the length of its timeout. Otherwise it climbs,
+  /// or, at the root or after a failed climb, hands over to
+  /// [RemoteFolderPicker.onExit] when there is one.
   void _onPop(bool didPop, Object? _) {
     if (didPop) return;
     if (_opening) {
@@ -165,7 +192,12 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
       });
       return;
     }
-    if (!_atRoot && !_busy) _climb();
+    if (_busy) return;
+    if (_atRoot || _climbFailed) {
+      widget.onExit?.call();
+    } else {
+      _climb();
+    }
   }
 
   Key _key(String suffix) => Key('${widget.keyPrefix}-$suffix');
@@ -173,17 +205,19 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   Widget _row(BuildContext context, String path, String title,
       {required bool open}) {
     final onOpen = open && !_busy ? () => _open(path) : null;
+    // The open folder's own row waits for its listing.
+    final busy = _busy || (!open && !_listed);
     final builder = widget.rowBuilder;
     if (builder != null) {
       return builder(context,
-          path: path, title: title, busy: _busy, onOpen: onOpen);
+          path: path, title: title, busy: busy, onOpen: onOpen);
     }
     return ListTile(
       key: ValueKey('folder-picker-row-${trimRootPath(path)}'),
       contentPadding: EdgeInsets.zero,
       leading: open ? const Icon(Icons.folder_outlined) : null,
       title: Text(title),
-      onTap: open ? onOpen : (_busy ? null : () => widget.onPicked(_dir)),
+      onTap: open ? onOpen : (busy ? null : () => widget.onPicked(_dir)),
     );
   }
 
@@ -253,7 +287,8 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
       // Never mid-listing (back abandons it) or while the caller is busy.
       // After a failed climb back leaves: a share that stopped answering
       // would otherwise turn every back into another failed climb.
-      canPop: !_busy && (_atRoot || _climbFailed),
+      // With an onExit, back never leaves the route itself.
+      canPop: !_busy && widget.onExit == null && (_atRoot || _climbFailed),
       onPopInvokedWithResult: _onPop,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

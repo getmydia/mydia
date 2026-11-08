@@ -32,10 +32,16 @@ class _RecordingNative extends FakeSmbNative {
   final listed = <(String, int, SmbCredentials)>[];
   bool noShares = false;
 
+  /// Hosts whose share listing is unreachable, as a dead interface.
+  final unreachableHosts = <String>{};
+
   @override
   Future<List<String>> listShares(
       String host, int port, SmbCredentials c) async {
     listed.add((host, port, c));
+    if (unreachableHosts.contains(host)) {
+      throw BackendUnreachable('no route to $host');
+    }
     final shares = await super.listShares(host, port, c);
     return noShares ? const [] : shares;
   }
@@ -373,44 +379,151 @@ void main() {
     });
   });
 
-  testWidgets('signing in again keeps the share and replaces the credentials',
-      (tester) async {
+  group('a saved share', () {
+    final accountId = smbAccountId(Uri.parse('smb://192.168.1.20/media'));
+
+    /// Saves the attic share with `/Films`, signed in with password `old`,
+    /// optionally marked as needing a new sign-in, then opens the screen
+    /// for it again.
+    Future<_Harness> reopen(WidgetTester tester,
+        {required bool needsReauth}) async {
+      final h = await _pump(tester);
+      await _viaDiscovery(tester, h);
+      await _enter(tester, 'smb-password-field', 'old');
+      await _enter(tester, 'smb-user-field', 'viewer');
+      await _tap(tester, 'smb-connect-button');
+      await _tap(tester, 'smb-share-media');
+      await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+      await tester.pumpAndSettle();
+      await _tap(tester, 'smb-save-button');
+      if (needsReauth) {
+        final record = (await h.store.load()).accounts.single;
+        await h.store.putAccount(record.copyWith(
+            account: record.account.copyWith(needsReauth: true)));
+      }
+      await tester.pumpWidget(const SizedBox());
+      return _pump(tester, reauthAccountId: accountId, reuse: h);
+    }
+
+    Future<String?> password(_Harness h) async {
+      final record = (await h.store.load()).accounts.single;
+      final secret = await h.storage
+          .read('${record.account.storageNamespace}/account_token');
+      return SmbCredentials.fromJson(secret!).password;
+    }
+
+    Future<void> signIn(WidgetTester tester, String password) async {
+      await _enter(tester, 'smb-user-field', 'viewer');
+      await _enter(tester, 'smb-password-field', password);
+      await _tap(tester, 'smb-connect-button');
+    }
+
+    testWidgets('signing in again keeps the share and replaces the credentials',
+        (tester) async {
+      final h = await reopen(tester, needsReauth: true);
+      expect(find.byKey(const Key('smb-login')), findsOneWidget);
+      expect(find.byKey(const Key('smb-servers')), findsNothing);
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('smb-host-field')))
+              .controller!
+              .text,
+          '192.168.1.20');
+
+      await signIn(tester, 'new');
+      expect(h.native.listed, isEmpty, reason: 'never lists shares');
+      // The saved share was checked with the new password before saving.
+      final (target, login) = h.native.probeLogins.single;
+      expect((target.host, target.port, target.share),
+          ('192.168.1.20', 445, 'media'));
+      expect((login.user, login.password), ('viewer', 'new'));
+
+      expect(find.byKey(const Key('smb-shares')), findsNothing);
+      final record = (await h.store.load()).accounts.single;
+      expect(record.account.id, accountId);
+      expect(record.account.needsReauth, isFalse);
+      expect(await password(h), 'new');
+      expect(
+          FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
+      expect(find.text('home'), findsOneWidget);
+    });
+
+    testWidgets('a refused sign-in keeps the old credentials', (tester) async {
+      final h = await reopen(tester, needsReauth: true);
+      h.native.failure = const BackendUnauthorized();
+      await signIn(tester, 'wrong');
+
+      expect(find.text('The username or password is wrong.'), findsOneWidget);
+      expect(find.byKey(const Key('smb-login')), findsOneWidget);
+      final record = (await h.store.load()).accounts.single;
+      expect(record.account.needsReauth, isTrue);
+      expect(await password(h), 'old');
+    });
+
+    testWidgets('add folders signs in, then opens the folder picker',
+        (tester) async {
+      final h = await reopen(tester, needsReauth: false);
+      await signIn(tester, 'new');
+
+      expect(find.byKey(const Key('smb-folders')), findsOneWidget);
+      expect(await password(h), 'old', reason: 'saved with the folders');
+      await tester.tap(find.byKey(const Key('smb-tick-/Shows')));
+      await tester.pumpAndSettle();
+      await _tap(tester, 'smb-save-button');
+
+      final roots = FileLibraryIndex(h.box, accountId: accountId).roots();
+      expect(roots.map((r) => r.path), unorderedEquals(['/Films', '/Shows']));
+      expect(await password(h), 'new');
+      // The source's playback URLs are its own: never closed from here.
+      expect(h.native.closedAccounts, isEmpty);
+      expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
+    });
+  });
+
+  testWidgets('back at a share root returns to the share list', (tester) async {
     final h = await _pump(tester);
     await _viaDiscovery(tester, h);
-    await _enter(tester, 'smb-password-field', 'old');
-    await _enter(tester, 'smb-user-field', 'viewer');
-    await _tap(tester, 'smb-connect-button');
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    expect(find.byKey(const Key('smb-folders')), findsOneWidget);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).last);
+    await navigator.maybePop();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('smb-shares')), findsOneWidget);
+    expect(h.native.closedAccounts,
+        [smbAccountId(Uri.parse('smb://192.168.1.20/media'))]);
+    // The sign-in is kept: the share opens again without one.
+    await _tap(tester, 'smb-share-media');
+    expect(find.byKey(const Key('smb-folders')), findsOneWidget);
+    expect(h.native.listed, hasLength(1));
+  });
+
+  testWidgets('an unreachable advertised address moves on to the next',
+      (tester) async {
+    final h = await _pump(tester);
+    h.native.unreachableHosts.add('172.17.0.1');
+    h.discovery.emit([
+      const DiscoveredSmbServer(
+          name: 'Attic NAS',
+          host: '172.17.0.1',
+          port: 445,
+          alternatives: ['192.168.1.20']),
+    ]);
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-server-172.17.0.1');
+    await _tap(tester, 'smb-guest');
+
+    expect(h.native.listed.map((l) => l.$1), ['172.17.0.1', '192.168.1.20']);
     await _tap(tester, 'smb-share-media');
     await tester.tap(find.byKey(const Key('smb-tick-/Films')));
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-save-button');
-    final accountId = smbAccountId(Uri.parse('smb://192.168.1.20/media'));
 
-    await tester.pumpWidget(const SizedBox());
-    final h2 = await _pump(tester, reauthAccountId: accountId, reuse: h);
-    expect(find.byKey(const Key('smb-login')), findsOneWidget);
-    expect(find.byKey(const Key('smb-servers')), findsNothing);
+    final record = (await h.store.load()).accounts.single;
     expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('smb-host-field')))
-            .controller!
-            .text,
-        '192.168.1.20');
-
-    await _enter(tester, 'smb-user-field', 'viewer');
-    await _enter(tester, 'smb-password-field', 'new');
-    await _tap(tester, 'smb-connect-button');
-    expect(h2.native.listed, isEmpty, reason: 'never lists shares');
-
-    expect(find.byKey(const Key('smb-shares')), findsNothing);
-    final record = (await h2.store.load()).accounts.single;
-    expect(record.account.id, accountId);
-    final secret = await h2.storage
-        .read('${record.account.storageNamespace}/account_token');
-    expect(SmbCredentials.fromJson(secret!).password, 'new');
-    expect(
-        FileLibraryIndex(h2.box, accountId: accountId).roots(), hasLength(1));
-    expect(find.text('home'), findsOneWidget);
+        record.account.id, smbAccountId(Uri.parse('smb://192.168.1.20/media')));
   });
 
   testWidgets('signing in again to a missing account cannot connect',

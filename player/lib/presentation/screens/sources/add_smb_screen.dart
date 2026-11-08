@@ -76,6 +76,15 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   /// The discovered server's own name, when that is how it was picked.
   String? _discoveredName;
 
+  /// Every address the discovered server advertised, best first; the first
+  /// one that answers is the one saved.
+  List<String> _discoveredAddresses = const [];
+
+  /// Re-login mode only: whether the saved share needs signing in again.
+  /// When it does not, the viewer came to add folders, so a sign-in goes on
+  /// to the folder picker instead of closing the screen.
+  bool _signInAgain = true;
+
   // Discovery.
   StreamSubscription<List<DiscoveredSmbServer>>? _browse;
   Timer? _quietTimer;
@@ -140,15 +149,11 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   Future<void> _prefill(String accountId) async {
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
-      final uri = snapshot.accounts
-          .where((a) => a.account.id == accountId)
-          .firstOrNull
-          ?.servers
-          .firstOrNull
-          ?.connections
-          .firstOrNull
-          ?.uri;
+      final record =
+          snapshot.accounts.where((a) => a.account.id == accountId).firstOrNull;
+      final uri = record?.servers.firstOrNull?.connections.firstOrNull?.uri;
       if (!mounted) return;
+      _signInAgain = record?.account.needsReauth ?? true;
       if (uri == null) {
         setState(() => _problem = _Problem.save);
         return;
@@ -167,16 +172,20 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     }
   }
 
+  /// A picker backend that was never saved leaves loopback tokens behind.
+  /// A saved account's belong to its source and are left alone.
+  void _closeUnsavedBackend() {
+    final backend = _backend;
+    if (backend == null || _saved) return;
+    unawaited(_native.closeAccount(backend.accountId).catchError((Object e) {
+      debugPrint('[AddSmb] Could not close the account: $e');
+    }));
+  }
+
   @override
   void dispose() {
     _stopBrowsing();
-    // A picker backend that was never saved leaves loopback tokens behind.
-    final backend = _backend;
-    if (backend != null && !_saved) {
-      unawaited(_native.closeAccount(backend.accountId).catchError((Object e) {
-        debugPrint('[AddSmb] Could not close the account: $e');
-      }));
-    }
+    _closeUnsavedBackend();
     _host.dispose();
     _port.dispose();
     _user.dispose();
@@ -200,6 +209,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
       _addressFixed = true;
       _discoveredName = server.name;
+      _discoveredAddresses = server.addresses;
       _problem = null;
       _step = _Step.login;
     });
@@ -210,6 +220,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     setState(() {
       _addressFixed = false;
       _discoveredName = null;
+      _discoveredAddresses = const [];
       _problem = null;
       _step = _Step.login;
     });
@@ -269,6 +280,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       _busy = true;
       _problem = null;
     });
+    // Read before the awaits: the screen may be gone by the time they end,
+    // and a sign-in that succeeded is still saved.
+    final accounts = ref.read(filesAccountsProvider);
     try {
       final share = _share;
       if (_reauth) {
@@ -278,17 +292,29 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         }
         await _native.probe(
             SmbTarget(host: host, port: port, share: share), credentials, '/');
-        await _saveCredentials(host, port, share, credentials);
+        if (_signInAgain) {
+          await _saveCredentials(accounts, host, port, share, credentials);
+          return;
+        }
+        // Add folders: the credentials are saved with them.
+        if (!mounted) return;
+        setState(() {
+          _hostName = host;
+          _portNumber = port;
+          _credentials = credentials;
+        });
+        _pickShare(share);
         return;
       }
-      final shares = await _native.listShares(host, port, credentials);
+      final (shares, reached) =
+          await _listSharesAt(_candidates(host), port, credentials);
       if (!mounted) return;
       if (shares.isEmpty) {
         setState(() => _problem = _Problem.noShares);
         return;
       }
       setState(() {
-        _hostName = host;
+        _hostName = reached;
         _portNumber = port;
         _credentials = credentials;
         _shares = shares;
@@ -302,12 +328,33 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     }
   }
 
+  /// The addresses to try for [host]: every one the discovered server
+  /// advertised when [host] is its first, else [host] alone.
+  List<String> _candidates(String host) =>
+      _discoveredAddresses.firstOrNull == host ? _discoveredAddresses : [host];
+
+  /// Lists the shares at the first of [hosts] that can be reached, and
+  /// returns them with that host. Only an unreachable address moves on: a
+  /// refused login or an SMB1-only server would answer the same anywhere.
+  Future<(List<String>, String)> _listSharesAt(
+      List<String> hosts, int port, SmbCredentials credentials) async {
+    for (var i = 0;; i++) {
+      final host = hosts[i];
+      try {
+        return (await _native.listShares(host, port, credentials), host);
+      } on BackendUnreachable catch (e) {
+        if (i == hosts.length - 1 || e.message == kSmb1OnlyReason) rethrow;
+        debugPrint('[AddSmb] $host unreachable, trying the next address: $e');
+      }
+    }
+  }
+
   /// Re-login: the same URL is the same account, so only the credentials
   /// change and `needsReauth` clears.
-  Future<void> _saveCredentials(
-      String host, int port, String share, SmbCredentials credentials) async {
+  Future<void> _saveCredentials(FilesAccounts accounts, String host, int port,
+      String share, SmbCredentials credentials) async {
     try {
-      await ref.read(filesAccountsProvider).addSmbAccount(
+      await accounts.addSmbAccount(
           url: _urlOf(host, port, share), credentials: credentials);
     } catch (e) {
       debugPrint('[AddSmb] Save failed: $e');
@@ -334,6 +381,20 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           .read(sourcesProvider)
           .any((s) => s.account.id == _backend?.accountId);
       _step = _Step.folders;
+    });
+  }
+
+  /// Back at a share's root: the share list again, with the sign-in kept,
+  /// so a wrong share (or one whose root would not list) costs one step.
+  void _backToShares() {
+    _closeUnsavedBackend();
+    setState(() {
+      _backend = null;
+      _share = null;
+      _saved = false;
+      _chosen.clear();
+      _problem = null;
+      _step = _Step.shares;
     });
   }
 
@@ -562,8 +623,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   /// The whole screen once a share is open: the folders scroll under the
   /// picker's pinned location bar (which also shows a failed save), with
   /// save kept below them. The picker owns back: it climbs out of a
-  /// subfolder before leaving, abandons a slow listing, and holds during a
-  /// save.
+  /// subfolder, abandons a slow listing, and holds during a save; at the
+  /// share's root it returns to the share list, when there is one.
   Widget _foldersStep(
       BuildContext context, AppLocalizations l10n, FileSystemBackend backend) {
     return RemoteFolderPicker(
@@ -572,6 +633,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       backend: backend,
       root: '/',
       busy: _busy,
+      onExit: _shares.isEmpty ? null : _backToShares,
       problem: switch (_problem) {
         final p? => _problemText(l10n, p),
         null => null,

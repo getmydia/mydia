@@ -13,7 +13,8 @@ import '../../../core/app_menu/now_playing.dart';
 import '../../../core/media_session/playing_source.dart';
 import '../../../core/config/web_config.dart' show isInstanceHostedWeb;
 import '../../../core/sources/cache/source_rules.dart';
-import '../../../core/sources/files/smb_native.dart' show smbNativeProvider;
+import '../../../core/sources/files/smb_native.dart'
+    show SmbNative, smbNativeProvider;
 import '../../../core/cache/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
@@ -471,6 +472,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _pendingProxyHeal = false;
   StreamSubscription<ProxyHeal>? _proxyHealSubscription;
   StreamSubscription<ProxyHeal>? _smbHealSubscription;
+
+  /// Null on web. Read in initState: `ref` is not safe from async gaps.
+  SmbNative? _smbNative;
 
   static const _lostSourceWindow = Duration(seconds: 30);
   bool _isLoading = true;
@@ -1223,13 +1227,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     unawaited(_loadScaling());
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
-    _proxyHealSubscription = _mediaProxy.heals.listen(_onProxyHeal);
-    // The SMB loopback listener heals independently of the media proxy. Web
-    // has no SMB native, so there is nothing to listen to. Only a playback
-    // that reads from SMB is affected by its port moving; any other would
-    // be reopened for nothing and spend the lost-source throttle window.
+    // The SMB loopback listener heals independently of the media proxy, and
+    // each heal only concerns playback through its own listener: any other
+    // would be reopened for nothing and spend the lost-source throttle
+    // window. Web has no SMB native, so there is nothing to listen to.
+    _proxyHealSubscription = _mediaProxy.heals.listen((heal) {
+      if (!playsFromSmb(_session)) _onProxyHeal(heal);
+    });
     if (!kIsWeb) {
-      _smbHealSubscription = ref.read(smbNativeProvider).heals.listen((heal) {
+      final smb = ref.read(smbNativeProvider);
+      _smbNative = smb;
+      _smbHealSubscription = smb.heals.listen((heal) {
         if (playsFromSmb(_session)) _onProxyHeal(heal);
       });
     }
@@ -3764,8 +3772,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final gen = _loadGeneration;
     unawaited(() async {
       try {
-        // Never reopen against a port that is still dead.
-        await _mediaProxy.healListener();
+        // Never reopen against a port that is still dead: heal the listener
+        // this playback reads through. An SMB file never touches the media
+        // proxy, whose own failures must not stop its recovery.
+        final smb = _smbNative;
+        if (smb != null && playsFromSmb(_session)) {
+          await smb.healListener();
+        } else {
+          await _mediaProxy.healListener();
+        }
         if (!_isCurrentLoad(gen)) return;
         final switched = await _switchSource(plan, at: at);
         if (!_isCurrentLoad(gen)) return;
