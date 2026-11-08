@@ -123,6 +123,7 @@ import 'player_screen_views.dart';
 import 'segment_skipper.dart';
 import 'session/playback_session_types.dart';
 import 'session/source_playback_session.dart';
+import 'session/source_playback_sessions.dart' show playsFromSmb;
 import 'audio_track_detection.dart';
 import 'remote_control_mapping.dart';
 import 'stats_context_builder.dart';
@@ -1224,12 +1225,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _mediaProxy = ref.read(mediaProxyProvider);
     _proxyHealSubscription = _mediaProxy.heals.listen(_onProxyHeal);
     // The SMB loopback listener heals independently of the media proxy. Web
-    // has no SMB native, so there is nothing to listen to. Every playback
-    // listens: _onProxyHeal ignores a playback that has not advanced, and
-    // the session types give no cheap way to tell an SMB source here.
+    // has no SMB native, so there is nothing to listen to. Only a playback
+    // that reads from SMB is affected by its port moving; any other would
+    // be reopened for nothing and spend the lost-source throttle window.
     if (!kIsWeb) {
-      _smbHealSubscription =
-          ref.read(smbNativeProvider).heals.listen(_onProxyHeal);
+      _smbHealSubscription = ref.read(smbNativeProvider).heals.listen((heal) {
+        if (playsFromSmb(_session)) _onProxyHeal(heal);
+      });
     }
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);

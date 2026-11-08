@@ -5,7 +5,9 @@ library;
 
 import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/player/device_profile.dart';
+import '../../../../core/sources/files/files_account.dart' show isSmbAccountId;
 import '../../../../core/sources/files/files_media_source.dart';
+import '../../../../core/sources/source.dart' show Source, SourceKind;
 import '../../../../core/sources/jellyfin/jellyfin_media_source.dart';
 import '../../../../core/sources/media_source.dart';
 import '../../../../core/sources/mydia/mydia_source.dart';
@@ -16,6 +18,7 @@ import 'files_playback_session.dart';
 import 'jellyfin_playback_session.dart';
 import 'mydia_playback_session.dart';
 import 'playback_session.dart';
+import 'source_playback_session.dart';
 import 'plex_playback_session.dart';
 import 'stash_playback_session.dart';
 
@@ -56,3 +59,13 @@ PlaybackSession? playbackSessionFor(
         ),
       _ => null,
     };
+
+/// Whether [source] is a files source backed by an SMB share, the only kind
+/// whose URLs ride the SMB loopback listener.
+bool isSmbSource(Source source) =>
+    source.kind == SourceKind.files && isSmbAccountId(source.account.id);
+
+/// Whether [session] plays from an SMB share, so a move of the SMB
+/// listener's port invalidates its URL.
+bool playsFromSmb(PlaybackSession session) =>
+    session is SourcePlaybackSession && isSmbSource(session.source.source);

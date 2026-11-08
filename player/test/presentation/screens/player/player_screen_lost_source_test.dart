@@ -288,7 +288,7 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('an SMB listener heal to a new port reopens the stream',
+  testWidgets('an SMB listener heal leaves a non-SMB playback alone',
       (tester) async {
     final smb = FakeSmbNative();
     final smbContainer = buildPlayerScreenContainer(
@@ -303,17 +303,11 @@ void main() {
       await _mount(tester, smbContainer, decoder);
       await _playTo75(tester, decoder);
 
-      smb.emitHeal(ProxyHeal.reboundSamePort);
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
-      expect(decoder.opened, hasLength(1));
-
       smb.emitHeal(ProxyHeal.reboundNewPort);
       await tester.pump();
-      await _landReopen(tester, decoder, 2);
+      await tester.pump(const Duration(seconds: 1));
 
-      expect(decoder.opened, hasLength(2));
-      expect(decoder.opened.last.start, const Duration(seconds: 75));
+      expect(decoder.opened, hasLength(1));
       expect(find.byType(PlayerErrorView), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
