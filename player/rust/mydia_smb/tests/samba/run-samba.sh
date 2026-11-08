@@ -38,22 +38,67 @@ export MYDIA_SMB_TEST_SMB1_PORT=$PORT_SMB1
 EXP
 }
 
-kill_pids() {
-  local pidfile
-  for pidfile in "$DIR"/main/run/smbd.pid "$DIR"/smb1/run/smbd.pid; do
-    [ -f "$pidfile" ] || continue
-    sudo kill "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null || true
+# Every live process of this harness: the sudo wrappers, smbd and its
+# samba-dcerpcd and rpcd_* helpers. smbd spawns the helpers on demand with
+# --configfile=$DIR/smb.conf, so the recorded pids alone miss them. Matching
+# the program name as well as the exact argument keeps this from picking up a
+# shell whose command line merely mentions $DIR, or a pid reused since a
+# stale state file was written.
+harness_pids() {
+  local pid exe args
+  for pid in $(pgrep -f -- "$DIR/" 2>/dev/null || true); do
+    [ "$pid" = "$$" ] && continue
+    args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
+    exe=${args%% *}
+    case "${exe##*/}" in
+      smbd | sudo | samba-dcerpcd | rpcd_*) ;;
+      *) continue ;;
+    esac
+    case "$args" in
+      *" --configfile=$DIR/"* | *" -s $DIR/smb.conf "* | *" -s $DIR/smb1.conf "*)
+        echo "$pid"
+        ;;
+    esac
   done
-  [ -n "${PIDS:-}" ] && sudo kill $PIDS 2>/dev/null || true
-  # smbd shuts down asynchronously; a restart must not race its old listener.
-  local i
-  for i in $(seq 1 100); do
-    if ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null &&
-      ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT_SMB1") 2>/dev/null; then
-      return 0
-    fi
+}
+
+# Waits up to 5s for the given pids to exit, then SIGKILLs the rest.
+# Returns non-zero if any survive even that.
+wait_gone() {
+  local i pid alive
+  for i in $(seq 1 50); do
+    alive=""
+    for pid in "$@"; do
+      if sudo kill -0 "$pid" 2>/dev/null; then alive="$alive $pid"; fi
+    done
+    [ -z "$alive" ] && return 0
     sleep 0.1
   done
+  log "still running after 5s, sending SIGKILL:$alive"
+  # shellcheck disable=SC2086
+  sudo kill -KILL $alive 2>/dev/null || true
+  for i in $(seq 1 20); do
+    alive=""
+    for pid in "$@"; do
+      if sudo kill -0 "$pid" 2>/dev/null; then alive="$alive $pid"; fi
+    done
+    [ -z "$alive" ] && return 0
+    sleep 0.1
+  done
+  log "could not kill:$alive"
+  return 1
+}
+
+# Kills every harness process and waits until each one has exited, so a
+# restart never races an old smbd still holding its pidfile lock or port.
+kill_pids() {
+  local pids
+  pids=$(harness_pids)
+  [ -n "$pids" ] || return 0
+  # shellcheck disable=SC2086
+  sudo kill $pids 2>/dev/null || true
+  # shellcheck disable=SC2086
+  wait_gone $pids
 }
 
 # A smbd that never listened leaves nothing else to debug from in CI.
@@ -150,17 +195,36 @@ PY
   chmod 000 "$DIR/share/denied/secret.txt" "$DIR/share/denied"
 }
 
+# True when both smbd are still running: the sudo wrappers we started and
+# the daemons named in their pidfiles.
+smbd_alive() {
+  local pid pidfile
+  for pid in $PIDS; do
+    kill -0 "$pid" 2>/dev/null || return 1
+  done
+  for pidfile in "$DIR"/main/run/smbd.pid "$DIR"/smb1/run/smbd.pid; do
+    pid=$(cat "$pidfile" 2>/dev/null) || return 1
+    sudo kill -0 "$pid" 2>/dev/null || return 1
+  done
+}
+
 start_smbd() {
   PIDS=""
   local conf
+  # No --no-process-group: smbd signals its whole process group when it
+  # shuts down, so sharing the caller's group would SIGTERM whoever ran
+  # start or restart (the test binary, the CI step) and the new smbd with it.
   for conf in "$DIR/smb.conf" "$DIR/smb1.conf"; do
-    sudo "${SMBD[@]}" --foreground --no-process-group -s "$conf" \
+    sudo "${SMBD[@]}" --foreground -s "$conf" \
       >"$DIR/smbd-$(basename "$conf").out" 2>&1 &
     PIDS="$PIDS $!"
   done
-  if ! { wait_port "$PORT" && wait_port "$PORT_SMB1"; }; then
+  # A smbd that binds and then quits (a stale pidfile lock, a bad config)
+  # must fail here, not as a hung test later.
+  if ! { wait_port "$PORT" && wait_port "$PORT_SMB1" && sleep 0.5 && smbd_alive; }; then
+    log "smbd did not stay up"
     dump_diagnostics
-    kill_pids
+    kill_pids || true
     exit 1
   fi
   {

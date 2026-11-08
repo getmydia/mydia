@@ -478,30 +478,47 @@ async fn reconnects_once_after_server_restart() {
     let resp = get_range(&url, "bytes=0-4095").await;
     assert_eq!(resp.status(), 206);
     resp.bytes().await.unwrap();
-    // A pooled client of its own, used before the restart (one restart per
-    // test binary run: two in a row leave the harness without an smbd).
+    // A pooled client of its own, used before the restart.
     let client = SmbClient::new();
     let t = target(&env, "guest");
     client.list(&t, &guest(), "/").await.unwrap();
 
+    // Every wait below is bounded: a restart that leaves no smbd must fail
+    // this test with a message, not hold the write lock until CI times out.
     let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samba/run-samba.sh");
-    let out = std::process::Command::new(script)
+    let restart = tokio::process::Command::new(script)
         .arg("restart")
-        .output()
+        .kill_on_drop(true)
+        .output();
+    let out = tokio::time::timeout(Duration::from_mins(1), restart)
+        .await
+        .unwrap_or_else(|_| panic!("run-samba.sh restart did not finish within 60s"))
         .unwrap();
     assert!(
         out.status.success(),
-        "{}",
+        "run-samba.sh restart failed ({}): {}",
+        out.status,
         String::from_utf8_lossy(&out.stderr)
     );
 
-    // The pooled session is dead: list retries once on a fresh connection.
-    let entries = client.list(&t, &guest(), "/").await.unwrap();
-    assert!(entries.iter().any(|e| e.name == "Fable of Glass (2031)"));
+    let after_restart = async {
+        // The pooled session is dead: list retries once on a fresh connection.
+        let entries = client.list(&t, &guest(), "/").await.unwrap();
+        assert!(entries.iter().any(|e| e.name == "Fable of Glass (2031)"));
 
-    let resp = get_range(&url, "bytes=5000000-5004095").await;
-    assert_eq!(resp.status(), 206);
-    let body = resp.bytes().await.unwrap();
+        let resp = get_range(&url, "bytes=5000000-5004095").await;
+        assert_eq!(resp.status(), 206);
+        resp.bytes().await.unwrap()
+    };
+    let body = tokio::time::timeout(Duration::from_secs(30), after_restart)
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "requests after the smbd restart did not finish within 30s; \
+                 is smbd still running? (run-samba.sh stderr: {})",
+                String::from_utf8_lossy(&out.stderr)
+            )
+        });
     assert_eq!(body.len(), 4096);
     assert_pattern(&body, 5_000_000);
 }
