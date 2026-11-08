@@ -1,5 +1,6 @@
 //! Integration tests against `tests/samba/run-samba.sh`.
-//! Without `MYDIA_SMB_TEST_HOST` they print "skipped" and pass.
+//! Without `MYDIA_SMB_TEST_HOST` they print "skipped" and pass, unless
+//! `MYDIA_SMB_REQUIRE_HARNESS` is set, which makes a missing harness a failure.
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code")]
 
@@ -15,7 +16,20 @@ pub struct TestEnv {
     pub password: String,
 }
 
+/// Harness settings from the environment. `None` (the test prints "skipped")
+/// when they are absent, unless `MYDIA_SMB_REQUIRE_HARNESS` is set: CI sets it
+/// so a harness that failed to start fails the run instead of skipping it.
 pub fn test_env() -> Option<TestEnv> {
+    let found = read_env();
+    assert!(
+        found.is_some() || std::env::var_os("MYDIA_SMB_REQUIRE_HARNESS").is_none(),
+        "MYDIA_SMB_REQUIRE_HARNESS is set but the Samba harness variables \
+         (MYDIA_SMB_TEST_HOST, _PORT, _USER, _PASSWORD) are missing or invalid"
+    );
+    found
+}
+
+fn read_env() -> Option<TestEnv> {
     let host = std::env::var("MYDIA_SMB_TEST_HOST").ok()?;
     let port = std::env::var("MYDIA_SMB_TEST_PORT").ok()?.parse().ok()?;
     Some(TestEnv {
@@ -297,7 +311,9 @@ fn unused_target() -> SmbTarget {
 
 async fn served(env: &TestEnv) -> (Arc<StreamServer>, String) {
     let server = StreamServer::start(SmbClient::new()).await.unwrap();
-    let url = server.open("acct", target(env, "guest"), guest(), MKV);
+    let url = server
+        .open("acct", target(env, "guest"), guest(), MKV)
+        .unwrap();
     (server, url)
 }
 
@@ -412,8 +428,12 @@ async fn unknown_token_is_404() {
 #[tokio::test]
 async fn closed_account_tokens_404() {
     let server = StreamServer::start(SmbClient::new()).await.unwrap();
-    let url = server.open("acct", unused_target(), guest(), "/a.mkv");
-    let kept = server.open("other", unused_target(), guest(), "/a.mkv");
+    let url = server
+        .open("acct", unused_target(), guest(), "/a.mkv")
+        .unwrap();
+    let kept = server
+        .open("other", unused_target(), guest(), "/a.mkv")
+        .unwrap();
     server.close_account("acct");
     assert_eq!(reqwest::get(&url).await.unwrap().status(), 404);
     // Another account's token is still known: it fails on the SMB side
@@ -458,6 +478,11 @@ async fn reconnects_once_after_server_restart() {
     let resp = get_range(&url, "bytes=0-4095").await;
     assert_eq!(resp.status(), 206);
     resp.bytes().await.unwrap();
+    // A pooled client of its own, used before the restart (one restart per
+    // test binary run: two in a row leave the harness without an smbd).
+    let client = SmbClient::new();
+    let t = target(&env, "guest");
+    client.list(&t, &guest(), "/").await.unwrap();
 
     let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samba/run-samba.sh");
     let out = std::process::Command::new(script)
@@ -470,11 +495,29 @@ async fn reconnects_once_after_server_restart() {
         String::from_utf8_lossy(&out.stderr)
     );
 
+    // The pooled session is dead: list retries once on a fresh connection.
+    let entries = client.list(&t, &guest(), "/").await.unwrap();
+    assert!(entries.iter().any(|e| e.name == "Fable of Glass (2031)"));
+
     let resp = get_range(&url, "bytes=5000000-5004095").await;
     assert_eq!(resp.status(), 206);
     let body = resp.bytes().await.unwrap();
     assert_eq!(body.len(), 4096);
     assert_pattern(&body, 5_000_000);
+}
+
+#[tokio::test]
+async fn concurrent_heals_leave_one_listener() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let port = server.port();
+    #[cfg(feature = "test-introspection")]
+    server.stop_listener().await;
+    let (a, b, c) = tokio::join!(server.heal(), server.heal(), server.heal());
+    for h in [a, b, c] {
+        h.unwrap();
+    }
+    assert_eq!(server.port(), port);
+    assert_eq!(server.heal().await.unwrap(), Heal::Healthy);
 }
 
 #[tokio::test]
@@ -490,7 +533,9 @@ async fn heal_without_loss_is_healthy() {
 async fn heal_after_listener_loss_rebinds_same_port() {
     let server = StreamServer::start(SmbClient::new()).await.unwrap();
     let port = server.port();
-    let url = server.open("acct", unused_target(), guest(), "/a.mkv");
+    let url = server
+        .open("acct", unused_target(), guest(), "/a.mkv")
+        .unwrap();
     server.stop_listener().await;
     assert_eq!(server.heal().await.unwrap(), Heal::ReboundSamePort);
     assert_eq!(server.port(), port);
@@ -501,7 +546,7 @@ async fn heal_after_listener_loss_rebinds_same_port() {
 #[tokio::test]
 async fn url_carries_no_path() {
     let server = StreamServer::start(SmbClient::new()).await.unwrap();
-    let url = server.open("acct", unused_target(), guest(), MKV);
+    let url = server.open("acct", unused_target(), guest(), MKV).unwrap();
     let rest = url
         .strip_prefix("http://127.0.0.1:")
         .unwrap_or_else(|| panic!("{url}"));
@@ -512,7 +557,7 @@ async fn url_carries_no_path() {
         token.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')),
         "{url}"
     );
-    let other = server.open("acct", unused_target(), guest(), MKV);
+    let other = server.open("acct", unused_target(), guest(), MKV).unwrap();
     assert_ne!(url, other);
 }
 
@@ -538,7 +583,7 @@ async fn closed_account_ends_in_flight_body_without_reconnecting() {
     let client = SmbClient::new();
     let server = StreamServer::start(client.clone()).await.unwrap();
     let t = target(&env, "guest");
-    let url = server.open("acct", t.clone(), guest(), MKV);
+    let url = server.open("acct", t.clone(), guest(), MKV).unwrap();
     let mut resp = reqwest::get(&url).await.unwrap();
     assert_eq!(resp.status(), 200);
     let mut got = 0_u64;

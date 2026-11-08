@@ -133,7 +133,24 @@ impl SmbClient {
         c: &SmbCredentials,
         dir: &str,
     ) -> Result<Vec<SmbEntry>, SmbError> {
-        let (key, entry) = self.checkout(t, c).await?;
+        match self.list_once(t, c, dir).await {
+            (true, Err(SmbError::Unreachable(_))) => self.list_once(t, c, dir).await.1,
+            (_, result) => result,
+        }
+    }
+
+    /// One attempt. The flag says whether the connection came from the pool,
+    /// so a stale one can be retried on a fresh connection.
+    async fn list_once(
+        &self,
+        t: &SmbTarget,
+        c: &SmbCredentials,
+        dir: &str,
+    ) -> (bool, Result<Vec<SmbEntry>, SmbError>) {
+        let (key, entry, pooled) = match self.checkout(t, c).await {
+            Ok(checked_out) => checked_out,
+            Err(e) => return (false, Err(e)),
+        };
         let result = {
             let mut guard = entry.session.lock().await;
             let session = &mut *guard;
@@ -151,7 +168,7 @@ impl SmbClient {
                 Err(e) => Err(e),
             }
         };
-        self.finish(&key, &entry, result, Phase::Operation)
+        (pooled, self.finish(&key, &entry, result, Phase::Operation))
     }
 
     /// Stat a path. A path that does not exist is `Ok(None)`.
@@ -161,7 +178,26 @@ impl SmbClient {
         c: &SmbCredentials,
         path: &str,
     ) -> Result<Option<SmbEntry>, SmbError> {
-        let (key, entry) = self.checkout(t, c).await?;
+        let result = match self.stat_once(t, c, path).await {
+            (true, Err(SmbError::Unreachable(_))) => self.stat_once(t, c, path).await.1,
+            (_, result) => result,
+        };
+        match result {
+            Err(SmbError::NotFound) => Ok(None),
+            other => other.map(Some),
+        }
+    }
+
+    async fn stat_once(
+        &self,
+        t: &SmbTarget,
+        c: &SmbCredentials,
+        path: &str,
+    ) -> (bool, Result<SmbEntry, SmbError>) {
+        let (key, entry, pooled) = match self.checkout(t, c).await {
+            Ok(checked_out) => checked_out,
+            Err(e) => return (false, Err(e)),
+        };
         let result = {
             let mut guard = entry.session.lock().await;
             let session = &mut *guard;
@@ -171,10 +207,7 @@ impl SmbClient {
                 .await
                 .map(|info| to_entry_from_info(path, &info))
         };
-        match self.finish(&key, &entry, result, Phase::Operation) {
-            Err(SmbError::NotFound) => Ok(None),
-            other => other.map(Some),
-        }
+        (pooled, self.finish(&key, &entry, result, Phase::Operation))
     }
 
     /// Check that the share can be reached and `root` is a readable
@@ -185,7 +218,22 @@ impl SmbClient {
         c: &SmbCredentials,
         root: &str,
     ) -> Result<(), SmbError> {
-        let (key, entry) = self.checkout(t, c).await?;
+        match self.probe_once(t, c, root).await {
+            (true, Err(SmbError::Unreachable(_))) => self.probe_once(t, c, root).await.1,
+            (_, result) => result,
+        }
+    }
+
+    async fn probe_once(
+        &self,
+        t: &SmbTarget,
+        c: &SmbCredentials,
+        root: &str,
+    ) -> (bool, Result<(), SmbError>) {
+        let (key, entry, pooled) = match self.checkout(t, c).await {
+            Ok(checked_out) => checked_out,
+            Err(e) => return (false, Err(e)),
+        };
         let result = {
             let mut guard = entry.session.lock().await;
             let session = &mut *guard;
@@ -195,7 +243,7 @@ impl SmbClient {
                 .await
                 .map(|_| ())
         };
-        self.finish(&key, &entry, result, Phase::Operation)
+        (pooled, self.finish(&key, &entry, result, Phase::Operation))
     }
 
     /// Disk shares offered by a server. Admin shares (`IPC$`, `C$`, any name
@@ -225,7 +273,7 @@ impl SmbClient {
         c: &SmbCredentials,
         path: &str,
     ) -> Result<SmbFile, SmbError> {
-        let (key, entry) = self.checkout(t, c).await?;
+        let (key, entry, _pooled) = self.checkout(t, c).await?;
         let result = {
             let mut guard = entry.session.lock().await;
             let session = &mut *guard;
@@ -245,17 +293,18 @@ impl SmbClient {
         })
     }
 
-    /// Get the pooled entry for a target, connecting if there is none.
+    /// Get the pooled entry for a target, connecting if there is none. The
+    /// flag is true when the entry was already in the pool.
     async fn checkout(
         &self,
         t: &SmbTarget,
         c: &SmbCredentials,
-    ) -> Result<(PoolKey, Arc<Entry>), SmbError> {
+    ) -> Result<(PoolKey, Arc<Entry>, bool), SmbError> {
         self.ensure_sweeper();
         let key = pool_key(t, c);
         if let Some(entry) = self.lookup(&key) {
             entry.touch();
-            return Ok((key, entry));
+            return Ok((key, entry, true));
         }
         let mut client = connect(&t.host, t.port, c).await?;
         let tree = client
@@ -275,7 +324,7 @@ impl SmbClient {
         let entry = pool.entry(key.clone()).or_insert(fresh).clone();
         drop(pool);
         entry.touch();
-        Ok((key, entry))
+        Ok((key, entry, false))
     }
 
     fn lookup(&self, key: &PoolKey) -> Option<Arc<Entry>> {
@@ -315,7 +364,7 @@ impl SmbClient {
             }
             Err(e) => {
                 let mapped = map_error(&e, phase);
-                if matches!(mapped, SmbError::Unreachable(_)) {
+                if evicts_pool_entry(&mapped) {
                     self.evict(key, entry);
                 }
                 Err(mapped)
@@ -369,6 +418,12 @@ impl Drop for SmbFile {
     fn drop(&mut self) {
         self.entry.open_files.fetch_sub(1, Ordering::AcqRel);
     }
+}
+
+/// A dead connection, or one whose login the server now refuses: either way
+/// the next call must authenticate again rather than ride the old session.
+fn evicts_pool_entry(e: &SmbError) -> bool {
+    matches!(e, SmbError::Unreachable(_) | SmbError::Unauthorized)
 }
 
 fn pool_key(t: &SmbTarget, c: &SmbCredentials) -> PoolKey {
@@ -622,6 +677,14 @@ mod tests {
                 SmbError::Unreachable(_)
             ));
         }
+    }
+
+    #[test]
+    fn unauthorized_and_unreachable_evict_the_pool_entry() {
+        assert!(evicts_pool_entry(&SmbError::Unauthorized));
+        assert!(evicts_pool_entry(&SmbError::Unreachable(String::new())));
+        assert!(!evicts_pool_entry(&SmbError::AccessDenied));
+        assert!(!evicts_pool_entry(&SmbError::NotFound));
     }
 
     #[test]

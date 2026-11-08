@@ -257,7 +257,9 @@ pub(crate) mod imp {
                     kind: FfiSmbErrorKind::Unreachable,
                     message: format!("cannot start the local SMB server: {e}"),
                 })?;
-            Ok(server.open(&account_id, target.into(), creds.into(), &path))
+            server
+                .open(&account_id, target.into(), creds.into(), &path)
+                .map_err(Into::into)
         })
         .await
     }

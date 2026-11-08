@@ -40,12 +40,30 @@ EXP
 
 kill_pids() {
   local pidfile
-  for pidfile in "$DIR"/run/smbd-*.pid "$DIR"/run1/smbd-*.pid; do
+  for pidfile in "$DIR"/main/run/smbd.pid "$DIR"/smb1/run/smbd.pid; do
     [ -f "$pidfile" ] || continue
-    sudo kill "$(cat "$pidfile")" 2>/dev/null || true
+    sudo kill "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null || true
   done
   [ -n "${PIDS:-}" ] && sudo kill $PIDS 2>/dev/null || true
-  sleep 0.5
+  # smbd shuts down asynchronously; a restart must not race its old listener.
+  local i
+  for i in $(seq 1 100); do
+    if ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null &&
+      ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT_SMB1") 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+}
+
+# A smbd that never listened leaves nothing else to debug from in CI.
+dump_diagnostics() {
+  local f
+  for f in "$DIR"/smbd-*.out "$DIR"/main/log/* "$DIR"/smb1/log/*; do
+    [ -f "$f" ] || continue
+    echo "--- $f" >&2
+    sudo cat "$f" >&2 2>/dev/null || cat "$f" >&2 || true
+  done
 }
 
 wait_port() {
@@ -140,8 +158,11 @@ start_smbd() {
       >"$DIR/smbd-$(basename "$conf").out" 2>&1 &
     PIDS="$PIDS $!"
   done
-  wait_port "$PORT"
-  wait_port "$PORT_SMB1"
+  if ! { wait_port "$PORT" && wait_port "$PORT_SMB1"; }; then
+    dump_diagnostics
+    kill_pids
+    exit 1
+  fi
   {
     echo "DIR=$DIR"
     echo "PIDS=\"$PIDS\""

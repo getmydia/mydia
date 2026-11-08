@@ -8,16 +8,15 @@
 //!
 //! Tokens go when their account closes, and after 12 hours unused.
 //!
-//! A body streams in 1 MiB positioned reads, one chunk read ahead. If a read
+//! A body streams in 1 MiB positioned reads. The reader task keeps one chunk
+//! in flight and one buffered ahead of the consumer. If a read
 //! fails, the file is opened again once through the pool (which has already
 //! dropped the dead connection) and the response resumes where it was. A
 //! second failure ends the response: before the headers that is a 502, after
 //! them the connection is aborted, and mpv retries the range.
 
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::hash::{BuildHasher, Hasher};
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -154,6 +153,7 @@ struct Shared {
 pub struct StreamServer {
     shared: Arc<Shared>,
     accept: Mutex<Option<JoinHandle<()>>>,
+    heal_lock: tokio::sync::Mutex<()>,
     sweeper: JoinHandle<()>,
 }
 
@@ -177,6 +177,7 @@ impl StreamServer {
         Ok(Arc::new(Self {
             shared,
             accept: Mutex::new(Some(accept)),
+            heal_lock: tokio::sync::Mutex::new(()),
             sweeper,
         }))
     }
@@ -187,8 +188,15 @@ impl StreamServer {
     }
 
     /// Issue a token for a file and return its URL. Nothing is opened yet.
-    pub fn open(&self, account: &str, t: SmbTarget, c: SmbCredentials, path: &str) -> String {
-        let token = new_token();
+    /// Fails only if the OS cannot supply random bytes for the token.
+    pub fn open(
+        &self,
+        account: &str,
+        t: SmbTarget,
+        c: SmbCredentials,
+        path: &str,
+    ) -> Result<String, SmbError> {
+        let token = new_token()?;
         let info = TokenTarget {
             account: account.to_string(),
             target: t,
@@ -198,7 +206,7 @@ impl StreamServer {
         if let Ok(mut tokens) = self.shared.tokens.lock() {
             tokens.insert(token.clone(), info, Instant::now());
         }
-        format!("http://127.0.0.1:{}/smb/{token}", self.port())
+        Ok(format!("http://127.0.0.1:{}/smb/{token}", self.port()))
     }
 
     /// Forget every token issued for an account, closing their handles.
@@ -219,6 +227,9 @@ impl StreamServer {
     /// again: on the same port if it is free, so issued URLs keep working,
     /// otherwise on a new one.
     pub async fn heal(&self) -> io::Result<Heal> {
+        // One heal at a time: two racing would each spawn an accept task and
+        // the loser's handle would be overwritten, leaving it orphaned.
+        let _one_at_a_time = self.heal_lock.lock().await;
         let port = self.port();
         let alive = self
             .accept
@@ -297,23 +308,18 @@ async fn accepts(port: u16) -> bool {
     )
 }
 
-/// 128 random bits as 32 lowercase hex characters.
-fn new_token() -> String {
+/// 128 random bits as 32 lowercase hex characters. Fails when the OS has no
+/// randomness to give: a guessable token would expose the file, so there is
+/// no weaker fallback.
+fn new_token() -> Result<String, SmbError> {
     let mut raw = [0_u8; 16];
-    if getrandom::fill(&mut raw).is_err() {
-        // No OS randomness: fall back to std's randomly keyed hasher, which
-        // still makes tokens unguessable to anything without our memory.
-        for half in raw.chunks_mut(8) {
-            let mut h = RandomState::new().build_hasher();
-            h.write_u128(Instant::now().elapsed().as_nanos());
-            half.copy_from_slice(&h.finish().to_le_bytes());
-        }
-    }
-    raw.iter().fold(String::with_capacity(32), |mut s, b| {
+    getrandom::fill(&mut raw)
+        .map_err(|e| SmbError::Other(format!("no OS randomness for a stream token: {e}")))?;
+    Ok(raw.iter().fold(String::with_capacity(32), |mut s, b| {
         use std::fmt::Write as _;
         let _ = write!(s, "{b:02x}");
         s
-    })
+    }))
 }
 
 async fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
@@ -720,8 +726,8 @@ mod tests {
 
     #[test]
     fn tokens_are_32_hex_and_distinct() {
-        let a = new_token();
-        let b = new_token();
+        let a = new_token().unwrap();
+        let b = new_token().unwrap();
         assert_eq!(a.len(), 32);
         assert!(a
             .bytes()
