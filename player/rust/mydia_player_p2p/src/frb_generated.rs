@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1636034117;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -379106248;
 
 // Section: executor
 
@@ -1180,6 +1180,274 @@ fn wire__crate__media_names__score_candidates_impl(
         },
     )
 }
+fn wire__crate__smb__smb_close_account_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_close_account",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_account_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok = crate::smb::smb_close_account(api_account_id).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_heal_listener_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_heal_listener",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok = crate::smb::smb_heal_listener().await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_list_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_list",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_target = <crate::smb::FfiSmbTarget>::sse_decode(&mut deserializer);
+            let api_creds = <crate::smb::FfiSmbCredentials>::sse_decode(&mut deserializer);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::smb::smb_list(api_target, api_creds, api_dir).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_list_shares_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_list_shares",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_host = <String>::sse_decode(&mut deserializer);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            let api_creds = <crate::smb::FfiSmbCredentials>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::smb::smb_list_shares(api_host, api_port, api_creds).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_open_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_open",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_account_id = <String>::sse_decode(&mut deserializer);
+            let api_target = <crate::smb::FfiSmbTarget>::sse_decode(&mut deserializer);
+            let api_creds = <crate::smb::FfiSmbCredentials>::sse_decode(&mut deserializer);
+            let api_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::smb::smb_open(api_account_id, api_target, api_creds, api_path)
+                                .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_probe_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_probe",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_target = <crate::smb::FfiSmbTarget>::sse_decode(&mut deserializer);
+            let api_creds = <crate::smb::FfiSmbCredentials>::sse_decode(&mut deserializer);
+            let api_root = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::smb::smb_probe(api_target, api_creds, api_root).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__smb__smb_stat_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "smb_stat",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_target = <crate::smb::FfiSmbTarget>::sse_decode(&mut deserializer);
+            let api_creds = <crate::smb::FfiSmbCredentials>::sse_decode(&mut deserializer);
+            let api_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::smb::FfiSmbError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::smb::smb_stat(api_target, api_creds, api_path).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 
 // Section: related_funcs
 
@@ -1316,6 +1584,19 @@ impl SseDecode for crate::media_names::FfiCandidate {
     }
 }
 
+impl SseDecode for crate::smb::FfiHeal {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::smb::FfiHeal::Healthy,
+            1 => crate::smb::FfiHeal::ReboundSamePort,
+            2 => crate::smb::FfiHeal::ReboundNewPort,
+            _ => unreachable!("Invalid variant for FfiHeal: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::media_names::FfiKind {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1361,6 +1642,83 @@ impl SseDecode for crate::media_names::FfiParsed {
             episode: var_episode,
             episode_end: var_episodeEnd,
             group_key: var_groupKey,
+        };
+    }
+}
+
+impl SseDecode for crate::smb::FfiSmbCredentials {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_user = <String>::sse_decode(deserializer);
+        let mut var_password = <String>::sse_decode(deserializer);
+        let mut var_domain = <Option<String>>::sse_decode(deserializer);
+        return crate::smb::FfiSmbCredentials {
+            user: var_user,
+            password: var_password,
+            domain: var_domain,
+        };
+    }
+}
+
+impl SseDecode for crate::smb::FfiSmbEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_isDir = <bool>::sse_decode(deserializer);
+        let mut var_size = <i64>::sse_decode(deserializer);
+        let mut var_modifiedMs = <i64>::sse_decode(deserializer);
+        let mut var_unreadable = <bool>::sse_decode(deserializer);
+        return crate::smb::FfiSmbEntry {
+            path: var_path,
+            name: var_name,
+            is_dir: var_isDir,
+            size: var_size,
+            modified_ms: var_modifiedMs,
+            unreadable: var_unreadable,
+        };
+    }
+}
+
+impl SseDecode for crate::smb::FfiSmbError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::smb::FfiSmbErrorKind>::sse_decode(deserializer);
+        let mut var_message = <String>::sse_decode(deserializer);
+        return crate::smb::FfiSmbError {
+            kind: var_kind,
+            message: var_message,
+        };
+    }
+}
+
+impl SseDecode for crate::smb::FfiSmbErrorKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::smb::FfiSmbErrorKind::Unreachable,
+            1 => crate::smb::FfiSmbErrorKind::Unauthorized,
+            2 => crate::smb::FfiSmbErrorKind::AccessDenied,
+            3 => crate::smb::FfiSmbErrorKind::NotFound,
+            4 => crate::smb::FfiSmbErrorKind::Smb1Only,
+            5 => crate::smb::FfiSmbErrorKind::Unsupported,
+            6 => crate::smb::FfiSmbErrorKind::Other,
+            _ => unreachable!("Invalid variant for FfiSmbErrorKind: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::smb::FfiSmbTarget {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_host = <String>::sse_decode(deserializer);
+        let mut var_port = <u16>::sse_decode(deserializer);
+        let mut var_share = <String>::sse_decode(deserializer);
+        return crate::smb::FfiSmbTarget {
+            host: var_host,
+            port: var_port,
+            share: var_share,
         };
     }
 }
@@ -1799,6 +2157,18 @@ impl SseDecode for Vec<crate::media_names::FfiParsed> {
     }
 }
 
+impl SseDecode for Vec<crate::smb::FfiSmbEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::smb::FfiSmbEntry>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::FlutterTrackInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1850,6 +2220,17 @@ impl SseDecode for Option<crate::media_names::FfiMatch> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::media_names::FfiMatch>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::smb::FfiSmbEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::smb::FfiSmbEntry>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -1976,6 +2357,13 @@ fn pde_ffi_dispatcher_primary_impl(
         18 => wire__crate__init_app_impl(port, ptr, rust_vec_len, data_len),
         20 => wire__crate__pairing_keys_lookup_key_impl(port, ptr, rust_vec_len, data_len),
         21 => wire__crate__pairing_keys_open_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__smb__smb_close_account_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__smb__smb_heal_listener_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__smb__smb_list_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__smb__smb_list_shares_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__smb__smb_open_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__smb__smb_probe_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__smb__smb_stat_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2070,6 +2458,23 @@ impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiCandidate>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiHeal {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Healthy => 0.into_dart(),
+            Self::ReboundSamePort => 1.into_dart(),
+            Self::ReboundNewPort => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiHeal {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiHeal> for crate::smb::FfiHeal {
+    fn into_into_dart(self) -> crate::smb::FfiHeal {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::media_names::FfiKind {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -2127,6 +2532,101 @@ impl flutter_rust_bridge::IntoIntoDart<crate::media_names::FfiParsed>
     for crate::media_names::FfiParsed
 {
     fn into_into_dart(self) -> crate::media_names::FfiParsed {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiSmbCredentials {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.user.into_into_dart().into_dart(),
+            self.password.into_into_dart().into_dart(),
+            self.domain.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiSmbCredentials {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiSmbCredentials>
+    for crate::smb::FfiSmbCredentials
+{
+    fn into_into_dart(self) -> crate::smb::FfiSmbCredentials {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiSmbEntry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.path.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.is_dir.into_into_dart().into_dart(),
+            self.size.into_into_dart().into_dart(),
+            self.modified_ms.into_into_dart().into_dart(),
+            self.unreadable.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiSmbEntry {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiSmbEntry> for crate::smb::FfiSmbEntry {
+    fn into_into_dart(self) -> crate::smb::FfiSmbEntry {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiSmbError {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiSmbError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiSmbError> for crate::smb::FfiSmbError {
+    fn into_into_dart(self) -> crate::smb::FfiSmbError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiSmbErrorKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Unreachable => 0.into_dart(),
+            Self::Unauthorized => 1.into_dart(),
+            Self::AccessDenied => 2.into_dart(),
+            Self::NotFound => 3.into_dart(),
+            Self::Smb1Only => 4.into_dart(),
+            Self::Unsupported => 5.into_dart(),
+            Self::Other => 6.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiSmbErrorKind {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiSmbErrorKind>
+    for crate::smb::FfiSmbErrorKind
+{
+    fn into_into_dart(self) -> crate::smb::FfiSmbErrorKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::smb::FfiSmbTarget {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.host.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
+            self.share.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::smb::FfiSmbTarget {}
+impl flutter_rust_bridge::IntoIntoDart<crate::smb::FfiSmbTarget> for crate::smb::FfiSmbTarget {
+    fn into_into_dart(self) -> crate::smb::FfiSmbTarget {
         self
     }
 }
@@ -2684,6 +3184,23 @@ impl SseEncode for crate::media_names::FfiCandidate {
     }
 }
 
+impl SseEncode for crate::smb::FfiHeal {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::smb::FfiHeal::Healthy => 0,
+                crate::smb::FfiHeal::ReboundSamePort => 1,
+                crate::smb::FfiHeal::ReboundNewPort => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::media_names::FfiKind {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2720,6 +3237,65 @@ impl SseEncode for crate::media_names::FfiParsed {
         <Option<i32>>::sse_encode(self.episode, serializer);
         <Option<i32>>::sse_encode(self.episode_end, serializer);
         <String>::sse_encode(self.group_key, serializer);
+    }
+}
+
+impl SseEncode for crate::smb::FfiSmbCredentials {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.user, serializer);
+        <String>::sse_encode(self.password, serializer);
+        <Option<String>>::sse_encode(self.domain, serializer);
+    }
+}
+
+impl SseEncode for crate::smb::FfiSmbEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.path, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <bool>::sse_encode(self.is_dir, serializer);
+        <i64>::sse_encode(self.size, serializer);
+        <i64>::sse_encode(self.modified_ms, serializer);
+        <bool>::sse_encode(self.unreadable, serializer);
+    }
+}
+
+impl SseEncode for crate::smb::FfiSmbError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::smb::FfiSmbErrorKind>::sse_encode(self.kind, serializer);
+        <String>::sse_encode(self.message, serializer);
+    }
+}
+
+impl SseEncode for crate::smb::FfiSmbErrorKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::smb::FfiSmbErrorKind::Unreachable => 0,
+                crate::smb::FfiSmbErrorKind::Unauthorized => 1,
+                crate::smb::FfiSmbErrorKind::AccessDenied => 2,
+                crate::smb::FfiSmbErrorKind::NotFound => 3,
+                crate::smb::FfiSmbErrorKind::Smb1Only => 4,
+                crate::smb::FfiSmbErrorKind::Unsupported => 5,
+                crate::smb::FfiSmbErrorKind::Other => 6,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::smb::FfiSmbTarget {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.host, serializer);
+        <u16>::sse_encode(self.port, serializer);
+        <String>::sse_encode(self.share, serializer);
     }
 }
 
@@ -3059,6 +3635,16 @@ impl SseEncode for Vec<crate::media_names::FfiParsed> {
     }
 }
 
+impl SseEncode for Vec<crate::smb::FfiSmbEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::smb::FfiSmbEntry>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::FlutterTrackInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3105,6 +3691,16 @@ impl SseEncode for Option<crate::media_names::FfiMatch> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::media_names::FfiMatch>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::smb::FfiSmbEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::smb::FfiSmbEntry>::sse_encode(value, serializer);
         }
     }
 }

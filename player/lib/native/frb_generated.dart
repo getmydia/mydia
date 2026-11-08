@@ -11,6 +11,7 @@ import 'frb_generated.io.dart'
 import 'lib.dart';
 import 'media_names.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'smb.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -71,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1636034117;
+  int get rustContentHash => -379106248;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -161,6 +162,36 @@ abstract class RustLibApi extends BaseApi {
       int? year,
       required bool isShow,
       required List<FfiCandidate> candidates});
+
+  Future<void> crateSmbSmbCloseAccount({required String accountId});
+
+  Future<FfiHeal> crateSmbSmbHealListener();
+
+  Future<List<FfiSmbEntry>> crateSmbSmbList(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String dir});
+
+  Future<List<String>> crateSmbSmbListShares(
+      {required String host,
+      required int port,
+      required FfiSmbCredentials creds});
+
+  Future<String> crateSmbSmbOpen(
+      {required String accountId,
+      required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String path});
+
+  Future<void> crateSmbSmbProbe(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String root});
+
+  Future<FfiSmbEntry?> crateSmbSmbStat(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String path});
 
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_HlsStreamHandle;
@@ -817,6 +848,200 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["title", "year", "isShow", "candidates"],
       );
 
+  @override
+  Future<void> crateSmbSmbCloseAccount({required String accountId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(accountId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 24, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbCloseAccountConstMeta,
+      argValues: [accountId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbCloseAccountConstMeta => const TaskConstMeta(
+        debugName: "smb_close_account",
+        argNames: ["accountId"],
+      );
+
+  @override
+  Future<FfiHeal> crateSmbSmbHealListener() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 25, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_ffi_heal,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbHealListenerConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbHealListenerConstMeta => const TaskConstMeta(
+        debugName: "smb_heal_listener",
+        argNames: [],
+      );
+
+  @override
+  Future<List<FfiSmbEntry>> crateSmbSmbList(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String dir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_ffi_smb_target(target, serializer);
+        sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
+        sse_encode_String(dir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 26, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_ffi_smb_entry,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbListConstMeta,
+      argValues: [target, creds, dir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbListConstMeta => const TaskConstMeta(
+        debugName: "smb_list",
+        argNames: ["target", "creds", "dir"],
+      );
+
+  @override
+  Future<List<String>> crateSmbSmbListShares(
+      {required String host,
+      required int port,
+      required FfiSmbCredentials creds}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(host, serializer);
+        sse_encode_u_16(port, serializer);
+        sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 27, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_String,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbListSharesConstMeta,
+      argValues: [host, port, creds],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbListSharesConstMeta => const TaskConstMeta(
+        debugName: "smb_list_shares",
+        argNames: ["host", "port", "creds"],
+      );
+
+  @override
+  Future<String> crateSmbSmbOpen(
+      {required String accountId,
+      required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String path}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(accountId, serializer);
+        sse_encode_box_autoadd_ffi_smb_target(target, serializer);
+        sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
+        sse_encode_String(path, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 28, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbOpenConstMeta,
+      argValues: [accountId, target, creds, path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbOpenConstMeta => const TaskConstMeta(
+        debugName: "smb_open",
+        argNames: ["accountId", "target", "creds", "path"],
+      );
+
+  @override
+  Future<void> crateSmbSmbProbe(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String root}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_ffi_smb_target(target, serializer);
+        sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
+        sse_encode_String(root, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 29, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbProbeConstMeta,
+      argValues: [target, creds, root],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbProbeConstMeta => const TaskConstMeta(
+        debugName: "smb_probe",
+        argNames: ["target", "creds", "root"],
+      );
+
+  @override
+  Future<FfiSmbEntry?> crateSmbSmbStat(
+      {required FfiSmbTarget target,
+      required FfiSmbCredentials creds,
+      required String path}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_ffi_smb_target(target, serializer);
+        sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
+        sse_encode_String(path, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 30, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_box_autoadd_ffi_smb_entry,
+        decodeErrorData: sse_decode_ffi_smb_error,
+      ),
+      constMeta: kCrateSmbSmbStatConstMeta,
+      argValues: [target, creds, path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateSmbSmbStatConstMeta => const TaskConstMeta(
+        debugName: "smb_stat",
+        argNames: ["target", "creds", "path"],
+      );
+
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_HlsStreamHandle => wire
           .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle;
@@ -922,6 +1147,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FfiMatch dco_decode_box_autoadd_ffi_match(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_ffi_match(raw);
+  }
+
+  @protected
+  FfiSmbCredentials dco_decode_box_autoadd_ffi_smb_credentials(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ffi_smb_credentials(raw);
+  }
+
+  @protected
+  FfiSmbEntry dco_decode_box_autoadd_ffi_smb_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ffi_smb_entry(raw);
+  }
+
+  @protected
+  FfiSmbTarget dco_decode_box_autoadd_ffi_smb_target(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ffi_smb_target(raw);
   }
 
   @protected
@@ -1036,6 +1279,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FfiHeal dco_decode_ffi_heal(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return FfiHeal.values[raw as int];
+  }
+
+  @protected
   FfiKind dco_decode_ffi_kind(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return FfiKind.values[raw as int];
@@ -1068,6 +1317,66 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       episode: dco_decode_opt_box_autoadd_i_32(arr[5]),
       episodeEnd: dco_decode_opt_box_autoadd_i_32(arr[6]),
       groupKey: dco_decode_String(arr[7]),
+    );
+  }
+
+  @protected
+  FfiSmbCredentials dco_decode_ffi_smb_credentials(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return FfiSmbCredentials(
+      user: dco_decode_String(arr[0]),
+      password: dco_decode_String(arr[1]),
+      domain: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
+  FfiSmbEntry dco_decode_ffi_smb_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return FfiSmbEntry(
+      path: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      isDir: dco_decode_bool(arr[2]),
+      size: dco_decode_i_64(arr[3]),
+      modifiedMs: dco_decode_i_64(arr[4]),
+      unreadable: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  FfiSmbError dco_decode_ffi_smb_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return FfiSmbError(
+      kind: dco_decode_ffi_smb_error_kind(arr[0]),
+      message: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  FfiSmbErrorKind dco_decode_ffi_smb_error_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return FfiSmbErrorKind.values[raw as int];
+  }
+
+  @protected
+  FfiSmbTarget dco_decode_ffi_smb_target(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return FfiSmbTarget(
+      host: dco_decode_String(arr[0]),
+      port: dco_decode_u_16(arr[1]),
+      share: dco_decode_String(arr[2]),
     );
   }
 
@@ -1408,6 +1717,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<FfiSmbEntry> dco_decode_list_ffi_smb_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ffi_smb_entry).toList();
+  }
+
+  @protected
   List<FlutterTrackInfo> dco_decode_list_flutter_track_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_flutter_track_info).toList();
@@ -1435,6 +1750,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FfiMatch? dco_decode_opt_box_autoadd_ffi_match(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_ffi_match(raw);
+  }
+
+  @protected
+  FfiSmbEntry? dco_decode_opt_box_autoadd_ffi_smb_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_ffi_smb_entry(raw);
   }
 
   @protected
@@ -1622,6 +1943,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FfiSmbCredentials sse_decode_box_autoadd_ffi_smb_credentials(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ffi_smb_credentials(deserializer));
+  }
+
+  @protected
+  FfiSmbEntry sse_decode_box_autoadd_ffi_smb_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ffi_smb_entry(deserializer));
+  }
+
+  @protected
+  FfiSmbTarget sse_decode_box_autoadd_ffi_smb_target(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ffi_smb_target(deserializer));
+  }
+
+  @protected
   FlutterGraphQLRequest sse_decode_box_autoadd_flutter_graph_ql_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1733,6 +2075,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FfiHeal sse_decode_ffi_heal(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return FfiHeal.values[inner];
+  }
+
+  @protected
   FfiKind sse_decode_ffi_kind(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -1767,6 +2116,59 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         episode: var_episode,
         episodeEnd: var_episodeEnd,
         groupKey: var_groupKey);
+  }
+
+  @protected
+  FfiSmbCredentials sse_decode_ffi_smb_credentials(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_user = sse_decode_String(deserializer);
+    var var_password = sse_decode_String(deserializer);
+    var var_domain = sse_decode_opt_String(deserializer);
+    return FfiSmbCredentials(
+        user: var_user, password: var_password, domain: var_domain);
+  }
+
+  @protected
+  FfiSmbEntry sse_decode_ffi_smb_entry(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_isDir = sse_decode_bool(deserializer);
+    var var_size = sse_decode_i_64(deserializer);
+    var var_modifiedMs = sse_decode_i_64(deserializer);
+    var var_unreadable = sse_decode_bool(deserializer);
+    return FfiSmbEntry(
+        path: var_path,
+        name: var_name,
+        isDir: var_isDir,
+        size: var_size,
+        modifiedMs: var_modifiedMs,
+        unreadable: var_unreadable);
+  }
+
+  @protected
+  FfiSmbError sse_decode_ffi_smb_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_ffi_smb_error_kind(deserializer);
+    var var_message = sse_decode_String(deserializer);
+    return FfiSmbError(kind: var_kind, message: var_message);
+  }
+
+  @protected
+  FfiSmbErrorKind sse_decode_ffi_smb_error_kind(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return FfiSmbErrorKind.values[inner];
+  }
+
+  @protected
+  FfiSmbTarget sse_decode_ffi_smb_target(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_host = sse_decode_String(deserializer);
+    var var_port = sse_decode_u_16(deserializer);
+    var var_share = sse_decode_String(deserializer);
+    return FfiSmbTarget(host: var_host, port: var_port, share: var_share);
   }
 
   @protected
@@ -2141,6 +2543,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<FfiSmbEntry> sse_decode_list_ffi_smb_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FfiSmbEntry>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ffi_smb_entry(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<FlutterTrackInfo> sse_decode_list_flutter_track_info(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2188,6 +2603,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_ffi_match(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  FfiSmbEntry? sse_decode_opt_box_autoadd_ffi_smb_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_ffi_smb_entry(deserializer));
     } else {
       return null;
     }
@@ -2399,6 +2826,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_ffi_smb_credentials(
+      FfiSmbCredentials self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ffi_smb_credentials(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_ffi_smb_entry(
+      FfiSmbEntry self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ffi_smb_entry(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_ffi_smb_target(
+      FfiSmbTarget self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ffi_smb_target(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_flutter_graph_ql_request(
       FlutterGraphQLRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2502,6 +2950,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_ffi_heal(FfiHeal self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_ffi_kind(FfiKind self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
@@ -2525,6 +2979,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_i_32(self.episode, serializer);
     sse_encode_opt_box_autoadd_i_32(self.episodeEnd, serializer);
     sse_encode_String(self.groupKey, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_smb_credentials(
+      FfiSmbCredentials self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.user, serializer);
+    sse_encode_String(self.password, serializer);
+    sse_encode_opt_String(self.domain, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_smb_entry(FfiSmbEntry self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_bool(self.isDir, serializer);
+    sse_encode_i_64(self.size, serializer);
+    sse_encode_i_64(self.modifiedMs, serializer);
+    sse_encode_bool(self.unreadable, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_smb_error(FfiSmbError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ffi_smb_error_kind(self.kind, serializer);
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_smb_error_kind(
+      FfiSmbErrorKind self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_ffi_smb_target(FfiSmbTarget self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.host, serializer);
+    sse_encode_u_16(self.port, serializer);
+    sse_encode_String(self.share, serializer);
   }
 
   @protected
@@ -2811,6 +3307,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_ffi_smb_entry(
+      List<FfiSmbEntry> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ffi_smb_entry(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_flutter_track_info(
       List<FlutterTrackInfo> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2856,6 +3362,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_ffi_match(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_ffi_smb_entry(
+      FfiSmbEntry? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_ffi_smb_entry(self, serializer);
     }
   }
 

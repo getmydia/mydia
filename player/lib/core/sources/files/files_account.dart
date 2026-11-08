@@ -54,3 +54,39 @@ class WebDavCredentials {
     );
   }
 }
+
+/// What an SMB account stores as its account token (`SourceSecrets`). An empty
+/// [user] means guest.
+class SmbCredentials {
+  const SmbCredentials({
+    required this.user,
+    required this.password,
+    this.domain,
+  });
+
+  final String user;
+  final String password;
+  final String? domain;
+
+  String toJson() => jsonEncode({
+        'user': user,
+        'password': password,
+        if (domain != null) 'domain': domain,
+      });
+
+  /// Throws [FormatException] when [s] is not a stored credential.
+  static SmbCredentials fromJson(String s) {
+    final json = jsonDecode(s);
+    if (json is! Map ||
+        json['user'] is! String ||
+        json['password'] is! String ||
+        (json['domain'] != null && json['domain'] is! String)) {
+      throw const FormatException('Not SMB credentials');
+    }
+    return SmbCredentials(
+      user: json['user'] as String,
+      password: json['password'] as String,
+      domain: json['domain'] as String?,
+    );
+  }
+}

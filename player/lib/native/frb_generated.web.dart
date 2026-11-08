@@ -12,6 +12,7 @@ import 'frb_generated.dart';
 import 'lib.dart';
 import 'media_names.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'smb.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -81,6 +82,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FfiMatch dco_decode_box_autoadd_ffi_match(dynamic raw);
 
   @protected
+  FfiSmbCredentials dco_decode_box_autoadd_ffi_smb_credentials(dynamic raw);
+
+  @protected
+  FfiSmbEntry dco_decode_box_autoadd_ffi_smb_entry(dynamic raw);
+
+  @protected
+  FfiSmbTarget dco_decode_box_autoadd_ffi_smb_target(dynamic raw);
+
+  @protected
   FlutterGraphQLRequest dco_decode_box_autoadd_flutter_graph_ql_request(
       dynamic raw);
 
@@ -133,6 +143,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FfiCandidate dco_decode_ffi_candidate(dynamic raw);
 
   @protected
+  FfiHeal dco_decode_ffi_heal(dynamic raw);
+
+  @protected
   FfiKind dco_decode_ffi_kind(dynamic raw);
 
   @protected
@@ -140,6 +153,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiParsed dco_decode_ffi_parsed(dynamic raw);
+
+  @protected
+  FfiSmbCredentials dco_decode_ffi_smb_credentials(dynamic raw);
+
+  @protected
+  FfiSmbEntry dco_decode_ffi_smb_entry(dynamic raw);
+
+  @protected
+  FfiSmbError dco_decode_ffi_smb_error(dynamic raw);
+
+  @protected
+  FfiSmbErrorKind dco_decode_ffi_smb_error_kind(dynamic raw);
+
+  @protected
+  FfiSmbTarget dco_decode_ffi_smb_target(dynamic raw);
 
   @protected
   FlutterConnectionType dco_decode_flutter_connection_type(dynamic raw);
@@ -215,6 +243,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FfiParsed> dco_decode_list_ffi_parsed(dynamic raw);
 
   @protected
+  List<FfiSmbEntry> dco_decode_list_ffi_smb_entry(dynamic raw);
+
+  @protected
   List<FlutterTrackInfo> dco_decode_list_flutter_track_info(dynamic raw);
 
   @protected
@@ -228,6 +259,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiMatch? dco_decode_opt_box_autoadd_ffi_match(dynamic raw);
+
+  @protected
+  FfiSmbEntry? dco_decode_opt_box_autoadd_ffi_smb_entry(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
@@ -321,6 +355,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FfiMatch sse_decode_box_autoadd_ffi_match(SseDeserializer deserializer);
 
   @protected
+  FfiSmbCredentials sse_decode_box_autoadd_ffi_smb_credentials(
+      SseDeserializer deserializer);
+
+  @protected
+  FfiSmbEntry sse_decode_box_autoadd_ffi_smb_entry(
+      SseDeserializer deserializer);
+
+  @protected
+  FfiSmbTarget sse_decode_box_autoadd_ffi_smb_target(
+      SseDeserializer deserializer);
+
+  @protected
   FlutterGraphQLRequest sse_decode_box_autoadd_flutter_graph_ql_request(
       SseDeserializer deserializer);
 
@@ -376,6 +422,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FfiCandidate sse_decode_ffi_candidate(SseDeserializer deserializer);
 
   @protected
+  FfiHeal sse_decode_ffi_heal(SseDeserializer deserializer);
+
+  @protected
   FfiKind sse_decode_ffi_kind(SseDeserializer deserializer);
 
   @protected
@@ -383,6 +432,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiParsed sse_decode_ffi_parsed(SseDeserializer deserializer);
+
+  @protected
+  FfiSmbCredentials sse_decode_ffi_smb_credentials(
+      SseDeserializer deserializer);
+
+  @protected
+  FfiSmbEntry sse_decode_ffi_smb_entry(SseDeserializer deserializer);
+
+  @protected
+  FfiSmbError sse_decode_ffi_smb_error(SseDeserializer deserializer);
+
+  @protected
+  FfiSmbErrorKind sse_decode_ffi_smb_error_kind(SseDeserializer deserializer);
+
+  @protected
+  FfiSmbTarget sse_decode_ffi_smb_target(SseDeserializer deserializer);
 
   @protected
   FlutterConnectionType sse_decode_flutter_connection_type(
@@ -471,6 +536,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FfiParsed> sse_decode_list_ffi_parsed(SseDeserializer deserializer);
 
   @protected
+  List<FfiSmbEntry> sse_decode_list_ffi_smb_entry(SseDeserializer deserializer);
+
+  @protected
   List<FlutterTrackInfo> sse_decode_list_flutter_track_info(
       SseDeserializer deserializer);
 
@@ -485,6 +553,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiMatch? sse_decode_opt_box_autoadd_ffi_match(SseDeserializer deserializer);
+
+  @protected
+  FfiSmbEntry? sse_decode_opt_box_autoadd_ffi_smb_entry(
+      SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
@@ -580,6 +652,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       FfiMatch self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_ffi_smb_credentials(
+      FfiSmbCredentials self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ffi_smb_entry(
+      FfiSmbEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ffi_smb_target(
+      FfiSmbTarget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_flutter_graph_ql_request(
       FlutterGraphQLRequest self, SseSerializer serializer);
 
@@ -634,6 +718,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_ffi_candidate(FfiCandidate self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ffi_heal(FfiHeal self, SseSerializer serializer);
+
+  @protected
   void sse_encode_ffi_kind(FfiKind self, SseSerializer serializer);
 
   @protected
@@ -641,6 +728,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_ffi_parsed(FfiParsed self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ffi_smb_credentials(
+      FfiSmbCredentials self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ffi_smb_entry(FfiSmbEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ffi_smb_error(FfiSmbError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ffi_smb_error_kind(
+      FfiSmbErrorKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ffi_smb_target(FfiSmbTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_connection_type(
@@ -732,6 +836,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<FfiParsed> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_ffi_smb_entry(
+      List<FfiSmbEntry> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_flutter_track_info(
       List<FlutterTrackInfo> self, SseSerializer serializer);
 
@@ -748,6 +856,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_ffi_match(
       FfiMatch? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_ffi_smb_entry(
+      FfiSmbEntry? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
