@@ -66,7 +66,7 @@ class FakeBackend implements FileSystemBackend {
     listed.add(d);
     final failure = failures[d];
     if (failure != null) throw failure;
-    final prefix = '$d/';
+    final prefix = d == '/' ? '/' : '$d/';
     final out = <FileEntry>[];
     for (final e in _sizes.entries) {
       if (!e.key.startsWith(prefix) ||

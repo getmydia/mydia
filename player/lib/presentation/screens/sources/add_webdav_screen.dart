@@ -19,6 +19,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import '../../widgets/files/experimental_badge.dart';
+import '../../widgets/files/remote_folder_picker.dart';
 import 'files_library_kind_picker.dart';
 import 'server_url.dart';
 
@@ -48,8 +49,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   FileSystemBackend? _backend;
   Uri? _base;
   bool _saved = false;
-  String _dir = '/';
-  List<FileEntry> _folders = const [];
+  List<FileEntry> _rootEntries = const [];
   final _chosen = <String, FilesLibraryKind>{};
 
   @override
@@ -124,15 +124,14 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     try {
       await backend.probe();
       final dir = _dirOf(base);
-      final folders = await _listFolders(backend, dir);
+      final entries = await backend.list(dir);
       if (!mounted) return;
       final id = webDavAccountId(base);
       setState(() {
         _backend = backend;
         _base = base;
         _saved = ref.read(sourcesProvider).any((s) => s.account.id == id);
-        _dir = dir;
-        _folders = folders;
+        _rootEntries = entries;
       });
     } catch (e) {
       debugPrint('[AddWebDav] Connect failed: $e');
@@ -140,43 +139,6 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<List<FileEntry>> _listFolders(
-      FileSystemBackend backend, String dir) async {
-    final entries = await backend.list(dir);
-    return [
-      for (final e in entries)
-        if (e.isDir) e,
-    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-  }
-
-  Future<void> _open(String dir) async {
-    final backend = _backend;
-    if (backend == null) return;
-    setState(() {
-      _busy = true;
-      _problem = null;
-    });
-    try {
-      final folders = await _listFolders(backend, dir);
-      if (!mounted) return;
-      setState(() {
-        _dir = trimRootPath(dir);
-        _folders = folders;
-      });
-    } catch (e) {
-      debugPrint('[AddWebDav] Listing $dir failed: $e');
-      if (mounted) setState(() => _problem = _problemOf(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  String _parent(String dir) {
-    final trimmed = trimRootPath(dir);
-    final i = trimmed.lastIndexOf('/');
-    return i <= 0 ? '/' : trimmed.substring(0, i);
   }
 
   Future<void> _save() async {
@@ -222,7 +184,8 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         }
       });
 
-  Widget _folderRow(String path, String name, {required bool open}) {
+  Widget _folderRow(String path, String name,
+      {required bool busy, required VoidCallback? onOpen}) {
     final key = trimRootPath(path);
     final kind = _chosen[key];
     return ListTile(
@@ -231,7 +194,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       leading: Checkbox(
         key: ValueKey('webdav-tick-$key'),
         value: kind != null,
-        onChanged: _busy ? null : (on) => _toggle(key, on ?? false),
+        onChanged: _busy || busy ? null : (on) => _toggle(key, on ?? false),
       ),
       title: Text(name),
       trailing: kind == null
@@ -239,9 +202,11 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
           : FilesLibraryKindPicker(
               key: ValueKey('webdav-kind-$key'),
               value: kind,
-              onChanged: _busy ? null : (k) => setState(() => _chosen[key] = k),
+              onChanged: _busy || busy
+                  ? null
+                  : (k) => setState(() => _chosen[key] = k),
             ),
-      onTap: open && !_busy ? () => _open(path) : null,
+      onTap: _busy ? null : onOpen,
     );
   }
 
@@ -301,32 +266,19 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
                 const SizedBox(height: 24),
                 Text(l10n.filesWebDavPickFolders),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    IconButton(
-                      key: const Key('webdav-up'),
-                      tooltip: l10n.filesWebDavUp,
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                      onPressed: _busy || _dir == _rootDir
-                          ? null
-                          : () => _open(_parent(_dir)),
-                    ),
-                    Expanded(
-                      child: Text(_dir,
-                          key: const Key('webdav-dir'),
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
+                RemoteFolderPicker(
+                  key: const Key('webdav-folder-picker'),
+                  backend: _backend!,
+                  root: _rootDir,
+                  initialFolders: _rootEntries,
+                  onPicked: (path) => _toggle(trimRootPath(path), true),
+                  rowBuilder: (context,
+                          {required path,
+                          required title,
+                          required busy,
+                          required onOpen}) =>
+                      _folderRow(path, title, busy: busy, onOpen: onOpen),
                 ),
-                _folderRow(_dir, l10n.filesWebDavThisFolder, open: false),
-                const Divider(),
-                if (_folders.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(l10n.filesWebDavNoFolders),
-                  ),
-                for (final f in _folders)
-                  _folderRow(f.path, f.name, open: true),
               ],
               const SizedBox(height: 24),
               FilledButton(
