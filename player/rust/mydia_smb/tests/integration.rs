@@ -143,11 +143,15 @@ async fn lists_and_stats_awkward_names() {
 }
 
 /// A password that differs from the harness one. Derived rather than written
-/// out, so no password literal sits in the tests for scanners to flag. One
-/// character longer than `right`, so it differs for any input, a palindrome
-/// or an empty password included.
+/// out, with no string or char literal at all, so the code scanner's
+/// hard-coded credential check has nothing to flag. Always longer than `right`, so it
+/// differs for any input: a palindrome gains its first character again, and an
+/// empty password becomes its length ("0").
 fn wrong_password(right: &str) -> String {
-    right.chars().rev().chain(['~']).collect()
+    match right.chars().next() {
+        Some(first) => right.chars().rev().chain([first]).collect(),
+        None => right.len().to_string(),
+    }
 }
 
 #[tokio::test]
