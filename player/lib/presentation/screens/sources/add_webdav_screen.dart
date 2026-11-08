@@ -113,9 +113,11 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
 
   /// The share's own folder as a backend path: decoded, since the backend
   /// encodes what it is given (`/my%20share` would go out as `my%2520share`).
+  /// Trimmed like every folder [_open] lands on, so an address ending in an
+  /// encoded slash still compares equal to its root on the way back up.
   static String _dirOf(Uri? base) {
     final path = webDavDecodePath(base?.path ?? '');
-    return path.isEmpty ? '/' : path;
+    return path.isEmpty ? '/' : trimRootPath(path);
   }
 
   _Problem _problemOf(Object e) =>
@@ -231,6 +233,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     setState(() {
       _busy = true;
       _problem = null;
+      _climbFailed = false;
     });
     final accounts = ref.read(filesAccountsProvider);
     // Read before the awaits: the screen may be gone by the time they end.
@@ -457,9 +460,10 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ReducedMotion.duration(context, const Duration(milliseconds: 250));
     final connected = _backend != null;
     return PopScope(
-      // After a failed climb back leaves: a share that stopped answering
-      // would otherwise turn every back into another failed climb.
-      canPop: !connected || _climbFailed || (_atRoot && !_opening),
+      // Never mid-listing (back abandons it) or mid-save. After a failed
+      // climb back leaves: a share that stopped answering would otherwise
+      // turn every back into another failed climb.
+      canPop: !connected || (!_busy && (_atRoot || _climbFailed)),
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n.filesWebDavTitle)),

@@ -15,6 +15,7 @@ import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -39,10 +40,23 @@ class _Harness {
 
 int _boxes = 0;
 
+/// A store whose writes wait on [gate], as a slow disk would.
+class _SlowStore extends InMemorySourceStore {
+  final gate = Completer<void>();
+
+  @override
+  Future<void> putAccount(SourceAccountRecord record) async {
+    await gate.future;
+    return super.putAccount(record);
+  }
+}
+
 /// [reuse] keeps the box, records and secrets of an earlier pump, as a
 /// restart of the app would.
 Future<_Harness> _pump(WidgetTester tester,
-    {String? reauthAccountId, _Harness? reuse}) async {
+    {String? reauthAccountId,
+    _Harness? reuse,
+    InMemorySourceStore? store}) async {
   var box = reuse?.box;
   if (box == null) {
     final opened = (await tester.runAsync(() =>
@@ -54,7 +68,7 @@ Future<_Harness> _pump(WidgetTester tester,
   }
   final h = _Harness(
     box,
-    reuse?.store ?? InMemorySourceStore(),
+    reuse?.store ?? store ?? InMemorySourceStore(),
     reuse?.storage ?? MockAuthStorage(),
     FakeBackend({
       '/dav/Films/Amber Tide (2019).mkv': 10,
@@ -382,6 +396,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('/dav'), findsOneWidget);
     expect(find.text('home'), findsNothing);
+  });
+
+  testWidgets('back waits for a save at the root', (tester) async {
+    final store = _SlowStore();
+    await _pump(tester, store: store);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-tick-/dav/Films')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('webdav-save-button')));
+    await tester.pump();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    expect(find.text('home'), findsNothing);
+
+    store.gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('opened '), findsOneWidget);
+  });
+
+  testWidgets('a share address ending in an encoded slash is its own root',
+      (tester) async {
+    await _pump(tester);
+    await _connect(tester, url: 'https://nas.example.test/dav%2F');
+    expect(find.text('/dav'), findsOneWidget);
+    expect(
+        tester.widget<IconButton>(find.byKey(const Key('webdav-up'))).onPressed,
+        isNull);
+
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+
+    // Back at the root leaves rather than climbing above the share.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
   });
 
   testWidgets('back at the root abandons a slow listing before leaving',
