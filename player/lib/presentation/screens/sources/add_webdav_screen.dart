@@ -16,6 +16,7 @@ import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/ui/reduced_motion.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import '../../widgets/files/experimental_badge.dart';
@@ -55,6 +56,18 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   /// The folder instructions, scrolled to the top once the share answers so
   /// the folders, not the spent form, fill a phone screen.
   final _pickFoldersKey = GlobalKey();
+
+  /// How long that scroll takes: resolved in build, zero under reduced
+  /// motion.
+  Duration _revealDuration = Duration.zero;
+
+  /// Bumped by every folder listing and by back, so a listing back
+  /// abandoned cannot land on top of where the user is now.
+  int _listing = 0;
+
+  /// Whether a folder listing is in flight, which back may abandon. A save
+  /// also sets [_busy] but is never abandoned.
+  bool _opening = false;
 
   @override
   void initState() {
@@ -142,8 +155,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         final target = _pickFoldersKey.currentContext;
         if (target == null) return;
         Scrollable.ensureVisible(target,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic);
+            duration: _revealDuration, curve: Curves.easeOutCubic);
       });
     } catch (e) {
       debugPrint('[AddWebDav] Connect failed: $e');
@@ -165,22 +177,30 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   Future<void> _open(String dir) async {
     final backend = _backend;
     if (backend == null) return;
+    final listing = ++_listing;
     setState(() {
       _busy = true;
+      _opening = true;
       _problem = null;
     });
+    bool current() => mounted && listing == _listing;
     try {
       final folders = await _listFolders(backend, dir);
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _dir = trimRootPath(dir);
         _folders = folders;
       });
     } catch (e) {
       debugPrint('[AddWebDav] Listing $dir failed: $e');
-      if (mounted) setState(() => _problem = _problemOf(e));
+      if (current()) setState(() => _problem = _problemOf(e));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (current()) {
+        setState(() {
+          _busy = false;
+          _opening = false;
+        });
+      }
     }
   }
 
@@ -389,15 +409,27 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   bool get _atRoot => _dir == _rootDir;
 
   /// Back climbs out of a subfolder before it leaves the setup, so the app
-  /// bar arrow and the system gesture never drop a half-picked share.
+  /// bar arrow and the system gesture never drop a half-picked share. While
+  /// a folder is still listing, back abandons it instead: a slow server
+  /// never leaves back dead for the length of its timeout.
   void _onPop(bool didPop, Object? _) {
-    if (didPop || _busy || _backend == null || _atRoot) return;
-    _open(_parent(_dir));
+    if (didPop || _backend == null || _atRoot) return;
+    if (_opening) {
+      setState(() {
+        _listing++;
+        _busy = false;
+        _opening = false;
+      });
+      return;
+    }
+    if (!_busy) _open(_parent(_dir));
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    _revealDuration =
+        ReducedMotion.duration(context, const Duration(milliseconds: 250));
     final connected = _backend != null;
     return PopScope(
       canPop: !connected || _atRoot,

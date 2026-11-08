@@ -307,6 +307,55 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
+  testWidgets('back abandons a slow folder listing', (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+
+    final slow = Completer<void>();
+    h.backend.holds['/dav/Shows/Low Orbit'] = slow;
+    await tester
+        .tap(find.byKey(const Key('webdav-folder-/dav/Shows/Low Orbit')));
+    await tester.pump();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+
+    // The abandoned answer arrives late and is dropped.
+    slow.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+
+    // Back is live again and climbs.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+  });
+
+  testWidgets('connecting jumps to the folders under reduced motion',
+      (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final h = await _pump(tester);
+    for (var i = 0; i < 40; i++) {
+      h.backend.setFile('/dav/Folder ${i.toString().padLeft(2, '0')}/a.mkv', 1);
+    }
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.enterText(find.byKey(const Key('webdav-url-field')),
+        'https://nas.example.test/dav/');
+    await tester.tap(find.byKey(const Key('webdav-connect-button')));
+    // Two frames with no time passing: the listing lands, then the
+    // post-frame scroll. An animated scroll would still be at its start.
+    await tester.pump();
+    await tester.pump();
+    expect(
+        tester.getRect(find.byKey(const Key('webdav-up'))).top, lessThan(250));
+  });
+
   testWidgets('back before connecting leaves the setup', (tester) async {
     await _pump(tester);
     await tester.tap(find.byType(BackButton));
@@ -338,6 +387,11 @@ void main() {
       expect(screen.contains(rect.center), isTrue,
           reason: '$key is off screen');
     }
+    expect(
+        tester.getRect(find.byKey(const Key('webdav-save-button'))).top,
+        greaterThanOrEqualTo(tester
+            .getRect(find.byKey(const Key('webdav-folder-list')))
+            .bottom));
 
     await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
     await tester.pumpAndSettle();
