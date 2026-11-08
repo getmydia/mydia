@@ -216,8 +216,6 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       "config" => %{"library_path_id" => "", "monitored" => "true"}
     })
 
-    assert :sys.get_state(view.pid).socket.assigns.pending_add_defaults.library_path_id == nil
-
     render_async(view, 5_000)
 
     assert Repo.one!(MediaItem).library_path_id == movies.id
@@ -326,6 +324,48 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     assert_receive {:DOWN, ^ref, :process, _pid, reason}
     refute reason == :normal
     assert Repo.aggregate(MediaItem, :count) == 0
+  end
+
+  describe "submitted_defaults/3 and dialog_defaults/2" do
+    setup do
+      %{
+        resolved: %AddDefaults{
+          library_path_id: "lib-default",
+          monitored: true,
+          season_monitoring: "all",
+          search_on_add: true
+        }
+      }
+    end
+
+    test "an empty movie library is Automatic", %{resolved: resolved} do
+      submitted =
+        ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => ""}, :movie)
+
+      assert submitted.library_path_id == nil
+      assert submitted.search_on_add == false
+    end
+
+    test "a chosen movie library is kept", %{resolved: resolved} do
+      submitted =
+        ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => "lib-default"}, :movie)
+
+      assert submitted.library_path_id == "lib-default"
+    end
+
+    test "a TV show never goes Automatic", %{resolved: resolved} do
+      submitted = ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => ""}, :tv_show)
+      assert submitted.library_path_id == "lib-default"
+    end
+
+    test "the dialog opens a movie on Automatic and a show on its default" do
+      movies = library_path_fixture(%{type: "movies", default_for_movies: true})
+      series = library_path_fixture(%{type: "series", default_for_series: true})
+
+      assert ReleaseAdd.dialog_defaults(nil, :movie).library_path_id == nil
+      assert ReleaseAdd.dialog_defaults(nil, :tv_show).library_path_id == series.id
+      refute ReleaseAdd.dialog_defaults(nil, :movie).library_path_id == movies.id
+    end
   end
 
   describe "download_opts/3" do

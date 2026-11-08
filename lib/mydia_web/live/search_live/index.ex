@@ -436,7 +436,7 @@ defmodule MydiaWeb.SearchLive.Index do
          {:ok, media_type} <- parse_media_type(params["media_type"]),
          {:ok, defaults} <-
            MediaAddHelpers.resolve_add_defaults(params["config"] || %{}, media_type, user) do
-      defaults = ReleaseAdd.submitted_defaults(defaults, params["config"])
+      defaults = ReleaseAdd.submitted_defaults(defaults, params["config"], media_type)
       scope = socket.assigns.current_scope
 
       {:noreply,

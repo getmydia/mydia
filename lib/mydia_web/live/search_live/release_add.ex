@@ -155,11 +155,9 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
 
     case existing do
       nil ->
-        # Create new media item
-        # `from_parsed` reads :defaults with Keyword.get_lazy, so a nil value
-        # would be used as-is; leave the key out instead.
-        attr_opts =
-          [user: scope.user] ++ if(opts[:defaults], do: [defaults: opts[:defaults]], else: [])
+        # Create new media item. Nil defaults, or defaults with an Automatic
+        # (nil) library, are resolved by `from_parsed` once the title is known.
+        attr_opts = [user: scope.user, defaults: opts[:defaults]]
 
         attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, attr_opts)
 
@@ -203,31 +201,33 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
   The dialog opens before the release is matched to a title, so the franchise
   library cannot be known yet (#1366). The library starts on Automatic, a nil
   that `Mydia.Media.AttrsFromMetadata` resolves after the match: franchise
-  first, then the user's preference and the instance default.
+  first, then the user's preference and the instance default. Franchises are
+  movies only, so a TV show opens on its resolved default as before.
   """
   @spec dialog_defaults(Mydia.Accounts.User.t() | nil, :movie | :tv_show) :: AddDefaults.t()
-  def dialog_defaults(user, media_type) do
-    %{AddDefaults.resolve(user, media_type) | library_path_id: nil}
-  end
+  def dialog_defaults(user, :movie), do: automatic(AddDefaults.resolve(user, :movie))
+  def dialog_defaults(user, media_type), do: AddDefaults.resolve(user, media_type)
 
   @doc """
   The settings a submitted download dialog adds with.
 
   `defaults` comes from `MediaAddHelpers.resolve_add_defaults/3`, which fills
-  an empty library from the preference or instance default. An empty library
-  is Automatic here, so it goes back to nil and the franchise still gets its
-  say after the match. A grab never searches on add: it would grab a second
-  release.
+  an empty library from the preference or instance default. For a movie an
+  empty library is Automatic, so it goes back to nil and the franchise still
+  gets its say after the match. A grab never searches on add: it would grab a
+  second release.
   """
-  @spec submitted_defaults(AddDefaults.t(), map() | nil) :: AddDefaults.t()
-  def submitted_defaults(%AddDefaults{} = defaults, config_params) do
+  @spec submitted_defaults(AddDefaults.t(), map() | nil, :movie | :tv_show) :: AddDefaults.t()
+  def submitted_defaults(%AddDefaults{} = defaults, config_params, media_type) do
     defaults = %{defaults | search_on_add: false}
 
-    case config_params && config_params["library_path_id"] do
-      blank when blank in [nil, ""] -> %{defaults | library_path_id: nil}
-      _chosen -> defaults
+    case {media_type, config_params && config_params["library_path_id"]} do
+      {:movie, blank} when blank in [nil, ""] -> automatic(defaults)
+      _ -> defaults
     end
   end
+
+  defp automatic(%AddDefaults{} = defaults), do: %{defaults | library_path_id: nil}
 
   @doc false
   # Public for tests. A newly created item downloads into the library the
