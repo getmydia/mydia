@@ -514,9 +514,11 @@ through `mediaSourceProvider` like any other server, and every item opens
 ## Files libraries
 
 `SourceKind.files` (`files/`) is media in folders on this device (account
-`flocal`, server `local`, one per device) or on a WebDAV share (account and
+`flocal`, server `local`, one per device) on a WebDAV share (account and
 server `w<sha16 of the normalized URL>`, `connections[0]` the share's URL,
-`WebDavCredentials` JSON as the account token). There is no server: every
+`WebDavCredentials` JSON as the account token), or on an SMB share (account
+and server `s<16 hex>`, the SHA-256 of `smb://<host>[:port]/<share>`, one
+share per account, `SmbCredentials` JSON as the account token). There is no server: every
 listing is read from the account's `FileLibraryIndex` (Hive box
 `files_index`, opened at startup with the progress box so the source builds
 synchronously; `filesIndexProvider` holds one index per account, which
@@ -548,6 +550,27 @@ its account, replaces the credentials and clears `needsReauth`. Signing a
 files account in again (`/sources/add/files?account=`) redirects to the
 folder picker for `flocal` and to the prefilled WebDAV form otherwise.
 `removeFilesAccount` removes the record and secrets, then clears the index.
+
+### SMB
+
+`SmbBackend` is a thin layer over the Rust crate `player/rust/mydia_smb`
+(client on `smb2`), exposed through `mydia_player_p2p/src/smb.rs`. Playback
+goes through a loopback HTTP range server: `playable()` returns
+`http://127.0.0.1:<port>/smb/<token>` with no headers. Tokens are opaque,
+carry no path or credential, expire after 12 hours unused and go when the
+account closes. Connections idle for 60 seconds are closed. Access denied
+after connect is `BackendPermissionLost`; at session setup or tree connect it
+is `BackendUnauthorized`. Discovered servers are connected by IPv4 address,
+since `.local` names do not resolve on Android or Linux without nss-mdns.
+
+The Rust tests run against a real Samba. It needs passwordless sudo and
+`smbd` on PATH:
+
+```
+eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
+cargo test --manifest-path player/rust/mydia_smb/Cargo.toml --features test-introspection
+player/rust/mydia_smb/tests/samba/run-samba.sh stop
+```
 
 ## Tests
 

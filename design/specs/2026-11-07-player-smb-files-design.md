@@ -19,7 +19,7 @@ local network without typing an address where the server advertises itself.
 | --- | --- |
 | How a share is found | mDNS discovery of `_smb._tcp`, plus manual address entry; after login the server's shares are listed to pick from |
 | Protocol versions | SMB 2.x and 3.x only; SMB1-only servers get a clear error |
-| Client | Pure-Rust SMB client inside `player/rust/mydia_player_p2p`, no libsmbclient |
+| Client | Pure-Rust SMB client (`smb2` 0.43.0) in its own crate, `player/rust/mydia_smb`, no libsmbclient |
 | How mpv reads a file | A loopback HTTP range server in Rust, addressed by an opaque token |
 | Windows PC discovery | Not discovered (they use WS-Discovery, not mDNS); entered by address |
 | Web | Not supported, filtered out like WebDAV |
@@ -39,17 +39,16 @@ Only the backend, the account plumbing, discovery and the add flow are new.
 playback session are unchanged, because SMB sits behind the existing
 `FileSystemBackend` interface.
 
-### Rust: `player/rust/mydia_player_p2p/src/smb/`
+### Rust: `player/rust/mydia_smb`
 
-Compiled for native targets only. On `wasm32` the FRB functions exist and
-return an "unsupported" error, because FRB generates bindings for every target.
+The client and the loopback server live in the crate `player/rust/mydia_smb`.
+`player/rust/mydia_player_p2p/src/smb.rs` exposes them to Dart. The crate is
+native only. On `wasm32` the FRB functions exist and return an "unsupported"
+error, because FRB generates bindings for every target.
 
-- **Crate choice.** Two pure-Rust SMB2/3 clients exist: `smb` (smb-rs) and
-  `smb2`. The first implementation task is a spike against a local Samba
-  server measuring sustained throughput and seek latency (time from a `Range`
-  request at an arbitrary offset to the first byte) on a large file. The
-  faster one that negotiates SMB3 encryption and NTLM wins. The rest of this
-  design does not depend on which.
+- **Crate choice.** `smb2` 0.43.0. A spike against a local Samba server
+  measured 490-2100 MiB/s sequential (220-590 MiB/s encrypted) and 0.2-1.1 ms
+  to first byte, against 22 MiB/s and 42 ms for `smb` 0.12.1.
 - **`client.rs`.** A connection pool keyed by `(host, port, share, user)`,
   running on `mydia_p2p_core`'s tokio runtime (this crate never starts its
   own). It provides:
@@ -67,6 +66,7 @@ return an "unsupported" error, because FRB generates bindings for every target.
   | --- | --- |
   | Connect timeout, refused, DNS, connection reset | `BackendUnreachable` |
   | `STATUS_LOGON_FAILURE`, `STATUS_ACCESS_DENIED` on session setup or tree connect | `BackendUnauthorized` |
+  | `STATUS_ACCESS_DENIED` after connect (`AccessDenied`) | `BackendPermissionLost` |
   | `STATUS_OBJECT_NAME_NOT_FOUND`, `STATUS_OBJECT_PATH_NOT_FOUND`, `STATUS_BAD_NETWORK_NAME` | `BackendNotFound` |
   | Negotiation fails because the server offers only SMB1 | `BackendUnreachable` with the SMB1 message (see Errors) |
 
@@ -86,7 +86,7 @@ return an "unsupported" error, because FRB generates bindings for every target.
   - If the SMB connection drops mid-request, the server reconnects and
     re-opens the file once before failing that request. mpv retries the
     range, so playback resumes after a Wi-Fi blip or a NAS waking.
-- **`api/smb.rs`.** The FRB surface: `smb_list`, `smb_stat`, `smb_probe`,
+- **`mydia_player_p2p/src/smb.rs`.** The FRB surface: `smb_list`, `smb_stat`, `smb_probe`,
   `smb_list_shares`, `smb_open` (returns the token URL), `smb_close_account`
   (drops that account's tokens and connections) and `smb_heal_listener`
   (rebinds the loopback listener, returning the same three outcomes as
@@ -101,8 +101,8 @@ return an "unsupported" error, because FRB generates bindings for every target.
   headers. `LazySmbBackend` mirrors `LazyWebDavBackend`: it reads the stored
   credentials on first use, and `close()` calls `smb_close_account`.
 - **`files_account.dart`.**
-  - `normalizeSmbUrl(Uri)`: `smb://`, host lowercased, port only when not
-    445, share and path without a trailing slash.
+  - `normalizeSmbUrl(Uri)`: `smb://<host lowercased>[:port when not 445]/<share lowercased>`.
+    One account is one share, and roots are share-relative paths.
   - `smbAccountId(Uri)`: `s` plus the first 16 hex characters of SHA-256
     over the normalized URL.
   - `SmbCredentials`: `user`, `password` and an optional `domain`, stored as
@@ -115,7 +115,10 @@ return an "unsupported" error, because FRB generates bindings for every target.
   `LazySmbBackend` for `s…` accounts.
 - **`smb_discovery.dart`.** Browses `_smb._tcp` with `bonsoir` (already a
   dependency) and exposes a stream of `(name, host, port)`, de-duplicated by
-  host. Browsing runs only while the add screen is open.
+  host. Browsing runs only while the add screen is open. A discovered server
+  is connected by its resolved IPv4 address, then a global IPv6 address, then
+  the hostname, because Android and Linux without nss-mdns cannot resolve
+  `.local` names.
 
 ### Foreground recovery
 
@@ -123,7 +126,7 @@ return an "unsupported" error, because FRB generates bindings for every target.
 `smb_heal_listener()`. When the port changed, tokens already handed to mpv
 point at nothing, so an active files playback session re-asks `playable()`
 for its file and reopens at the current position, as p2p playback does for
-`reboundNewPort`.
+`reboundNewPort`. The heal only reopens SMB playback, never another backend's.
 
 ### UI
 
@@ -134,6 +137,9 @@ for its file and reopens at the current position, as p2p playback does for
 - After picking a server: a credentials form (user, password, optional domain,
   or "Connect as guest"), then the server's shares, then a folder picker
   inside the chosen share, then the existing library-kind picker.
+- After saving a new SMB account, the add flow opens the source's home, like
+  the other add screens.
+- The new strings are English-only, like the rest of the files library.
 - Re-login after `BackendUnauthorized` opens the credentials form for that
   account, the same entry point WebDAV uses.
 
@@ -179,8 +185,8 @@ Platform changes:
 
 ## Testing
 
-- **Spike (first task):** `smb` vs `smb2` throughput and seek latency against
-  Samba; the result and the chosen crate are recorded in the plan.
+- **Spike:** `smb` vs `smb2` throughput and seek latency against Samba, which
+  chose `smb2` (see Crate choice).
 - **Rust unit:** `Range` parsing (open-ended, suffix, unsatisfiable), token
   issue and expiry, closing an account drops its tokens, and the error mapping
   table.
