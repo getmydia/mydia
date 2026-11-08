@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/files/backend/smb_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_accounts.dart';
+import 'package:player/core/sources/files/files_media_source.dart';
 import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
+import 'package:player/core/sources/files/smb_native.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
@@ -14,6 +17,7 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import 'fake_backend.dart';
 import 'fake_media_names.dart';
+import 'fake_smb_native.dart';
 import 'files_fixture.dart';
 
 Future<void> _settle() async {
@@ -33,7 +37,9 @@ void main() {
     store = InMemorySourceStore();
   });
 
-  Future<ProviderContainer> container() async {
+  /// With [smb], files sources are built by the production
+  /// [defaultFilesBackend] over that native; otherwise by a fake backend.
+  Future<ProviderContainer> container({FakeSmbNative? smb}) async {
     final c = ProviderContainer(overrides: [
       ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
@@ -42,8 +48,11 @@ void main() {
       filesProgressStoreProvider.overrideWithValue(f.progress),
       mediaNamesProvider.overrideWithValue(FakeMediaNames()),
       relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      filesBackendBuilderProvider
-          .overrideWithValue((ref, source) => FakeBackend({})),
+      if (smb == null)
+        filesBackendBuilderProvider
+            .overrideWithValue((ref, source) => FakeBackend({}))
+      else
+        smbNativeProvider.overrideWithValue(smb),
     ]);
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
@@ -191,6 +200,60 @@ void main() {
     final conn =
         (await store.load()).accounts.single.servers.single.connections;
     expect(conn.single.local, isTrue);
+  });
+
+  test('a_saved_smb_share_scans_browses_and_plays_through_its_own_backend',
+      () async {
+    final smb = FakeSmbNative()
+      ..addFile('media', '/Films/Copper Valley (2018).mkv', size: 9)
+      ..addFile('other', '/Films/Not This One (2001).mkv', size: 9);
+    final c = await container(smb: smb);
+    final accounts = c.read(filesAccountsProvider);
+    // A folder on this device with the same path must stay out of it.
+    await accounts.addLocalRoot(
+        path: '/Films', kind: FilesLibraryKind.movies, accountName: 'Device');
+    final id = await accounts.addSmbAccount(
+        url: Uri.parse('smb://nas.local/media'),
+        credentials: const SmbCredentials(user: 'viewer', password: 'pw'));
+    await accounts.addSmbRoot(id,
+        path: '/Films', kind: FilesLibraryKind.movies);
+    await _settle();
+    final accountId = id.value.split(':').first;
+
+    final source = c.read(mediaSourceProvider(id))! as FilesMediaSource;
+    expect(source.backend, isA<LazySmbBackend>());
+    await source.probe();
+    final (target, login) = smb.probeLogins.last;
+    expect((target.host, target.share), ('nas.local', 'media'));
+    expect(login.password, 'pw');
+
+    final scanned = c.read(filesIndexProvider(accountId)).files().values;
+    expect(scanned.map((f) => f.path), ['Copper Valley (2018).mkv']);
+    final listed = await source.backend.list('/Films');
+    expect(listed.single.path, '/Films/Copper Valley (2018).mkv');
+    final playable =
+        await source.backend.playable('/Films/Copper Valley (2018).mkv');
+    expect(playable.url, startsWith('http://127.0.0.1:'));
+    expect(smb.opens.single, (accountId, '/Films/Copper Valley (2018).mkv'));
+  });
+
+  test('smb_playback_urls_outlive_a_rebuild_and_go_with_the_account', () async {
+    final smb = FakeSmbNative()..addDir('media', '/Films');
+    final c = await container(smb: smb);
+    final accounts = c.read(filesAccountsProvider);
+    const creds = SmbCredentials(user: 'viewer', password: 'pw');
+    final url = Uri.parse('smb://nas.local/media');
+    final id = await accounts.addSmbAccount(url: url, credentials: creds);
+    c.read(mediaSourceProvider(id));
+    // Signing in again rebuilds the source; a playback may be streaming.
+    await accounts.addSmbAccount(url: url, credentials: creds);
+    c.read(mediaSourceProvider(id));
+    await _settle();
+    expect(smb.closedAccounts, isEmpty);
+
+    final accountId = id.value.split(':').first;
+    await accounts.removeFilesAccount(accountId);
+    expect(smb.closedAccounts, [accountId]);
   });
 
   test('remove_account_clears_index_and_secrets', () async {

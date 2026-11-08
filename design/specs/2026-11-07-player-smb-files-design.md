@@ -81,8 +81,10 @@ error, because FRB generates bindings for every target.
   SMB `READ`s from the pooled connection.
   - A token is 128 random bits, maps to `(account, path)`, and carries no
     path or credential, so nothing sensitive reaches mpv's logs.
-  - Tokens are removed when the files source that issued them closes, and
-    after 12 hours unused.
+  - Tokens are removed when their account is removed, and after 12 hours
+    unused (a response still streaming counts as use). A files source
+    rebuilt with new credentials or folders keeps them, since a playback in
+    progress streams through them.
   - If the SMB connection drops mid-request, the server reconnects and
     re-opens the file once before failing that request. mpv retries the
     range, so playback resumes after a Wi-Fi blip or a NAS waking.
@@ -99,7 +101,8 @@ error, because FRB generates bindings for every target.
   `BackendFailure` subclasses. `playable()` calls `smb_open` and returns
   `PlayableFile(url: 'http://127.0.0.1:<port>/smb/<token>')` with no
   headers. `LazySmbBackend` mirrors `LazyWebDavBackend`: it reads the stored
-  credentials on first use, and `close()` calls `smb_close_account`.
+  credentials on first use. Removing the account calls
+  `smb_close_account`.
 - **`files_account.dart`.**
   - `normalizeSmbUrl(Uri)`: `smb://<host lowercased>[:port when not 445]/<share lowercased>`.
     One account is one share, and roots are share-relative paths.
@@ -115,10 +118,11 @@ error, because FRB generates bindings for every target.
   `LazySmbBackend` for `s…` accounts.
 - **`smb_discovery.dart`.** Browses `_smb._tcp` with `bonsoir` (already a
   dependency) and exposes a stream of `(name, host, port)`, de-duplicated by
-  host. Browsing runs only while the add screen is open. A discovered server
-  is connected by its resolved IPv4 address, then a global IPv6 address, then
-  the hostname, because Android and Linux without nss-mdns cannot resolve
-  `.local` names.
+  host and port. Browsing runs only while the add screen is open. A
+  discovered server is connected by its resolved IPv4 addresses, then its
+  global IPv6 addresses, then the hostname, because Android and Linux
+  without nss-mdns cannot resolve `.local` names. When an address is
+  unreachable the next one is tried, and the one that answers is saved.
 
 ### Foreground recovery
 

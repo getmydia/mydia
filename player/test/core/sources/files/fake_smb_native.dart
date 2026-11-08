@@ -16,6 +16,12 @@ class FakeSmbNative implements SmbNative {
   final List<(String, String)> opens = [];
   final List<String> closedAccounts = [];
 
+  /// Every [probe]'s root.
+  final List<String> probes = [];
+
+  /// Every [probe]'s target and credentials.
+  final List<(SmbTarget, SmbCredentials)> probeLogins = [];
+
   /// Returned by [healListener].
   ProxyHeal healResult = ProxyHeal.healthy;
 
@@ -78,6 +84,8 @@ class FakeSmbNative implements SmbNative {
 
   @override
   Future<void> probe(SmbTarget t, SmbCredentials c, String root) async {
+    probes.add(root);
+    probeLogins.add((t, c));
     _check();
     await list(t, c, root);
   }
@@ -107,9 +115,12 @@ class FakeSmbNative implements SmbNative {
     closedAccounts.add(accountId);
   }
 
+  /// Like [FfiSmbNative]: a result other than healthy is also emitted on
+  /// [heals].
   @override
   Future<ProxyHeal> healListener() async {
     _check();
+    if (healResult != ProxyHeal.healthy) _heals.add(healResult);
     return healResult;
   }
 

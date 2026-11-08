@@ -56,10 +56,6 @@ class LazySmbBackend implements FileSystemBackend {
   final Future<String?> Function() credentials;
   Future<SmbBackend>? _backend;
 
-  /// Forgets the account's playback URLs and connections. Called when its
-  /// source goes.
-  Future<void> close() => native.closeAccount(accountId);
-
   Future<T> _call<T>(Future<T> Function(SmbBackend b) run) async {
     final b = await _resolve();
     try {

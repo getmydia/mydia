@@ -557,12 +557,16 @@ folder picker for `flocal` and to the prefilled WebDAV form otherwise.
 (client on `smb2`), exposed through `mydia_player_p2p/src/smb.rs`. Playback
 goes through a loopback HTTP range server: `playable()` returns
 `http://127.0.0.1:<port>/smb/<token>` with no headers. Tokens are opaque,
-carry no path or credential, expire after 12 hours unused and go when the
-account closes. Connections idle for 60 seconds are closed. Access denied
-after connect is `BackendPermissionLost`; at session setup or tree connect it
-is `BackendUnauthorized`. Discovered servers are connected by their first
-IPv4 address, else a global IPv6 address, else the hostname, since `.local`
-names do not resolve on Android or Linux without nss-mdns. A new SMB account
+carry no path or credential, expire after 12 hours unused (never while a
+response is streaming) and go when the account is removed. A source rebuilt
+by a sign-in or a new folder keeps them, because a playback in progress
+streams through them. Connections idle for 60 seconds are closed. Access
+denied after connect is `BackendPermissionLost`; at session setup or tree
+connect it is `BackendUnauthorized`. Discovered servers are connected by
+their IPv4 addresses, then global IPv6 addresses, then the hostname, since
+`.local` names do not resolve on Android or Linux without nss-mdns; an
+unreachable address moves on to the next, and the one that answers is
+saved. A new SMB account
 is named `<host>/<share>`, or `<discovered name> / <share>` when the server was
 found on the network, so two shares on one server are told apart; signing in
 again keeps the saved name.

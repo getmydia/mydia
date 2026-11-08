@@ -45,6 +45,7 @@ void main() {
 
   test('probe_checks_the_share_root', () async {
     await backend().probe();
+    expect(native.probes, ['/']);
     native.failure = const BackendUnauthorized();
     await expectLater(backend().probe(), throwsA(isA<BackendUnauthorized>()));
   });
@@ -83,12 +84,6 @@ void main() {
       native.failure = null;
       await b.list('/');
       expect(reads, 2);
-    });
-
-    test('close_reaches_close_account', () async {
-      final b = lazy(() async => _creds.toJson());
-      await b.close();
-      expect(native.closedAccounts, ['sabc']);
     });
   });
 }

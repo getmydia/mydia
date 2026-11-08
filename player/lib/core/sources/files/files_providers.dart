@@ -146,19 +146,29 @@ FilesMediaSource buildFilesSource(
     tmdb: tmdb,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
+    // An SMB account's playback URLs outlive this source: saving new
+    // credentials or a folder rebuilds it, and a playback in progress
+    // streams through them. They go with the account
+    // ([closeRemovedFilesAccount]), or after 12 hours unused.
     onDispose: () {
       unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
-      if (backend is LazySmbBackend) {
-        unawaited(backend.close().catchError((Object e) {
-          debugPrint('[FilesSource] Could not close the SMB account: $e');
-        }));
-      }
     },
   );
   unawaited(media.probe());
   _scanIfDue(ref, source, index);
   return media;
+}
+
+/// Forgets a removed SMB account's playback URLs and closes its connections.
+/// Anything else, or a failure, is left alone: leftover URLs expire unused.
+Future<void> closeRemovedFilesAccount(Ref ref, String accountId) async {
+  if (!isSmbAccountId(accountId)) return;
+  try {
+    await ref.read(smbNativeProvider).closeAccount(accountId);
+  } catch (e) {
+    debugPrint('[FilesSource] Could not close the SMB account: $e');
+  }
 }
 
 /// Starts a scan when the last one is older than [kFilesRescanAfter]. A

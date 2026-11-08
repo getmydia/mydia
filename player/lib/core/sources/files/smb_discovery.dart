@@ -17,24 +17,35 @@ class DiscoveredSmbServer {
     required this.name,
     required this.host,
     required this.port,
+    this.alternatives = const [],
   });
 
   /// The advertised instance name, for display.
   final String name;
 
-  /// The resolved host, without a trailing dot.
+  /// The resolved host, without a trailing dot: the preferred address.
   final String host;
   final int port;
+
+  /// Further advertised addresses, in order of preference, to try when
+  /// [host] cannot be reached (a NAS often advertises a container bridge or
+  /// a second interface first).
+  final List<String> alternatives;
+
+  /// [host], then [alternatives].
+  List<String> get addresses => [host, ...alternatives];
 
   @override
   bool operator ==(Object other) =>
       other is DiscoveredSmbServer &&
       other.name == name &&
       other.host == host &&
-      other.port == port;
+      other.port == port &&
+      listEquals(other.alternatives, alternatives);
 
   @override
-  int get hashCode => Object.hash(name, host, port);
+  int get hashCode =>
+      Object.hash(name, host, port, Object.hashAll(alternatives));
 
   @override
   String toString() => 'DiscoveredSmbServer($name, $host:$port)';
@@ -42,7 +53,8 @@ class DiscoveredSmbServer {
 
 abstract interface class SmbDiscovery {
   /// Starts browsing on listen and stops on cancel. Emits the current list
-  /// (de-duplicated by host, sorted by name) after each resolve or loss.
+  /// (de-duplicated by host and port, sorted by name) after each resolve or
+  /// loss.
   /// Browsing errors emit an empty list; they are never thrown.
   Stream<List<DiscoveredSmbServer>> browse();
 }
@@ -62,7 +74,7 @@ class _BrowseSession {
   final Stream<BonsoirDiscoveryEvent> events;
   final Future<void> Function() start;
   final Future<void> Function() stop;
-  final void Function(BonsoirService service) resolve;
+  final Future<void> Function(BonsoirService service) resolve;
 }
 
 class BonsoirSmbDiscovery implements SmbDiscovery {
@@ -75,12 +87,12 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     Stream<BonsoirDiscoveryEvent> events, {
     Future<void> Function()? start,
     Future<void> Function()? stop,
-    void Function(BonsoirService service)? resolve,
+    Future<void> Function(BonsoirService service)? resolve,
   }) : _open = (() async => _BrowseSession(
               events: events,
               start: start ?? () async {},
               stop: stop ?? () async {},
-              resolve: resolve ?? (_) {},
+              resolve: resolve ?? (_) async {},
             ));
 
   final Future<_BrowseSession> Function() _open;
@@ -92,8 +104,7 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
       events: discovery.eventStream ?? const Stream.empty(),
       start: discovery.start,
       stop: discovery.stop,
-      resolve: (service) =>
-          unawaited(service.resolve(discovery.serviceResolver)),
+      resolve: (service) => service.resolve(discovery.serviceResolver),
     );
   }
 
@@ -128,7 +139,17 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     void onEvent(BonsoirDiscoveryEvent event) {
       switch (event) {
         case BonsoirDiscoveryServiceFoundEvent():
-          session?.resolve(event.service);
+          // A resolve fails asynchronously (Avahi refuses it, or the browse
+          // stopped under it). That server just stays out of the list; the
+          // others, and the browse, carry on.
+          final s = session;
+          if (s != null) {
+            unawaited(Future.sync(() => s.resolve(event.service))
+                .catchError((Object e) {
+              debugPrint('[BonsoirSmbDiscovery] Could not resolve '
+                  '${event.service.name}: $e');
+            }));
+          }
         case BonsoirDiscoveryServiceResolvedEvent():
           final server = _serverFrom(event.service);
           if (server == null) return;
@@ -172,31 +193,35 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
   }
 
   static DiscoveredSmbServer? _serverFrom(BonsoirService service) {
-    final host = _connectHost(service);
-    if (host == null) return null;
+    final hosts = _connectHosts(service);
+    if (hosts.isEmpty) return null;
     return DiscoveredSmbServer(
       name: service.name,
-      host: host,
+      host: hosts.first,
       port: service.port,
+      alternatives: hosts.sublist(1),
     );
   }
 
-  /// The address to connect to. mDNS `.local` names do not resolve through
-  /// Android's getaddrinfo (or Linux without nss-mdns), so prefer the first
-  /// IPv4 address, then a global IPv6 one (link-local needs a scope id), and
-  /// fall back to the hostname only when no usable address exists.
-  static String? _connectHost(BonsoirService service) {
-    final addresses = service.hostAddresses.map((a) => a.trim());
-    for (final a in addresses) {
-      if (_isIpv4(a)) return a;
-    }
-    for (final a in addresses) {
-      if (a.contains(':') && !_isLinkLocalIpv6(a)) return a;
-    }
+  /// The addresses to connect to, best first. mDNS `.local` names do not
+  /// resolve through Android's getaddrinfo (or Linux without nss-mdns), so
+  /// IPv4 addresses come first, then global IPv6 ones (link-local needs a
+  /// scope id), and the hostname only when no usable address exists. Every
+  /// usable address is kept, since the first one advertised is not always
+  /// reachable.
+  static List<String> _connectHosts(BonsoirService service) {
+    final addresses = service.hostAddresses.map((a) => a.trim()).toList();
+    final usable = <String>{
+      for (final a in addresses)
+        if (_isIpv4(a)) a,
+      for (final a in addresses)
+        if (a.contains(':') && !_isLinkLocalIpv6(a)) a,
+    };
+    if (usable.isNotEmpty) return usable.toList();
     final raw = service.hostname;
-    if (raw == null) return null;
+    if (raw == null) return const [];
     final host = raw.endsWith('.') ? raw.substring(0, raw.length - 1) : raw;
-    return host.isEmpty ? null : host;
+    return host.isEmpty ? const [] : [host];
   }
 
   static bool _isIpv4(String a) =>
@@ -211,15 +236,16 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
         lower.contains('%');
   }
 
-  /// De-duplicated by host (first name wins) and sorted by name.
+  /// De-duplicated by endpoint, host and port (first name wins), and sorted
+  /// by name. Two services on one host but different ports both stay.
   static List<DiscoveredSmbServer> _snapshot(
     Iterable<DiscoveredSmbServer> servers,
   ) {
     final sorted = servers.toList()..sort((a, b) => a.name.compareTo(b.name));
-    final seen = <String>{};
+    final seen = <(String, int)>{};
     return [
       for (final s in sorted)
-        if (seen.add(s.host)) s,
+        if (seen.add((s.host, s.port))) s,
     ];
   }
 }

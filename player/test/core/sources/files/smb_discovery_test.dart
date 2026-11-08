@@ -42,7 +42,7 @@ void main() {
       events.stream,
       start: () async => starts++,
       stop: () async => stops++,
-      resolve: (s) => resolveCalls.add(s.name),
+      resolve: (s) async => resolveCalls.add(s.name),
     );
   });
 
@@ -131,6 +131,53 @@ void main() {
     events.add(BonsoirDiscoveryServiceFoundEvent(service: _svc('Nas')));
     await pumpEventQueue();
     expect(resolveCalls, ['Nas']);
+    await sub.cancel();
+  });
+
+  test('every usable address is kept, best first', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(_resolved('Nas', hostname: 'nas.local', addresses: [
+      '2001:db8::7',
+      '172.17.0.1',
+      'fe80::1',
+      '192.168.1.20',
+    ]));
+    await pumpEventQueue();
+    final server = seen.last.single;
+    expect(server.host, '172.17.0.1');
+    expect(server.addresses, ['172.17.0.1', '192.168.1.20', '2001:db8::7']);
+    await sub.cancel();
+  });
+
+  test('services on one host but different ports are both listed', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(BonsoirDiscoveryServiceResolvedEvent(
+        service: _svc('A', addresses: ['10.0.0.9'])));
+    events.add(BonsoirDiscoveryServiceResolvedEvent(
+        service: _svc('B', addresses: ['10.0.0.9'], port: 4455)));
+    await pumpEventQueue();
+    expect(seen.last.map((s) => (s.name, s.port)), [('A', 445), ('B', 4455)]);
+    await sub.cancel();
+  });
+
+  test('a failed resolve is contained and the browse carries on', () async {
+    final failing = BonsoirSmbDiscovery.forTest(
+      events.stream,
+      resolve: (s) async => throw StateError('avahi refused ${s.name}'),
+    );
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = failing.browse().listen(seen.add, onError: (_) {
+      fail('error leaked to the listener');
+    });
+    await pumpEventQueue();
+    events.add(_resolved('Other', hostname: 'other.local'));
+    events.add(BonsoirDiscoveryServiceFoundEvent(service: _svc('Nas')));
+    await pumpEventQueue();
+    expect(seen.last.map((s) => s.name), ['Other']);
     await sub.cancel();
   });
 

@@ -417,7 +417,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           Text(l10n.filesSmbSearching, key: const Key('smb-searching')),
         for (final s in _servers)
           ListTile(
-            key: Key('smb-server-${s.host}'),
+            // One row per endpoint: a host can serve on two ports.
+            key: Key(s.port == kSmbDefaultPort
+                ? 'smb-server-${s.host}'
+                : 'smb-server-${s.host}:${s.port}'),
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.dns_rounded),
             title: Text(s.name),

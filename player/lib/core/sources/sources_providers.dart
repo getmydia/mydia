@@ -13,7 +13,8 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
-import 'files/files_providers.dart' show filesIndexProvider;
+import 'files/files_providers.dart'
+    show closeRemovedFilesAccount, filesIndexProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -196,6 +197,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      await closeRemovedFilesAccount(ref, accountId);
       // Legacy bare-id entries record no owner and read as the legacy
       // instance's, so they go with the account the legacy rule picked.
       await _dropCollectionSync({
@@ -290,7 +292,10 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         });
         await ref.read(sourceSecretsProvider).deleteAll(record);
         await _dropCache(id);
-        if (record.account.kind == SourceKind.files) await _dropFilesIndex(id);
+        if (record.account.kind == SourceKind.files) {
+          await _dropFilesIndex(id);
+          await closeRemovedFilesAccount(ref, id);
+        }
         ids.add(id);
       }
       return ids;
