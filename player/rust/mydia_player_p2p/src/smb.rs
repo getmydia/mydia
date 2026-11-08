@@ -273,6 +273,9 @@ pub(crate) mod imp {
         // Connections that list/stat made for the account are not tracked per
         // account, so they close through the client's 60 s idle sweep.
         if let Some(server) = SERVER.get() {
+            // Closing a connection can spawn its teardown, and this runs on the
+            // Dart isolate thread, which has no reactor of its own.
+            let _guard = runtime::enter();
             server.close_account(&account_id);
         }
         Ok(())
