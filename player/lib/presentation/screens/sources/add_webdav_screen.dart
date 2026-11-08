@@ -432,7 +432,9 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ReducedMotion.duration(context, const Duration(milliseconds: 250));
     final connected = _backend != null;
     return PopScope(
-      canPop: !connected || (_atRoot && !_opening),
+      // A shown problem lets back leave: a share that stopped answering
+      // would otherwise turn every back into another failed climb.
+      canPop: !connected || _problem != null || (_atRoot && !_opening),
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n.filesWebDavTitle)),

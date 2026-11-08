@@ -335,6 +335,23 @@ void main() {
     expect(find.text('/dav'), findsOneWidget);
   });
 
+  testWidgets('back leaves once climbing has failed', (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pumpAndSettle();
+
+    h.backend.failures['/dav'] = const BackendUnreachable('down');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Shows'), findsOneWidget);
+    expect(find.byKey(const Key('webdav-error')), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
   testWidgets('back at the root abandons a slow listing before leaving',
       (tester) async {
     final h = await _pump(tester);
