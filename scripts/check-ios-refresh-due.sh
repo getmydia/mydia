@@ -20,9 +20,18 @@ readonly SCRIPT="scripts/ios-refresh-due.sh"
 # dated marker across ALL ios-refresh/* refs, not just this probe. Once the
 # refresh workflow ships, real markers accumulate permanently, and a probe dated
 # in the past would lose to the first real one and fail this suite on every run
-# from then on. 9999-12-31 wins forever.
-readonly MARKER_PROBE="ios-refresh/9999-12-31"
-trap 'git tag -d "$MARKER_PROBE" "v9.9.9-beta.1" >/dev/null 2>&1 || true' EXIT
+# from then on. 2999-12-31 wins for any marker this repo will ever see.
+#
+# Not 9999-12-31: uutils `date` (the default coreutils on ubuntu-26.04 runners)
+# rejects that date as invalid, so epoch() fails, the marker is dropped and the
+# assertion below reads the stable baseline instead.
+readonly MARKER_PROBE="ios-refresh/2999-12-31"
+# The probe this suite used before. A run interrupted before its trap fired can
+# leave it in a local clone, where it sorts after MARKER_PROBE and would win
+# newest_marker() with a date epoch() cannot parse. Clear it up front.
+readonly OLD_MARKER_PROBE="ios-refresh/9999-12-31"
+git tag -d "$OLD_MARKER_PROBE" >/dev/null 2>&1 || true
+trap 'git tag -d "$MARKER_PROBE" "$OLD_MARKER_PROBE" "v9.9.9-beta.1" >/dev/null 2>&1 || true' EXIT
 
 fail=0
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
@@ -69,10 +78,10 @@ expect "version drops the leading v" 0.13.2 \
 # overrides IOS_REFRESH_MARKER and so never executes that function at all, which
 # is how a real bug survived a full green suite once already.
 #
-# Asserted on baseline_date, not on due. The probe names 9999-12-31 but points
+# Asserted on baseline_date, not on due. The probe names 2999-12-31 but points
 # at HEAD, whose commit date is recent, so the two implementations disagree on
 # exactly one observable: reading the date from the tag's NAME gives a baseline
-# of 9999-12-31, while reading any git date field gives HEAD's committer date.
+# of 2999-12-31, while reading any git date field gives HEAD's committer date.
 # Both make `due` false, so asserting on `due` here would pass under the bug and
 # test nothing. That is not hypothetical: it is the shape of the defect this
 # case exists to catch.
@@ -81,7 +90,7 @@ git tag -f "$MARKER_PROBE" HEAD >/dev/null 2>&1
 marker_baseline="$(IOS_REFRESH_TODAY=2026-09-04 IOS_REFRESH_STABLE="$REAL_TAG 2026-01-01" \
   "$SCRIPT" 2>/dev/null | sed -n 's/^baseline_date=//p')"
 expect "the marker date is read from the tag name, not a git date" \
-  9999-12-31 "$marker_baseline"
+  2999-12-31 "$marker_baseline"
 
 git tag -d "$MARKER_PROBE" >/dev/null 2>&1 || true
 

@@ -16,6 +16,7 @@ import '../source.dart';
 import '../sources_providers.dart' show sourceSecretsProvider;
 import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
+import 'backend/smb_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
@@ -23,6 +24,7 @@ import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
+import 'smb_native.dart' show smbNativeProvider;
 
 /// Opens the boxes a files source reads synchronously while it builds: its
 /// index and the playback progress store. Called at startup after
@@ -76,8 +78,8 @@ typedef FilesBackendBuilder = FileSystemBackend Function(
 final filesBackendBuilderProvider =
     Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
 
-/// Folders on this device probe each of the account's roots. A WebDAV share
-/// reads its credentials on first use.
+/// Folders on this device probe each of the account's roots. A WebDAV or SMB
+/// share reads its credentials on first use.
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
   if (source.account.id == kFilesLocalAccountId ||
       source.server.connections.isEmpty) {
@@ -85,6 +87,14 @@ FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
     return LocalFoldersBackend(roots: index.roots);
   }
   final secrets = ref.read(sourceSecretsProvider);
+  if (isSmbAccountId(source.account.id)) {
+    return LazySmbBackend(
+      native: ref.read(smbNativeProvider),
+      accountId: source.account.id,
+      target: smbTargetOf(source.server.connections.first.uri),
+      credentials: () => secrets.accountToken(source.account),
+    );
+  }
   return LazyWebDavBackend(
     base: source.server.connections.first.uri,
     credentials: () => secrets.accountToken(source.account),
@@ -136,6 +146,10 @@ FilesMediaSource buildFilesSource(
     tmdb: tmdb,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
+    // An SMB account's playback URLs outlive this source: saving new
+    // credentials or a folder rebuilds it, and a playback in progress
+    // streams through them. They go with the account
+    // ([closeRemovedFilesAccount]), or after 12 hours unused.
     onDispose: () {
       unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
@@ -144,6 +158,17 @@ FilesMediaSource buildFilesSource(
   unawaited(media.probe());
   _scanIfDue(ref, source, index);
   return media;
+}
+
+/// Forgets a removed SMB account's playback URLs and closes its connections.
+/// Anything else, or a failure, is left alone: leftover URLs expire unused.
+Future<void> closeRemovedFilesAccount(Ref ref, String accountId) async {
+  if (!isSmbAccountId(accountId)) return;
+  try {
+    await ref.read(smbNativeProvider).closeAccount(accountId);
+  } catch (e) {
+    debugPrint('[FilesSource] Could not close the SMB account: $e');
+  }
 }
 
 /// Starts a scan when the last one is older than [kFilesRescanAfter]. A

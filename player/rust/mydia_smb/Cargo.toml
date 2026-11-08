@@ -1,0 +1,47 @@
+[package]
+name = "mydia_smb"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "2"
+tokio = { version = "1.49", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
+smb2 = "0.43"
+# Loopback range server mpv plays SMB files through. Plain HTTP/1.1, no TLS.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+bytes = "1"
+getrandom = "0.4"
+
+[features]
+# Exposes pool and stream-server introspection to the integration tests.
+# Off by default.
+test-introspection = []
+
+[dev-dependencies]
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "process"] }
+reqwest = { version = "0.12", default-features = false }
+
+# Copied from rust-lints.toml; scripts/check-rust-lints.sh keeps it in sync.
+[lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints we opt out of.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Panic-free non-test code.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Hygiene.
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
+allow_attributes_without_reason = "warn"

@@ -13,7 +13,8 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
-import 'files/files_providers.dart' show filesIndexProvider;
+import 'files/files_providers.dart'
+    show closeRemovedFilesAccount, filesIndexProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -92,7 +93,12 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// A sign-in flow writes a fresh record with no locks. Keep the stored
   /// record's locks for servers the new record still lists, so signing in
   /// again never unhides a server.
-  Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+  ///
+  /// With [replaceOnly], an account that is no longer stored (removed while
+  /// a sign-in was in flight) throws [StateError] instead of coming back.
+  Future<void> putAccount(SourceAccountRecord record,
+          {bool replaceOnly = false}) =>
+      _serialise(() {
         if (ref.read(isWebProvider) &&
             !sourceKindAllowedOnWeb(record.account.kind)) {
           debugPrint(
@@ -100,6 +106,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
           return Future<void>.value();
         }
         final stored = _record(record.account.id);
+        if (replaceOnly && stored == null) {
+          throw StateError('Account ${record.account.id} was removed');
+        }
         final ids = {for (final s in record.servers) s.id};
         final kept = {
           for (final e in (stored?.serverLocks ?? const {}).entries)
@@ -196,6 +205,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      await closeRemovedFilesAccount(ref, accountId);
       // Legacy bare-id entries record no owner and read as the legacy
       // instance's, so they go with the account the legacy rule picked.
       await _dropCollectionSync({
@@ -290,7 +300,10 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         });
         await ref.read(sourceSecretsProvider).deleteAll(record);
         await _dropCache(id);
-        if (record.account.kind == SourceKind.files) await _dropFilesIndex(id);
+        if (record.account.kind == SourceKind.files) {
+          await _dropFilesIndex(id);
+          await closeRemovedFilesAccount(ref, id);
+        }
         ids.add(id);
       }
       return ids;

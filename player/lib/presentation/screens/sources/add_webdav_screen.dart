@@ -20,6 +20,7 @@ import '../../../core/ui/reduced_motion.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import '../../widgets/files/experimental_badge.dart';
+import '../../widgets/files/remote_folder_picker.dart';
 import 'files_library_kind_picker.dart';
 import 'server_url.dart';
 
@@ -49,8 +50,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   FileSystemBackend? _backend;
   Uri? _base;
   bool _saved = false;
-  String _dir = '/';
-  List<FileEntry> _folders = const [];
+  List<FileEntry> _rootEntries = const [];
   final _chosen = <String, FilesLibraryKind>{};
 
   /// The folder instructions, scrolled to the top once the share answers so
@@ -60,18 +60,6 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   /// How long that scroll takes: resolved in build, zero under reduced
   /// motion.
   Duration _revealDuration = Duration.zero;
-
-  /// Bumped by every folder listing and by back, so a listing back
-  /// abandoned cannot land on top of where the user is now.
-  int _listing = 0;
-
-  /// Whether a folder listing is in flight, which back may abandon. A save
-  /// also sets [_busy] but is never abandoned.
-  bool _opening = false;
-
-  /// Whether the last climb to a parent folder failed. Back then leaves,
-  /// rather than retrying against a share that stopped answering.
-  bool _climbFailed = false;
 
   @override
   void initState() {
@@ -147,15 +135,14 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     try {
       await backend.probe();
       final dir = _dirOf(base);
-      final folders = await _listFolders(backend, dir);
+      final entries = await backend.list(dir);
       if (!mounted) return;
       final id = webDavAccountId(base);
       setState(() {
         _backend = backend;
         _base = base;
         _saved = ref.read(sourcesProvider).any((s) => s.account.id == id);
-        _dir = dir;
-        _folders = folders;
+        _rootEntries = entries;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final target = _pickFoldersKey.currentContext;
@@ -169,62 +156,6 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<List<FileEntry>> _listFolders(
-      FileSystemBackend backend, String dir) async {
-    final entries = await backend.list(dir);
-    return [
-      for (final e in entries)
-        if (e.isDir) e,
-    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-  }
-
-  /// Opens the folder above the current one.
-  Future<void> _climb() => _open(_parent(_dir), climb: true);
-
-  /// Lists [dir]. A failed [climb] lets back leave the setup, since the
-  /// share has stopped answering on the way out.
-  Future<void> _open(String dir, {bool climb = false}) async {
-    final backend = _backend;
-    if (backend == null) return;
-    final listing = ++_listing;
-    setState(() {
-      _busy = true;
-      _opening = true;
-      _problem = null;
-      _climbFailed = false;
-    });
-    bool current() => mounted && listing == _listing;
-    try {
-      final folders = await _listFolders(backend, dir);
-      if (!current()) return;
-      setState(() {
-        _dir = trimRootPath(dir);
-        _folders = folders;
-      });
-    } catch (e) {
-      debugPrint('[AddWebDav] Listing $dir failed: $e');
-      if (current()) {
-        setState(() {
-          _problem = _problemOf(e);
-          _climbFailed = climb;
-        });
-      }
-    } finally {
-      if (current()) {
-        setState(() {
-          _busy = false;
-          _opening = false;
-        });
-      }
-    }
-  }
-
-  String _parent(String dir) {
-    final trimmed = trimRootPath(dir);
-    final i = trimmed.lastIndexOf('/');
-    return i <= 0 ? '/' : trimmed.substring(0, i);
   }
 
   Future<void> _save() async {
@@ -270,7 +201,8 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         }
       });
 
-  Widget _folderRow(String path, String name, {required bool open}) {
+  Widget _folderRow(String path, String name,
+      {required bool busy, required VoidCallback? onOpen}) {
     final key = trimRootPath(path);
     final kind = _chosen[key];
     return ListTile(
@@ -279,7 +211,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       leading: Checkbox(
         key: ValueKey('webdav-tick-$key'),
         value: kind != null,
-        onChanged: _busy ? null : (on) => _toggle(key, on ?? false),
+        onChanged: _busy || busy ? null : (on) => _toggle(key, on ?? false),
       ),
       title: Text(name),
       trailing: kind == null
@@ -287,9 +219,11 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
           : FilesLibraryKindPicker(
               key: ValueKey('webdav-kind-$key'),
               value: kind,
-              onChanged: _busy ? null : (k) => setState(() => _chosen[key] = k),
+              onChanged: _busy || busy
+                  ? null
+                  : (k) => setState(() => _chosen[key] = k),
             ),
-      onTap: open && !_busy ? () => _open(path) : null,
+      onTap: _busy ? null : onOpen,
     );
   }
 
@@ -325,7 +259,8 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
           decoration: InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
           onSubmitted: (_) => connected ? null : _connect(),
         ),
-        // Once connected the form scrolls away, so [_location] shows it.
+        // Once connected the form scrolls away, so the folder picker's
+        // pinned location bar shows it.
         if (_problem case final p? when !connected) ...[
           const SizedBox(height: 16),
           _problemLine(l10n, p),
@@ -349,138 +284,60 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
             : Text(connected ? l10n.commonSave : l10n.loginConnect),
       );
 
-  /// Where the list is and the way up, pinned while the folders scroll
-  /// under it. Painted opaque so they do not show through.
-  Widget _location(AppLocalizations l10n) => ColoredBox(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    key: const Key('webdav-up'),
-                    tooltip: l10n.filesWebDavUp,
-                    icon: const Icon(Icons.arrow_upward_rounded),
-                    onPressed: _busy || _atRoot ? null : _climb,
-                  ),
-                  Expanded(
-                    child: Text(_dir,
-                        key: const Key('webdav-dir'),
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ),
-              if (_problem case final p?)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: _problemLine(l10n, p)),
-                ),
-              _folderRow(_dir, l10n.filesWebDavThisFolder, open: false),
-              const Divider(height: 1),
-            ],
-          ),
-        ),
-      );
-
-  Widget _folderBrowser(AppLocalizations l10n) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: CustomScrollView(
-              key: const Key('webdav-folder-list'),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                  sliver: SliverList.list(children: [
-                    ..._form(l10n, connected: true),
-                    const SizedBox(height: 24),
-                    Text(l10n.filesWebDavPickFolders, key: _pickFoldersKey),
-                    const SizedBox(height: 8),
-                  ]),
-                ),
-                PinnedHeaderSliver(child: _location(l10n)),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  sliver: _folders.isEmpty
-                      ? SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(l10n.filesWebDavNoFolders),
-                          ),
-                        )
-                      : SliverList.builder(
-                          itemCount: _folders.length,
-                          itemBuilder: (_, i) => _folderRow(
-                              _folders[i].path, _folders[i].name,
-                              open: true),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-              child: _actionButton(l10n, connected: true),
-            ),
-          ),
+  /// The spent form scrolls away above the picker's pinned location bar,
+  /// which also shows a failed save. The picker owns back: it climbs out of
+  /// a subfolder before leaving, abandons a slow listing, and holds during
+  /// a save.
+  Widget _folderBrowser(AppLocalizations l10n, FileSystemBackend backend) =>
+      RemoteFolderPicker(
+        key: const Key('webdav-folder-picker'),
+        keyPrefix: 'webdav',
+        backend: backend,
+        root: _rootDir,
+        initialFolders: _rootEntries,
+        busy: _busy,
+        problem: switch (_problem) {
+          final p? => _problemText(l10n, p),
+          null => null,
+        },
+        header: [
+          ..._form(l10n, connected: true),
+          const SizedBox(height: 24),
+          Text(l10n.filesWebDavPickFolders, key: _pickFoldersKey),
+          const SizedBox(height: 8),
         ],
+        footer: _actionButton(l10n, connected: true),
+        onPicked: (path) => _toggle(trimRootPath(path), true),
+        rowBuilder: (context,
+                {required path,
+                required title,
+                required busy,
+                required onOpen}) =>
+            _folderRow(path, title, busy: busy, onOpen: onOpen),
       );
-
-  bool get _atRoot => _dir == _rootDir;
-
-  /// Back climbs out of a subfolder before it leaves the setup, so the app
-  /// bar arrow and the system gesture never drop a half-picked share. While
-  /// a folder is still listing, back abandons it instead: a slow server
-  /// never leaves back dead for the length of its timeout.
-  void _onPop(bool didPop, Object? _) {
-    if (didPop || _backend == null) return;
-    if (_opening) {
-      setState(() {
-        _listing++;
-        _busy = false;
-        _opening = false;
-      });
-      return;
-    }
-    if (!_atRoot && !_busy) _climb();
-  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     _revealDuration =
         ReducedMotion.duration(context, const Duration(milliseconds: 250));
-    final connected = _backend != null;
-    return PopScope(
-      // Never mid-listing (back abandons it) or mid-save. After a failed
-      // climb back leaves: a share that stopped answering would otherwise
-      // turn every back into another failed climb.
-      canPop: !connected || (!_busy && (_atRoot || _climbFailed)),
-      onPopInvokedWithResult: _onPop,
-      child: Scaffold(
-        appBar: AppBar(title: Text(l10n.filesWebDavTitle)),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: connected
-                ? _folderBrowser(l10n)
-                : ListView(
-                    padding: const EdgeInsets.all(24),
-                    shrinkWrap: true,
-                    children: [
-                      ..._form(l10n, connected: false),
-                      const SizedBox(height: 24),
-                      _actionButton(l10n, connected: false),
-                    ],
-                  ),
-          ),
+    final backend = _backend;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.filesWebDavTitle)),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: backend != null
+              ? _folderBrowser(l10n, backend)
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  shrinkWrap: true,
+                  children: [
+                    ..._form(l10n, connected: false),
+                    const SizedBox(height: 24),
+                    _actionButton(l10n, connected: false),
+                  ],
+                ),
         ),
       ),
     );

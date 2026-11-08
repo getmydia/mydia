@@ -9,15 +9,25 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
+import 'package:player/core/sources/files/files_account.dart';
+import 'package:player/core/sources/files/index/file_library_index.dart';
+import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/files/match/file_matcher.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart';
+import 'package:player/presentation/screens/player/session/files_playback_session.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
+import '../../../core/sources/files/fake_backend.dart';
+import '../../../core/sources/files/fake_media_names.dart';
+import '../../../core/sources/files/fake_smb_native.dart';
+import '../../../core/sources/files/files_fixture.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/probed_tracks.dart';
@@ -208,6 +218,32 @@ Future<void> _landReopen(
   await tester.pump();
 }
 
+/// A files source on an SMB share, so `playsFromSmb` holds for its session.
+Source _smbSource() {
+  final id = smbAccountId(Uri.parse('smb://nas.local/media'));
+  return Source(
+    account: ProviderAccount(
+      id: id,
+      kind: SourceKind.files,
+      displayName: 'nas.local/media',
+      storageNamespace: 'source/$id',
+      activeProfileId: kOwnerProfileId,
+    ),
+    profile: SourceProfile(
+      id: kOwnerProfileId,
+      accountId: id,
+      name: 'Owner',
+      isOwner: true,
+    ),
+    server: SourceServer(
+      id: id,
+      accountId: id,
+      profileId: kOwnerProfileId,
+      name: 'nas.local/media',
+    ),
+  );
+}
+
 void main() {
   late _Decoder decoder;
   late TrackingLocalProxyService proxy;
@@ -285,6 +321,141 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('an SMB listener heal leaves a non-SMB playback alone',
+      (tester) async {
+    final smb = FakeSmbNative();
+    final smbContainer = buildPlayerScreenContainer(
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxy,
+      smbNative: smb,
+    );
+    addTearDown(smbContainer.dispose);
+    await mockHttpResponse(() async {
+      await _mount(tester, smbContainer, decoder);
+      await _playTo75(tester, decoder);
+
+      smb.emitHeal(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.byType(PlayerErrorView), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  group('SMB playback', () {
+    late FakeSmbNative smb;
+    late ProviderContainer smbContainer;
+    late FilesMediaSource files;
+    late String fileKey;
+
+    setUp(() async {
+      smb = FakeSmbNative();
+      smbContainer = buildPlayerScreenContainer(
+        server: _server(),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: proxy,
+        smbNative: smb,
+      );
+      addTearDown(smbContainer.dispose);
+    });
+
+    /// Builds the SMB files source; must run inside `runAsync`, since the
+    /// fixture opens Hive on disk.
+    Future<void> buildSource() async {
+      final f = await FilesFixture.create();
+      final relay = FakeFilesRelay();
+      final source = _smbSource();
+      files = FilesMediaSource(
+        source: source,
+        backend: FakeBackend(
+            {'${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv': 10}),
+        index: f.index,
+        progress: f.progress,
+        matcher: FileMatcher(
+          tmdb: relay,
+          names: FakeMediaNames(),
+          index: f.index,
+          progress: f.progress,
+          sourceId: source.id,
+        ),
+        tmdb: relay,
+        invalidate: (_) async {},
+        l10n: () => filesL10n,
+      );
+      addTearDown(files.dispose);
+      fileKey =
+          fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv');
+    }
+
+    Future<void> mountSmb(WidgetTester tester) async {
+      await tester.runAsync(buildSource);
+      final item = ItemRef(
+          sourceId: files.source.id, kind: ItemKind.movie, externalId: '101');
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: smbContainer,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: PlayerScreen(
+            mediaId: '101',
+            mediaType: 'movie',
+            fileId: fileKey,
+            title: 'Copper Valley',
+            session: FilesPlaybackSession(
+                source: files, item: item, fileId: fileKey),
+            createPlayer: () => Player(platformPlayer: decoder),
+          ),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    testWidgets('an SMB listener heal to a new port reopens the file',
+        (tester) async {
+      await mountSmb(tester);
+      await _playTo75(tester, decoder);
+      expect(decoder.opened, hasLength(1));
+      final proxyHeals = proxy.healCalls;
+
+      smb.emitHeal(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await _landReopen(tester, decoder, 2);
+
+      expect(decoder.opened, hasLength(2));
+      expect(decoder.opened.last.start, const Duration(seconds: 75));
+      expect(decoder.opened.last.uri, contains('Copper Valley'));
+      expect(proxy.healCalls, proxyHeals,
+          reason: 'an SMB reopen heals its own listener, not the proxy');
+      expect(find.byType(PlayerErrorView), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    });
+
+    testWidgets('a media proxy heal leaves SMB playback alone', (tester) async {
+      await mountSmb(tester);
+      await _playTo75(tester, decoder);
+
+      proxy.healEvents.add(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.byType(PlayerErrorView), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    });
   });
 
   testWidgets('a heal to the same port leaves playback alone', (tester) async {

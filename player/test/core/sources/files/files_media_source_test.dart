@@ -2,7 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/files/backend/smb_backend.dart';
+import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_ids.dart';
+import 'package:player/core/sources/files/scan/file_scanner.dart';
+import 'package:player/core/sources/files/smb_native.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/match/file_matcher.dart';
@@ -14,6 +19,7 @@ import 'package:player/domain/sources/library.dart';
 import '../media_source_contract.dart';
 import 'fake_backend.dart';
 import 'fake_media_names.dart';
+import 'fake_smb_native.dart';
 import 'files_fixture.dart';
 
 class _Built {
@@ -402,5 +408,106 @@ void main() {
     final b = await _build();
     await b.source.probe();
     expect(b.source.connection, SourceConnectionStatus.local);
+  });
+
+  group('SMB source', () {
+    final smbId = smbAccountId(Uri.parse('smb://nas.local/media'));
+    final smbSource = Source(
+      account: ProviderAccount(
+        id: smbId,
+        kind: SourceKind.files,
+        displayName: 'nas.local',
+        storageNamespace: 'source/$smbId',
+        activeProfileId: kOwnerProfileId,
+      ),
+      profile: SourceProfile(
+        id: kOwnerProfileId,
+        accountId: smbId,
+        name: 'Owner',
+        isOwner: true,
+      ),
+      server: SourceServer(
+        id: smbId,
+        accountId: smbId,
+        profileId: kOwnerProfileId,
+        name: 'nas.local',
+      ),
+    );
+
+    test('probe_scan_and_playable_url_over_smb', () async {
+      final f = await FilesFixture.create(seed: false);
+      final native = FakeSmbNative()
+        ..addFile('media', '/Films/Copper Valley (2018).mkv', size: 9);
+      final backend = SmbBackend(
+        native: native,
+        accountId: smbId,
+        target: const SmbTarget(host: 'nas.local', port: 445, share: 'media'),
+        credentials: const SmbCredentials(user: '', password: ''),
+      );
+      final relay = FakeFilesRelay();
+      final source = FilesMediaSource(
+        source: smbSource,
+        backend: backend,
+        index: f.index,
+        progress: f.progress,
+        matcher: FileMatcher(
+          tmdb: relay,
+          names: FakeMediaNames(),
+          index: f.index,
+          progress: f.progress,
+          sourceId: smbSource.id,
+        ),
+        tmdb: relay,
+        onReauthNeeded: () {},
+        invalidate: (_) async {},
+        l10n: () => filesL10n,
+      );
+      addTearDown(source.dispose);
+
+      await source.probe();
+      expect(source.connection, SourceConnectionStatus.local);
+
+      const root = LibraryRoot(
+        id: 'rfilms',
+        path: '/Films',
+        kind: FilesLibraryKind.movies,
+        title: 'Films',
+      );
+      await f.index.putRoot(root);
+      final delta = await FileScanner(
+        backend: backend,
+        names: FakeMediaNames(),
+        index: f.index,
+      ).scan(root);
+      expect(delta.added.single.path, 'Copper Valley (2018).mkv');
+      expect(f.index.files(), hasLength(1));
+
+      final p = await backend.playable('/Films/Copper Valley (2018).mkv');
+      expect(p.url, startsWith('http://127.0.0.1:'));
+      expect(native.opens.single.$1, smbId);
+
+      native.failure = const BackendUnauthorized();
+      var reauth = 0;
+      final refused = FilesMediaSource(
+        source: smbSource,
+        backend: backend,
+        index: f.index,
+        progress: f.progress,
+        matcher: FileMatcher(
+          tmdb: relay,
+          names: FakeMediaNames(),
+          index: f.index,
+          progress: f.progress,
+          sourceId: smbSource.id,
+        ),
+        tmdb: relay,
+        onReauthNeeded: () => reauth++,
+        invalidate: (_) async {},
+        l10n: () => filesL10n,
+      );
+      addTearDown(refused.dispose);
+      await refused.probe();
+      expect(reauth, 1);
+    });
   });
 }
