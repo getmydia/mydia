@@ -719,6 +719,7 @@
                   config={@download_config}
                   quality_profiles={@quality_profiles}
                   show_search_on_add={false}
+                  automatic_library={@download_config.media_type == :movie}
                 />
               <% end %>
             <% end %>

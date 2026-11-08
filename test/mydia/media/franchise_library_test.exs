@@ -111,6 +111,24 @@ defmodule Mydia.Media.FranchiseLibraryTest do
     assert FranchiseLibrary.library_for(nil) == nil
   end
 
+  # No Bypass stubs: any relay call would fail the test.
+  test "library_for_collection/3 returns nil without a lookup for a movie in no franchise",
+       %{config: config} do
+    assert FranchiseLibrary.library_for_collection(tmdb_id(), nil, config) == nil
+    assert FranchiseLibrary.library_for_collection(nil, 42, config) == nil
+  end
+
+  test "library_for_collection/3 votes without fetching the movie's details",
+       %{bypass: bypass, config: config} do
+    cid = System.unique_integer([:positive])
+    id = tmdb_id()
+    stub_collection(bypass, cid, [id])
+    lib = library_path_fixture(%{type: "movies"})
+    sibling(tmdb_id(), cid, %{library_path_id: lib.id})
+
+    assert FranchiseLibrary.library_for_collection(id, cid, config) == lib.id
+  end
+
   test "pointerless siblings found only through the parts outvote a pointer-bearing one",
        %{bypass: bypass, config: config} do
     cid = System.unique_integer([:positive])

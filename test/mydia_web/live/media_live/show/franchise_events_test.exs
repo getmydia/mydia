@@ -181,6 +181,61 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       assert media_item.quality_profile_id == profile.id
     end
 
+    # #1366: a plain click names no library, and the sequel used to land in
+    # the instance default instead of beside the movie being viewed.
+    test "lands in the library the franchise lives in", %{bypass: bypass, config: config} do
+      collection_id = System.unique_integer([:positive])
+      Mydia.SettingsFixtures.library_path_fixture(%{type: "movies", default_for_movies: true})
+      franchise_library = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "First",
+          year: 2001,
+          tmdb_id: 1001,
+          library_path_id: franchise_library.id
+        })
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/1002", fn conn ->
+        body = %{
+          "id" => 1002,
+          "title" => "Missing Sequel",
+          "release_date" => "2004-01-01",
+          "credits" => %{"cast" => [], "crew" => []},
+          "belongs_to_collection" => %{"id" => collection_id, "name" => "Test Collection"}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("collection:metadata_relay:#{collection_id}:en-US")
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/collections/#{collection_id}", fn conn ->
+        body = %{
+          "id" => collection_id,
+          "name" => "Test Collection",
+          "parts" => [
+            %{"id" => 1001, "title" => "First", "release_date" => "2001-01-01"},
+            %{"id" => 1002, "title" => "Missing Sequel", "release_date" => "2004-01-01"}
+          ]
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      {:ok, media_item} =
+        FranchiseEvents.perform_add(Scope.unrestricted(), current, {:tmdb, 1002}, config)
+
+      assert media_item.library_path_id == franchise_library.id
+    end
+
     test "reports already-in-library instead of crashing on a duplicate tmdb id",
          %{bypass: bypass, config: config} do
       current =

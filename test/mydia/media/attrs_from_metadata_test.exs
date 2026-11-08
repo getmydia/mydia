@@ -176,5 +176,53 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
 
       assert attrs.library_path_id == franchise.id
     end
+
+    # The search page's download dialog submits Automatic as given defaults
+    # with no library, because it runs before the release is matched (#1366).
+    test "given defaults with no library still resolve the franchise library" do
+      franchise = library_path_fixture(%{type: :movies})
+      profile = quality_profile_fixture()
+      tmdb_id = 900_000 + System.unique_integer([:positive])
+      metadata = %{metadata() | provider_id: to_string(tmdb_id), title: "Starfall Protocol"}
+
+      given = %AddDefaults{
+        library_path_id: nil,
+        quality_profile_id: profile.id,
+        monitored: false,
+        season_monitoring: "all",
+        search_on_add: false
+      }
+
+      attrs =
+        AttrsFromMetadata.from_parsed(%{type: :movie, title: "Starfall"}, metadata,
+          defaults: given,
+          franchise_lookup: fn ^tmdb_id -> franchise.id end
+        )
+
+      assert attrs.library_path_id == franchise.id
+      assert attrs.quality_profile_id == profile.id
+      assert attrs.monitored == false
+    end
+
+    test "an explicit library in the given defaults skips the lookup" do
+      chosen = library_path_fixture(%{type: :movies})
+      tmdb_id = 900_000 + System.unique_integer([:positive])
+      metadata = %{metadata() | provider_id: to_string(tmdb_id)}
+
+      given = %AddDefaults{
+        library_path_id: chosen.id,
+        monitored: true,
+        season_monitoring: "all",
+        search_on_add: false
+      }
+
+      attrs =
+        AttrsFromMetadata.from_metadata(metadata, :movie,
+          defaults: given,
+          franchise_lookup: fn _ -> flunk("franchise lookup ran for an explicit library") end
+        )
+
+      assert attrs.library_path_id == chosen.id
+    end
   end
 end
