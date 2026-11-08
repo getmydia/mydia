@@ -4,17 +4,27 @@ import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/files/smb_discovery.dart';
 
-BonsoirService _svc(String name, {String? hostname, int port = 445}) =>
+BonsoirService _svc(
+  String name, {
+  String? hostname,
+  List<String> addresses = const [],
+  int port = 445,
+}) =>
     BonsoirService(
       name: name,
       type: '_smb._tcp',
       port: port,
       hostname: hostname,
+      hostAddresses: addresses,
     );
 
-BonsoirDiscoveryEvent _resolved(String name, {String? hostname}) =>
+BonsoirDiscoveryEvent _resolved(
+  String name, {
+  String? hostname,
+  List<String> addresses = const [],
+}) =>
     BonsoirDiscoveryServiceResolvedEvent(
-        service: _svc(name, hostname: hostname));
+        service: _svc(name, hostname: hostname, addresses: addresses));
 
 void main() {
   late StreamController<BonsoirDiscoveryEvent> events;
@@ -63,6 +73,55 @@ void main() {
     await pumpEventQueue();
     expect(seen.length, 2);
     expect(seen.last.map((s) => s.name), ['Alpha', 'Zed']);
+    await sub.cancel();
+  });
+
+  Future<String> hostFor(
+      {String? hostname, List<String> addresses = const []}) async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(_resolved('Nas', hostname: hostname, addresses: addresses));
+    await pumpEventQueue();
+    await sub.cancel();
+    return seen.last.single.host;
+  }
+
+  test('an IPv4 address is preferred over the .local hostname', () async {
+    expect(
+      await hostFor(
+        hostname: 'nas.local.',
+        addresses: ['fe80::1', '192.168.1.20', '10.0.0.5'],
+      ),
+      '192.168.1.20',
+    );
+  });
+
+  test('a link-local-only IPv6 service falls back to the hostname', () async {
+    expect(
+      await hostFor(hostname: 'nas.local.', addresses: ['fe80::abcd']),
+      'nas.local',
+    );
+  });
+
+  test('a global IPv6-only service uses that address', () async {
+    expect(
+      await hostFor(
+        hostname: 'nas.local',
+        addresses: ['fe80::abcd', '2001:db8::7'],
+      ),
+      '2001:db8::7',
+    );
+  });
+
+  test('de-duplication keys on the chosen address', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(_resolved('B', hostname: 'b.local', addresses: ['10.0.0.9']));
+    events.add(_resolved('A', hostname: 'a.local', addresses: ['10.0.0.9']));
+    await pumpEventQueue();
+    expect(seen.last.map((s) => s.name), ['A']);
     await sub.cancel();
   });
 

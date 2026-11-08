@@ -172,15 +172,43 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
   }
 
   static DiscoveredSmbServer? _serverFrom(BonsoirService service) {
-    final raw = service.hostname ?? service.hostAddress;
-    if (raw == null) return null;
-    final host = raw.endsWith('.') ? raw.substring(0, raw.length - 1) : raw;
-    if (host.isEmpty) return null;
+    final host = _connectHost(service);
+    if (host == null) return null;
     return DiscoveredSmbServer(
       name: service.name,
       host: host,
       port: service.port,
     );
+  }
+
+  /// The address to connect to. mDNS `.local` names do not resolve through
+  /// Android's getaddrinfo (or Linux without nss-mdns), so prefer the first
+  /// IPv4 address, then a global IPv6 one (link-local needs a scope id), and
+  /// fall back to the hostname only when no usable address exists.
+  static String? _connectHost(BonsoirService service) {
+    final addresses = service.hostAddresses.map((a) => a.trim());
+    for (final a in addresses) {
+      if (_isIpv4(a)) return a;
+    }
+    for (final a in addresses) {
+      if (a.contains(':') && !_isLinkLocalIpv6(a)) return a;
+    }
+    final raw = service.hostname;
+    if (raw == null) return null;
+    final host = raw.endsWith('.') ? raw.substring(0, raw.length - 1) : raw;
+    return host.isEmpty ? null : host;
+  }
+
+  static bool _isIpv4(String a) =>
+      RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(a);
+
+  static bool _isLinkLocalIpv6(String a) {
+    final lower = a.toLowerCase();
+    return lower.startsWith('fe8') ||
+        lower.startsWith('fe9') ||
+        lower.startsWith('fea') ||
+        lower.startsWith('feb') ||
+        lower.contains('%');
   }
 
   /// De-duplicated by host (first name wins) and sorted by name.
