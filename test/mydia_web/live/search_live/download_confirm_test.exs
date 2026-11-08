@@ -205,6 +205,24 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     assert item.library_path_id == series.id
   end
 
+  # #1366: the dialog runs before the match, so Automatic is resolved after
+  # it, franchise first. With no franchise it falls through to the default.
+  test "Automatic resolves the library after the match", %{conn: conn, movies: movies} do
+    r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [r])
+
+    open_and_submit(view, r, %{
+      "media_type" => "movie",
+      "config" => %{"library_path_id" => "", "monitored" => "true"}
+    })
+
+    assert :sys.get_state(view.pid).socket.assigns.pending_add_defaults.library_path_id == nil
+
+    render_async(view, 5_000)
+
+    assert Repo.one!(MediaItem).library_path_id == movies.id
+  end
+
   test "a library of the wrong type is refused and nothing is created",
        %{conn: conn, series: series} do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
@@ -332,6 +350,17 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       }
 
       assert ReleaseAdd.download_opts("item-1", :existing, defaults) == [media_item_id: "item-1"]
+    end
+
+    test "Automatic leaves the download on the item's own library" do
+      defaults = %AddDefaults{
+        library_path_id: nil,
+        monitored: true,
+        season_monitoring: "all",
+        search_on_add: false
+      }
+
+      assert ReleaseAdd.download_opts("item-1", :created, defaults) == [media_item_id: "item-1"]
     end
   end
 end

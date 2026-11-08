@@ -12,7 +12,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Accounts.HomeLayout
   alias Mydia.Health.Rollup
   alias Mydia.Media
-  alias Mydia.Media.{FranchiseLibrary, RecentlyAdded, RemoteFilter}
+  alias Mydia.Media.{RecentlyAdded, RemoteFilter}
   alias Mydia.Library
   alias Mydia.Downloads
   alias Mydia.Metadata
@@ -628,7 +628,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> put_flash(:error, gettext("That library is no longer available. Nothing was added."))}
 
       {:ok, opts} ->
-        add_with_opts(ref, media_type, FranchiseLibrary.fill_opts(opts, ref, media_type), socket)
+        add_with_opts(ref, media_type, opts, socket)
     end
   end
 

@@ -8,7 +8,6 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
-  alias Mydia.Media.AddDefaults
   alias MydiaWeb.Live.{Helpers.MediaAddHelpers, SearchResultRef}
   alias MydiaWeb.OperationErrors
   alias MydiaWeb.SearchLive.{ReleaseAdd, ResultType}
@@ -437,7 +436,7 @@ defmodule MydiaWeb.SearchLive.Index do
          {:ok, media_type} <- parse_media_type(params["media_type"]),
          {:ok, defaults} <-
            MediaAddHelpers.resolve_add_defaults(params["config"] || %{}, media_type, user) do
-      defaults = %{defaults | search_on_add: false}
+      defaults = ReleaseAdd.submitted_defaults(defaults, params["config"])
       scope = socket.assigns.current_scope
 
       {:noreply,
@@ -1036,7 +1035,7 @@ defmodule MydiaWeb.SearchLive.Index do
       available_types: available,
       media_type: media_type,
       libraries: if(media_type, do: MediaAddHelpers.candidate_libraries(media_type), else: []),
-      defaults: media_type && AddDefaults.resolve(socket.assigns.current_user, media_type)
+      defaults: media_type && ReleaseAdd.dialog_defaults(socket.assigns.current_user, media_type)
     }
   end
 

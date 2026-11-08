@@ -138,6 +138,23 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
            )
   end
 
+  # #1366: the release is not matched yet, so the franchise library cannot be
+  # pre-selected; a pre-selected default would be submitted as a choice.
+  test "the library starts on Automatic, not the default", %{conn: conn} do
+    default =
+      library_path_fixture(%{type: "movies", name: "Invented Default", default_for_movies: true})
+
+    r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [r])
+
+    render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
+
+    library_select = ~s(select[name="config[library_path_id]"])
+    assert has_element?(view, ~s(#{library_select} option[value=""][selected]))
+    refute has_element?(view, ~s(#{library_select} option[value="#{default.id}"][selected]))
+    refute has_element?(view, ~s(#{library_select}[required]))
+  end
+
   test "lists only the chosen type's libraries and swaps on type change",
        %{conn: conn, movies: movies, series: series} do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", nil)

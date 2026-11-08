@@ -197,9 +197,42 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
     |> String.trim()
   end
 
+  @doc """
+  The settings the download dialog opens with.
+
+  The dialog opens before the release is matched to a title, so the franchise
+  library cannot be known yet (#1366). The library starts on Automatic, a nil
+  that `Mydia.Media.AttrsFromMetadata` resolves after the match: franchise
+  first, then the user's preference and the instance default.
+  """
+  @spec dialog_defaults(Mydia.Accounts.User.t() | nil, :movie | :tv_show) :: AddDefaults.t()
+  def dialog_defaults(user, media_type) do
+    %{AddDefaults.resolve(user, media_type) | library_path_id: nil}
+  end
+
+  @doc """
+  The settings a submitted download dialog adds with.
+
+  `defaults` comes from `MediaAddHelpers.resolve_add_defaults/3`, which fills
+  an empty library from the preference or instance default. An empty library
+  is Automatic here, so it goes back to nil and the franchise still gets its
+  say after the match. A grab never searches on add: it would grab a second
+  release.
+  """
+  @spec submitted_defaults(AddDefaults.t(), map() | nil) :: AddDefaults.t()
+  def submitted_defaults(%AddDefaults{} = defaults, config_params) do
+    defaults = %{defaults | search_on_add: false}
+
+    case config_params && config_params["library_path_id"] do
+      blank when blank in [nil, ""] -> %{defaults | library_path_id: nil}
+      _chosen -> defaults
+    end
+  end
+
   @doc false
   # Public for tests. A newly created item downloads into the library the
-  # user chose; an item already in the library keeps its own.
+  # user chose; an item already in the library keeps its own, and so does an
+  # Automatic pick, which is the nil library here.
   def download_opts(media_item_id, :created, %AddDefaults{library_path_id: lib})
       when is_binary(lib),
       do: [media_item_id: media_item_id, library_path_id: lib]
