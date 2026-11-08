@@ -170,6 +170,8 @@ struct Shared {
     min_read_offset: std::sync::atomic::AtomicU64,
     #[cfg(feature = "test-introspection")]
     active_readers: std::sync::atomic::AtomicUsize,
+    #[cfg(feature = "test-introspection")]
+    read_reconnects: std::sync::atomic::AtomicUsize,
 }
 
 /// The loopback range server. Dropping it stops accepting connections.
@@ -194,6 +196,8 @@ impl StreamServer {
             min_read_offset: std::sync::atomic::AtomicU64::new(u64::MAX),
             #[cfg(feature = "test-introspection")]
             active_readers: std::sync::atomic::AtomicUsize::new(0),
+            #[cfg(feature = "test-introspection")]
+            read_reconnects: std::sync::atomic::AtomicUsize::new(0),
         });
         let accept = tokio::spawn(accept_loop(listener, shared.clone()));
         let sweeper = tokio::spawn(sweep_loop(Arc::downgrade(&shared)));
@@ -306,6 +310,12 @@ impl StreamServer {
     #[cfg(feature = "test-introspection")]
     pub fn active_readers(&self) -> usize {
         self.shared.active_readers.load(Ordering::Acquire)
+    }
+
+    /// Times a read failed on a cached handle and reopened the file.
+    #[cfg(feature = "test-introspection")]
+    pub fn read_reconnects(&self) -> usize {
+        self.shared.read_reconnects.load(Ordering::Acquire)
     }
 
     /// Drop the listener, as an OS might while the app is suspended.
@@ -438,6 +448,8 @@ impl Cursor {
             Ok(data) => Ok(Bytes::from(data)),
             Err(_) if !self.reconnected => {
                 self.reconnected = true;
+                #[cfg(feature = "test-introspection")]
+                self.shared.read_reconnects.fetch_add(1, Ordering::AcqRel);
                 self.file = open_file(&self.shared, &self.token, &self.info).await?;
                 self.file.read_at(offset, len).await.map(Bytes::from)
             }
@@ -800,6 +812,8 @@ mod tests {
             min_read_offset: std::sync::atomic::AtomicU64::new(u64::MAX),
             #[cfg(feature = "test-introspection")]
             active_readers: std::sync::atomic::AtomicUsize::new(0),
+            #[cfg(feature = "test-introspection")]
+            read_reconnects: std::sync::atomic::AtomicUsize::new(0),
         });
         let active = |s: &Shared| s.tokens.lock().unwrap().entries["tok"].active;
         shared

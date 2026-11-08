@@ -66,8 +66,9 @@ fn account(env: &TestEnv) -> SmbCredentials {
     }
 }
 
-/// Tests share one smbd. `reconnects_once_after_server_restart` restarts it,
-/// so it takes this for writing and every other harness test for reading.
+/// Tests share one smbd. `reconnects_once_after_connection_drop` drops every
+/// client connection, so it takes this for writing and every other harness
+/// test for reading.
 static SMBD: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
 
 /// Binds `$env` to the harness settings and holds a read lock on [`SMBD`]
@@ -503,40 +504,46 @@ async fn abandoned_response_does_not_poison_next_request() {
 }
 
 #[tokio::test]
-async fn reconnects_once_after_server_restart() {
+async fn reconnects_once_after_connection_drop() {
     let Some(env) = test_env() else {
         println!("skipped");
         return;
     };
+    // Dropping every client connection would break any test running beside
+    // this one, so it takes the lock for writing.
     let _smbd = SMBD.write().await;
-    let (_server, url) = served(&env).await;
+    let (server, url) = served(&env).await;
     let resp = get_range(&url, "bytes=0-4095").await;
     assert_eq!(resp.status(), 206);
     resp.bytes().await.unwrap();
-    // A pooled client of its own, used before the restart.
+    // A pooled client of its own, used before the drop.
     let client = SmbClient::new();
     let t = target(&env, "guest");
     client.list(&t, &guest(), "/").await.unwrap();
 
-    // Every wait below is bounded: a restart that leaves no smbd must fail
+    // Every wait below is bounded: a drop that leaves no smbd must fail
     // this test with a message, not hold the write lock until CI times out.
     let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samba/run-samba.sh");
-    let restart = tokio::process::Command::new(script)
-        .arg("restart")
+    let drop_clients = tokio::process::Command::new(script)
+        .arg("drop-clients")
         .kill_on_drop(true)
         .output();
-    let out = tokio::time::timeout(Duration::from_mins(1), restart)
+    let out = tokio::time::timeout(Duration::from_mins(1), drop_clients)
         .await
-        .unwrap_or_else(|_| panic!("run-samba.sh restart did not finish within 60s"))
+        .unwrap_or_else(|_| panic!("run-samba.sh drop-clients did not finish within 60s"))
         .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
-        "run-samba.sh restart failed ({}): {}",
+        "run-samba.sh drop-clients failed ({}): {stderr}",
         out.status,
-        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stderr.contains("dropping client connections"),
+        "drop-clients found no connections to drop: {stderr}"
     );
 
-    let after_restart = async {
+    let after_drop = async {
         // The pooled session is dead: list retries once on a fresh connection.
         let entries = client.list(&t, &guest(), "/").await.unwrap();
         assert!(entries.iter().any(|e| e.name == "Fable of Glass (2031)"));
@@ -545,17 +552,20 @@ async fn reconnects_once_after_server_restart() {
         assert_eq!(resp.status(), 206);
         resp.bytes().await.unwrap()
     };
-    let body = tokio::time::timeout(Duration::from_secs(30), after_restart)
+    let body = tokio::time::timeout(Duration::from_secs(30), after_drop)
         .await
         .unwrap_or_else(|_| {
             panic!(
-                "requests after the smbd restart did not finish within 30s; \
-                 is smbd still running? (run-samba.sh stderr: {})",
-                String::from_utf8_lossy(&out.stderr)
+                "requests after dropping the connections did not finish within 30s; \
+                 is smbd still running? (run-samba.sh stderr: {stderr})"
             )
         });
     assert_eq!(body.len(), 4096);
     assert_pattern(&body, 5_000_000);
+    // The cached handle really failed, and the read reopened the file once.
+    #[cfg(feature = "test-introspection")]
+    assert_eq!(server.read_reconnects(), 1);
+    drop(server);
 }
 
 #[tokio::test]

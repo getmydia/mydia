@@ -4,6 +4,9 @@
 #   run-samba.sh [start]   start two smbd (4455 SMB3, 4456 NT1), print export lines
 #   run-samba.sh stop      kill both and delete the temp dir
 #   run-samba.sh restart   restart the smbd processes, keeping dir, conf, fixtures
+#                          (for local use; no test calls it)
+#   run-samba.sh drop-clients
+#                          end every client connection; both smbd keep listening
 #
 # Usage in a shell:  eval "$(run-samba.sh)"
 set -euo pipefail
@@ -56,10 +59,13 @@ EXP
 # The pidfiles add the groups of a smbd that already died and left children
 # behind: a pgid stays taken while any member lives, so a pidfile pid that is
 # not running names our orphans, and one that is running but is not one of
-# ours (a reused pid) is skipped.
+# ours (a reused pid) is skipped. A stale pidfile pid can also have been
+# reused as someone else's process group by now, so a member of such a group
+# counts only while it holds a file under $DIR open (every smbd of ours has
+# its log and tdb files there).
 harness_pids() {
   local pid exe args pgid
-  local ours=" " pgids=""
+  local ours=" " pgids="" stale=" "
   for pid in $(pgrep -f -- "$DIR/" 2>/dev/null || true); do
     [ "$pid" = "$$" ] && continue
     args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
@@ -83,6 +89,7 @@ harness_pids() {
     case "$ours" in *" $pid "*) continue ;; esac
     [ -e "/proc/$pid" ] && continue
     pgids="$pgids $pid"
+    stale="$stale$pid "
   done
   # Callers dedupe: a pgid named twice only repeats its members.
   for pgid in $pgids; do
@@ -90,9 +97,41 @@ harness_pids() {
       args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
       exe=${args%% *}
       case "${exe##*/}" in
-        smbd | smbd: | samba-dcerpcd | rpcd_*) echo "$pid" ;;
+        smbd | smbd: | samba-dcerpcd | rpcd_*) ;;
+        *) continue ;;
       esac
+      case "$stale" in
+        *" $pgid "*) holds_dir_file "$pid" || continue ;;
+      esac
+      echo "$pid"
     done
+  done
+}
+
+# True when the process has a file under $DIR open.
+holds_dir_file() {
+  [ -n "$(sudo find "/proc/$1/fd" -lname "$DIR/*" -print -quit 2>/dev/null)" ]
+}
+
+# Pids of the per-connection children ("smbd: client [...]") of the smbd
+# named in pidfile $1. smbd forks one per client straight from the listener,
+# so they are found by exact parent pid, and only after that parent is shown
+# to be our smbd by its -s $DIR/... argument. Nothing else is matched, so
+# neither this shell nor any other smbd on the machine can be selected.
+client_pids() {
+  local parent args pid
+  parent=$(cat "$1" 2>/dev/null) || return 0
+  case "$parent" in '' | *[!0-9]*) return 0 ;; esac
+  args=$(tr '\0' ' ' <"/proc/$parent/cmdline" 2>/dev/null) || return 0
+  case "$args" in
+    *" -s $DIR/smb.conf "* | *" -s $DIR/smb1.conf "*) ;;
+    *) return 0 ;;
+  esac
+  for pid in $(pgrep -P "$parent" 2>/dev/null || true); do
+    args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
+    case "$args" in
+      "smbd: client "*) echo "$pid" ;;
+    esac
   done
 }
 
@@ -399,8 +438,28 @@ case "$cmd" in
     start_smbd
     export_lines
     ;;
+  drop-clients)
+    load_state
+    pids=$( {
+      client_pids "$DIR/main/run/smbd.pid"
+      client_pids "$DIR/smb1/run/smbd.pid"
+    } | sort -un)
+    if [ -z "$pids" ]; then
+      log "no client connections to drop"
+      exit 0
+    fi
+    log "dropping client connections: $(echo "$pids" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    sudo kill $pids 2>/dev/null || true
+    # shellcheck disable=SC2086
+    wait_gone $pids
+    smbd_alive || {
+      log "smbd went away while dropping its clients"
+      exit 1
+    }
+    ;;
   *)
-    echo "usage: $0 [start|stop|restart]" >&2
+    echo "usage: $0 [start|stop|restart|drop-clients]" >&2
     exit 2
     ;;
 esac

@@ -200,7 +200,9 @@ Platform changes:
 - **Rust integration:** a Samba container in CI with a guest share and an
   authenticated share, covering list, stat, share enumeration, ranged reads
   through the loopback server, a denied entry inside a listing, wrong
-  credentials, and reconnect after the server restarts mid-read.
+  credentials, and one reconnect after the server drops the connection
+  mid-read (`run-samba.sh drop-clients` ends smbd's client processes while
+  smbd keeps listening).
 - **Dart unit:** `SmbBackend` against a fake FRB API, `normalizeSmbUrl` and
   `smbAccountId`, `SmbCredentials` round trip, and discovery de-duplication.
 - **Source contract:** an SMB files source joins the existing files-source
