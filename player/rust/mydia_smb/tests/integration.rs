@@ -515,3 +515,55 @@ async fn url_carries_no_path() {
     let other = server.open("acct", unused_target(), guest(), MKV);
     assert_ne!(url, other);
 }
+
+#[cfg(feature = "test-introspection")]
+#[tokio::test]
+async fn close_drops_the_pooled_connection() {
+    env_or_skip!(env);
+    let client = SmbClient::new();
+    let t = target(&env, "guest");
+    client.list(&t, &guest(), "/").await.unwrap();
+    assert!(client.has_connection(&t, &guest()));
+    client.close(&t, &guest());
+    assert!(!client.has_connection(&t, &guest()));
+    // The next call simply reconnects.
+    client.list(&t, &guest(), "/").await.unwrap();
+    assert!(client.has_connection(&t, &guest()));
+}
+
+#[cfg(feature = "test-introspection")]
+#[tokio::test]
+async fn closed_account_ends_in_flight_body_without_reconnecting() {
+    env_or_skip!(env);
+    let client = SmbClient::new();
+    let server = StreamServer::start(client.clone()).await.unwrap();
+    let t = target(&env, "guest");
+    let url = server.open("acct", t.clone(), guest(), MKV);
+    let mut resp = reqwest::get(&url).await.unwrap();
+    assert_eq!(resp.status(), 200);
+    let mut got = 0_u64;
+    while got < 1024 * 1024 {
+        got += resp.chunk().await.unwrap().unwrap().len() as u64;
+    }
+
+    server.close_account("acct");
+    assert!(!client.has_connection(&t, &guest()));
+
+    // The body ends short instead of carrying on to the end of the file.
+    let ended_early = loop {
+        match resp.chunk().await {
+            Ok(Some(c)) => got += c.len() as u64,
+            Ok(None) => break got < SIZE,
+            Err(_) => break true,
+        }
+    };
+    assert!(ended_early, "body ran to completion ({got} bytes)");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while server.active_readers() > 0 {
+        assert!(Instant::now() < deadline, "reader still running");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    // Nothing reconnected on the closed account's behalf.
+    assert!(!client.has_connection(&t, &guest()));
+    assert_eq!(reqwest::get(&url).await.unwrap().status(), 404);
+}

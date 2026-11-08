@@ -105,6 +105,25 @@ impl SmbClient {
         self.pool.lock().map_or(0, |p| p.len())
     }
 
+    /// Whether a pooled connection exists for a target and login.
+    #[cfg(feature = "test-introspection")]
+    pub fn has_connection(&self, t: &SmbTarget, c: &SmbCredentials) -> bool {
+        self.lookup(&pool_key(t, c)).is_some()
+    }
+
+    /// Drop the pooled connection for a target and login, if any. Files
+    /// already open on it keep it alive until they are dropped; the next
+    /// call for that pair connects afresh.
+    pub fn close(&self, t: &SmbTarget, c: &SmbCredentials) {
+        let removed = self
+            .pool
+            .lock()
+            .ok()
+            .and_then(|mut pool| pool.remove(&pool_key(t, c)));
+        // Dropped outside the pool lock.
+        drop(removed);
+    }
+
     /// List a directory. `.` and `..` are skipped. Directories the account
     /// cannot open come back with `unreadable` set instead of failing the
     /// listing. Only directories are probed, with one stat each.
@@ -233,13 +252,7 @@ impl SmbClient {
         c: &SmbCredentials,
     ) -> Result<(PoolKey, Arc<Entry>), SmbError> {
         self.ensure_sweeper();
-        let key: PoolKey = (
-            t.host.clone(),
-            t.port,
-            t.share.clone(),
-            c.user.clone(),
-            c.domain.clone(),
-        );
+        let key = pool_key(t, c);
         if let Some(entry) = self.lookup(&key) {
             entry.touch();
             return Ok((key, entry));
@@ -356,6 +369,16 @@ impl Drop for SmbFile {
     fn drop(&mut self) {
         self.entry.open_files.fetch_sub(1, Ordering::AcqRel);
     }
+}
+
+fn pool_key(t: &SmbTarget, c: &SmbCredentials) -> PoolKey {
+    (
+        t.host.clone(),
+        t.port,
+        t.share.clone(),
+        c.user.clone(),
+        c.domain.clone(),
+    )
 }
 
 /// `/a/b` to `a/b` (smb2 paths are share-relative with no leading slash).

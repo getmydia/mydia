@@ -47,6 +47,8 @@ const TOKEN_TTL: Duration = Duration::from_hours(12);
 const FILE_IDLE: Duration = Duration::from_mins(1);
 /// How often expired tokens and idle handles are swept.
 const SWEEP_PERIOD: Duration = Duration::from_secs(30);
+/// Error text for a read whose token was closed with its account.
+const ACCOUNT_CLOSED: &str = "account closed";
 /// Bound on the liveness probe `heal` makes against its own listener.
 const HEAL_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -94,15 +96,35 @@ impl TokenTable {
         Some((entry.info.clone(), entry.file.clone()))
     }
 
-    /// Cache an open handle for a token that is still issued.
-    fn set_file(&mut self, token: &str, file: Arc<SmbFile>) {
-        if let Some(entry) = self.entries.get_mut(token) {
-            entry.file = Some(file);
-        }
+    /// Cache an open handle for a token that is still issued. `false` when
+    /// the token is gone.
+    fn set_file(&mut self, token: &str, file: Arc<SmbFile>) -> bool {
+        let Some(entry) = self.entries.get_mut(token) else {
+            return false;
+        };
+        entry.file = Some(file);
+        true
     }
 
-    fn remove_account(&mut self, account: &str) {
-        self.entries.retain(|_, e| e.info.account != account);
+    /// Forget an account's tokens, returning each distinct target and login
+    /// they referenced so the caller can close those connections.
+    fn remove_account(&mut self, account: &str) -> Vec<(SmbTarget, SmbCredentials)> {
+        let mut removed: Vec<(SmbTarget, SmbCredentials)> = Vec::new();
+        self.entries.retain(|_, e| {
+            if e.info.account != account {
+                return true;
+            }
+            let pair = (e.info.target.clone(), e.info.creds.clone());
+            if !removed.contains(&pair) {
+                removed.push(pair);
+            }
+            false
+        });
+        removed
+    }
+
+    fn contains(&self, token: &str) -> bool {
+        self.entries.contains_key(token)
     }
 
     /// Forget expired tokens and close handles idle past [`FILE_IDLE`].
@@ -181,8 +203,14 @@ impl StreamServer {
 
     /// Forget every token issued for an account, closing their handles.
     pub fn close_account(&self, account: &str) {
-        if let Ok(mut tokens) = self.shared.tokens.lock() {
-            tokens.remove_account(account);
+        let removed = self
+            .shared
+            .tokens
+            .lock()
+            .map(|mut tokens| tokens.remove_account(account))
+            .unwrap_or_default();
+        for (target, creds) in removed {
+            self.shared.client.close(&target, &creds);
         }
     }
 
@@ -341,6 +369,11 @@ impl Cursor {
         self.shared
             .min_read_offset
             .fetch_min(offset, Ordering::AcqRel);
+        // A closed account's body ends at the next chunk, and never
+        // reconnects on the account's behalf.
+        if !token_issued(&self.shared, &self.token) {
+            return Err(SmbError::Other(ACCOUNT_CLOSED.to_string()));
+        }
         let len = usize::try_from(len).unwrap_or(usize::MAX);
         match self.file.read_at(offset, len).await {
             Ok(data) => Ok(Bytes::from(data)),
@@ -360,16 +393,32 @@ async fn open_file(
     token: &str,
     info: &TokenTarget,
 ) -> Result<Arc<SmbFile>, SmbError> {
+    if !token_issued(shared, token) {
+        return Err(SmbError::Other(ACCOUNT_CLOSED.to_string()));
+    }
     let file = Arc::new(
         shared
             .client
             .open(&info.target, &info.creds, &info.path)
             .await?,
     );
-    if let Ok(mut tokens) = shared.tokens.lock() {
-        tokens.set_file(token, file.clone());
+    let cached = shared
+        .tokens
+        .lock()
+        .is_ok_and(|mut tokens| tokens.set_file(token, file.clone()));
+    if !cached {
+        // The account closed while we were connecting: undo the connection
+        // made on its behalf.
+        drop(file);
+        shared.client.close(&info.target, &info.creds);
+        return Err(SmbError::Other(ACCOUNT_CLOSED.to_string()));
     }
     Ok(file)
+}
+
+/// Whether a token is still issued (not closed with its account).
+fn token_issued(shared: &Shared, token: &str) -> bool {
+    shared.tokens.lock().is_ok_and(|t| t.contains(token))
 }
 
 async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<StreamBody> {
@@ -659,9 +708,14 @@ mod tests {
         let mut table = TokenTable::default();
         table.insert("a".to_string(), info("one"), now);
         table.insert("b".to_string(), info("two"), now);
-        table.remove_account("one");
+        table.insert("c".to_string(), info("one"), now);
+        let removed = table.remove_account("one");
         assert!(table.get("a", now).is_none());
+        assert!(!table.contains("c"));
         assert!(table.get("b", now).is_some());
+        // Two tokens on the same target and login close one connection.
+        let one = info("one");
+        assert_eq!(removed, vec![(one.target, one.creds)]);
     }
 
     #[test]
