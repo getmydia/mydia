@@ -1,0 +1,579 @@
+/// Connect an SMB share as a files library: pick a server (found on the
+/// network or typed), sign in, pick a share, then the folders to add, each
+/// with what it holds. Also signs a saved share in again.
+library;
+
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/sources/files/backend/file_system_backend.dart';
+import '../../../core/sources/files/backend/smb_backend.dart';
+import '../../../core/sources/files/files_account.dart';
+import '../../../core/sources/files/files_accounts.dart';
+import '../../../core/sources/files/media_names.dart';
+import '../../../core/sources/files/smb_discovery.dart';
+import '../../../core/sources/files/smb_native.dart';
+import '../../../core/sources/sources_providers.dart';
+import '../../../l10n/l10n.dart';
+import '../../widgets/files/experimental_badge.dart';
+import '../../widgets/files/remote_folder_picker.dart';
+import 'files_library_kind_picker.dart';
+
+enum _Step { servers, login, shares, folders }
+
+enum _Problem {
+  address,
+  unauthorized,
+  unreachable,
+  smb1Only,
+  noShares,
+  save,
+}
+
+class AddSmbScreen extends ConsumerStatefulWidget {
+  const AddSmbScreen({
+    super.key,
+    this.reauthAccountId,
+    this.platform,
+    this.discoveryTimeout = const Duration(seconds: 5),
+  });
+
+  /// A saved share to sign in to again: its server and share are filled in.
+  final String? reauthAccountId;
+
+  /// [defaultTargetPlatform] when null. Overridable for tests.
+  final TargetPlatform? platform;
+
+  /// How long a search may find nothing before the empty state shows.
+  final Duration discoveryTimeout;
+
+  @override
+  ConsumerState<AddSmbScreen> createState() => _AddSmbScreenState();
+}
+
+class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
+  final _host = TextEditingController();
+  final _port = TextEditingController();
+  final _user = TextEditingController();
+  final _password = TextEditingController();
+  final _domain = TextEditingController();
+
+  _Step _step = _Step.servers;
+  _Problem? _problem;
+  bool _busy = false;
+
+  /// True when the server came from discovery or the saved share, so its
+  /// address is not editable.
+  bool _addressFixed = false;
+
+  // Discovery.
+  StreamSubscription<List<DiscoveredSmbServer>>? _browse;
+  Timer? _quietTimer;
+  List<DiscoveredSmbServer> _servers = const [];
+  bool _browseEmpty = false;
+  bool _quiet = false;
+
+  // Read in initState: `ref` is not safe to use from dispose.
+  late final SmbNative _native = ref.read(smbNativeProvider);
+
+  // Set by the login.
+  String _hostName = '';
+  int _portNumber = kSmbDefaultPort;
+  SmbCredentials? _credentials;
+  List<String> _shares = const [];
+
+  // Set once a share is picked.
+  String? _share;
+  SmbBackend? _backend;
+  bool _saved = false;
+  final _chosen = <String, FilesLibraryKind>{};
+
+  bool get _reauth => widget.reauthAccountId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.reauthAccountId;
+    if (id != null) {
+      _step = _Step.login;
+      _prefill(id);
+    } else {
+      _startBrowsing();
+    }
+  }
+
+  void _startBrowsing() {
+    _quietTimer = Timer(widget.discoveryTimeout, () {
+      if (mounted) setState(() => _quiet = true);
+    });
+    _browse = ref.read(smbDiscoveryProvider).browse().listen((servers) {
+      if (!mounted) return;
+      setState(() {
+        _servers = servers;
+        _browseEmpty = servers.isEmpty;
+      });
+    });
+  }
+
+  void _stopBrowsing() {
+    _quietTimer?.cancel();
+    _quietTimer = null;
+    unawaited(_browse?.cancel());
+    _browse = null;
+  }
+
+  /// Fills in the saved share's server once the records have loaded.
+  Future<void> _prefill(String accountId) async {
+    try {
+      final snapshot = await ref.read(sourceRecordsProvider.future);
+      final uri = snapshot.accounts
+          .where((a) => a.account.id == accountId)
+          .firstOrNull
+          ?.servers
+          .firstOrNull
+          ?.connections
+          .firstOrNull
+          ?.uri;
+      if (!mounted || uri == null) return;
+      final target = smbTargetOf(Uri.parse(normalizeSmbUrl(uri)));
+      setState(() {
+        _host.text = target.host;
+        if (target.port != kSmbDefaultPort) _port.text = '${target.port}';
+        _share = target.share;
+        _addressFixed = true;
+      });
+    } catch (e) {
+      debugPrint('[AddSmb] Could not read the saved share: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopBrowsing();
+    // A picker backend that was never saved leaves loopback tokens behind.
+    final backend = _backend;
+    if (backend != null && !_saved) {
+      unawaited(_native.closeAccount(backend.accountId).catchError((Object e) {
+        debugPrint('[AddSmb] Could not close the account: $e');
+      }));
+    }
+    _host.dispose();
+    _port.dispose();
+    _user.dispose();
+    _password.dispose();
+    _domain.dispose();
+    super.dispose();
+  }
+
+  /// `smb://host[:port]/share`, with an IPv6 host bracketed by [Uri].
+  static Uri _urlOf(String host, int port, String share) => Uri(
+        scheme: 'smb',
+        host: host,
+        port: port == kSmbDefaultPort ? null : port,
+        path: '/$share',
+      );
+
+  void _pickServer(DiscoveredSmbServer server) {
+    _stopBrowsing();
+    setState(() {
+      _host.text = server.host;
+      _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
+      _addressFixed = true;
+      _problem = null;
+      _step = _Step.login;
+    });
+  }
+
+  void _pickManual() {
+    _stopBrowsing();
+    setState(() {
+      _addressFixed = false;
+      _problem = null;
+      _step = _Step.login;
+    });
+  }
+
+  _Problem _problemOf(Object e) => switch (e) {
+        BackendUnauthorized() => _Problem.unauthorized,
+        BackendUnreachable(message: kSmb1OnlyReason) => _Problem.smb1Only,
+        _ => _Problem.unreachable,
+      };
+
+  /// The typed host, without the brackets of an IPv6 literal, or null.
+  String? _typedHost() {
+    var host = _host.text.trim();
+    if (host.startsWith('[') && host.endsWith(']')) {
+      host = host.substring(1, host.length - 1);
+    }
+    return host.isEmpty || host.contains(RegExp(r'[\s/]')) ? null : host;
+  }
+
+  int? _typedPort() {
+    final text = _port.text.trim();
+    if (text.isEmpty) return kSmbDefaultPort;
+    final port = int.tryParse(text);
+    return port != null && port >= 1 && port <= 65535 ? port : null;
+  }
+
+  Future<void> _connect({required bool guest}) async {
+    final host = _typedHost();
+    final port = _typedPort();
+    if (host == null || port == null) {
+      setState(() => _problem = _Problem.address);
+      return;
+    }
+    final domain = _domain.text.trim();
+    final credentials = guest
+        ? const SmbCredentials(user: '', password: '', domain: null)
+        : SmbCredentials(
+            user: _user.text.trim(),
+            password: _password.text,
+            domain: domain.isEmpty ? null : domain,
+          );
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    try {
+      final share = _share;
+      if (_reauth && share != null) {
+        await _native.probe(
+            SmbTarget(host: host, port: port, share: share), credentials, '/');
+        await _saveCredentials(host, port, share, credentials);
+        return;
+      }
+      final shares = await _native.listShares(host, port, credentials);
+      if (!mounted) return;
+      if (shares.isEmpty) {
+        setState(() => _problem = _Problem.noShares);
+        return;
+      }
+      setState(() {
+        _hostName = host;
+        _portNumber = port;
+        _credentials = credentials;
+        _shares = shares;
+        _step = _Step.shares;
+      });
+    } catch (e) {
+      debugPrint('[AddSmb] Connect failed: $e');
+      if (mounted) setState(() => _problem = _problemOf(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Re-login: the same URL is the same account, so only the credentials
+  /// change and `needsReauth` clears.
+  Future<void> _saveCredentials(
+      String host, int port, String share, SmbCredentials credentials) async {
+    try {
+      await ref.read(filesAccountsProvider).addSmbAccount(
+          url: _urlOf(host, port, share), credentials: credentials);
+    } catch (e) {
+      debugPrint('[AddSmb] Save failed: $e');
+      if (mounted) setState(() => _problem = _Problem.save);
+      return;
+    }
+    if (mounted) context.pop();
+  }
+
+  void _pickShare(String share) {
+    final url = _urlOf(_hostName, _portNumber, share);
+    final credentials = _credentials;
+    if (credentials == null) return;
+    setState(() {
+      _share = share;
+      _chosen.clear();
+      _backend = SmbBackend(
+        native: _native,
+        accountId: smbAccountId(url),
+        target: smbTargetOf(Uri.parse(normalizeSmbUrl(url))),
+        credentials: credentials,
+      );
+      _saved = ref
+          .read(sourcesProvider)
+          .any((s) => s.account.id == _backend?.accountId);
+      _step = _Step.folders;
+    });
+  }
+
+  Future<void> _save() async {
+    final share = _share;
+    final credentials = _credentials;
+    if (share == null || credentials == null) return;
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    final accounts = ref.read(filesAccountsProvider);
+    final selected = ref.read(selectedSourceIdProvider.notifier);
+    try {
+      final id = await accounts.addSmbAccount(
+          url: _urlOf(_hostName, _portNumber, share), credentials: credentials);
+      // Saved: its playback tokens now belong to the source, not this screen.
+      _saved = true;
+      for (final MapEntry(key: path, value: kind) in _chosen.entries) {
+        await accounts.addSmbRoot(id, path: path, kind: kind);
+      }
+      selected.select(id);
+      if (!mounted) return;
+      context.pop();
+    } catch (e) {
+      debugPrint('[AddSmb] Save failed: $e');
+      if (mounted) setState(() => _problem = _Problem.save);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
+        _Problem.address => l10n.filesSmbAddressInvalid,
+        _Problem.unauthorized => l10n.filesSmbUnauthorized,
+        _Problem.unreachable => l10n.filesSmbUnreachable,
+        _Problem.smb1Only => l10n.filesSmbSmb1Only,
+        _Problem.noShares => l10n.filesSmbNoShares,
+        _Problem.save => l10n.filesSmbSaveFailed,
+      };
+
+  void _toggle(String path, bool on) => setState(() {
+        if (on) {
+          _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
+        } else {
+          _chosen.remove(path);
+        }
+      });
+
+  Widget _error(BuildContext context, AppLocalizations l10n) {
+    final p = _problem;
+    if (p == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Text(_problemText(l10n, p),
+          key: const Key('smb-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error)),
+    );
+  }
+
+  // -- Steps ---------------------------------------------------------------
+
+  Widget _serversStep(BuildContext context, AppLocalizations l10n) {
+    final isIos =
+        (widget.platform ?? defaultTargetPlatform) == TargetPlatform.iOS;
+    final none = _servers.isEmpty && (_browseEmpty || _quiet);
+    return Column(
+      key: const Key('smb-servers'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.filesSmbServersHeading,
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (_servers.isEmpty && !none)
+          Text(l10n.filesSmbSearching, key: const Key('smb-searching')),
+        for (final s in _servers)
+          ListTile(
+            key: Key('smb-server-${s.host}'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.dns_rounded),
+            title: Text(s.name),
+            subtitle: Text(s.host),
+            onTap: () => _pickServer(s),
+          ),
+        if (none) ...[
+          Text(l10n.filesSmbNoneFound, key: const Key('smb-none-found')),
+          if (isIos)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(l10n.filesSmbLocalNetworkDenied,
+                  key: const Key('smb-local-network-denied')),
+            ),
+        ],
+        const Divider(),
+        ListTile(
+          key: const Key('smb-manual'),
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.edit_rounded),
+          title: Text(l10n.filesSmbManualEntry),
+          subtitle: Text(l10n.filesSmbManualHint),
+          onTap: _pickManual,
+        ),
+      ],
+    );
+  }
+
+  Widget _loginStep(BuildContext context, AppLocalizations l10n) {
+    return Column(
+      key: const Key('smb-login'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const Key('smb-host-field'),
+          controller: _host,
+          readOnly: _addressFixed,
+          autofocus: !_addressFixed,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(labelText: l10n.filesSmbHostLabel),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('smb-port-field'),
+          controller: _port,
+          readOnly: _addressFixed,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+              labelText: l10n.filesSmbPortLabel, hintText: '445'),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('smb-user-field'),
+          controller: _user,
+          autofocus: _addressFixed,
+          decoration: InputDecoration(labelText: l10n.filesSmbUserLabel),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('smb-password-field'),
+          controller: _password,
+          obscureText: true,
+          decoration: InputDecoration(labelText: l10n.filesSmbPasswordLabel),
+          onSubmitted: (_) => _busy ? null : _connect(guest: false),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('smb-domain-field'),
+          controller: _domain,
+          decoration: InputDecoration(labelText: l10n.filesSmbDomainLabel),
+        ),
+        _error(context, l10n),
+        const SizedBox(height: 24),
+        FilledButton(
+          key: const Key('smb-connect-button'),
+          onPressed: _busy ? null : () => _connect(guest: false),
+          child: _busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(l10n.loginConnect),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          key: const Key('smb-guest'),
+          onPressed: _busy ? null : () => _connect(guest: true),
+          child: Text(l10n.filesSmbGuest),
+        ),
+      ],
+    );
+  }
+
+  Widget _sharesStep(BuildContext context, AppLocalizations l10n) {
+    return Column(
+      key: const Key('smb-shares'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.filesSmbPickShare),
+        const SizedBox(height: 8),
+        for (final share in _shares)
+          ListTile(
+            key: Key('smb-share-$share'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_shared_rounded),
+            title: Text(share),
+            onTap: () => _pickShare(share),
+          ),
+      ],
+    );
+  }
+
+  Widget _folderRow(String path, String name,
+      {required bool busy, required VoidCallback? onOpen}) {
+    final key = trimRootPath(path);
+    final kind = _chosen[key];
+    return ListTile(
+      key: ValueKey('smb-folder-$key'),
+      contentPadding: EdgeInsets.zero,
+      leading: Checkbox(
+        key: ValueKey('smb-tick-$key'),
+        value: kind != null,
+        onChanged: _busy || busy ? null : (on) => _toggle(key, on ?? false),
+      ),
+      title: Text(name),
+      trailing: kind == null
+          ? null
+          : FilesLibraryKindPicker(
+              key: ValueKey('smb-kind-$key'),
+              value: kind,
+              onChanged: _busy || busy
+                  ? null
+                  : (k) => setState(() => _chosen[key] = k),
+            ),
+      onTap: _busy ? null : onOpen,
+    );
+  }
+
+  Widget _foldersStep(BuildContext context, AppLocalizations l10n) {
+    final backend = _backend;
+    if (backend == null) return const SizedBox.shrink();
+    return Column(
+      key: const Key('smb-folders'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.filesWebDavPickFolders),
+        const SizedBox(height: 8),
+        RemoteFolderPicker(
+          key: const Key('smb-folder-picker'),
+          backend: backend,
+          root: '/',
+          onPicked: (path) => _toggle(trimRootPath(path), true),
+          rowBuilder: (context,
+                  {required path,
+                  required title,
+                  required busy,
+                  required onOpen}) =>
+              _folderRow(path, title, busy: busy, onOpen: onOpen),
+        ),
+        _error(context, l10n),
+        const SizedBox(height: 24),
+        FilledButton(
+          key: const Key('smb-save-button'),
+          onPressed: _busy || (_chosen.isEmpty && !_saved) ? null : _save,
+          child: _busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(l10n.commonSave),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.filesSmbTitle)),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            shrinkWrap: true,
+            children: [
+              const FilesExperimentalNotice(key: Key('add-smb-experimental')),
+              const SizedBox(height: 16),
+              switch (_step) {
+                _Step.servers => _serversStep(context, l10n),
+                _Step.login => _loginStep(context, l10n),
+                _Step.shares => _sharesStep(context, l10n),
+                _Step.folders => _foldersStep(context, l10n),
+              },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

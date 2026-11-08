@@ -76,6 +76,15 @@ class AddSourceScreen extends ConsumerWidget {
                   subtitle: Text(context.l10n.sourcesAddWebDavSubtitle),
                   onTap: () => context.push('/sources/add/webdav'),
                 ),
+              if (!isWeb)
+                ListTile(
+                  key: const Key('add-source-smb'),
+                  leading: const Icon(Icons.lan_rounded),
+                  title: const ExperimentalTitle(
+                      title: Text('SMB')), // l10n-ignore: protocol name
+                  subtitle: Text(context.l10n.sourcesAddSmbSubtitle),
+                  onTap: () => context.push('/sources/add/smb'),
+                ),
               ListTile(
                 key: const Key('add-source-mydia'),
                 leading: const Icon(Icons.dns_rounded),

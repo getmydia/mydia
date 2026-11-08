@@ -32,6 +32,7 @@ import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
     show isSmbAccountId, kFilesLocalAccountId;
@@ -377,15 +378,12 @@ GoRouter appRouter(Ref ref) {
           reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),
-      // Placeholder until the SMB add screen lands.
       GoRoute(
         path: '/sources/add/smb',
         name: 'add_source_smb',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => Scaffold(
-          appBar: AppBar(
-            title: const Text('SMB'), // l10n-ignore: protocol name
-          ),
+        builder: (context, state) => AddSmbScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),
       // Signing a files account in again (`SettingsNav.reauth`): the folder
