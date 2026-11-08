@@ -52,7 +52,15 @@ defmodule MydiaWeb.MediaLive.ShowCastButtonTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-    assert has_element?(view, "#media-cast-person-907-7")
+    items =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#media-cast-row [role=listitem]")
+
+    assert Enum.count(items) == 8
+
+    for i <- 0..7, do: assert(has_element?(view, "#media-cast-person-#{900 + i}-#{i}"))
     refute has_element?(view, "#media-cast-person-908-8")
   end
 
