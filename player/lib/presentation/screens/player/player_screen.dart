@@ -13,6 +13,7 @@ import '../../../core/app_menu/now_playing.dart';
 import '../../../core/media_session/playing_source.dart';
 import '../../../core/config/web_config.dart' show isInstanceHostedWeb;
 import '../../../core/sources/cache/source_rules.dart';
+import '../../../core/sources/files/smb_native.dart' show smbNativeProvider;
 import '../../../core/cache/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
@@ -468,6 +469,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// A new-port heal arrived during a switch; replayed when the switch ends.
   bool _pendingProxyHeal = false;
   StreamSubscription<ProxyHeal>? _proxyHealSubscription;
+  StreamSubscription<ProxyHeal>? _smbHealSubscription;
 
   static const _lostSourceWindow = Duration(seconds: 30);
   bool _isLoading = true;
@@ -1221,6 +1223,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
     _proxyHealSubscription = _mediaProxy.heals.listen(_onProxyHeal);
+    // The SMB loopback listener heals independently of the media proxy. Web
+    // has no SMB native, so there is nothing to listen to. Every playback
+    // listens: _onProxyHeal ignores a playback that has not advanced, and
+    // the session types give no cheap way to tell an SMB source here.
+    if (!kIsWeb) {
+      _smbHealSubscription =
+          ref.read(smbNativeProvider).heals.listen(_onProxyHeal);
+    }
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);
     _nowPlaying = ref.read(nowPlayingPublisherProvider)..claim(this);
@@ -5337,6 +5347,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
     unawaited(_proxyHealSubscription?.cancel());
+    unawaited(_smbHealSubscription?.cancel());
     _nowPlayingSubscription?.cancel();
     unawaited(_cancelMediaSessionSubscriptions());
     _firstFrameSubscription?.cancel();

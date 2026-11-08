@@ -28,6 +28,7 @@ import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'presentation/widgets/toast/toaster.dart' show showToast;
 import 'core/p2p/media_proxy_factory.dart' show mediaProxyProvider;
+import 'core/sources/files/smb_native.dart' show smbNativeProvider;
 import 'core/providers/providers.dart';
 import 'core/cache/resume_gate.dart';
 import 'core/cache/watcher_registry.dart';
@@ -495,6 +496,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       ref.read(mediaProxyProvider).healListener().then<void>((_) {},
           onError: (Object e) =>
               debugPrint('[MyApp] Media proxy heal failed: $e'));
+      // The SMB loopback listener is reclaimed the same way. Its heals reach
+      // the player through `SmbNative.heals`. Web has no SMB native.
+      if (!kIsWeb) {
+        ref.read(smbNativeProvider).healListener().then<void>((_) {},
+            onError: (Object e) =>
+                debugPrint('[MyApp] SMB listener heal failed: $e'));
+      }
     }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.

@@ -18,6 +18,7 @@ import 'package:player/presentation/screens/player/player_screen_views.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
+import '../../../core/sources/files/fake_smb_native.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/probed_tracks.dart';
@@ -281,6 +282,39 @@ void main() {
 
       expect(decoder.opened, hasLength(2));
       expect(decoder.opened.last.start, const Duration(seconds: 75));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('an SMB listener heal to a new port reopens the stream',
+      (tester) async {
+    final smb = FakeSmbNative();
+    final smbContainer = buildPlayerScreenContainer(
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxy,
+      smbNative: smb,
+    );
+    addTearDown(smbContainer.dispose);
+    await mockHttpResponse(() async {
+      await _mount(tester, smbContainer, decoder);
+      await _playTo75(tester, decoder);
+
+      smb.emitHeal(ProxyHeal.reboundSamePort);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(decoder.opened, hasLength(1));
+
+      smb.emitHeal(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await _landReopen(tester, decoder, 2);
+
+      expect(decoder.opened, hasLength(2));
+      expect(decoder.opened.last.start, const Duration(seconds: 75));
+      expect(find.byType(PlayerErrorView), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

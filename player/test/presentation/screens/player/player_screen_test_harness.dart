@@ -19,6 +19,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/sources/files/smb_native.dart'
+    show SmbNative, smbNativeProvider;
 import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -727,6 +729,8 @@ ProviderContainer buildPlayerScreenContainer({
   // duration guesses at which one it is. Ignored when [castManagerGate] is
   // null.
   Completer<void>? castManagerRequested,
+  // The SMB loopback listener whose heals the player recovers from.
+  SmbNative? smbNative,
 }) {
   final creds = harnessCredentials(connectionState);
   final base = testMydiaSourceOver(server, creds: creds, accountId: 'macct');
@@ -738,6 +742,7 @@ ProviderContainer buildPlayerScreenContainer({
         )
       : base;
   return ProviderContainer(overrides: [
+    if (smbNative != null) smbNativeProvider.overrideWithValue(smbNative),
     mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
     for (final entry in extraSources.entries)
       mediaSourceProvider(entry.key).overrideWithValue(entry.value),
