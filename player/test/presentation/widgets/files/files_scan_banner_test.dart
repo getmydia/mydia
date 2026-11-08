@@ -61,5 +61,12 @@ void main() {
     await tester.pump();
     expect(find.text('Scanning 1 of 2,040'), findsOneWidget);
     expect(find.byKey(const Key('files-scan-skipped')), findsNothing);
+
+    // While the folders are still being read there is no total yet: the
+    // banner counts folders instead of showing "0 of 0".
+    scan.set(const ScanState(running: true, walking: true, foldersRead: 1204));
+    await tester.pump();
+    expect(find.text('Reading folders: 1,204'), findsOneWidget);
+    expect(find.textContaining('of 0'), findsNothing);
   });
 }
