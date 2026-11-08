@@ -7,6 +7,7 @@
 //! error evicts the pool entry, so the next call reconnects.
 
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, Weak};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -25,7 +26,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Bound on the raw SMB1 probe used to explain a failed negotiate.
 const SMB1_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
-type PoolKey = (String, u16, String, String, Option<String>);
+/// Host, port, share, user, domain and a fingerprint of the password (see
+/// [`password_fingerprint`]). Without the password a re-login probe with a
+/// mistyped one would ride a live session opened with the right one.
+type PoolKey = (String, u16, String, String, Option<String>, u64);
 
 /// Which step a failing call was in. `STATUS_ACCESS_DENIED` means bad
 /// credentials while signing in, and only a missing permission afterwards.
@@ -433,7 +437,16 @@ fn pool_key(t: &SmbTarget, c: &SmbCredentials) -> PoolKey {
         t.share.clone(),
         c.user.clone(),
         c.domain.clone(),
+        password_fingerprint(&c.password),
     )
+}
+
+/// In-memory fingerprint of a password, so pool keys can tell logins apart
+/// without holding the password itself. Never logged or persisted.
+fn password_fingerprint(password: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    password.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// `/a/b` to `a/b` (smb2 paths are share-relative with no leading slash).

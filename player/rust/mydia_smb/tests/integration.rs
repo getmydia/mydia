@@ -155,6 +155,29 @@ async fn wrong_password_is_unauthorized() {
     assert!(matches!(err, SmbError::Unauthorized), "{err:?}");
 }
 
+/// A re-login probe with a mistyped password must not ride the live session
+/// pooled for the right one.
+#[tokio::test]
+async fn wrong_password_is_unauthorized_while_pooled() {
+    env_or_skip!(env);
+    let client = SmbClient::new();
+    let t = target(&env, "auth");
+    let right = account(&env);
+    client.list(&t, &right, "/").await.unwrap();
+    #[cfg(feature = "test-introspection")]
+    assert!(client.has_connection(&t, &right));
+
+    let mut wrong = right.clone();
+    wrong.password = "definitely-wrong".to_string();
+    let err = client.list(&t, &wrong, "/").await.unwrap_err();
+    assert!(matches!(err, SmbError::Unauthorized), "{err:?}");
+
+    // The right login's pooled session is untouched.
+    #[cfg(feature = "test-introspection")]
+    assert!(client.has_connection(&t, &right));
+    client.list(&t, &right, "/").await.unwrap();
+}
+
 #[tokio::test]
 async fn missing_share_is_not_found() {
     env_or_skip!(env);
