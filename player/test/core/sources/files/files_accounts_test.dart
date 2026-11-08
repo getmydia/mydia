@@ -156,6 +156,35 @@ void main() {
     expect((stored.password, stored.domain), ('new', 'HOME'));
   });
 
+  test('signing_in_again_never_brings_back_a_removed_smb_share', () async {
+    final c = await container();
+    final accounts = c.read(filesAccountsProvider);
+    final url = Uri.parse('smb://nas.local/media');
+    const creds = SmbCredentials(user: 'viewer', password: 'new');
+    final accountId = smbAccountId(url);
+    final namespace = SourceSecrets.newStorageNamespace(accountId);
+
+    await expectLater(
+        accounts.addSmbAccount(url: url, credentials: creds, signInAgain: true),
+        throwsStateError);
+    expect((await store.load()).accounts, isEmpty);
+
+    await accounts.addSmbAccount(
+        url: url, credentials: const SmbCredentials(user: 'v', password: 'o'));
+    final storedNamespace =
+        (await store.load()).accounts.single.account.storageNamespace;
+    // The removal lands while the sign-in is in flight.
+    final signIn =
+        accounts.addSmbAccount(url: url, credentials: creds, signInAgain: true);
+    final removal = accounts.removeFilesAccount(accountId);
+    await expectLater(signIn, throwsStateError);
+    await removal;
+
+    expect((await store.load()).accounts, isEmpty);
+    expect(await storage.read('$storedNamespace/account_token'), isNull);
+    expect(await storage.read('$namespace/account_token'), isNull);
+  });
+
   test('two_smb_shares_on_one_host_get_distinct_names', () async {
     final c = await container();
     final accounts = c.read(filesAccountsProvider);

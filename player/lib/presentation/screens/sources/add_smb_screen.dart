@@ -350,12 +350,15 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   }
 
   /// Re-login: the same URL is the same account, so only the credentials
-  /// change and `needsReauth` clears.
+  /// change and `needsReauth` clears. A share removed while the probe ran
+  /// stays removed.
   Future<void> _saveCredentials(FilesAccounts accounts, String host, int port,
       String share, SmbCredentials credentials) async {
     try {
       await accounts.addSmbAccount(
-          url: _urlOf(host, port, share), credentials: credentials);
+          url: _urlOf(host, port, share),
+          credentials: credentials,
+          signInAgain: true);
     } catch (e) {
       debugPrint('[AddSmb] Save failed: $e');
       if (mounted) setState(() => _problem = _Problem.save);
@@ -478,10 +481,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           Text(l10n.filesSmbSearching, key: const Key('smb-searching')),
         for (final s in _servers)
           ListTile(
-            // One row per endpoint: a host can serve on two ports.
-            key: Key(s.port == kSmbDefaultPort
-                ? 'smb-server-${s.host}'
-                : 'smb-server-${s.host}:${s.port}'),
+            // Keyed by the advertised name, which discovery keeps unique:
+            // two rows can share a host (two ports) or a first address.
+            key: Key('smb-server-${s.name}'),
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.dns_rounded),
             title: Text(s.name),

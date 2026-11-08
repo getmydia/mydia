@@ -118,7 +118,8 @@ error, because FRB generates bindings for every target.
   `LazySmbBackend` for `s…` accounts.
 - **`smb_discovery.dart`.** Browses `_smb._tcp` with `bonsoir` (already a
   dependency) and exposes a stream of `(name, host, port)`, de-duplicated by
-  host and port. Browsing runs only while the add screen is open. A
+  the full set of advertised addresses and the port, so two boxes that share
+  only a container bridge address both stay listed. Browsing runs only while the add screen is open. A
   discovered server is connected by its resolved IPv4 addresses, then its
   global IPv6 addresses, then the hostname, because Android and Linux
   without nss-mdns cannot resolve `.local` names. When an address is
@@ -145,7 +146,9 @@ for its file and reopens at the current position, as p2p playback does for
   the other add screens.
 - The new strings are English-only, like the rest of the files library.
 - Re-login after `BackendUnauthorized` opens the credentials form for that
-  account, the same entry point WebDAV uses.
+  account, the same entry point WebDAV uses. It only replaces the credentials
+  of a stored account: a share removed while the sign-in probe ran (or by
+  "Forgot PIN") stays removed, and the save reports a failure.
 
 ## Errors
 

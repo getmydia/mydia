@@ -123,9 +123,11 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
     }
   }
 
-  /// Whether [path] is [RemoteFolderPicker.root] or below it.
+  /// Whether [path] is [RemoteFolderPicker.root] or below it. A path with a
+  /// `.` or `..` segment never is: `/dav/../elsewhere` only looks inside.
   bool _withinRoot(String path) {
     final p = trimRootPath(path);
+    if (p.split('/').any((s) => s == '.' || s == '..')) return false;
     final root = _root;
     if (root == '/') return p.startsWith('/');
     return p == root || p.startsWith('$root/');

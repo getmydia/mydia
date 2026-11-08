@@ -53,7 +53,7 @@ class DiscoveredSmbServer {
 
 abstract interface class SmbDiscovery {
   /// Starts browsing on listen and stops on cancel. Emits the current list
-  /// (de-duplicated by host and port, sorted by name) after each resolve or
+  /// (de-duplicated by addresses and port, sorted by name) after each resolve or
   /// loss.
   /// Browsing errors emit an empty list; they are never thrown.
   Stream<List<DiscoveredSmbServer>> browse();
@@ -236,8 +236,10 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
         lower.contains('%');
   }
 
-  /// De-duplicated by endpoint, host and port (first name wins), and sorted
-  /// by name. Two services on one host but different ports both stay.
+  /// De-duplicated by endpoint, every advertised address and the port (first
+  /// name wins), and sorted by name. Two services on one host but different
+  /// ports both stay, and so do two servers that share only their first
+  /// address (the same container bridge on two boxes).
   static List<DiscoveredSmbServer> _snapshot(
     Iterable<DiscoveredSmbServer> servers,
   ) {
@@ -245,7 +247,7 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     final seen = <(String, int)>{};
     return [
       for (final s in sorted)
-        if (seen.add((s.host, s.port))) s,
+        if (seen.add(((s.addresses.toList()..sort()).join(' '), s.port))) s,
     ];
   }
 }

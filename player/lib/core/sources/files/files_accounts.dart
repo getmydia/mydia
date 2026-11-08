@@ -89,8 +89,11 @@ class FilesAccounts {
 
   /// Writes [record] and rebuilds its sources, so a cleared `needsReauth`
   /// and new credentials are read.
-  Future<SourceId> _save(SourceAccountRecord record) async {
-    await _ref.read(sourceRecordsProvider.notifier).putAccount(record);
+  Future<SourceId> _save(SourceAccountRecord record,
+      {bool replaceOnly = false}) async {
+    await _ref
+        .read(sourceRecordsProvider.notifier)
+        .putAccount(record, replaceOnly: replaceOnly);
     for (final source in record.sources) {
       _ref.invalidate(mediaSourceProvider(source.id));
     }
@@ -205,10 +208,15 @@ class FilesAccounts {
   ///
   /// A new account is named [displayName], or `<host>/<share>` with the share
   /// as typed, so two shares on one server are told apart.
+  ///
+  /// [signInAgain] only replaces the credentials of a stored account: one
+  /// removed while the sign-in was in flight throws [StateError] and its
+  /// credentials are not left behind, so a removal (or "Forgot PIN") sticks.
   Future<SourceId> addSmbAccount({
     required Uri url,
     required SmbCredentials credentials,
     String? displayName,
+    bool signInAgain = false,
   }) async {
     final id = smbAccountId(url);
     final base = Uri.parse(normalizeSmbUrl(url));
@@ -216,6 +224,9 @@ class FilesAccounts {
         url.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '';
     final name = displayName ?? '${base.host}/$typedShare';
     final existing = await _stored(id);
+    if (signInAgain && existing == null) {
+      throw StateError('SMB account $id was removed');
+    }
     final account = existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
@@ -244,7 +255,15 @@ class FilesAccounts {
           ],
           addedAtMs: DateTime.now().millisecondsSinceEpoch,
         );
-    return _save(record);
+    if (!signInAgain) return _save(record);
+    try {
+      return await _save(record, replaceOnly: true);
+    } on StateError {
+      // Removed after the check above: its credentials were deleted with it,
+      // and the ones just written must go too.
+      await _ref.read(sourceSecretsProvider).deleteAccountToken(account);
+      rethrow;
+    }
   }
 
   /// Adds [path], a path on the share, as a root of [id].

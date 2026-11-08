@@ -146,7 +146,7 @@ Future<void> _tap(WidgetTester tester, String key) async {
 Future<void> _viaDiscovery(WidgetTester tester, _Harness h) async {
   h.discovery.emit([_attic]);
   await tester.pumpAndSettle();
-  await _tap(tester, 'smb-server-192.168.1.20');
+  await _tap(tester, 'smb-server-Attic NAS');
 }
 
 void main() {
@@ -162,6 +162,25 @@ void main() {
         .controller!
         .text;
     expect(host, '192.168.1.20');
+  });
+
+  testWidgets('endpoints whose host:port text collides get their own rows',
+      (tester) async {
+    final h = await _pump(tester);
+    h.discovery.emit([
+      const DiscoveredSmbServer(name: 'Den', host: '2001:db8::1', port: 4455),
+      const DiscoveredSmbServer(
+          name: 'Loft', host: '2001:db8::1:4455', port: 445),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.byType(ListTile), findsNWidgets(3)); // two servers + manual
+
+    await _tap(tester, 'smb-server-Loft');
+    final host = tester
+        .widget<TextField>(find.byKey(const Key('smb-host-field')))
+        .controller!
+        .text;
+    expect(host, '2001:db8::1:4455');
   });
 
   testWidgets('the manual row shows its hint and accepts an address',
@@ -512,7 +531,7 @@ void main() {
           alternatives: ['192.168.1.20']),
     ]);
     await tester.pumpAndSettle();
-    await _tap(tester, 'smb-server-172.17.0.1');
+    await _tap(tester, 'smb-server-Attic NAS');
     await _tap(tester, 'smb-guest');
 
     expect(h.native.listed.map((l) => l.$1), ['172.17.0.1', '192.168.1.20']);

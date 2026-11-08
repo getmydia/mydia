@@ -27,13 +27,15 @@ Future<void> _pump(
 /// A listing that also names a folder elsewhere on the server, as a WebDAV
 /// href outside the base can.
 class _StrayBackend extends FakeBackend {
-  _StrayBackend(super.files);
+  _StrayBackend(super.files, {this.strayPath = '/elsewhere'});
+
+  final String strayPath;
 
   @override
   Future<List<FileEntry>> list(String dir) async => [
         ...await super.list(dir),
         FileEntry(
-          path: '/elsewhere',
+          path: strayPath,
           name: 'elsewhere',
           isDir: true,
           size: 0,
@@ -95,11 +97,15 @@ void main() {
     expect(picked, isEmpty);
   });
 
-  testWidgets('folders outside the root get no row', (tester) async {
-    await _pump(tester, _StrayBackend({'/dav/A/f.mkv': 1}), [], root: '/dav');
-    expect(find.text('A'), findsOneWidget);
-    expect(find.text('elsewhere'), findsNothing);
-  });
+  for (final stray in ['/elsewhere', '/dav/../elsewhere', '/dav/./elsewhere']) {
+    testWidgets('a folder at $stray gets no row', (tester) async {
+      await _pump(
+          tester, _StrayBackend({'/dav/A/f.mkv': 1}, strayPath: stray), [],
+          root: '/dav');
+      expect(find.text('A'), findsOneWidget);
+      expect(find.text('elsewhere'), findsNothing);
+    });
+  }
 
   testWidgets('with onExit, back at the root calls it and stays',
       (tester) async {

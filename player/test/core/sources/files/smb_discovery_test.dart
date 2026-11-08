@@ -164,6 +164,20 @@ void main() {
     await sub.cancel();
   });
 
+  test('servers sharing only their first address are both listed', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(_resolved('A', addresses: ['172.17.0.1', '192.168.1.20']));
+    events.add(_resolved('B', addresses: ['172.17.0.1', '192.168.1.30']));
+    await pumpEventQueue();
+    expect(seen.last.map((s) => '${s.name} ${s.addresses.join(',')}'), [
+      'A 172.17.0.1,192.168.1.20',
+      'B 172.17.0.1,192.168.1.30',
+    ]);
+    await sub.cancel();
+  });
+
   test('a failed resolve is contained and the browse carries on', () async {
     final failing = BonsoirSmbDiscovery.forTest(
       events.stream,
