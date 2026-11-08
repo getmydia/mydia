@@ -16,6 +16,7 @@ import '../source.dart';
 import '../sources_providers.dart' show sourceSecretsProvider;
 import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
+import 'backend/smb_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
@@ -23,6 +24,7 @@ import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
+import 'smb_native.dart' show smbNativeProvider;
 
 /// Opens the boxes a files source reads synchronously while it builds: its
 /// index and the playback progress store. Called at startup after
@@ -76,8 +78,8 @@ typedef FilesBackendBuilder = FileSystemBackend Function(
 final filesBackendBuilderProvider =
     Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
 
-/// Folders on this device probe each of the account's roots. A WebDAV share
-/// reads its credentials on first use.
+/// Folders on this device probe each of the account's roots. A WebDAV or SMB
+/// share reads its credentials on first use.
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
   if (source.account.id == kFilesLocalAccountId ||
       source.server.connections.isEmpty) {
@@ -85,6 +87,14 @@ FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
     return LocalFoldersBackend(roots: index.roots);
   }
   final secrets = ref.read(sourceSecretsProvider);
+  if (isSmbAccountId(source.account.id)) {
+    return LazySmbBackend(
+      native: ref.read(smbNativeProvider),
+      accountId: source.account.id,
+      target: smbTargetOf(source.server.connections.first.uri),
+      credentials: () => secrets.accountToken(source.account),
+    );
+  }
   return LazyWebDavBackend(
     base: source.server.connections.first.uri,
     credentials: () => secrets.accountToken(source.account),
@@ -139,6 +149,7 @@ FilesMediaSource buildFilesSource(
     onDispose: () {
       unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
+      if (backend is LazySmbBackend) unawaited(backend.close());
     },
   );
   unawaited(media.probe());

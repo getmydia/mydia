@@ -73,6 +73,8 @@ void main() {
   test('signing a files account in again picks the right form', () {
     expect(filesReauthLocation(kFilesLocalAccountId), '/sources/add/folder');
     expect(filesReauthLocation('wabc'), '/sources/add/webdav?account=wabc');
+    expect(filesReauthLocation('s0123456789abcdef'),
+        '/sources/add/smb?account=s0123456789abcdef');
   });
 
   testWidgets('picks a folder and adds it with its kind', (tester) async {

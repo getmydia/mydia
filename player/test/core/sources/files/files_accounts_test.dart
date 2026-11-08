@@ -115,6 +115,55 @@ void main() {
     expect(WebDavCredentials.fromJson(secret!).password, 'new');
   });
 
+  test('adding_existing_smb_url_reuses_the_account', () async {
+    final c = await container();
+    final accounts = c.read(filesAccountsProvider);
+    final first = await accounts.addSmbAccount(
+        url: Uri.parse('smb://NAS.local/Media/'),
+        credentials: const SmbCredentials(user: 'viewer', password: 'old'));
+    final record = (await store.load()).accounts.single;
+    await store.putAccount(
+        record.copyWith(account: record.account.copyWith(needsReauth: true)));
+    c.invalidate(sourceRecordsProvider);
+    await c.read(sourceRecordsProvider.future);
+
+    final second = await accounts.addSmbAccount(
+        url: Uri.parse('smb://nas.local:445/media'),
+        credentials: const SmbCredentials(
+            user: 'viewer', password: 'new', domain: 'HOME'));
+
+    expect(second, first);
+    final after = (await store.load()).accounts.single;
+    expect(after.account.id, smbAccountId(Uri.parse('smb://nas.local/media')));
+    expect(after.account.displayName, 'nas.local');
+    expect(after.account.needsReauth, isFalse);
+    final conn = after.servers.single.connections.single;
+    expect(conn.uri, Uri.parse('smb://nas.local/media'));
+    expect(conn.local, isTrue);
+    final secret =
+        await storage.read('${after.account.storageNamespace}/account_token');
+    final stored = SmbCredentials.fromJson(secret!);
+    expect((stored.password, stored.domain), ('new', 'HOME'));
+  });
+
+  test('smb_roots_are_share_relative_paths', () async {
+    final c = await container();
+    final accounts = c.read(filesAccountsProvider);
+    final id = await accounts.addSmbAccount(
+        url: Uri.parse('smb://192.168.1.5/media'),
+        credentials: const SmbCredentials(user: '', password: ''));
+    await accounts.addSmbRoot(id,
+        path: '/Films/', kind: FilesLibraryKind.movies);
+    await _settle();
+    final accountId = id.value.split(':').first;
+    final root = c.read(filesIndexProvider(accountId)).roots().single;
+    expect(root.path, '/Films');
+    expect(root.title, 'Films');
+    final conn =
+        (await store.load()).accounts.single.servers.single.connections;
+    expect(conn.single.local, isTrue);
+  });
+
   test('remove_account_clears_index_and_secrets', () async {
     final c = await container();
     final accounts = c.read(filesAccountsProvider);

@@ -199,6 +199,52 @@ class FilesAccounts {
     return _save(record);
   }
 
+  /// Saves an SMB share. The credentials are written before the record. A
+  /// URL already saved reuses its account: the credentials are replaced and
+  /// `needsReauth` clears.
+  Future<SourceId> addSmbAccount({
+    required Uri url,
+    required SmbCredentials credentials,
+  }) async {
+    final id = smbAccountId(url);
+    final base = Uri.parse(normalizeSmbUrl(url));
+    final existing = await _stored(id);
+    final account = existing?.account.copyWith(needsReauth: false) ??
+        ProviderAccount(
+          id: id,
+          kind: SourceKind.files,
+          displayName: base.host,
+          storageNamespace: SourceSecrets.newStorageNamespace(id),
+          activeProfileId: kOwnerProfileId,
+        );
+    await _ref
+        .read(sourceSecretsProvider)
+        .writeAccountToken(account, credentials.toJson());
+    final record = existing?.copyWith(account: account) ??
+        SourceAccountRecord(
+          account: account,
+          profiles: [_owner(id)],
+          servers: [
+            SourceServer(
+              id: id,
+              accountId: id,
+              profileId: kOwnerProfileId,
+              name: base.host,
+              connections: [
+                ServerConnection(uri: base, local: isPrivateHost(base.host)),
+              ],
+            ),
+          ],
+          addedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+    return _save(record);
+  }
+
+  /// Adds [path], a path on the share, as a root of [id].
+  Future<void> addSmbRoot(SourceId id,
+          {required String path, required FilesLibraryKind kind}) =>
+      addWebDavRoot(id, path: path, kind: kind);
+
   /// Adds [path], a server path on the share, as a root of [id].
   Future<void> addWebDavRoot(SourceId id,
       {required String path, required FilesLibraryKind kind}) async {

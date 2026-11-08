@@ -10,6 +10,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'smb_native.dart' show SmbTarget;
+
 const kFilesLocalAccountId = 'flocal';
 const kFilesLocalServerId = 'local';
 
@@ -30,6 +32,34 @@ String normalizeWebDavUrl(Uri url) {
 /// `w` + the first 16 hex characters of SHA-256 over [normalizeWebDavUrl].
 String webDavAccountId(Uri url) =>
     'w${sha256.convert(utf8.encode(normalizeWebDavUrl(url))).toString().substring(0, 16)}';
+
+const kSmbDefaultPort = 445;
+
+/// `smb://<host lowercased>[:port when not 445]/<share lowercased>`. An
+/// account is one share, so the same share typed two ways is one account.
+String normalizeSmbUrl(Uri url) {
+  final host = url.host.toLowerCase();
+  final authority = host.contains(':') ? '[$host]' : host;
+  final port = url.hasPort && url.port != kSmbDefaultPort ? ':${url.port}' : '';
+  final share = url.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '';
+  return 'smb://$authority$port/${Uri.encodeComponent(share.toLowerCase())}';
+}
+
+/// `s` + the first 16 hex characters of SHA-256 over [normalizeSmbUrl].
+String smbAccountId(Uri url) =>
+    's${sha256.convert(utf8.encode(normalizeSmbUrl(url))).toString().substring(0, 16)}';
+
+final _smbAccountId = RegExp(r'^s[0-9a-f]{16}$');
+
+bool isSmbAccountId(String id) => _smbAccountId.hasMatch(id);
+
+/// Where the share named by [normalized] lives; port 445 when absent.
+SmbTarget smbTargetOf(Uri normalized) => SmbTarget(
+      host: normalized.host,
+      port: normalized.hasPort ? normalized.port : kSmbDefaultPort,
+      share:
+          normalized.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '',
+    );
 
 /// What a WebDAV account stores as its account token (`SourceSecrets`).
 class WebDavCredentials {

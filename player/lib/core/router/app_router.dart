@@ -33,7 +33,8 @@ import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
-import '../sources/files/files_account.dart' show kFilesLocalAccountId;
+import '../sources/files/files_account.dart'
+    show isSmbAccountId, kFilesLocalAccountId;
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -198,13 +199,17 @@ String? addMydiaRouteRedirect({
     (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
 /// Where signing files account [accountId] in again goes: Add folder for
-/// this device's folders, the WebDAV form, address filled in, for a share.
+/// this device's folders, the SMB or WebDAV form, address filled in, for a
+/// share.
 String filesReauthLocation(String? accountId) =>
     accountId == null || accountId == kFilesLocalAccountId
         ? '/sources/add/folder'
-        : Uri(path: '/sources/add/webdav', queryParameters: {
-            'account': accountId,
-          }).toString();
+        : Uri(
+            path: isSmbAccountId(accountId)
+                ? '/sources/add/smb'
+                : '/sources/add/webdav',
+            queryParameters: {'account': accountId},
+          ).toString();
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
@@ -370,6 +375,17 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => AddWebDavScreen(
           reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      // Placeholder until the SMB add screen lands.
+      GoRoute(
+        path: '/sources/add/smb',
+        name: 'add_source_smb',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(
+            title: const Text('SMB'), // l10n-ignore: protocol name
+          ),
         ),
       ),
       // Signing a files account in again (`SettingsNav.reauth`): the folder
