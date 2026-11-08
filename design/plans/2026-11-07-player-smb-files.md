@@ -86,7 +86,7 @@ pub enum Heal { Healthy, ReboundSamePort, ReboundNewPort }
 - [ ] **Step 6:** In `ci.yml`, after "Media names tests", add a step "SMB tests": `sudo apt-get install -y samba`, then `eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"`, then `devenv shell -- cargo test --manifest-path player/rust/mydia_smb/Cargo.toml`. `check-rust.sh` picks the crate up by glob, so it needs no change.
 - [ ] **Step 7:** Commit: `feat(player): add mydia_smb crate with a Samba test harness`.
 
-**Spike result:** _(filled in at Step 3: the numbers for both crates and the choice)_
+**Spike result:** Release build, 64 MiB fixture, loopback Samba, both negotiated NTLM and `smb encrypt = required`, bytes verified. `smb` 0.12.1: sequential 22 MiB/s (auth), 21 MiB/s (enc); random 1 MiB ranges 11 MiB/s; median first byte 42 ms. `smb2` 0.43.0: sequential 490-2100 MiB/s (auth), 220-590 MiB/s (enc), run-to-run variance on loopback; random 1 MiB ranges 200-500 MiB/s (auth), 120-190 MiB/s (enc); median first byte 0.2-1.1 ms. Choice: `smb2` (crates.io 0.43.0), because it pipelines reads and is one to two orders of magnitude faster at both sequential and seek.
 
 ---
 

@@ -598,6 +598,12 @@ jobs:
       - name: Media names tests
         run: devenv shell -- cargo test --manifest-path native/mydia_media_names/Cargo.toml
 
+      - name: SMB tests
+        run: |
+          sudo apt-get install -y samba
+          eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
+          devenv shell -- cargo test --manifest-path player/rust/mydia_smb/Cargo.toml
+
   test-postgres:
     name: Test / PostgreSQL (${{ matrix.partition }}/3)
     needs: changes

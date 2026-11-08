@@ -1,0 +1,36 @@
+[package]
+name = "mydia_smb"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "2"
+tokio = { version = "1.49", features = ["rt", "net", "time", "sync"] }
+smb2 = "0.43"
+
+[dev-dependencies]
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
+
+# Copied from rust-lints.toml; scripts/check-rust-lints.sh keeps it in sync.
+[lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints we opt out of.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Panic-free non-test code.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Hygiene.
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
+allow_attributes_without_reason = "warn"
