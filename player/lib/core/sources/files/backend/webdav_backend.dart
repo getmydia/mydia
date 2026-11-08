@@ -197,7 +197,8 @@ class WebDavBackend implements FileSystemBackend {
       // freeze the whole library on it.
       final unreadable = !_classified(response);
       if (unreadable) {
-        debugPrint('[WebDavBackend] $href refused; listed as unreadable');
+        // The decoded path, not the href: it carries no query.
+        debugPrint('[WebDavBackend] $path refused; listed as unreadable');
       }
       final length = response.descendantElements
           .where(_isDav('getcontentlength'))
