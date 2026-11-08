@@ -17,7 +17,8 @@ defmodule Mydia.Media.AttrsFromMetadata do
   Builds attrs from a parsed release name plus its resolved metadata.
 
   `opts` accepts `:user`, the acting user whose add preferences the resolver
-  should consult, `:defaults` to inject an `%AddDefaults{}` in tests, and
+  should consult, `:defaults`, an `%AddDefaults{}` chosen up front (a nil
+  `library_path_id` in it is resolved here, franchise first), and
   `:franchise_lookup` to inject the franchise library lookup in tests.
   """
   @spec from_parsed(map(), map(), keyword()) :: map()
@@ -42,9 +43,7 @@ defmodule Mydia.Media.AttrsFromMetadata do
   @doc """
   Builds attrs from metadata alone, for a title with no parsed release.
 
-  `opts` accepts `:user`, the acting user whose add preferences the resolver
-  should consult, `:defaults` to inject an `%AddDefaults{}` in tests, and
-  `:franchise_lookup` to inject the franchise library lookup in tests.
+  `opts` accepts the same keys as `from_parsed/3`.
   """
   @spec from_metadata(map(), :movie | :tv_show, keyword()) :: map()
   def from_metadata(metadata, media_type, opts \\ []) do
@@ -64,14 +63,29 @@ defmodule Mydia.Media.AttrsFromMetadata do
     put_provider_id(base, media_type, metadata)
   end
 
+  # Given defaults with no library mean "Automatic" on the search page's
+  # download dialog (#1366): that dialog runs before the release is matched,
+  # so the library can only be resolved here, once the movie and its franchise
+  # are known.
   defp defaults_for(media_type, metadata, opts) do
-    Keyword.get_lazy(opts, :defaults, fn ->
+    resolve = fn ->
       resolve_opts =
         [tmdb_id: movie_tmdb_id(media_type, metadata)] ++
           Keyword.take(opts, [:franchise_lookup])
 
       AddDefaults.resolve(opts[:user], media_type, resolve_opts)
-    end)
+    end
+
+    case opts[:defaults] do
+      nil ->
+        resolve.()
+
+      %AddDefaults{library_path_id: nil} = given ->
+        %{given | library_path_id: resolve.().library_path_id}
+
+      given ->
+        given
+    end
   end
 
   # The franchise layer only applies to movies, whose provider_id is a TMDB id.

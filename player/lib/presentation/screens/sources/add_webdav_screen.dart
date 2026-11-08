@@ -16,6 +16,7 @@ import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/ui/reduced_motion.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import '../../widgets/files/experimental_badge.dart';
@@ -51,6 +52,14 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   bool _saved = false;
   List<FileEntry> _rootEntries = const [];
   final _chosen = <String, FilesLibraryKind>{};
+
+  /// The folder instructions, scrolled to the top once the share answers so
+  /// the folders, not the spent form, fill a phone screen.
+  final _pickFoldersKey = GlobalKey();
+
+  /// How long that scroll takes: resolved in build, zero under reduced
+  /// motion.
+  Duration _revealDuration = Duration.zero;
 
   @override
   void initState() {
@@ -92,9 +101,11 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
 
   /// The share's own folder as a backend path: decoded, since the backend
   /// encodes what it is given (`/my%20share` would go out as `my%2520share`).
+  /// Trimmed like every folder [_open] lands on, so an address ending in an
+  /// encoded slash still compares equal to its root on the way back up.
   static String _dirOf(Uri? base) {
     final path = webDavDecodePath(base?.path ?? '');
-    return path.isEmpty ? '/' : path;
+    return path.isEmpty ? '/' : trimRootPath(path);
   }
 
   _Problem _problemOf(Object e) =>
@@ -132,6 +143,12 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         _base = base;
         _saved = ref.read(sourcesProvider).any((s) => s.account.id == id);
         _rootEntries = entries;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _pickFoldersKey.currentContext;
+        if (target == null) return;
+        Scrollable.ensureVisible(target,
+            duration: _revealDuration, curve: Curves.easeOutCubic);
       });
     } catch (e) {
       debugPrint('[AddWebDav] Connect failed: $e');
@@ -210,91 +227,117 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     );
   }
 
+  /// Address, user, password and the last problem: the whole screen before
+  /// the share answers, and the top of the folder list after.
+  List<Widget> _form(AppLocalizations l10n, {required bool connected}) => [
+        const FilesExperimentalNotice(key: Key('add-webdav-experimental')),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('webdav-url-field'),
+          controller: _url,
+          autofocus: true,
+          enabled: !connected,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(
+            labelText: l10n.sourcesServerAddressLabel,
+            hintText: 'https://nas.local/dav', // l10n-ignore: example
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('webdav-user-field'),
+          controller: _user,
+          enabled: !connected,
+          decoration: InputDecoration(labelText: l10n.filesWebDavUserLabel),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('webdav-password-field'),
+          controller: _password,
+          enabled: !connected,
+          obscureText: true,
+          decoration: InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
+          onSubmitted: (_) => connected ? null : _connect(),
+        ),
+        // Once connected the form scrolls away, so the folder picker's
+        // pinned location bar shows it.
+        if (_problem case final p? when !connected) ...[
+          const SizedBox(height: 16),
+          _problemLine(l10n, p),
+        ],
+      ];
+
+  Widget _problemLine(AppLocalizations l10n, _Problem p) =>
+      Text(_problemText(l10n, p),
+          key: const Key('webdav-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error));
+
+  Widget _actionButton(AppLocalizations l10n, {required bool connected}) =>
+      FilledButton(
+        key: Key(connected ? 'webdav-save-button' : 'webdav-connect-button'),
+        onPressed: _busy || (connected && _chosen.isEmpty && !_saved)
+            ? null
+            : (connected ? _save : _connect),
+        child: _busy
+            ? const SizedBox.square(
+                dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : Text(connected ? l10n.commonSave : l10n.loginConnect),
+      );
+
+  /// The spent form scrolls away above the picker's pinned location bar,
+  /// which also shows a failed save. The picker owns back: it climbs out of
+  /// a subfolder before leaving, abandons a slow listing, and holds during
+  /// a save.
+  Widget _folderBrowser(AppLocalizations l10n, FileSystemBackend backend) =>
+      RemoteFolderPicker(
+        key: const Key('webdav-folder-picker'),
+        keyPrefix: 'webdav',
+        backend: backend,
+        root: _rootDir,
+        initialFolders: _rootEntries,
+        busy: _busy,
+        problem: switch (_problem) {
+          final p? => _problemText(l10n, p),
+          null => null,
+        },
+        header: [
+          ..._form(l10n, connected: true),
+          const SizedBox(height: 24),
+          Text(l10n.filesWebDavPickFolders, key: _pickFoldersKey),
+          const SizedBox(height: 8),
+        ],
+        footer: _actionButton(l10n, connected: true),
+        onPicked: (path) => _toggle(trimRootPath(path), true),
+        rowBuilder: (context,
+                {required path,
+                required title,
+                required busy,
+                required onOpen}) =>
+            _folderRow(path, title, busy: busy, onOpen: onOpen),
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final connected = _backend != null;
+    _revealDuration =
+        ReducedMotion.duration(context, const Duration(milliseconds: 250));
+    final backend = _backend;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.filesWebDavTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
-            children: [
-              const FilesExperimentalNotice(
-                  key: Key('add-webdav-experimental')),
-              const SizedBox(height: 16),
-              TextField(
-                key: const Key('webdav-url-field'),
-                controller: _url,
-                autofocus: true,
-                enabled: !connected,
-                keyboardType: TextInputType.url,
-                decoration: InputDecoration(
-                  labelText: l10n.sourcesServerAddressLabel,
-                  hintText: 'https://nas.local/dav', // l10n-ignore: example
+          child: backend != null
+              ? _folderBrowser(l10n, backend)
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  shrinkWrap: true,
+                  children: [
+                    ..._form(l10n, connected: false),
+                    const SizedBox(height: 24),
+                    _actionButton(l10n, connected: false),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                key: const Key('webdav-user-field'),
-                controller: _user,
-                enabled: !connected,
-                decoration:
-                    InputDecoration(labelText: l10n.filesWebDavUserLabel),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                key: const Key('webdav-password-field'),
-                controller: _password,
-                enabled: !connected,
-                obscureText: true,
-                decoration:
-                    InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
-                onSubmitted: (_) => connected ? null : _connect(),
-              ),
-              if (_problem case final p?) ...[
-                const SizedBox(height: 16),
-                Text(_problemText(l10n, p),
-                    key: const Key('webdav-error'),
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
-              ],
-              if (connected) ...[
-                const SizedBox(height: 24),
-                Text(l10n.filesWebDavPickFolders),
-                const SizedBox(height: 8),
-                RemoteFolderPicker(
-                  key: const Key('webdav-folder-picker'),
-                  backend: _backend!,
-                  root: _rootDir,
-                  initialFolders: _rootEntries,
-                  onPicked: (path) => _toggle(trimRootPath(path), true),
-                  rowBuilder: (context,
-                          {required path,
-                          required title,
-                          required busy,
-                          required onOpen}) =>
-                      _folderRow(path, title, busy: busy, onOpen: onOpen),
-                ),
-              ],
-              const SizedBox(height: 24),
-              FilledButton(
-                key: Key(
-                    connected ? 'webdav-save-button' : 'webdav-connect-button'),
-                onPressed: _busy || (connected && _chosen.isEmpty && !_saved)
-                    ? null
-                    : (connected ? _save : _connect),
-                child: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(connected ? l10n.commonSave : l10n.loginConnect),
-              ),
-            ],
-          ),
         ),
       ),
     );

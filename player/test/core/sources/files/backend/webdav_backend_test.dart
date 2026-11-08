@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -51,6 +52,129 @@ void main() {
     expect(entries[3].path, '/media/Movies/Harbor Lights.mp4');
     expect(entries[3].modified,
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+  });
+
+  test('webdav_server_rs_reply_lists_its_video', () async {
+    // webdav-server-rs, as captured: parentheses escaped in hrefs the
+    // client sent raw, a split 200/404 propstat on the folder, and both D:
+    // and d: bound to DAV:.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/Amber%20Tide%20%282019%29/</D:href>'
+        '<D:propstat><D:prop><d:resourcetype xmlns:d="DAV:"><D:collection>'
+        '</D:collection></d:resourcetype><D:getlastmodified>Tue, 20 Oct 2026 '
+        '12:29:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat><D:propstat><D:prop><D:getcontentlength>'
+        '</D:getcontentlength></D:prop><D:status>HTTP/1.1 404 Not Found'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>/media/Movies/Amber%20Tide%20%282019%29/'
+        'Amber.Tide.2019.1080p.BluRay.x264.mkv</D:href><D:propstat><D:prop>'
+        '<d:resourcetype xmlns:d="DAV:"></d:resourcetype><D:getcontentlength>'
+        '9036244507</D:getcontentlength><D:getlastmodified>Tue, 20 Oct 2026 '
+        '12:30:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response></D:multistatus>';
+    late http.Request seen;
+    final entries = await backend(MockClient((request) async {
+      seen = request;
+      return http.Response(xml, 207);
+    })).list('/media/Movies/Amber Tide (2019)');
+    expect(
+        Uri.decodeComponent(seen.url.path), '/media/Movies/Amber Tide (2019)/');
+    expect(entries, hasLength(1));
+    final video = entries.single;
+    expect(video.name, 'Amber.Tide.2019.1080p.BluRay.x264.mkv');
+    expect(video.isDir, isFalse);
+    expect(video.unreadable, isFalse);
+    expect(video.size, 9036244507);
+  });
+
+  test('a_listing_logs_its_shape_not_its_content', () async {
+    // Logs are shared; a reply can carry signed URLs.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
+        '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>https://dav.example.com/media/Movies/a.mkv?sig=SECRET</D:href>'
+        '<D:propstat><D:prop><D:resourcetype/><D:getcontentlength>5'
+        '</D:getcontentlength></D:prop><D:status>HTTP/1.1 200 OK</D:status>'
+        '</D:propstat></D:response></D:multistatus>';
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
+    addTearDown(() => debugPrint = original);
+
+    final b = backend(MockClient((_) async => http.Response(xml, 207)));
+    await b.list('/media/Movies');
+    await b.list('/media/Movies');
+
+    expect(logged.where((l) => l.contains('PROPFIND')), hasLength(1));
+    expect(logged.single, contains('1 absolute hrefs'));
+    expect(logged.join('\n'), isNot(contains('SECRET')));
+  });
+
+  test('a_child_outside_the_folder_is_counted_without_its_path', () async {
+    String reply(String self, String child) =>
+        '<D:multistatus xmlns:D="DAV:"><D:response><D:href>$self</D:href>'
+        '<D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype>'
+        '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>'
+        '</D:response><D:response><D:href>$child</D:href><D:propstat>'
+        '<D:prop><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response></D:multistatus>';
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
+    addTearDown(() => debugPrint = original);
+
+    // The share's root holds its children: no warning.
+    await backend(
+            MockClient((_) async => http.Response(reply('/', '/a.mkv'), 207)))
+        .list('/');
+    expect(logged.where((l) => l.contains('outside')), isEmpty);
+
+    await backend(MockClient((_) async => http.Response(
+            reply('/media/Movies/', '/elsewhere/a.mkv?sig=SECRET'), 207)))
+        .list('/media/Movies');
+    expect(logged.where((l) => l.contains('1 of 1 entries outside')),
+        hasLength(1));
+    expect(logged.join('\n'), isNot(contains('SECRET')));
+  });
+
+  test('a_relative_href_query_stays_out_of_the_path', () async {
+    // So a signature never reaches the paths the scanner logs.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
+        '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>/media/Movies/Sub/?sig=SECRET&amp;v=1</D:href><D:propstat>'
+        '<D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>'
+        '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
+        '</D:multistatus>';
+    final entries =
+        await backend(MockClient((_) async => http.Response(xml, 207)))
+            .list('/media/Movies');
+    expect(entries.single.path, '/media/Movies/Sub/');
+    expect(entries.single.isDir, isTrue);
+  });
+
+  test('a_refused_signed_href_is_logged_without_its_query', () async {
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
+        '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>/media/Movies/a.mkv?sig=SECRET</D:href>'
+        '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
+        '</D:multistatus>';
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
+    addTearDown(() => debugPrint = original);
+
+    final entries =
+        await backend(MockClient((_) async => http.Response(xml, 207)))
+            .list('/media/Movies');
+    expect(entries.single.unreadable, isTrue);
+    expect(logged.where((l) => l.contains('/media/Movies/a.mkv refused')),
+        hasLength(1));
+    expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
   test('playable_reencodes_the_path_and_carries_auth', () async {

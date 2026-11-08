@@ -1,7 +1,8 @@
 defmodule MydiaWeb.DashboardLive.FranchiseFastAddTest do
   @moduledoc """
   A fast add from the dashboard fills in the library only when the movie's
-  franchise answers (#1293). An explicit library always wins.
+  franchise answers (#1293). An explicit library always wins. The dashboard
+  leaves the library unset and `Mydia.Media.Add` fills it (#1366).
   """
 
   # Points the global metadata relay URL at a Bypass server.

@@ -205,6 +205,22 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     assert item.library_path_id == series.id
   end
 
+  # #1366: the dialog runs before the match, so Automatic is resolved after
+  # it, franchise first. With no franchise it falls through to the default.
+  test "Automatic resolves the library after the match", %{conn: conn, movies: movies} do
+    r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [r])
+
+    open_and_submit(view, r, %{
+      "media_type" => "movie",
+      "config" => %{"library_path_id" => "", "monitored" => "true"}
+    })
+
+    render_async(view, 5_000)
+
+    assert Repo.one!(MediaItem).library_path_id == movies.id
+  end
+
   test "a library of the wrong type is refused and nothing is created",
        %{conn: conn, series: series} do
     r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
@@ -310,6 +326,48 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     assert Repo.aggregate(MediaItem, :count) == 0
   end
 
+  describe "submitted_defaults/3 and dialog_defaults/2" do
+    setup do
+      %{
+        resolved: %AddDefaults{
+          library_path_id: "lib-default",
+          monitored: true,
+          season_monitoring: "all",
+          search_on_add: true
+        }
+      }
+    end
+
+    test "an empty movie library is Automatic", %{resolved: resolved} do
+      submitted =
+        ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => ""}, :movie)
+
+      assert submitted.library_path_id == nil
+      assert submitted.search_on_add == false
+    end
+
+    test "a chosen movie library is kept", %{resolved: resolved} do
+      submitted =
+        ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => "lib-default"}, :movie)
+
+      assert submitted.library_path_id == "lib-default"
+    end
+
+    test "a TV show never goes Automatic", %{resolved: resolved} do
+      submitted = ReleaseAdd.submitted_defaults(resolved, %{"library_path_id" => ""}, :tv_show)
+      assert submitted.library_path_id == "lib-default"
+    end
+
+    test "the dialog opens a movie on Automatic and a show on its default" do
+      movies = library_path_fixture(%{type: "movies", default_for_movies: true})
+      series = library_path_fixture(%{type: "series", default_for_series: true})
+
+      assert ReleaseAdd.dialog_defaults(nil, :movie).library_path_id == nil
+      assert ReleaseAdd.dialog_defaults(nil, :tv_show).library_path_id == series.id
+      refute ReleaseAdd.dialog_defaults(nil, :movie).library_path_id == movies.id
+    end
+  end
+
   describe "download_opts/3" do
     test "a newly created item downloads into the chosen library" do
       defaults = %AddDefaults{
@@ -332,6 +390,17 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       }
 
       assert ReleaseAdd.download_opts("item-1", :existing, defaults) == [media_item_id: "item-1"]
+    end
+
+    test "Automatic leaves the download on the item's own library" do
+      defaults = %AddDefaults{
+        library_path_id: nil,
+        monitored: true,
+        season_monitoring: "all",
+        search_on_add: false
+      }
+
+      assert ReleaseAdd.download_opts("item-1", :created, defaults) == [media_item_id: "item-1"]
     end
   end
 end

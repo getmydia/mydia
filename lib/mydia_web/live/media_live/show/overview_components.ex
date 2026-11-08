@@ -11,9 +11,9 @@ defmodule MydiaWeb.MediaLive.Show.OverviewComponents do
 
   alias MydiaWeb.{PersonComponents, PosterCardComponents}
 
-  # The row scrolls sideways, so this reaches past the leads without costing
-  # height; TMDB metadata stores the first 20 billed.
-  @cast_row_size 15
+  # Enough for the leads, and few enough that the row fits a 1080p page
+  # without scrolling. Narrower screens still scroll it sideways.
+  @cast_row_size 8
 
   @doc """
   The overview text, a Trailer button when the item has one, a Crew dropdown

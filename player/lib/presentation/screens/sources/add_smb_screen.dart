@@ -556,64 +556,73 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     );
   }
 
-  Widget _foldersStep(BuildContext context, AppLocalizations l10n) {
-    final backend = _backend;
-    if (backend == null) return const SizedBox.shrink();
-    return Column(
+  /// The whole screen once a share is open: the folders scroll under the
+  /// picker's pinned location bar (which also shows a failed save), with
+  /// save kept below them. The picker owns back: it climbs out of a
+  /// subfolder before leaving, abandons a slow listing, and holds during a
+  /// save.
+  Widget _foldersStep(
+      BuildContext context, AppLocalizations l10n, FileSystemBackend backend) {
+    return RemoteFolderPicker(
       key: const Key('smb-folders'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+      keyPrefix: 'smb',
+      backend: backend,
+      root: '/',
+      busy: _busy,
+      problem: switch (_problem) {
+        final p? => _problemText(l10n, p),
+        null => null,
+      },
+      header: [
+        const FilesExperimentalNotice(key: Key('add-smb-experimental')),
+        const SizedBox(height: 16),
         Text(l10n.filesWebDavPickFolders),
         const SizedBox(height: 8),
-        RemoteFolderPicker(
-          key: const Key('smb-folder-picker'),
-          backend: backend,
-          root: '/',
-          onPicked: (path) => _toggle(trimRootPath(path), true),
-          rowBuilder: (context,
-                  {required path,
-                  required title,
-                  required busy,
-                  required onOpen}) =>
-              _folderRow(path, title, busy: busy, onOpen: onOpen),
-        ),
-        _error(context, l10n),
-        const SizedBox(height: 24),
-        FilledButton(
-          key: const Key('smb-save-button'),
-          onPressed: _busy || (_chosen.isEmpty && !_saved) ? null : _save,
-          child: _busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(l10n.commonSave),
-        ),
       ],
+      footer: FilledButton(
+        key: const Key('smb-save-button'),
+        onPressed: _busy || (_chosen.isEmpty && !_saved) ? null : _save,
+        child: _busy
+            ? const SizedBox.square(
+                dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : Text(l10n.commonSave),
+      ),
+      onPicked: (path) => _toggle(trimRootPath(path), true),
+      rowBuilder: (context,
+              {required path,
+              required title,
+              required busy,
+              required onOpen}) =>
+          _folderRow(path, title, busy: busy, onOpen: onOpen),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final backend = _backend;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.filesSmbTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
-            children: [
-              const FilesExperimentalNotice(key: Key('add-smb-experimental')),
-              const SizedBox(height: 16),
-              switch (_step) {
-                _Step.servers => _serversStep(context, l10n),
-                _Step.login => _loginStep(context, l10n),
-                _Step.shares => _sharesStep(context, l10n),
-                _Step.folders => _foldersStep(context, l10n),
-              },
-            ],
-          ),
+          child: _step == _Step.folders && backend != null
+              ? _foldersStep(context, l10n, backend)
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  shrinkWrap: true,
+                  children: [
+                    const FilesExperimentalNotice(
+                        key: Key('add-smb-experimental')),
+                    const SizedBox(height: 16),
+                    switch (_step) {
+                      _Step.servers => _serversStep(context, l10n),
+                      _Step.login => _loginStep(context, l10n),
+                      _Step.shares => _sharesStep(context, l10n),
+                      _Step.folders => const SizedBox.shrink(),
+                    },
+                  ],
+                ),
         ),
       ),
     );

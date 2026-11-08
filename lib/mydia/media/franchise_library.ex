@@ -3,9 +3,11 @@ defmodule Mydia.Media.FranchiseLibrary do
   Picks the library a movie should default to from where its franchise lives.
 
   A movie added from a TMDB collection that already has titles in the library
-  should land beside them (#1293). `Mydia.Media.AddDefaults` asks this module
-  before the user's own preference, and only when no library was chosen
-  explicitly.
+  should land beside them (#1293). Two callers ask, and only when no library
+  was chosen explicitly: `Mydia.Media.AddDefaults`, before the user's own
+  preference, for the paths that resolve add settings up front; and
+  `Mydia.Media.Add`, for every add that still reaches it with no library
+  (#1366).
 
   The siblings are the union of two sets, deduplicated: local movies whose
   metadata carries the `collection_id` pointer, and owned movies among the
@@ -34,7 +36,6 @@ defmodule Mydia.Media.FranchiseLibrary do
   alias Mydia.Library.TargetResolver
   alias Mydia.Media.{Franchises, MediaItem}
   alias Mydia.Metadata.Provider.Error
-  alias Mydia.Metadata.Ref
 
   @voting_reasons [:explicit, :existing_files]
 
@@ -58,21 +59,45 @@ defmodule Mydia.Media.FranchiseLibrary do
 
   def library_for(tmdb_id, config) when is_integer(tmdb_id) do
     config = bounded(config || Metadata.default_relay_config())
+    run_lookup(tmdb_id, fn -> lookup(tmdb_id, config) end)
+  end
 
-    case start_lookup(tmdb_id, config) do
+  def library_for(_tmdb_id, _config), do: nil
+
+  @doc """
+  Same as `library_for/2`, for a caller that already knows the movie's
+  collection.
+
+  `Mydia.Media.Add` has just fetched the movie's metadata, which carries the
+  `collection_id`, so this skips the movie-details call and goes straight to
+  the siblings. A nil `collection_id` means the movie belongs to no franchise
+  and returns nil without any lookup.
+  """
+  @spec library_for_collection(integer() | nil, integer() | nil, map() | nil) ::
+          String.t() | nil
+  def library_for_collection(tmdb_id, collection_id, config \\ nil)
+
+  def library_for_collection(tmdb_id, collection_id, config)
+      when is_integer(tmdb_id) and is_integer(collection_id) do
+    config = bounded(config || Metadata.default_relay_config())
+    run_lookup(tmdb_id, fn -> lookup_siblings(tmdb_id, collection_id, config) end)
+  end
+
+  def library_for_collection(_tmdb_id, _collection_id, _config), do: nil
+
+  defp run_lookup(tmdb_id, fun) do
+    case start_lookup(tmdb_id, fun) do
       nil -> nil
       task -> await_lookup(task, tmdb_id)
     end
   end
 
-  def library_for(_tmdb_id, _config), do: nil
-
   # Unlinked, so nothing inside the task can crash the caller. Task.Supervisor
   # records the caller in $callers, which keeps Ecto sandbox access in tests.
   # Starting it exits when the supervisor is down; that is a nil like any other
   # failure here.
-  defp start_lookup(tmdb_id, config) do
-    Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> lookup(tmdb_id, config) end)
+  defp start_lookup(tmdb_id, fun) do
+    Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fun)
   catch
     :exit, reason ->
       Logger.warning(
@@ -101,39 +126,30 @@ defmodule Mydia.Media.FranchiseLibrary do
     end
   end
 
-  @doc """
-  Puts the franchise's library into add `opts` when they name no library.
-
-  For add paths that otherwise leave the library to import-time resolution,
-  which knows nothing about franchises. Only a movie with a TMDB ref is looked
-  up; anything else, or a lookup with no answer, returns `opts` unchanged.
-  """
-  @spec fill_opts(keyword(), term(), atom()) :: keyword()
-  def fill_opts(opts, ref, :movie) do
-    with nil <- opts[:library_path_id],
-         id when is_binary(id) <- library_for(Ref.tmdb_id(ref)) do
-      Keyword.put(opts, :library_path_id, id)
-    else
-      _ -> opts
-    end
-  end
-
-  def fill_opts(opts, _ref, _media_type), do: opts
-
   defp lookup(tmdb_id, config) do
-    with {:ok, collection_id} <- collection_id_for(tmdb_id, config),
-         [_ | _] = siblings <- siblings(tmdb_id, collection_id, config) do
-      majority_library(siblings)
-    else
+    case collection_id_for(tmdb_id, config) do
+      {:ok, collection_id} -> lookup_siblings(tmdb_id, collection_id, config)
       _ -> nil
     end
   rescue
-    error ->
-      Logger.warning(
-        "Franchise library lookup raised for tmdb #{tmdb_id}: #{Exception.message(error)}"
-      )
+    error -> log_raise(tmdb_id, error)
+  end
 
-      nil
+  defp lookup_siblings(tmdb_id, collection_id, config) do
+    case siblings(tmdb_id, collection_id, config) do
+      [_ | _] = siblings -> majority_library(siblings)
+      [] -> nil
+    end
+  rescue
+    error -> log_raise(tmdb_id, error)
+  end
+
+  defp log_raise(tmdb_id, error) do
+    Logger.warning(
+      "Franchise library lookup raised for tmdb #{tmdb_id}: #{Exception.message(error)}"
+    )
+
+    nil
   end
 
   @doc false

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 
 /// In-memory [FileSystemBackend] built from absolute file path -> size.
@@ -20,6 +22,10 @@ class FakeBackend implements FileSystemBackend {
 
   /// Directory path -> failure thrown by [list] for it.
   final Map<String, BackendFailure> failures = {};
+
+  /// Directory path -> gate [list] waits on before answering, as a slow
+  /// server would.
+  final Map<String, Completer<void>> holds = {};
 
   /// Files [list] marks [FileEntry.unreadable], as a server refusing them.
   final Set<String> unreadable = {};
@@ -64,6 +70,8 @@ class FakeBackend implements FileSystemBackend {
   Future<List<FileEntry>> list(String dir) async {
     final d = _norm(dir);
     listed.add(d);
+    final hold = holds[d];
+    if (hold != null) await hold.future;
     final failure = failures[d];
     if (failure != null) throw failure;
     final prefix = d == '/' ? '/' : '$d/';

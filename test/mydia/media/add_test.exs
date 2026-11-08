@@ -543,4 +543,122 @@ defmodule Mydia.Media.AddTest do
       assert found.tvdb_id == exact_tvdb_id
     end
   end
+
+  # #1366: an add that names no library, like the franchise strip on a movie
+  # page, used to leave the item to import-time resolution, which knows
+  # nothing about franchises.
+  describe "franchise library" do
+    defp stub_collection_movie(bypass, id, collection_id) do
+      body = %{
+        "id" => id,
+        "title" => "Starfall Protocol #{id}",
+        "release_date" => "2001-01-01",
+        "credits" => %{"cast" => [], "crew" => []},
+        "belongs_to_collection" => %{"id" => collection_id, "name" => "Starfall"}
+      }
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+    end
+
+    defp stub_collection(bypass, collection_id, part_ids) do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("collection:metadata_relay:#{collection_id}:en-US")
+      end)
+
+      body = %{
+        "id" => collection_id,
+        "name" => "Starfall",
+        "parts" =>
+          Enum.map(part_ids, &%{"id" => &1, "title" => "Part #{&1}", "release_date" => "2001"})
+      }
+
+      Bypass.stub(bypass, "GET", "/tmdb/collections/#{collection_id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+    end
+
+    defp sibling_in(library, tmdb_id) do
+      Mydia.MediaFixtures.media_item_fixture(%{
+        type: "movie",
+        title: "Starfall Protocol #{tmdb_id}",
+        tmdb_id: tmdb_id,
+        library_path_id: library.id
+      })
+    end
+
+    setup do
+      bypass = Bypass.open()
+      collection_id = System.unique_integer([:positive])
+      id = 910_000 + System.unique_integer([:positive])
+      sibling_id = 910_000 + System.unique_integer([:positive])
+
+      %{
+        bypass: bypass,
+        config: relay_config(bypass),
+        collection_id: collection_id,
+        id: id,
+        sibling_id: sibling_id
+      }
+    end
+
+    test "an add with no library lands beside the franchise", ctx do
+      library_path_fixture(%{type: "movies"})
+      franchise_library = library_path_fixture(%{type: "movies"})
+      sibling_in(franchise_library, ctx.sibling_id)
+      stub_collection_movie(ctx.bypass, ctx.id, ctx.collection_id)
+      stub_collection(ctx.bypass, ctx.collection_id, [ctx.sibling_id, ctx.id])
+
+      assert {:ok, item} =
+               Add.from_provider(Scope.unrestricted(), {:tmdb, ctx.id}, :movie, ctx.config)
+
+      assert item.library_path_id == franchise_library.id
+    end
+
+    test "an explicit library wins over the franchise", ctx do
+      chosen = library_path_fixture(%{type: "movies"})
+      franchise_library = library_path_fixture(%{type: "movies"})
+      sibling_in(franchise_library, ctx.sibling_id)
+      # No collection stub: Bypass fails the test if the lookup runs.
+      stub_collection_movie(ctx.bypass, ctx.id, ctx.collection_id)
+
+      assert {:ok, item} =
+               Add.from_provider(Scope.unrestricted(), {:tmdb, ctx.id}, :movie, ctx.config,
+                 library_path_id: chosen.id
+               )
+
+      assert item.library_path_id == chosen.id
+    end
+
+    test "a movie in no franchise is left to import-time resolution", ctx do
+      library_path_fixture(%{type: "movies"})
+      stub_tmdb_movie(ctx.bypass, ctx.id, "Lone Orbit", nil)
+
+      assert {:ok, item} =
+               Add.from_provider(Scope.unrestricted(), {:tmdb, ctx.id}, :movie, ctx.config)
+
+      assert item.library_path_id == nil
+    end
+
+    test "a failed collection fetch still adds the movie", ctx do
+      library_path_fixture(%{type: "movies"})
+      stub_collection_movie(ctx.bypass, ctx.id, ctx.collection_id)
+
+      Bypass.stub(ctx.bypass, "GET", "/tmdb/collections/#{ctx.collection_id}", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      capture_log(fn ->
+        assert {:ok, item} =
+                 Add.from_provider(Scope.unrestricted(), {:tmdb, ctx.id}, :movie, ctx.config)
+
+        assert item.library_path_id == nil
+      end)
+    end
+  end
 end

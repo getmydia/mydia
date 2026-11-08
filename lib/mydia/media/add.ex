@@ -16,6 +16,7 @@ defmodule Mydia.Media.Add do
   alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
+  alias Mydia.Media.FranchiseLibrary
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
   alias Mydia.Settings
@@ -387,10 +388,31 @@ defmodule Mydia.Media.Add do
   defp resolve_movie_attrs(ref, config, opts) do
     case Metadata.fetch_by_ref(config, ref, media_type: :movie) do
       {:ok, metadata} ->
-        {:ok, build_media_item_attrs(metadata, :movie, Keyword.put(opts, :tmdb_id, Ref.id(ref)))}
+        opts =
+          opts
+          |> Keyword.put(:tmdb_id, Ref.id(ref))
+          |> put_franchise_library(Ref.id(ref), metadata, config)
+
+        {:ok, build_media_item_attrs(metadata, :movie, opts)}
 
       {:error, reason} ->
         {:error, {:metadata, reason}}
+    end
+  end
+
+  # A movie added with no library lands beside its franchise (#1366). Every
+  # add path that leaves the library to import-time resolution reaches here:
+  # the franchise strip on a movie page, recommendations, GraphQL, import lists
+  # with no library and the downloads match dialog. The metadata already
+  # carries the collection, so this costs no extra details call. A nil answer
+  # leaves the item on import-time resolution as before.
+  defp put_franchise_library(opts, tmdb_id, metadata, config) do
+    with nil <- opts[:library_path_id],
+         id when is_binary(id) <-
+           FranchiseLibrary.library_for_collection(tmdb_id, metadata.collection_id, config) do
+      Keyword.put(opts, :library_path_id, id)
+    else
+      _ -> opts
     end
   end
 

@@ -12,10 +12,8 @@ Future<void> _pump(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
-      body: SingleChildScrollView(
-        child: RemoteFolderPicker(
-            backend: backend, root: '/', onPicked: picked.add),
-      ),
+      body:
+          RemoteFolderPicker(backend: backend, root: '/', onPicked: picked.add),
     ),
   ));
   await tester.pumpAndSettle();

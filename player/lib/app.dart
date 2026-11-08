@@ -12,6 +12,7 @@ import 'core/sources/lock/source_lock_controller.dart';
 import 'core/sources/lock/window_privacy.dart';
 import 'core/sources/sources_providers.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
+import 'core/sources/connection/app_foreground.dart';
 import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
@@ -485,6 +486,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     ref.read(sourceLockProvider.notifier).onLifecycle(state);
+    ref.read(appForegroundProvider).onLifecycle(state);
     if (state == AppLifecycleState.resumed) {
       ref
           .read(connectionRefreshBusProvider)

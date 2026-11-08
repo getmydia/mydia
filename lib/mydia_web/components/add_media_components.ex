@@ -42,6 +42,11 @@ defmodule MydiaWeb.AddMediaComponents do
     doc:
       "False on hosts that grab a specific release, where an add-time search would grab a second one."
 
+  attr :automatic_library, :boolean,
+    default: false,
+    doc:
+      "Offers an Automatic library, submitted as an empty value. For hosts that open before the title is known, so the franchise library can only be resolved after the match (#1366)."
+
   def add_config_fields(assigns) do
     assigns =
       assign(assigns, :library_labels, LibraryPath.display_names(assigns.config.libraries))
@@ -51,7 +56,7 @@ defmodule MydiaWeb.AddMediaComponents do
     <div class="form-control mb-4">
       <label class="label">
         <span class="label-text font-semibold">{gettext("Library")}</span>
-        <span class="label-text-alt text-error">*</span>
+        <span :if={!@automatic_library} class="label-text-alt text-error">*</span>
       </label>
       <%= if @config.libraries == [] do %>
         <div class="alert alert-warning">
@@ -61,14 +66,27 @@ defmodule MydiaWeb.AddMediaComponents do
           </span>
         </div>
       <% else %>
-        <select name="config[library_path_id]" class="select select-bordered" required>
-          <option value="">{gettext("Select a library...")}</option>
+        <select
+          name="config[library_path_id]"
+          class="select select-bordered"
+          required={!@automatic_library}
+        >
+          <%= if @automatic_library do %>
+            <option value="" selected={is_nil(@config.defaults.library_path_id)}>
+              {gettext("Automatic")}
+            </option>
+          <% else %>
+            <option value="">{gettext("Select a library...")}</option>
+          <% end %>
           <%= for path <- @config.libraries do %>
             <option value={path.id} selected={@config.defaults.library_path_id == path.id}>
               {@library_labels[path.id]}
             </option>
           <% end %>
         </select>
+        <span :if={@automatic_library} class="label-text-alt text-base-content/60 mt-1">
+          {gettext("Automatic uses the library its franchise is in, else your default.")}
+        </span>
       <% end %>
     </div>
     <%!-- Quality Profile --%>

@@ -53,12 +53,51 @@ class WebDavBackend implements FileSystemBackend {
   /// a folder check or a whole scan open for good.
   final Duration _timeout;
 
+  // Each oddity is logged once per backend: a scan lists hundreds of
+  // folders, and one line says how this server behaves.
+  var _loggedReplyShape = false;
+  var _loggedMissingSelf = false;
+  var _loggedForeignChild = false;
+
   @override
   Future<List<FileEntry>> list(String dir) async {
     final body = await _propfind(_asCollection(dir), depth: 1);
     final self = _normalize(dir);
-    return _parse(body).where((e) => _normalize(e.path) != self).toList();
+    final all = _parse(body);
+    if (!_loggedReplyShape) {
+      // How this server shapes a reply, without its content: a reply can
+      // carry signed URLs, and logs are shared.
+      _loggedReplyShape = true;
+      debugPrint('[WebDavBackend] PROPFIND $dir: ${body.length} chars, '
+          '${all.length} entries, ${all.where((e) => e.isDir).length} '
+          'folders, ${all.where((e) => !e.isDir && e.size > 0).length} sized '
+          'files, ${all.where((e) => e.unreadable).length} unreadable, '
+          '${_absoluteHref.allMatches(body).length} absolute hrefs');
+    }
+    final children = all.where((e) => _normalize(e.path) != self).toList();
+    if (all.isNotEmpty &&
+        all.length == children.length &&
+        !_loggedMissingSelf) {
+      _loggedMissingSelf = true;
+      debugPrint('[WebDavBackend] $dir: no entry for the folder itself among '
+          '${all.length}');
+    }
+    // A child outside the folder asked for means the server's hrefs are not
+    // the paths the client sent, and every path built from them is wrong.
+    // Counted, not shown: a relative href keeps its query, which can be a
+    // signature.
+    final prefix = _asCollection(self);
+    final foreign =
+        children.where((e) => !_normalize(e.path).startsWith(prefix)).length;
+    if (foreign > 0 && !_loggedForeignChild) {
+      _loggedForeignChild = true;
+      debugPrint('[WebDavBackend] $dir: $foreign of ${children.length} '
+          'entries outside the folder asked for');
+    }
+    return children;
   }
+
+  static final _absoluteHref = RegExp(r'href>\s*https?://');
 
   @override
   Future<FileEntry?> stat(String path) async {
@@ -139,12 +178,16 @@ class WebDavBackend implements FileSystemBackend {
       throw const BackendUnreachable('not a WebDAV multistatus response');
     }
     final entries = <FileEntry>[];
+    var withoutHref = 0;
     for (final response in root.childElements.where(_isDav('response'))) {
       final href = response.descendantElements
           .where(_isDav('href'))
           .map((e) => e.innerText.trim())
           .firstOrNull;
-      if (href == null || href.isEmpty) continue;
+      if (href == null || href.isEmpty) {
+        withoutHref++;
+        continue;
+      }
       final path = _decodePath(href);
       final isDir = href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
@@ -154,7 +197,8 @@ class WebDavBackend implements FileSystemBackend {
       // freeze the whole library on it.
       final unreadable = !_classified(response);
       if (unreadable) {
-        debugPrint('[WebDavBackend] $href refused; listed as unreadable');
+        // The decoded path, not the href: it carries no query.
+        debugPrint('[WebDavBackend] $path refused; listed as unreadable');
       }
       final length = response.descendantElements
           .where(_isDav('getcontentlength'))
@@ -174,6 +218,10 @@ class WebDavBackend implements FileSystemBackend {
         modified: _parseDate(modifiedText),
         unreadable: unreadable,
       ));
+    }
+    if (withoutHref > 0) {
+      debugPrint('[WebDavBackend] dropped $withoutHref responses without '
+          'an href');
     }
     return entries;
   }
@@ -210,8 +258,18 @@ class WebDavBackend implements FileSystemBackend {
     return propstats.isEmpty || propstats.any(_statusOk);
   }
 
+  /// The path [href] names, decoded. A query is dropped from a relative href
+  /// as [Uri.path] drops it from an absolute one: a `?` in a name arrives
+  /// escaped, so a raw one starts a query, which can be a signature that
+  /// would otherwise travel with the path into every log line naming it.
   static String _decodePath(String href) {
-    final raw = href.contains('://') ? Uri.parse(href).path : href;
+    final String raw;
+    if (href.contains('://')) {
+      raw = Uri.parse(href).path;
+    } else {
+      final query = href.indexOf('?');
+      raw = query < 0 ? href : href.substring(0, query);
+    }
     return webDavDecodePath(raw);
   }
 
