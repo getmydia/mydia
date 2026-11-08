@@ -26,7 +26,12 @@ readonly SCRIPT="scripts/ios-refresh-due.sh"
 # rejects that date as invalid, so epoch() fails, the marker is dropped and the
 # assertion below reads the stable baseline instead.
 readonly MARKER_PROBE="ios-refresh/2999-12-31"
-trap 'git tag -d "$MARKER_PROBE" "v9.9.9-beta.1" >/dev/null 2>&1 || true' EXIT
+# The probe this suite used before. A run interrupted before its trap fired can
+# leave it in a local clone, where it sorts after MARKER_PROBE and would win
+# newest_marker() with a date epoch() cannot parse. Clear it up front.
+readonly OLD_MARKER_PROBE="ios-refresh/9999-12-31"
+git tag -d "$OLD_MARKER_PROBE" >/dev/null 2>&1 || true
+trap 'git tag -d "$MARKER_PROBE" "$OLD_MARKER_PROBE" "v9.9.9-beta.1" >/dev/null 2>&1 || true' EXIT
 
 fail=0
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
