@@ -562,14 +562,26 @@ fn negotiate_may_have_hit_smb1(e: &smb2::Error) -> bool {
 }
 
 /// smb2 does not report why a negotiate failed, so ask the server directly:
-/// send an SMB1 `NEGOTIATE` for `NT LM 0.12`. A server that also speaks SMB2
-/// answers with an SMB2 header (`0xFE 'S' 'M' 'B'`), an SMB1-only one with an
-/// SMB1 header (`0xFF 'S' 'M' 'B'`). Anything else, or no answer, is not
-/// taken as proof.
+/// send an SMB1 `NEGOTIATE` offering `NT LM 0.12` and the SMB2 dialects
+/// (`SMB 2.002`, `SMB 2.???`), the multi-protocol negotiate Windows clients
+/// send. A server that also speaks SMB2 picks an SMB2 dialect and answers
+/// with an SMB2 header (`0xFE 'S' 'M' 'B'`); only a server that can speak
+/// nothing newer answers with an SMB1 header (`0xFF 'S' 'M' 'B'`). Offering
+/// `NT LM 0.12` alone would draw an SMB1 answer from a dual-protocol server
+/// too, and a passing SMB2 hiccup would read as SMB1-only. Anything else, or
+/// no answer, is not taken as proof.
 async fn server_speaks_only_smb1(host: &str, port: u16) -> bool {
+    const DIALECTS: [&[u8]; 3] = [b"NT LM 0.12\0", b"SMB 2.002\0", b"SMB 2.???\0"];
     let probe = async {
         let mut stream = tokio::net::TcpStream::connect((host, port)).await.ok()?;
-        let mut packet = vec![0x00, 0x00, 0x00, 47];
+        let dialects: Vec<u8> = DIALECTS
+            .iter()
+            .flat_map(|d| std::iter::once(0x02).chain(d.iter().copied()))
+            .collect();
+        let byte_count = u16::try_from(dialects.len()).ok()?;
+        // SMB1 header (32) + word count (1) + byte count (2) + dialects.
+        let length = u8::try_from(35 + dialects.len()).ok()?;
+        let mut packet = vec![0x00, 0x00, 0x00, length];
         packet.extend_from_slice(&[0xFF, b'S', b'M', b'B', 0x72]);
         packet.extend_from_slice(&[0; 4]); // status
         packet.push(0x18); // flags
@@ -579,9 +591,8 @@ async fn server_speaks_only_smb1(host: &str, port: u16) -> bool {
         packet.extend_from_slice(&[0; 2]); // reserved
         packet.extend_from_slice(&[0xFF, 0xFF, 0xFE, 0xFF, 0, 0, 0, 0]); // tid, pid, uid, mid
         packet.push(0); // word count
-        packet.extend_from_slice(&[12, 0]); // byte count
-        packet.push(0x02);
-        packet.extend_from_slice(b"NT LM 0.12\0");
+        packet.extend_from_slice(&byte_count.to_le_bytes());
+        packet.extend_from_slice(&dialects);
         stream.write_all(&packet).await.ok()?;
         let mut reply = [0_u8; 8];
         stream.read_exact(&mut reply).await.ok()?;
@@ -698,6 +709,27 @@ mod tests {
         assert!(evicts_pool_entry(&SmbError::Unreachable(String::new())));
         assert!(!evicts_pool_entry(&SmbError::AccessDenied));
         assert!(!evicts_pool_entry(&SmbError::NotFound));
+    }
+
+    /// Against the Samba harness when it is running (see
+    /// `tests/samba/run-samba.sh`): the multi-dialect negotiate draws an SMB2
+    /// answer from the SMB3 server and an SMB1 one from the NT1 server.
+    #[tokio::test]
+    async fn smb1_probe_tells_dual_protocol_from_smb1_only() {
+        let env = |k: &str| std::env::var(k).ok();
+        let (Some(host), Some(port), Some(smb1_port)) = (
+            env("MYDIA_SMB_TEST_HOST"),
+            env("MYDIA_SMB_TEST_PORT").and_then(|p| p.parse::<u16>().ok()),
+            env("MYDIA_SMB_TEST_SMB1_PORT").and_then(|p| p.parse::<u16>().ok()),
+        ) else {
+            assert!(
+                std::env::var_os("MYDIA_SMB_REQUIRE_HARNESS").is_none(),
+                "MYDIA_SMB_REQUIRE_HARNESS is set but the harness variables are missing"
+            );
+            return;
+        };
+        assert!(!server_speaks_only_smb1(&host, port).await);
+        assert!(server_speaks_only_smb1(&host, smb1_port).await);
     }
 
     #[test]

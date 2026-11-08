@@ -50,7 +50,9 @@ impl ByteRange {
         let last_byte = size.checked_sub(1)?;
         match self {
             Self::From(a) => (a < size).then_some((a, last_byte)),
-            Self::FromTo(a, b) => (a < size).then_some((a, b.min(last_byte))),
+            // `parse_range` never builds a reversed range, but the variant is
+            // public, so a hand-built one must not resolve to `a > b`.
+            Self::FromTo(a, b) => (a <= b && a < size).then_some((a, b.min(last_byte))),
             Self::Suffix(0) => None,
             Self::Suffix(n) => Some((size - n.min(size), last_byte)),
         }
@@ -96,6 +98,7 @@ mod tests {
         assert_eq!(ByteRange::From(100).resolve(100), None);
         assert_eq!(ByteRange::FromTo(10, 500).resolve(100), Some((10, 99)));
         assert_eq!(ByteRange::FromTo(100, 200).resolve(100), None);
+        assert_eq!(ByteRange::FromTo(20, 10).resolve(100), None);
         assert_eq!(ByteRange::Suffix(10).resolve(100), Some((90, 99)));
         assert_eq!(ByteRange::Suffix(500).resolve(100), Some((0, 99)));
         assert_eq!(ByteRange::Suffix(0).resolve(100), None);

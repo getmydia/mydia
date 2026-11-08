@@ -64,6 +64,9 @@ struct TokenEntry {
     info: TokenTarget,
     last_used: Instant,
     file: Option<Arc<SmbFile>>,
+    /// Responses still streaming for this token. A token in use never
+    /// expires; its idle time starts when the last response ends.
+    active: usize,
 }
 
 /// Issued tokens. Time is passed in, so expiry is testable without a clock.
@@ -80,6 +83,7 @@ impl TokenTable {
                 info,
                 last_used: now,
                 file: None,
+                active: 0,
             },
         );
     }
@@ -87,12 +91,27 @@ impl TokenTable {
     /// Look a token up and mark it used. An expired token is removed.
     fn get(&mut self, token: &str, now: Instant) -> Option<(TokenTarget, Option<Arc<SmbFile>>)> {
         let entry = self.entries.get_mut(token)?;
-        if now.saturating_duration_since(entry.last_used) > TOKEN_TTL {
+        if entry.active == 0 && now.saturating_duration_since(entry.last_used) > TOKEN_TTL {
             self.entries.remove(token);
             return None;
         }
         entry.last_used = now;
         Some((entry.info.clone(), entry.file.clone()))
+    }
+
+    /// A response for `token` started streaming.
+    fn begin(&mut self, token: &str) {
+        if let Some(entry) = self.entries.get_mut(token) {
+            entry.active += 1;
+        }
+    }
+
+    /// A response for `token` ended: its idle time starts now.
+    fn end(&mut self, token: &str, now: Instant) {
+        if let Some(entry) = self.entries.get_mut(token) {
+            entry.active = entry.active.saturating_sub(1);
+            entry.last_used = now;
+        }
     }
 
     /// Cache an open handle for a token that is still issued. `false` when
@@ -126,9 +145,13 @@ impl TokenTable {
         self.entries.contains_key(token)
     }
 
-    /// Forget expired tokens and close handles idle past [`FILE_IDLE`].
+    /// Forget expired tokens and close handles idle past [`FILE_IDLE`]. A
+    /// token with a response still streaming is neither.
     fn sweep(&mut self, now: Instant) {
         self.entries.retain(|_, e| {
+            if e.active > 0 {
+                return true;
+            }
             let idle = now.saturating_duration_since(e.last_used);
             if idle > FILE_IDLE {
                 e.file = None;
@@ -358,6 +381,34 @@ async fn sweep_loop(shared: Weak<Shared>) {
     }
 }
 
+/// Marks a token in use for as long as one response holds it, so the sweep
+/// never expires a token under a body that is still streaming (a playback
+/// paused for longer than [`TOKEN_TTL`] holds its connection open).
+struct ActiveResponse {
+    shared: Arc<Shared>,
+    token: String,
+}
+
+impl ActiveResponse {
+    fn new(shared: &Arc<Shared>, token: &str) -> Self {
+        if let Ok(mut tokens) = shared.tokens.lock() {
+            tokens.begin(token);
+        }
+        Self {
+            shared: shared.clone(),
+            token: token.to_string(),
+        }
+    }
+}
+
+impl Drop for ActiveResponse {
+    fn drop(&mut self) {
+        if let Ok(mut tokens) = self.shared.tokens.lock() {
+            tokens.end(&self.token, Instant::now());
+        }
+    }
+}
+
 /// One request's view of its token: where to reopen from, the handle in use,
 /// and whether its single reconnect has been spent.
 struct Cursor {
@@ -366,6 +417,7 @@ struct Cursor {
     info: TokenTarget,
     file: Arc<SmbFile>,
     reconnected: bool,
+    _active: ActiveResponse,
 }
 
 impl Cursor {
@@ -449,6 +501,7 @@ async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<Stre
     let Some((info, cached)) = found else {
         return status(StatusCode::NOT_FOUND);
     };
+    let active = ActiveResponse::new(shared, token);
 
     // Opening counts as the request's one reconnect only when a cached
     // handle existed and failed; a first open gets a retry of its own.
@@ -474,6 +527,7 @@ async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<Stre
         info,
         file,
         reconnected,
+        _active: active,
     };
 
     let range = req
@@ -531,7 +585,9 @@ async fn respond(shared: &Arc<Shared>, req: &Request<Incoming>) -> Response<Stre
 /// Read `[offset, end)` into a channel of one chunk, so the next chunk is
 /// being fetched while hyper writes the current one. The task ends when the
 /// range is done, on a second read failure, or as soon as the response body
-/// is dropped (the client hung up) and a send fails.
+/// is dropped (the client hung up), even mid-read: a read stalled on a dead
+/// share, or its reconnect, is abandoned rather than left holding the file
+/// and the connection until it times out.
 fn spawn_reader(
     mut cursor: Cursor,
     mut offset: u64,
@@ -542,7 +598,12 @@ fn spawn_reader(
         #[cfg(feature = "test-introspection")]
         let _guard = ReaderGuard::new(&cursor.shared);
         while offset < end {
-            let chunk = match cursor.read(offset, (end - offset).min(CHUNK)).await {
+            let read = cursor.read(offset, (end - offset).min(CHUNK));
+            let result = tokio::select! {
+                r = read => r,
+                () = tx.closed() => break,
+            };
+            let chunk = match result {
                 Ok(data) if !data.is_empty() => data,
                 // The file shrank under us: end the body short.
                 Ok(_) => {
@@ -706,6 +767,23 @@ mod tests {
         table.sweep(t0 + TOKEN_TTL + Duration::from_secs(1));
         assert!(!table.entries.contains_key("old"));
         assert!(table.entries.contains_key("new"));
+    }
+
+    #[test]
+    fn a_streaming_token_outlives_the_ttl_and_idles_from_its_end() {
+        let t0 = Instant::now();
+        let mut table = TokenTable::default();
+        table.insert("tok".to_string(), info("acct"), t0);
+        table.begin("tok");
+        let long_after = t0 + TOKEN_TTL * 2;
+        table.sweep(long_after);
+        assert!(table.contains("tok"), "swept under a live response");
+        assert!(table.get("tok", long_after).is_some());
+        table.end("tok", long_after);
+        table.sweep(long_after + TOKEN_TTL);
+        assert!(table.contains("tok"), "idle time starts at the end");
+        table.sweep(long_after + TOKEN_TTL + Duration::from_secs(1));
+        assert!(!table.contains("tok"));
     }
 
     #[test]

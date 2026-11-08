@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 thiserror = "2"
-tokio = { version = "1.49", features = ["rt", "net", "time", "sync", "io-util"] }
+tokio = { version = "1.49", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
 smb2 = "0.43"
 # Loopback range server mpv plays SMB files through. Plain HTTP/1.1, no TLS.
 hyper = { version = "1", features = ["server", "http1"] }
