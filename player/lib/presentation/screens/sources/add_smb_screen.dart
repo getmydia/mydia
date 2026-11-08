@@ -19,6 +19,7 @@ import '../../../core/sources/files/smb_discovery.dart';
 import '../../../core/sources/files/smb_native.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
+import '../detail/detail_links.dart';
 import '../../widgets/files/experimental_badge.dart';
 import '../../widgets/files/remote_folder_picker.dart';
 import 'files_library_kind_picker.dart';
@@ -88,6 +89,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
 
   // Set once a share is picked.
   String? _share;
+
+  /// False in re-login mode until the saved share has been read; Connect
+  /// stays off until then, and for good when there is no saved share.
+  late bool _prefilled = widget.reauthAccountId == null;
   SmbBackend? _backend;
   bool _saved = false;
   final _chosen = <String, FilesLibraryKind>{};
@@ -138,16 +143,22 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           ?.connections
           .firstOrNull
           ?.uri;
-      if (!mounted || uri == null) return;
+      if (!mounted) return;
+      if (uri == null) {
+        setState(() => _problem = _Problem.save);
+        return;
+      }
       final target = smbTargetOf(Uri.parse(normalizeSmbUrl(uri)));
       setState(() {
         _host.text = target.host;
         if (target.port != kSmbDefaultPort) _port.text = '${target.port}';
         _share = target.share;
         _addressFixed = true;
+        _prefilled = true;
       });
     } catch (e) {
       debugPrint('[AddSmb] Could not read the saved share: $e');
+      if (mounted) setState(() => _problem = _Problem.save);
     }
   }
 
@@ -240,7 +251,11 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     });
     try {
       final share = _share;
-      if (_reauth && share != null) {
+      if (_reauth) {
+        if (share == null) {
+          setState(() => _problem = _Problem.save);
+          return;
+        }
         await _native.probe(
             SmbTarget(host: host, port: port, share: share), credentials, '/');
         await _saveCredentials(host, port, share, credentials);
@@ -322,7 +337,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       }
       selected.select(id);
       if (!mounted) return;
-      context.pop();
+      context.go(sourceHomeLocation(id));
     } catch (e) {
       debugPrint('[AddSmb] Save failed: $e');
       if (mounted) setState(() => _problem = _Problem.save);
@@ -440,7 +455,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           controller: _password,
           obscureText: true,
           decoration: InputDecoration(labelText: l10n.filesSmbPasswordLabel),
-          onSubmitted: (_) => _busy ? null : _connect(guest: false),
+          onSubmitted: (_) =>
+              _busy || !_prefilled ? null : _connect(guest: false),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -452,7 +468,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         const SizedBox(height: 24),
         FilledButton(
           key: const Key('smb-connect-button'),
-          onPressed: _busy ? null : () => _connect(guest: false),
+          onPressed: _busy || !_prefilled ? null : () => _connect(guest: false),
           child: _busy
               ? const SizedBox.square(
                   dimension: 18,
@@ -462,7 +478,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         const SizedBox(height: 8),
         TextButton(
           key: const Key('smb-guest'),
-          onPressed: _busy ? null : () => _connect(guest: true),
+          onPressed: _busy || !_prefilled ? null : () => _connect(guest: true),
           child: Text(l10n.filesSmbGuest),
         ),
       ],

@@ -89,6 +89,9 @@ Future<_Harness> _pump(
     routes: [
       GoRoute(path: '/', builder: (_, __) => const Text('home')),
       GoRoute(
+          path: '/s/:id',
+          builder: (_, s) => Text('opened ${s.pathParameters['id']}')),
+      GoRoute(
           path: '/add',
           builder: (_, __) => AddSmbScreen(
                 reauthAccountId: reauthAccountId,
@@ -198,7 +201,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('smb-kind-/Films')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('files-kind-movies')).last);
+    await tester.tap(find
+        .descendant(
+            of: find.byKey(const ValueKey('files-kind-movies')).last,
+            matching: find.byType(Text))
+        .last);
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-save-button');
 
@@ -214,9 +221,9 @@ void main() {
     };
     expect(roots.keys, ['/Films']);
     expect(roots['/Films']!.kind, FilesLibraryKind.movies);
-    // Saved: the screen closed.
-    expect(find.byKey(const Key('smb-login')), findsNothing);
-    expect(find.text('home'), findsOneWidget);
+    // Saved: the new source opens.
+    expect(find.byKey(const Key('smb-folders')), findsNothing);
+    expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
   testWidgets('leaving the folder step unsaved closes the account',
@@ -325,6 +332,7 @@ void main() {
     await _enter(tester, 'smb-user-field', 'viewer');
     await _enter(tester, 'smb-password-field', 'new');
     await _tap(tester, 'smb-connect-button');
+    expect(h2.native.listed, isEmpty, reason: 'never lists shares');
 
     expect(find.byKey(const Key('smb-shares')), findsNothing);
     final record = (await h2.store.load()).accounts.single;
@@ -335,5 +343,23 @@ void main() {
     expect(
         FileLibraryIndex(h2.box, accountId: accountId).roots(), hasLength(1));
     expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('signing in again to a missing account cannot connect',
+      (tester) async {
+    final h = await _pump(tester, reauthAccountId: 'sdeadbeefdeadbeef');
+
+    expect(find.byKey(const Key('smb-error')), findsOneWidget);
+    expect(
+        find.text('Could not save this share on this device.'), findsOneWidget);
+    for (final key in ['smb-connect-button', 'smb-guest']) {
+      final f = find.byKey(Key(key));
+      await tester.ensureVisible(f);
+      await tester.tap(f, warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
+    expect(h.native.listed, isEmpty);
+    expect(find.byKey(const Key('smb-shares')), findsNothing);
+    expect((await h.store.load()).accounts, isEmpty);
   });
 }
