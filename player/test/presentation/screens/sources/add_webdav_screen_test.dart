@@ -352,6 +352,38 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
+  testWidgets('a failed folder shows its problem and back still climbs',
+      (tester) async {
+    final h = await _pump(tester);
+    for (var i = 0; i < 40; i++) {
+      h.backend.setFile('/dav/Folder ${i.toString().padLeft(2, '0')}/a.mkv', 1);
+    }
+    h.backend.setFile('/dav/Films/Broken/a.mkv', 1);
+    h.backend.failures['/dav/Films/Broken'] = const BackendUnreachable('x');
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Films')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Films/Broken')));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav/Films'), findsOneWidget);
+
+    // The problem sits in the pinned bar, not the scrolled-away form.
+    final error = find.byKey(const Key('webdav-error'));
+    expect(error, findsOneWidget);
+    expect(
+        tester
+            .getRect(find.byType(Scaffold))
+            .contains(tester.getRect(error).center),
+        isTrue);
+
+    // Opening a child failed, not climbing, so back still climbs.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+  });
+
   testWidgets('back at the root abandons a slow listing before leaving',
       (tester) async {
     final h = await _pump(tester);

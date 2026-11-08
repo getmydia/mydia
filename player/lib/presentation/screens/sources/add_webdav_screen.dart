@@ -69,6 +69,10 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   /// also sets [_busy] but is never abandoned.
   bool _opening = false;
 
+  /// Whether the last climb to a parent folder failed. Back then leaves,
+  /// rather than retrying against a share that stopped answering.
+  bool _climbFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -174,7 +178,12 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
-  Future<void> _open(String dir) async {
+  /// Opens the folder above the current one.
+  Future<void> _climb() => _open(_parent(_dir), climb: true);
+
+  /// Lists [dir]. A failed [climb] lets back leave the setup, since the
+  /// share has stopped answering on the way out.
+  Future<void> _open(String dir, {bool climb = false}) async {
     final backend = _backend;
     if (backend == null) return;
     final listing = ++_listing;
@@ -182,6 +191,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       _busy = true;
       _opening = true;
       _problem = null;
+      _climbFailed = false;
     });
     bool current() => mounted && listing == _listing;
     try {
@@ -193,7 +203,12 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       });
     } catch (e) {
       debugPrint('[AddWebDav] Listing $dir failed: $e');
-      if (current()) setState(() => _problem = _problemOf(e));
+      if (current()) {
+        setState(() {
+          _problem = _problemOf(e);
+          _climbFailed = climb;
+        });
+      }
     } finally {
       if (current()) {
         setState(() {
@@ -308,13 +323,17 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
           decoration: InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
           onSubmitted: (_) => connected ? null : _connect(),
         ),
-        if (_problem case final p?) ...[
+        // Once connected the form scrolls away, so [_location] shows it.
+        if (_problem case final p? when !connected) ...[
           const SizedBox(height: 16),
-          Text(_problemText(l10n, p),
-              key: const Key('webdav-error'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          _problemLine(l10n, p),
         ],
       ];
+
+  Widget _problemLine(AppLocalizations l10n, _Problem p) =>
+      Text(_problemText(l10n, p),
+          key: const Key('webdav-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error));
 
   Widget _actionButton(AppLocalizations l10n, {required bool connected}) =>
       FilledButton(
@@ -343,8 +362,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
                     key: const Key('webdav-up'),
                     tooltip: l10n.filesWebDavUp,
                     icon: const Icon(Icons.arrow_upward_rounded),
-                    onPressed:
-                        _busy || _atRoot ? null : () => _open(_parent(_dir)),
+                    onPressed: _busy || _atRoot ? null : _climb,
                   ),
                   Expanded(
                     child: Text(_dir,
@@ -353,6 +371,13 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
                   ),
                 ],
               ),
+              if (_problem case final p?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: _problemLine(l10n, p)),
+                ),
               _folderRow(_dir, l10n.filesWebDavThisFolder, open: false),
               const Divider(height: 1),
             ],
@@ -422,7 +447,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       });
       return;
     }
-    if (!_atRoot && !_busy) _open(_parent(_dir));
+    if (!_atRoot && !_busy) _climb();
   }
 
   @override
@@ -432,9 +457,9 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ReducedMotion.duration(context, const Duration(milliseconds: 250));
     final connected = _backend != null;
     return PopScope(
-      // A shown problem lets back leave: a share that stopped answering
+      // After a failed climb back leaves: a share that stopped answering
       // would otherwise turn every back into another failed climb.
-      canPop: !connected || _problem != null || (_atRoot && !_opening),
+      canPop: !connected || _climbFailed || (_atRoot && !_opening),
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n.filesWebDavTitle)),
