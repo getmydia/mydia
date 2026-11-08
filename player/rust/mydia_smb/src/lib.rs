@@ -4,8 +4,12 @@
 //! root is `/`).
 
 mod client;
+mod range;
+mod stream;
 
 pub use client::{SmbClient, SmbFile};
+pub use range::{parse_range, ByteRange};
+pub use stream::StreamServer;
 
 /// Where a share lives.
 #[derive(Debug, Clone, PartialEq, Eq)]

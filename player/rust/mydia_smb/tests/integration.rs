@@ -1,11 +1,12 @@
 //! Integration tests against `tests/samba/run-samba.sh`.
 //! Without `MYDIA_SMB_TEST_HOST` they print "skipped" and pass.
 
-#![allow(clippy::unwrap_used, reason = "test code")]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test code")]
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mydia_smb::{SmbClient, SmbCredentials, SmbError, SmbTarget};
+use mydia_smb::{Heal, SmbClient, SmbCredentials, SmbError, SmbTarget, StreamServer};
 
 pub struct TestEnv {
     pub host: String,
@@ -51,21 +52,25 @@ fn account(env: &TestEnv) -> SmbCredentials {
     }
 }
 
+/// Tests share one smbd. `reconnects_once_after_server_restart` restarts it,
+/// so it takes this for writing and every other harness test for reading.
+static SMBD: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
+/// Binds `$env` to the harness settings and holds a read lock on [`SMBD`]
+/// for the rest of the test, or prints "skipped" and returns.
 macro_rules! env_or_skip {
-    () => {
-        match test_env() {
-            Some(env) => env,
-            None => {
-                println!("skipped");
-                return;
-            }
-        }
+    ($env:ident) => {
+        let Some($env) = test_env() else {
+            println!("skipped");
+            return;
+        };
+        let _smbd = SMBD.read().await;
     };
 }
 
 #[tokio::test]
 async fn lists_guest_root() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let entries = client
         .list(&target(&env, "guest"), &guest(), "/")
@@ -82,7 +87,7 @@ async fn lists_guest_root() {
 
 #[tokio::test]
 async fn stats_fixture_size() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let entry = client
         .stat(&target(&env, "guest"), &guest(), MKV)
@@ -95,7 +100,7 @@ async fn stats_fixture_size() {
 
 #[tokio::test]
 async fn stat_missing_is_none() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let entry = client
         .stat(&target(&env, "guest"), &guest(), "/nope.mkv")
@@ -106,7 +111,7 @@ async fn stat_missing_is_none() {
 
 #[tokio::test]
 async fn lists_and_stats_awkward_names() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let t = target(&env, "guest");
     let entries = client.list(&t, &guest(), "/").await.unwrap();
@@ -125,7 +130,7 @@ async fn lists_and_stats_awkward_names() {
 
 #[tokio::test]
 async fn wrong_password_is_unauthorized() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let mut creds = account(&env);
     creds.password = "definitely-wrong".to_string();
@@ -138,7 +143,7 @@ async fn wrong_password_is_unauthorized() {
 
 #[tokio::test]
 async fn missing_share_is_not_found() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let err = client
         .list(&target(&env, "nope"), &account(&env), "/")
@@ -163,7 +168,7 @@ async fn closed_port_is_unreachable() {
 
 #[tokio::test]
 async fn smb1_server_is_smb1_only() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let Some(port) = std::env::var("MYDIA_SMB_TEST_SMB1_PORT")
         .ok()
         .and_then(|p| p.parse::<u16>().ok())
@@ -183,7 +188,7 @@ async fn smb1_server_is_smb1_only() {
 
 #[tokio::test]
 async fn denied_entry_is_unreadable_not_fatal() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let entries = client
         .list(&target(&env, "auth"), &account(&env), "/")
@@ -200,7 +205,7 @@ async fn denied_entry_is_unreadable_not_fatal() {
 
 #[tokio::test]
 async fn encrypted_share_lists() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let entries = client
         .list(&target(&env, "enc"), &account(&env), "/")
@@ -211,7 +216,7 @@ async fn encrypted_share_lists() {
 
 #[tokio::test]
 async fn shares_exclude_admin() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let shares = client
         .list_shares(&env.host, env.port, &account(&env))
@@ -228,7 +233,7 @@ fn pattern_byte(i: u64) -> u8 {
 
 #[tokio::test]
 async fn read_at_matches_pattern() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let file = client
         .open(&target(&env, "guest"), &guest(), MKV)
@@ -248,7 +253,7 @@ async fn read_at_matches_pattern() {
 
 #[tokio::test]
 async fn open_missing_is_not_found() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::new();
     let err = client
         .open(&target(&env, "guest"), &guest(), "/nope.mkv")
@@ -261,7 +266,7 @@ async fn open_missing_is_not_found() {
 #[cfg(feature = "test-introspection")]
 #[tokio::test]
 async fn idle_connections_close_after_60s() {
-    let env = env_or_skip!();
+    env_or_skip!(env);
     let client = SmbClient::with_idle_timeout(Duration::from_millis(200));
     client
         .list(&target(&env, "guest"), &guest(), "/")
@@ -276,4 +281,237 @@ async fn idle_connections_close_after_60s() {
         .await
         .unwrap();
     assert_eq!(client.pool_size(), 1);
+}
+
+// ---- StreamServer -------------------------------------------------------
+
+const SIZE: u64 = 67_108_864;
+
+fn unused_target() -> SmbTarget {
+    SmbTarget {
+        host: "127.0.0.1".to_string(),
+        port: 1,
+        share: "guest".to_string(),
+    }
+}
+
+async fn served(env: &TestEnv) -> (Arc<StreamServer>, String) {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let url = server.open("acct", target(env, "guest"), guest(), MKV);
+    (server, url)
+}
+
+async fn get_range(url: &str, range: &str) -> reqwest::Response {
+    reqwest::Client::new()
+        .get(url)
+        .header("Range", range)
+        .send()
+        .await
+        .unwrap()
+}
+
+fn header<'a>(resp: &'a reqwest::Response, name: &str) -> &'a str {
+    resp.headers()
+        .get(name)
+        .unwrap_or_else(|| panic!("missing {name}"))
+        .to_str()
+        .unwrap()
+}
+
+fn assert_pattern(data: &[u8], offset: u64) {
+    for (i, b) in data.iter().enumerate() {
+        assert_eq!(*b, pattern_byte(offset + i as u64), "byte {i}");
+    }
+}
+
+#[tokio::test]
+async fn head_reports_size() {
+    env_or_skip!(env);
+    let (_server, url) = served(&env).await;
+    let resp = reqwest::Client::new().head(&url).send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(header(&resp, "content-length"), SIZE.to_string());
+    assert_eq!(header(&resp, "accept-ranges"), "bytes");
+    assert_eq!(header(&resp, "content-type"), "application/octet-stream");
+}
+
+#[tokio::test]
+async fn range_returns_exact_bytes() {
+    env_or_skip!(env);
+    let (_server, url) = served(&env).await;
+    let resp = get_range(&url, "bytes=1000000-1004095").await;
+    assert_eq!(resp.status(), 206);
+    assert_eq!(
+        header(&resp, "content-range"),
+        format!("bytes 1000000-1004095/{SIZE}")
+    );
+    let body = resp.bytes().await.unwrap();
+    assert_eq!(body.len(), 4096);
+    assert_pattern(&body, 1_000_000);
+}
+
+#[tokio::test]
+async fn range_spanning_chunks_is_exact() {
+    env_or_skip!(env);
+    let (_server, url) = served(&env).await;
+    // 3 MiB starting mid-chunk, so the read-ahead path is exercised.
+    let start = 500_000_u64;
+    let end = start + 3 * 1024 * 1024 - 1;
+    let resp = get_range(&url, &format!("bytes={start}-{end}")).await;
+    assert_eq!(resp.status(), 206);
+    let body = resp.bytes().await.unwrap();
+    assert_eq!(body.len() as u64, end - start + 1);
+    assert_pattern(&body, start);
+}
+
+#[cfg(feature = "test-introspection")]
+#[tokio::test]
+async fn tail_range_reads_only_the_tail() {
+    env_or_skip!(env);
+    let (server, url) = served(&env).await;
+    let resp = get_range(&url, "bytes=-4096").await;
+    assert_eq!(resp.status(), 206);
+    assert_eq!(
+        header(&resp, "content-range"),
+        format!("bytes 67104768-67108863/{SIZE}")
+    );
+    let body = resp.bytes().await.unwrap();
+    assert_eq!(body.len(), 4096);
+    assert_pattern(&body, 67_104_768);
+    assert!(
+        server.min_read_offset() >= 67_104_768,
+        "{}",
+        server.min_read_offset()
+    );
+}
+
+#[tokio::test]
+async fn past_end_is_416() {
+    env_or_skip!(env);
+    let (_server, url) = served(&env).await;
+    let resp = get_range(&url, &format!("bytes={SIZE}-")).await;
+    assert_eq!(resp.status(), 416);
+    assert_eq!(header(&resp, "content-range"), format!("bytes */{SIZE}"));
+}
+
+#[tokio::test]
+async fn unknown_token_is_404() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let url = format!(
+        "http://127.0.0.1:{}/smb/0123456789abcdef0123456789abcdef",
+        server.port()
+    );
+    let resp = reqwest::get(&url).await.unwrap();
+    assert_eq!(resp.status(), 404);
+    let resp = reqwest::get(format!("http://127.0.0.1:{}/other", server.port()))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+}
+
+#[tokio::test]
+async fn closed_account_tokens_404() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let url = server.open("acct", unused_target(), guest(), "/a.mkv");
+    let kept = server.open("other", unused_target(), guest(), "/a.mkv");
+    server.close_account("acct");
+    assert_eq!(reqwest::get(&url).await.unwrap().status(), 404);
+    // Another account's token is still known: it fails on the SMB side
+    // (port 1 is closed), not as an unknown token.
+    assert_eq!(reqwest::get(&kept).await.unwrap().status(), 502);
+}
+
+#[cfg(feature = "test-introspection")]
+#[tokio::test]
+async fn abandoned_response_does_not_poison_next_request() {
+    env_or_skip!(env);
+    let (server, url) = served(&env).await;
+    {
+        let mut resp = reqwest::get(&url).await.unwrap();
+        assert_eq!(resp.status(), 200);
+        let mut got = 0;
+        while got < 1024 * 1024 {
+            got += resp.chunk().await.unwrap().unwrap().len();
+        }
+    }
+    // The reader behind the dropped response stops.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while server.active_readers() > 0 {
+        assert!(Instant::now() < deadline, "reader still running");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let resp = get_range(&url, "bytes=2000000-2000999").await;
+    assert_eq!(resp.status(), 206);
+    let body = resp.bytes().await.unwrap();
+    assert_eq!(body.len(), 1000);
+    assert_pattern(&body, 2_000_000);
+}
+
+#[tokio::test]
+async fn reconnects_once_after_server_restart() {
+    let Some(env) = test_env() else {
+        println!("skipped");
+        return;
+    };
+    let _smbd = SMBD.write().await;
+    let (_server, url) = served(&env).await;
+    let resp = get_range(&url, "bytes=0-4095").await;
+    assert_eq!(resp.status(), 206);
+    resp.bytes().await.unwrap();
+
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samba/run-samba.sh");
+    let out = std::process::Command::new(script)
+        .arg("restart")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let resp = get_range(&url, "bytes=5000000-5004095").await;
+    assert_eq!(resp.status(), 206);
+    let body = resp.bytes().await.unwrap();
+    assert_eq!(body.len(), 4096);
+    assert_pattern(&body, 5_000_000);
+}
+
+#[tokio::test]
+async fn heal_without_loss_is_healthy() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let port = server.port();
+    assert_eq!(server.heal().await.unwrap(), Heal::Healthy);
+    assert_eq!(server.port(), port);
+}
+
+#[cfg(feature = "test-introspection")]
+#[tokio::test]
+async fn heal_after_listener_loss_rebinds_same_port() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let port = server.port();
+    let url = server.open("acct", unused_target(), guest(), "/a.mkv");
+    server.stop_listener().await;
+    assert_eq!(server.heal().await.unwrap(), Heal::ReboundSamePort);
+    assert_eq!(server.port(), port);
+    // Tokens survive the rebind.
+    assert_eq!(reqwest::get(&url).await.unwrap().status(), 502);
+}
+
+#[tokio::test]
+async fn url_carries_no_path() {
+    let server = StreamServer::start(SmbClient::new()).await.unwrap();
+    let url = server.open("acct", unused_target(), guest(), MKV);
+    let rest = url
+        .strip_prefix("http://127.0.0.1:")
+        .unwrap_or_else(|| panic!("{url}"));
+    let (port, token) = rest.split_once("/smb/").unwrap_or_else(|| panic!("{url}"));
+    assert_eq!(port.parse::<u16>().unwrap(), server.port());
+    assert_eq!(token.len(), 32, "{url}");
+    assert!(
+        token.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')),
+        "{url}"
+    );
+    let other = server.open("acct", unused_target(), guest(), MKV);
+    assert_ne!(url, other);
 }

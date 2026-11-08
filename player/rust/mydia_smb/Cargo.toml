@@ -7,13 +7,20 @@ edition = "2021"
 thiserror = "2"
 tokio = { version = "1.49", features = ["rt", "net", "time", "sync", "io-util"] }
 smb2 = "0.43"
+# Loopback range server mpv plays SMB files through. Plain HTTP/1.1, no TLS.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+bytes = "1"
+getrandom = "0.4"
 
 [features]
-# Exposes pool introspection to the integration tests. Off by default.
+# Exposes pool and stream-server introspection to the integration tests.
+# Off by default.
 test-introspection = []
 
 [dev-dependencies]
 tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
+reqwest = { version = "0.12", default-features = false }
 
 # Copied from rust-lints.toml; scripts/check-rust-lints.sh keeps it in sync.
 [lints.rust]
