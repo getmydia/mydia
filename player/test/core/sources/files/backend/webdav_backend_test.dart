@@ -111,6 +111,33 @@ void main() {
     expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
+  test('a_child_outside_the_folder_is_counted_without_its_path', () async {
+    String reply(String self, String child) =>
+        '<D:multistatus xmlns:D="DAV:"><D:response><D:href>$self</D:href>'
+        '<D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype>'
+        '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>'
+        '</D:response><D:response><D:href>$child</D:href><D:propstat>'
+        '<D:prop><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response></D:multistatus>';
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
+    addTearDown(() => debugPrint = original);
+
+    // The share's root holds its children: no warning.
+    await backend(
+            MockClient((_) async => http.Response(reply('/', '/a.mkv'), 207)))
+        .list('/');
+    expect(logged.where((l) => l.contains('outside')), isEmpty);
+
+    await backend(MockClient((_) async => http.Response(
+            reply('/media/Movies/', '/elsewhere/a.mkv?sig=SECRET'), 207)))
+        .list('/media/Movies');
+    expect(logged.where((l) => l.contains('1 of 1 entries outside')),
+        hasLength(1));
+    expect(logged.join('\n'), isNot(contains('SECRET')));
+  });
+
   test('playable_reencodes_the_path_and_carries_auth', () async {
     final p = await backend(okClient())
         .playable('/media/Movies/Night Train #2 (2011).mkv');

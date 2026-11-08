@@ -84,13 +84,15 @@ class WebDavBackend implements FileSystemBackend {
     }
     // A child outside the folder asked for means the server's hrefs are not
     // the paths the client sent, and every path built from them is wrong.
-    final foreign = children
-        .where((e) => !_normalize(e.path).startsWith('$self/'))
-        .firstOrNull;
-    if (foreign != null && !_loggedForeignChild) {
+    // Counted, not shown: a relative href keeps its query, which can be a
+    // signature.
+    final prefix = _asCollection(self);
+    final foreign =
+        children.where((e) => !_normalize(e.path).startsWith(prefix)).length;
+    if (foreign > 0 && !_loggedForeignChild) {
       _loggedForeignChild = true;
-      debugPrint('[WebDavBackend] $dir: entry outside the folder asked for: '
-          '${foreign.path}');
+      debugPrint('[WebDavBackend] $dir: $foreign of ${children.length} '
+          'entries outside the folder asked for');
     }
     return children;
   }
