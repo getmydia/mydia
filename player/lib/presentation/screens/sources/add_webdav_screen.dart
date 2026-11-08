@@ -413,7 +413,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   /// a folder is still listing, back abandons it instead: a slow server
   /// never leaves back dead for the length of its timeout.
   void _onPop(bool didPop, Object? _) {
-    if (didPop || _backend == null || _atRoot) return;
+    if (didPop || _backend == null) return;
     if (_opening) {
       setState(() {
         _listing++;
@@ -422,7 +422,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       });
       return;
     }
-    if (!_busy) _open(_parent(_dir));
+    if (!_atRoot && !_busy) _open(_parent(_dir));
   }
 
   @override
@@ -432,7 +432,7 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ReducedMotion.duration(context, const Duration(milliseconds: 250));
     final connected = _backend != null;
     return PopScope(
-      canPop: !connected || _atRoot,
+      canPop: !connected || (_atRoot && !_opening),
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n.filesWebDavTitle)),

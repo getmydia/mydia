@@ -335,6 +335,38 @@ void main() {
     expect(find.text('/dav'), findsOneWidget);
   });
 
+  testWidgets('back at the root abandons a slow listing before leaving',
+      (tester) async {
+    final h = await _pump(tester);
+    await _connect(tester);
+    await tester.tap(find.byKey(const Key('webdav-tick-/dav/Films')));
+    await tester.pumpAndSettle();
+
+    final slow = Completer<void>();
+    h.backend.holds['/dav/Shows'] = slow;
+    await tester.tap(find.byKey(const Key('webdav-folder-/dav/Shows')));
+    await tester.pump();
+
+    // The first back abandons the listing; the ticked folder survives.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsNothing);
+    expect(find.text('/dav'), findsOneWidget);
+    expect(
+        tester
+            .widget<Checkbox>(find.byKey(const Key('webdav-tick-/dav/Films')))
+            .value,
+        isTrue);
+    slow.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('/dav'), findsOneWidget);
+
+    // The next one leaves.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
   testWidgets('connecting jumps to the folders under reduced motion',
       (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
