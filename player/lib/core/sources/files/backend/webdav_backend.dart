@@ -257,8 +257,18 @@ class WebDavBackend implements FileSystemBackend {
     return propstats.isEmpty || propstats.any(_statusOk);
   }
 
+  /// The path [href] names, decoded. A query is dropped from a relative href
+  /// as [Uri.path] drops it from an absolute one: a `?` in a name arrives
+  /// escaped, so a raw one starts a query, which can be a signature that
+  /// would otherwise travel with the path into every log line naming it.
   static String _decodePath(String href) {
-    final raw = href.contains('://') ? Uri.parse(href).path : href;
+    final String raw;
+    if (href.contains('://')) {
+      raw = Uri.parse(href).path;
+    } else {
+      final query = href.indexOf('?');
+      raw = query < 0 ? href : href.substring(0, query);
+    }
     return webDavDecodePath(raw);
   }
 

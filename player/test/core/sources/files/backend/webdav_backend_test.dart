@@ -138,6 +138,23 @@ void main() {
     expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
+  test('a_relative_href_query_stays_out_of_the_path', () async {
+    // So a signature never reaches the paths the scanner logs.
+    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+        '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
+        '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
+        '</D:status></D:propstat></D:response><D:response>'
+        '<D:href>/media/Movies/Sub/?sig=SECRET&amp;v=1</D:href><D:propstat>'
+        '<D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>'
+        '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
+        '</D:multistatus>';
+    final entries =
+        await backend(MockClient((_) async => http.Response(xml, 207)))
+            .list('/media/Movies');
+    expect(entries.single.path, '/media/Movies/Sub/');
+    expect(entries.single.isDir, isTrue);
+  });
+
   test('playable_reencodes_the_path_and_carries_auth', () async {
     final p = await backend(okClient())
         .playable('/media/Movies/Night Train #2 (2011).mkv');

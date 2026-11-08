@@ -271,7 +271,9 @@ class FileScanner {
   Future<List<FileEntry>> _list(String dir) async {
     final foreground = _foreground;
     for (var reads = 1;; reads++) {
-      await foreground?.whenForeground();
+      if (foreground != null && !foreground.foreground) {
+        await foreground.whenForeground();
+      }
       final departures = foreground?.departures;
       try {
         return await _backend.list(dir);
