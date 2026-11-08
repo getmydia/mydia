@@ -40,6 +40,9 @@ pub enum SmbError {
     Unreachable(String),
     #[error("unauthorized")]
     Unauthorized,
+    /// Signed in, but the account lacks permission for this object.
+    #[error("access denied")]
+    AccessDenied,
     #[error("not found")]
     NotFound,
     #[error("smb1 only")]

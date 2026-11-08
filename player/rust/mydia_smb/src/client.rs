@@ -191,7 +191,7 @@ impl SmbClient {
         let shares = client
             .list_shares()
             .await
-            .map_err(|e| map_error(&e, Phase::Operation))?;
+            .map_err(|e| map_list_shares_error(&e))?;
         Ok(shares
             .into_iter()
             .map(|s| s.name)
@@ -521,6 +521,12 @@ fn map_error(e: &smb2::Error, phase: Phase) -> SmbError {
     }
 }
 
+/// Share enumeration tree-connects `IPC$` before its RPC call, so a refusal
+/// there is a rejected login, not a missing permission on some object.
+fn map_list_shares_error(e: &smb2::Error) -> SmbError {
+    map_error(e, Phase::Connect)
+}
+
 /// Status codes with a fixed meaning. `None` falls through to the generic
 /// classification.
 fn map_status(status: NtStatus, phase: Phase) -> Option<SmbError> {
@@ -528,7 +534,7 @@ fn map_status(status: NtStatus, phase: Phase) -> Option<SmbError> {
         NtStatus::LOGON_FAILURE => Some(SmbError::Unauthorized),
         NtStatus::ACCESS_DENIED => Some(match phase {
             Phase::Connect => SmbError::Unauthorized,
-            Phase::Operation => SmbError::Other("access denied".to_string()),
+            Phase::Operation => SmbError::AccessDenied,
         }),
         NtStatus::OBJECT_NAME_NOT_FOUND
         | NtStatus::OBJECT_PATH_NOT_FOUND
@@ -558,8 +564,17 @@ mod tests {
         ));
         assert!(matches!(
             map_status(NtStatus::ACCESS_DENIED, Phase::Operation),
-            Some(SmbError::Other(_))
+            Some(SmbError::AccessDenied)
         ));
+    }
+
+    #[test]
+    fn denied_share_enumeration_is_unauthorized() {
+        let e = smb2::Error::Protocol {
+            status: NtStatus::ACCESS_DENIED,
+            command: smb2::types::Command::TreeConnect,
+        };
+        assert!(matches!(map_list_shares_error(&e), SmbError::Unauthorized));
     }
 
     #[test]
