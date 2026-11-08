@@ -602,7 +602,7 @@ jobs:
         run: |
           sudo apt-get install -y samba
           eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
-          devenv shell -- cargo test --manifest-path player/rust/mydia_smb/Cargo.toml
+          devenv shell -- cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
   test-postgres:
     name: Test / PostgreSQL (${{ matrix.partition }}/3)

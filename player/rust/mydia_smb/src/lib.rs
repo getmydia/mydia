@@ -3,6 +3,10 @@
 //! Paths are share-relative, `/`-separated, and start with `/` (the share
 //! root is `/`).
 
+mod client;
+
+pub use client::{SmbClient, SmbFile};
+
 /// Where a share lives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SmbTarget {

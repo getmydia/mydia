@@ -125,7 +125,9 @@ reps = n // 251 + 1
 with open(sys.argv[1], "wb") as f:
     f.write((period * reps)[:n])
 PY
-  head -c 1024 /dev/zero | tr '\0' 'x' >"$DIR/share/Odd #1 50% ?é.mkv"
+  # '?' is illegal on the wire. Clients (smb2, macOS) store it as U+F025, so the
+  # fixture does too, or Samba would hand back a mangled 8.3 name instead.
+  head -c 1024 /dev/zero | tr '\0' 'x' >"$DIR/share/Odd #1 50% $(printf '\357\200\245')é.mkv"
   echo "hidden" >"$DIR/share/denied/secret.txt"
   chmod 000 "$DIR/share/denied/secret.txt" "$DIR/share/denied"
 }

@@ -5,8 +5,12 @@ edition = "2021"
 
 [dependencies]
 thiserror = "2"
-tokio = { version = "1.49", features = ["rt", "net", "time", "sync"] }
+tokio = { version = "1.49", features = ["rt", "net", "time", "sync", "io-util"] }
 smb2 = "0.43"
+
+[features]
+# Exposes pool introspection to the integration tests. Off by default.
+test-introspection = []
 
 [dev-dependencies]
 tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
