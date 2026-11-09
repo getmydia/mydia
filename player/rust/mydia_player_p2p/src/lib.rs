@@ -20,8 +20,9 @@ use flutter_rust_bridge::frb;
 use mydia_p2p_core::{
     runtime, Event, GraphQLRequest, HlsCancel, HlsRequest, HlsRequester, HlsResponseHeader,
     HlsStreamResponse, Host, HostConfig, LoadContentRequest, LogLevel, MydiaRequest, MydiaResponse,
-    PairingRequest, PeerConnectionType, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
-    RemoteControlResponse, TargetCapabilities, TrackInfo,
+    PairingRequest, PeerConnectionType, PeerSyncRequest, PeerSyncResponse, PlaybackSnapshot,
+    PlaybackState, RemoteControlRequest, RemoteControlResponse, TargetCapabilities, TrackInfo,
+    WirePeerMember, WirePinRecord, WireWatchRecord,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -134,6 +135,9 @@ pub struct P2pHost {
     /// Inbound control requests, routed here by the same `init` dispatcher.
     /// Drained by `remote_control_stream`.
     control_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundControlRequest>>>,
+    /// Inbound peer sync requests, routed here by the same `init` dispatcher.
+    /// Drained by `peer_sync_stream`.
+    peer_sync_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundPeerSyncRequest>>>,
     /// How many `Event::Log` entries are currently sitting on
     /// `generic_event_rx`, waiting for `event_stream` to drain them.
     ///
@@ -720,6 +724,295 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterWirePeerMember {
+    pub node_id: String,
+    pub device_name: String,
+    pub platform: String,
+    pub endpoint_addr_json: Option<String>,
+    pub updated_at_ms: i64,
+    pub revoked: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterWireWatchRecord {
+    pub key: String,
+    pub watched: bool,
+    pub position_seconds: Option<i64>,
+    pub duration_seconds: Option<i64>,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterWirePinRecord {
+    pub key: String,
+    pub group_key: String,
+    pub is_show: bool,
+    pub tmdb_id: Option<i64>,
+    pub pinned: bool,
+    pub updated_at_ms: i64,
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlutterPeerSyncRequest {
+    Pair {
+        claim_code: String,
+        device_name: String,
+        platform: String,
+        endpoint_addr_json: Option<String>,
+    },
+    Sync {
+        auth_proof: String,
+        sender_endpoint_addr_json: Option<String>,
+        roster: Vec<FlutterWirePeerMember>,
+        since_landed_ms: i64,
+        watch_records: Vec<FlutterWireWatchRecord>,
+        pin_records: Vec<FlutterWirePinRecord>,
+    },
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlutterPeerSyncResponse {
+    Paired {
+        group_secret_base64: String,
+        roster: Vec<FlutterWirePeerMember>,
+        watch_records: Vec<FlutterWireWatchRecord>,
+        pin_records: Vec<FlutterWirePinRecord>,
+    },
+    PairRejected {
+        reason: String,
+    },
+    SyncAck {
+        roster: Vec<FlutterWirePeerMember>,
+        watch_records: Vec<FlutterWireWatchRecord>,
+        pin_records: Vec<FlutterWirePinRecord>,
+        peer_now_ms: i64,
+    },
+    NotAuthorized,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterInboundPeerSyncRequest {
+    pub peer: String,
+    pub request_id: String,
+    pub request: FlutterPeerSyncRequest,
+}
+
+pub struct FlutterSealedClaim {
+    pub lookup_key: String,
+    pub sealed: String,
+}
+
+impl From<FlutterWirePeerMember> for WirePeerMember {
+    fn from(m: FlutterWirePeerMember) -> Self {
+        WirePeerMember {
+            node_id: m.node_id,
+            device_name: m.device_name,
+            platform: m.platform,
+            endpoint_addr_json: m.endpoint_addr_json,
+            updated_at_ms: m.updated_at_ms,
+            revoked: m.revoked,
+        }
+    }
+}
+
+impl From<WirePeerMember> for FlutterWirePeerMember {
+    fn from(m: WirePeerMember) -> Self {
+        FlutterWirePeerMember {
+            node_id: m.node_id,
+            device_name: m.device_name,
+            platform: m.platform,
+            endpoint_addr_json: m.endpoint_addr_json,
+            updated_at_ms: m.updated_at_ms,
+            revoked: m.revoked,
+        }
+    }
+}
+
+impl From<FlutterWireWatchRecord> for WireWatchRecord {
+    fn from(w: FlutterWireWatchRecord) -> Self {
+        WireWatchRecord {
+            key: w.key,
+            watched: w.watched,
+            position_seconds: w.position_seconds,
+            duration_seconds: w.duration_seconds,
+            updated_at_ms: w.updated_at_ms,
+        }
+    }
+}
+
+impl From<WireWatchRecord> for FlutterWireWatchRecord {
+    fn from(w: WireWatchRecord) -> Self {
+        FlutterWireWatchRecord {
+            key: w.key,
+            watched: w.watched,
+            position_seconds: w.position_seconds,
+            duration_seconds: w.duration_seconds,
+            updated_at_ms: w.updated_at_ms,
+        }
+    }
+}
+
+impl From<FlutterWirePinRecord> for WirePinRecord {
+    fn from(p: FlutterWirePinRecord) -> Self {
+        WirePinRecord {
+            key: p.key,
+            group_key: p.group_key,
+            is_show: p.is_show,
+            tmdb_id: p.tmdb_id,
+            pinned: p.pinned,
+            updated_at_ms: p.updated_at_ms,
+        }
+    }
+}
+
+impl From<WirePinRecord> for FlutterWirePinRecord {
+    fn from(p: WirePinRecord) -> Self {
+        FlutterWirePinRecord {
+            key: p.key,
+            group_key: p.group_key,
+            is_show: p.is_show,
+            tmdb_id: p.tmdb_id,
+            pinned: p.pinned,
+            updated_at_ms: p.updated_at_ms,
+        }
+    }
+}
+
+impl From<FlutterPeerSyncRequest> for PeerSyncRequest {
+    fn from(r: FlutterPeerSyncRequest) -> Self {
+        match r {
+            FlutterPeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            } => PeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            },
+            FlutterPeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster,
+                since_landed_ms,
+                watch_records,
+                pin_records,
+            } => PeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster: roster.into_iter().map(Into::into).collect(),
+                since_landed_ms,
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+            },
+        }
+    }
+}
+
+impl From<PeerSyncRequest> for FlutterPeerSyncRequest {
+    fn from(r: PeerSyncRequest) -> Self {
+        match r {
+            PeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            } => FlutterPeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            },
+            PeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster,
+                since_landed_ms,
+                watch_records,
+                pin_records,
+            } => FlutterPeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster: roster.into_iter().map(Into::into).collect(),
+                since_landed_ms,
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+            },
+        }
+    }
+}
+
+impl From<FlutterPeerSyncResponse> for PeerSyncResponse {
+    fn from(r: FlutterPeerSyncResponse) -> Self {
+        match r {
+            FlutterPeerSyncResponse::Paired {
+                group_secret_base64,
+                roster,
+                watch_records,
+                pin_records,
+            } => PeerSyncResponse::Paired {
+                group_secret_base64,
+                roster: roster.into_iter().map(Into::into).collect(),
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+            },
+            FlutterPeerSyncResponse::PairRejected { reason } => {
+                PeerSyncResponse::PairRejected { reason }
+            }
+            FlutterPeerSyncResponse::SyncAck {
+                roster,
+                watch_records,
+                pin_records,
+                peer_now_ms,
+            } => PeerSyncResponse::SyncAck {
+                roster: roster.into_iter().map(Into::into).collect(),
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+                peer_now_ms,
+            },
+            FlutterPeerSyncResponse::NotAuthorized => PeerSyncResponse::NotAuthorized,
+        }
+    }
+}
+
+impl From<PeerSyncResponse> for FlutterPeerSyncResponse {
+    fn from(r: PeerSyncResponse) -> Self {
+        match r {
+            PeerSyncResponse::Paired {
+                group_secret_base64,
+                roster,
+                watch_records,
+                pin_records,
+            } => FlutterPeerSyncResponse::Paired {
+                group_secret_base64,
+                roster: roster.into_iter().map(Into::into).collect(),
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+            },
+            PeerSyncResponse::PairRejected { reason } => {
+                FlutterPeerSyncResponse::PairRejected { reason }
+            }
+            PeerSyncResponse::SyncAck {
+                roster,
+                watch_records,
+                pin_records,
+                peer_now_ms,
+            } => FlutterPeerSyncResponse::SyncAck {
+                roster: roster.into_iter().map(Into::into).collect(),
+                watch_records: watch_records.into_iter().map(Into::into).collect(),
+                pin_records: pin_records.into_iter().map(Into::into).collect(),
+                peer_now_ms,
+            },
+            PeerSyncResponse::NotAuthorized => FlutterPeerSyncResponse::NotAuthorized,
+        }
+    }
+}
+
 /// How many `Event::Log` entries `run_event_dispatcher` will admit onto the
 /// unbounded `generic_tx` channel before it starts dropping new ones.
 ///
@@ -768,6 +1061,7 @@ fn should_forward_log_event(queued: usize, cap: usize) -> bool {
 async fn run_event_dispatcher(
     event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     control_tx: mpsc::Sender<FlutterInboundControlRequest>,
+    peer_sync_tx: mpsc::Sender<FlutterInboundPeerSyncRequest>,
     generic_tx: mpsc::UnboundedSender<Event>,
     queued_log_events: Arc<AtomicUsize>,
 ) {
@@ -793,6 +1087,27 @@ async fn run_event_dispatcher(
                         }
                     };
                     tracing::warn!("Dropping inbound control request: {reason}");
+                }
+            }
+            Event::RequestReceived {
+                peer,
+                request: MydiaRequest::PeerSync(req),
+                request_id,
+            } => {
+                if let Err(err) = peer_sync_tx.try_send(FlutterInboundPeerSyncRequest {
+                    peer,
+                    request_id,
+                    request: req.into(),
+                }) {
+                    let reason = match err {
+                        mpsc::error::TrySendError::Full(_) => {
+                            "the peer sync channel is full (32 unconsumed requests)"
+                        }
+                        mpsc::error::TrySendError::Closed(_) => {
+                            "the peer sync channel has no receiver"
+                        }
+                    };
+                    tracing::warn!("Dropping inbound peer sync request: {reason}");
                 }
             }
             event @ Event::Log { .. } => {
@@ -905,6 +1220,7 @@ impl P2pHost {
         // for why admission onto it has to be non-blocking despite that.
         let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
         let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+        let (peer_sync_tx, peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
         // See `MAX_QUEUED_LOG_EVENTS` and the doc comment on the struct
         // field: the dispatcher increments this, `event_stream` decrements
         // it, and it is what keeps `generic_tx` from growing without bound
@@ -916,6 +1232,7 @@ impl P2pHost {
         runtime::spawn(run_event_dispatcher(
             event_rx,
             control_tx,
+            peer_sync_tx,
             generic_tx,
             queued_log_events.clone(),
         ));
@@ -926,6 +1243,7 @@ impl P2pHost {
                 hls_requester,
                 generic_event_rx: Arc::new(Mutex::new(generic_rx)),
                 control_rx: Arc::new(Mutex::new(control_rx)),
+                peer_sync_rx: Arc::new(Mutex::new(peer_sync_rx)),
                 queued_log_events,
             },
             node_id,
@@ -1109,6 +1427,56 @@ impl P2pHost {
     ) -> anyhow::Result<()> {
         self.inner
             .send_response(request_id, MydiaResponse::RemoteControl(res.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("send_response failed: {e}"))
+    }
+
+    /// Stream inbound peer sync requests to Flutter.
+    pub fn peer_sync_stream(
+        &self,
+        sink: StreamSink<FlutterInboundPeerSyncRequest>,
+    ) -> anyhow::Result<()> {
+        let rx = self.peer_sync_rx.clone();
+        let _guard = runtime::enter();
+        runtime::spawn(async move {
+            let mut rx = rx.lock().await;
+            while let Some(inbound) = rx.recv().await {
+                if sink.add(inbound).is_err() {
+                    tracing::warn!("peer_sync_stream sink closed, exiting");
+                    break;
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Send a peer sync request to a peer and await its answer.
+    pub async fn send_peer_sync(
+        &self,
+        peer: String,
+        req: FlutterPeerSyncRequest,
+    ) -> anyhow::Result<FlutterPeerSyncResponse> {
+        let response = self
+            .inner
+            .send_request(peer, MydiaRequest::PeerSync(req.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("peer sync request failed: {e}"))?;
+
+        match response {
+            MydiaResponse::PeerSync(res) => Ok(res.into()),
+            MydiaResponse::Error(e) => Err(anyhow::anyhow!("target returned an error: {e}")),
+            other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Answer an inbound peer sync request.
+    pub async fn respond_to_peer_sync(
+        &self,
+        request_id: String,
+        res: FlutterPeerSyncResponse,
+    ) -> anyhow::Result<()> {
+        self.inner
+            .send_response(request_id, MydiaResponse::PeerSync(res.into()))
             .await
             .map_err(|e| anyhow::anyhow!("send_response failed: {e}"))
     }
@@ -1379,6 +1747,27 @@ impl PairingKeys {
             instance_id: payload.instance_id,
         })
     }
+
+    /// Seal a node address and instance ID into a claim blob for the relay.
+    pub fn seal(
+        &self,
+        node_addr: String,
+        instance_id: String,
+    ) -> anyhow::Result<FlutterSealedClaim> {
+        let sealed = mydia_p2p_core::pairing_seal::seal_claim(
+            &self.code,
+            &mydia_p2p_core::pairing_seal::ClaimPayload {
+                node_addr,
+                instance_id,
+            },
+        )
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+        Ok(FlutterSealedClaim {
+            lookup_key: sealed.lookup_key,
+            sealed: sealed.sealed,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1552,6 +1941,19 @@ mod pairing_keys_tests {
             .open(sealed.sealed)
             .is_err());
     }
+
+    #[test]
+    fn seals_and_opens_back() {
+        let keys = PairingKeys::derive("K7RPM2".to_string());
+        let sealed = keys.seal("addr".to_string(), "inst".to_string()).unwrap();
+
+        let opener = PairingKeys::derive("k7r-pm2".to_string());
+        assert_eq!(opener.lookup_key().unwrap(), sealed.lookup_key);
+
+        let recovered = opener.open(sealed.sealed).unwrap();
+        assert_eq!(recovered.node_addr, "addr");
+        assert_eq!(recovered.instance_id, "inst");
+    }
 }
 
 #[cfg(test)]
@@ -1617,6 +2019,19 @@ mod event_dispatcher_tests {
         }
     }
 
+    fn peer_sync_event(request_id: &str) -> Event {
+        Event::RequestReceived {
+            peer: "peer-sync-node".to_string(),
+            request: MydiaRequest::PeerSync(PeerSyncRequest::Pair {
+                claim_code: "123456".to_string(),
+                device_name: "Test Device".to_string(),
+                platform: "linux".to_string(),
+                endpoint_addr_json: None,
+            }),
+            request_id: request_id.to_string(),
+        }
+    }
+
     /// Pins the bug `CodeRabbit` found: an awaited `send` on the bounded
     /// control channel used to block this loop once it filled up, which
     /// stopped it from draining `event_rx` at all — silently stalling
@@ -1630,6 +2045,7 @@ mod event_dispatcher_tests {
             // Deliberately tiny, so the test does not need to send 33 events
             // to reproduce a full channel.
             let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
+            let (peer_sync_tx, _peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
             let queued_log_events = Arc::new(AtomicUsize::new(0));
 
@@ -1637,6 +2053,7 @@ mod event_dispatcher_tests {
             runtime::spawn(run_event_dispatcher(
                 event_rx,
                 control_tx,
+                peer_sync_tx,
                 generic_tx,
                 queued_log_events,
             ));
@@ -1689,6 +2106,7 @@ mod event_dispatcher_tests {
             let event_rx = Arc::new(Mutex::new(event_rx));
             let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
             drop(control_rx);
+            let (peer_sync_tx, _peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
             let queued_log_events = Arc::new(AtomicUsize::new(0));
 
@@ -1696,6 +2114,7 @@ mod event_dispatcher_tests {
             runtime::spawn(run_event_dispatcher(
                 event_rx,
                 control_tx,
+                peer_sync_tx,
                 generic_tx,
                 queued_log_events,
             ));
@@ -1708,6 +2127,52 @@ mod event_dispatcher_tests {
                 .expect("the dispatcher must still be draining event_rx")
                 .expect("generic_tx must still be open");
             assert!(matches!(generic, Event::RelayConnected));
+        });
+    }
+
+    #[test]
+    fn a_full_peer_sync_channel_does_not_stall_generic_event_delivery() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            let (control_tx, _control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+            let (peer_sync_tx, mut peer_sync_rx) =
+                mpsc::channel::<FlutterInboundPeerSyncRequest>(2);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                peer_sync_tx,
+                generic_tx,
+                queued_log_events,
+            ));
+
+            for i in 0..5 {
+                event_tx
+                    .send(peer_sync_event(&format!("req-{i}")))
+                    .await
+                    .unwrap();
+            }
+
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect(
+                    "the dispatcher must still be draining event_rx for the generic side, \
+                     even with the peer sync side backed up",
+                )
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+
+            let mut received = 0;
+            while peer_sync_rx.try_recv().is_ok() {
+                received += 1;
+            }
+            assert_eq!(received, 2);
         });
     }
 }

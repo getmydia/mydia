@@ -4,6 +4,7 @@
 library;
 
 import '../../domain/sources/item.dart';
+import '../p2p/peer_sync_store.dart';
 import '../playback/local_playback_progress.dart';
 import '../playback/playback_progress_store.dart';
 import 'periodic_progress_reporter.dart';
@@ -20,11 +21,17 @@ class LocalProgressReporter extends PeriodicProgressReporter {
     this.resumeMinSeconds = 30,
     this.watchedFraction = ProgressService.watchedThreshold,
     this.currentItem,
+    this.syncStore,
+    this.syncKeyFor,
+    this.onSyncWrite,
     DateTime Function()? clock,
     super.interval,
   }) : _clock = clock ?? DateTime.now;
 
   final PlaybackProgressStore store;
+  final PeerSyncStore? syncStore;
+  final String? Function(ItemRef item)? syncKeyFor;
+  final void Function()? onSyncWrite;
 
   /// The item playback started on.
   final ItemRef item;
@@ -60,6 +67,16 @@ class LocalProgressReporter extends PeriodicProgressReporter {
   }
 
   _Standing _stored() {
+    final syncKey = syncKeyFor?.call(_item);
+    if (syncStore != null && syncKey != null) {
+      final rec = syncStore!.watchRecord(syncKey);
+      if (rec != null) {
+        if (rec.watched) return _Standing.watched;
+        final pos = rec.positionSeconds ?? 0;
+        final dur = rec.durationSeconds ?? 0;
+        return _standing(pos, dur);
+      }
+    }
     final p = store.get(progressKey(_item));
     return p == null
         ? _Standing.notStarted
@@ -77,6 +94,17 @@ class LocalProgressReporter extends PeriodicProgressReporter {
       duration: Duration(seconds: durationSeconds),
       now: _clock(),
     );
+    final syncKey = syncKeyFor?.call(_item);
+    if (syncStore != null && syncKey != null) {
+      await syncStore!.recordProgress(
+        syncKey,
+        positionSeconds: positionSeconds,
+        durationSeconds: durationSeconds,
+        watchedFraction: watchedFraction,
+        nowMs: _clock().millisecondsSinceEpoch,
+      );
+      onSyncWrite?.call();
+    }
     return _stored() != before;
   }
 

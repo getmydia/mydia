@@ -14,7 +14,6 @@ import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/local_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
-import '../../../../core/sources/cache/source_rules.dart';
 import '../../../../core/sources/files/backend/file_system_backend.dart';
 import '../../../../core/sources/files/cast/files_cast_bridge.dart';
 import '../../../../core/sources/files/files_media_source.dart';
@@ -101,8 +100,13 @@ class FilesPlaybackSession extends SourcePlaybackSession {
         currentItem: () => _files.currentRef(item, fileId),
         resumeMinSeconds: kFilesResumeMinSeconds,
         watchedFraction: kFilesWatchedFraction,
-        onChanged: () => _files
-            .invalidateTargets(SourceRules.watchedChanged(_files.source.id)),
+        syncStore: _files.syncStore,
+        syncKeyFor: _files.syncKeyFor,
+        onSyncWrite: _files.onSyncMutation,
+        // The identity playback writes under, which a match made during
+        // playback changes.
+        onChanged: () =>
+            _files.invalidateWatchedFor(_files.currentRef(item, fileId)),
       );
 
   @override

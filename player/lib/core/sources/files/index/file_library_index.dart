@@ -23,7 +23,7 @@ String fileKeyFor(String rootId, String relativePath) => sha256
 class FileLibraryIndex {
   static const boxName = 'files_index';
 
-  FileLibraryIndex(this._box, {required String accountId})
+  FileLibraryIndex(this._box, {required this.accountId})
       : _prefix = '$accountId/' {
     for (final key in _box.keys) {
       if (key is! String || !key.startsWith(_prefix)) continue;
@@ -41,6 +41,7 @@ class FileLibraryIndex {
   }
 
   final Box<Map<dynamic, dynamic>> _box;
+  final String accountId;
   final String _prefix;
 
   final _roots = <String, LibraryRoot>{};

@@ -19,6 +19,8 @@ abstract interface class SettingsNav {
 
   void openDiagnostics();
 
+  void openPairedDevices();
+
   /// The instance on screen was just removed from this device.
   void instanceRemoved();
 
@@ -42,6 +44,9 @@ class RouterSettingsNav implements SettingsNav {
 
   @override
   void openDiagnostics() => _router.push('/settings/diagnostics');
+
+  @override
+  void openPairedDevices() => _router.push('/settings/paired-devices');
 
   /// Removing the last or current source can already have sent the router
   /// elsewhere (add-a-server); only step back if still on the instance.

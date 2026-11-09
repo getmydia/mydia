@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -379106248;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1278201938;
 
 // Section: executor
 
@@ -574,6 +574,62 @@ fn wire__crate__P2PHost_open_hls_stream_impl(
         },
     )
 }
+fn wire__crate__P2PHost_peer_sync_stream_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "P2PHost_peer_sync_stream",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>,
+            >>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::FlutterInboundPeerSyncRequest,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok =
+                            crate::P2pHost::peer_sync_stream(&*api_that_guard, api_sink)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 fn wire__crate__P2PHost_remote_control_stream_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -625,6 +681,68 @@ fn wire__crate__P2PHost_remote_control_stream_impl(
                             crate::P2pHost::remote_control_stream(&*api_that_guard, api_sink)?;
                         std::result::Result::Ok(output_ok)
                     })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__P2PHost_respond_to_peer_sync_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "P2PHost_respond_to_peer_sync",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>,
+            >>::sse_decode(&mut deserializer);
+            let api_request_id = <String>::sse_decode(&mut deserializer);
+            let api_res = <crate::FlutterPeerSyncResponse>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = crate::P2pHost::respond_to_peer_sync(
+                            &*api_that_guard,
+                            api_request_id,
+                            api_res,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
@@ -875,6 +993,65 @@ fn wire__crate__P2PHost_send_pairing_request_impl(
         },
     )
 }
+fn wire__crate__P2PHost_send_peer_sync_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "P2PHost_send_peer_sync",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>,
+            >>::sse_decode(&mut deserializer);
+            let api_peer = <String>::sse_decode(&mut deserializer);
+            let api_req = <crate::FlutterPeerSyncRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok =
+                            crate::P2pHost::send_peer_sync(&*api_that_guard, api_peer, api_req)
+                                .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__P2PHost_send_remote_control_request_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1100,6 +1277,44 @@ fn wire__crate__pairing_keys_open_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
                         let output_ok = crate::PairingKeys::open(&api_that, api_sealed)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__pairing_keys_seal_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pairing_keys_seal",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::PairingKeys>::sse_decode(&mut deserializer);
+            let api_node_addr = <String>::sse_decode(&mut deserializer);
+            let api_instance_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok =
+                            crate::PairingKeys::seal(&api_that, api_node_addr, api_instance_id)?;
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
@@ -1527,6 +1742,19 @@ impl SseDecode
     }
 }
 
+impl SseDecode
+    for StreamSink<
+        crate::FlutterInboundPeerSyncRequest,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
 impl SseDecode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1841,6 +2069,20 @@ impl SseDecode for crate::FlutterInboundControlRequest {
     }
 }
 
+impl SseDecode for crate::FlutterInboundPeerSyncRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_peer = <String>::sse_decode(deserializer);
+        let mut var_requestId = <String>::sse_decode(deserializer);
+        let mut var_request = <crate::FlutterPeerSyncRequest>::sse_decode(deserializer);
+        return crate::FlutterInboundPeerSyncRequest {
+            peer: var_peer,
+            request_id: var_requestId,
+            request: var_request,
+        };
+    }
+}
+
 impl SseDecode for crate::FlutterLoadContentRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1912,6 +2154,95 @@ impl SseDecode for crate::FlutterPairingResponse {
             error: var_error,
             direct_urls: var_directUrls,
         };
+    }
+}
+
+impl SseDecode for crate::FlutterPeerSyncRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_claimCode = <String>::sse_decode(deserializer);
+                let mut var_deviceName = <String>::sse_decode(deserializer);
+                let mut var_platform = <String>::sse_decode(deserializer);
+                let mut var_endpointAddrJson = <Option<String>>::sse_decode(deserializer);
+                return crate::FlutterPeerSyncRequest::Pair {
+                    claim_code: var_claimCode,
+                    device_name: var_deviceName,
+                    platform: var_platform,
+                    endpoint_addr_json: var_endpointAddrJson,
+                };
+            }
+            1 => {
+                let mut var_authProof = <String>::sse_decode(deserializer);
+                let mut var_senderEndpointAddrJson = <Option<String>>::sse_decode(deserializer);
+                let mut var_roster = <Vec<crate::FlutterWirePeerMember>>::sse_decode(deserializer);
+                let mut var_sinceLandedMs = <i64>::sse_decode(deserializer);
+                let mut var_watchRecords =
+                    <Vec<crate::FlutterWireWatchRecord>>::sse_decode(deserializer);
+                let mut var_pinRecords =
+                    <Vec<crate::FlutterWirePinRecord>>::sse_decode(deserializer);
+                return crate::FlutterPeerSyncRequest::Sync {
+                    auth_proof: var_authProof,
+                    sender_endpoint_addr_json: var_senderEndpointAddrJson,
+                    roster: var_roster,
+                    since_landed_ms: var_sinceLandedMs,
+                    watch_records: var_watchRecords,
+                    pin_records: var_pinRecords,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::FlutterPeerSyncResponse {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_groupSecretBase64 = <String>::sse_decode(deserializer);
+                let mut var_roster = <Vec<crate::FlutterWirePeerMember>>::sse_decode(deserializer);
+                let mut var_watchRecords =
+                    <Vec<crate::FlutterWireWatchRecord>>::sse_decode(deserializer);
+                let mut var_pinRecords =
+                    <Vec<crate::FlutterWirePinRecord>>::sse_decode(deserializer);
+                return crate::FlutterPeerSyncResponse::Paired {
+                    group_secret_base64: var_groupSecretBase64,
+                    roster: var_roster,
+                    watch_records: var_watchRecords,
+                    pin_records: var_pinRecords,
+                };
+            }
+            1 => {
+                let mut var_reason = <String>::sse_decode(deserializer);
+                return crate::FlutterPeerSyncResponse::PairRejected { reason: var_reason };
+            }
+            2 => {
+                let mut var_roster = <Vec<crate::FlutterWirePeerMember>>::sse_decode(deserializer);
+                let mut var_watchRecords =
+                    <Vec<crate::FlutterWireWatchRecord>>::sse_decode(deserializer);
+                let mut var_pinRecords =
+                    <Vec<crate::FlutterWirePinRecord>>::sse_decode(deserializer);
+                let mut var_peerNowMs = <i64>::sse_decode(deserializer);
+                return crate::FlutterPeerSyncResponse::SyncAck {
+                    roster: var_roster,
+                    watch_records: var_watchRecords,
+                    pin_records: var_pinRecords,
+                    peer_now_ms: var_peerNowMs,
+                };
+            }
+            3 => {
+                return crate::FlutterPeerSyncResponse::NotAuthorized;
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -2079,6 +2410,18 @@ impl SseDecode for crate::FlutterRemoteControlResponse {
     }
 }
 
+impl SseDecode for crate::FlutterSealedClaim {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_lookupKey = <String>::sse_decode(deserializer);
+        let mut var_sealed = <String>::sse_decode(deserializer);
+        return crate::FlutterSealedClaim {
+            lookup_key: var_lookupKey,
+            sealed: var_sealed,
+        };
+    }
+}
+
 impl SseDecode for crate::FlutterTargetCapabilities {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2103,6 +2446,64 @@ impl SseDecode for crate::FlutterTrackInfo {
             id: var_id,
             label: var_label,
             language: var_language,
+        };
+    }
+}
+
+impl SseDecode for crate::FlutterWirePeerMember {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_nodeId = <String>::sse_decode(deserializer);
+        let mut var_deviceName = <String>::sse_decode(deserializer);
+        let mut var_platform = <String>::sse_decode(deserializer);
+        let mut var_endpointAddrJson = <Option<String>>::sse_decode(deserializer);
+        let mut var_updatedAtMs = <i64>::sse_decode(deserializer);
+        let mut var_revoked = <bool>::sse_decode(deserializer);
+        return crate::FlutterWirePeerMember {
+            node_id: var_nodeId,
+            device_name: var_deviceName,
+            platform: var_platform,
+            endpoint_addr_json: var_endpointAddrJson,
+            updated_at_ms: var_updatedAtMs,
+            revoked: var_revoked,
+        };
+    }
+}
+
+impl SseDecode for crate::FlutterWirePinRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <String>::sse_decode(deserializer);
+        let mut var_groupKey = <String>::sse_decode(deserializer);
+        let mut var_isShow = <bool>::sse_decode(deserializer);
+        let mut var_tmdbId = <Option<i64>>::sse_decode(deserializer);
+        let mut var_pinned = <bool>::sse_decode(deserializer);
+        let mut var_updatedAtMs = <i64>::sse_decode(deserializer);
+        return crate::FlutterWirePinRecord {
+            key: var_key,
+            group_key: var_groupKey,
+            is_show: var_isShow,
+            tmdb_id: var_tmdbId,
+            pinned: var_pinned,
+            updated_at_ms: var_updatedAtMs,
+        };
+    }
+}
+
+impl SseDecode for crate::FlutterWireWatchRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <String>::sse_decode(deserializer);
+        let mut var_watched = <bool>::sse_decode(deserializer);
+        let mut var_positionSeconds = <Option<i64>>::sse_decode(deserializer);
+        let mut var_durationSeconds = <Option<i64>>::sse_decode(deserializer);
+        let mut var_updatedAtMs = <i64>::sse_decode(deserializer);
+        return crate::FlutterWireWatchRecord {
+            key: var_key,
+            watched: var_watched,
+            position_seconds: var_positionSeconds,
+            duration_seconds: var_durationSeconds,
+            updated_at_ms: var_updatedAtMs,
         };
     }
 }
@@ -2181,6 +2582,42 @@ impl SseDecode for Vec<crate::FlutterTrackInfo> {
     }
 }
 
+impl SseDecode for Vec<crate::FlutterWirePeerMember> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::FlutterWirePeerMember>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::FlutterWirePinRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::FlutterWirePinRecord>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::FlutterWireWatchRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::FlutterWireWatchRecord>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2242,6 +2679,17 @@ impl SseDecode for Option<i32> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<i32>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<i64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<i64>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -2343,27 +2791,31 @@ fn pde_ffi_dispatcher_primary_impl(
         7 => wire__crate__P2PHost_get_network_stats_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__P2PHost_get_node_addr_impl(port, ptr, rust_vec_len, data_len),
         10 => wire__crate__P2PHost_open_hls_stream_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__P2PHost_remote_control_stream_impl(port, ptr, rust_vec_len, data_len),
-        12 => {
+        11 => wire__crate__P2PHost_peer_sync_stream_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__P2PHost_remote_control_stream_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__P2PHost_respond_to_peer_sync_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__P2PHost_respond_to_remote_control_impl(port, ptr, rust_vec_len, data_len)
         }
-        13 => wire__crate__P2PHost_send_graphql_request_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__P2PHost_send_hls_request_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__P2PHost_send_pairing_request_impl(port, ptr, rust_vec_len, data_len),
-        16 => {
+        15 => wire__crate__P2PHost_send_graphql_request_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__P2PHost_send_hls_request_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__P2PHost_send_pairing_request_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__P2PHost_send_peer_sync_impl(port, ptr, rust_vec_len, data_len),
+        19 => {
             wire__crate__P2PHost_send_remote_control_request_impl(port, ptr, rust_vec_len, data_len)
         }
-        17 => wire__crate__available_disk_space_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__init_app_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__pairing_keys_lookup_key_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__pairing_keys_open_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__smb__smb_close_account_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__smb__smb_heal_listener_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__smb__smb_list_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__smb__smb_list_shares_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__smb__smb_open_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__smb__smb_probe_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__smb__smb_stat_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__available_disk_space_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__init_app_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__pairing_keys_lookup_key_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__pairing_keys_open_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__pairing_keys_seal_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__smb__smb_close_account_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__smb__smb_heal_listener_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__smb__smb_list_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__smb__smb_list_shares_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__smb__smb_open_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__smb__smb_probe_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__smb__smb_stat_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2379,9 +2831,9 @@ fn pde_ffi_dispatcher_sync_impl(
         1 => wire__crate__HlsStreamHandle_cancel_impl(ptr, rust_vec_len, data_len),
         2 => wire__crate__HlsStreamHandle_header_impl(ptr, rust_vec_len, data_len),
         9 => wire__crate__P2PHost_init_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__pairing_keys_derive_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__media_names__parse_batch_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__media_names__score_candidates_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__pairing_keys_derive_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__media_names__parse_batch_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__media_names__score_candidates_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2787,6 +3239,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::FlutterInboundControlRequest>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterInboundPeerSyncRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.peer.into_into_dart().into_dart(),
+            self.request_id.into_into_dart().into_dart(),
+            self.request.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::FlutterInboundPeerSyncRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterInboundPeerSyncRequest>
+    for crate::FlutterInboundPeerSyncRequest
+{
+    fn into_into_dart(self) -> crate::FlutterInboundPeerSyncRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::FlutterLoadContentRequest {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2869,6 +3343,105 @@ impl flutter_rust_bridge::IntoIntoDart<crate::FlutterPairingResponse>
     for crate::FlutterPairingResponse
 {
     fn into_into_dart(self) -> crate::FlutterPairingResponse {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterPeerSyncRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::FlutterPeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            } => [
+                0.into_dart(),
+                claim_code.into_into_dart().into_dart(),
+                device_name.into_into_dart().into_dart(),
+                platform.into_into_dart().into_dart(),
+                endpoint_addr_json.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::FlutterPeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster,
+                since_landed_ms,
+                watch_records,
+                pin_records,
+            } => [
+                1.into_dart(),
+                auth_proof.into_into_dart().into_dart(),
+                sender_endpoint_addr_json.into_into_dart().into_dart(),
+                roster.into_into_dart().into_dart(),
+                since_landed_ms.into_into_dart().into_dart(),
+                watch_records.into_into_dart().into_dart(),
+                pin_records.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterPeerSyncRequest {}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterPeerSyncRequest>
+    for crate::FlutterPeerSyncRequest
+{
+    fn into_into_dart(self) -> crate::FlutterPeerSyncRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterPeerSyncResponse {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::FlutterPeerSyncResponse::Paired {
+                group_secret_base64,
+                roster,
+                watch_records,
+                pin_records,
+            } => [
+                0.into_dart(),
+                group_secret_base64.into_into_dart().into_dart(),
+                roster.into_into_dart().into_dart(),
+                watch_records.into_into_dart().into_dart(),
+                pin_records.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::FlutterPeerSyncResponse::PairRejected { reason } => {
+                [1.into_dart(), reason.into_into_dart().into_dart()].into_dart()
+            }
+            crate::FlutterPeerSyncResponse::SyncAck {
+                roster,
+                watch_records,
+                pin_records,
+                peer_now_ms,
+            } => [
+                2.into_dart(),
+                roster.into_into_dart().into_dart(),
+                watch_records.into_into_dart().into_dart(),
+                pin_records.into_into_dart().into_dart(),
+                peer_now_ms.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::FlutterPeerSyncResponse::NotAuthorized => [3.into_dart()].into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::FlutterPeerSyncResponse
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterPeerSyncResponse>
+    for crate::FlutterPeerSyncResponse
+{
+    fn into_into_dart(self) -> crate::FlutterPeerSyncResponse {
         self
     }
 }
@@ -3027,6 +3600,22 @@ impl flutter_rust_bridge::IntoIntoDart<crate::FlutterRemoteControlResponse>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterSealedClaim {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.lookup_key.into_into_dart().into_dart(),
+            self.sealed.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterSealedClaim {}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterSealedClaim> for crate::FlutterSealedClaim {
+    fn into_into_dart(self) -> crate::FlutterSealedClaim {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::FlutterTargetCapabilities {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3062,6 +3651,71 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterTrackInfo {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterTrackInfo {}
 impl flutter_rust_bridge::IntoIntoDart<crate::FlutterTrackInfo> for crate::FlutterTrackInfo {
     fn into_into_dart(self) -> crate::FlutterTrackInfo {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterWirePeerMember {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.node_id.into_into_dart().into_dart(),
+            self.device_name.into_into_dart().into_dart(),
+            self.platform.into_into_dart().into_dart(),
+            self.endpoint_addr_json.into_into_dart().into_dart(),
+            self.updated_at_ms.into_into_dart().into_dart(),
+            self.revoked.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterWirePeerMember {}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterWirePeerMember>
+    for crate::FlutterWirePeerMember
+{
+    fn into_into_dart(self) -> crate::FlutterWirePeerMember {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterWirePinRecord {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.group_key.into_into_dart().into_dart(),
+            self.is_show.into_into_dart().into_dart(),
+            self.tmdb_id.into_into_dart().into_dart(),
+            self.pinned.into_into_dart().into_dart(),
+            self.updated_at_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterWirePinRecord {}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterWirePinRecord>
+    for crate::FlutterWirePinRecord
+{
+    fn into_into_dart(self) -> crate::FlutterWirePinRecord {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterWireWatchRecord {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.watched.into_into_dart().into_dart(),
+            self.position_seconds.into_into_dart().into_dart(),
+            self.duration_seconds.into_into_dart().into_dart(),
+            self.updated_at_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::FlutterWireWatchRecord {}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterWireWatchRecord>
+    for crate::FlutterWireWatchRecord
+{
+    fn into_into_dart(self) -> crate::FlutterWireWatchRecord {
         self
     }
 }
@@ -3129,6 +3783,18 @@ impl SseEncode for StreamSink<String, flutter_rust_bridge::for_generated::SseCod
 impl SseEncode
     for StreamSink<
         crate::FlutterInboundControlRequest,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::FlutterInboundPeerSyncRequest,
         flutter_rust_bridge::for_generated::SseCodec,
     >
 {
@@ -3383,6 +4049,15 @@ impl SseEncode for crate::FlutterInboundControlRequest {
     }
 }
 
+impl SseEncode for crate::FlutterInboundPeerSyncRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.peer, serializer);
+        <String>::sse_encode(self.request_id, serializer);
+        <crate::FlutterPeerSyncRequest>::sse_encode(self.request, serializer);
+    }
+}
+
 impl SseEncode for crate::FlutterLoadContentRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3425,6 +4100,87 @@ impl SseEncode for crate::FlutterPairingResponse {
         <Option<String>>::sse_encode(self.device_token, serializer);
         <Option<String>>::sse_encode(self.error, serializer);
         <Vec<String>>::sse_encode(self.direct_urls, serializer);
+    }
+}
+
+impl SseEncode for crate::FlutterPeerSyncRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::FlutterPeerSyncRequest::Pair {
+                claim_code,
+                device_name,
+                platform,
+                endpoint_addr_json,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(claim_code, serializer);
+                <String>::sse_encode(device_name, serializer);
+                <String>::sse_encode(platform, serializer);
+                <Option<String>>::sse_encode(endpoint_addr_json, serializer);
+            }
+            crate::FlutterPeerSyncRequest::Sync {
+                auth_proof,
+                sender_endpoint_addr_json,
+                roster,
+                since_landed_ms,
+                watch_records,
+                pin_records,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(auth_proof, serializer);
+                <Option<String>>::sse_encode(sender_endpoint_addr_json, serializer);
+                <Vec<crate::FlutterWirePeerMember>>::sse_encode(roster, serializer);
+                <i64>::sse_encode(since_landed_ms, serializer);
+                <Vec<crate::FlutterWireWatchRecord>>::sse_encode(watch_records, serializer);
+                <Vec<crate::FlutterWirePinRecord>>::sse_encode(pin_records, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::FlutterPeerSyncResponse {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::FlutterPeerSyncResponse::Paired {
+                group_secret_base64,
+                roster,
+                watch_records,
+                pin_records,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(group_secret_base64, serializer);
+                <Vec<crate::FlutterWirePeerMember>>::sse_encode(roster, serializer);
+                <Vec<crate::FlutterWireWatchRecord>>::sse_encode(watch_records, serializer);
+                <Vec<crate::FlutterWirePinRecord>>::sse_encode(pin_records, serializer);
+            }
+            crate::FlutterPeerSyncResponse::PairRejected { reason } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(reason, serializer);
+            }
+            crate::FlutterPeerSyncResponse::SyncAck {
+                roster,
+                watch_records,
+                pin_records,
+                peer_now_ms,
+            } => {
+                <i32>::sse_encode(2, serializer);
+                <Vec<crate::FlutterWirePeerMember>>::sse_encode(roster, serializer);
+                <Vec<crate::FlutterWireWatchRecord>>::sse_encode(watch_records, serializer);
+                <Vec<crate::FlutterWirePinRecord>>::sse_encode(pin_records, serializer);
+                <i64>::sse_encode(peer_now_ms, serializer);
+            }
+            crate::FlutterPeerSyncResponse::NotAuthorized => {
+                <i32>::sse_encode(3, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -3573,6 +4329,14 @@ impl SseEncode for crate::FlutterRemoteControlResponse {
     }
 }
 
+impl SseEncode for crate::FlutterSealedClaim {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.lookup_key, serializer);
+        <String>::sse_encode(self.sealed, serializer);
+    }
+}
+
 impl SseEncode for crate::FlutterTargetCapabilities {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3588,6 +4352,41 @@ impl SseEncode for crate::FlutterTrackInfo {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.label, serializer);
         <Option<String>>::sse_encode(self.language, serializer);
+    }
+}
+
+impl SseEncode for crate::FlutterWirePeerMember {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.node_id, serializer);
+        <String>::sse_encode(self.device_name, serializer);
+        <String>::sse_encode(self.platform, serializer);
+        <Option<String>>::sse_encode(self.endpoint_addr_json, serializer);
+        <i64>::sse_encode(self.updated_at_ms, serializer);
+        <bool>::sse_encode(self.revoked, serializer);
+    }
+}
+
+impl SseEncode for crate::FlutterWirePinRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.key, serializer);
+        <String>::sse_encode(self.group_key, serializer);
+        <bool>::sse_encode(self.is_show, serializer);
+        <Option<i64>>::sse_encode(self.tmdb_id, serializer);
+        <bool>::sse_encode(self.pinned, serializer);
+        <i64>::sse_encode(self.updated_at_ms, serializer);
+    }
+}
+
+impl SseEncode for crate::FlutterWireWatchRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.key, serializer);
+        <bool>::sse_encode(self.watched, serializer);
+        <Option<i64>>::sse_encode(self.position_seconds, serializer);
+        <Option<i64>>::sse_encode(self.duration_seconds, serializer);
+        <i64>::sse_encode(self.updated_at_ms, serializer);
     }
 }
 
@@ -3655,6 +4454,36 @@ impl SseEncode for Vec<crate::FlutterTrackInfo> {
     }
 }
 
+impl SseEncode for Vec<crate::FlutterWirePeerMember> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::FlutterWirePeerMember>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::FlutterWirePinRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::FlutterWirePinRecord>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::FlutterWireWatchRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::FlutterWireWatchRecord>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3711,6 +4540,16 @@ impl SseEncode for Option<i32> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <i32>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<i64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <i64>::sse_encode(value, serializer);
         }
     }
 }

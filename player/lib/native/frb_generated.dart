@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -379106248;
+  int get rustContentHash => -1278201938;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -113,8 +113,16 @@ abstract class RustLibApi extends BaseApi {
       required String peer,
       required FlutterHlsRequest req});
 
+  Stream<FlutterInboundPeerSyncRequest> crateP2PHostPeerSyncStream(
+      {required P2PHost that});
+
   Stream<FlutterInboundControlRequest> crateP2PHostRemoteControlStream(
       {required P2PHost that});
+
+  Future<void> crateP2PHostRespondToPeerSync(
+      {required P2PHost that,
+      required String requestId,
+      required FlutterPeerSyncResponse res});
 
   Future<void> crateP2PHostRespondToRemoteControl(
       {required P2PHost that,
@@ -136,6 +144,11 @@ abstract class RustLibApi extends BaseApi {
       required String peer,
       required FlutterPairingRequest req});
 
+  Future<FlutterPeerSyncResponse> crateP2PHostSendPeerSync(
+      {required P2PHost that,
+      required String peer,
+      required FlutterPeerSyncRequest req});
+
   Future<FlutterRemoteControlResponse> crateP2PHostSendRemoteControlRequest(
       {required P2PHost that,
       required String peer,
@@ -151,6 +164,11 @@ abstract class RustLibApi extends BaseApi {
 
   Future<ClaimPayload> cratePairingKeysOpen(
       {required PairingKeys that, required String sealed});
+
+  Future<FlutterSealedClaim> cratePairingKeysSeal(
+      {required PairingKeys that,
+      required String nodeAddr,
+      required String instanceId});
 
   List<FfiParsed> crateMediaNamesParseBatch(
       {required String root,
@@ -485,6 +503,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Stream<FlutterInboundPeerSyncRequest> crateP2PHostPeerSyncStream(
+      {required P2PHost that}) {
+    final sink = RustStreamSink<FlutterInboundPeerSyncRequest>();
+    unawaited(handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+            that, serializer);
+        sse_encode_StreamSink_flutter_inbound_peer_sync_request_Sse(
+            sink, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 11, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateP2PHostPeerSyncStreamConstMeta,
+      argValues: [that, sink],
+      apiImpl: this,
+    )));
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateP2PHostPeerSyncStreamConstMeta => const TaskConstMeta(
+        debugName: "P2PHost_peer_sync_stream",
+        argNames: ["that", "sink"],
+      );
+
+  @override
   Stream<FlutterInboundControlRequest> crateP2PHostRemoteControlStream(
       {required P2PHost that}) {
     final sink = RustStreamSink<FlutterInboundControlRequest>();
@@ -496,7 +544,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_StreamSink_flutter_inbound_control_request_Sse(
             sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 11, port: port_);
+            funcId: 12, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -516,6 +564,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateP2PHostRespondToPeerSync(
+      {required P2PHost that,
+      required String requestId,
+      required FlutterPeerSyncResponse res}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+            that, serializer);
+        sse_encode_String(requestId, serializer);
+        sse_encode_box_autoadd_flutter_peer_sync_response(res, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 13, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateP2PHostRespondToPeerSyncConstMeta,
+      argValues: [that, requestId, res],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateP2PHostRespondToPeerSyncConstMeta =>
+      const TaskConstMeta(
+        debugName: "P2PHost_respond_to_peer_sync",
+        argNames: ["that", "requestId", "res"],
+      );
+
+  @override
   Future<void> crateP2PHostRespondToRemoteControl(
       {required P2PHost that,
       required String requestId,
@@ -528,7 +607,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(requestId, serializer);
         sse_encode_box_autoadd_flutter_remote_control_response(res, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -559,7 +638,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_graph_ql_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_graph_ql_response,
@@ -590,7 +669,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_hls_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_hls_response,
@@ -620,7 +699,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_pairing_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 15, port: port_);
+            funcId: 17, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_pairing_response,
@@ -639,6 +718,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<FlutterPeerSyncResponse> crateP2PHostSendPeerSync(
+      {required P2PHost that,
+      required String peer,
+      required FlutterPeerSyncRequest req}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+            that, serializer);
+        sse_encode_String(peer, serializer);
+        sse_encode_box_autoadd_flutter_peer_sync_request(req, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 18, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_flutter_peer_sync_response,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateP2PHostSendPeerSyncConstMeta,
+      argValues: [that, peer, req],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateP2PHostSendPeerSyncConstMeta => const TaskConstMeta(
+        debugName: "P2PHost_send_peer_sync",
+        argNames: ["that", "peer", "req"],
+      );
+
+  @override
   Future<FlutterRemoteControlResponse> crateP2PHostSendRemoteControlRequest(
       {required P2PHost that,
       required String peer,
@@ -651,7 +760,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_remote_control_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
+            funcId: 19, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_remote_control_response,
@@ -676,7 +785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 17, port: port_);
+            funcId: 20, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_disk_space,
@@ -699,7 +808,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 18, port: port_);
+            funcId: 21, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -722,7 +831,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(code, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_pairing_keys,
@@ -746,7 +855,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_pairing_keys(that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 20, port: port_);
+            funcId: 23, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -772,7 +881,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_pairing_keys(that, serializer);
         sse_encode_String(sealed, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 21, port: port_);
+            funcId: 24, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_claim_payload,
@@ -790,6 +899,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<FlutterSealedClaim> cratePairingKeysSeal(
+      {required PairingKeys that,
+      required String nodeAddr,
+      required String instanceId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_pairing_keys(that, serializer);
+        sse_encode_String(nodeAddr, serializer);
+        sse_encode_String(instanceId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 25, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_flutter_sealed_claim,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCratePairingKeysSealConstMeta,
+      argValues: [that, nodeAddr, instanceId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCratePairingKeysSealConstMeta => const TaskConstMeta(
+        debugName: "pairing_keys_seal",
+        argNames: ["that", "nodeAddr", "instanceId"],
+      );
+
+  @override
   List<FfiParsed> crateMediaNamesParseBatch(
       {required String root,
       required List<String> paths,
@@ -800,7 +938,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(root, serializer);
         sse_encode_list_String(paths, serializer);
         sse_encode_ffi_kind(kind, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_ffi_parsed,
@@ -830,7 +968,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_opt_box_autoadd_i_32(year, serializer);
         sse_encode_bool(isShow, serializer);
         sse_encode_list_ffi_candidate(candidates, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_ffi_match,
@@ -855,7 +993,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(accountId, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 24, port: port_);
+            funcId: 28, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -878,7 +1016,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 25, port: port_);
+            funcId: 29, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_ffi_heal,
@@ -907,7 +1045,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
         sse_encode_String(dir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 26, port: port_);
+            funcId: 30, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_ffi_smb_entry,
@@ -936,7 +1074,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_u_16(port, serializer);
         sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 27, port: port_);
+            funcId: 31, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_String,
@@ -967,7 +1105,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
         sse_encode_String(path, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 28, port: port_);
+            funcId: 32, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -996,7 +1134,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
         sse_encode_String(root, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 29, port: port_);
+            funcId: 33, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1025,7 +1163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_ffi_smb_credentials(creds, serializer);
         sse_encode_String(path, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 30, port: port_);
+            funcId: 34, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_ffi_smb_entry,
@@ -1126,6 +1264,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<FlutterInboundPeerSyncRequest>
+      dco_decode_StreamSink_flutter_inbound_peer_sync_request_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
@@ -1195,6 +1340,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterPeerSyncRequest dco_decode_box_autoadd_flutter_peer_sync_request(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_flutter_peer_sync_request(raw);
+  }
+
+  @protected
+  FlutterPeerSyncResponse dco_decode_box_autoadd_flutter_peer_sync_response(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_flutter_peer_sync_response(raw);
+  }
+
+  @protected
   FlutterPlaybackSnapshot dco_decode_box_autoadd_flutter_playback_snapshot(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1226,6 +1385,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int dco_decode_box_autoadd_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
   }
 
   @protected
@@ -1482,6 +1647,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterInboundPeerSyncRequest dco_decode_flutter_inbound_peer_sync_request(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return FlutterInboundPeerSyncRequest(
+      peer: dco_decode_String(arr[0]),
+      requestId: dco_decode_String(arr[1]),
+      request: dco_decode_flutter_peer_sync_request(arr[2]),
+    );
+  }
+
+  @protected
   FlutterLoadContentRequest dco_decode_flutter_load_content_request(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1541,6 +1720,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       error: dco_decode_opt_String(arr[4]),
       directUrls: dco_decode_list_String(arr[5]),
     );
+  }
+
+  @protected
+  FlutterPeerSyncRequest dco_decode_flutter_peer_sync_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return FlutterPeerSyncRequest_Pair(
+          claimCode: dco_decode_String(raw[1]),
+          deviceName: dco_decode_String(raw[2]),
+          platform: dco_decode_String(raw[3]),
+          endpointAddrJson: dco_decode_opt_String(raw[4]),
+        );
+      case 1:
+        return FlutterPeerSyncRequest_Sync(
+          authProof: dco_decode_String(raw[1]),
+          senderEndpointAddrJson: dco_decode_opt_String(raw[2]),
+          roster: dco_decode_list_flutter_wire_peer_member(raw[3]),
+          sinceLandedMs: dco_decode_i_64(raw[4]),
+          watchRecords: dco_decode_list_flutter_wire_watch_record(raw[5]),
+          pinRecords: dco_decode_list_flutter_wire_pin_record(raw[6]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  FlutterPeerSyncResponse dco_decode_flutter_peer_sync_response(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return FlutterPeerSyncResponse_Paired(
+          groupSecretBase64: dco_decode_String(raw[1]),
+          roster: dco_decode_list_flutter_wire_peer_member(raw[2]),
+          watchRecords: dco_decode_list_flutter_wire_watch_record(raw[3]),
+          pinRecords: dco_decode_list_flutter_wire_pin_record(raw[4]),
+        );
+      case 1:
+        return FlutterPeerSyncResponse_PairRejected(
+          reason: dco_decode_String(raw[1]),
+        );
+      case 2:
+        return FlutterPeerSyncResponse_SyncAck(
+          roster: dco_decode_list_flutter_wire_peer_member(raw[1]),
+          watchRecords: dco_decode_list_flutter_wire_watch_record(raw[2]),
+          pinRecords: dco_decode_list_flutter_wire_pin_record(raw[3]),
+          peerNowMs: dco_decode_i_64(raw[4]),
+        );
+      case 3:
+        return FlutterPeerSyncResponse_NotAuthorized();
+      default:
+        throw Exception("unreachable");
+    }
   }
 
   @protected
@@ -1660,6 +1893,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterSealedClaim dco_decode_flutter_sealed_claim(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return FlutterSealedClaim(
+      lookupKey: dco_decode_String(arr[0]),
+      sealed: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
   FlutterTargetCapabilities dco_decode_flutter_target_capabilities(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1683,6 +1928,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       id: dco_decode_String(arr[0]),
       label: dco_decode_String(arr[1]),
       language: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
+  FlutterWirePeerMember dco_decode_flutter_wire_peer_member(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return FlutterWirePeerMember(
+      nodeId: dco_decode_String(arr[0]),
+      deviceName: dco_decode_String(arr[1]),
+      platform: dco_decode_String(arr[2]),
+      endpointAddrJson: dco_decode_opt_String(arr[3]),
+      updatedAtMs: dco_decode_i_64(arr[4]),
+      revoked: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  FlutterWirePinRecord dco_decode_flutter_wire_pin_record(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return FlutterWirePinRecord(
+      key: dco_decode_String(arr[0]),
+      groupKey: dco_decode_String(arr[1]),
+      isShow: dco_decode_bool(arr[2]),
+      tmdbId: dco_decode_opt_box_autoadd_i_64(arr[3]),
+      pinned: dco_decode_bool(arr[4]),
+      updatedAtMs: dco_decode_i_64(arr[5]),
+    );
+  }
+
+  @protected
+  FlutterWireWatchRecord dco_decode_flutter_wire_watch_record(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return FlutterWireWatchRecord(
+      key: dco_decode_String(arr[0]),
+      watched: dco_decode_bool(arr[1]),
+      positionSeconds: dco_decode_opt_box_autoadd_i_64(arr[2]),
+      durationSeconds: dco_decode_opt_box_autoadd_i_64(arr[3]),
+      updatedAtMs: dco_decode_i_64(arr[4]),
     );
   }
 
@@ -1729,6 +2021,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<FlutterWirePeerMember> dco_decode_list_flutter_wire_peer_member(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_flutter_wire_peer_member)
+        .toList();
+  }
+
+  @protected
+  List<FlutterWirePinRecord> dco_decode_list_flutter_wire_pin_record(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_flutter_wire_pin_record)
+        .toList();
+  }
+
+  @protected
+  List<FlutterWireWatchRecord> dco_decode_list_flutter_wire_watch_record(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_flutter_wire_watch_record)
+        .toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
@@ -1762,6 +2081,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -1918,6 +2243,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<FlutterInboundPeerSyncRequest>
+      sse_decode_StreamSink_flutter_inbound_peer_sync_request_Sse(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
@@ -1992,6 +2325,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterPeerSyncRequest sse_decode_box_autoadd_flutter_peer_sync_request(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_flutter_peer_sync_request(deserializer));
+  }
+
+  @protected
+  FlutterPeerSyncResponse sse_decode_box_autoadd_flutter_peer_sync_response(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_flutter_peer_sync_response(deserializer));
+  }
+
+  @protected
   FlutterPlaybackSnapshot sse_decode_box_autoadd_flutter_playback_snapshot(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2025,6 +2372,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
   }
 
   @protected
@@ -2268,6 +2621,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterInboundPeerSyncRequest sse_decode_flutter_inbound_peer_sync_request(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_peer = sse_decode_String(deserializer);
+    var var_requestId = sse_decode_String(deserializer);
+    var var_request = sse_decode_flutter_peer_sync_request(deserializer);
+    return FlutterInboundPeerSyncRequest(
+        peer: var_peer, requestId: var_requestId, request: var_request);
+  }
+
+  @protected
   FlutterLoadContentRequest sse_decode_flutter_load_content_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2336,6 +2700,85 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         deviceToken: var_deviceToken,
         error: var_error,
         directUrls: var_directUrls);
+  }
+
+  @protected
+  FlutterPeerSyncRequest sse_decode_flutter_peer_sync_request(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_claimCode = sse_decode_String(deserializer);
+        var var_deviceName = sse_decode_String(deserializer);
+        var var_platform = sse_decode_String(deserializer);
+        var var_endpointAddrJson = sse_decode_opt_String(deserializer);
+        return FlutterPeerSyncRequest_Pair(
+            claimCode: var_claimCode,
+            deviceName: var_deviceName,
+            platform: var_platform,
+            endpointAddrJson: var_endpointAddrJson);
+      case 1:
+        var var_authProof = sse_decode_String(deserializer);
+        var var_senderEndpointAddrJson = sse_decode_opt_String(deserializer);
+        var var_roster = sse_decode_list_flutter_wire_peer_member(deserializer);
+        var var_sinceLandedMs = sse_decode_i_64(deserializer);
+        var var_watchRecords =
+            sse_decode_list_flutter_wire_watch_record(deserializer);
+        var var_pinRecords =
+            sse_decode_list_flutter_wire_pin_record(deserializer);
+        return FlutterPeerSyncRequest_Sync(
+            authProof: var_authProof,
+            senderEndpointAddrJson: var_senderEndpointAddrJson,
+            roster: var_roster,
+            sinceLandedMs: var_sinceLandedMs,
+            watchRecords: var_watchRecords,
+            pinRecords: var_pinRecords);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  FlutterPeerSyncResponse sse_decode_flutter_peer_sync_response(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_groupSecretBase64 = sse_decode_String(deserializer);
+        var var_roster = sse_decode_list_flutter_wire_peer_member(deserializer);
+        var var_watchRecords =
+            sse_decode_list_flutter_wire_watch_record(deserializer);
+        var var_pinRecords =
+            sse_decode_list_flutter_wire_pin_record(deserializer);
+        return FlutterPeerSyncResponse_Paired(
+            groupSecretBase64: var_groupSecretBase64,
+            roster: var_roster,
+            watchRecords: var_watchRecords,
+            pinRecords: var_pinRecords);
+      case 1:
+        var var_reason = sse_decode_String(deserializer);
+        return FlutterPeerSyncResponse_PairRejected(reason: var_reason);
+      case 2:
+        var var_roster = sse_decode_list_flutter_wire_peer_member(deserializer);
+        var var_watchRecords =
+            sse_decode_list_flutter_wire_watch_record(deserializer);
+        var var_pinRecords =
+            sse_decode_list_flutter_wire_pin_record(deserializer);
+        var var_peerNowMs = sse_decode_i_64(deserializer);
+        return FlutterPeerSyncResponse_SyncAck(
+            roster: var_roster,
+            watchRecords: var_watchRecords,
+            pinRecords: var_pinRecords,
+            peerNowMs: var_peerNowMs);
+      case 3:
+        return FlutterPeerSyncResponse_NotAuthorized();
+      default:
+        throw UnimplementedError('');
+    }
   }
 
   @protected
@@ -2471,6 +2914,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterSealedClaim sse_decode_flutter_sealed_claim(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_lookupKey = sse_decode_String(deserializer);
+    var var_sealed = sse_decode_String(deserializer);
+    return FlutterSealedClaim(lookupKey: var_lookupKey, sealed: var_sealed);
+  }
+
+  @protected
   FlutterTargetCapabilities sse_decode_flutter_target_capabilities(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2491,6 +2943,61 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_language = sse_decode_opt_String(deserializer);
     return FlutterTrackInfo(
         id: var_id, label: var_label, language: var_language);
+  }
+
+  @protected
+  FlutterWirePeerMember sse_decode_flutter_wire_peer_member(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_nodeId = sse_decode_String(deserializer);
+    var var_deviceName = sse_decode_String(deserializer);
+    var var_platform = sse_decode_String(deserializer);
+    var var_endpointAddrJson = sse_decode_opt_String(deserializer);
+    var var_updatedAtMs = sse_decode_i_64(deserializer);
+    var var_revoked = sse_decode_bool(deserializer);
+    return FlutterWirePeerMember(
+        nodeId: var_nodeId,
+        deviceName: var_deviceName,
+        platform: var_platform,
+        endpointAddrJson: var_endpointAddrJson,
+        updatedAtMs: var_updatedAtMs,
+        revoked: var_revoked);
+  }
+
+  @protected
+  FlutterWirePinRecord sse_decode_flutter_wire_pin_record(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_String(deserializer);
+    var var_groupKey = sse_decode_String(deserializer);
+    var var_isShow = sse_decode_bool(deserializer);
+    var var_tmdbId = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_pinned = sse_decode_bool(deserializer);
+    var var_updatedAtMs = sse_decode_i_64(deserializer);
+    return FlutterWirePinRecord(
+        key: var_key,
+        groupKey: var_groupKey,
+        isShow: var_isShow,
+        tmdbId: var_tmdbId,
+        pinned: var_pinned,
+        updatedAtMs: var_updatedAtMs);
+  }
+
+  @protected
+  FlutterWireWatchRecord sse_decode_flutter_wire_watch_record(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_String(deserializer);
+    var var_watched = sse_decode_bool(deserializer);
+    var var_positionSeconds = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_durationSeconds = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_updatedAtMs = sse_decode_i_64(deserializer);
+    return FlutterWireWatchRecord(
+        key: var_key,
+        watched: var_watched,
+        positionSeconds: var_positionSeconds,
+        durationSeconds: var_durationSeconds,
+        updatedAtMs: var_updatedAtMs);
   }
 
   @protected
@@ -2569,6 +3076,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<FlutterWirePeerMember> sse_decode_list_flutter_wire_peer_member(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FlutterWirePeerMember>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_flutter_wire_peer_member(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FlutterWirePinRecord> sse_decode_list_flutter_wire_pin_record(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FlutterWirePinRecord>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_flutter_wire_pin_record(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FlutterWireWatchRecord> sse_decode_list_flutter_wire_watch_record(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FlutterWireWatchRecord>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_flutter_wire_watch_record(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
@@ -2626,6 +3172,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_i_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
     } else {
       return null;
     }
@@ -2801,6 +3358,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_StreamSink_flutter_inbound_peer_sync_request_Sse(
+      RustStreamSink<FlutterInboundPeerSyncRequest> self,
+      SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+        self.setupAndSerialize(
+            codec: SseCodec(
+          decodeSuccessData: sse_decode_flutter_inbound_peer_sync_request,
+          decodeErrorData: sse_decode_AnyhowException,
+        )),
+        serializer);
+  }
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
@@ -2875,6 +3446,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_flutter_peer_sync_request(
+      FlutterPeerSyncRequest self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_flutter_peer_sync_request(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_flutter_peer_sync_response(
+      FlutterPeerSyncResponse self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_flutter_peer_sync_response(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_flutter_playback_snapshot(
       FlutterPlaybackSnapshot self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2906,6 +3491,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+      PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
   }
 
   @protected
@@ -3097,6 +3689,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_flutter_inbound_peer_sync_request(
+      FlutterInboundPeerSyncRequest self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.peer, serializer);
+    sse_encode_String(self.requestId, serializer);
+    sse_encode_flutter_peer_sync_request(self.request, serializer);
+  }
+
+  @protected
   void sse_encode_flutter_load_content_request(
       FlutterLoadContentRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3139,6 +3740,75 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.deviceToken, serializer);
     sse_encode_opt_String(self.error, serializer);
     sse_encode_list_String(self.directUrls, serializer);
+  }
+
+  @protected
+  void sse_encode_flutter_peer_sync_request(
+      FlutterPeerSyncRequest self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case FlutterPeerSyncRequest_Pair(
+          claimCode: final claimCode,
+          deviceName: final deviceName,
+          platform: final platform,
+          endpointAddrJson: final endpointAddrJson
+        ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(claimCode, serializer);
+        sse_encode_String(deviceName, serializer);
+        sse_encode_String(platform, serializer);
+        sse_encode_opt_String(endpointAddrJson, serializer);
+      case FlutterPeerSyncRequest_Sync(
+          authProof: final authProof,
+          senderEndpointAddrJson: final senderEndpointAddrJson,
+          roster: final roster,
+          sinceLandedMs: final sinceLandedMs,
+          watchRecords: final watchRecords,
+          pinRecords: final pinRecords
+        ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(authProof, serializer);
+        sse_encode_opt_String(senderEndpointAddrJson, serializer);
+        sse_encode_list_flutter_wire_peer_member(roster, serializer);
+        sse_encode_i_64(sinceLandedMs, serializer);
+        sse_encode_list_flutter_wire_watch_record(watchRecords, serializer);
+        sse_encode_list_flutter_wire_pin_record(pinRecords, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_flutter_peer_sync_response(
+      FlutterPeerSyncResponse self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case FlutterPeerSyncResponse_Paired(
+          groupSecretBase64: final groupSecretBase64,
+          roster: final roster,
+          watchRecords: final watchRecords,
+          pinRecords: final pinRecords
+        ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(groupSecretBase64, serializer);
+        sse_encode_list_flutter_wire_peer_member(roster, serializer);
+        sse_encode_list_flutter_wire_watch_record(watchRecords, serializer);
+        sse_encode_list_flutter_wire_pin_record(pinRecords, serializer);
+      case FlutterPeerSyncResponse_PairRejected(reason: final reason):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(reason, serializer);
+      case FlutterPeerSyncResponse_SyncAck(
+          roster: final roster,
+          watchRecords: final watchRecords,
+          pinRecords: final pinRecords,
+          peerNowMs: final peerNowMs
+        ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_list_flutter_wire_peer_member(roster, serializer);
+        sse_encode_list_flutter_wire_watch_record(watchRecords, serializer);
+        sse_encode_list_flutter_wire_pin_record(pinRecords, serializer);
+        sse_encode_i_64(peerNowMs, serializer);
+      case FlutterPeerSyncResponse_NotAuthorized():
+        sse_encode_i_32(3, serializer);
+    }
   }
 
   @protected
@@ -3248,6 +3918,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_flutter_sealed_claim(
+      FlutterSealedClaim self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.lookupKey, serializer);
+    sse_encode_String(self.sealed, serializer);
+  }
+
+  @protected
   void sse_encode_flutter_target_capabilities(
       FlutterTargetCapabilities self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3263,6 +3941,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.label, serializer);
     sse_encode_opt_String(self.language, serializer);
+  }
+
+  @protected
+  void sse_encode_flutter_wire_peer_member(
+      FlutterWirePeerMember self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.nodeId, serializer);
+    sse_encode_String(self.deviceName, serializer);
+    sse_encode_String(self.platform, serializer);
+    sse_encode_opt_String(self.endpointAddrJson, serializer);
+    sse_encode_i_64(self.updatedAtMs, serializer);
+    sse_encode_bool(self.revoked, serializer);
+  }
+
+  @protected
+  void sse_encode_flutter_wire_pin_record(
+      FlutterWirePinRecord self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.key, serializer);
+    sse_encode_String(self.groupKey, serializer);
+    sse_encode_bool(self.isShow, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.tmdbId, serializer);
+    sse_encode_bool(self.pinned, serializer);
+    sse_encode_i_64(self.updatedAtMs, serializer);
+  }
+
+  @protected
+  void sse_encode_flutter_wire_watch_record(
+      FlutterWireWatchRecord self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.key, serializer);
+    sse_encode_bool(self.watched, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.positionSeconds, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.durationSeconds, serializer);
+    sse_encode_i_64(self.updatedAtMs, serializer);
   }
 
   @protected
@@ -3327,6 +4040,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_flutter_wire_peer_member(
+      List<FlutterWirePeerMember> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_flutter_wire_peer_member(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_flutter_wire_pin_record(
+      List<FlutterWirePinRecord> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_flutter_wire_pin_record(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_flutter_wire_watch_record(
+      List<FlutterWireWatchRecord> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_flutter_wire_watch_record(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
       Uint8List self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3383,6 +4126,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_i_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+      PlatformInt64? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
     }
   }
 
@@ -3558,6 +4312,12 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
       RustLib.instance.api
           .crateP2PHostOpenHlsStream(that: this, peer: peer, req: req);
 
+  /// Stream inbound peer sync requests to Flutter.
+  Stream<FlutterInboundPeerSyncRequest> peerSyncStream() =>
+      RustLib.instance.api.crateP2PHostPeerSyncStream(
+        that: this,
+      );
+
   /// Stream inbound control requests to Flutter.
   ///
   /// Separate from `event_stream` on purpose: that one is a colon-delimited
@@ -3573,6 +4333,12 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
       RustLib.instance.api.crateP2PHostRemoteControlStream(
         that: this,
       );
+
+  /// Answer an inbound peer sync request.
+  Future<void> respondToPeerSync(
+          {required String requestId, required FlutterPeerSyncResponse res}) =>
+      RustLib.instance.api.crateP2PHostRespondToPeerSync(
+          that: this, requestId: requestId, res: res);
 
   /// Answer an inbound control request.
   ///
@@ -3607,6 +4373,12 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
           {required String peer, required FlutterPairingRequest req}) =>
       RustLib.instance.api
           .crateP2PHostSendPairingRequest(that: this, peer: peer, req: req);
+
+  /// Send a peer sync request to a peer and await its answer.
+  Future<FlutterPeerSyncResponse> sendPeerSync(
+          {required String peer, required FlutterPeerSyncRequest req}) =>
+      RustLib.instance.api
+          .crateP2PHostSendPeerSync(that: this, peer: peer, req: req);
 
   /// Send a control command to a peer and await its answer.
   Future<FlutterRemoteControlResponse> sendRemoteControlRequest(

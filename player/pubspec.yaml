@@ -98,6 +98,7 @@ dependencies:
   screen_retriever: ^0.2.2
   # The folder picker of Add folder (files libraries, desktop).
   file_selector: ^1.1.0
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

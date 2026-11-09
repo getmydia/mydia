@@ -344,6 +344,10 @@ fn start_listening(
             let host = &resource_for_thread.host;
             let mut rx = event_rx.lock().await;
             while let Some(event) = rx.recv().await {
+                // `PeerSync` is the same: it is a player-to-player request, and
+                // a client that sends one here would otherwise wait out the
+                // 30s response timeout instead of getting an error.
+                //
                 // `RemoteControl` and `Custom` requests have no consumer on
                 // this side of the transport: neither variant has a match
                 // arm below, and player-to-player casting (the only feature
@@ -360,7 +364,10 @@ fn start_listening(
                 // and cleans the entry up right away instead of leaking or
                 // waiting out a timeout.
                 if let Event::RequestReceived {
-                    request: MydiaRequest::RemoteControl(_) | MydiaRequest::Custom(_),
+                    request:
+                        MydiaRequest::RemoteControl(_)
+                        | MydiaRequest::Custom(_)
+                        | MydiaRequest::PeerSync(_),
                     request_id,
                     ..
                 } = &event

@@ -13,6 +13,8 @@ import '../../../domain/sources/source_error.dart';
 import '../../../l10n/current_l10n.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../cache/invalidation_target.dart';
+import '../../p2p/peer_sync_records.dart';
+import '../../p2p/peer_sync_store.dart';
 import '../../playback/local_playback_progress.dart';
 import '../../playback/playback_progress_store.dart';
 import '../cache/source_keys.dart';
@@ -60,16 +62,27 @@ class FilesMediaSource extends MediaSource
     required PlaybackProgressStore progress,
     required this.matcher,
     required RelayTmdb tmdb,
+    PeerSyncStore? syncStore,
+    void Function()? onSyncMutation,
     void Function()? onReauthNeeded,
     FilesInvalidate? invalidate,
     AppLocalizations Function()? l10n,
     void Function()? onDispose,
   })  : _progress = progress,
         _tmdb = tmdb,
+        _syncStore = syncStore,
+        _onSyncMutation = onSyncMutation,
         _onReauthNeeded = onReauthNeeded,
         _invalidate = invalidate,
         _l10n = l10n ?? currentAppLocalizations,
-        _onDispose = onDispose;
+        _onDispose = onDispose {
+    _activeSources.add(this);
+  }
+
+  static final _activeSources = <FilesMediaSource>{};
+
+  /// The [FilesMediaSource] instances currently alive in the process.
+  static Iterable<FilesMediaSource> get activeSources => _activeSources;
 
   static const _pageOf50 = 50;
   static const _rowLimit = 20;
@@ -82,8 +95,19 @@ class FilesMediaSource extends MediaSource
   final FileMatcher matcher;
   final PlaybackProgressStore _progress;
   final RelayTmdb _tmdb;
+  final PeerSyncStore? _syncStore;
+  final void Function()? _onSyncMutation;
   final void Function()? _onReauthNeeded;
   final FilesInvalidate? _invalidate;
+
+  PeerSyncStore? get syncStore => _syncStore;
+  void Function()? get onSyncMutation => _onSyncMutation;
+
+  String? syncKeyFor(ItemRef ref) => syncKeyForFilesItem(
+        accountId: source.account.id,
+        externalId: ref.externalId,
+        isEpisode: ref.kind == ItemKind.episode,
+      );
 
   /// The store this source reads positions from; playback writes through it.
   PlaybackProgressStore get progressStore => _progress;
@@ -91,6 +115,21 @@ class FilesMediaSource extends MediaSource
   /// Invalidates cache targets; a no-op when the source was built without one.
   Future<void> invalidateTargets(Iterable<InvalidationTarget> targets) async =>
       _invalidate?.call(targets);
+
+  /// Refreshes the watched state of [ref] after its record changed. A record
+  /// keyed by TMDB id is shared by every files source that holds the item,
+  /// so each of them refreshes, as [setWatched] does.
+  Future<void> invalidateWatchedFor(ItemRef ref) async {
+    final syncKey = syncKeyFor(ref);
+    if (_syncStore != null && syncKey != null && syncKey.startsWith('tmdb:')) {
+      for (final s in _activeSources.toList()) {
+        await s._invalidate?.call(SourceRules.watchedChanged(s.id));
+      }
+    } else {
+      await _invalidate?.call(SourceRules.watchedChanged(id));
+    }
+  }
+
   final AppLocalizations Function() _l10n;
   final void Function()? _onDispose;
 
@@ -176,6 +215,8 @@ class FilesMediaSource extends MediaSource
         index: index,
         progress: _progress,
         l10n: _l10n(),
+        syncStore: _syncStore,
+        accountId: source.account.id,
       );
 
   IndexedFile? indexedFile(String fileKey) => index.files()[fileKey];
@@ -327,13 +368,43 @@ class FilesMediaSource extends MediaSource
       case ItemKind.movie || ItemKind.video:
         ids.add(ref.externalId);
     }
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    var hadTmdbChange = false;
+
     for (final i in ids) {
-      await index.setWatched(i, watched);
-      // A stored position would keep the item in Continue Watching, or keep
-      // it watched past 90%, against the viewer's choice.
-      await _progress.delete(progressKey(catalog.ref(ItemKind.movie, i)));
+      final parsed = parseFilesId(i);
+      final isEp = parsed?.season != null && parsed?.episode != null;
+      final syncKey = syncKeyForFilesItem(
+        accountId: source.account.id,
+        externalId: i,
+        isEpisode: isEp,
+      );
+      if (_syncStore != null && syncKey != null) {
+        await _syncStore.setWatched(syncKey, watched, nowMs: nowMs);
+        if (syncKey.startsWith('tmdb:')) {
+          hadTmdbChange = true;
+        }
+      }
+      if (_syncStore == null || syncKey == null) {
+        await index.setWatched(i, watched);
+        await _progress.delete(progressKey(catalog.ref(ItemKind.movie, i)));
+      } else {
+        await _progress.delete(progressKey(catalog.ref(ItemKind.movie, i)));
+      }
     }
-    await _invalidate?.call(SourceRules.watchedChanged(id));
+
+    if (_syncStore != null) {
+      _onSyncMutation?.call();
+    }
+
+    if (hadTmdbChange) {
+      for (final s in _activeSources.toList()) {
+        await s._invalidate?.call(SourceRules.watchedChanged(s.id));
+      }
+    } else {
+      await _invalidate?.call(SourceRules.watchedChanged(id));
+    }
   }
 
   // Searchable
@@ -358,13 +429,76 @@ class FilesMediaSource extends MediaSource
   @override
   Future<List<ItemSummary>> continueWatching() async {
     final catalog = _catalog();
-    final records = [
-      for (final r in _progress.all())
-        if (r.sourceId == id.value) r,
-    ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (_syncStore == null) {
+      final records = [
+        for (final r in _progress.all())
+          if (r.sourceId == id.value) r,
+      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final out = <ItemSummary>[];
+      for (final r in records) {
+        final summary = catalog.playableSummary(r.mediaId);
+        if (summary == null || summary.userState.progressSeconds == null) {
+          continue;
+        }
+        out.add(summary);
+        if (out.length == _rowLimit) break;
+      }
+      return out;
+    }
+
+    final candidates = <String, DateTime>{};
+
+    for (final rec in _syncStore.allWatchRecords().values) {
+      if (rec.key.startsWith('tmdb:movie:')) {
+        final tmdbId = rec.key.substring('tmdb:movie:'.length);
+        if (catalog.movies.containsKey(tmdbId)) {
+          final mediaId = movieId(tmdbId);
+          candidates[mediaId] =
+              DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+        }
+      } else if (rec.key.startsWith('tmdb:ep:')) {
+        final parts = rec.key.split(':');
+        if (parts.length == 5) {
+          final tmdbId = parts[2];
+          final season = int.tryParse(parts[3]);
+          final episode = int.tryParse(parts[4]);
+          if (season != null &&
+              episode != null &&
+              (catalog.shows[tmdbId]?.seasons[season]?.containsKey(episode) ??
+                  false)) {
+            final mediaId = episodeId(tmdbId, season, episode);
+            candidates[mediaId] =
+                DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+          }
+        }
+      } else if (rec.key.startsWith('file:')) {
+        final parts = rec.key.split(':');
+        if (parts.length == 3 && parts[1] == source.account.id) {
+          final fileKey = parts[2];
+          if (catalog.unmatched.containsKey(fileKey)) {
+            final mediaId = unmatchedFileId(fileKey);
+            candidates[mediaId] =
+                DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+          }
+        }
+      }
+    }
+
+    for (final r in _progress.all()) {
+      if (r.sourceId == id.value) {
+        final parsed = parseFilesId(r.mediaId);
+        if (parsed != null && parsed.isProvisional) {
+          candidates[r.mediaId] = r.updatedAt;
+        }
+      }
+    }
+
+    final sortedMediaIds = candidates.keys.toList()
+      ..sort((a, b) => candidates[b]!.compareTo(candidates[a]!));
+
     final out = <ItemSummary>[];
-    for (final r in records) {
-      final summary = catalog.playableSummary(r.mediaId);
+    for (final mediaId in sortedMediaIds) {
+      final summary = catalog.playableSummary(mediaId);
       if (summary == null || summary.userState.progressSeconds == null) {
         continue;
       }
@@ -379,8 +513,22 @@ class FilesMediaSource extends MediaSource
 
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) async {
+    final syncKey = syncKeyFor(ref);
+    if (_syncStore != null && syncKey != null) {
+      await _syncStore.removeFromContinueWatching(
+        syncKey,
+        nowMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      _onSyncMutation?.call();
+    }
     await _progress.delete(progressKey(ref));
-    await _invalidate?.call(SourceRules.continueWatchingRemoved(id));
+    if (_syncStore != null && syncKey != null && syncKey.startsWith('tmdb:')) {
+      for (final s in _activeSources.toList()) {
+        await s._invalidate?.call(SourceRules.continueWatchingRemoved(s.id));
+      }
+    } else {
+      await _invalidate?.call(SourceRules.continueWatchingRemoved(id));
+    }
   }
 
   // NextUp
@@ -561,6 +709,7 @@ class FilesMediaSource extends MediaSource
   @override
   void dispose() {
     _disposed = true;
+    _activeSources.remove(this);
     _onDispose?.call();
     _status.dispose();
   }

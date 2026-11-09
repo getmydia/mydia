@@ -2469,5 +2469,119 @@
   "@freshnessFailedBanner": {
     "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
     "placeholders": {"time": {"type": "String"}}
+  },
+  "settingsPairedDevicesTitle": "Paired devices",
+  "@settingsPairedDevicesTitle": {
+    "description": "Title of the paired devices settings screen and navigation row."
+  },
+  "settingsPairedDevicesNotPaired": "Not paired",
+  "@settingsPairedDevicesNotPaired": {
+    "description": "Subtitle of the paired devices settings row when no devices are paired."
+  },
+  "settingsPairedDevicesCount": "{count, plural, =1{1 paired device} other{{count} paired devices}}",
+  "@settingsPairedDevicesCount": {
+    "description": "Subtitle of the paired devices settings row showing the number of paired devices.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairedDevicesIntroTitle": "Sync between devices",
+  "@pairedDevicesIntroTitle": {
+    "description": "Heading explaining watch-state & pin syncing."
+  },
+  "pairedDevicesIntroBody": "Sync watch progress and pinned media directly between your devices over P2P.",
+  "@pairedDevicesIntroBody": {
+    "description": "Introductory text explaining watch-state & pin syncing between devices."
+  },
+  "pairedDevicesShowCodeButton": "Show pairing code",
+  "@pairedDevicesShowCodeButton": {
+    "description": "Button to generate and display a pairing code."
+  },
+  "pairedDevicesCancelOfferButton": "Cancel",
+  "@pairedDevicesCancelOfferButton": {
+    "description": "Button to cancel an active pairing offer."
+  },
+  "pairedDevicesActiveOfferInstructions": "Enter this code on your other device, or scan the QR code:",
+  "@pairedDevicesActiveOfferInstructions": {
+    "description": "Instructions shown above active pairing code and QR code."
+  },
+  "pairedDevicesCodeInputLabel": "Pairing code",
+  "@pairedDevicesCodeInputLabel": {
+    "description": "Label for the pairing code input field."
+  },
+  "pairedDevicesCodeInputHint": "ABC-123",
+  "@pairedDevicesCodeInputHint": {
+    "description": "Hint for pairing code input field."
+  },
+  "pairedDevicesSubmitCodeButton": "Pair device",
+  "@pairedDevicesSubmitCodeButton": {
+    "description": "Button to submit a pairing code."
+  },
+  "pairedDevicesScanQrButton": "Scan QR code",
+  "@pairedDevicesScanQrButton": {
+    "description": "Button to open the QR code scanner."
+  },
+  "pairedDevicesSyncNowButton": "Sync now",
+  "@pairedDevicesSyncNowButton": {
+    "description": "Button to trigger immediate sync with paired devices."
+  },
+  "pairedDevicesLeaveGroupButton": "Leave sync group",
+  "@pairedDevicesLeaveGroupButton": {
+    "description": "Button to leave the current peer sync group."
+  },
+  "pairedDevicesLeaveGroupConfirmTitle": "Leave sync group?",
+  "@pairedDevicesLeaveGroupConfirmTitle": {
+    "description": "Title of the dialog confirming leaving the sync group."
+  },
+  "pairedDevicesLeaveGroupConfirmBody": "This device will stop syncing watch state and pins with other paired devices.",
+  "@pairedDevicesLeaveGroupConfirmBody": {
+    "description": "Body text of the dialog confirming leaving the sync group."
+  },
+  "pairedDevicesRemovePeerButton": "Remove",
+  "@pairedDevicesRemovePeerButton": {
+    "description": "Tooltip or label for removing a paired peer device."
+  },
+  "pairedDevicesStatusActive": "Active",
+  "@pairedDevicesStatusActive": {
+    "description": "Status subtitle for an active paired peer."
+  },
+  "pairedDevicesStatusRevoked": "Revoked",
+  "@pairedDevicesStatusRevoked": {
+    "description": "Status subtitle for a revoked paired peer."
+  },
+  "pairedDevicesConnectedToast": "Paired with {deviceName}",
+  "@pairedDevicesConnectedToast": {
+    "description": "Toast notification when a peer device successfully pairs.",
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "pairedDevicesOrDivider": "or",
+  "@pairedDevicesOrDivider": {
+    "description": "Divider text between show code and enter code sections."
+  },
+  "pairedDevicesPairingFailed": "Pairing failed",
+  "@pairedDevicesPairingFailed": {
+    "description": "Error message when pairing with a code or QR fails."
+  },
+  "pairedDevicesOfferFailed": "Couldn't start pairing. Check your connection and try again.",
+  "@pairedDevicesOfferFailed": {
+    "description": "Error message when this device cannot start offering a pairing code and QR code."
+  },
+  "pairedDevicesQrOnlyInstructions": "The pairing code is unavailable right now. Scan this QR code on your other device:",
+  "@pairedDevicesQrOnlyInstructions": {
+    "description": "Instructions shown above the QR code alone, when the pairing code could not be published and can only be used through the QR code."
+  },
+  "pairedDevicesListSection": "Paired devices",
+  "@pairedDevicesListSection": {
+    "description": "Section header for the list of paired devices."
+  },
+  "pairedDevicesPairNewSection": "Pair another device",
+  "@pairedDevicesPairNewSection": {
+    "description": "Section header for pairing an additional device."
   }
 }
