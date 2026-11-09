@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../../domain/sources/source_error.dart';
 import '../../../p2p/local_proxy_service.dart';
 import '../../../p2p/media_proxy.dart';
 import '../backend/file_system_backend.dart';
@@ -89,7 +90,8 @@ class FilesCastBridge {
   int? get activePort => _server != null ? _boundPort : null;
 
   /// Opens (or replaces) the active cast bridge session and returns its LAN
-  /// URLs. Throws a [StateError] if no private IPv4 LAN interface is available.
+  /// URLs. Throws a [SourceException] if no private IPv4 LAN interface is
+  /// available.
   Future<FilesCastSession> openSession({
     required PlayableFile media,
     required String mime,
@@ -97,7 +99,9 @@ class FilesCastBridge {
   }) async {
     final lanIp = await _lanAddressResolver();
     if (lanIp == null) {
-      throw StateError('No LAN network interface available for casting');
+      throw const SourceException.unreachable(
+        'No LAN network interface available for casting',
+      );
     }
 
     await _ensureBound();

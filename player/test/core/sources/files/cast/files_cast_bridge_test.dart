@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
+import 'package:player/domain/sources/source_error.dart';
 
 void main() {
   late Directory tempDir;
@@ -244,5 +245,24 @@ void main() {
     final text = utf8.decode(subResp.bodyBytes);
     expect(text, startsWith('WEBVTT\n\n'));
     expect(text, contains('Harbor dusk'));
+  });
+
+  test(
+      'openSession throws SourceException.unreachable when no LAN IP is available',
+      () async {
+    final noLanBridge = FilesCastBridge(lanAddressResolver: () async => null);
+    addTearDown(noLanBridge.dispose);
+    expect(
+      () => noLanBridge.openSession(
+        media: PlayableFile(url: localVideo.path),
+        mime: 'video/mp4',
+        subtitles: const {},
+      ),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unreachable,
+      )),
+    );
   });
 }

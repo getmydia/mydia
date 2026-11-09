@@ -6,6 +6,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../core/playback/loading_step.dart';
@@ -219,11 +220,17 @@ class FilesStreamResolver implements StreamResolver {
           final s = streams[i];
           final codec = (s.codec ?? 'srt').toLowerCase();
           if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
-            final playableSub = await source.backend.playable(s.externalPath!);
-            subtitles['ext-$i'] = FilesCastSubtitle(
-              file: playableSub,
-              format: codec,
-            );
+            try {
+              final playableSub =
+                  await source.backend.playable(s.externalPath!);
+              subtitles['ext-$i'] = FilesCastSubtitle(
+                file: playableSub,
+                format: codec,
+              );
+            } catch (e) {
+              debugPrint(
+                  '[FilesPlaybackSession] Could not resolve sidecar subtitle $i: $e');
+            }
           }
         }
       }

@@ -8,8 +8,10 @@ import 'package:player/core/sources/files/match/file_matcher.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/original_download.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/source_error.dart';
 
 import '../media_source_contract.dart';
 import 'fake_backend.dart';
@@ -26,6 +28,19 @@ class _WebDavFakeBackend extends FakeBackend {
         url: 'https://dav.example$path',
         headers: const {'Authorization': 'Basic dXNlcjpwYXNz'},
       );
+}
+
+class _FaultyBackend extends FakeBackend {
+  _FaultyBackend(super.files);
+
+  BackendFailure? failure;
+
+  @override
+  Future<FileEntry?> stat(String path) async {
+    final f = failure;
+    if (f != null) throw f;
+    return super.stat(path);
+  }
 }
 
 final _webdavAccountId =
@@ -80,14 +95,18 @@ Future<(FilesFixture, FilesMediaSource)> _buildSource(
 }
 
 void main() {
-  const filePath = '${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv';
+  const filePath1080 =
+      '${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv';
+  const filePath = '${FilesFixture.rootPath}/B/Copper Valley (2018) 2160p.mkv';
   final versionKey =
+      fileKeyFor(FilesFixture.rootId, 'B/Copper Valley (2018) 2160p.mkv');
+  final versionKey1080 =
       fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv');
 
   runMediaSourceContract('Network Files (WebDAV)', () async {
     final (f, source) = await _buildSource(
       _webdavSource,
-      _WebDavFakeBackend({filePath: 1000}),
+      _WebDavFakeBackend({filePath: 1000, filePath1080: 1000}),
     );
     return ContractFixture(
       source: source,
@@ -120,7 +139,7 @@ void main() {
       () async {
     final (_, source) = await _buildSource(
       _webdavSource,
-      _WebDavFakeBackend({filePath: 1000}),
+      _WebDavFakeBackend({filePath: 1000, filePath1080: 1000}),
     );
     expect(source.capabilities, contains(SourceCapability.downloadable));
     expect(source.capabilities, contains(SourceCapability.castable));
@@ -147,5 +166,88 @@ void main() {
     expect(prepared.headers, {'Authorization': 'Basic dXNlcjpwYXNz'});
     expect(prepared.container, 'mkv');
     expect(prepared.expectedBytes, 1000);
+
+    final resolved =
+        await downloadable.resolve(movieRef, option.id) as DirectFile;
+    expect(resolved.url, prepared.url);
+    expect(resolved.headers, prepared.headers);
+    expect(resolved.extension, prepared.container);
+    expect(resolved.expectedBytes, prepared.expectedBytes);
+
+    final prepared1080 =
+        await downloadable.prepareDownload(movieRef, versionKey1080, option);
+    expect(prepared1080.url, 'https://dav.example$filePath1080');
+    expect(prepared1080.container, 'mkv');
+  });
+
+  test('downloadable maps BackendFailure to SourceException', () async {
+    final backend = _FaultyBackend({filePath: 1000, filePath1080: 1000});
+    final (_, source) = await _buildSource(_webdavSource, backend);
+    final downloadable = source.as<Downloadable>()!;
+
+    final movieRef = ItemRef(
+      sourceId: _webdavSource.id,
+      kind: ItemKind.movie,
+      externalId: '101',
+    );
+    final options = await downloadable.downloadOptions(movieRef);
+    final option = options.single;
+
+    // BackendUnauthorized -> SourceException.unauthorized
+    backend.failure = const BackendUnauthorized('bad credentials');
+    await expectLater(
+      downloadable.resolve(movieRef, option.id),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unauthorized,
+      )),
+    );
+    await expectLater(
+      downloadable.prepareDownload(movieRef, versionKey, option),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unauthorized,
+      )),
+    );
+
+    // BackendPermissionLost -> SourceException.unauthorized
+    backend.failure = const BackendPermissionLost('storage access lost');
+    await expectLater(
+      downloadable.resolve(movieRef, option.id),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unauthorized,
+      )),
+    );
+    await expectLater(
+      downloadable.prepareDownload(movieRef, versionKey, option),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unauthorized,
+      )),
+    );
+
+    // BackendNotFound -> SourceException.notFound
+    backend.failure = const BackendNotFound('file missing');
+    await expectLater(
+      downloadable.resolve(movieRef, option.id),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.notFound,
+      )),
+    );
+    await expectLater(
+      downloadable.prepareDownload(movieRef, versionKey, option),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.notFound,
+      )),
+    );
   });
 }

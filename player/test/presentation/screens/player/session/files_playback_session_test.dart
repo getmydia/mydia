@@ -29,6 +29,20 @@ class _AuthBackend extends FakeBackend {
       url: 'https://dav.example$path', headers: {'Authorization': 'Basic x'});
 }
 
+class _FailingSubBackend extends FakeBackend {
+  _FailingSubBackend(super.files);
+  @override
+  Future<PlayableFile> playable(String path) async {
+    if (path.endsWith('.srt') || path.endsWith('.vtt')) {
+      throw const BackendNotFound('Sidecar missing');
+    }
+    return PlayableFile(
+      url: 'https://dav.example$path',
+      headers: const {'Authorization': 'Basic x'},
+    );
+  }
+}
+
 class _Built {
   _Built(this.fixture, this.source, this.invalidated);
   final FilesFixture fixture;
@@ -261,6 +275,37 @@ void main() {
       resolved.subtitleUrl!('ext-0'),
       endsWith('/sub/ext-0.vtt'),
     );
+
+    await session.endServerSession(resolved.sessionId!);
+    expect(bridge.activePort, isNull);
+  });
+
+  test('cast resolution succeeds even if a sidecar subtitle fails to resolve',
+      () async {
+    final b = await _build(_FailingSubBackend({_file: 10, _sidecar: 5}));
+    final bridge = FilesCastBridge(lanAddressResolver: () async => '127.0.0.1');
+    addTearDown(bridge.dispose);
+
+    final session = FilesPlaybackSession(
+      source: b.source,
+      item: movie(b),
+      fileId: key,
+      bridge: bridge,
+    );
+
+    final resolved = await session.createResolver().resolve(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          fileId: key,
+          startAt: Duration.zero,
+          forCast: true,
+        );
+    expect(bridge.activePort, isNotNull);
+    expect(resolved.sessionId, isNotNull);
+    expect(
+      resolved.url,
+      startsWith('http://127.0.0.1:${bridge.activePort}/f/'),
+    );
+    expect(resolved.url, endsWith('/media.mkv'));
 
     await session.endServerSession(resolved.sessionId!);
     expect(bridge.activePort, isNull);
