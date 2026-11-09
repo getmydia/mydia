@@ -8,7 +8,11 @@ import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
 import 'package:player/domain/sources/source_error.dart';
 
+import '../../../../test_utils/real_http.dart';
+
 void main() {
+  useRealHttp();
+
   late Directory tempDir;
   late File localVideo;
   late FilesCastBridge bridge;
