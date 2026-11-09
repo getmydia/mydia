@@ -318,7 +318,12 @@ class FilesCatalog {
       final syncKey = _syncKeyForId(id);
       if (syncKey != null) {
         final rec = syncStore!.watchRecord(syncKey);
-        if (rec != null) return rec.watched;
+        // A record that is watched, or one set by hand (no position), is the
+        // answer. A partial-progress one still defers to the other episodes
+        // of its file: finishing the file as one of them finishes them all.
+        if (rec != null && (rec.watched || rec.positionSeconds == null)) {
+          return rec.watched;
+        }
         for (final otherId in episodesSharingAFile(id)) {
           final otherKey = _syncKeyForId(otherId);
           if (otherKey != null &&
@@ -336,6 +341,18 @@ class FilesCatalog {
         episodesSharingAFile(id).any(_playedThrough);
   }
 
+  /// Whether [id] carries a watched flag of its own: the synced record for an
+  /// item that has a sync key, the legacy flag for the rest.
+  bool _flaggedWatched(String id) {
+    if (syncStore != null) {
+      final syncKey = _syncKeyForId(id);
+      if (syncKey != null) {
+        return syncStore!.watchRecord(syncKey)?.watched ?? false;
+      }
+    }
+    return _watched.contains(id);
+  }
+
   bool _playedThrough(String id) {
     final p = progressOf(id);
     return p != null &&
@@ -345,7 +362,7 @@ class FilesCatalog {
 
   /// The position to resume [id] from, or null when it is not under way.
   int? resumeSeconds(String id) {
-    if (_watched.contains(id)) return null;
+    if (_flaggedWatched(id)) return null;
     final p = progressOf(id);
     if (p == null || p.durationSeconds <= 0) return null;
     if (p.positionSeconds < kFilesResumeMinSeconds) return null;

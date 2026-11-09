@@ -136,6 +136,10 @@ class FileMatcher {
       );
       _onSyncMutation?.call();
     }
+    // Read before the work below: a newer pin arriving meanwhile stays newer
+    // than the revision this one records, and is applied on the next scan.
+    final revision =
+        _syncStore?.pinRecord(isShow: isShow, groupKey: groupKey)?.updatedAt;
     if (tmdbId == null) {
       final previous = _index.group(groupKey);
       await _migrateToFiles(_Group(groupKey, isShow, files), previous?.tmdbId);
@@ -144,6 +148,7 @@ class FileMatcher {
         isShow: isShow,
         matchedAt: _now(),
         pinned: true,
+        pinRevision: revision,
       ));
     } else {
       final group = _Group(groupKey, isShow, files);
@@ -158,6 +163,7 @@ class FileMatcher {
         tmdbId: tmdbId,
         pinned: true,
         matchedAt: _now(),
+        pinRevision: revision,
       ));
     }
     await _onGroupLanded?.call();
@@ -189,13 +195,32 @@ class FileMatcher {
   bool hasFilesForGroup(String groupKey) =>
       _index.files().values.any((f) => f.parsed?.groupKey == groupKey);
 
+  /// Whether [pin] (a synced pinned record) is already what [m] holds. A
+  /// group from before pin revisions counts as applied when it is pinned to
+  /// the same target.
+  bool _pinApplied(GroupMatch? m, PeerPinRecord pin) {
+    if (m == null) return false;
+    final revision = m.pinRevision;
+    if (revision != null) return pin.updatedAt <= revision;
+    return m.pinned && m.tmdbId == pin.tmdbId;
+  }
+
+  /// Whether [pin] (a synced unpin) newer than what [m] last applied still
+  /// has to unpin the group, which a pin that arrived while this source was
+  /// inactive leaves pinned. A local pin made after it carries a newer
+  /// revision and stands.
+  bool _unpinPending(GroupMatch? m, PeerPinRecord pin) {
+    if (m == null || !m.pinned || pin.pinned) return false;
+    final revision = m.pinRevision;
+    return revision == null || pin.updatedAt > revision;
+  }
+
   bool _needsWork(_Group g) {
     final m = _index.group(g.key);
     final pinRec = _syncStore?.pinRecord(isShow: g.isShow, groupKey: g.key);
-    if (pinRec != null && pinRec.pinned) {
-      if (m == null || pinRec.updatedAt > m.matchedAt.millisecondsSinceEpoch) {
-        return true;
-      }
+    if (pinRec != null) {
+      if (pinRec.pinned && !_pinApplied(m, pinRec)) return true;
+      if (_unpinPending(m, pinRec)) return true;
     }
     if (m == null) return true;
     if (m.pinned) {
@@ -245,31 +270,38 @@ class FileMatcher {
     try {
       final existing = _index.group(g.key);
       final pinRec = _syncStore?.pinRecord(isShow: g.isShow, groupKey: g.key);
-      if (pinRec != null && pinRec.pinned) {
-        final matchedAt = existing?.matchedAt.millisecondsSinceEpoch ?? 0;
-        if (existing == null || pinRec.updatedAt > matchedAt) {
-          if (pinRec.tmdbId == null) {
-            await _migrateToFiles(g, existing?.tmdbId);
-            await _index.putGroup(GroupMatch(
-              groupKey: g.key,
-              isShow: g.isShow,
-              matchedAt: _now(),
-              pinned: true,
-            ));
-          } else {
-            await _fetchAndStore(g, pinRec.tmdbId!);
-            await _migrateProgress(g, pinRec.tmdbId!, existing?.tmdbId);
-            await _index.putGroup(GroupMatch(
-              groupKey: g.key,
-              isShow: g.isShow,
-              tmdbId: pinRec.tmdbId,
-              pinned: true,
-              matchedAt: _now(),
-            ));
-          }
-          await _onGroupLanded?.call();
-          return;
+      if (pinRec != null && _unpinPending(existing, pinRec)) {
+        await _index.putGroup(existing!.copyWith(
+          pinned: false,
+          pinRevision: pinRec.updatedAt,
+        ));
+        await _onGroupLanded?.call();
+        return;
+      }
+      if (pinRec != null && pinRec.pinned && !_pinApplied(existing, pinRec)) {
+        if (pinRec.tmdbId == null) {
+          await _migrateToFiles(g, existing?.tmdbId);
+          await _index.putGroup(GroupMatch(
+            groupKey: g.key,
+            isShow: g.isShow,
+            matchedAt: _now(),
+            pinned: true,
+            pinRevision: pinRec.updatedAt,
+          ));
+        } else {
+          await _fetchAndStore(g, pinRec.tmdbId!);
+          await _migrateProgress(g, pinRec.tmdbId!, existing?.tmdbId);
+          await _index.putGroup(GroupMatch(
+            groupKey: g.key,
+            isShow: g.isShow,
+            tmdbId: pinRec.tmdbId,
+            pinned: true,
+            matchedAt: _now(),
+            pinRevision: pinRec.updatedAt,
+          ));
         }
+        await _onGroupLanded?.call();
+        return;
       }
 
       if (existing != null && existing.pinned) {
@@ -415,12 +447,44 @@ class FileMatcher {
         watchedFraction: fromRec.watched ? 0.0 : kFilesWatchedFraction,
         nowMs: fromRec.updatedAt,
       );
-    } else if (fromRec.watched) {
+    } else {
+      // Watched, or cleared (unwatched, no position): the newer record is
+      // written either way, or a cleared state would leave the older
+      // destination record to show again after a rematch.
       await sync.setWatched(
         toKey,
-        true,
+        fromRec.watched,
         nowMs: fromRec.updatedAt,
       );
+    }
+  }
+
+  /// State a provisional id holds only in the legacy stores (the sync store
+  /// keeps no records for provisional ids) goes to the sync record of the id
+  /// the group now resolves to, unless that already has one. Read before
+  /// `_move`, which clears the legacy copy.
+  Future<void> _syncLegacyState(
+    ItemKind kind,
+    String oldId,
+    String toKey,
+    Set<String> watched,
+  ) async {
+    final sync = _syncStore;
+    if (sync == null || sync.watchRecord(toKey) != null) return;
+    final old = _progress.get(progressKey(
+      ItemRef(sourceId: _sourceId, kind: kind, externalId: oldId),
+    ));
+    final isWatched = watched.contains(oldId);
+    if (old != null && old.durationSeconds > 0) {
+      await sync.recordProgress(
+        toKey,
+        positionSeconds: old.positionSeconds,
+        durationSeconds: old.durationSeconds,
+        watchedFraction: isWatched ? 0.0 : kFilesWatchedFraction,
+        nowMs: old.updatedAt.millisecondsSinceEpoch,
+      );
+    } else if (isWatched) {
+      await sync.setWatched(toKey, true, nowMs: _now().millisecondsSinceEpoch);
     }
   }
 
@@ -457,17 +521,19 @@ class FileMatcher {
       );
       for (final oldBase in oldBases) {
         if (stopped()) return;
-        await _move(item.kind, item.id(oldBase), [target], watched,
+        final oldId = item.id(oldBase);
+        final oldSyncKey = syncKeyForFilesItem(
+          accountId: _index.accountId,
+          externalId: oldId,
+          isEpisode: g.isShow,
+        );
+        if (targetSyncKey != null && oldSyncKey == null) {
+          await _syncLegacyState(item.kind, oldId, targetSyncKey, watched);
+        }
+        await _move(item.kind, oldId, [target], watched,
             mediaType: type, keepSource: oldBase == sharedBase);
-        if (targetSyncKey != null) {
-          final oldSyncKey = syncKeyForFilesItem(
-            accountId: _index.accountId,
-            externalId: item.id(oldBase),
-            isEpisode: g.isShow,
-          );
-          if (oldSyncKey != null) {
-            await _migrateSyncRecord(oldSyncKey, targetSyncKey);
-          }
+        if (targetSyncKey != null && oldSyncKey != null) {
+          await _migrateSyncRecord(oldSyncKey, targetSyncKey);
         }
       }
       for (final key in item.fileIds) {

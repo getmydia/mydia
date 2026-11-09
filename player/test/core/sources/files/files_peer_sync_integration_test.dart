@@ -10,6 +10,7 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/files/files_ids.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/match/file_matcher.dart';
 import 'package:player/core/sources/files/media_names.dart';
@@ -495,6 +496,264 @@ void main() {
       expect(group!.pinned, isTrue);
       expect(group.tmdbId, 99901);
       expect(relay.searched, isEmpty);
+    });
+
+    group('pins and migrations', () {
+      const groupKey = 'fable of glass:2031';
+
+      Future<FileLibraryIndex> openIndex(String name) async {
+        final dir = await Directory.systemTemp.createTemp(name);
+        Hive.init(dir.path);
+        addTearDown(() async {
+          await Hive.close();
+          await dir.delete(recursive: true);
+        });
+        final box = await Hive.openBox<Map<dynamic, dynamic>>(name);
+        final index = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
+        await index.putRoot(const LibraryRoot(
+          id: 'r1',
+          path: '/media/movies',
+          kind: FilesLibraryKind.movies,
+          title: 'Movies',
+        ));
+        await index.putFiles([
+          IndexedFile(
+            key: 'file_glass',
+            rootId: 'r1',
+            path: 'Fable of Glass (2031).mkv',
+            size: 500,
+            modified: filesT0,
+            firstSeen: filesT0,
+            parsed: const ParsedName(
+              path: 'Fable of Glass (2031).mkv',
+              groupKey: groupKey,
+              title: 'Fable of Glass',
+              year: 2031,
+              isEpisode: false,
+            ),
+          ),
+        ]);
+        return index;
+      }
+
+      FileMatcher matcherOver(
+        FileLibraryIndex index,
+        PeerSyncStore syncStore, {
+        PlaybackProgressStore? progress,
+      }) =>
+          FileMatcher(
+            tmdb: _CapturingRelay()..searchDown = true,
+            names: FakeMediaNames(),
+            index: index,
+            progress: progress ?? InMemoryPlaybackProgressStore(),
+            sourceId: filesLocalSource.id,
+            syncStore: syncStore,
+          );
+
+      test('a_pin_older_than_the_automatic_match_is_still_applied', () async {
+        final index = await openIndex('pin_before_match');
+        // Matched automatically after the pin was made on the other device.
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 1,
+          matchedAt: DateTime.fromMillisecondsSinceEpoch(9000),
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.setPin(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          pinned: true,
+          nowMs: 5000,
+        );
+
+        await matcherOver(index, syncStore).matchPending();
+
+        final group = index.group(groupKey)!;
+        expect(group.pinned, isTrue);
+        expect(group.tmdbId, 99901);
+        expect(group.pinRevision, 5000);
+      });
+
+      test('a_stored_unpin_is_applied_when_the_source_scans', () async {
+        final index = await openIndex('stored_unpin');
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          pinned: true,
+          matchedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+          pinRevision: 4000,
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.setPin(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          pinned: false,
+          nowMs: 5000,
+        );
+
+        await matcherOver(index, syncStore).matchPending();
+
+        final group = index.group(groupKey)!;
+        expect(group.pinned, isFalse);
+        expect(group.pinRevision, 5000);
+      });
+
+      test('a_newer_local_pin_survives_an_older_stored_unpin', () async {
+        final index = await openIndex('newer_local_pin');
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          pinned: true,
+          matchedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+          pinRevision: 6000,
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.setPin(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          pinned: false,
+          nowMs: 5000,
+        );
+
+        await matcherOver(index, syncStore).matchPending();
+
+        expect(index.group(groupKey)!.pinned, isTrue);
+      });
+
+      test('a_cleared_record_replaces_the_older_one_at_the_destination',
+          () async {
+        final index = await openIndex('cleared_migration');
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 1,
+          matchedAt: filesT0,
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.setWatched('tmdb:movie:2', true, nowMs: 3000);
+        // Marked unwatched later, under the id the group had before.
+        await syncStore.setWatched('tmdb:movie:1', false, nowMs: 4000);
+
+        await matcherOver(index, syncStore)
+            .pin(groupKey, isShow: false, tmdbId: 2);
+
+        expect(syncStore.watchRecord('tmdb:movie:2')!.watched, isFalse);
+      });
+
+      test('provisional_progress_moves_into_the_sync_record_on_match',
+          () async {
+        final index = await openIndex('provisional_migration');
+        final progress = InMemoryPlaybackProgressStore();
+        await progress.save(LocalPlaybackProgress(
+          sourceId: filesLocalSource.id.value,
+          mediaId: movieId(provisionalKey(groupKey)),
+          mediaType: 'movie',
+          positionSeconds: 120,
+          durationSeconds: 1800,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(2000),
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+
+        await matcherOver(index, syncStore, progress: progress)
+            .pin(groupKey, isShow: false, tmdbId: 99901);
+
+        final record = syncStore.watchRecord('tmdb:movie:99901');
+        expect(record, isNotNull);
+        expect(record!.positionSeconds, 120);
+        expect(record.durationSeconds, 1800);
+      });
+
+      Future<FilesMediaSource> mediaOver(
+        FileLibraryIndex index,
+        PeerSyncStore syncStore, {
+        Source? source,
+        List<InvalidationTarget>? invalidated,
+      }) async {
+        final s = source ?? filesLocalSource;
+        await index.putMovie(const MatchedMovie(
+          tmdbId: 99901,
+          title: 'Fable of Glass',
+          year: 2031,
+        ));
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 99901,
+          matchedAt: filesT0,
+        ));
+        final media = FilesMediaSource(
+          source: s,
+          backend: FakeBackend(const {}),
+          index: index,
+          progress: InMemoryPlaybackProgressStore(),
+          matcher: matcherOver(index, syncStore),
+          tmdb: FakeFilesRelay(),
+          syncStore: syncStore,
+          invalidate: (targets) async => invalidated?.addAll(targets),
+        );
+        addTearDown(media.dispose);
+        return media;
+      }
+
+      ItemRef movieRef(Source s) => ItemRef(
+            sourceId: s.id,
+            kind: ItemKind.movie,
+            externalId: '99901',
+          );
+
+      test('resume_follows_the_synced_watched_state_not_a_legacy_flag',
+          () async {
+        final index = await openIndex('resume_sync_state');
+        // A legacy flag from before sync, on an item marked unwatched since.
+        await index.setWatched('99901', true);
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.recordProgress(
+          'tmdb:movie:99901',
+          positionSeconds: 600,
+          durationSeconds: 3000,
+          watchedFraction: 0.95,
+          nowMs: 2000,
+        );
+        final media = await mediaOver(index, syncStore);
+
+        final detail = await media.item(movieRef(filesLocalSource));
+        expect(detail.summary.userState.progressSeconds, 600);
+
+        // Watched in the synced record, with no legacy flag.
+        await index.setWatched('99901', false);
+        await syncStore.setWatched('tmdb:movie:99901', true, nowMs: 3000);
+        final watched = await media.item(movieRef(filesLocalSource));
+        expect(watched.summary.userState.progressSeconds, isNull);
+      });
+
+      test('invalidating_a_shared_item_refreshes_every_files_source', () async {
+        final syncStore = InMemoryPeerSyncStore();
+        final first = <InvalidationTarget>[];
+        final second = <InvalidationTarget>[];
+        final otherSource = _makeSource('s0123456789abcdef');
+        final media1 = await mediaOver(
+          await openIndex('invalidate_first'),
+          syncStore,
+          invalidated: first,
+        );
+        final media2 = await mediaOver(
+          await openIndex('invalidate_second'),
+          syncStore,
+          source: otherSource,
+          invalidated: second,
+        );
+
+        await media1.invalidateWatchedFor(movieRef(filesLocalSource));
+
+        expect(first, containsAll(SourceRules.watchedChanged(media1.id)));
+        expect(second, containsAll(SourceRules.watchedChanged(media2.id)));
+      });
     });
   });
 }

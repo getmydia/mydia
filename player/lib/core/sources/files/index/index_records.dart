@@ -97,6 +97,7 @@ class GroupMatch {
     required this.matchedAt,
     this.tmdbId,
     this.pinned = false,
+    this.pinRevision,
   });
 
   final String groupKey;
@@ -105,12 +106,19 @@ class GroupMatch {
   final bool pinned;
   final DateTime matchedAt;
 
+  /// The `updatedAt` of the synced pin record this group last applied (a pin
+  /// or an unpin), or null when none was. Kept apart from [matchedAt]: an
+  /// automatic match can be newer than a pin that reached this device before
+  /// it, and must not make that pin look applied.
+  final int? pinRevision;
+
   GroupMatch copyWith({
     String? groupKey,
     bool? isShow,
     int? tmdbId,
     bool? pinned,
     DateTime? matchedAt,
+    int? pinRevision,
   }) =>
       GroupMatch(
         groupKey: groupKey ?? this.groupKey,
@@ -118,6 +126,7 @@ class GroupMatch {
         tmdbId: tmdbId ?? this.tmdbId,
         pinned: pinned ?? this.pinned,
         matchedAt: matchedAt ?? this.matchedAt,
+        pinRevision: pinRevision ?? this.pinRevision,
       );
 
   Map<String, dynamic> toMap() => {
@@ -126,6 +135,7 @@ class GroupMatch {
         'tmdbId': tmdbId,
         'pinned': pinned,
         'matchedAt': matchedAt.millisecondsSinceEpoch,
+        'pinRevision': pinRevision,
       };
 
   factory GroupMatch.fromMap(Map<dynamic, dynamic> m) => GroupMatch(
@@ -134,6 +144,7 @@ class GroupMatch {
         tmdbId: m['tmdbId'] as int?,
         pinned: m['pinned'] as bool,
         matchedAt: _date(m['matchedAt']),
+        pinRevision: (m['pinRevision'] as num?)?.toInt(),
       );
 }
 

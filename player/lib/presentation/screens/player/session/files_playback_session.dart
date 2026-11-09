@@ -13,7 +13,6 @@ import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/local_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
-import '../../../../core/sources/cache/source_rules.dart';
 import '../../../../core/sources/files/backend/file_system_backend.dart';
 import '../../../../core/sources/files/files_media_source.dart';
 import '../../../../core/sources/files/files_queries.dart';
@@ -93,8 +92,7 @@ class FilesPlaybackSession extends SourcePlaybackSession {
         syncStore: _files.syncStore,
         syncKeyFor: _files.syncKeyFor,
         onSyncWrite: _files.onSyncMutation,
-        onChanged: () => _files
-            .invalidateTargets(SourceRules.watchedChanged(_files.source.id)),
+        onChanged: () => _files.invalidateWatchedFor(item),
       );
 
   @override

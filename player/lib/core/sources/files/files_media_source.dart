@@ -110,6 +110,21 @@ class FilesMediaSource extends MediaSource
   /// Invalidates cache targets; a no-op when the source was built without one.
   Future<void> invalidateTargets(Iterable<InvalidationTarget> targets) async =>
       _invalidate?.call(targets);
+
+  /// Refreshes the watched state of [ref] after its record changed. A record
+  /// keyed by TMDB id is shared by every files source that holds the item,
+  /// so each of them refreshes, as [setWatched] does.
+  Future<void> invalidateWatchedFor(ItemRef ref) async {
+    final syncKey = syncKeyFor(ref);
+    if (_syncStore != null && syncKey != null && syncKey.startsWith('tmdb:')) {
+      for (final s in _activeSources.toList()) {
+        await s._invalidate?.call(SourceRules.watchedChanged(s.id));
+      }
+    } else {
+      await _invalidate?.call(SourceRules.watchedChanged(id));
+    }
+  }
+
   final AppLocalizations Function() _l10n;
   final void Function()? _onDispose;
 

@@ -144,10 +144,15 @@ FilesMediaSource buildFilesSource(
   final tmdb = ref.read(relayTmdbProvider);
   final invalidator = ref.read(invalidatorProvider);
   final syncStore = ref.read(peerSyncStoreProvider);
+  // Playback keeps a reporter, and with it this callback, past a rebuild of
+  // this source; `ref` is disposed by then. The container is not.
+  final container = ref.container;
   final syncMutation = onSyncMutation ??
       () {
         unawaited(
-          ref.read(peerSyncServiceProvider).notifyLocalMutation(throttle: true),
+          container
+              .read(peerSyncServiceProvider)
+              .notifyLocalMutation(throttle: true),
         );
       };
   final matcher = FileMatcher(
