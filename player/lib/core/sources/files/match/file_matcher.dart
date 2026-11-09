@@ -94,6 +94,7 @@ class FileMatcher {
     required bool isShow,
     int? tmdbId,
     bool recordSync = true,
+    int? pinRevision,
   }) =>
       _serialized(
           groupKey,
@@ -102,21 +103,26 @@ class FileMatcher {
                 isShow: isShow,
                 tmdbId: tmdbId,
                 recordSync: recordSync,
+                pinRevision: pinRevision,
               ));
 
   /// Applies a pin received from remote peer sync. Performs matching,
   /// indexing, and migrations without re-recording in [PeerSyncStore] or
-  /// triggering sync mutation callbacks.
+  /// triggering sync mutation callbacks. [pinRevision] is the `updatedAt` of
+  /// the record that carries [tmdbId], so the group records the revision of
+  /// the target it was actually given, not that of a newer pin queued behind.
   Future<void> applyRemotePin(
     String groupKey, {
     required bool isShow,
     int? tmdbId,
+    int? pinRevision,
   }) =>
       pin(
         groupKey,
         isShow: isShow,
         tmdbId: tmdbId,
         recordSync: false,
+        pinRevision: pinRevision,
       );
 
   Future<void> _pin(
@@ -124,22 +130,21 @@ class FileMatcher {
     required bool isShow,
     int? tmdbId,
     bool recordSync = true,
+    int? pinRevision,
   }) async {
     final files = _filesOf(groupKey, isShow);
+    var revision = pinRevision;
     if (recordSync && _syncStore != null) {
-      await _syncStore.setPin(
+      final record = await _syncStore.setPin(
         groupKey: groupKey,
         isShow: isShow,
         tmdbId: tmdbId,
         pinned: true,
         nowMs: _now().millisecondsSinceEpoch,
       );
+      revision = record.updatedAt;
       _onSyncMutation?.call();
     }
-    // Read before the work below: a newer pin arriving meanwhile stays newer
-    // than the revision this one records, and is applied on the next scan.
-    final revision =
-        _syncStore?.pinRecord(isShow: isShow, groupKey: groupKey)?.updatedAt;
     if (tmdbId == null) {
       final previous = _index.group(groupKey);
       await _migrateToFiles(_Group(groupKey, isShow, files), previous?.tmdbId);
@@ -201,7 +206,13 @@ class FileMatcher {
   bool _pinApplied(GroupMatch? m, PeerPinRecord pin) {
     if (m == null) return false;
     final revision = m.pinRevision;
-    if (revision != null) return pin.updatedAt <= revision;
+    // An older revision is applied. A newer one is not. At the same time two
+    // pins can differ (the store settles it by target), so the group must
+    // hold the winner's own target for it to count, and a failed apply is
+    // retried on the next scan.
+    if (revision != null && pin.updatedAt != revision) {
+      return pin.updatedAt < revision;
+    }
     return m.pinned && m.tmdbId == pin.tmdbId;
   }
 
@@ -438,6 +449,8 @@ class FileMatcher {
     if (fromRec == null) return;
     final toRec = sync.watchRecord(toKey);
     if (toRec != null && toRec.updatedAt >= fromRec.updatedAt) return;
+    // A write below is a mutation like any other: paired devices are told.
+    _onSyncMutation?.call();
 
     if (fromRec.positionSeconds != null && fromRec.durationSeconds != null) {
       await sync.recordProgress(
@@ -461,8 +474,9 @@ class FileMatcher {
 
   /// State a provisional id holds only in the legacy stores (the sync store
   /// keeps no records for provisional ids) goes to the sync record of the id
-  /// the group now resolves to, unless that already has one. Read before
-  /// `_move`, which clears the legacy copy.
+  /// the group now resolves to. Progress replaces a record only when it is
+  /// newer; a bare watched flag (which has no time) only fills a gap. Read
+  /// before `_move`, which clears the legacy copy.
   Future<void> _syncLegacyState(
     ItemKind kind,
     String oldId,
@@ -470,21 +484,26 @@ class FileMatcher {
     Set<String> watched,
   ) async {
     final sync = _syncStore;
-    if (sync == null || sync.watchRecord(toKey) != null) return;
+    if (sync == null) return;
+    final existing = sync.watchRecord(toKey);
     final old = _progress.get(progressKey(
       ItemRef(sourceId: _sourceId, kind: kind, externalId: oldId),
     ));
     final isWatched = watched.contains(oldId);
     if (old != null && old.durationSeconds > 0) {
+      final at = old.updatedAt.millisecondsSinceEpoch;
+      if (existing != null && existing.updatedAt >= at) return;
       await sync.recordProgress(
         toKey,
         positionSeconds: old.positionSeconds,
         durationSeconds: old.durationSeconds,
         watchedFraction: isWatched ? 0.0 : kFilesWatchedFraction,
-        nowMs: old.updatedAt.millisecondsSinceEpoch,
+        nowMs: at,
       );
-    } else if (isWatched) {
+      _onSyncMutation?.call();
+    } else if (isWatched && existing == null) {
       await sync.setWatched(toKey, true, nowMs: _now().millisecondsSinceEpoch);
+      _onSyncMutation?.call();
     }
   }
 
@@ -569,13 +588,25 @@ class FileMatcher {
       final targets = [for (final k in item.fileIds) unmatchedFileId(k)];
       for (final oldBase in oldBases) {
         if (stop?.call() ?? false) return;
-        await _move(item.kind, item.id(oldBase), targets, watched,
-            keepSource: oldBase == sharedBase);
         final oldSyncKey = syncKeyForFilesItem(
           accountId: _index.accountId,
           externalId: item.id(oldBase),
           isEpisode: g.isShow,
         );
+        // A provisional id has no sync record: its legacy state goes to each
+        // file's record before `_move` clears it.
+        if (oldSyncKey == null) {
+          for (final k in item.fileIds) {
+            await _syncLegacyState(
+              item.kind,
+              item.id(oldBase),
+              unmatchedFileSyncKey(_index.accountId, k),
+              watched,
+            );
+          }
+        }
+        await _move(item.kind, item.id(oldBase), targets, watched,
+            keepSource: oldBase == sharedBase);
         if (oldSyncKey != null) {
           for (final k in item.fileIds) {
             final fileSyncKey = unmatchedFileSyncKey(_index.accountId, k);

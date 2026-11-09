@@ -341,18 +341,6 @@ class FilesCatalog {
         episodesSharingAFile(id).any(_playedThrough);
   }
 
-  /// Whether [id] carries a watched flag of its own: the synced record for an
-  /// item that has a sync key, the legacy flag for the rest.
-  bool _flaggedWatched(String id) {
-    if (syncStore != null) {
-      final syncKey = _syncKeyForId(id);
-      if (syncKey != null) {
-        return syncStore!.watchRecord(syncKey)?.watched ?? false;
-      }
-    }
-    return _watched.contains(id);
-  }
-
   bool _playedThrough(String id) {
     final p = progressOf(id);
     return p != null &&
@@ -362,7 +350,9 @@ class FilesCatalog {
 
   /// The position to resume [id] from, or null when it is not under way.
   int? resumeSeconds(String id) {
-    if (_flaggedWatched(id)) return null;
+    // Effectively watched, which includes finishing a shared file as another
+    // of its episodes, leaves nothing to resume.
+    if (watched(id)) return null;
     final p = progressOf(id);
     if (p == null || p.durationSeconds <= 0) return null;
     if (p.positionSeconds < kFilesResumeMinSeconds) return null;

@@ -92,7 +92,10 @@ class FilesPlaybackSession extends SourcePlaybackSession {
         syncStore: _files.syncStore,
         syncKeyFor: _files.syncKeyFor,
         onSyncWrite: _files.onSyncMutation,
-        onChanged: () => _files.invalidateWatchedFor(item),
+        // The identity playback writes under, which a match made during
+        // playback changes.
+        onChanged: () =>
+            _files.invalidateWatchedFor(_files.currentRef(item, fileId)),
       );
 
   @override

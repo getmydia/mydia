@@ -669,6 +669,67 @@ void main() {
         expect(record.durationSeconds, 1800);
       });
 
+      test('newer_provisional_progress_beats_an_older_destination_record',
+          () async {
+        final index = await openIndex('provisional_newer');
+        final progress = InMemoryPlaybackProgressStore();
+        await progress.save(LocalPlaybackProgress(
+          sourceId: filesLocalSource.id.value,
+          mediaId: movieId(provisionalKey(groupKey)),
+          mediaType: 'movie',
+          positionSeconds: 900,
+          durationSeconds: 1800,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(5000),
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.recordProgress(
+          'tmdb:movie:99901',
+          positionSeconds: 100,
+          durationSeconds: 1800,
+          watchedFraction: 0.95,
+          nowMs: 2000,
+        );
+        var mutations = 0;
+        await FileMatcher(
+          tmdb: _CapturingRelay()..searchDown = true,
+          names: FakeMediaNames(),
+          index: index,
+          progress: progress,
+          sourceId: filesLocalSource.id,
+          syncStore: syncStore,
+          onSyncMutation: () => mutations++,
+        ).pin(groupKey, isShow: false, tmdbId: 99901);
+
+        expect(syncStore.watchRecord('tmdb:movie:99901')!.positionSeconds, 900);
+        expect(mutations, greaterThan(0));
+      });
+
+      test('an_equal_time_pin_with_another_target_is_applied_on_scan',
+          () async {
+        final index = await openIndex('equal_time_pin');
+        // The index holds the loser of an equal-time conflict.
+        await index.putGroup(GroupMatch(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 100,
+          pinned: true,
+          matchedAt: filesT0,
+          pinRevision: 5000,
+        ));
+        final syncStore = InMemoryPeerSyncStore();
+        await syncStore.setPin(
+          groupKey: groupKey,
+          isShow: false,
+          tmdbId: 200,
+          pinned: true,
+          nowMs: 5000,
+        );
+
+        await matcherOver(index, syncStore).matchPending();
+
+        expect(index.group(groupKey)!.tmdbId, 200);
+      });
+
       Future<FilesMediaSource> mediaOver(
         FileLibraryIndex index,
         PeerSyncStore syncStore, {
