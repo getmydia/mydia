@@ -178,6 +178,8 @@ class HivePeerSyncStore implements PeerSyncStore {
       bool wins;
       if (existing == null) {
         wins = true;
+      } else if (existing.revoked && !candidate.revoked) {
+        wins = false;
       } else if (candidate.updatedAt > existing.updatedAt) {
         wins = true;
       } else if (candidate.updatedAt == existing.updatedAt &&
@@ -291,6 +293,9 @@ class HivePeerSyncStore implements PeerSyncStore {
     required int nowMs,
   }) async {
     final current = watchRecord(key);
+    if (current != null && current.updatedAt > nowMs) {
+      return current;
+    }
     final isWatched = (current?.watched ?? false) ||
         (durationSeconds > 0 &&
             (positionSeconds / durationSeconds) >= watchedFraction);
@@ -558,6 +563,8 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
       bool wins;
       if (existing == null) {
         wins = true;
+      } else if (existing.revoked && !candidate.revoked) {
+        wins = false;
       } else if (candidate.updatedAt > existing.updatedAt) {
         wins = true;
       } else if (candidate.updatedAt == existing.updatedAt &&
@@ -639,6 +646,9 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
     required int nowMs,
   }) async {
     final current = _watchRecords[key];
+    if (current != null && current.updatedAt > nowMs) {
+      return current;
+    }
     final isWatched = (current?.watched ?? false) ||
         (durationSeconds > 0 &&
             (positionSeconds / durationSeconds) >= watchedFraction);
@@ -821,7 +831,31 @@ Future<void> seedPeerSyncStoreIfNeeded({
   if (syncStore.isSeeded) return;
   final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
 
-  // 1. Watched state and pins from indexBox
+  // 1. Playback progress from progressStore
+  for (final p in progressStore.all()) {
+    final parsed = parseFilesId(p.mediaId);
+    if (parsed == null || parsed.isProvisional) continue;
+    final accountId =
+        p.sourceId.contains(':') ? p.sourceId.split(':').first : p.sourceId;
+    final isEpisode = p.mediaType == 'episode' ||
+        (parsed.season != null && parsed.episode != null);
+    final syncKey = syncKeyForFilesItem(
+      accountId: accountId,
+      externalId: p.mediaId,
+      isEpisode: isEpisode,
+    );
+    if (syncKey != null) {
+      await syncStore.recordProgress(
+        syncKey,
+        positionSeconds: p.positionSeconds,
+        durationSeconds: p.durationSeconds,
+        watchedFraction: ProgressService.watchedThreshold,
+        nowMs: p.updatedAt.millisecondsSinceEpoch,
+      );
+    }
+  }
+
+  // 2. Watched state and pins from indexBox (nowMs wins over older progress)
   for (final key in indexBox.keys) {
     if (key is! String) continue;
     final slash1 = key.indexOf('/');
@@ -864,30 +898,6 @@ Future<void> seedPeerSyncStoreIfNeeded({
               '[seedPeerSyncStoreIfNeeded] Failed to parse group $key: $e');
         }
       }
-    }
-  }
-
-  // 2. Playback progress from progressStore
-  for (final p in progressStore.all()) {
-    final parsed = parseFilesId(p.mediaId);
-    if (parsed == null || parsed.isProvisional) continue;
-    final accountId =
-        p.sourceId.contains(':') ? p.sourceId.split(':').first : p.sourceId;
-    final isEpisode = p.mediaType == 'episode' ||
-        (parsed.season != null && parsed.episode != null);
-    final syncKey = syncKeyForFilesItem(
-      accountId: accountId,
-      externalId: p.mediaId,
-      isEpisode: isEpisode,
-    );
-    if (syncKey != null) {
-      await syncStore.recordProgress(
-        syncKey,
-        positionSeconds: p.positionSeconds,
-        durationSeconds: p.durationSeconds,
-        watchedFraction: ProgressService.watchedThreshold,
-        nowMs: p.updatedAt.millisecondsSinceEpoch,
-      );
     }
   }
 

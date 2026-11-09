@@ -38,6 +38,9 @@ class FakePeerSyncService implements PeerSyncService {
   int leaveGroupCount = 0;
 
   @override
+  String get deviceName => 'Test Device';
+
+  @override
   bool get isPaired => _isPaired;
 
   @override

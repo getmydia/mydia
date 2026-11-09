@@ -114,6 +114,7 @@ class PeerSyncService {
     required RelayApiClient relayClient,
     required String deviceName,
     required String platform,
+    Future<String> Function()? resolveDeviceName,
     Future<void> Function(
       Set<String> changedWatchKeys,
       Set<String> changedPinKeys,
@@ -126,6 +127,7 @@ class PeerSyncService {
         _relayClient = relayClient,
         _deviceName = deviceName,
         _platform = platform,
+        _resolveDeviceName = resolveDeviceName,
         _onRemoteChangesApplied = onRemoteChangesApplied,
         _onPeerPaired = onPeerPaired,
         _clock = clock ?? DateTime.now;
@@ -134,8 +136,10 @@ class PeerSyncService {
   final AuthStorage _authStorage;
   final PeerSyncTransport _transport;
   final RelayApiClient _relayClient;
-  final String _deviceName;
+  String _deviceName;
+  String get deviceName => _deviceName;
   final String _platform;
+  final Future<String> Function()? _resolveDeviceName;
   final Future<void> Function(
     Set<String> changedWatchKeys,
     Set<String> changedPinKeys,
@@ -183,6 +187,28 @@ class PeerSyncService {
         _secret = null;
       }
     }
+
+    try {
+      final name = _resolveDeviceName != null
+          ? await _resolveDeviceName()
+          : await DeviceInfoService().getDeviceName();
+      if (name.trim().isNotEmpty) {
+        _deviceName = name.trim();
+        final localNodeId = _transport.nodeId;
+        if (localNodeId != null) {
+          final existing = _store.member(localNodeId);
+          if (existing != null && existing.deviceName != _deviceName) {
+            await _store.putMember(
+              existing.copyWith(
+                deviceName: _deviceName,
+                updatedAt: max(
+                    _clock().millisecondsSinceEpoch, existing.updatedAt + 1),
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
 
     _inboundSub ??=
         _transport.onPeerSyncRequest.listen(_handleInboundPeerSyncRequest);
@@ -502,10 +528,6 @@ class PeerSyncService {
       return;
     }
 
-    final nowMs = _clock().millisecondsSinceEpoch;
-    final incomingMembers = req.roster.map(PeerMember.fromWire);
-    await _store.mergeRoster(incomingMembers, nowMs: nowMs);
-
     final senderMember = _store.member(request.peer);
     if (senderMember != null && senderMember.revoked) {
       await _transport.respondToPeerSync(
@@ -514,6 +536,10 @@ class PeerSyncService {
       );
       return;
     }
+
+    final nowMs = _clock().millisecondsSinceEpoch;
+    final incomingMembers = req.roster.map(PeerMember.fromWire);
+    await _store.mergeRoster(incomingMembers, nowMs: nowMs);
 
     _peerCooldowns.remove(request.peer);
 
@@ -531,16 +557,42 @@ class PeerSyncService {
       ...req.watchRecords.map((w) => w.key),
       ...req.pinRecords.map((p) => p.key),
     };
-    final outgoingWatch = _store
+    final outgoingWatchRecords = _store
         .watchRecordsSince(req.sinceLandedMs.toInt())
         .where((w) => !incomingKeys.contains(w.key))
-        .map((w) => w.toWire())
         .toList();
-    final outgoingPins = _store
+    final outgoingPinRecords = _store
         .pinRecordsSince(req.sinceLandedMs.toInt())
         .where((p) => !incomingKeys.contains(p.key))
-        .map((p) => p.toWire())
         .toList();
+    final outgoingWatch = outgoingWatchRecords.map((w) => w.toWire()).toList();
+    final outgoingPins = outgoingPinRecords.map((p) => p.toWire()).toList();
+
+    var maxLandedAt = 0;
+    for (final w in outgoingWatchRecords) {
+      if (w.landedAt > maxLandedAt) maxLandedAt = w.landedAt;
+    }
+    for (final p in outgoingPinRecords) {
+      if (p.landedAt > maxLandedAt) maxLandedAt = p.landedAt;
+    }
+
+    if (maxLandedAt > req.sinceLandedMs.toInt()) {
+      final existingWatermark = _store.watermark(request.peer);
+      final baseWatermark = existingWatermark ??
+          PeerWatermark(
+            lastSentLandedAt: 0,
+            lastPeerNowMs: 0,
+            lastSyncedAt: nowMs,
+          );
+      final updatedLastSent = max(baseWatermark.lastSentLandedAt, maxLandedAt);
+      await _store.setWatermark(
+        request.peer,
+        baseWatermark.copyWith(
+          lastSentLandedAt: updatedLastSent,
+          lastSyncedAt: nowMs,
+        ),
+      );
+    }
 
     await _transport.respondToPeerSync(
       request.requestId,
@@ -757,7 +809,7 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
             if (pinRecord == null) continue;
             if (source.matcher.hasFilesForGroup(pinRecord.groupKey)) {
               if (pinRecord.pinned) {
-                await source.matcher.pin(
+                await source.matcher.applyRemotePin(
                   pinRecord.groupKey,
                   isShow: pinRecord.isShow,
                   tmdbId: pinRecord.tmdbId,

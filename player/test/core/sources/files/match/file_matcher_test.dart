@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/files/files_ids.dart';
@@ -627,6 +628,46 @@ void main() {
     expect(index.watched(), contains('7'));
     expect(progress.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
     expect(index.watched(), contains('8'));
+  });
+
+  test('applyRemotePin updates index without sync mutation or sync store write',
+      () async {
+    final syncStore = InMemoryPeerSyncStore();
+    var syncMutationCalls = 0;
+    final m = FileMatcher(
+      tmdb: relay,
+      names: FakeMediaNames(),
+      index: index,
+      progress: progress,
+      sourceId: source,
+      syncStore: syncStore,
+      onSyncMutation: () => syncMutationCalls++,
+      now: () => t0.add(const Duration(days: 1)),
+    );
+
+    relay.ids['Harbor of Echoes'] = 99908;
+    await addFiles(['A/Harbor of Echoes (2024).mkv']);
+
+    await m.applyRemotePin('harborofechoes|2024', isShow: false, tmdbId: 99908);
+
+    // Group is pinned and matched in index
+    expect(index.group('harborofechoes|2024')?.pinned, isTrue);
+    expect(index.group('harborofechoes|2024')?.tmdbId, 99908);
+
+    // BUT sync mutation is not triggered and nothing is written to syncStore
+    expect(syncMutationCalls, 0);
+    expect(
+      syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
+      isNull,
+    );
+
+    // Compare with regular pin which DOES record and notify
+    await m.pin('harborofechoes|2024', isShow: false, tmdbId: 99908);
+    expect(syncMutationCalls, 1);
+    expect(
+      syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
+      isNotNull,
+    );
   });
 }
 

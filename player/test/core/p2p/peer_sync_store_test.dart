@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
+import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/playback/playback_progress_store.dart';
 
 void main() {
   group('Canonical sync keys', () {
@@ -301,7 +303,7 @@ void main() {
         expect(ignored, isEmpty);
         expect(store.member(nodeId)!.revoked, isTrue);
 
-        // Higher updatedAt un-revokes
+        // Higher updatedAt does NOT un-revoke a revoked member
         final revived = await store.mergeRoster(
           [
             const PeerMember(
@@ -314,8 +316,32 @@ void main() {
           ],
           nowMs: 2500,
         );
-        expect(revived, contains(nodeId));
-        expect(store.member(nodeId)!.revoked, isFalse);
+        expect(revived, isEmpty);
+        expect(store.member(nodeId)!.revoked, isTrue);
+      });
+
+      test('record_progress_does_not_overwrite_newer_record', () async {
+        const key = 'tmdb:movie:99905';
+        // Newer watched record at t = 2000
+        await store.setWatched(key, true, nowMs: 2000);
+
+        // Older progress arrives at t = 1000
+        final record = await store.recordProgress(
+          key,
+          positionSeconds: 200,
+          durationSeconds: 1000,
+          watchedFraction: 0.90,
+          nowMs: 1000,
+        );
+
+        expect(record.watched, isTrue);
+        expect(record.updatedAt, 2000);
+        expect(record.positionSeconds, isNull);
+
+        final stored = store.watchRecord(key);
+        expect(stored, isNotNull);
+        expect(stored!.watched, isTrue);
+        expect(stored.updatedAt, 2000);
       });
     });
   }
@@ -343,7 +369,7 @@ void main() {
       await store.setPin(
         groupKey: 'harbor-of-echoes',
         isShow: true,
-        tmdbId: 550,
+        tmdbId: 99950,
         pinned: true,
         nowMs: 1100,
       );
@@ -389,7 +415,7 @@ void main() {
         groupKey: 'harbor-of-echoes',
       );
       expect(pin, isNotNull);
-      expect(pin!.tmdbId, 550);
+      expect(pin!.tmdbId, 99950);
       expect(pin.pinned, isTrue);
 
       final member = store.member('node-reopen-1');
@@ -415,6 +441,49 @@ void main() {
       await box.deleteFromDisk();
       await Hive.close();
       await tempDir.delete(recursive: true);
+    });
+  });
+
+  group('seedPeerSyncStoreIfNeeded', () {
+    test('seeds_progress_first_and_watched_second_so_watched_wins', () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('hive_seed_order_test_');
+      Hive.init(tempDir.path);
+      addTearDown(() async {
+        await Hive.close();
+        if (tempDir.existsSync()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final indexBox =
+          await Hive.openBox<Map<dynamic, dynamic>>('test_index_seed');
+      // Item marked watched in indexBox
+      await indexBox.put('local_acc/watched/99910', <dynamic, dynamic>{});
+
+      // Older progress in progressStore for same item
+      final progressStore = InMemoryPlaybackProgressStore();
+      await progressStore.save(LocalPlaybackProgress(
+        sourceId: 'local_acc:owner:srv',
+        mediaId: '99910',
+        mediaType: 'movie',
+        positionSeconds: 100,
+        durationSeconds: 1000,
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+      ));
+
+      final syncStore = InMemoryPeerSyncStore();
+      await seedPeerSyncStoreIfNeeded(
+        syncStore: syncStore,
+        indexBox: indexBox,
+        progressStore: progressStore,
+        nowMs: 2000,
+      );
+
+      final rec = syncStore.watchRecord('tmdb:movie:99910');
+      expect(rec, isNotNull);
+      expect(rec!.watched, isTrue);
+      expect(rec.updatedAt, 2000);
     });
   });
 }

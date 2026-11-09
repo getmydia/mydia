@@ -86,21 +86,47 @@ class FileMatcher {
   /// Fixes a group to [tmdbId], or to "no match" when null. A pinned group is
   /// never searched again. Throws [RelayUnavailable] when details are needed
   /// and the relay is down; nothing is written then.
+  ///
+  /// Set [recordSync] to false when applying a pin from remote peer sync,
+  /// preventing local sync store writes and sync mutation broadcasts.
   Future<void> pin(
     String groupKey, {
     required bool isShow,
     int? tmdbId,
+    bool recordSync = true,
   }) =>
       _serialized(
-          groupKey, () => _pin(groupKey, isShow: isShow, tmdbId: tmdbId));
+          groupKey,
+          () => _pin(
+                groupKey,
+                isShow: isShow,
+                tmdbId: tmdbId,
+                recordSync: recordSync,
+              ));
+
+  /// Applies a pin received from remote peer sync. Performs matching,
+  /// indexing, and migrations without re-recording in [PeerSyncStore] or
+  /// triggering sync mutation callbacks.
+  Future<void> applyRemotePin(
+    String groupKey, {
+    required bool isShow,
+    int? tmdbId,
+  }) =>
+      pin(
+        groupKey,
+        isShow: isShow,
+        tmdbId: tmdbId,
+        recordSync: false,
+      );
 
   Future<void> _pin(
     String groupKey, {
     required bool isShow,
     int? tmdbId,
+    bool recordSync = true,
   }) async {
     final files = _filesOf(groupKey, isShow);
-    if (_syncStore != null) {
+    if (recordSync && _syncStore != null) {
       await _syncStore.setPin(
         groupKey: groupKey,
         isShow: isShow,

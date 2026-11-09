@@ -94,11 +94,11 @@ void main() {
       final indexBox =
           await Hive.openBox<Map<dynamic, dynamic>>('files_index_seed');
       final index = FileLibraryIndex(indexBox, accountId: kFilesLocalAccountId);
-      await index.setWatched('603', true);
+      await index.setWatched('99901', true);
       await index.putGroup(GroupMatch(
         groupKey: 'fable of glass:2031',
         isShow: false,
-        tmdbId: 603,
+        tmdbId: 99901,
         pinned: true,
         matchedAt: DateTime.now(),
       ));
@@ -106,7 +106,7 @@ void main() {
       final progressStore = InMemoryPlaybackProgressStore();
       await progressStore.save(LocalPlaybackProgress(
         sourceId: 'flocal:owner:local',
-        mediaId: '1399-1-1',
+        mediaId: '99902-1-1',
         mediaType: 'episode',
         positionSeconds: 120,
         durationSeconds: 1800,
@@ -124,11 +124,11 @@ void main() {
 
       expect(syncStore.isSeeded, isTrue);
 
-      final movieRec = syncStore.watchRecord('tmdb:movie:603');
+      final movieRec = syncStore.watchRecord('tmdb:movie:99901');
       expect(movieRec, isNotNull);
       expect(movieRec!.watched, isTrue);
 
-      final epRec = syncStore.watchRecord('tmdb:ep:1399:1:1');
+      final epRec = syncStore.watchRecord('tmdb:ep:99902:1:1');
       expect(epRec, isNotNull);
       expect(epRec!.positionSeconds, 120);
       expect(epRec.durationSeconds, 1800);
@@ -137,7 +137,7 @@ void main() {
           syncStore.pinRecord(isShow: false, groupKey: 'fable of glass:2031');
       expect(pinRec, isNotNull);
       expect(pinRec!.pinned, isTrue);
-      expect(pinRec.tmdbId, 603);
+      expect(pinRec.tmdbId, 99901);
     });
 
     test('matched_watch_state_shared_across_files_sources', () async {
@@ -168,25 +168,25 @@ void main() {
       await index1.putRoot(root1);
       await index2.putRoot(root2);
 
-      const movie603 = MatchedMovie(
-        tmdbId: 603,
+      const movie99901 = MatchedMovie(
+        tmdbId: 99901,
         title: 'Fable of Glass',
         year: 2031,
       );
-      await index1.putMovie(movie603);
-      await index2.putMovie(movie603);
+      await index1.putMovie(movie99901);
+      await index2.putMovie(movie99901);
 
-      final group603 = GroupMatch(
+      final group99901 = GroupMatch(
         groupKey: 'fable of glass:2031',
         isShow: false,
-        tmdbId: 603,
+        tmdbId: 99901,
         matchedAt: filesT0,
       );
-      await index1.putGroup(group603);
-      await index2.putGroup(group603);
+      await index1.putGroup(group99901);
+      await index2.putGroup(group99901);
 
       final file1 = IndexedFile(
-        key: 'file603_1',
+        key: 'file99901_1',
         rootId: 'r1',
         path: 'Fable of Glass (2031).mkv',
         size: 500,
@@ -201,7 +201,7 @@ void main() {
         ),
       );
       final file2 = IndexedFile(
-        key: 'file603_2',
+        key: 'file99901_2',
         rootId: 'r2',
         path: 'Fable of Glass (2031).mkv',
         size: 500,
@@ -266,7 +266,7 @@ void main() {
       final ref2 = ItemRef(
         sourceId: source2.id,
         kind: ItemKind.movie,
-        externalId: '603',
+        externalId: '99901',
       );
       final before = await media2.item(ref2);
       expect(before.summary.userState.watched, isFalse);
@@ -274,7 +274,7 @@ void main() {
       final ref1 = ItemRef(
         sourceId: source1.id,
         kind: ItemKind.movie,
-        externalId: '603',
+        externalId: '99901',
       );
       await media1.setWatched(ref1, true);
 
@@ -314,25 +314,25 @@ void main() {
       await index1.putRoot(root1);
       await index2.putRoot(root2);
 
-      const movie603 = MatchedMovie(
-        tmdbId: 603,
+      const movie99901 = MatchedMovie(
+        tmdbId: 99901,
         title: 'Fable of Glass',
         year: 2031,
       );
-      await index1.putMovie(movie603);
-      await index2.putMovie(movie603);
+      await index1.putMovie(movie99901);
+      await index2.putMovie(movie99901);
 
-      final group603 = GroupMatch(
+      final group99901 = GroupMatch(
         groupKey: 'fable of glass:2031',
         isShow: false,
-        tmdbId: 603,
+        tmdbId: 99901,
         matchedAt: filesT0,
       );
-      await index1.putGroup(group603);
-      await index2.putGroup(group603);
+      await index1.putGroup(group99901);
+      await index2.putGroup(group99901);
 
       final file1 = IndexedFile(
-        key: 'file603_1',
+        key: 'file99901_1',
         rootId: 'r1',
         path: 'Fable of Glass (2031).mkv',
         size: 500,
@@ -347,7 +347,7 @@ void main() {
         ),
       );
       final file2 = IndexedFile(
-        key: 'file603_2',
+        key: 'file99901_2',
         rootId: 'r2',
         path: 'Fable of Glass (2031).mkv',
         size: 500,
@@ -404,9 +404,9 @@ void main() {
       );
       addTearDown(media2.dispose);
 
-      // Record a 300s/3600s position for 603 in syncStore
+      // Record a 300s/3600s position for 99901 in syncStore
       await syncStore.recordProgress(
-        'tmdb:movie:603',
+        'tmdb:movie:99901',
         positionSeconds: 300,
         durationSeconds: 3600,
         watchedFraction: ProgressService.watchedThreshold,
@@ -415,13 +415,13 @@ void main() {
 
       final cw1 = await media1.continueWatching();
       final cw2 = await media2.continueWatching();
-      expect(cw1.map((i) => i.ref.externalId), contains('603'));
-      expect(cw2.map((i) => i.ref.externalId), contains('603'));
+      expect(cw1.map((i) => i.ref.externalId), contains('99901'));
+      expect(cw2.map((i) => i.ref.externalId), contains('99901'));
 
       final ref1 = ItemRef(
         sourceId: source1.id,
         kind: ItemKind.movie,
-        externalId: '603',
+        externalId: '99901',
       );
       await media1.removeFromContinueWatching(ref1);
 
@@ -471,7 +471,7 @@ void main() {
       await syncStore.setPin(
         groupKey: 'fable of glass:2031',
         isShow: false,
-        tmdbId: 603,
+        tmdbId: 99901,
         pinned: true,
         nowMs: 5000,
       );
@@ -493,7 +493,7 @@ void main() {
       final group = index.group('fable of glass:2031');
       expect(group, isNotNull);
       expect(group!.pinned, isTrue);
-      expect(group.tmdbId, 603);
+      expect(group.tmdbId, 99901);
       expect(relay.searched, isEmpty);
     });
   });

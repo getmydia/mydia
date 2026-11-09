@@ -300,6 +300,18 @@ class PeerWatermark {
   final int lastPeerNowMs;
   final int lastSyncedAt;
 
+  PeerWatermark copyWith({
+    int? lastSentLandedAt,
+    int? lastPeerNowMs,
+    int? lastSyncedAt,
+  }) {
+    return PeerWatermark(
+      lastSentLandedAt: lastSentLandedAt ?? this.lastSentLandedAt,
+      lastPeerNowMs: lastPeerNowMs ?? this.lastPeerNowMs,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
         'lastSentLandedAt': lastSentLandedAt,
         'lastPeerNowMs': lastPeerNowMs,

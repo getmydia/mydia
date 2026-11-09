@@ -5,6 +5,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show PlatformInt64Util;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_group_secret.dart';
+import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/relay/claim_resolve_result.dart';
@@ -223,6 +224,7 @@ class TestNode {
       relayClient: relayClient,
       deviceName: name,
       platform: 'linux',
+      resolveDeviceName: () async => name,
       clock: clock.call,
       onRemoteChangesApplied: (watchKeys, pinKeys) async {
         appliedWatchKeys.addAll(watchKeys);
@@ -575,5 +577,120 @@ void main() {
 
     expect(nodeB.appliedWatchKeys, contains(movieKey));
     expect(nodeB.appliedPinKeys, contains(pinKey));
+  });
+
+  test('revoked_peer_cannot_unrevoke_itself_and_inbound_request_is_rejected',
+      () async {
+    // Pair A <-> B
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+
+    // B revokes A
+    clock.setMs(2000);
+    await nodeB.service.revokePeer('node-a');
+    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+
+    // A tries to send a sync request with candidate roster claiming revoked: false with higher clock
+    clock.setMs(5000);
+    final secretA = PeerGroupSecret.fromBase64Url(
+      (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
+    );
+    const unrevokeAttempt = PeerMember(
+      nodeId: 'node-a',
+      deviceName: 'Device A',
+      platform: 'linux',
+      updatedAt: 5000,
+      revoked: false,
+    );
+    final syncReq = FlutterPeerSyncRequest.sync_(
+      authProof: secretA.authProof('node-a'),
+      roster: [unrevokeAttempt.toWire()],
+      sinceLandedMs: PlatformInt64Util.from(0),
+      watchRecords: const [],
+      pinRecords: const [],
+    );
+
+    final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
+    expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
+
+    // B still has A marked as revoked, not un-revoked
+    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+  });
+
+  test('handle_sync_request_updates_last_sent_landed_at_watermark', () async {
+    const movieKey = 'tmdb:movie:99901';
+
+    // Pair A <-> B
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    // B sets a watch record
+    clock.setMs(2000);
+    final watchRecB = await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+
+    // Initially B's watermark for A has lastSentLandedAt = 0
+    expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
+
+    // A sends a sync request to B with sinceLandedMs = 0
+    final secretA = PeerGroupSecret.fromBase64Url(
+      (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
+    );
+    final syncReq = FlutterPeerSyncRequest.sync_(
+      authProof: secretA.authProof('node-a'),
+      roster: nodeA.store.members().values.map((m) => m.toWire()).toList(),
+      sinceLandedMs: PlatformInt64Util.from(0),
+      watchRecords: const [],
+      pinRecords: const [],
+    );
+
+    final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
+    expect(res, isA<FlutterPeerSyncResponse_SyncAck>());
+    final ack = res as FlutterPeerSyncResponse_SyncAck;
+    expect(ack.watchRecords.map((w) => w.key), contains(movieKey));
+
+    // B's watermark for A must be updated to at least the watch record's landedAt
+    final wm = nodeB.store.watermark('node-a');
+    expect(wm, isNotNull);
+    expect(wm!.lastSentLandedAt, greaterThanOrEqualTo(watchRecB.landedAt));
+  });
+
+  test('resolves_device_name_asynchronously_and_updates_local_member',
+      () async {
+    final standaloneStore = InMemoryPeerSyncStore();
+    final standaloneAuth = MockAuthStorage();
+    final standaloneTransport = FakePeerSyncTransport(
+      network: network,
+      localNodeId: 'node-standalone',
+    );
+
+    // Seed existing local member with old device name
+    await standaloneStore.putMember(const PeerMember(
+      nodeId: 'node-standalone',
+      deviceName: 'Old Device Name',
+      platform: 'linux',
+      updatedAt: 1000,
+    ));
+
+    final service = PeerSyncService(
+      store: standaloneStore,
+      authStorage: standaloneAuth,
+      transport: standaloneTransport,
+      relayClient: relayClient,
+      deviceName: 'Mydia Player',
+      platform: 'linux',
+      resolveDeviceName: () async => 'Echo Deck Pro',
+      clock: clock.call,
+    );
+
+    await service.start();
+
+    expect(service.deviceName, 'Echo Deck Pro');
+    expect(
+      standaloneStore.member('node-standalone')?.deviceName,
+      'Echo Deck Pro',
+    );
+
+    service.dispose();
+    standaloneTransport.dispose();
   });
 }
