@@ -110,8 +110,8 @@ mod tests {
                 updated_at_ms: 600,
             }],
             pin_records: vec![WirePinRecord {
-                key: "pin:m:matrix:1999".into(),
-                group_key: "matrix:1999".into(),
+                key: "pin:m:fable of glass:2031".into(),
+                group_key: "fable of glass:2031".into(),
                 is_show: false,
                 tmdb_id: Some(603),
                 pinned: true,
