@@ -49,11 +49,19 @@ class PeerGroupRoster implements DeviceRoster {
   @override
   Future<List<RemoteDeviceEntry>> onlineEntries() async {
     final active = activeMembers();
+    // Every active member is swept, the connected ones first: a member that
+    // is reachable and playing need not hold a connection yet, and leaving it
+    // out would keep its "Playing on" banner away whenever another member is
+    // connected.
     final connected = [
       for (final m in active)
         if (_isPeerConnected(m.nodeId)) m,
     ];
-    final target = connected.isNotEmpty ? connected : active;
+    final target = [
+      ...connected,
+      for (final m in active)
+        if (!connected.contains(m)) m,
+    ];
     return [
       for (final m in target)
         RemoteDeviceEntry(

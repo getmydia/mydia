@@ -16,9 +16,13 @@ abstract class PeerSyncStore {
   Map<String, PeerMember> members();
   PeerMember? member(String nodeId);
   Future<bool> putMember(PeerMember member);
+
+  /// Merges [incoming] roster entries. [senderNodeId] is the peer that sent
+  /// them: it can never lift its own revocation (see [rosterCandidateWins]).
   Future<Set<String>> mergeRoster(
     Iterable<PeerMember> incoming, {
     required int nowMs,
+    String? senderNodeId,
   });
   Future<void> clearRoster();
 
@@ -70,6 +74,62 @@ abstract class PeerSyncStore {
   // Initial seeding
   bool get isSeeded;
   Future<void> markSeeded();
+}
+
+/// Whether [candidate] replaces [existing] in the roster.
+///
+/// Last write wins on `updatedAt`, and a revocation wins a tie. A revoked
+/// member is brought back only by a newer record, and never one the member
+/// sends about itself ([senderNodeId]): the host that enrolls a device again
+/// stamps a newer, unrevoked record, and the rest of the group accepts it on
+/// the strength of the sender being someone else. Without that rule a revoked
+/// device could un-revoke itself with a record of its own.
+bool rosterCandidateWins(
+  PeerMember? existing,
+  PeerMember candidate, {
+  String? senderNodeId,
+}) {
+  if (existing == null) return true;
+  if (existing.revoked && !candidate.revoked) {
+    if (senderNodeId != null &&
+        senderNodeId.toLowerCase() == candidate.nodeId.toLowerCase()) {
+      return false;
+    }
+    return candidate.updatedAt > existing.updatedAt;
+  }
+  if (candidate.updatedAt > existing.updatedAt) return true;
+  return candidate.updatedAt == existing.updatedAt &&
+      candidate.revoked &&
+      !existing.revoked;
+}
+
+/// Whether [wire], with its clamped time [updatedAt], replaces [local].
+/// Equal times are settled the same way on every device: watched beats
+/// unwatched, then the later position, then the longer duration.
+bool watchIncomingWins(
+  PeerWatchRecord? local,
+  WireWatchRecord wire,
+  int updatedAt,
+) {
+  if (local == null || updatedAt > local.updatedAt) return true;
+  if (updatedAt < local.updatedAt) return false;
+  if (wire.watched != local.watched) return wire.watched;
+  final incomingPos = wire.positionSeconds?.toInt() ?? -1;
+  final localPos = local.positionSeconds ?? -1;
+  if (incomingPos != localPos) return incomingPos > localPos;
+  final incomingDur = wire.durationSeconds?.toInt() ?? -1;
+  final localDur = local.durationSeconds ?? -1;
+  return incomingDur > localDur;
+}
+
+/// Whether [wire], with its clamped time [updatedAt], replaces [local]. Equal
+/// times are settled the same way on every device: pinned beats unpinned,
+/// then the larger TMDB id.
+bool pinIncomingWins(PeerPinRecord? local, WirePinRecord wire, int updatedAt) {
+  if (local == null || updatedAt > local.updatedAt) return true;
+  if (updatedAt < local.updatedAt) return false;
+  if (wire.pinned != local.pinned) return wire.pinned;
+  return (wire.tmdbId?.toInt() ?? -1) > (local.tmdbId ?? -1);
 }
 
 class HivePeerSyncStore implements PeerSyncStore {
@@ -145,20 +205,7 @@ class HivePeerSyncStore implements PeerSyncStore {
   @override
   Future<bool> putMember(PeerMember member) async {
     final existing = this.member(member.nodeId);
-    bool wins;
-    if (existing == null) {
-      wins = true;
-    } else if (member.updatedAt > existing.updatedAt) {
-      wins = true;
-    } else if (member.updatedAt == existing.updatedAt &&
-        member.revoked &&
-        !existing.revoked) {
-      wins = true;
-    } else {
-      wins = false;
-    }
-
-    if (!wins) return false;
+    if (!rosterCandidateWins(existing, member)) return false;
     await _box.put('$_memberPrefix${member.nodeId}', member.toMap());
     return true;
   }
@@ -167,6 +214,7 @@ class HivePeerSyncStore implements PeerSyncStore {
   Future<Set<String>> mergeRoster(
     Iterable<PeerMember> incoming, {
     required int nowMs,
+    String? senderNodeId,
   }) async {
     final changed = <String>{};
     for (final m in incoming) {
@@ -175,20 +223,11 @@ class HivePeerSyncStore implements PeerSyncStore {
           ? m.copyWith(updatedAt: effectiveUpdatedAt)
           : m;
       final existing = member(candidate.nodeId);
-      bool wins;
-      if (existing == null) {
-        wins = true;
-      } else if (existing.revoked && !candidate.revoked) {
-        wins = false;
-      } else if (candidate.updatedAt > existing.updatedAt) {
-        wins = true;
-      } else if (candidate.updatedAt == existing.updatedAt &&
-          candidate.revoked &&
-          !existing.revoked) {
-        wins = true;
-      } else {
-        wins = false;
-      }
+      final wins = rosterCandidateWins(
+        existing,
+        candidate,
+        senderNodeId: senderNodeId,
+      );
 
       if (wins) {
         if (existing != candidate) {
@@ -405,24 +444,7 @@ class HivePeerSyncStore implements PeerSyncStore {
     for (final wire in watchRecords) {
       final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
       final local = watchRecord(wire.key);
-      bool incomingWins;
-      if (local == null) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt > local.updatedAt) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt < local.updatedAt) {
-        incomingWins = false;
-      } else {
-        if (wire.watched && !local.watched) {
-          incomingWins = true;
-        } else if (!wire.watched && local.watched) {
-          incomingWins = false;
-        } else {
-          final incomingPos = wire.positionSeconds?.toInt() ?? -1;
-          final localPos = local.positionSeconds ?? -1;
-          incomingWins = incomingPos > localPos;
-        }
-      }
+      final incomingWins = watchIncomingWins(local, wire, effectiveUpdatedAt);
 
       if (incomingWins) {
         final landed = _nextLandedAt(nowMs);
@@ -442,16 +464,7 @@ class HivePeerSyncStore implements PeerSyncStore {
     for (final wire in pinRecords) {
       final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
       final local = pinRecord(isShow: wire.isShow, groupKey: wire.groupKey);
-      bool incomingWins;
-      if (local == null) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt > local.updatedAt) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt < local.updatedAt) {
-        incomingWins = false;
-      } else {
-        incomingWins = false;
-      }
+      final incomingWins = pinIncomingWins(local, wire, effectiveUpdatedAt);
 
       if (incomingWins) {
         final landed = _nextLandedAt(nowMs);
@@ -530,20 +543,7 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
   @override
   Future<bool> putMember(PeerMember member) async {
     final existing = _members[member.nodeId];
-    bool wins;
-    if (existing == null) {
-      wins = true;
-    } else if (member.updatedAt > existing.updatedAt) {
-      wins = true;
-    } else if (member.updatedAt == existing.updatedAt &&
-        member.revoked &&
-        !existing.revoked) {
-      wins = true;
-    } else {
-      wins = false;
-    }
-
-    if (!wins) return false;
+    if (!rosterCandidateWins(existing, member)) return false;
     _members[member.nodeId] = member;
     return true;
   }
@@ -552,6 +552,7 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
   Future<Set<String>> mergeRoster(
     Iterable<PeerMember> incoming, {
     required int nowMs,
+    String? senderNodeId,
   }) async {
     final changed = <String>{};
     for (final m in incoming) {
@@ -560,20 +561,11 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
           ? m.copyWith(updatedAt: effectiveUpdatedAt)
           : m;
       final existing = _members[candidate.nodeId];
-      bool wins;
-      if (existing == null) {
-        wins = true;
-      } else if (existing.revoked && !candidate.revoked) {
-        wins = false;
-      } else if (candidate.updatedAt > existing.updatedAt) {
-        wins = true;
-      } else if (candidate.updatedAt == existing.updatedAt &&
-          candidate.revoked &&
-          !existing.revoked) {
-        wins = true;
-      } else {
-        wins = false;
-      }
+      final wins = rosterCandidateWins(
+        existing,
+        candidate,
+        senderNodeId: senderNodeId,
+      );
 
       if (wins) {
         if (existing != candidate) {
@@ -732,24 +724,7 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
     for (final wire in watchRecords) {
       final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
       final local = _watchRecords[wire.key];
-      bool incomingWins;
-      if (local == null) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt > local.updatedAt) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt < local.updatedAt) {
-        incomingWins = false;
-      } else {
-        if (wire.watched && !local.watched) {
-          incomingWins = true;
-        } else if (!wire.watched && local.watched) {
-          incomingWins = false;
-        } else {
-          final incomingPos = wire.positionSeconds?.toInt() ?? -1;
-          final localPos = local.positionSeconds ?? -1;
-          incomingWins = incomingPos > localPos;
-        }
-      }
+      final incomingWins = watchIncomingWins(local, wire, effectiveUpdatedAt);
 
       if (incomingWins) {
         final landed = _nextLandedAt(nowMs);
@@ -769,16 +744,7 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
     for (final wire in pinRecords) {
       final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
       final local = _pinRecords[wire.key];
-      bool incomingWins;
-      if (local == null) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt > local.updatedAt) {
-        incomingWins = true;
-      } else if (effectiveUpdatedAt < local.updatedAt) {
-        incomingWins = false;
-      } else {
-        incomingWins = false;
-      }
+      final incomingWins = pinIncomingWins(local, wire, effectiveUpdatedAt);
 
       if (incomingWins) {
         final landed = _nextLandedAt(nowMs);

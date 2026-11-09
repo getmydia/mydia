@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:player/presentation/screens/settings/paired_devices_screen.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_sections.dart';
@@ -114,7 +117,10 @@ class FakePeerSyncService implements PeerSyncService {
   }
 
   @override
-  Future<void> syncAll({bool ignoreCooldown = false}) async {
+  Future<void> syncAll({
+    bool ignoreCooldown = false,
+    String? exceptPeer,
+  }) async {
     syncAllCount++;
   }
 
@@ -230,6 +236,23 @@ void main() {
     expect(find.byKey(const Key('pair-active-code')), findsOneWidget);
     expect(find.text('ABC-123'), findsOneWidget);
     expect(find.byKey(const Key('pair-active-qr')), findsOneWidget);
+    // The QR encodes the offer's own payload (address and claim code), not a
+    // placeholder: another device scanning it can pair from it alone.
+    final qr = tester.widget<PairingQrCode>(
+      find.byKey(const Key('pair-active-qr-image')),
+    );
+    expect(qr.data, service.activeOffer!.qrJson);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('pair-active-qr-image')),
+        matching: find.byType(QrImageView),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      jsonDecode(qr.data),
+      containsPair('claim_code', 'ABC123'),
+    );
     expect(find.byKey(const Key('pair-cancel-offer-button')), findsOneWidget);
 
     // Cancel offer
@@ -238,6 +261,33 @@ void main() {
 
     expect(find.byKey(const Key('pair-active-code')), findsNothing);
     expect(find.byKey(const Key('pair-show-code-button')), findsOneWidget);
+  });
+
+  testWidgets('hides_scan_button_where_the_scanner_is_unsupported',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final store = InMemoryPeerSyncStore();
+      final service = FakePeerSyncService(store: store, isPaired: false);
+      final roster = PeerGroupRoster(
+        store: store,
+        localNodeId: () => service.localNodeId,
+        isPeerConnected: (_) => true,
+      );
+
+      await tester.pumpWidget(_wrapScreen(
+        service: service,
+        store: store,
+        roster: roster,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pair-scan-qr-button')), findsNothing);
+      // Typing the code still works.
+      expect(find.byKey(const Key('pair-code-input')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('submitting_claim_code_pairs_and_lists_peer_device',

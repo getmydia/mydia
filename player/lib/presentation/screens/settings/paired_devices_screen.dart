@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/peer_sync_records.dart';
@@ -44,6 +45,39 @@ class PairedDevicesScreen extends StatelessWidget {
   }
 }
 
+/// What failed, kept as a value and worded in `build` so the text follows the
+/// language.
+enum _PairingFailure { offer, pairing }
+
+/// Whether `mobile_scanner` can scan on this platform: Android, iOS and
+/// macOS. The web build cannot open the scanner and the Windows and Linux
+/// ones have no camera plugin for it.
+bool get _scanSupported =>
+    !kIsWeb &&
+    const {
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+      TargetPlatform.macOS,
+    }.contains(defaultTargetPlatform);
+
+/// The offer's payload (address and claim code) as a QR code, which another
+/// device scans to pair. Black on white whatever the theme, which scanners
+/// need.
+class PairingQrCode extends StatelessWidget {
+  const PairingQrCode({super.key, required this.data});
+
+  final String data;
+
+  @override
+  Widget build(BuildContext context) => QrImageView(
+        data: data,
+        size: 160,
+        backgroundColor: Colors.white,
+        eyeStyle: const QrEyeStyle(color: Colors.black),
+        dataModuleStyle: const QrDataModuleStyle(color: Colors.black),
+      );
+}
+
 class PairedDevicesBody extends ConsumerStatefulWidget {
   const PairedDevicesBody({super.key, this.padding = const EdgeInsets.all(16)});
 
@@ -58,7 +92,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
   StreamSubscription<PeerMember>? _pairedSub;
   StreamSubscription<void>? _stateSub;
   bool _isLoading = false;
-  String? _errorMessage;
+  _PairingFailure? _failure;
 
   @override
   void initState() {
@@ -112,13 +146,14 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
   Future<void> _handleStartOffer() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _failure = null;
     });
     try {
       await ref.read(peerSyncServiceProvider).startPairingOffer();
     } catch (e) {
+      debugPrint('[PairedDevices] Could not start an offer: $e');
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _failure = _PairingFailure.offer);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -138,15 +173,17 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
 
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _failure = null;
     });
 
     try {
       await ref.read(peerSyncServiceProvider).pairWithCode(cleanCode);
-      _codeController.clear();
+      // The viewer may have left while pairing was pending; a disposed
+      // controller must not be notified.
+      if (mounted) _codeController.clear();
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = context.l10n.pairedDevicesPairingFailed);
+        setState(() => _failure = _PairingFailure.pairing);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -154,7 +191,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
   }
 
   Future<void> _handleScanQr() async {
-    if (kIsWeb) return;
+    if (!_scanSupported) return;
     var detected = false;
     await showGlassSheet<void>(
       context: context,
@@ -185,13 +222,13 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
   Future<void> _pairWithQr(String qrJson) async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _failure = null;
     });
     try {
       await ref.read(peerSyncServiceProvider).pairWithQr(qrJson);
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = context.l10n.pairedDevicesPairingFailed);
+        setState(() => _failure = _PairingFailure.pairing);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -247,7 +284,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
     return ListView(
       padding: widget.padding,
       children: [
-        if (_errorMessage != null) ...[
+        if (_failure != null) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -255,7 +292,10 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              _errorMessage!,
+              switch (_failure!) {
+                _PairingFailure.offer => l10n.pairedDevicesOfferFailed,
+                _PairingFailure.pairing => l10n.pairedDevicesPairingFailed,
+              },
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onErrorContainer,
               ),
@@ -288,19 +328,26 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
               child: Column(
                 children: [
                   Text(
-                    l10n.pairedDevicesActiveOfferInstructions,
+                    activeOffer.publishedToRelay
+                        ? l10n.pairedDevicesActiveOfferInstructions
+                        : l10n.pairedDevicesQrOnlyInstructions,
                     style: Theme.of(context).textTheme.bodyMedium,
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 12),
-                  SelectableText(
-                    key: const Key('pair-active-code'),
-                    _formatCode(activeOffer.code),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                  ),
+                  // A code the relay does not hold cannot be looked up, so
+                  // it is shown only when it was published.
+                  if (activeOffer.publishedToRelay) ...[
+                    const SizedBox(height: 12),
+                    SelectableText(
+                      key: const Key('pair-active-code'),
+                      _formatCode(activeOffer.code),
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     key: const Key('pair-active-qr'),
@@ -309,10 +356,9 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
-                      Icons.qr_code_2,
-                      size: 140,
-                      color: Colors.black,
+                    child: PairingQrCode(
+                      key: const Key('pair-active-qr-image'),
+                      data: activeOffer.qrJson,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -363,13 +409,15 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          key: const Key('pair-scan-qr-button'),
-          icon: const Icon(Icons.qr_code_scanner),
-          label: Text(l10n.pairedDevicesScanQrButton),
-          onPressed: _isLoading ? null : _handleScanQr,
-        ),
+        if (_scanSupported) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('pair-scan-qr-button'),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(l10n.pairedDevicesScanQrButton),
+            onPressed: _isLoading ? null : _handleScanQr,
+          ),
+        ],
         const SizedBox(height: 24),
 
         // Paired devices list

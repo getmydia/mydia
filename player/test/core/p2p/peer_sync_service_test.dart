@@ -17,6 +17,14 @@ import '../../test_utils/mock_auth_storage.dart';
 class FakePeerSyncNetwork {
   final Map<String, FakePeerSyncTransport> _nodes = {};
   final Set<String> _disconnectedNodes = {};
+
+  /// Requesters whose replies are lost on the way back: the responder handles
+  /// the request, the requester sees a failure.
+  final Set<String> dropRepliesTo = {};
+
+  /// The next reply to this requester is held back until [heldReply] runs.
+  String? holdNextReplyTo;
+  void Function()? heldReply;
   final Map<String, int> _dialCount = {};
   int _requestIdCounter = 0;
 
@@ -68,6 +76,7 @@ class FakePeerSyncNetwork {
     final reqId = 'req-${++_requestIdCounter}';
     final completer = Completer<FlutterPeerSyncResponse>();
     targetTransport._pendingResponses[reqId] = completer;
+    targetTransport._requesterOf[reqId] = fromNodeId;
 
     targetTransport._inboundController.add(
       FlutterInboundPeerSyncRequest(
@@ -95,6 +104,7 @@ class FakePeerSyncTransport implements PeerSyncTransport {
       StreamController<FlutterInboundPeerSyncRequest>.broadcast();
   final _peerConnectedController = StreamController<String>.broadcast();
   final Map<String, Completer<FlutterPeerSyncResponse>> _pendingResponses = {};
+  final Map<String, String> _requesterOf = {};
   final Set<String> addressHints = {};
 
   @override
@@ -141,6 +151,16 @@ class FakePeerSyncTransport implements PeerSyncTransport {
     FlutterPeerSyncResponse res,
   ) async {
     final completer = _pendingResponses.remove(requestId);
+    final requester = _requesterOf.remove(requestId);
+    if (requester != null && network.dropRepliesTo.contains(requester)) {
+      completer?.completeError(Exception('reply lost'));
+      return;
+    }
+    if (requester != null && network.holdNextReplyTo == requester) {
+      network.holdNextReplyTo = null;
+      network.heldReply = () => completer?.complete(res);
+      return;
+    }
     completer?.complete(res);
   }
 
@@ -159,6 +179,7 @@ class FakeRelayClient extends RelayApiClient {
   final Map<String, ({String nodeAddr, String instanceId, String lookupKey})>
       _claimsByCode = {};
   final Map<String, String> _codeByLookupKey = {};
+  bool failPublish = false;
 
   @override
   Future<({String lookupKey, String sealed})> publishClaimCode({
@@ -166,6 +187,7 @@ class FakeRelayClient extends RelayApiClient {
     required String nodeAddr,
     required String instanceId,
   }) async {
+    if (failPublish) throw Exception('relay unavailable');
     final lookupKey = 'lookup-$code';
     _claimsByCode[code] = (
       nodeAddr: nodeAddr,
@@ -415,7 +437,9 @@ void main() {
     clock.setMs(4000);
     network.disconnect('node-a');
     network.reconnect('node-c');
-    await nodeB.service.syncAll();
+    // B already tried C while passing on A's change at t = 3000, when C was
+    // unreachable, so C is in its cooldown.
+    await nodeB.service.syncAll(ignoreCooldown: true);
 
     // Verify C now has movie watched with updatedAt == 1000
     final recordC = nodeC.store.watchRecord(movieKey);
@@ -617,7 +641,8 @@ void main() {
     expect(nodeB.store.member('node-a')?.revoked, isTrue);
   });
 
-  test('handle_sync_request_updates_last_sent_landed_at_watermark', () async {
+  test('handle_sync_request_does_not_advance_last_sent_landed_at_watermark',
+      () async {
     const movieKey = 'tmdb:movie:99901';
 
     // Pair A <-> B
@@ -626,7 +651,7 @@ void main() {
 
     // B sets a watch record
     clock.setMs(2000);
-    final watchRecB = await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+    await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
 
     // Initially B's watermark for A has lastSentLandedAt = 0
     expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
@@ -648,10 +673,264 @@ void main() {
     final ack = res as FlutterPeerSyncResponse_SyncAck;
     expect(ack.watchRecords.map((w) => w.key), contains(movieKey));
 
-    // B's watermark for A must be updated to at least the watch record's landedAt
-    final wm = nodeB.store.watermark('node-a');
-    expect(wm, isNotNull);
-    expect(wm!.lastSentLandedAt, greaterThanOrEqualTo(watchRecB.landedAt));
+    // B does not know the reply arrived, so it does not mark the record sent:
+    // only B's own next request, answered by A, moves that cursor.
+    expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
+  });
+
+  test('lost_sync_reply_is_delivered_when_the_responder_next_initiates',
+      () async {
+    const movieKey = 'tmdb:movie:99901';
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    clock.setMs(2000);
+    await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+
+    // A asks B for what is new, and B's reply never reaches A.
+    network.dropRepliesTo.add('node-a');
+    await nodeA.service.syncAll(ignoreCooldown: true);
+    expect(nodeA.store.watchRecord(movieKey), isNull);
+    network.dropRepliesTo.clear();
+
+    // B initiating next must still carry the record to A.
+    clock.setMs(3000);
+    await nodeB.service.syncAll(ignoreCooldown: true);
+    expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
+  });
+
+  Future<FlutterPeerSyncResponse> sendManualSync(
+    TestNode from,
+    String to, {
+    List<PeerMember> roster = const [],
+    List<FlutterWireWatchRecord> watch = const [],
+    int since = 0,
+  }) async {
+    final secret = PeerGroupSecret.fromBase64Url(
+      (await from.authStorage.read(PeerGroupSecret.storageKey))!,
+    );
+    return from.transport.sendPeerSync(
+      to,
+      FlutterPeerSyncRequest.sync_(
+        authProof: secret.authProof(from.nodeId),
+        roster: roster.map((m) => m.toWire()).toList(),
+        sinceLandedMs: PlatformInt64Util.from(since),
+        watchRecords: watch,
+        pinRecords: const [],
+      ),
+    );
+  }
+
+  test('revoked_device_cannot_enroll_a_new_node_id_with_the_group_secret',
+      () async {
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+    clock.setMs(2000);
+    await nodeA.service.revokePeer('node-b');
+
+    // B keeps the group secret. It syncs again as a node A has never seen.
+    final newNode = FakePeerSyncTransport(
+      network: network,
+      localNodeId: 'node-b-new',
+    );
+    addTearDown(newNode.dispose);
+    final secret = PeerGroupSecret.fromBase64Url(
+      (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
+    );
+    final res = await newNode.sendPeerSync(
+      'node-a',
+      FlutterPeerSyncRequest.sync_(
+        authProof: secret.authProof('node-b-new'),
+        roster: [
+          const PeerMember(
+            nodeId: 'node-b-new',
+            deviceName: 'Device B',
+            platform: 'linux',
+            updatedAt: 3000,
+          ).toWire(),
+        ],
+        sinceLandedMs: PlatformInt64Util.from(0),
+        watchRecords: const [],
+        pinRecords: const [],
+      ),
+    );
+
+    expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
+    expect(nodeA.store.member('node-b-new'), isNull);
+  });
+
+  test('re_enrolled_device_is_accepted_again_by_the_rest_of_the_group',
+      () async {
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+    final offerB = await nodeB.service.startPairingOffer();
+    await nodeC.service.pairWithCode(offerB.code);
+
+    // C removes A, and B hears of it.
+    clock.setMs(2000);
+    await nodeC.service.revokePeer('node-a');
+    await nodeB.service.syncAll(ignoreCooldown: true);
+    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+
+    // A pairs with B again, on purpose.
+    clock.setMs(3000);
+    final again = await nodeB.service.startPairingOffer();
+    await nodeA.service.pairWithCode(again.code);
+    await pumpEventQueue();
+
+    expect(nodeB.store.member('node-a')?.revoked, isFalse);
+    expect(nodeC.store.member('node-a')?.revoked, isFalse);
+  });
+
+  test('revocation_wins_over_a_member_record_stamped_ahead_of_the_clock',
+      () async {
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    clock.setMs(2000);
+    final b = nodeA.store.member('node-b')!;
+    await nodeA.store.putMember(b.copyWith(updatedAt: 9000000));
+    await nodeA.service.revokePeer('node-b');
+
+    expect(nodeA.store.member('node-b')?.revoked, isTrue);
+  });
+
+  test('leaving_revokes_this_device_even_when_its_record_is_ahead_of_the_clock',
+      () async {
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    clock.setMs(2000);
+    final a = nodeA.store.member('node-a')!;
+    await nodeA.store.putMember(a.copyWith(updatedAt: 40000));
+    await nodeA.service.leaveGroup();
+
+    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+    expect(nodeA.service.groupId, isNull);
+    expect(nodeA.store.members(), isEmpty);
+  });
+
+  test('late_sync_reply_does_not_restore_the_roster_after_leaving', () async {
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    // A sync is under way, its reply held back.
+    network.holdNextReplyTo = 'node-a';
+    final inFlight = nodeA.service.syncAll(ignoreCooldown: true);
+    await pumpEventQueue();
+    expect(network.heldReply, isNotNull);
+
+    await nodeA.service.leaveGroup();
+    expect(nodeA.store.members(), isEmpty);
+
+    // The reply lands after A has left.
+    network.heldReply!();
+    await inFlight;
+    await pumpEventQueue();
+
+    expect(nodeA.store.members(), isEmpty);
+    expect(nodeA.service.isPaired, isFalse);
+  });
+
+  test('accepted_change_is_passed_on_to_the_rest_of_the_group', () async {
+    const movieKey = 'tmdb:movie:99920';
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+    final offerB = await nodeB.service.startPairingOffer();
+    await nodeC.service.pairWithCode(offerB.code);
+    await pumpEventQueue();
+
+    // A reaches B alone, as when A skips C during a cooldown.
+    clock.setMs(2000);
+    await nodeA.store.setWatched(movieKey, true, nowMs: 2000);
+    final res = await sendManualSync(
+      nodeA,
+      'node-b',
+      watch: [nodeA.store.watchRecord(movieKey)!.toWire()],
+    );
+    expect(res, isA<FlutterPeerSyncResponse_SyncAck>());
+    await pumpEventQueue();
+
+    expect(nodeC.store.watchRecord(movieKey)?.watched, isTrue);
+  });
+
+  test('sync_returns_the_newer_local_record_when_the_incoming_one_is_older',
+      () async {
+    const movieKey = 'tmdb:movie:99921';
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    clock.setMs(5000);
+    await nodeB.store.setWatched(movieKey, true, nowMs: 5000);
+    const stale = 3000;
+    final older = FlutterWireWatchRecord(
+      key: movieKey,
+      watched: false,
+      updatedAtMs: PlatformInt64Util.from(stale),
+    );
+
+    // The sender's cursor is past B's record, so only the winner rule can
+    // bring it back.
+    final res = await sendManualSync(
+      nodeA,
+      'node-b',
+      watch: [older],
+      since: 9000000,
+    ) as FlutterPeerSyncResponse_SyncAck;
+
+    expect(res.watchRecords.map((w) => w.key), contains(movieKey));
+    expect(
+      res.watchRecords.firstWhere((w) => w.key == movieKey).updatedAtMs.toInt(),
+      5000,
+    );
+    expect(nodeB.store.watchRecord(movieKey)!.watched, isTrue);
+  });
+
+  test('qr_offer_is_active_without_relay_publication', () async {
+    relayClient.failPublish = true;
+    final offer = await nodeA.service.startPairingOffer();
+
+    expect(offer.publishedToRelay, isFalse);
+    expect(nodeA.service.activeOffer, isNotNull);
+
+    await nodeB.service.pairWithQr(offer.qrJson);
+    expect(nodeB.service.isPaired, isTrue);
+
+    await nodeA.service.cancelPairingOffer();
+    expect(nodeA.service.activeOffer, isNull);
+  });
+
+  test('paired_device_syncs_after_start_without_a_local_change', () async {
+    const movieKey = 'tmdb:movie:99922';
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+
+    clock.setMs(2000);
+    await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+    expect(nodeA.store.watchRecord(movieKey), isNull);
+
+    // B restarts: nothing was mutated and no refresh event fires.
+    await nodeB.service.start();
+    await pumpEventQueue();
+
+    expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
+  });
+
+  test('roster_change_from_sync_notifies_listeners', () async {
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+    final offerB = await nodeB.service.startPairingOffer();
+    await nodeC.service.pairWithCode(offerB.code);
+    await pumpEventQueue();
+
+    var changes = 0;
+    nodeA.service.onStateChanged.listen((_) => changes++);
+    await nodeA.store.clearRoster();
+    await nodeA.store.putMember(nodeB.store.member('node-b')!);
+    await nodeA.service.syncAll(ignoreCooldown: true);
+    await pumpEventQueue();
+
+    expect(changes, greaterThan(0));
   });
 
   test('resolves_device_name_asynchronously_and_updates_local_member',

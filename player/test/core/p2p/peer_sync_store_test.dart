@@ -8,6 +8,7 @@ import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
+import 'package:player/native/lib.dart';
 
 void main() {
   group('Canonical sync keys', () {
@@ -303,21 +304,114 @@ void main() {
         expect(ignored, isEmpty);
         expect(store.member(nodeId)!.revoked, isTrue);
 
-        // Higher updatedAt does NOT un-revoke a revoked member
-        final revived = await store.mergeRoster(
-          [
-            const PeerMember(
-              nodeId: nodeId,
-              deviceName: 'Harbor Deck',
-              platform: 'linux',
-              updatedAt: 2000,
-              revoked: false,
-            ),
-          ],
-          nowMs: 2500,
+        // A newer unrevoked record the member sends about itself never
+        // un-revokes it.
+        const reenrolled = PeerMember(
+          nodeId: nodeId,
+          deviceName: 'Harbor Deck',
+          platform: 'linux',
+          updatedAt: 2000,
+          revoked: false,
         );
-        expect(revived, isEmpty);
+        final selfAsserted = await store.mergeRoster(
+          [reenrolled],
+          nowMs: 2500,
+          senderNodeId: nodeId,
+        );
+        expect(selfAsserted, isEmpty);
         expect(store.member(nodeId)!.revoked, isTrue);
+
+        // The same record from another member is a re-enrollment: newer than
+        // the revocation, it lifts it.
+        final revived = await store.mergeRoster(
+          [reenrolled],
+          nowMs: 2500,
+          senderNodeId: 'node-host-1',
+        );
+        expect(revived, contains(nodeId));
+        expect(store.member(nodeId)!.revoked, isFalse);
+
+        // A stale unrevoked record cannot undo a newer revocation.
+        await store.putMember(
+          reenrolled.copyWith(revoked: true, updatedAt: 3000),
+        );
+        final stale = await store.mergeRoster(
+          [reenrolled],
+          nowMs: 3500,
+          senderNodeId: 'node-host-1',
+        );
+        expect(stale, isEmpty);
+        expect(store.member(nodeId)!.revoked, isTrue);
+      });
+
+      test('equal_time_watch_conflicts_settle_the_same_on_both_sides',
+          () async {
+        const key = 'tmdb:movie:99910';
+        // Same position, same millisecond, different durations.
+        await store.recordProgress(
+          key,
+          positionSeconds: 300,
+          durationSeconds: 1000,
+          watchedFraction: 0.95,
+          nowMs: 2000,
+        );
+        FlutterWireWatchRecord wire(int duration) => FlutterWireWatchRecord(
+              key: key,
+              watched: false,
+              positionSeconds: PlatformInt64Util.from(300),
+              durationSeconds: PlatformInt64Util.from(duration),
+              updatedAtMs: PlatformInt64Util.from(2000),
+            );
+        final changed = await store.mergeRemote(
+          watchRecords: [wire(1200)],
+          pinRecords: const [],
+          nowMs: 3000,
+        );
+        expect(changed.changedWatchKeys, {key});
+        expect(store.watchRecord(key)!.durationSeconds, 1200);
+
+        // The shorter duration does not win from the other side.
+        final back = await store.mergeRemote(
+          watchRecords: [wire(1000)],
+          pinRecords: const [],
+          nowMs: 3000,
+        );
+        expect(back.changedWatchKeys, isEmpty);
+        expect(store.watchRecord(key)!.durationSeconds, 1200);
+      });
+
+      test('equal_time_pin_conflicts_settle_the_same_on_both_sides', () async {
+        const group = 'harbor-of-echoes-2024';
+        await store.setPin(
+          groupKey: group,
+          isShow: false,
+          tmdbId: 100,
+          pinned: true,
+          nowMs: 2000,
+        );
+        FlutterWirePinRecord wire(int tmdbId) => FlutterWirePinRecord(
+              key: pinSyncKey(isShow: false, groupKey: group),
+              groupKey: group,
+              isShow: false,
+              tmdbId: PlatformInt64Util.from(tmdbId),
+              pinned: true,
+              updatedAtMs: PlatformInt64Util.from(2000),
+            );
+        final changed = await store.mergeRemote(
+          watchRecords: const [],
+          pinRecords: [wire(200)],
+          nowMs: 3000,
+        );
+        expect(changed.changedPinKeys, {wire(200).key});
+        expect(store.pinRecord(isShow: false, groupKey: group)!.tmdbId, 200);
+
+        // The smaller id loses to it from the other side.
+        final back = await store.mergeRemote(
+          watchRecords: const [],
+          pinRecords: [wire(100)],
+          nowMs: 3000,
+        );
+        expect(back.changedPinKeys, isEmpty);
       });
 
       test('record_progress_does_not_overwrite_newer_record', () async {

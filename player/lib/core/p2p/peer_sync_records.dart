@@ -175,6 +175,13 @@ class PeerWatchRecord {
     );
   }
 
+  /// Whether [wire] carries exactly this record's synced fields.
+  bool matchesWire(FlutterWireWatchRecord wire) =>
+      wire.watched == watched &&
+      wire.positionSeconds?.toInt() == positionSeconds &&
+      wire.durationSeconds?.toInt() == durationSeconds &&
+      wire.updatedAtMs.toInt() == updatedAt;
+
   FlutterWireWatchRecord toWire() => FlutterWireWatchRecord(
         key: key,
         watched: watched,
@@ -252,6 +259,12 @@ class PeerPinRecord {
       landedAt: (map['landedAt'] as num).toInt(),
     );
   }
+
+  /// Whether [wire] carries exactly this record's synced fields.
+  bool matchesWire(FlutterWirePinRecord wire) =>
+      wire.pinned == pinned &&
+      wire.tmdbId?.toInt() == tmdbId &&
+      wire.updatedAtMs.toInt() == updatedAt;
 
   FlutterWirePinRecord toWire() => FlutterWirePinRecord(
         key: key,

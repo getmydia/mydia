@@ -2568,6 +2568,14 @@
   "@pairedDevicesPairingFailed": {
     "description": "Error message when pairing with a code or QR fails."
   },
+  "pairedDevicesOfferFailed": "Couldn't start pairing. Check your connection and try again.",
+  "@pairedDevicesOfferFailed": {
+    "description": "Error message when this device cannot start offering a pairing code and QR code."
+  },
+  "pairedDevicesQrOnlyInstructions": "The pairing code is unavailable right now. Scan this QR code on your other device:",
+  "@pairedDevicesQrOnlyInstructions": {
+    "description": "Instructions shown above the QR code alone, when the pairing code could not be published and can only be used through the QR code."
+  },
   "pairedDevicesListSection": "Paired devices",
   "@pairedDevicesListSection": {
     "description": "Section header for the list of paired devices."

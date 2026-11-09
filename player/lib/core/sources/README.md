@@ -573,7 +573,19 @@ without a central Mydia server.
 - Convergence: Updates use Last-Write-Wins (LWW) with monotonically assigned
   `landedAt` watermarks. Delta sync exchanges only records updated since the
   peer's last received landed watermark, allowing transitive gossiping across
-  partially connected peer topologies (A ↔ B ↔ C).
+  partially connected peer topologies (A ↔ B ↔ C). Equal timestamps are
+  settled the same way on every device (watched, then position, then
+  duration; pinned, then the larger TMDB id). A device accepting a change
+  passes it on to the other members, and a reply to a sync request is not
+  counted as delivered until the requester sends its next cursor, so a lost
+  reply is sent again.
+- Membership: the group secret proves a device once belonged, not that it
+  still does, so only a node id the roster already holds may sync. A device
+  that pairs reaches the other members through the one it paired with. A
+  revocation always carries a time later than the stored record, and a
+  revoked member comes back only through a newer record from another member
+  (a re-enrollment by pairing), never one it sends about itself. A sync reply
+  that arrives after `leaveGroup` is dropped.
 - Handshake & lifecycle: `PeerSyncService` (`core/p2p/peer_sync_service.dart`)
   manages pairing offers with 6-character claim codes or direct QR payloads,
   with a 5-attempt rate limit locking out brute-force attempts. Mutations

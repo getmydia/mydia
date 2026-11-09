@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show PlatformInt64Util;
@@ -102,8 +103,14 @@ class ActivePairingOffer {
 
   final String code;
   final String qrJson;
-  final String lookupKey;
+
+  /// The relay's key for the published code, or null when the relay could
+  /// not be reached. The QR payload carries the address itself, so such an
+  /// offer still pairs by QR, just not by typing the code.
+  final String? lookupKey;
   final DateTime expiresAt;
+
+  bool get publishedToRelay => lookupKey != null;
 }
 
 class PeerSyncService {
@@ -160,6 +167,15 @@ class PeerSyncService {
 
   final Map<String, DateTime> _peerCooldowns = {};
 
+  /// Bumped when the group is left. A sync that was under way records what it
+  /// finds only if this is still the value it started with, so a late reply
+  /// cannot put the roster back after [leaveGroup] cleared it.
+  int _generation = 0;
+  bool _leaving = false;
+
+  bool _stale(int generation) =>
+      generation != _generation || _leaving || _secret == null;
+
   static const _alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
   bool get isPaired =>
@@ -215,6 +231,20 @@ class PeerSyncService {
     _peerConnectedSub ??= _transport.onPeerConnected.listen((_) {
       unawaited(syncAll());
     });
+
+    // Devices paired in an earlier launch reconcile what changed while this
+    // one was off, without waiting for a refresh event or a local change.
+    if (_secret != null) unawaited(_syncOnceHostReady());
+  }
+
+  Future<void> _syncOnceHostReady() async {
+    try {
+      await _transport.initialize();
+    } catch (e) {
+      debugPrint('[PeerSyncService] P2P host not ready for startup sync: $e');
+      return;
+    }
+    await syncAll(ignoreCooldown: true);
   }
 
   void _notifyStateChanged() {
@@ -266,7 +296,10 @@ class PeerSyncService {
           deviceName: _deviceName,
           platform: _platform,
           endpointAddrJson: nodeAddr,
-          updatedAt: _clock().millisecondsSinceEpoch,
+          updatedAt: max(
+            _clock().millisecondsSinceEpoch,
+            (existing?.updatedAt ?? 0) + 1,
+          ),
           revoked: false,
         ));
       }
@@ -274,11 +307,17 @@ class PeerSyncService {
 
     final code = _generateCode();
     final instanceId = 'peer:${secret.groupId}';
-    final sealed = await _relayClient.publishClaimCode(
-      code: code,
-      nodeAddr: nodeAddr,
-      instanceId: instanceId,
-    );
+    String? lookupKey;
+    try {
+      final sealed = await _relayClient.publishClaimCode(
+        code: code,
+        nodeAddr: nodeAddr,
+        instanceId: instanceId,
+      );
+      lookupKey = sealed.lookupKey;
+    } catch (e) {
+      debugPrint('[PeerSyncService] Claim code not published: $e');
+    }
 
     final qrJson = jsonEncode({'node_addr': nodeAddr, 'claim_code': code});
     final expiresAt = _clock().add(const Duration(minutes: 5));
@@ -287,7 +326,7 @@ class PeerSyncService {
     _activeOffer = ActivePairingOffer(
       code: code,
       qrJson: qrJson,
-      lookupKey: sealed.lookupKey,
+      lookupKey: lookupKey,
       expiresAt: expiresAt,
     );
     _failedPairAttempts = 0;
@@ -308,11 +347,18 @@ class PeerSyncService {
     _activeOfferTimer = null;
     _failedPairAttempts = 0;
 
-    try {
-      await _relayClient.deleteClaimCode(offer.lookupKey);
-    } catch (_) {}
-
+    await _deleteClaimCode(offer);
     _notifyStateChanged();
+  }
+
+  /// Takes the offer's code off the relay. An offer the relay never held has
+  /// nothing to take down.
+  Future<void> _deleteClaimCode(ActivePairingOffer offer) async {
+    final key = offer.lookupKey;
+    if (key == null) return;
+    try {
+      await _relayClient.deleteClaimCode(key);
+    } catch (_) {}
   }
 
   Future<void> pairWithCode(String code) async {
@@ -382,7 +428,7 @@ class PeerSyncService {
         deviceName: _deviceName,
         platform: _platform,
         endpointAddrJson: localNodeAddr,
-        updatedAt: nowMs,
+        updatedAt: max(nowMs, (_store.member(localNodeId)?.updatedAt ?? 0) + 1),
         revoked: false,
       ));
     }
@@ -390,6 +436,7 @@ class PeerSyncService {
     await _store.mergeRoster(
       res.roster.map(PeerMember.fromWire),
       nowMs: nowMs,
+      senderNodeId: hostNodeId,
     );
 
     final changes = await _store.mergeRemote(
@@ -446,9 +493,7 @@ class PeerSyncService {
         _activeOfferTimer?.cancel();
         _activeOfferTimer = null;
         _failedPairAttempts = 0;
-        try {
-          await _relayClient.deleteClaimCode(offer.lookupKey);
-        } catch (_) {}
+        await _deleteClaimCode(offer);
         _notifyStateChanged();
       }
       await _transport.respondToPeerSync(
@@ -465,17 +510,19 @@ class PeerSyncService {
     _activeOfferTimer?.cancel();
     _activeOfferTimer = null;
     _failedPairAttempts = 0;
-    try {
-      await _relayClient.deleteClaimCode(offer.lookupKey);
-    } catch (_) {}
+    await _deleteClaimCode(offer);
 
     final nowMs = now.millisecondsSinceEpoch;
+    // A device that was removed and pairs again is enrolled by a record newer
+    // than its revocation, so the rest of the group, which still holds the
+    // revocation, accepts it as a re-enrollment (see [rosterCandidateWins]).
+    final previous = _store.member(request.peer);
     final joinerMember = PeerMember(
       nodeId: request.peer,
       deviceName: req.deviceName,
       platform: req.platform,
       endpointAddrJson: req.endpointAddrJson,
-      updatedAt: nowMs,
+      updatedAt: max(nowMs, (previous?.updatedAt ?? 0) + 1),
       revoked: false,
     );
     await _store.putMember(joinerMember);
@@ -502,44 +549,45 @@ class PeerSyncService {
     _onPeerPaired?.call(joinerMember);
     _peerPairedController.add(joinerMember);
     _notifyStateChanged();
+
+    // The other members learn of the new device (or its re-enrollment) from
+    // here; the joiner syncs itself once its handshake completes.
+    unawaited(syncAll(exceptPeer: request.peer));
   }
 
   Future<void> _handleSyncRequest(
     FlutterInboundPeerSyncRequest request,
     FlutterPeerSyncRequest_Sync req,
   ) async {
-    if (_secret == null) {
-      await _transport.respondToPeerSync(
-        request.requestId,
-        const FlutterPeerSyncResponse.notAuthorized(),
-      );
-      return;
-    }
+    final generation = _generation;
+    final secret = _secret;
+    Future<void> reject() => _transport.respondToPeerSync(
+          request.requestId,
+          const FlutterPeerSyncResponse.notAuthorized(),
+        );
 
-    final valid = _secret!.verifyAuthProof(
+    if (secret == null || _leaving) return reject();
+    final valid = secret.verifyAuthProof(
       senderNodeId: request.peer,
       proof: req.authProof,
     );
-    if (!valid) {
-      await _transport.respondToPeerSync(
-        request.requestId,
-        const FlutterPeerSyncResponse.notAuthorized(),
-      );
-      return;
-    }
+    if (!valid) return reject();
 
-    final senderMember = _store.member(request.peer);
-    if (senderMember != null && senderMember.revoked) {
-      await _transport.respondToPeerSync(
-        request.requestId,
-        const FlutterPeerSyncResponse.notAuthorized(),
-      );
-      return;
-    }
+    // The group secret proves a device once belonged, not that it still
+    // does: a revoked device keeps it. Only a node the roster already holds
+    // may sync, so a revoked device cannot enroll a fresh node id. A device
+    // that just paired reaches the other members through the one it paired
+    // with (see [_handlePairRequest]).
+    final senderMember = _knownMember(request.peer);
+    if (senderMember == null || senderMember.revoked) return reject();
 
     final nowMs = _clock().millisecondsSinceEpoch;
-    final incomingMembers = req.roster.map(PeerMember.fromWire);
-    await _store.mergeRoster(incomingMembers, nowMs: nowMs);
+    final rosterChanged = await _store.mergeRoster(
+      req.roster.map(PeerMember.fromWire),
+      nowMs: nowMs,
+      senderNodeId: request.peer,
+    );
+    if (_stale(generation)) return reject();
 
     _peerCooldowns.remove(request.peer);
 
@@ -553,46 +601,32 @@ class PeerSyncService {
       await _transport.addAddressHint(req.senderEndpointAddrJson!);
     }
 
-    final incomingKeys = {
-      ...req.watchRecords.map((w) => w.key),
-      ...req.pinRecords.map((p) => p.key),
-    };
-    final outgoingWatchRecords = _store
-        .watchRecordsSince(req.sinceLandedMs.toInt())
-        .where((w) => !incomingKeys.contains(w.key))
-        .toList();
-    final outgoingPinRecords = _store
-        .pinRecordsSince(req.sinceLandedMs.toInt())
-        .where((p) => !incomingKeys.contains(p.key))
-        .toList();
-    final outgoingWatch = outgoingWatchRecords.map((w) => w.toWire()).toList();
-    final outgoingPins = outgoingPinRecords.map((p) => p.toWire()).toList();
-
-    var maxLandedAt = 0;
-    for (final w in outgoingWatchRecords) {
-      if (w.landedAt > maxLandedAt) maxLandedAt = w.landedAt;
-    }
-    for (final p in outgoingPinRecords) {
-      if (p.landedAt > maxLandedAt) maxLandedAt = p.landedAt;
-    }
-
-    if (maxLandedAt > req.sinceLandedMs.toInt()) {
-      final existingWatermark = _store.watermark(request.peer);
-      final baseWatermark = existingWatermark ??
-          PeerWatermark(
-            lastSentLandedAt: 0,
-            lastPeerNowMs: 0,
-            lastSyncedAt: nowMs,
-          );
-      final updatedLastSent = max(baseWatermark.lastSentLandedAt, maxLandedAt);
-      await _store.setWatermark(
-        request.peer,
-        baseWatermark.copyWith(
-          lastSentLandedAt: updatedLastSent,
-          lastSyncedAt: nowMs,
-        ),
-      );
-    }
+    // What goes back: this device's records since the sender's cursor, minus
+    // the ones the sender just supplied (the winners among them are the
+    // sender's own), plus this device's record for any key the sender sent an
+    // older value of, wherever it falls against the cursor. Otherwise both
+    // sides would move their cursors past a value only one of them holds.
+    // Nothing here advances a cursor: the sender does, on receiving this
+    // reply, so a reply lost on the way is sent again.
+    final since = req.sinceLandedMs.toInt();
+    final sentWatchKeys = {for (final w in req.watchRecords) w.key};
+    final sentPinKeys = {for (final p in req.pinRecords) p.key};
+    final outgoingWatch = <FlutterWireWatchRecord>[
+      for (final w in _store.watchRecordsSince(since))
+        if (!sentWatchKeys.contains(w.key)) w.toWire(),
+      for (final w in req.watchRecords)
+        if (!changes.changedWatchKeys.contains(w.key))
+          if (_store.watchRecord(w.key) case final local?)
+            if (!local.matchesWire(w)) local.toWire(),
+    ];
+    final outgoingPins = <FlutterWirePinRecord>[
+      for (final p in _store.pinRecordsSince(since))
+        if (!sentPinKeys.contains(p.key)) p.toWire(),
+      for (final p in req.pinRecords)
+        if (!changes.changedPinKeys.contains(p.key))
+          if (_store.allPinRecords()[p.key] case final local?)
+            if (!local.matchesWire(p)) local.toWire(),
+    ];
 
     await _transport.respondToPeerSync(
       request.requestId,
@@ -604,6 +638,7 @@ class PeerSyncService {
       ),
     );
 
+    if (rosterChanged.isNotEmpty) _notifyStateChanged();
     if (changes.changedWatchKeys.isNotEmpty ||
         changes.changedPinKeys.isNotEmpty) {
       await _onRemoteChangesApplied?.call(
@@ -611,6 +646,22 @@ class PeerSyncService {
         changes.changedPinKeys,
       );
     }
+    if (rosterChanged.isNotEmpty ||
+        changes.changedWatchKeys.isNotEmpty ||
+        changes.changedPinKeys.isNotEmpty) {
+      unawaited(syncAll(exceptPeer: request.peer));
+    }
+  }
+
+  /// The roster entry for [nodeId], matched without regard to case.
+  PeerMember? _knownMember(String nodeId) {
+    final direct = _store.member(nodeId);
+    if (direct != null) return direct;
+    final wanted = nodeId.toLowerCase();
+    for (final m in _store.members().values) {
+      if (m.nodeId.toLowerCase() == wanted) return m;
+    }
+    return null;
   }
 
   bool _isInCooldown(String nodeId) {
@@ -619,17 +670,25 @@ class PeerSyncService {
     return _clock().difference(failedAt) < const Duration(seconds: 60);
   }
 
-  Future<void> syncAll({bool ignoreCooldown = false}) async {
+  /// Syncs with every active member. [exceptPeer] is skipped: it is the one
+  /// the change being passed on came from.
+  Future<void> syncAll({
+    bool ignoreCooldown = false,
+    String? exceptPeer,
+  }) async {
     if (_secret == null) return;
     final localNodeId = _transport.nodeId?.toLowerCase();
+    final skip = exceptPeer?.toLowerCase();
     final members = [
       for (final m in _store.members().values)
         if (!m.revoked &&
-            (localNodeId == null || m.nodeId.toLowerCase() != localNodeId))
+            (localNodeId == null || m.nodeId.toLowerCase() != localNodeId) &&
+            m.nodeId.toLowerCase() != skip)
           m,
     ];
 
     for (final peer in members) {
+      if (_secret == null) return;
       if (!ignoreCooldown && _isInCooldown(peer.nodeId)) {
         continue;
       }
@@ -638,7 +697,10 @@ class PeerSyncService {
   }
 
   Future<void> _syncWithPeer(PeerMember peer) async {
+    final generation = _generation;
     try {
+      final secret = _secret;
+      if (secret == null) return;
       if (peer.endpointAddrJson != null) {
         await _transport.addAddressHint(peer.endpointAddrJson!);
       }
@@ -663,7 +725,7 @@ class PeerSyncService {
           await _transport.getNodeAddr() ?? _transport.nodeAddr;
 
       final req = FlutterPeerSyncRequest.sync_(
-        authProof: _secret!.authProof(localNodeId),
+        authProof: secret.authProof(localNodeId),
         senderEndpointAddrJson: localNodeAddr,
         roster: _store.members().values.map((m) => m.toWire()).toList(),
         sinceLandedMs: PlatformInt64Util.from(sinceLandedMs),
@@ -673,13 +735,19 @@ class PeerSyncService {
 
       final res = await _transport.sendPeerSync(peer.nodeId, req);
 
+      // A reply that outlives [leaveGroup] (a slow peer, a timed-out leave)
+      // must not write the old roster back.
+      if (_stale(generation)) return;
+
       if (res is FlutterPeerSyncResponse_SyncAck) {
         _peerCooldowns.remove(peer.nodeId);
         final nowMs = _clock().millisecondsSinceEpoch;
-        await _store.mergeRoster(
+        final rosterChanged = await _store.mergeRoster(
           res.roster.map(PeerMember.fromWire),
           nowMs: nowMs,
+          senderNodeId: peer.nodeId,
         );
+        if (_stale(generation)) return;
         final changes = await _store.mergeRemote(
           watchRecords: res.watchRecords,
           pinRecords: res.pinRecords,
@@ -693,12 +761,20 @@ class PeerSyncService {
             lastSyncedAt: nowMs,
           ),
         );
+        if (rosterChanged.isNotEmpty) _notifyStateChanged();
         if (changes.changedWatchKeys.isNotEmpty ||
             changes.changedPinKeys.isNotEmpty) {
           await _onRemoteChangesApplied?.call(
             changes.changedWatchKeys,
             changes.changedPinKeys,
           );
+        }
+        // Pass on what this device just learned to the members the peer
+        // cannot reach for it (one skipped for its cooldown, say).
+        if (rosterChanged.isNotEmpty ||
+            changes.changedWatchKeys.isNotEmpty ||
+            changes.changedPinKeys.isNotEmpty) {
+          unawaited(syncAll(exceptPeer: peer.nodeId));
         }
       } else if (res is FlutterPeerSyncResponse_NotAuthorized) {
         _peerCooldowns[peer.nodeId] = _clock();
@@ -735,7 +811,9 @@ class PeerSyncService {
             ))
         .copyWith(
       revoked: true,
-      updatedAt: nowMs,
+      // Later than the stored record even when that one carries a time ahead
+      // of this clock, or the store would keep the member active.
+      updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
     );
     await _store.putMember(updated);
     await syncAll(ignoreCooldown: true);
@@ -743,26 +821,43 @@ class PeerSyncService {
   }
 
   Future<void> leaveGroup() async {
-    final localNodeId = _transport.nodeId;
-    final nowMs = _clock().millisecondsSinceEpoch;
-    if (localNodeId != null) {
-      final current = _store.member(localNodeId);
-      if (current != null) {
-        await _store.putMember(current.copyWith(
-          revoked: true,
-          updatedAt: nowMs,
-        ));
-      }
-    }
-
+    // While leaving, no sync reply or request is recorded: the roster is
+    // about to be cleared, and a reply landing after that must not bring it
+    // back (and with it the members' control of this player).
+    _leaving = true;
     try {
-      await syncAll(ignoreCooldown: true).timeout(const Duration(seconds: 3));
-    } catch (_) {}
+      final localNodeId = _transport.nodeId;
+      final nowMs = _clock().millisecondsSinceEpoch;
+      if (localNodeId != null) {
+        final current = _store.member(localNodeId);
+        await _store.putMember(
+          (current ??
+                  PeerMember(
+                    nodeId: localNodeId,
+                    deviceName: _deviceName,
+                    platform: _platform,
+                    updatedAt: nowMs,
+                    revoked: true,
+                  ))
+              .copyWith(
+            revoked: true,
+            updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
+          ),
+        );
+      }
 
-    await cancelPairingOffer();
-    await _authStorage.delete(PeerGroupSecret.storageKey);
-    _secret = null;
-    await _store.clearRoster();
+      try {
+        await syncAll(ignoreCooldown: true).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+
+      await cancelPairingOffer();
+      _generation++;
+      await _authStorage.delete(PeerGroupSecret.storageKey);
+      _secret = null;
+      await _store.clearRoster();
+    } finally {
+      _leaving = false;
+    }
     _notifyStateChanged();
   }
 
@@ -817,7 +912,10 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
               } else {
                 final current = source.index.group(pinRecord.groupKey);
                 if (current != null && current.pinned) {
-                  await source.index.putGroup(current.copyWith(pinned: false));
+                  await source.index.putGroup(current.copyWith(
+                    pinned: false,
+                    pinRevision: pinRecord.updatedAt,
+                  ));
                   await source.invalidateTargets(
                     FilesMediaSource.groupLandedTargets(source.source.id),
                   );

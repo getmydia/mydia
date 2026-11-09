@@ -124,13 +124,14 @@ void main() {
     final fallbackEntries = await roster.onlineEntries();
     expect(fallbackEntries.map((e) => e.nodeId).toSet(), {'peer-1', 'peer-2'});
 
-    // When peer-2 is connected, only connected active members are returned.
+    // When peer-2 is connected it comes first, and the unconnected active
+    // member is still swept: it may be reachable and playing.
     connectedNodes.add('peer-2');
     // Also mark peer-revoked as connected; it must still be excluded because it is revoked.
     connectedNodes.add('peer-revoked');
 
     final connectedEntries = await roster.onlineEntries();
-    expect(connectedEntries.map((e) => e.nodeId), ['peer-2']);
-    expect(connectedEntries.single.deviceName, 'Screen Two');
+    expect(connectedEntries.map((e) => e.nodeId), ['peer-2', 'peer-1']);
+    expect(connectedEntries.first.deviceName, 'Screen Two');
   });
 }
