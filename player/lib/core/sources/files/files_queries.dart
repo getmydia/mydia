@@ -449,13 +449,22 @@ class FilesCatalog {
   List<MediaStreamInfo> _sidecars(IndexedFile f) {
     final root = roots[f.rootId];
     if (root == null) return const [];
+    return sidecarStreams(root, f);
+  }
+
+  static List<MediaStreamInfo> sidecarStreams(
+    LibraryRoot root,
+    IndexedFile f,
+  ) {
     final stem = _stem(_nameOf(f.path));
     return [
-      for (final (i, path) in f.sidecars.indexed) _sidecar(i, root, path, stem),
+      for (final (i, path) in f.sidecars.indexed)
+        _sidecarStatic(i, root, path, stem),
     ];
   }
 
-  MediaStreamInfo _sidecar(int i, LibraryRoot root, String path, String stem) {
+  static MediaStreamInfo _sidecarStatic(
+      int i, LibraryRoot root, String path, String stem) {
     final name = _nameOf(path);
     // `Movie.en.forced.srt`: the parts between the stem and the extension.
     final middle = _stem(name).length > stem.length
@@ -473,6 +482,18 @@ class FilesCatalog {
       title: name,
       externalPath: filesBackendPath(root, path),
     );
+  }
+
+  static String mimeOf(String path) {
+    final ext = _ext(_nameOf(path));
+    return switch (ext) {
+      'mkv' => 'video/x-matroska',
+      'mp4' || 'm4v' || 'mov' => 'video/mp4',
+      'avi' => 'video/x-msvideo',
+      'ts' || 'mpegts' => 'video/mp2t',
+      'webm' => 'video/webm',
+      _ => 'video/$ext',
+    };
   }
 
   ItemDetail? detail(ItemRef r) {

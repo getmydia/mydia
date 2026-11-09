@@ -5,6 +5,7 @@ library;
 
 import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/player/device_profile.dart';
+import '../../../../core/sources/files/cast/files_cast_bridge.dart';
 import '../../../../core/sources/files/files_account.dart' show isSmbAccountId;
 import '../../../../core/sources/files/files_media_source.dart';
 import '../../../../core/sources/source.dart' show Source, SourceKind;
@@ -31,6 +32,7 @@ PlaybackSession? playbackSessionFor(
   required MediaProxy Function() proxy,
   String? showId,
   int? seasonNumber,
+  FilesCastBridge Function()? bridge,
 }) =>
     switch (source) {
       PlexMediaSource() => PlexPlaybackSession(
@@ -47,8 +49,12 @@ PlaybackSession? playbackSessionFor(
           fileId: fileId,
           profile: DeviceProfileHolder.instance.profile,
         ),
-      FilesMediaSource() =>
-        FilesPlaybackSession(source: source, item: item, fileId: fileId),
+      FilesMediaSource() => FilesPlaybackSession(
+          source: source,
+          item: item,
+          fileId: fileId,
+          bridge: bridge?.call(),
+        ),
       MydiaSource() => MydiaPlaybackSession(
           source: source,
           item: item,

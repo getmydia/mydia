@@ -7,6 +7,7 @@ import '../../core/cast/cast_session_manager.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
 import '../../core/player/platform_features.dart';
+import '../../core/sources/files/files_providers.dart';
 import '../../domain/models/cast_device.dart';
 import '../../l10n/l10n.dart';
 import 'cast_device_picker.dart';
@@ -41,7 +42,9 @@ String castErrorMessage(
   switch (e.kind) {
     case CastFailureKind.unreachable:
       if (isMydiaTarget) return l10n.castErrorUnreachableMydia;
-      final port = proxy != null && proxy.isLanAccessible ? proxy.port : null;
+      final port = proxy != null && proxy.isLanAccessible
+          ? proxy.port
+          : ref?.read(filesCastBridgeProvider).activePort;
       return port == null
           ? l10n.castErrorUnreachable
           : l10n.castErrorUnreachableWithPort(port);

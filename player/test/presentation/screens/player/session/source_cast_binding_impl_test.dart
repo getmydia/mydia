@@ -7,6 +7,11 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
+import 'package:player/core/sources/files/files_media_source.dart';
+import 'package:player/core/sources/files/index/file_library_index.dart';
+import 'package:player/core/sources/files/match/file_matcher.dart';
+import 'package:player/presentation/screens/player/session/files_playback_session.dart';
 import 'package:player/presentation/screens/player/session/jellyfin_playback_session.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
 import 'package:player/presentation/screens/player/session/source_cast_binding_impl.dart';
@@ -21,6 +26,9 @@ import '../../../../core/sources/plex/plex_media_source_test.dart' as px
 import '../../../../core/sources/stash/fake_stash_server.dart';
 import '../../../../core/sources/stash/stash_media_source_test.dart' as st
     show build;
+import '../../../../core/sources/files/fake_backend.dart';
+import '../../../../core/sources/files/fake_media_names.dart';
+import '../../../../core/sources/files/files_fixture.dart';
 
 void main() {
   test('a source that is no longer in the app cannot be cast from', () async {
@@ -202,6 +210,93 @@ void main() {
         expect(Uri.parse(track.url).queryParameters['apikey'],
             FakeStashServer.apiKey);
       }
+    });
+  });
+
+  group('Files', () {
+    const file = '${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv';
+    const sidecar =
+        '${FilesFixture.rootPath}/Copper Valley (2018) 1080p.en.srt';
+    final key =
+        fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv');
+
+    Future<(SessionSourceCastBinding, FilesCastBridge, FilesFixture)>
+        openFiles() async {
+      final f = await FilesFixture.create();
+      final relay = FakeFilesRelay();
+      final backend = FakeBackend({file: 100, sidecar: 20});
+      final source = FilesMediaSource(
+        source: filesLocalSource,
+        backend: backend,
+        index: f.index,
+        progress: f.progress,
+        matcher: FileMatcher(
+          tmdb: relay,
+          names: FakeMediaNames(),
+          index: f.index,
+          progress: f.progress,
+          sourceId: f.sourceId,
+        ),
+        tmdb: relay,
+        invalidate: (_) async {},
+        l10n: () => filesL10n,
+      );
+      addTearDown(source.dispose);
+      final bridge =
+          FilesCastBridge(lanAddressResolver: () async => '127.0.0.1');
+      addTearDown(bridge.dispose);
+      final session = FilesPlaybackSession(
+        source: source,
+        item: f.ref(ItemKind.movie, '101'),
+        fileId: key,
+        bridge: bridge,
+      );
+      return (SessionSourceCastBinding(session), bridge, f);
+    }
+
+    test('Chromecast gets a progressive localBridge route and VTT sidecars',
+        () async {
+      final (binding, bridge, _) = await openFiles();
+      final route = await binding.resolve(
+        protocol: CastProtocolKind.chromecast,
+        startPosition: Duration.zero,
+        subtitleTrackId: null,
+        forceTranscode: false,
+      );
+      expect(route.kind, CastRouteKind.localBridge);
+      expect(route.mediaKind, CastMediaKind.progressive);
+      expect(route.transcoded, isFalse);
+      expect(route.hlsSessionId, isNotNull);
+      expect(
+        route.mediaUrl,
+        startsWith('http://127.0.0.1:${bridge.activePort}/f/'),
+      );
+      expect(route.subtitles, hasLength(1));
+      final sub = route.subtitles.single;
+      expect(sub.trackId, 'ext-0');
+      expect(sub.burnedIn, isFalse);
+      expect(sub.url, endsWith('/sub/ext-0.vtt'));
+
+      await binding.endServerSession(route.hlsSessionId!);
+      expect(bridge.activePort, isNull);
+    });
+
+    test('DLNA gets a progressive localBridge route and no subtitles',
+        () async {
+      final (binding, bridge, _) = await openFiles();
+      final route = await binding.resolve(
+        protocol: CastProtocolKind.dlna,
+        startPosition: Duration.zero,
+        subtitleTrackId: null,
+        forceTranscode: false,
+      );
+      expect(route.kind, CastRouteKind.localBridge);
+      expect(route.mediaKind, CastMediaKind.progressive);
+      expect(
+        route.mediaUrl,
+        startsWith('http://127.0.0.1:${bridge.activePort}/f/'),
+      );
+      expect(route.subtitles, isEmpty);
     });
   });
 }

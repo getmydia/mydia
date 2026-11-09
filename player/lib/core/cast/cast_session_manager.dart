@@ -1485,6 +1485,7 @@ class CastSessionManager {
       // would come back and fail again.
       if (device.protocol != CastProtocolKind.chromecast ||
           e.kind != CastFailureKind.mediaLoadFailed ||
+          attempted.kind == CastRouteKind.localBridge ||
           attempted.transcoded) {
         return null;
       }

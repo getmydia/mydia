@@ -178,6 +178,23 @@ class FilesMediaSource extends MediaSource
         l10n: _l10n(),
       );
 
+  IndexedFile? indexedFile(String fileKey) => index.files()[fileKey];
+
+  LibraryRoot? rootFor(IndexedFile file) =>
+      index.roots().where((r) => r.id == file.rootId).firstOrNull;
+
+  Future<PlayableFile> playableForFileKey(String fileKey) async {
+    final indexed = indexedFile(fileKey);
+    final root = indexed == null ? null : rootFor(indexed);
+    if (indexed == null || root == null) {
+      throw const SourceException(
+        SourceErrorKind.notFound,
+        'Playable file not found',
+      );
+    }
+    return backend.playable(filesBackendPath(root, indexed.path));
+  }
+
   @override
   Future<List<Library>> libraries() async {
     final catalog = _catalog();

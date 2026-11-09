@@ -43,6 +43,8 @@ class _FakeBinding implements SourceCastBinding {
   final sink = _FakeSink();
   var _n = 0;
   List<CastSubtitleTrack> subtitles = const [];
+  CastRouteKind routeKind = CastRouteKind.directServer;
+  CastMediaKind mediaKind = CastMediaKind.hls;
 
   @override
   Future<CastRoute> resolve({
@@ -60,8 +62,8 @@ class _FakeBinding implements SourceCastBinding {
     return CastRoute(
       mediaUrl:
           'http://192.168.1.5:32400/start.m3u8?session=$id&X-Plex-Token=secret',
-      kind: CastRouteKind.directServer,
-      mediaKind: CastMediaKind.hls,
+      kind: routeKind,
+      mediaKind: mediaKind,
       hlsSessionId: id,
       subtitles: subtitles,
       transcoded: forceTranscode,
@@ -295,6 +297,20 @@ void main() {
 
     await expectLater(
       manager.startCast(device: dlna, request: request),
+      throwsA(isA<CastBackendException>()),
+    );
+    expect(binding.resolves, hasLength(1));
+  });
+
+  test('a localBridge source route is not retried with a transcode', () async {
+    binding
+      ..routeKind = CastRouteKind.localBridge
+      ..mediaKind = CastMediaKind.progressive;
+    backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+    final manager = build();
+
+    await expectLater(
+      manager.startCast(device: tv, request: request),
       throwsA(isA<CastBackendException>()),
     );
     expect(binding.resolves, hasLength(1));
