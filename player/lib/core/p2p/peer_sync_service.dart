@@ -551,8 +551,10 @@ class PeerSyncService {
     _notifyStateChanged();
 
     // The other members learn of the new device (or its re-enrollment) from
-    // here; the joiner syncs itself once its handshake completes.
-    unawaited(syncAll(exceptPeer: request.peer));
+    // here; the joiner syncs itself once its handshake completes. A member in
+    // its failure cooldown is tried anyway: this announcement is one-off, and
+    // skipping it would leave that member rejecting the joiner as unknown.
+    unawaited(syncAll(exceptPeer: request.peer, ignoreCooldown: true));
   }
 
   Future<void> _handleSyncRequest(
@@ -619,12 +621,14 @@ class PeerSyncService {
           if (_store.watchRecord(w.key) case final local?)
             if (!local.matchesWire(w)) local.toWire(),
     ];
+    // Read once: the store rebuilds the whole map on every call.
+    final localPins = _store.allPinRecords();
     final outgoingPins = <FlutterWirePinRecord>[
       for (final p in _store.pinRecordsSince(since))
         if (!sentPinKeys.contains(p.key)) p.toWire(),
       for (final p in req.pinRecords)
         if (!changes.changedPinKeys.contains(p.key))
-          if (_store.allPinRecords()[p.key] case final local?)
+          if (localPins[p.key] case final local?)
             if (!local.matchesWire(p)) local.toWire(),
     ];
 
@@ -738,6 +742,11 @@ class PeerSyncService {
       // A reply that outlives [leaveGroup] (a slow peer, a timed-out leave)
       // must not write the old roster back.
       if (_stale(generation)) return;
+
+      // The peer may have been revoked while this request was outstanding; its
+      // reply must not enroll anything then.
+      final current = _knownMember(peer.nodeId);
+      if (current == null || current.revoked) return;
 
       if (res is FlutterPeerSyncResponse_SyncAck) {
         _peerCooldowns.remove(peer.nodeId);
@@ -908,6 +917,7 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
                   pinRecord.groupKey,
                   isShow: pinRecord.isShow,
                   tmdbId: pinRecord.tmdbId,
+                  pinRevision: pinRecord.updatedAt,
                 );
               } else {
                 final current = source.index.group(pinRecord.groupKey);

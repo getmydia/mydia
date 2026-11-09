@@ -582,7 +582,9 @@ without a central Mydia server.
 - Membership: the group secret proves a device once belonged, not that it
   still does, so only a node id the roster already holds may sync. A device
   that pairs reaches the other members through the one it paired with. A
-  revocation always carries a time later than the stored record, and a
+  revocation always carries a time later than the stored record (the sender's
+  own, so another device can hold an active record with the same time, and a
+  revocation wins that tie), and a
   revoked member comes back only through a newer record from another member
   (a re-enrollment by pairing), never one it sends about itself. A sync reply
   that arrives after `leaveGroup` is dropped.
