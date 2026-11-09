@@ -255,8 +255,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // startup. Restoring a cast session before one exists is meaningless
     // anyway: there is no instance to sync progress to or reach.
     //
-    // Starting remote control shares the same gate for the same reason:
-    // `NodeRegistration` and `RemoteRoster` both need a Mydia instance.
+    // The receiver that answers other devices is not gated on an account: two
+    // Files-only players paired with each other have no Mydia server, and
+    // each must still answer the other's discovery (`Hello`) request. Only
+    // registering the node id needs a Mydia instance, and that is done by
+    // `nodeRegistrationsProvider`, not here. Started once at launch, and
+    // retried by the listeners below.
+    unawaited(_initRemoteControlIfEnabled());
     ref.listenManual<bool>(
       hasMydiaProvider,
       (previous, next) {
@@ -273,14 +278,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // `_initRemoteControlIfEnabled` no-ops once a receiver is actually
     // wired (see `RemoteControlInitGate`), so re-invoking it here on every
     // change is safe, and is what makes the settings switch take effect for
-    // the rest of this launch instead of only the next one. Gated on auth
-    // the same way `_initRemoteControlIfEnabled` itself is: with no Mydia
-    // server stored there is nothing to register with.
+    // the rest of this launch instead of only the next one.
     ref.listenManual<AsyncValue<bool>>(
       remoteControlEnabledProvider,
       (previous, next) {
         if (next.value != true) return;
-        if (!ref.read(hasMydiaProvider)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
     );
