@@ -90,6 +90,9 @@ class FilesPlaybackSession extends SourcePlaybackSession {
         currentItem: () => _files.currentRef(item, fileId),
         resumeMinSeconds: kFilesResumeMinSeconds,
         watchedFraction: kFilesWatchedFraction,
+        syncStore: _files.syncStore,
+        syncKeyFor: _files.syncKeyFor,
+        onSyncWrite: _files.onSyncMutation,
         onChanged: () => _files
             .invalidateTargets(SourceRules.watchedChanged(_files.source.id)),
       );

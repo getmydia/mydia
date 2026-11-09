@@ -5,6 +5,8 @@ library;
 
 import '../../../domain/sources/item.dart';
 import '../../../l10n/gen/app_localizations.dart';
+import '../../p2p/peer_sync_records.dart';
+import '../../p2p/peer_sync_store.dart';
 import '../../playback/local_playback_progress.dart';
 import '../../playback/playback_progress_store.dart';
 import '../../player/progress_service.dart';
@@ -99,7 +101,14 @@ class FilesShow {
 /// One query's view of a files library.
 class FilesCatalog {
   FilesCatalog._(
-      this.sourceId, this._progress, this._l10n, this._watched, this.roots);
+    this.sourceId,
+    this._progress,
+    this._l10n,
+    this._watched,
+    this.roots, {
+    this.syncStore,
+    required this.accountId,
+  });
 
   /// Reads [index] once: its files and watched flags are copied per call.
   factory FilesCatalog.read({
@@ -107,6 +116,8 @@ class FilesCatalog {
     required FileLibraryIndex index,
     required PlaybackProgressStore progress,
     required AppLocalizations l10n,
+    PeerSyncStore? syncStore,
+    String? accountId,
   }) {
     final catalog = FilesCatalog._(
       sourceId,
@@ -114,6 +125,8 @@ class FilesCatalog {
       l10n,
       index.watched(),
       {for (final r in index.roots()) r.id: r},
+      syncStore: syncStore,
+      accountId: accountId ?? index.accountId,
     );
     catalog._build(index);
     return catalog;
@@ -124,6 +137,8 @@ class FilesCatalog {
   final AppLocalizations _l10n;
   final Set<String> _watched;
   final Map<String, LibraryRoot> roots;
+  final PeerSyncStore? syncStore;
+  final String accountId;
 
   final movies = <String, FilesMovie>{};
   final shows = <String, FilesShow>{};
@@ -258,15 +273,68 @@ class FilesCatalog {
   ItemRef ref(ItemKind kind, String id) =>
       ItemRef(sourceId: sourceId, kind: kind, externalId: id);
 
-  LocalPlaybackProgress? progressOf(String id) =>
-      _progress.get(progressKey(ref(ItemKind.movie, id)));
+  String? _syncKeyForId(String id) {
+    final parsed = parseFilesId(id);
+    if (parsed == null || parsed.isProvisional) return null;
+    if (parsed.isUnmatchedFile) {
+      return unmatchedFileSyncKey(accountId, parsed.fileKey!);
+    }
+    final tmdbId = parsed.tmdbId;
+    if (tmdbId == null) return null;
+    final isEp = parsed.season != null && parsed.episode != null;
+    return isEp
+        ? tmdbEpisodeSyncKey(tmdbId, parsed.season!, parsed.episode!)
+        : tmdbMovieSyncKey(tmdbId);
+  }
 
-  bool watched(String id) =>
-      _watched.contains(id) ||
-      _playedThrough(id) ||
-      // Finishing a multi-episode file, played as any one of its episodes,
-      // finishes each of them.
-      episodesSharingAFile(id).any(_playedThrough);
+  LocalPlaybackProgress? progressOf(String id) {
+    if (syncStore != null) {
+      final syncKey = _syncKeyForId(id);
+      if (syncKey != null) {
+        final rec = syncStore!.watchRecord(syncKey);
+        if (rec == null ||
+            rec.positionSeconds == null ||
+            rec.durationSeconds == null) {
+          return null;
+        }
+        final parsed = parseFilesId(id);
+        final isEp =
+            parsed != null && parsed.season != null && parsed.episode != null;
+        return LocalPlaybackProgress(
+          sourceId: sourceId.value,
+          mediaId: id,
+          mediaType: isEp ? 'episode' : 'movie',
+          positionSeconds: rec.positionSeconds!,
+          durationSeconds: rec.durationSeconds!,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(rec.updatedAt),
+        );
+      }
+    }
+    return _progress.get(progressKey(ref(ItemKind.movie, id)));
+  }
+
+  bool watched(String id) {
+    if (syncStore != null) {
+      final syncKey = _syncKeyForId(id);
+      if (syncKey != null) {
+        final rec = syncStore!.watchRecord(syncKey);
+        if (rec != null) return rec.watched;
+        for (final otherId in episodesSharingAFile(id)) {
+          final otherKey = _syncKeyForId(otherId);
+          if (otherKey != null &&
+              (syncStore!.watchRecord(otherKey)?.watched ?? false)) {
+            return true;
+          }
+        }
+        return false;
+      }
+    }
+    return _watched.contains(id) ||
+        _playedThrough(id) ||
+        // Finishing a multi-episode file, played as any one of its episodes,
+        // finishes each of them.
+        episodesSharingAFile(id).any(_playedThrough);
+  }
 
   bool _playedThrough(String id) {
     final p = progressOf(id);

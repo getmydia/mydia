@@ -4,10 +4,13 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../../../../domain/sources/item.dart';
+import '../../../p2p/peer_sync_records.dart';
+import '../../../p2p/peer_sync_store.dart';
 import '../../../playback/local_playback_progress.dart';
 import '../../../playback/playback_progress_store.dart';
 import '../../source.dart';
 import '../files_ids.dart';
+import '../files_queries.dart' show kFilesWatchedFraction;
 import '../index/file_library_index.dart';
 import '../media_names.dart';
 import 'relay_tmdb.dart';
@@ -22,6 +25,8 @@ class FileMatcher {
     required FileLibraryIndex index,
     required PlaybackProgressStore progress,
     required SourceId sourceId,
+    PeerSyncStore? syncStore,
+    void Function()? onSyncMutation,
     Future<void> Function()? onGroupLanded,
     int concurrency = 4,
     DateTime Function()? now,
@@ -30,6 +35,8 @@ class FileMatcher {
         _index = index,
         _progress = progress,
         _sourceId = sourceId,
+        _syncStore = syncStore,
+        _onSyncMutation = onSyncMutation,
         _onGroupLanded = onGroupLanded,
         _slots = _Semaphore(concurrency),
         _now = now ?? DateTime.now;
@@ -39,6 +46,8 @@ class FileMatcher {
   final FileLibraryIndex _index;
   final PlaybackProgressStore _progress;
   final SourceId _sourceId;
+  final PeerSyncStore? _syncStore;
+  final void Function()? _onSyncMutation;
   final Future<void> Function()? _onGroupLanded;
   final _Semaphore _slots;
   final DateTime Function() _now;
@@ -91,6 +100,16 @@ class FileMatcher {
     int? tmdbId,
   }) async {
     final files = _filesOf(groupKey, isShow);
+    if (_syncStore != null) {
+      await _syncStore.setPin(
+        groupKey: groupKey,
+        isShow: isShow,
+        tmdbId: tmdbId,
+        pinned: true,
+        nowMs: _now().millisecondsSinceEpoch,
+      );
+      _onSyncMutation?.call();
+    }
     if (tmdbId == null) {
       final previous = _index.group(groupKey);
       await _migrateToFiles(_Group(groupKey, isShow, files), previous?.tmdbId);
@@ -142,6 +161,12 @@ class FileMatcher {
 
   bool _needsWork(_Group g) {
     final m = _index.group(g.key);
+    final pinRec = _syncStore?.pinRecord(isShow: g.isShow, groupKey: g.key);
+    if (pinRec != null && pinRec.pinned) {
+      if (m == null || pinRec.updatedAt > m.matchedAt.millisecondsSinceEpoch) {
+        return true;
+      }
+    }
     if (m == null) return true;
     if (m.pinned) {
       return m.tmdbId != null &&
@@ -189,6 +214,34 @@ class FileMatcher {
   Future<void> _matchOneNow(_Group g) async {
     try {
       final existing = _index.group(g.key);
+      final pinRec = _syncStore?.pinRecord(isShow: g.isShow, groupKey: g.key);
+      if (pinRec != null && pinRec.pinned) {
+        final matchedAt = existing?.matchedAt.millisecondsSinceEpoch ?? 0;
+        if (existing == null || pinRec.updatedAt > matchedAt) {
+          if (pinRec.tmdbId == null) {
+            await _migrateToFiles(g, existing?.tmdbId);
+            await _index.putGroup(GroupMatch(
+              groupKey: g.key,
+              isShow: g.isShow,
+              matchedAt: _now(),
+              pinned: true,
+            ));
+          } else {
+            await _fetchAndStore(g, pinRec.tmdbId!);
+            await _migrateProgress(g, pinRec.tmdbId!, existing?.tmdbId);
+            await _index.putGroup(GroupMatch(
+              groupKey: g.key,
+              isShow: g.isShow,
+              tmdbId: pinRec.tmdbId,
+              pinned: true,
+              matchedAt: _now(),
+            ));
+          }
+          await _onGroupLanded?.call();
+          return;
+        }
+      }
+
       if (existing != null && existing.pinned) {
         // Pinned, possibly by a pin queued ahead of this match.
         final pinnedTo = existing.tmdbId;
@@ -316,6 +369,31 @@ class FileMatcher {
     ];
   }
 
+  Future<void> _migrateSyncRecord(String fromKey, String toKey) async {
+    final sync = _syncStore;
+    if (sync == null) return;
+    final fromRec = sync.watchRecord(fromKey);
+    if (fromRec == null) return;
+    final toRec = sync.watchRecord(toKey);
+    if (toRec != null && toRec.updatedAt >= fromRec.updatedAt) return;
+
+    if (fromRec.positionSeconds != null && fromRec.durationSeconds != null) {
+      await sync.recordProgress(
+        toKey,
+        positionSeconds: fromRec.positionSeconds!,
+        durationSeconds: fromRec.durationSeconds!,
+        watchedFraction: fromRec.watched ? 0.0 : kFilesWatchedFraction,
+        nowMs: fromRec.updatedAt,
+      );
+    } else if (fromRec.watched) {
+      await sync.setWatched(
+        toKey,
+        true,
+        nowMs: fromRec.updatedAt,
+      );
+    }
+  }
+
   /// Moves progress and watched flags from the ids this group had before
   /// (provisional, a previous TMDB id when it changed, and each file's
   /// unmatched id) to [newTmdbId]. Ends early, before any further move,
@@ -342,13 +420,32 @@ class FileMatcher {
     final type = g.isShow ? 'episode' : 'movie';
     for (final item in _items(g)) {
       final target = item.id(newBase);
+      final targetSyncKey = syncKeyForFilesItem(
+        accountId: _index.accountId,
+        externalId: target,
+        isEpisode: g.isShow,
+      );
       for (final oldBase in oldBases) {
         if (stopped()) return;
         await _move(item.kind, item.id(oldBase), [target], watched,
             mediaType: type, keepSource: oldBase == sharedBase);
+        if (targetSyncKey != null) {
+          final oldSyncKey = syncKeyForFilesItem(
+            accountId: _index.accountId,
+            externalId: item.id(oldBase),
+            isEpisode: g.isShow,
+          );
+          if (oldSyncKey != null) {
+            await _migrateSyncRecord(oldSyncKey, targetSyncKey);
+          }
+        }
       }
       for (final key in item.fileIds) {
         fromFiles.putIfAbsent(key, () => []).add(target);
+        if (targetSyncKey != null) {
+          final fileSyncKey = unmatchedFileSyncKey(_index.accountId, key);
+          await _migrateSyncRecord(fileSyncKey, targetSyncKey);
+        }
       }
     }
     for (final MapEntry(key: key, value: targets) in fromFiles.entries) {
@@ -378,6 +475,17 @@ class FileMatcher {
         if (stop?.call() ?? false) return;
         await _move(item.kind, item.id(oldBase), targets, watched,
             keepSource: oldBase == sharedBase);
+        final oldSyncKey = syncKeyForFilesItem(
+          accountId: _index.accountId,
+          externalId: item.id(oldBase),
+          isEpisode: g.isShow,
+        );
+        if (oldSyncKey != null) {
+          for (final k in item.fileIds) {
+            final fileSyncKey = unmatchedFileSyncKey(_index.accountId, k);
+            await _migrateSyncRecord(oldSyncKey, fileSyncKey);
+          }
+        }
       }
     }
   }

@@ -3,6 +3,10 @@ import 'dart:math';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce/hive.dart';
 
+import '../playback/playback_progress_store.dart';
+import '../player/progress_service.dart';
+import '../sources/files/files_ids.dart';
+import '../sources/files/index/index_records.dart';
 import 'peer_sync_records.dart';
 
 abstract class PeerSyncStore {
@@ -804,4 +808,88 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
   Future<void> markSeeded() async {
     _seeded = true;
   }
+}
+
+/// Seeds [syncStore] from [indexBox] and [progressStore] on first run.
+/// No-op if [syncStore.isSeeded] is true.
+Future<void> seedPeerSyncStoreIfNeeded({
+  required PeerSyncStore syncStore,
+  required Box<Map<dynamic, dynamic>> indexBox,
+  required PlaybackProgressStore progressStore,
+  int? nowMs,
+}) async {
+  if (syncStore.isSeeded) return;
+  final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+
+  // 1. Watched state and pins from indexBox
+  for (final key in indexBox.keys) {
+    if (key is! String) continue;
+    final slash1 = key.indexOf('/');
+    if (slash1 < 0) continue;
+    final accountId = key.substring(0, slash1);
+    final rest = key.substring(slash1 + 1);
+    final slash2 = rest.indexOf('/');
+    if (slash2 < 0) continue;
+    final type = rest.substring(0, slash2);
+    final id = rest.substring(slash2 + 1);
+
+    if (type == 'watched') {
+      final parsed = parseFilesId(id);
+      if (parsed == null || parsed.isProvisional) continue;
+      final isEpisode = parsed.season != null && parsed.episode != null;
+      final syncKey = syncKeyForFilesItem(
+        accountId: accountId,
+        externalId: id,
+        isEpisode: isEpisode,
+      );
+      if (syncKey != null) {
+        await syncStore.setWatched(syncKey, true, nowMs: now);
+      }
+    } else if (type == 'group') {
+      final raw = indexBox.get(key);
+      if (raw != null) {
+        try {
+          final gm = GroupMatch.fromMap(raw);
+          if (gm.pinned) {
+            await syncStore.setPin(
+              groupKey: gm.groupKey,
+              isShow: gm.isShow,
+              tmdbId: gm.tmdbId,
+              pinned: true,
+              nowMs: gm.matchedAt.millisecondsSinceEpoch,
+            );
+          }
+        } catch (e) {
+          debugPrint(
+              '[seedPeerSyncStoreIfNeeded] Failed to parse group $key: $e');
+        }
+      }
+    }
+  }
+
+  // 2. Playback progress from progressStore
+  for (final p in progressStore.all()) {
+    final parsed = parseFilesId(p.mediaId);
+    if (parsed == null || parsed.isProvisional) continue;
+    final accountId =
+        p.sourceId.contains(':') ? p.sourceId.split(':').first : p.sourceId;
+    final isEpisode = p.mediaType == 'episode' ||
+        (parsed.season != null && parsed.episode != null);
+    final syncKey = syncKeyForFilesItem(
+      accountId: accountId,
+      externalId: p.mediaId,
+      isEpisode: isEpisode,
+    );
+    if (syncKey != null) {
+      await syncStore.recordProgress(
+        syncKey,
+        positionSeconds: p.positionSeconds,
+        durationSeconds: p.durationSeconds,
+        watchedFraction: ProgressService.watchedThreshold,
+        nowMs: p.updatedAt.millisecondsSinceEpoch,
+      );
+    }
+  }
+
+  await syncStore.markSeeded();
 }

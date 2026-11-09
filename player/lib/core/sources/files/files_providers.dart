@@ -10,6 +10,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../p2p/peer_sync_store.dart';
 import '../../playback/playback_progress_store.dart';
 import '../connection/connection_refresh_bus.dart';
 import '../source.dart';
@@ -27,11 +28,22 @@ import 'media_names.dart';
 import 'smb_native.dart' show smbNativeProvider;
 
 /// Opens the boxes a files source reads synchronously while it builds: its
-/// index and the playback progress store. Called at startup after
+/// index, playback progress, and the peer sync store. Called at startup after
 /// `initAppHive()`; Hive hands back an already-open box.
 Future<void> openFilesLibraryBoxes() async {
-  await Hive.openBox<Map<dynamic, dynamic>>(FileLibraryIndex.boxName);
-  await Hive.openBox<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName);
+  final indexBox =
+      await Hive.openBox<Map<dynamic, dynamic>>(FileLibraryIndex.boxName);
+  final progressBox = await Hive.openBox<Map<dynamic, dynamic>>(
+      HivePlaybackProgressStore.boxName);
+  final syncBox =
+      await Hive.openBox<Map<dynamic, dynamic>>(PeerSyncStore.boxName);
+  final syncStore = HivePeerSyncStore(syncBox);
+  final progressStore = HivePlaybackProgressStore(progressBox);
+  await seedPeerSyncStoreIfNeeded(
+    syncStore: syncStore,
+    indexBox: indexBox,
+    progressStore: progressStore,
+  );
 }
 
 /// The `files_index` box, opened by [openFilesLibraryBoxes].
@@ -51,6 +63,16 @@ final filesIndexProvider = Provider.family<FileLibraryIndex, String>(
 final filesProgressStoreProvider = Provider<PlaybackProgressStore>((ref) =>
     HivePlaybackProgressStore(
         Hive.box<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName)));
+
+/// The peer sync store, read synchronously. It wraps the open box
+/// [PeerSyncStore.boxName] when open, falling back to an in-memory store in tests.
+final peerSyncStoreProvider = Provider<PeerSyncStore>((ref) {
+  if (Hive.isBoxOpen(PeerSyncStore.boxName)) {
+    return HivePeerSyncStore(
+        Hive.box<Map<dynamic, dynamic>>(PeerSyncStore.boxName));
+  }
+  return InMemoryPeerSyncStore();
+});
 
 /// Whether the boxes [openFilesLibraryBoxes] opens are there. False when
 /// that failed at startup: files sources are then left out (see
@@ -114,17 +136,21 @@ FilesMediaSource buildFilesSource(
   Ref ref,
   Source source, {
   required void Function() onReauthNeeded,
+  void Function()? onSyncMutation,
 }) {
   final index = ref.read(filesIndexProvider(source.account.id));
   final progress = ref.read(filesProgressStoreProvider);
   final tmdb = ref.read(relayTmdbProvider);
   final invalidator = ref.read(invalidatorProvider);
+  final syncStore = ref.read(peerSyncStoreProvider);
   final matcher = FileMatcher(
     tmdb: tmdb,
     names: ref.read(mediaNamesProvider),
     index: index,
     progress: progress,
     sourceId: source.id,
+    syncStore: syncStore,
+    onSyncMutation: onSyncMutation,
     onGroupLanded: () =>
         invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
   );
@@ -144,6 +170,8 @@ FilesMediaSource buildFilesSource(
     progress: progress,
     matcher: matcher,
     tmdb: tmdb,
+    syncStore: syncStore,
+    onSyncMutation: onSyncMutation,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
     // An SMB account's playback URLs outlive this source: saving new
