@@ -230,6 +230,7 @@ class _ManageSection extends ConsumerWidget {
           onTap: () => SettingsNavScope.of(context).openDiagnostics(),
         ),
         ...remoteControlRows(context, ref),
+        pairedDevicesRow(context, ref),
         ...updateRows(context, ref),
       ],
     );

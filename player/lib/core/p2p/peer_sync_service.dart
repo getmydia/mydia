@@ -20,6 +20,8 @@ import 'peer_group_secret.dart';
 import 'peer_sync_records.dart';
 import 'peer_sync_store.dart';
 
+export '../sources/files/files_providers.dart' show peerSyncStoreProvider;
+
 abstract interface class PeerSyncTransport {
   String? get nodeId;
   String? get nodeAddr;
@@ -142,6 +144,7 @@ class PeerSyncService {
   final DateTime Function() _clock;
 
   final _stateChangedController = StreamController<void>.broadcast();
+  final _peerPairedController = StreamController<PeerMember>.broadcast();
   StreamSubscription<FlutterInboundPeerSyncRequest>? _inboundSub;
   StreamSubscription<String>? _peerConnectedSub;
 
@@ -169,6 +172,7 @@ class PeerSyncService {
   ActivePairingOffer? get activeOffer => _activeOffer;
 
   Stream<void> get onStateChanged => _stateChangedController.stream;
+  Stream<PeerMember> get onPeerPaired => _peerPairedController.stream;
 
   Future<void> start() async {
     final stored = await _authStorage.read(PeerGroupSecret.storageKey);
@@ -470,6 +474,7 @@ class PeerSyncService {
     );
 
     _onPeerPaired?.call(joinerMember);
+    _peerPairedController.add(joinerMember);
     _notifyStateChanged();
   }
 
@@ -715,6 +720,7 @@ class PeerSyncService {
     _activeOfferTimer?.cancel();
     _throttleTimer?.cancel();
     _stateChangedController.close();
+    _peerPairedController.close();
   }
 }
 

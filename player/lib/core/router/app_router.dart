@@ -43,6 +43,7 @@ import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
+import '../../presentation/screens/settings/paired_devices_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../l10n/l10n.dart';
@@ -658,6 +659,12 @@ GoRouter appRouter(Ref ref) {
         name: 'diagnostics',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DiagnosticsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/paired-devices',
+        name: 'paired_devices',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const PairedDevicesScreen(),
       ),
       GoRoute(
         path: '/collection/:id',

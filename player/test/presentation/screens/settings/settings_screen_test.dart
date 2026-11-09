@@ -316,13 +316,11 @@ void main() {
     expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
   });
 
-  testWidgets('sign out and paired devices live on each server, not here',
-      (tester) async {
+  testWidgets('sign out lives on each server, not here', (tester) async {
     await _pump(tester);
 
     expect(find.byKey(const Key('settings-sign-out')), findsNothing);
     expect(find.text('Sign out'), findsNothing);
-    expect(find.text('Paired devices'), findsNothing);
   });
 
   testWidgets('the footer names the running version', (tester) async {

@@ -19,6 +19,8 @@ class PeerGroupRoster implements DeviceRoster {
   final String? Function() _localNodeId;
   final bool Function(String nodeId) _isPeerConnected;
 
+  String? localNodeId() => _localNodeId();
+
   /// Returns all members in the store excluding the local node and revoked
   /// members.
   List<PeerMember> activeMembers() {
