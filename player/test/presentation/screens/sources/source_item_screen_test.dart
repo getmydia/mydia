@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -13,6 +14,7 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../test_utils/toast_harness.dart';
+import '../detail/download_fakes.dart';
 import 'fake_media_source.dart';
 
 Future<List<String>> pumpItem(
@@ -36,6 +38,7 @@ Future<List<String>> pumpItem(
       mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
       // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
       sourceArtworkProvider.overrideWith((ref, key) async => null),
+      isItemDownloadedProvider(item).overrideWith((ref) => false),
     ],
     child: MaterialApp.router(
       routerConfig: router,
@@ -162,5 +165,27 @@ void main() {
       (tester) async {
     await pumpItem(tester, FakeMediaSource(), movie);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+  });
+
+  testWidgets('a downloadable source shows the download button on a video',
+      (tester) async {
+    await pumpItem(tester, DownloadableFakeSource(), movie);
+    expect(find.byKey(const Key('source-item-download')), findsOneWidget);
+  });
+
+  testWidgets('a non-downloadable source hides the download button',
+      (tester) async {
+    await pumpItem(tester, FakeMediaSource(), movie);
+    expect(find.byKey(const Key('source-item-download')), findsNothing);
+  });
+
+  testWidgets('a downloadable source hides the download button on a folder',
+      (tester) async {
+    await pumpItem(
+        tester,
+        DownloadableFakeSource(),
+        const ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.folder, externalId: 'm3'));
+    expect(find.byKey(const Key('source-item-download')), findsNothing);
   });
 }
