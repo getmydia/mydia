@@ -59,11 +59,13 @@ fn duration_nanos(d: std::time::Duration) -> u64 {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
 pub mod pairing_seal;
+pub mod peer_sync;
 pub mod remote_control;
 pub mod runtime;
 #[cfg(not(target_arch = "wasm32"))]
 mod trace_file;
 
+pub use peer_sync::*;
 pub use remote_control::{
     LoadContentRequest, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
     RemoteControlResponse, TargetCapabilities, TrackInfo, PROTOCOL_VERSION,
@@ -82,6 +84,7 @@ pub enum MydiaRequest {
     HlsStream(HlsRequest),
     Custom(Vec<u8>),
     RemoteControl(RemoteControlRequest),
+    PeerSync(PeerSyncRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -148,6 +151,7 @@ pub enum MydiaResponse {
     Custom(Vec<u8>),
     Error(String),
     RemoteControl(RemoteControlResponse),
+    PeerSync(PeerSyncResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
