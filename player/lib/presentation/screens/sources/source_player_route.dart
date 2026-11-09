@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
+import '../../../core/sources/files/files_providers.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -109,6 +110,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       proxy: () => ref.read(mediaProxyProvider),
       showId: _params.showId,
       seasonNumber: _params.seasonNumber,
+      bridge: () => ref.read(filesCastBridgeProvider),
     );
   }();
 

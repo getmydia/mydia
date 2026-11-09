@@ -74,7 +74,7 @@ void main() {
     final offer = (await session.candidates(CandidateScope.file)).offer!;
     expect(offer.candidates.map((c) => c.strategy), ['DIRECT_PLAY']);
     expect(offer.candidates.single.mime, 'video/x-matroska');
-    expect(session.features, isEmpty);
+    expect(session.features, {PlaybackFeature.cast});
   });
 
   test('resolver returns the backend url and headers', () async {

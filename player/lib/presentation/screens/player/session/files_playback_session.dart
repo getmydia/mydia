@@ -42,6 +42,9 @@ class FilesPlaybackSession extends SourcePlaybackSession {
   final FilesCastBridge? bridge;
 
   @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
+
+  @override
   bool get castsAsProgressive => true;
 
   /// Always: an unreachable files source (one folder of several unplugged,
