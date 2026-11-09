@@ -7,6 +7,7 @@ import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/player/local_progress_reporter.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
 import 'package:player/core/sources/files/files_ids.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -26,6 +27,20 @@ class _AuthBackend extends FakeBackend {
   @override
   Future<PlayableFile> playable(String path) async => PlayableFile(
       url: 'https://dav.example$path', headers: {'Authorization': 'Basic x'});
+}
+
+class _FailingSubBackend extends FakeBackend {
+  _FailingSubBackend(super.files);
+  @override
+  Future<PlayableFile> playable(String path) async {
+    if (path.endsWith('.srt') || path.endsWith('.vtt')) {
+      throw const BackendNotFound('Sidecar missing');
+    }
+    return PlayableFile(
+      url: 'https://dav.example$path',
+      headers: const {'Authorization': 'Basic x'},
+    );
+  }
 }
 
 class _Built {
@@ -73,7 +88,7 @@ void main() {
     final offer = (await session.candidates(CandidateScope.file)).offer!;
     expect(offer.candidates.map((c) => c.strategy), ['DIRECT_PLAY']);
     expect(offer.candidates.single.mime, 'video/x-matroska');
-    expect(session.features, isEmpty);
+    expect(session.features, {PlaybackFeature.cast});
   });
 
   test('resolver returns the backend url and headers', () async {
@@ -225,5 +240,74 @@ void main() {
     await reporter.sendStopped(positionSeconds: 5510, durationSeconds: 6000);
     expect(told(), 3, reason: 'stopping always tells');
     reporter.dispose();
+  });
+
+  test(
+      'cast resolution opens a FilesCastBridge session with subtitle URLs and closes it',
+      () async {
+    final b = await _build(_AuthBackend({_file: 10, _sidecar: 5}));
+    final bridge = FilesCastBridge(lanAddressResolver: () async => '127.0.0.1');
+    addTearDown(bridge.dispose);
+
+    final session = FilesPlaybackSession(
+      source: b.source,
+      item: movie(b),
+      fileId: key,
+      bridge: bridge,
+    );
+    expect(session.castsAsProgressive, isTrue);
+
+    final resolved = await session.createResolver().resolve(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          fileId: key,
+          startAt: Duration.zero,
+          forCast: true,
+        );
+    expect(bridge.activePort, isNotNull);
+    expect(resolved.sessionId, isNotNull);
+    expect(
+      resolved.url,
+      startsWith('http://127.0.0.1:${bridge.activePort}/f/'),
+    );
+    expect(resolved.url, endsWith('/media.mkv'));
+    expect(resolved.subtitleUrl, isNotNull);
+    expect(
+      resolved.subtitleUrl!('sidecar-0'),
+      endsWith('/sub/sidecar-0.vtt'),
+    );
+
+    await session.endServerSession(resolved.sessionId!);
+    expect(bridge.activePort, isNull);
+  });
+
+  test('cast resolution succeeds even if a sidecar subtitle fails to resolve',
+      () async {
+    final b = await _build(_FailingSubBackend({_file: 10, _sidecar: 5}));
+    final bridge = FilesCastBridge(lanAddressResolver: () async => '127.0.0.1');
+    addTearDown(bridge.dispose);
+
+    final session = FilesPlaybackSession(
+      source: b.source,
+      item: movie(b),
+      fileId: key,
+      bridge: bridge,
+    );
+
+    final resolved = await session.createResolver().resolve(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          fileId: key,
+          startAt: Duration.zero,
+          forCast: true,
+        );
+    expect(bridge.activePort, isNotNull);
+    expect(resolved.sessionId, isNotNull);
+    expect(
+      resolved.url,
+      startsWith('http://127.0.0.1:${bridge.activePort}/f/'),
+    );
+    expect(resolved.url, endsWith('/media.mkv'));
+
+    await session.endServerSession(resolved.sessionId!);
+    expect(bridge.activePort, isNull);
   });
 }

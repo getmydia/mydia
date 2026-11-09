@@ -18,8 +18,9 @@ import 'stream_urls.dart' show ResolvedSource;
 class ResolvedStream {
   const ResolvedStream({
     required this.url,
-    required this.headers,
+    this.headers = const {},
     this.sessionId,
+    this.subtitleUrl,
   });
 
   final String url;
@@ -28,8 +29,13 @@ class ResolvedStream {
   /// credential, which never goes in [url].
   final Map<String, String> headers;
 
-  /// A server-side session to end later. Null when there is none.
+  /// Server transcode or local cast bridge session id, when the stream opened
+  /// one that `stop` should end.
   final String? sessionId;
+
+  /// Resolves a sidecar subtitle URL by track id when a cast bridge serves
+  /// converted subtitles on its own endpoints.
+  final String Function(String trackId)? subtitleUrl;
 }
 
 abstract interface class StreamResolver {

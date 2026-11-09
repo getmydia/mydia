@@ -29,6 +29,7 @@ import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'presentation/widgets/toast/toaster.dart' show showToast;
 import 'core/p2p/media_proxy_factory.dart' show mediaProxyProvider;
+import 'core/sources/files/files_providers.dart' show filesCastBridgeProvider;
 import 'core/sources/files/smb_native.dart' show smbNativeProvider;
 import 'core/providers/providers.dart';
 import 'core/cache/resume_gate.dart';
@@ -505,6 +506,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             onError: (Object e) =>
                 debugPrint('[MyApp] SMB listener heal failed: $e'));
       }
+      ref.read(filesCastBridgeProvider).healListener().then<void>((_) {},
+          onError: (Object e) =>
+              debugPrint('[MyApp] Files cast bridge heal failed: $e'));
     }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.

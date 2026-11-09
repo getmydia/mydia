@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -17,8 +19,10 @@ import '../cache/source_keys.dart';
 import '../cache/source_rules.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'backend/file_system_backend.dart';
+import 'files_account.dart';
 import 'files_ids.dart';
 import 'files_queries.dart';
 import 'index/file_library_index.dart';
@@ -47,7 +51,8 @@ class FilesMediaSource extends MediaSource
         NextUp,
         RecentlyAdded,
         UnwatchedListing,
-        MatchEditing {
+        MatchEditing,
+        Downloadable {
   FilesMediaSource({
     required this.source,
     required this.backend,
@@ -107,8 +112,10 @@ class FilesMediaSource extends MediaSource
           SourceKeys.family(id, op),
       };
 
+  bool get _isNetworkShare => source.account.id != kFilesLocalAccountId;
+
   @override
-  Set<SourceCapability> get capabilities => const {
+  Set<SourceCapability> get capabilities => {
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
@@ -117,6 +124,8 @@ class FilesMediaSource extends MediaSource
         SourceCapability.recentlyAdded,
         SourceCapability.unwatchedListing,
         SourceCapability.matchEditing,
+        SourceCapability.castable,
+        if (_isNetworkShare) SourceCapability.downloadable,
       };
 
   @override
@@ -126,7 +135,10 @@ class FilesMediaSource extends MediaSource
   ValueListenable<SourceConnectionStatus> get statusListenable => _status;
 
   @override
-  T? as<T extends Object>() => this is T ? this as T : null;
+  T? as<T extends Object>() {
+    if (T == Downloadable && !_isNetworkShare) return null;
+    return this is T ? this as T : null;
+  }
 
   /// Checks the backend: reachable is `local`; a refused credential or a
   /// lost folder permission flags the account for sign-in. Browsing reads the
@@ -165,6 +177,23 @@ class FilesMediaSource extends MediaSource
         progress: _progress,
         l10n: _l10n(),
       );
+
+  IndexedFile? indexedFile(String fileKey) => index.files()[fileKey];
+
+  LibraryRoot? rootFor(IndexedFile file) =>
+      index.roots().where((r) => r.id == file.rootId).firstOrNull;
+
+  Future<PlayableFile> playableForFileKey(String fileKey) async {
+    final indexed = indexedFile(fileKey);
+    final root = indexed == null ? null : rootFor(indexed);
+    if (indexed == null || root == null) {
+      throw const SourceException(
+        SourceErrorKind.notFound,
+        'Playable file not found',
+      );
+    }
+    return backend.playable(filesBackendPath(root, indexed.path));
+  }
 
   @override
   Future<List<Library>> libraries() async {
@@ -452,6 +481,81 @@ class FilesMediaSource extends MediaSource
     return (groups.toList()..sort(), isShow);
   }
 
+  String? backendPathOfFileKey(String fileKey) {
+    final IndexedFile? file = index.files()[fileKey];
+    if (file == null) return null;
+    final root = index.roots().where((r) => r.id == file.rootId).firstOrNull;
+    return root == null ? null : filesBackendPath(root, file.path);
+  }
+
+  // Downloadable
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(
+    ItemRef item, [
+    String? versionId,
+  ]) async {
+    final detail = await this.item(item);
+    final version = versionId != null
+        ? (detail.versions.where((v) => v.id == versionId).firstOrNull ??
+            detail.versions.firstOrNull)
+        : downloadVersion(detail);
+    return version == null ? const [] : [originalOption(version)];
+  }
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
+    final detail = await item(ref);
+    final version = downloadVersion(detail) ??
+        (throw const SourceException.unsupportedFault(
+            SourceFault.noFileToDownload));
+    return _resolveVersion(version);
+  }
+
+  Future<PreparedDownloadFile> prepareDownload(
+    ItemRef item,
+    String versionId,
+    DownloadOption option,
+  ) async {
+    final detail = await this.item(item);
+    final version =
+        detail.versions.where((v) => v.id == versionId).firstOrNull ??
+            detail.versions.firstOrNull;
+    if (version == null) {
+      throw const SourceException.unsupportedFault(
+          SourceFault.noFileToDownload);
+    }
+    return _resolveVersion(version);
+  }
+
+  Future<PreparedDownloadFile> _resolveVersion(MediaVersion version) async {
+    final path = backendPathOfFileKey(version.id);
+    if (path == null) {
+      throw const SourceException.unsupportedFault(
+          SourceFault.noFileToDownload);
+    }
+    try {
+      final stat = await backend.stat(path);
+      if (stat == null) throw const SourceException.notFound();
+      final playable = await backend.playable(path);
+      reportReachability(null);
+      return originalFileForVersion(
+        version,
+        url: playable.url,
+        headers: playable.headers,
+      );
+    } on BackendFailure catch (e) {
+      reportReachability(e);
+      throw switch (e) {
+        BackendUnauthorized() ||
+        BackendPermissionLost() =>
+          const SourceException.unauthorized(),
+        BackendNotFound() => const SourceException.notFound(),
+        BackendUnreachable() => const SourceException.unreachable(),
+      };
+    }
+  }
+
   bool _disposed = false;
 
   @override
@@ -459,5 +563,19 @@ class FilesMediaSource extends MediaSource
     _disposed = true;
     _onDispose?.call();
     _status.dispose();
+  }
+}
+
+extension FilesDownloadableExtension on Downloadable {
+  Future<PreparedDownloadFile> prepareDownload(
+    ItemRef item,
+    String versionId,
+    DownloadOption option,
+  ) {
+    if (this is FilesMediaSource) {
+      return (this as FilesMediaSource)
+          .prepareDownload(item, versionId, option);
+    }
+    throw UnsupportedError('Only supported on FilesMediaSource');
   }
 }

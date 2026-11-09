@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/router/legacy_routes.dart';
+import '../../../core/sources/files/files_providers.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
@@ -208,6 +209,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
             ),
             currentItem.fileId,
             proxy: () => ref.read(mediaProxyProvider),
+            bridge: () => ref.read(filesCastBridgeProvider),
           );
     if (session == null) {
       return Scaffold(

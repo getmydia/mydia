@@ -130,6 +130,10 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Set<PlaybackFeature> get features => const {};
 
+  /// Whether Chromecast casts from this session use a progressive `DirectPlayPlan`
+  /// served through a local LAN bridge rather than a server HLS transcode.
+  bool get castsAsProgressive => false;
+
   @override
   bool get reachable => source.connection != SourceConnectionStatus.unreachable;
 

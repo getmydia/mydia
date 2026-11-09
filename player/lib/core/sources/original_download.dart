@@ -11,6 +11,20 @@ import '../../domain/sources/source_error.dart';
 import 'media_source.dart';
 
 const originalOptionId = 'original';
+const kOriginalDownloadOptionId = originalOptionId;
+
+enum DownloadType { original }
+
+typedef PreparedDownloadFile = DirectFile;
+
+extension OriginalDownloadOptionExtension on DownloadOption {
+  String get id => resolution;
+  DownloadType get type => DownloadType.original;
+}
+
+extension PreparedDownloadFileExtension on DirectFile {
+  String get container => extension;
+}
 
 /// The version a download takes: the item's default, else its first.
 MediaVersion? downloadVersion(ItemDetail detail) {
@@ -27,13 +41,18 @@ int? estimatedBytes(MediaVersion version) {
   return kbps * 1000 ~/ 8 * seconds;
 }
 
-DownloadOption originalOption(MediaVersion version) => DownloadOption(
-      resolution: originalOptionId,
-      label:
-          'Original', // l10n-ignore: identity, the dialog words it by resolution
-      estimatedSize: estimatedBytes(version) ?? 0,
-      container: version.container,
-    );
+DownloadOption originalOption(MediaVersion version) {
+  final exactBytes = version.sizeBytes;
+  final fallbackBytes = estimatedBytes(version);
+  return DownloadOption(
+    resolution: originalOptionId,
+    label:
+        'Original', // l10n-ignore: identity, the dialog words it by resolution
+    estimatedSize: exactBytes ?? fallbackBytes ?? 0,
+    actualSize: exactBytes,
+    container: version.container,
+  );
+}
 
 Future<List<DownloadOption>> originalOptions(
     MediaSource source, ItemRef ref) async {
@@ -54,6 +73,18 @@ Future<DirectFile> originalFile(
     url: (await url(version)).toString(),
     headers: await headers(),
     extension: extensionForContainer(version.container),
-    expectedBytes: estimatedBytes(version),
+    expectedBytes: version.sizeBytes ?? estimatedBytes(version),
   );
 }
+
+PreparedDownloadFile originalFileForVersion(
+  MediaVersion version, {
+  required String url,
+  Map<String, String> headers = const {},
+}) =>
+    DirectFile(
+      url: url,
+      headers: headers,
+      extension: extensionForContainer(version.container),
+      expectedBytes: version.sizeBytes ?? estimatedBytes(version),
+    );

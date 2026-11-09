@@ -4,10 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/downloads/download_providers.dart';
+import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../domain/models/download.dart';
+import '../../../domain/models/download_request.dart';
 import '../../../domain/sources/item.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
@@ -17,6 +22,7 @@ import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
+import '../detail/start_download.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
 
@@ -83,6 +89,11 @@ class _Body extends ConsumerWidget {
         item.kind == ItemKind.folder && source?.kind == SourceKind.files;
     final watched = folderOfFiles ? null : source?.as<WatchedState>();
     final version = detail.versions.firstOrNull;
+    final isFolder = item.kind == ItemKind.folder;
+    final canDownload = isDownloadSupported &&
+        !isFolder &&
+        version != null &&
+        (source?.capabilities.contains(SourceCapability.downloadable) ?? false);
     final fixMatch = item.kind == ItemKind.video
         ? fixMatchAction(context, ref, item, summary.title)
         : null;
@@ -155,6 +166,12 @@ class _Body extends ConsumerWidget {
                     ? l10n.commonWatched
                     : l10n.commonMarkWatched),
               ),
+            if (canDownload)
+              _DownloadButton(
+                key: const Key('source-item-download'),
+                item: item,
+                detail: detail,
+              ),
             if (fixMatch != null)
               OutlinedButton.icon(
                 key: const Key('source-item-fix-match'),
@@ -215,4 +232,62 @@ class _Children extends ConsumerWidget {
         ),
     };
   }
+}
+
+class _DownloadButton extends ConsumerWidget {
+  const _DownloadButton({
+    super.key,
+    required this.item,
+    required this.detail,
+  });
+
+  final ItemRef item;
+  final ItemDetail detail;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final isDownloaded =
+        ref.watch(isItemDownloadedProvider(item)).value ?? false;
+
+    return OutlinedButton.icon(
+      onPressed: isDownloaded
+          ? null
+          : () => startItemDownload(
+                context,
+                ref,
+                item: item,
+                metadata: _itemDetailDownloadMetadata(detail),
+              ),
+      icon: Icon(
+        isDownloaded ? Icons.download_done : Icons.download_outlined,
+      ),
+      label: Text(
+        isDownloaded ? l10n.commonDownloaded : l10n.commonDownload,
+      ),
+    );
+  }
+}
+
+DownloadMetadata _itemDetailDownloadMetadata(ItemDetail detail) {
+  final s = detail.summary;
+  final isEpisode = s.ref.kind == ItemKind.episode;
+  return DownloadMetadata(
+    title: s.title,
+    mediaType: isEpisode ? MediaType.episode : MediaType.movie,
+    posterUrl: s.poster?.path,
+    backdropUrl: s.backdrop?.path,
+    overview: detail.overview ?? s.overview,
+    runtime: s.durationSeconds,
+    genres: detail.genres,
+    rating: detail.rating,
+    year: s.year,
+    contentRating: detail.contentRating,
+    seasonNumber: s.parentIndex,
+    episodeNumber: s.index,
+    showId: detail.show?.externalId ?? s.showRef?.externalId,
+    showTitle: s.showTitle,
+    showPosterUrl: detail.showPoster?.path,
+    airDate: s.airDate,
+  );
 }

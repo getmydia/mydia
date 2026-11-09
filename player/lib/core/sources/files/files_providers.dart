@@ -18,6 +18,7 @@ import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
 import 'backend/smb_backend.dart';
 import 'backend/webdav_backend.dart';
+import 'cast/files_cast_bridge.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
 import 'files_scan_controller.dart';
@@ -159,6 +160,14 @@ FilesMediaSource buildFilesSource(
   _scanIfDue(ref, source, index);
   return media;
 }
+
+/// LAN HTTP range bridge used when casting a `SourceKind.files` item to a
+/// Chromecast or DLNA receiver.
+final filesCastBridgeProvider = Provider<FilesCastBridge>((ref) {
+  final bridge = FilesCastBridge();
+  ref.onDispose(bridge.dispose);
+  return bridge;
+});
 
 /// Forgets a removed SMB account's playback URLs and closes its connections.
 /// Anything else, or a failure, is left alone: leftover URLs expire unused.

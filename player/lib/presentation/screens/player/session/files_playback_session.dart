@@ -6,6 +6,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../core/playback/loading_step.dart';
@@ -15,9 +16,11 @@ import '../../../../core/player/local_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/cache/source_rules.dart';
 import '../../../../core/sources/files/backend/file_system_backend.dart';
+import '../../../../core/sources/files/cast/files_cast_bridge.dart';
 import '../../../../core/sources/files/files_media_source.dart';
 import '../../../../core/sources/files/files_queries.dart';
 import '../../../../core/sources/files/index/index_records.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../l10n/l10n.dart';
 import 'playback_problem.dart';
@@ -30,12 +33,20 @@ class FilesPlaybackSession extends SourcePlaybackSession {
     required super.item,
     required super.fileId,
     http.Client? client,
+    this.bridge,
   })  : _files = source,
         _client = client,
         super(source: source);
 
   final FilesMediaSource _files;
   final http.Client? _client;
+  final FilesCastBridge? bridge;
+
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
+
+  @override
+  bool get castsAsProgressive => true;
 
   /// Always: an unreachable files source (one folder of several unplugged,
   /// a share that is down) is no reason to refuse every file.
@@ -95,16 +106,47 @@ class FilesPlaybackSession extends SourcePlaybackSession {
       );
 
   @override
-  StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
-      FilesStreamResolver(source: _files);
+  FilesStreamResolver createResolver(
+          [ItemDetail? detail, MediaVersion? version]) =>
+      FilesStreamResolver(source: _files, bridge: bridge);
 
   @override
-  StreamResolver createReceiverResolver(
+  FilesStreamResolver createReceiverResolver(
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
   }) =>
-      createResolver(detail, version);
+      FilesStreamResolver(source: _files, bridge: bridge, forReceiver: true);
+
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+      MediaVersion version) async {
+    final key = version.id.isNotEmpty ? version.id : fileId;
+    final indexed = _files.indexedFile(key);
+    final root = indexed == null ? null : _files.rootFor(indexed);
+    if (indexed == null || root == null) return const [];
+    final streams = FilesCatalog.sidecarStreams(root, indexed);
+    final tracks = <CastSubtitleTrack>[];
+    for (var i = 0; i < streams.length; i++) {
+      final s = streams[i];
+      final codec = (s.codec ?? 'srt').toLowerCase();
+      if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
+        tracks.add(CastSubtitleTrack(
+          trackId: s.id,
+          url: '',
+          label: s.title ??
+              s.language ??
+              currentAppLocalizations().commonSubtitles,
+          language: s.language ?? 'und',
+        ));
+      }
+    }
+    return tracks;
+  }
+
+  Future<void> endServerSession(String sessionId) async {
+    await bridge?.closeSession(sessionId);
+  }
 
   /// Checks the file is still there before opening it, so a missing drive or
   /// share reads as such instead of as an mpv failure.
@@ -149,25 +191,68 @@ Future<bool> _fileIsThere(FilesMediaSource source, String fileKey) async {
 }
 
 class FilesStreamResolver implements StreamResolver {
-  FilesStreamResolver({required this.source});
+  FilesStreamResolver({
+    required this.source,
+    this.bridge,
+    this.forReceiver = false,
+  });
 
   final FilesMediaSource source;
+  final FilesCastBridge? bridge;
+  final bool forReceiver;
 
   @override
   Future<ResolvedStream> resolve(
     PlaybackPlan plan, {
     required String fileId,
     required Duration startAt,
+    String? audioTrackId,
+    String? burnSubtitleTrackId,
+    bool forCast = false,
   }) async {
-    final path = _backendPathOf(source, fileId);
-    if (path == null) {
-      throw const PlaybackIssueException(PlaybackIssue.noPlayableFile);
+    final file = await source.playableForFileKey(fileId);
+    if ((forCast || forReceiver) && bridge != null) {
+      final indexed = source.indexedFile(fileId);
+      final root = indexed == null ? null : source.rootFor(indexed);
+      final subtitles = <String, FilesCastSubtitle>{};
+      if (indexed != null && root != null) {
+        final streams = FilesCatalog.sidecarStreams(root, indexed);
+        for (var i = 0; i < streams.length; i++) {
+          final s = streams[i];
+          final codec = (s.codec ?? 'srt').toLowerCase();
+          if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
+            try {
+              final playableSub =
+                  await source.backend.playable(s.externalPath!);
+              subtitles[s.id] = FilesCastSubtitle(
+                file: playableSub,
+                format: codec,
+              );
+            } catch (e) {
+              debugPrint(
+                  '[FilesPlaybackSession] Could not resolve sidecar subtitle $i: $e');
+            }
+          }
+        }
+      }
+      final mime =
+          indexed == null ? 'video/mp4' : FilesCatalog.mimeOf(indexed.path);
+      final session = await bridge!.openSession(
+        media: file,
+        mime: mime,
+        subtitles: subtitles,
+      );
+      return ResolvedStream(
+        url: session.mediaUrl,
+        sessionId: session.sessionId,
+        subtitleUrl: session.subtitleUrl,
+      );
     }
-    final playable = await source.backend.playable(path);
-    return ResolvedStream(url: playable.url, headers: playable.headers);
+    return ResolvedStream(url: file.url, headers: file.headers);
   }
 
-  /// Nothing was started on a server.
   @override
-  Future<void> end(String sessionId) async {}
+  Future<void> end(String sessionId) async {
+    await bridge?.closeSession(sessionId);
+  }
 }
