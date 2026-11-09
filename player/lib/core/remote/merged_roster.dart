@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../p2p/peer_sync_service.dart' show peerGroupRosterProvider;
 import '../router/legacy_routes.dart';
 import '../sources/capabilities.dart';
 import '../sources/source.dart';
@@ -152,5 +153,6 @@ final mergedRosterProvider = Provider<MergedRoster>((ref) {
         ref.watch(mediaSourceProvider(id))?.as<RemoteTargets>()?.roster;
     if (roster != null) rosters[id] = roster;
   }
-  return MergedRoster(rosters);
+  final peerGroupRoster = ref.watch(peerGroupRosterProvider);
+  return MergedRoster(rosters, extras: [peerGroupRoster]);
 });

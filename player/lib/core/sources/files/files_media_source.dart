@@ -76,6 +76,9 @@ class FilesMediaSource extends MediaSource
 
   static final _activeSources = <FilesMediaSource>{};
 
+  /// The [FilesMediaSource] instances currently alive in the process.
+  static Iterable<FilesMediaSource> get activeSources => _activeSources;
+
   static const _pageOf50 = 50;
   static const _rowLimit = 20;
   static const _searchLimit = 50;

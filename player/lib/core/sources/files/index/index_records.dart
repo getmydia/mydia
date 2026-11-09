@@ -105,6 +105,21 @@ class GroupMatch {
   final bool pinned;
   final DateTime matchedAt;
 
+  GroupMatch copyWith({
+    String? groupKey,
+    bool? isShow,
+    int? tmdbId,
+    bool? pinned,
+    DateTime? matchedAt,
+  }) =>
+      GroupMatch(
+        groupKey: groupKey ?? this.groupKey,
+        isShow: isShow ?? this.isShow,
+        tmdbId: tmdbId ?? this.tmdbId,
+        pinned: pinned ?? this.pinned,
+        matchedAt: matchedAt ?? this.matchedAt,
+      );
+
   Map<String, dynamic> toMap() => {
         'groupKey': groupKey,
         'isShow': isShow,

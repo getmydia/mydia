@@ -159,6 +159,10 @@ class FileMatcher {
   List<IndexedFile> _filesOf(String groupKey, bool isShow) =>
       (_groups()[groupKey]?.files ?? const <IndexedFile>[]);
 
+  /// Whether this matcher's index has any indexed files for [groupKey].
+  bool hasFilesForGroup(String groupKey) =>
+      _index.files().values.any((f) => f.parsed?.groupKey == groupKey);
+
   bool _needsWork(_Group g) {
     final m = _index.group(g.key);
     final pinRec = _syncStore?.pinRecord(isShow: g.isShow, groupKey: g.key);

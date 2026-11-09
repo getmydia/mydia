@@ -10,6 +10,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../p2p/peer_sync_service.dart';
 import '../../p2p/peer_sync_store.dart';
 import '../../playback/playback_progress_store.dart';
 import '../connection/connection_refresh_bus.dart';
@@ -143,6 +144,12 @@ FilesMediaSource buildFilesSource(
   final tmdb = ref.read(relayTmdbProvider);
   final invalidator = ref.read(invalidatorProvider);
   final syncStore = ref.read(peerSyncStoreProvider);
+  final syncMutation = onSyncMutation ??
+      () {
+        unawaited(
+          ref.read(peerSyncServiceProvider).notifyLocalMutation(throttle: true),
+        );
+      };
   final matcher = FileMatcher(
     tmdb: tmdb,
     names: ref.read(mediaNamesProvider),
@@ -150,7 +157,7 @@ FilesMediaSource buildFilesSource(
     progress: progress,
     sourceId: source.id,
     syncStore: syncStore,
-    onSyncMutation: onSyncMutation,
+    onSyncMutation: syncMutation,
     onGroupLanded: () =>
         invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
   );
@@ -171,7 +178,7 @@ FilesMediaSource buildFilesSource(
     matcher: matcher,
     tmdb: tmdb,
     syncStore: syncStore,
-    onSyncMutation: onSyncMutation,
+    onSyncMutation: syncMutation,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
     // An SMB account's playback URLs outlive this source: saving new
