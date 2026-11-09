@@ -40,6 +40,17 @@ class _FakePairingKeys implements PairingKeyHandle {
     }
     return (nodeAddr: 'addr', instanceId: 'inst');
   }
+
+  @override
+  Future<({String lookupKey, String sealed})> seal(
+    String nodeAddr,
+    String instanceId,
+  ) async {
+    return (
+      lookupKey: await lookupKey(),
+      sealed: 'SEALED_${nodeAddr}_$instanceId',
+    );
+  }
 }
 
 void main() {
@@ -156,5 +167,85 @@ void main() {
       () => api.resolveClaimCode('K7RPM2'),
       throwsA(isA<TamperedClaimException>()),
     );
+  });
+
+  group('publishClaimCode', () {
+    test('posts lookup_key and sealed to /pairing/v2/claim', () async {
+      late Uri requested;
+      late String method;
+      late String body;
+
+      final client = MockClient((request) async {
+        requested = request.url;
+        method = request.method;
+        body = request.body;
+        return http.Response('', 204);
+      });
+
+      final api = RelayApiClient(
+        baseUrl: relayUrl,
+        client: client,
+        pairingKeys: fakeFactory,
+      );
+
+      final result = await api.publishClaimCode(
+        code: 'K7RPM2',
+        nodeAddr: 'addr123',
+        instanceId: 'inst456',
+      );
+
+      expect(method, 'POST');
+      expect(requested.path, '/pairing/v2/claim');
+      expect(requested.toString(), isNot(contains('K7RPM2')));
+
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      expect(decoded['lookup_key'], result.lookupKey);
+      expect(decoded['sealed'], result.sealed);
+      expect(result.sealed, 'SEALED_addr123_inst456');
+    });
+
+    test('throws RateLimitedException on 429', () async {
+      final client = MockClient((_) async => http.Response('{}', 429));
+      final api = RelayApiClient(
+        baseUrl: relayUrl,
+        client: client,
+        pairingKeys: fakeFactory,
+      );
+
+      expect(
+        () => api.publishClaimCode(
+          code: 'K7RPM2',
+          nodeAddr: 'addr123',
+          instanceId: 'inst456',
+        ),
+        throwsA(isA<RateLimitedException>()),
+      );
+    });
+  });
+
+  group('deleteClaimCode', () {
+    test('sends DELETE to /pairing/v2/claim/<lookupKey>', () async {
+      late Uri requested;
+      late String method;
+
+      final client = MockClient((request) async {
+        requested = request.url;
+        method = request.method;
+        return http.Response('', 204);
+      });
+
+      final api = RelayApiClient(
+        baseUrl: relayUrl,
+        client: client,
+        pairingKeys: fakeFactory,
+      );
+
+      const lookupKey =
+          'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+      await api.deleteClaimCode(lookupKey);
+
+      expect(method, 'DELETE');
+      expect(requested.path, '/pairing/v2/claim/$lookupKey');
+    });
   });
 }

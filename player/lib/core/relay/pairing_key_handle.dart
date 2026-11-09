@@ -21,6 +21,12 @@ abstract class PairingKeyHandle {
   /// hit short of a 256-bit collision, so a blob that fetches but will not open
   /// was altered in storage or in transit.
   Future<({String nodeAddr, String instanceId})> open(String sealed);
+
+  /// Seals an endpoint payload for publishing to the relay.
+  Future<({String lookupKey, String sealed})> seal(
+    String nodeAddr,
+    String instanceId,
+  );
 }
 
 /// Builds a handle for a claim code as the user typed it. Case, dashes, and
@@ -40,6 +46,15 @@ class NativePairingKeyHandle implements PairingKeyHandle {
   Future<({String nodeAddr, String instanceId})> open(String sealed) async {
     final payload = await _keys.open(sealed: sealed);
     return (nodeAddr: payload.nodeAddr, instanceId: payload.instanceId);
+  }
+
+  @override
+  Future<({String lookupKey, String sealed})> seal(
+    String nodeAddr,
+    String instanceId,
+  ) async {
+    final res = await _keys.seal(nodeAddr: nodeAddr, instanceId: instanceId);
+    return (lookupKey: res.lookupKey, sealed: res.sealed);
   }
 }
 

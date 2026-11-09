@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `collect_hls_body`, `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Space on the volume holding `path`, for sizing the playback spool.
 /// Always an error in a browser, which has no filesystem to ask.
@@ -75,6 +75,9 @@ abstract class P2PHost implements RustOpaqueInterface {
   Future<HlsStreamHandle> openHlsStream(
       {required String peer, required FlutterHlsRequest req});
 
+  /// Stream inbound peer sync requests to Flutter.
+  Stream<FlutterInboundPeerSyncRequest> peerSyncStream();
+
   /// Stream inbound control requests to Flutter.
   ///
   /// Separate from `event_stream` on purpose: that one is a colon-delimited
@@ -87,6 +90,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// calling `event_stream()`, is a fully supported way to act as a
   /// control target.
   Stream<FlutterInboundControlRequest> remoteControlStream();
+
+  /// Answer an inbound peer sync request.
+  Future<void> respondToPeerSync(
+      {required String requestId, required FlutterPeerSyncResponse res});
 
   /// Answer an inbound control request.
   ///
@@ -112,6 +119,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Send a pairing request to a specific peer.
   Future<FlutterPairingResponse> sendPairingRequest(
       {required String peer, required FlutterPairingRequest req});
+
+  /// Send a peer sync request to a peer and await its answer.
+  Future<FlutterPeerSyncResponse> sendPeerSync(
+      {required String peer, required FlutterPeerSyncRequest req});
 
   /// Send a control command to a peer and await its answer.
   Future<FlutterRemoteControlResponse> sendRemoteControlRequest(
@@ -363,6 +374,30 @@ class FlutterInboundControlRequest {
           request == other.request;
 }
 
+class FlutterInboundPeerSyncRequest {
+  final String peer;
+  final String requestId;
+  final FlutterPeerSyncRequest request;
+
+  const FlutterInboundPeerSyncRequest({
+    required this.peer,
+    required this.requestId,
+    required this.request,
+  });
+
+  @override
+  int get hashCode => peer.hashCode ^ requestId.hashCode ^ request.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterInboundPeerSyncRequest &&
+          runtimeType == other.runtimeType &&
+          peer == other.peer &&
+          requestId == other.requestId &&
+          request == other.request;
+}
+
 class FlutterLoadContentRequest {
   final String mediaItemId;
   final String? episodeId;
@@ -510,6 +545,49 @@ class FlutterPairingResponse {
           deviceToken == other.deviceToken &&
           error == other.error &&
           directUrls == other.directUrls;
+}
+
+@freezed
+sealed class FlutterPeerSyncRequest with _$FlutterPeerSyncRequest {
+  const FlutterPeerSyncRequest._();
+
+  const factory FlutterPeerSyncRequest.pair({
+    required String claimCode,
+    required String deviceName,
+    required String platform,
+    String? endpointAddrJson,
+  }) = FlutterPeerSyncRequest_Pair;
+  const factory FlutterPeerSyncRequest.sync_({
+    required String authProof,
+    String? senderEndpointAddrJson,
+    required List<FlutterWirePeerMember> roster,
+    required PlatformInt64 sinceLandedMs,
+    required List<FlutterWireWatchRecord> watchRecords,
+    required List<FlutterWirePinRecord> pinRecords,
+  }) = FlutterPeerSyncRequest_Sync;
+}
+
+@freezed
+sealed class FlutterPeerSyncResponse with _$FlutterPeerSyncResponse {
+  const FlutterPeerSyncResponse._();
+
+  const factory FlutterPeerSyncResponse.paired({
+    required String groupSecretBase64,
+    required List<FlutterWirePeerMember> roster,
+    required List<FlutterWireWatchRecord> watchRecords,
+    required List<FlutterWirePinRecord> pinRecords,
+  }) = FlutterPeerSyncResponse_Paired;
+  const factory FlutterPeerSyncResponse.pairRejected({
+    required String reason,
+  }) = FlutterPeerSyncResponse_PairRejected;
+  const factory FlutterPeerSyncResponse.syncAck({
+    required List<FlutterWirePeerMember> roster,
+    required List<FlutterWireWatchRecord> watchRecords,
+    required List<FlutterWirePinRecord> pinRecords,
+    required PlatformInt64 peerNowMs,
+  }) = FlutterPeerSyncResponse_SyncAck;
+  const factory FlutterPeerSyncResponse.notAuthorized() =
+      FlutterPeerSyncResponse_NotAuthorized;
 }
 
 class FlutterPlaybackSnapshot {
@@ -667,6 +745,27 @@ sealed class FlutterRemoteControlResponse with _$FlutterRemoteControlResponse {
   ) = FlutterRemoteControlResponse_Error;
 }
 
+class FlutterSealedClaim {
+  final String lookupKey;
+  final String sealed;
+
+  const FlutterSealedClaim({
+    required this.lookupKey,
+    required this.sealed,
+  });
+
+  @override
+  int get hashCode => lookupKey.hashCode ^ sealed.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterSealedClaim &&
+          runtimeType == other.runtimeType &&
+          lookupKey == other.lookupKey &&
+          sealed == other.sealed;
+}
+
 class FlutterTargetCapabilities {
   final bool volume;
   final bool trackSelection;
@@ -716,6 +815,119 @@ class FlutterTrackInfo {
           language == other.language;
 }
 
+class FlutterWirePeerMember {
+  final String nodeId;
+  final String deviceName;
+  final String platform;
+  final String? endpointAddrJson;
+  final PlatformInt64 updatedAtMs;
+  final bool revoked;
+
+  const FlutterWirePeerMember({
+    required this.nodeId,
+    required this.deviceName,
+    required this.platform,
+    this.endpointAddrJson,
+    required this.updatedAtMs,
+    required this.revoked,
+  });
+
+  @override
+  int get hashCode =>
+      nodeId.hashCode ^
+      deviceName.hashCode ^
+      platform.hashCode ^
+      endpointAddrJson.hashCode ^
+      updatedAtMs.hashCode ^
+      revoked.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterWirePeerMember &&
+          runtimeType == other.runtimeType &&
+          nodeId == other.nodeId &&
+          deviceName == other.deviceName &&
+          platform == other.platform &&
+          endpointAddrJson == other.endpointAddrJson &&
+          updatedAtMs == other.updatedAtMs &&
+          revoked == other.revoked;
+}
+
+class FlutterWirePinRecord {
+  final String key;
+  final String groupKey;
+  final bool isShow;
+  final PlatformInt64? tmdbId;
+  final bool pinned;
+  final PlatformInt64 updatedAtMs;
+
+  const FlutterWirePinRecord({
+    required this.key,
+    required this.groupKey,
+    required this.isShow,
+    this.tmdbId,
+    required this.pinned,
+    required this.updatedAtMs,
+  });
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      groupKey.hashCode ^
+      isShow.hashCode ^
+      tmdbId.hashCode ^
+      pinned.hashCode ^
+      updatedAtMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterWirePinRecord &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          groupKey == other.groupKey &&
+          isShow == other.isShow &&
+          tmdbId == other.tmdbId &&
+          pinned == other.pinned &&
+          updatedAtMs == other.updatedAtMs;
+}
+
+class FlutterWireWatchRecord {
+  final String key;
+  final bool watched;
+  final PlatformInt64? positionSeconds;
+  final PlatformInt64? durationSeconds;
+  final PlatformInt64 updatedAtMs;
+
+  const FlutterWireWatchRecord({
+    required this.key,
+    required this.watched,
+    this.positionSeconds,
+    this.durationSeconds,
+    required this.updatedAtMs,
+  });
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      watched.hashCode ^
+      positionSeconds.hashCode ^
+      durationSeconds.hashCode ^
+      updatedAtMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterWireWatchRecord &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          watched == other.watched &&
+          positionSeconds == other.positionSeconds &&
+          durationSeconds == other.durationSeconds &&
+          updatedAtMs == other.updatedAtMs;
+}
+
 /// Keys derived from a pairing claim code.
 ///
 /// Held as an object rather than exposed as two free functions so that Argon2id
@@ -745,6 +957,12 @@ class PairingKeys {
   /// was altered in storage or in transit.
   Future<ClaimPayload> open({required String sealed}) =>
       RustLib.instance.api.cratePairingKeysOpen(that: this, sealed: sealed);
+
+  /// Seal a node address and instance ID into a claim blob for the relay.
+  Future<FlutterSealedClaim> seal(
+          {required String nodeAddr, required String instanceId}) =>
+      RustLib.instance.api.cratePairingKeysSeal(
+          that: this, nodeAddr: nodeAddr, instanceId: instanceId);
 
   @override
   int get hashCode => code.hashCode;
