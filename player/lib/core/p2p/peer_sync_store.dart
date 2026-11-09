@@ -1,0 +1,807 @@
+import 'dart:math';
+
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:hive_ce/hive.dart';
+
+import 'peer_sync_records.dart';
+
+abstract class PeerSyncStore {
+  static const boxName = 'peer_sync';
+
+  // Roster
+  Map<String, PeerMember> members();
+  PeerMember? member(String nodeId);
+  Future<bool> putMember(PeerMember member);
+  Future<Set<String>> mergeRoster(
+    Iterable<PeerMember> incoming, {
+    required int nowMs,
+  });
+  Future<void> clearRoster();
+
+  // Watch & progress
+  PeerWatchRecord? watchRecord(String key);
+  Map<String, PeerWatchRecord> allWatchRecords();
+  Future<PeerWatchRecord> setWatched(
+    String key,
+    bool watched, {
+    required int nowMs,
+  });
+  Future<PeerWatchRecord> removeFromContinueWatching(
+    String key, {
+    required int nowMs,
+  });
+  Future<PeerWatchRecord> recordProgress(
+    String key, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required double watchedFraction,
+    required int nowMs,
+  });
+
+  // Pins
+  PeerPinRecord? pinRecord({required bool isShow, required String groupKey});
+  Map<String, PeerPinRecord> allPinRecords();
+  Future<PeerPinRecord> setPin({
+    required String groupKey,
+    required bool isShow,
+    required int? tmdbId,
+    required bool pinned,
+    required int nowMs,
+  });
+
+  // Wire delta & LWW merge
+  List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive);
+  List<PeerPinRecord> pinRecordsSince(int landedAtExclusive);
+  Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
+      mergeRemote({
+    required Iterable<WireWatchRecord> watchRecords,
+    required Iterable<WirePinRecord> pinRecords,
+    required int nowMs,
+  });
+
+  // Per-peer sync watermarks
+  PeerWatermark? watermark(String nodeId);
+  Future<void> setWatermark(String nodeId, PeerWatermark mark);
+
+  // Initial seeding
+  bool get isSeeded;
+  Future<void> markSeeded();
+}
+
+class HivePeerSyncStore implements PeerSyncStore {
+  HivePeerSyncStore(this._box) {
+    var maxLanded = 0;
+    final meta = _box.get(_metaLastLandedAtKey);
+    if (meta != null && meta['value'] is num) {
+      maxLanded = (meta['value'] as num).toInt();
+    }
+    for (final key in _box.keys) {
+      final keyStr = key.toString();
+      if (keyStr.startsWith(_watchPrefix) || keyStr.startsWith(_pinPrefix)) {
+        final raw = _box.get(key);
+        if (raw != null && raw['landedAt'] is num) {
+          final l = (raw['landedAt'] as num).toInt();
+          if (l > maxLanded) maxLanded = l;
+        }
+      }
+    }
+    _lastIssuedLandedAt = maxLanded;
+  }
+
+  static const _memberPrefix = 'member:';
+  static const _watchPrefix = 'watch:';
+  static const _pinPrefix = 'pin:';
+  static const _watermarkPrefix = 'watermark:';
+  static const _metaSeededKey = 'meta:seeded';
+  static const _metaLastLandedAtKey = 'meta:last_landed_at';
+
+  final Box<Map<dynamic, dynamic>> _box;
+  int _lastIssuedLandedAt = 0;
+
+  int _nextLandedAt(int nowMs) {
+    final next = max(nowMs, _lastIssuedLandedAt + 1);
+    _lastIssuedLandedAt = next;
+    return next;
+  }
+
+  // Roster
+
+  @override
+  Map<String, PeerMember> members() {
+    final result = <String, PeerMember>{};
+    for (final key in _box.keys) {
+      final keyStr = key.toString();
+      if (keyStr.startsWith(_memberPrefix)) {
+        final nodeId = keyStr.substring(_memberPrefix.length);
+        final raw = _box.get(key);
+        if (raw != null) {
+          try {
+            result[nodeId] = PeerMember.fromMap(raw);
+          } catch (e) {
+            debugPrint('[HivePeerSyncStore] Corrupt member $key: $e');
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  @override
+  PeerMember? member(String nodeId) {
+    final raw = _box.get('$_memberPrefix$nodeId');
+    if (raw == null) return null;
+    try {
+      return PeerMember.fromMap(raw);
+    } catch (e) {
+      debugPrint('[HivePeerSyncStore] Corrupt member $nodeId: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> putMember(PeerMember member) async {
+    final existing = this.member(member.nodeId);
+    bool wins;
+    if (existing == null) {
+      wins = true;
+    } else if (member.updatedAt > existing.updatedAt) {
+      wins = true;
+    } else if (member.updatedAt == existing.updatedAt &&
+        member.revoked &&
+        !existing.revoked) {
+      wins = true;
+    } else {
+      wins = false;
+    }
+
+    if (!wins) return false;
+    await _box.put('$_memberPrefix${member.nodeId}', member.toMap());
+    return true;
+  }
+
+  @override
+  Future<Set<String>> mergeRoster(
+    Iterable<PeerMember> incoming, {
+    required int nowMs,
+  }) async {
+    final changed = <String>{};
+    for (final m in incoming) {
+      final effectiveUpdatedAt = min(m.updatedAt, nowMs + 60000);
+      final candidate = m.updatedAt != effectiveUpdatedAt
+          ? m.copyWith(updatedAt: effectiveUpdatedAt)
+          : m;
+      final existing = member(candidate.nodeId);
+      bool wins;
+      if (existing == null) {
+        wins = true;
+      } else if (candidate.updatedAt > existing.updatedAt) {
+        wins = true;
+      } else if (candidate.updatedAt == existing.updatedAt &&
+          candidate.revoked &&
+          !existing.revoked) {
+        wins = true;
+      } else {
+        wins = false;
+      }
+
+      if (wins) {
+        if (existing != candidate) {
+          await _box.put(
+            '$_memberPrefix${candidate.nodeId}',
+            candidate.toMap(),
+          );
+          changed.add(candidate.nodeId);
+        }
+      }
+    }
+    return changed;
+  }
+
+  @override
+  Future<void> clearRoster() async {
+    final memberKeys = [
+      for (final key in _box.keys)
+        if (key.toString().startsWith(_memberPrefix)) key,
+    ];
+    await _box.deleteAll(memberKeys);
+  }
+
+  // Watch & progress
+
+  @override
+  PeerWatchRecord? watchRecord(String key) {
+    final raw = _box.get('$_watchPrefix$key');
+    if (raw == null) return null;
+    try {
+      return PeerWatchRecord.fromMap(raw);
+    } catch (e) {
+      debugPrint('[HivePeerSyncStore] Corrupt watch record $key: $e');
+      return null;
+    }
+  }
+
+  @override
+  Map<String, PeerWatchRecord> allWatchRecords() {
+    final result = <String, PeerWatchRecord>{};
+    for (final key in _box.keys) {
+      final keyStr = key.toString();
+      if (keyStr.startsWith(_watchPrefix)) {
+        final syncKey = keyStr.substring(_watchPrefix.length);
+        final raw = _box.get(key);
+        if (raw != null) {
+          try {
+            result[syncKey] = PeerWatchRecord.fromMap(raw);
+          } catch (e) {
+            debugPrint('[HivePeerSyncStore] Corrupt watch record $key: $e');
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<PeerWatchRecord> setWatched(
+    String key,
+    bool watched, {
+    required int nowMs,
+  }) async {
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: watched,
+      positionSeconds: null,
+      durationSeconds: null,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    await _box.put('$_watchPrefix$key', record.toMap());
+    return record;
+  }
+
+  @override
+  Future<PeerWatchRecord> removeFromContinueWatching(
+    String key, {
+    required int nowMs,
+  }) async {
+    final current = watchRecord(key);
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: current?.watched ?? false,
+      positionSeconds: null,
+      durationSeconds: null,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    await _box.put('$_watchPrefix$key', record.toMap());
+    return record;
+  }
+
+  @override
+  Future<PeerWatchRecord> recordProgress(
+    String key, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required double watchedFraction,
+    required int nowMs,
+  }) async {
+    final current = watchRecord(key);
+    final isWatched = (current?.watched ?? false) ||
+        (durationSeconds > 0 &&
+            (positionSeconds / durationSeconds) >= watchedFraction);
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: isWatched,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    await _box.put('$_watchPrefix$key', record.toMap());
+    return record;
+  }
+
+  // Pins
+
+  @override
+  PeerPinRecord? pinRecord({required bool isShow, required String groupKey}) {
+    final key = pinSyncKey(isShow: isShow, groupKey: groupKey);
+    final raw = _box.get('$_pinPrefix$key');
+    if (raw == null) return null;
+    try {
+      return PeerPinRecord.fromMap(raw);
+    } catch (e) {
+      debugPrint('[HivePeerSyncStore] Corrupt pin record $key: $e');
+      return null;
+    }
+  }
+
+  @override
+  Map<String, PeerPinRecord> allPinRecords() {
+    final result = <String, PeerPinRecord>{};
+    for (final key in _box.keys) {
+      final keyStr = key.toString();
+      if (keyStr.startsWith(_pinPrefix)) {
+        final pinKey = keyStr.substring(_pinPrefix.length);
+        final raw = _box.get(key);
+        if (raw != null) {
+          try {
+            result[pinKey] = PeerPinRecord.fromMap(raw);
+          } catch (e) {
+            debugPrint('[HivePeerSyncStore] Corrupt pin record $key: $e');
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<PeerPinRecord> setPin({
+    required String groupKey,
+    required bool isShow,
+    required int? tmdbId,
+    required bool pinned,
+    required int nowMs,
+  }) async {
+    final key = pinSyncKey(isShow: isShow, groupKey: groupKey);
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerPinRecord(
+      key: key,
+      groupKey: groupKey,
+      isShow: isShow,
+      tmdbId: tmdbId,
+      pinned: pinned,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    await _box.put('$_pinPrefix$key', record.toMap());
+    return record;
+  }
+
+  // Wire delta & LWW merge
+
+  @override
+  List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive) {
+    final list = allWatchRecords()
+        .values
+        .where((r) => r.landedAt > landedAtExclusive)
+        .toList()
+      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    return list;
+  }
+
+  @override
+  List<PeerPinRecord> pinRecordsSince(int landedAtExclusive) {
+    final list = allPinRecords()
+        .values
+        .where((r) => r.landedAt > landedAtExclusive)
+        .toList()
+      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    return list;
+  }
+
+  @override
+  Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
+      mergeRemote({
+    required Iterable<WireWatchRecord> watchRecords,
+    required Iterable<WirePinRecord> pinRecords,
+    required int nowMs,
+  }) async {
+    final changedWatch = <String>{};
+    final changedPin = <String>{};
+
+    for (final wire in watchRecords) {
+      final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
+      final local = watchRecord(wire.key);
+      bool incomingWins;
+      if (local == null) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt > local.updatedAt) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt < local.updatedAt) {
+        incomingWins = false;
+      } else {
+        if (wire.watched && !local.watched) {
+          incomingWins = true;
+        } else if (!wire.watched && local.watched) {
+          incomingWins = false;
+        } else {
+          final incomingPos = wire.positionSeconds?.toInt() ?? -1;
+          final localPos = local.positionSeconds ?? -1;
+          incomingWins = incomingPos > localPos;
+        }
+      }
+
+      if (incomingWins) {
+        final landed = _nextLandedAt(nowMs);
+        final record = PeerWatchRecord(
+          key: wire.key,
+          watched: wire.watched,
+          positionSeconds: wire.positionSeconds?.toInt(),
+          durationSeconds: wire.durationSeconds?.toInt(),
+          updatedAt: effectiveUpdatedAt,
+          landedAt: landed,
+        );
+        await _box.put('$_watchPrefix${wire.key}', record.toMap());
+        changedWatch.add(wire.key);
+      }
+    }
+
+    for (final wire in pinRecords) {
+      final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
+      final local = pinRecord(isShow: wire.isShow, groupKey: wire.groupKey);
+      bool incomingWins;
+      if (local == null) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt > local.updatedAt) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt < local.updatedAt) {
+        incomingWins = false;
+      } else {
+        incomingWins = false;
+      }
+
+      if (incomingWins) {
+        final landed = _nextLandedAt(nowMs);
+        final record = PeerPinRecord(
+          key: wire.key,
+          groupKey: wire.groupKey,
+          isShow: wire.isShow,
+          tmdbId: wire.tmdbId?.toInt(),
+          pinned: wire.pinned,
+          updatedAt: effectiveUpdatedAt,
+          landedAt: landed,
+        );
+        await _box.put('$_pinPrefix${wire.key}', record.toMap());
+        changedPin.add(wire.key);
+      }
+    }
+
+    return (changedWatchKeys: changedWatch, changedPinKeys: changedPin);
+  }
+
+  // Per-peer sync watermarks
+
+  @override
+  PeerWatermark? watermark(String nodeId) {
+    final raw = _box.get('$_watermarkPrefix$nodeId');
+    if (raw == null) return null;
+    try {
+      return PeerWatermark.fromMap(raw);
+    } catch (e) {
+      debugPrint('[HivePeerSyncStore] Corrupt watermark $nodeId: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> setWatermark(String nodeId, PeerWatermark mark) async {
+    await _box.put('$_watermarkPrefix$nodeId', mark.toMap());
+  }
+
+  // Initial seeding
+
+  @override
+  bool get isSeeded {
+    final raw = _box.get(_metaSeededKey);
+    return raw != null && raw['seeded'] == true;
+  }
+
+  @override
+  Future<void> markSeeded() async {
+    await _box.put(_metaSeededKey, {'seeded': true});
+  }
+}
+
+class InMemoryPeerSyncStore implements PeerSyncStore {
+  final Map<String, PeerMember> _members = {};
+  final Map<String, PeerWatchRecord> _watchRecords = {};
+  final Map<String, PeerPinRecord> _pinRecords = {};
+  final Map<String, PeerWatermark> _watermarks = {};
+  bool _seeded = false;
+  int _lastIssuedLandedAt = 0;
+
+  int _nextLandedAt(int nowMs) {
+    final next = max(nowMs, _lastIssuedLandedAt + 1);
+    _lastIssuedLandedAt = next;
+    return next;
+  }
+
+  // Roster
+
+  @override
+  Map<String, PeerMember> members() => Map.unmodifiable(_members);
+
+  @override
+  PeerMember? member(String nodeId) => _members[nodeId];
+
+  @override
+  Future<bool> putMember(PeerMember member) async {
+    final existing = _members[member.nodeId];
+    bool wins;
+    if (existing == null) {
+      wins = true;
+    } else if (member.updatedAt > existing.updatedAt) {
+      wins = true;
+    } else if (member.updatedAt == existing.updatedAt &&
+        member.revoked &&
+        !existing.revoked) {
+      wins = true;
+    } else {
+      wins = false;
+    }
+
+    if (!wins) return false;
+    _members[member.nodeId] = member;
+    return true;
+  }
+
+  @override
+  Future<Set<String>> mergeRoster(
+    Iterable<PeerMember> incoming, {
+    required int nowMs,
+  }) async {
+    final changed = <String>{};
+    for (final m in incoming) {
+      final effectiveUpdatedAt = min(m.updatedAt, nowMs + 60000);
+      final candidate = m.updatedAt != effectiveUpdatedAt
+          ? m.copyWith(updatedAt: effectiveUpdatedAt)
+          : m;
+      final existing = _members[candidate.nodeId];
+      bool wins;
+      if (existing == null) {
+        wins = true;
+      } else if (candidate.updatedAt > existing.updatedAt) {
+        wins = true;
+      } else if (candidate.updatedAt == existing.updatedAt &&
+          candidate.revoked &&
+          !existing.revoked) {
+        wins = true;
+      } else {
+        wins = false;
+      }
+
+      if (wins) {
+        if (existing != candidate) {
+          _members[candidate.nodeId] = candidate;
+          changed.add(candidate.nodeId);
+        }
+      }
+    }
+    return changed;
+  }
+
+  @override
+  Future<void> clearRoster() async {
+    _members.clear();
+  }
+
+  // Watch & progress
+
+  @override
+  PeerWatchRecord? watchRecord(String key) => _watchRecords[key];
+
+  @override
+  Map<String, PeerWatchRecord> allWatchRecords() =>
+      Map.unmodifiable(_watchRecords);
+
+  @override
+  Future<PeerWatchRecord> setWatched(
+    String key,
+    bool watched, {
+    required int nowMs,
+  }) async {
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: watched,
+      positionSeconds: null,
+      durationSeconds: null,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    _watchRecords[key] = record;
+    return record;
+  }
+
+  @override
+  Future<PeerWatchRecord> removeFromContinueWatching(
+    String key, {
+    required int nowMs,
+  }) async {
+    final current = _watchRecords[key];
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: current?.watched ?? false,
+      positionSeconds: null,
+      durationSeconds: null,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    _watchRecords[key] = record;
+    return record;
+  }
+
+  @override
+  Future<PeerWatchRecord> recordProgress(
+    String key, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required double watchedFraction,
+    required int nowMs,
+  }) async {
+    final current = _watchRecords[key];
+    final isWatched = (current?.watched ?? false) ||
+        (durationSeconds > 0 &&
+            (positionSeconds / durationSeconds) >= watchedFraction);
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerWatchRecord(
+      key: key,
+      watched: isWatched,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    _watchRecords[key] = record;
+    return record;
+  }
+
+  // Pins
+
+  @override
+  PeerPinRecord? pinRecord({required bool isShow, required String groupKey}) {
+    final key = pinSyncKey(isShow: isShow, groupKey: groupKey);
+    return _pinRecords[key];
+  }
+
+  @override
+  Map<String, PeerPinRecord> allPinRecords() => Map.unmodifiable(_pinRecords);
+
+  @override
+  Future<PeerPinRecord> setPin({
+    required String groupKey,
+    required bool isShow,
+    required int? tmdbId,
+    required bool pinned,
+    required int nowMs,
+  }) async {
+    final key = pinSyncKey(isShow: isShow, groupKey: groupKey);
+    final landed = _nextLandedAt(nowMs);
+    final record = PeerPinRecord(
+      key: key,
+      groupKey: groupKey,
+      isShow: isShow,
+      tmdbId: tmdbId,
+      pinned: pinned,
+      updatedAt: nowMs,
+      landedAt: landed,
+    );
+    _pinRecords[key] = record;
+    return record;
+  }
+
+  // Wire delta & LWW merge
+
+  @override
+  List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive) {
+    final list = _watchRecords.values
+        .where((r) => r.landedAt > landedAtExclusive)
+        .toList()
+      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    return list;
+  }
+
+  @override
+  List<PeerPinRecord> pinRecordsSince(int landedAtExclusive) {
+    final list = _pinRecords.values
+        .where((r) => r.landedAt > landedAtExclusive)
+        .toList()
+      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    return list;
+  }
+
+  @override
+  Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
+      mergeRemote({
+    required Iterable<WireWatchRecord> watchRecords,
+    required Iterable<WirePinRecord> pinRecords,
+    required int nowMs,
+  }) async {
+    final changedWatch = <String>{};
+    final changedPin = <String>{};
+
+    for (final wire in watchRecords) {
+      final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
+      final local = _watchRecords[wire.key];
+      bool incomingWins;
+      if (local == null) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt > local.updatedAt) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt < local.updatedAt) {
+        incomingWins = false;
+      } else {
+        if (wire.watched && !local.watched) {
+          incomingWins = true;
+        } else if (!wire.watched && local.watched) {
+          incomingWins = false;
+        } else {
+          final incomingPos = wire.positionSeconds?.toInt() ?? -1;
+          final localPos = local.positionSeconds ?? -1;
+          incomingWins = incomingPos > localPos;
+        }
+      }
+
+      if (incomingWins) {
+        final landed = _nextLandedAt(nowMs);
+        final record = PeerWatchRecord(
+          key: wire.key,
+          watched: wire.watched,
+          positionSeconds: wire.positionSeconds?.toInt(),
+          durationSeconds: wire.durationSeconds?.toInt(),
+          updatedAt: effectiveUpdatedAt,
+          landedAt: landed,
+        );
+        _watchRecords[wire.key] = record;
+        changedWatch.add(wire.key);
+      }
+    }
+
+    for (final wire in pinRecords) {
+      final effectiveUpdatedAt = min(wire.updatedAtMs.toInt(), nowMs + 60000);
+      final local = _pinRecords[wire.key];
+      bool incomingWins;
+      if (local == null) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt > local.updatedAt) {
+        incomingWins = true;
+      } else if (effectiveUpdatedAt < local.updatedAt) {
+        incomingWins = false;
+      } else {
+        incomingWins = false;
+      }
+
+      if (incomingWins) {
+        final landed = _nextLandedAt(nowMs);
+        final record = PeerPinRecord(
+          key: wire.key,
+          groupKey: wire.groupKey,
+          isShow: wire.isShow,
+          tmdbId: wire.tmdbId?.toInt(),
+          pinned: wire.pinned,
+          updatedAt: effectiveUpdatedAt,
+          landedAt: landed,
+        );
+        _pinRecords[wire.key] = record;
+        changedPin.add(wire.key);
+      }
+    }
+
+    return (changedWatchKeys: changedWatch, changedPinKeys: changedPin);
+  }
+
+  // Per-peer sync watermarks
+
+  @override
+  PeerWatermark? watermark(String nodeId) => _watermarks[nodeId];
+
+  @override
+  Future<void> setWatermark(String nodeId, PeerWatermark mark) async {
+    _watermarks[nodeId] = mark;
+  }
+
+  // Initial seeding
+
+  @override
+  bool get isSeeded => _seeded;
+
+  @override
+  Future<void> markSeeded() async {
+    _seeded = true;
+  }
+}
