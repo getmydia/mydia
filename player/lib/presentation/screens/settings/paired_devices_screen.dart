@@ -10,6 +10,8 @@ import '../../../core/p2p/peer_sync_service.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../../widgets/glass/glass_dialog.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
 
@@ -154,7 +156,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
   Future<void> _handleScanQr() async {
     if (kIsWeb) return;
     var detected = false;
-    await showModalBottomSheet<void>(
+    await showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (bottomSheetContext) => Scaffold(
@@ -200,7 +202,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
     final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => GlassDialog(
         title: Text(l10n.pairedDevicesLeaveGroupConfirmTitle),
         content: Text(l10n.pairedDevicesLeaveGroupConfirmBody),
         actions: [

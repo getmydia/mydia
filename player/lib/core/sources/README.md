@@ -253,9 +253,12 @@ Every Mydia instance lists the player devices paired to it, and a device
 paired to several instances is one entry.
 
 - `MergedRoster` (`core/remote/merged_roster.dart`) joins the instances'
-  rosters and dedupes by p2p node id, the identity a device shares across
-  instances. An instance whose roster throws contributes nothing. A sender
-  is allowed when any instance allows it.
+  rosters and `peerGroupRosterProvider` (`core/p2p/peer_group_roster.dart`),
+  deduping by p2p node id, the identity a device shares across instances and
+  peer groups. An instance whose roster throws contributes nothing. A sender
+  is allowed when any instance or the paired peer group allows it. This allows
+  paired players to remote-control each other even in pure local or files-only
+  setups without a Mydia server.
 - Commands answer against the instance that listed the sender.
   `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
   content command resolves the item on the server it names
@@ -550,6 +553,33 @@ its account, replaces the credentials and clears `needsReauth`. Signing a
 files account in again (`/sources/add/files?account=`) redirects to the
 folder picker for `flocal` and to the prefilled WebDAV form otherwise.
 `removeFilesAccount` removes the record and secrets, then clears the index.
+
+### Peer-to-peer watch-state and match-pin sync
+
+When players pair directly over iroh (`/settings/paired-devices`), watch
+state, resume positions, and manual match pins synchronize automatically
+without a central Mydia server.
+
+- Storage: Hive box `peer_sync` managed by `PeerSyncStore` (`core/p2p/peer_sync_store.dart`).
+  On first run, existing local watch progress and manual pins in `files_index`
+  are seeded into `peer_sync` via `seedPeerSyncStoreIfNeeded`.
+- Identity & keys: A 32-byte shared `PeerGroupSecret` stored in `AuthStorage`
+  generates a 16-hex group ID and HMAC-SHA256 authentication tokens for 1-RTT
+  sync requests. Records use canonical sync keys:
+  - `tmdb:movie:<id>`
+  - `tmdb:ep:<showId>:<season>:<episode>`
+  - `file:<accountId>:<fileKey>` (for unmatched files)
+  - `pin:<m|s>:<groupKey>` (for manual metadata matcher overrides)
+- Convergence: Updates use Last-Write-Wins (LWW) with monotonically assigned
+  `landedAt` watermarks. Delta sync exchanges only records updated since the
+  peer's last received landed watermark, allowing transitive gossiping across
+  partially connected peer topologies (A ↔ B ↔ C).
+- Handshake & lifecycle: `PeerSyncService` (`core/p2p/peer_sync_service.dart`)
+  manages pairing offers with 6-character claim codes or direct QR payloads,
+  with a 5-attempt rate limit locking out brute-force attempts. Mutations
+  trigger immediate notifications, failing dials enter a 60-second cooldown,
+  and leaving a group revokes the local device while preserving local watch
+  records.
 
 ### SMB
 
