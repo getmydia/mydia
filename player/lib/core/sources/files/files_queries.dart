@@ -488,7 +488,9 @@ class FilesCatalog {
     final ext = _ext(_nameOf(path));
     return switch (ext) {
       'mkv' => 'video/x-matroska',
-      'mp4' || 'm4v' || 'mov' => 'video/mp4',
+      'mp4' || 'm4v' => 'video/mp4',
+      'mov' => 'video/quicktime',
+      'mpg' || 'mpeg' => 'video/mpeg',
       'avi' => 'video/x-msvideo',
       'ts' || 'mpegts' => 'video/mp2t',
       'webm' => 'video/webm',

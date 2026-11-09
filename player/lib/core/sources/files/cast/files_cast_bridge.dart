@@ -183,10 +183,18 @@ class FilesCastBridge {
     }
   }
 
+  Future<void>? _bindFuture;
+
   Future<void> _ensureBound() async {
     if (_server != null) return;
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
-    _adopt(server);
+    return _bindFuture ??= () async {
+      try {
+        final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+        _adopt(server);
+      } finally {
+        _bindFuture = null;
+      }
+    }();
   }
 
   void _adopt(HttpServer server) {
@@ -460,15 +468,23 @@ class FilesCastBridge {
     );
   }
 
-  /// Parses `bytes=start-end` or `bytes=start-` against [totalLength].
+  /// Parses `bytes=start-end`, `bytes=start-`, or `bytes=-suffix` against [totalLength].
   /// Returns `(start, endInclusive)` or `null` when unsatisfiable.
   static (int, int)? _parseRange(String header, int totalLength) {
     if (totalLength <= 0) return null;
-    final match = RegExp(r'^bytes=(\d+)-(\d*)$').firstMatch(header.trim());
+    final match = RegExp(r'^bytes=(\d*)-(\d*)$').firstMatch(header.trim());
     if (match == null) return null;
-    final start = int.tryParse(match.group(1)!);
-    if (start == null || start < 0 || start >= totalLength) return null;
+    final startStr = match.group(1)!;
     final endStr = match.group(2)!;
+    if (startStr.isEmpty && endStr.isEmpty) return null;
+    if (startStr.isEmpty) {
+      final suffix = int.tryParse(endStr);
+      if (suffix == null || suffix <= 0) return null;
+      final start = suffix >= totalLength ? 0 : totalLength - suffix;
+      return (start, totalLength - 1);
+    }
+    final start = int.tryParse(startStr);
+    if (start == null || start < 0 || start >= totalLength) return null;
     final end = endStr.isEmpty ? totalLength - 1 : int.tryParse(endStr);
     if (end == null || end < start) return null;
     final clampedEnd = end >= totalLength ? totalLength - 1 : end;
@@ -478,13 +494,24 @@ class FilesCastBridge {
   static String _extensionForMime(String mime, String url) {
     final parsedPath = Uri.tryParse(url)?.path.toLowerCase() ?? '';
     final path = parsedPath.isNotEmpty ? parsedPath : url.toLowerCase();
-    for (final ext in ['mp4', 'm4v', 'mkv', 'webm', 'mov', 'avi', 'ts']) {
+    for (final ext in [
+      'mp4',
+      'm4v',
+      'mkv',
+      'webm',
+      'mov',
+      'avi',
+      'ts',
+      'mpg',
+      'mpeg'
+    ]) {
       if (path.endsWith('.$ext')) return ext;
     }
     return switch (mime.toLowerCase()) {
       'video/x-matroska' => 'mkv',
       'video/webm' => 'webm',
       'video/quicktime' => 'mov',
+      'video/mpeg' => 'mpg',
       'video/mp2t' => 'ts',
       'video/x-msvideo' => 'avi',
       _ => 'mp4',

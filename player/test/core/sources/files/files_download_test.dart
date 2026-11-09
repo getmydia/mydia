@@ -249,5 +249,24 @@ void main() {
         SourceErrorKind.notFound,
       )),
     );
+
+    // BackendUnreachable -> SourceException.unreachable
+    backend.failure = const BackendUnreachable('host down');
+    await expectLater(
+      downloadable.resolve(movieRef, option.id),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unreachable,
+      )),
+    );
+    await expectLater(
+      downloadable.prepareDownload(movieRef, versionKey, option),
+      throwsA(isA<SourceException>().having(
+        (e) => e.kind,
+        'kind',
+        SourceErrorKind.unreachable,
+      )),
+    );
   });
 }

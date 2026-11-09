@@ -273,9 +273,9 @@ void main() {
       );
       expect(route.subtitles, hasLength(1));
       final sub = route.subtitles.single;
-      expect(sub.trackId, 'ext-0');
+      expect(sub.trackId, 'sidecar-0');
       expect(sub.burnedIn, isFalse);
-      expect(sub.url, endsWith('/sub/ext-0.vtt'));
+      expect(sub.url, endsWith('/sub/sidecar-0.vtt'));
 
       await binding.endServerSession(route.hlsSessionId!);
       expect(bridge.activePort, isNull);

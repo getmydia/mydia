@@ -80,6 +80,15 @@ void main() {
     expect(tail.headers['content-range'], 'bytes 95-99/100');
     expect(tail.bodyBytes, [95, 96, 97, 98, 99]);
 
+    // Suffix range (bytes=-5)
+    final suffix = await http.get(
+      Uri.parse(session.mediaUrl),
+      headers: const {'Range': 'bytes=-5'},
+    );
+    expect(suffix.statusCode, HttpStatus.partialContent);
+    expect(suffix.headers['content-range'], 'bytes 95-99/100');
+    expect(suffix.bodyBytes, [95, 96, 97, 98, 99]);
+
     // Unsatisfiable range (bytes=200-300)
     final badRange = await http.get(
       Uri.parse(session.mediaUrl),

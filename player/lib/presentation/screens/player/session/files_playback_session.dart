@@ -121,7 +121,8 @@ class FilesPlaybackSession extends SourcePlaybackSession {
   @override
   Future<List<CastSubtitleTrack>> receiverSubtitles(
       MediaVersion version) async {
-    final indexed = _files.indexedFile(fileId);
+    final key = version.id.isNotEmpty ? version.id : fileId;
+    final indexed = _files.indexedFile(key);
     final root = indexed == null ? null : _files.rootFor(indexed);
     if (indexed == null || root == null) return const [];
     final streams = FilesCatalog.sidecarStreams(root, indexed);
@@ -131,7 +132,7 @@ class FilesPlaybackSession extends SourcePlaybackSession {
       final codec = (s.codec ?? 'srt').toLowerCase();
       if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
         tracks.add(CastSubtitleTrack(
-          trackId: 'ext-$i',
+          trackId: s.id,
           url: '',
           label: s.title ??
               s.language ??
@@ -223,7 +224,7 @@ class FilesStreamResolver implements StreamResolver {
             try {
               final playableSub =
                   await source.backend.playable(s.externalPath!);
-              subtitles['ext-$i'] = FilesCastSubtitle(
+              subtitles[s.id] = FilesCastSubtitle(
                 file: playableSub,
                 format: codec,
               );

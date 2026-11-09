@@ -272,8 +272,8 @@ void main() {
     expect(resolved.url, endsWith('/media.mkv'));
     expect(resolved.subtitleUrl, isNotNull);
     expect(
-      resolved.subtitleUrl!('ext-0'),
-      endsWith('/sub/ext-0.vtt'),
+      resolved.subtitleUrl!('sidecar-0'),
+      endsWith('/sub/sidecar-0.vtt'),
     );
 
     await session.endServerSession(resolved.sessionId!);

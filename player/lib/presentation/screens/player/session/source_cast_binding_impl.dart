@@ -89,10 +89,13 @@ class SessionSourceCastBinding implements SourceCastBinding {
         subtitles = [
           for (final track in subtitles)
             if (!track.burnedIn)
-              track.copyWith(url: stream.subtitleUrl!(track.trackId))
+              () {
+                final url = stream.subtitleUrl!(track.trackId);
+                return url.isNotEmpty ? track.copyWith(url: url) : null;
+              }()
             else
               track,
-        ];
+        ].whereType<CastSubtitleTrack>().toList();
       }
 
       return CastRoute(
