@@ -180,13 +180,13 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
 
 Widget pairedDevicesRow(BuildContext context, WidgetRef ref) {
   final syncService = ref.watch(peerSyncServiceProvider);
+  final store = ref.watch(peerSyncStoreProvider);
+  final roster = ref.watch(peerGroupRosterProvider);
   return StreamBuilder<void>(
     stream: syncService.onStateChanged,
     builder: (context, _) {
-      final store = ref.watch(peerSyncStoreProvider);
       final l10n = context.l10n;
-      final localNodeId =
-          ref.watch(peerGroupRosterProvider).localNodeId() ?? '';
+      final localNodeId = roster.localNodeId() ?? '';
       final activePeers = store
           .members()
           .values

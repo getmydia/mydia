@@ -153,6 +153,7 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
 
   Future<void> _handleScanQr() async {
     if (kIsWeb) return;
+    var detected = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -166,8 +167,10 @@ class _PairedDevicesBodyState extends ConsumerState<PairedDevicesBody> {
         ),
         body: MobileScanner(
           onDetect: (capture) {
+            if (detected) return;
             final barcode = capture.barcodes.firstOrNull;
             if (barcode?.rawValue != null) {
+              detected = true;
               Navigator.of(bottomSheetContext).pop();
               _pairWithQr(barcode!.rawValue!);
             }

@@ -112,6 +112,8 @@ class DialogSettingsNav implements SettingsNav {
   final GoRouter router;
 
   NavigatorState get _servers => scope.paneNavigator(SettingsCategory.servers);
+  NavigatorState get _playback =>
+      scope.paneNavigator(SettingsCategory.playback);
 
   @override
   void openInstance(SourceId id) => _servers.push(MaterialPageRoute<void>(
@@ -122,7 +124,7 @@ class DialogSettingsNav implements SettingsNav {
   void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
 
   @override
-  void openPairedDevices() => _servers.push(MaterialPageRoute<void>(
+  void openPairedDevices() => _playback.push(MaterialPageRoute<void>(
         builder: (_) => const _PairedDevicesPage(),
       ));
 
