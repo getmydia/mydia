@@ -278,11 +278,16 @@ class FilesCastBridge {
     HttpRequest request,
     _ActiveSession session,
   ) async {
-    final uri = Uri.parse(session.media.url);
-    if (uri.scheme == 'file') {
-      await _serveLocalFile(request, File(uri.toFilePath()), session.mime);
+    final localFile = _asLocalFile(session.media.url);
+    if (localFile != null) {
+      await _serveLocalFile(request, localFile, session.mime);
     } else {
-      await _proxyHttpMedia(request, uri, session.media.headers, session.mime);
+      await _proxyHttpMedia(
+        request,
+        Uri.parse(session.media.url),
+        session.media.headers,
+        session.mime,
+      );
     }
   }
 
@@ -417,15 +422,28 @@ class FilesCastBridge {
   }
 
   Future<String?> _readSubtitleText(PlayableFile playable) async {
-    final uri = Uri.parse(playable.url);
-    if (uri.scheme == 'file') {
-      final file = File(uri.toFilePath());
-      if (!await file.exists()) return null;
-      return utf8.decode(await file.readAsBytes(), allowMalformed: true);
+    final localFile = _asLocalFile(playable.url);
+    if (localFile != null) {
+      if (!await localFile.exists()) return null;
+      return utf8.decode(await localFile.readAsBytes(), allowMalformed: true);
     }
-    final resp = await _client.get(uri, headers: playable.headers);
+    final resp = await _client.get(
+      Uri.parse(playable.url),
+      headers: playable.headers,
+    );
     if (resp.statusCode != HttpStatus.ok) return null;
     return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  }
+
+  static File? _asLocalFile(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
+      return null;
+    }
+    if (uri != null && uri.isScheme('file')) {
+      return File(uri.toFilePath());
+    }
+    return File(url);
   }
 
   static void _setCorsHeaders(HttpResponse response) {
@@ -454,7 +472,8 @@ class FilesCastBridge {
   }
 
   static String _extensionForMime(String mime, String url) {
-    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    final parsedPath = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    final path = parsedPath.isNotEmpty ? parsedPath : url.toLowerCase();
     for (final ext in ['mp4', 'm4v', 'mkv', 'webm', 'mov', 'avi', 'ts']) {
       if (path.endsWith('.$ext')) return ext;
     }

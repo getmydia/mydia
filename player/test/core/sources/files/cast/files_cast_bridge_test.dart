@@ -209,4 +209,40 @@ void main() {
       expect(resp.statusCode, HttpStatus.ok);
     }
   });
+
+  test(
+      'serves local media and sidecars with raw filesystem paths without file:// prefix',
+      () async {
+    final srtFile = File('${tempDir.path}/copper_valley_raw.en.srt');
+    await srtFile.writeAsString(
+      '1\r\n00:00:01,000 --> 00:00:03,000\r\nHarbor dusk\r\n',
+      encoding: utf8,
+    );
+
+    // Using raw filesystem paths as returned by LocalPathBackend.playable(path)
+    final session = await bridge.openSession(
+      media: PlayableFile(url: localVideo.path),
+      mime: 'video/mp4',
+      subtitles: {
+        'ext-0': FilesCastSubtitle(
+          file: PlayableFile(url: srtFile.path),
+          format: 'srt',
+        ),
+      },
+    );
+
+    // Verify media serves cleanly with 200 OK and correct content
+    final mediaResp = await http.get(Uri.parse(session.mediaUrl));
+    expect(mediaResp.statusCode, HttpStatus.ok);
+    expect(mediaResp.bodyBytes, hasLength(100));
+
+    // Verify subtitle serves cleanly with 200 OK and WebVTT conversion
+    final subUrl = session.subtitleUrl('ext-0');
+    final subResp = await http.get(Uri.parse(subUrl));
+    expect(subResp.statusCode, HttpStatus.ok);
+    expect(subResp.headers['content-type'], contains('text/vtt'));
+    final text = utf8.decode(subResp.bodyBytes);
+    expect(text, startsWith('WEBVTT\n\n'));
+    expect(text, contains('Harbor dusk'));
+  });
 }
