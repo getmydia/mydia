@@ -540,8 +540,8 @@ categories again there would empty the section out.
 
 `test/mydia_web/features/mobile_layout_sweep_test.exs` visits every `live`
 route at 320, 375 and 414px wide, in its default state and in the states
-listed for it in `test/support/mobile_layout_manifest.ex`, and fails on six
-defects, measured by seven checks:
+listed for it in `test/support/mobile_layout_manifest.ex`, and fails on seven
+defects, measured by eight checks:
 
 | Check | Fails when |
 |---|---|
@@ -551,6 +551,7 @@ defects, measured by seven checks:
 | `small_target` | a button, link, input, select, summary, `role="button"` or `label[for]` is under 24x24px |
 | `overlapping_targets` | two tap targets overlap |
 | `clipped_text` | an `overflow: hidden` element cuts its text off without an ellipsis or line clamp |
+| `spilled_text` | text paints outside the background or border of the nearest box that has one (a fixed-height badge whose label wraps, #1376) |
 | `tiny_text` | text renders under 12px |
 
 All comparisons allow 1px. The audit hides scrollbars while it measures, so
@@ -589,6 +590,10 @@ redirect), `/plugins/:slug`, `/plugins/:slug/activity`, `/setup`,
 `/play/:type/:id` and the ErrorTracker dashboard (`/admin/errors` and its
 detail pages) are excluded. Every page must pass at 320px.
 
+The sweep points an enabled Prowlarr indexer at a Bypass stub serving
+`MobileLayoutSeed.search_results/0`, so the manual search dialog is measured
+with result rows, one of them carrying a quality label long enough to wrap.
+
 A manifest state is a name and steps (reload with a query, click, wait for a
 selector). Its results are keyed `route#state`, for example
 `/downloads#issues`, in failures and in `@known`. Only four states are swept
@@ -621,6 +626,15 @@ fixed. The checker's own tests are in
   classes as usual; do not swap them per call site to satisfy the sweep. The
   block is unlayered, so below 640px it also outranks Tailwind text utilities
   on `.badge-xs` and `.btn-xs`; a `text-[10px]` there does nothing on phones.
+- **Badges grow with their text.** daisyUI 5 gives `.badge` a fixed
+  `height: var(--size)` but lets its text wrap, so a long label (a release's
+  quality, a tracker name) painted half outside its fill on phones (#1376).
+  `assets/css/app.css` turns that height into a `min-height` for every badge:
+  a one-line badge is unchanged and a wrapping one grows. A Tailwind height
+  utility on a badge still wins. Truncate instead (`max-w-full min-w-0` plus
+  a `truncate` span, as the manual search indexer badge does) only where the
+  full text is available elsewhere. The sweep's `spilled_text` check catches
+  any box that lets text paint past its fill.
 - **Mobile dock: at most five items.** The dock labels are 12px and five items
   fit at 320px. Player lives in the drawer only. A sixth item would not fit, so
   put it in the drawer instead. The `DockNav` hook re-measures on resize.

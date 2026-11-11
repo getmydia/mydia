@@ -289,11 +289,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               />
             </div>
           </fieldset>
-          <fieldset :if={@filter_options.indexers != []} class="fieldset">
+          <%!-- Names wrap: a phone cannot reveal a truncated name's title, and
+               trackers sharing a prefix would look alike. The fieldset grid's
+               track and daisyUI's wrapping menu (and each wrapping item) size
+               to their content, which pushed the form sideways on phones, so
+               min-w-0 runs down the chain and the items and labels are w-full. --%>
+          <fieldset :if={@filter_options.indexers != []} class="fieldset min-w-0">
             <legend class="fieldset-legend">{gettext("Indexer")}</legend>
-            <ul class="menu menu-sm w-full p-0">
-              <li :for={{name, count} <- @filter_options.indexers}>
-                <label class="flex items-center gap-2">
+            <ul class="menu menu-sm w-full min-w-0 p-0">
+              <li :for={{name, count} <- @filter_options.indexers} class="w-full min-w-0">
+                <label class="flex w-full min-w-0 items-center gap-2">
                   <input
                     type="checkbox"
                     class="checkbox checkbox-sm checkbox-primary"
@@ -301,7 +306,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
                     value={name}
                     checked={name in @indexer_filters}
                   />
-                  <span class="flex-1 truncate">{name}</span>
+                  <span class="min-w-0 flex-1 wrap-anywhere">{name}</span>
                   <span class="text-xs text-base-content/60">{count}</span>
                 </label>
               </li>

@@ -1,8 +1,8 @@
 defmodule MydiaWeb.Features.MobileLayoutSweepTest do
   @moduledoc """
   Every `live` route, at phone widths, in its default state and the states
-  listed in `MydiaWeb.MobileLayoutManifest`, audited for the six defects
-  (seven checks) in `lib/mydia_web/components/README.md`, "Mobile layout
+  listed in `MydiaWeb.MobileLayoutManifest`, audited for the seven defects
+  (eight checks) in `lib/mydia_web/components/README.md`, "Mobile layout
   sweep".
 
   `@known` lists accepted violations, each with a reason. A violation not on
@@ -56,6 +56,19 @@ defmodule MydiaWeb.Features.MobileLayoutSweepTest do
     # The Indexers page reads the health cache this server owns; the app skips
     # it in test.
     start_supervised!(Mydia.Indexers.Health)
+
+    # A stub Prowlarr, so the manual search dialog has result rows to measure.
+    bypass = Bypass.open()
+    Mydia.IndexerMock.mock_prowlarr_all(bypass, results: MobileLayoutSeed.search_results())
+
+    {:ok, _} =
+      Mydia.Settings.create_indexer_config(%{
+        name: "Fictional Prowlarr",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}",
+        api_key: "test-key",
+        enabled: true
+      })
 
     admin = create_admin_user()
     {:ok, admin: admin, ids: MobileLayoutSeed.insert!(admin)}

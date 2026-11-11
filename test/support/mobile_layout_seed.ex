@@ -28,6 +28,31 @@ defmodule MydiaWeb.MobileLayoutSeed do
   @long_path "/remote/very/long/path/to/the/fictional/downloads/directory/" <> @long_release
 
   @doc """
+  Releases for the stub Prowlarr the sweep points an indexer at, so the manual
+  search dialog renders rows. The first one's quality label (resolution,
+  source, codec, audio and HDR) is long enough to wrap at 320px, which is what
+  painted a badge's label outside its fill (#1376).
+  """
+  def search_results do
+    base = "The.Quiet.Harbor.of.the.Fictional.Salt.Meridian.Archipelago.2021"
+
+    [
+      %{
+        title: base <> ".2160p.BluRay.x265.DTS-HD.MA.5.1.HDR-FICTIONALGRP",
+        seeders: 1961,
+        indexer: "The Westmarch Lantern Archive Network",
+        info_url: "https://tracker.example/details/1"
+      },
+      %{
+        title: base <> ".1080p.WEB-DL.x264-FICTIONALGRP",
+        seeders: 3,
+        indexer: "Saltmarsh Mirror",
+        info_url: "https://tracker.example/details/2"
+      }
+    ]
+  end
+
+  @doc """
   Inserts the awkward data and returns the ids the manifest builds URLs from.
 
   The collection and the smart collection (the "section") belong to `admin`,

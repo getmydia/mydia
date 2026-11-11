@@ -105,7 +105,28 @@ defmodule MydiaWeb.Features.MobileLayoutSelfTest do
     # image's alt box) is not clipped text.
     {:clipped_text,
      ~s|<div style="overflow:hidden;height:30px;line-height:20px"><div>One line</div><div>Second line</div></div>|,
-     ~s|<div style="overflow:hidden;height:30px;line-height:20px"><div style="padding-bottom:30px">One line</div></div>|}
+     ~s|<div style="overflow:hidden;height:30px;line-height:20px"><div style="padding-bottom:30px">One line</div></div>|},
+    # A filled box of fixed height whose text wraps: daisyUI's `.badge` before
+    # app.css let it grow, which painted a long quality label half outside its
+    # fill on phones (#1376).
+    {:spilled_text,
+     ~s|<span style="display:inline-flex;align-items:center;height:20px;width:120px;background:#9e9;line-height:16px">A considerably long fictional quality label</span>|,
+     ~s|<span style="display:inline-flex;align-items:center;min-height:20px;width:120px;background:#9e9;line-height:16px">A considerably long fictional quality label</span>|},
+    # A bordered box an unbroken token runs out of sideways.
+    {:spilled_text,
+     ~s|<div style="width:60px;border:1px solid #333">Considerablylongfictionalunbrokentoken</div>|,
+     ~s|<div style="width:60px;border:1px solid #333;overflow-wrap:anywhere">Considerablylongfictionalunbrokentoken</div>|},
+    # Text cut by a truncating child never paints outside the fill around it,
+    # and a box with no fill or border has no edge for text to cross.
+    {:spilled_text,
+     ~s|<div style="width:60px;background:#9e9"><div style="white-space:nowrap">A considerably long fictional label</div></div>|,
+     ~s|<div style="height:4px">Unfilled</div><div style="width:60px;margin-top:24px;background:#9e9"><div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">A considerably long fictional label</div></div>|},
+    # False positives found by the sweep. The body of a closed <details> (the
+    # Changelog, the manual search indexer status) is never painted, and a
+    # positioned layer (a menu placed outside its card) is deliberate.
+    {:spilled_text,
+     ~s|<div style="height:20px;width:120px;background:#9e9;line-height:16px">A considerably long fictional label</div>|,
+     ~s|<details style="border:1px solid #333"><summary>v1</summary><div style="height:400px">Never painted</div></details><div style="position:relative;height:40px;background:#9e9"><div style="position:absolute;top:44px;left:0">Placed below</div></div><div style="height:40px"></div>|}
   ]
 
   setup %{session: session} do
