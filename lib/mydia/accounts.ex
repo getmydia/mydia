@@ -28,8 +28,7 @@ defmodule Mydia.Accounts do
     Passkey,
     Passkeys,
     Totp,
-    AccessRestriction,
-    IgnoredDiscoverTitle
+    AccessRestriction
   }
 
   @changelog_key "last_seen_changelog_version"
@@ -391,70 +390,6 @@ defmodule Mydia.Accounts do
         error
     end
   end
-
-  @doc """
-  Adds a title to the user's Discover ignore list.
-
-  Idempotent: ignoring an already ignored title returns `:ok`, so a double
-  click or a second tab is harmless.
-  """
-  @spec ignore_discover_title(User.t(), Mydia.Metadata.Ref.t(), :movie | :tv_show) ::
-          :ok | {:error, Ecto.Changeset.t()}
-  def ignore_discover_title(%User{id: user_id}, {provider, provider_id}, media_type) do
-    %IgnoredDiscoverTitle{user_id: user_id}
-    |> IgnoredDiscoverTitle.changeset(%{
-      media_type: to_string(media_type),
-      provider: to_string(provider),
-      provider_id: provider_id
-    })
-    |> Repo.insert(
-      on_conflict: :nothing,
-      conflict_target: [:user_id, :media_type, :provider, :provider_id]
-    )
-    |> case do
-      {:ok, _} -> :ok
-      {:error, changeset} -> {:error, changeset}
-    end
-  end
-
-  @doc """
-  Removes a title from the user's Discover ignore list. Idempotent.
-  """
-  @spec unignore_discover_title(User.t(), Mydia.Metadata.Ref.t(), :movie | :tv_show) :: :ok
-  def unignore_discover_title(%User{id: user_id}, {provider, provider_id}, media_type) do
-    media_type = to_string(media_type)
-    provider = to_string(provider)
-
-    from(i in IgnoredDiscoverTitle,
-      where:
-        i.user_id == ^user_id and i.media_type == ^media_type and i.provider == ^provider and
-          i.provider_id == ^provider_id
-    )
-    |> Repo.delete_all()
-
-    :ok
-  end
-
-  @doc """
-  The user's ignored Discover titles as a set of `{media_type, ref}` keys.
-  """
-  @spec ignored_discover_keys(User.t()) ::
-          MapSet.t({:movie | :tv_show, Mydia.Metadata.Ref.t()})
-  def ignored_discover_keys(%User{id: user_id}) do
-    from(i in IgnoredDiscoverTitle,
-      where: i.user_id == ^user_id,
-      select: {i.media_type, i.provider, i.provider_id}
-    )
-    |> Repo.all()
-    |> MapSet.new(fn {media_type, provider, id} ->
-      {ignored_media_type(media_type), {ignored_provider(provider), id}}
-    end)
-  end
-
-  defp ignored_media_type("movie"), do: :movie
-  defp ignored_media_type("tv_show"), do: :tv_show
-  defp ignored_provider("tmdb"), do: :tmdb
-  defp ignored_provider("tvdb"), do: :tvdb
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking user changes.

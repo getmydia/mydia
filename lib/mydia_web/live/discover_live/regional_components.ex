@@ -6,6 +6,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
   import MydiaWeb.PosterCardComponents
 
   alias Mydia.Metadata.Countries
+  alias MydiaWeb.DiscoverLive.Ignores
   alias Mydia.Metadata.RegionalSources
 
   attr :sources, :list, required: true
@@ -13,17 +14,25 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
   attr :country, :string, required: true
   attr :media_type, :atom, required: true
   attr :has_services, :boolean, required: true
-  # Whether browsing drops an item (owned and hidden, or ignored and hidden).
-  # The same predicate the grid uses, so the two cannot disagree.
-  attr :hidden_fun, :any, required: true
+  # The browse filters. Rows drop items with Ignores.hidden?/2, the predicate
+  # the grid uses, so the two cannot disagree.
+  attr :hide_owned, :boolean, required: true
+  attr :show_ignored, :boolean, default: false
+  attr :ignored_keys, MapSet, default: MapSet.new()
   attr :ignore_event, :string, default: nil
   attr :unignore_event, :string, default: nil
-  attr :ignored_fun, :any, default: nil
   attr :current_user, :map, required: true
   attr :adding_ids, MapSet, required: true
   attr :requesting_item_id, :string, default: nil
 
   def regional_rows(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :filters,
+        Map.take(assigns, [:hide_owned, :show_ignored, :ignored_keys, :media_type])
+      )
+
     ~H"""
     <div id="discover-regional-rows" class="space-y-2">
       <div :if={not @has_services} id="discover-services-prompt" class="card bg-base-200 mb-6">
@@ -46,7 +55,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
       <%= for source <- @sources do %>
         <% param = RegionalSources.to_param(source) %>
         <% row = Map.get(@rows, param, %{status: :loading, items: []}) %>
-        <% items = Enum.reject(row.items, @hidden_fun) %>
+        <% items = Enum.reject(row.items, &Ignores.hidden?(@filters, &1)) %>
         <section id={"discover-row-#{param}"} class="mb-6 md:mb-8">
           <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-lg md:text-xl font-semibold truncate">
@@ -94,7 +103,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
                 requesting_item_id={@requesting_item_id}
                 ignore_event={@ignore_event}
                 unignore_event={@unignore_event}
-                ignored_fun={@ignored_fun}
+                ignored_keys={@ignored_keys}
               />
           <% end %>
         </section>

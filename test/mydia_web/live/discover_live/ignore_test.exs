@@ -5,7 +5,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
   import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts
-  alias Mydia.Accounts.UserPreference
+  alias Mydia.Accounts.{DiscoverIgnores, UserPreference}
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverLive.Ignores
@@ -30,7 +30,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
     test "an ignored title is hidden from the grid on mount", %{conn: conn, user: user} do
       ignored_id = unique_provider_id()
       kept_id = unique_provider_id()
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, ignored_id}, :movie)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, ignored_id}, :movie)
 
       warm_trending_cache(:movie, [
         %{"id" => ignored_id, "title" => "Paper Comet"},
@@ -45,7 +45,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
     test "a tv_show ignore does not hide the movie with the same id", %{conn: conn, user: user} do
       id = unique_provider_id()
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :tv_show)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, id}, :tv_show)
 
       warm_trending_cache(:movie, [%{"id" => id, "title" => "Paper Comet"}])
 
@@ -56,7 +56,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
     test "show ignored renders the ignored title with Unignore", %{conn: conn, user: user} do
       id = unique_provider_id()
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :movie)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, id}, :movie)
       show_ignored!(user)
 
       warm_trending_cache(:movie, [%{"id" => id, "title" => "Paper Comet"}])
@@ -79,7 +79,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
     test "ignoring a whole page auto-advances", %{conn: conn, user: user} do
       ignored_id = unique_provider_id()
       visible_id = unique_provider_id()
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, ignored_id}, :movie)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, ignored_id}, :movie)
 
       bypass = Bypass.open()
       previous = Application.get_env(:mydia, :metadata_relay_url)
@@ -146,7 +146,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
       refute has_element?(view, "#discover-grid h3", "Paper Comet")
       assert has_element?(view, "#discover-ignore-toast", "Paper Comet")
-      assert MapSet.member?(Accounts.ignored_discover_keys(user), {:movie, {:tmdb, id}})
+      assert MapSet.member?(DiscoverIgnores.keys(user), {:movie, {:tmdb, id}})
     end
 
     test "Undo restores the card", %{conn: conn, user: user, ignored_id: id} do
@@ -157,7 +157,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
       assert has_element?(view, "#discover-grid h3", "Paper Comet")
       refute has_element?(view, "#discover-ignore-toast")
-      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+      assert DiscoverIgnores.keys(user) == MapSet.new()
     end
 
     test "the ignore survives a remount", %{conn: conn, ignored_id: id} do
@@ -189,14 +189,30 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
     test "Unignore from the dimmed card restores it",
          %{conn: conn, user: user, ignored_id: id} do
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :movie)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, id}, :movie)
       show_ignored!(user)
 
       {:ok, view, _html} = live(conn, ~p"/discover")
       view |> element("#discover-unignore-tmdb-#{id}") |> render_click()
 
-      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+      assert DiscoverIgnores.keys(user) == MapSet.new()
       assert has_element?(view, "#discover-ignore-tmdb-#{id}")
+    end
+
+    test "the toggle stays while on, even with no ignores left", %{conn: conn, user: user} do
+      show_ignored!(user)
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      assert has_element?(view, "#discover-show-ignored[checked]")
+    end
+
+    test "the toast reads as a whole sentence when the title is unknown", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      render_click(view, "ignore_title", %{"ref" => "tmdb:4242", "media_type" => "movie"})
+
+      assert has_element?(view, "#discover-ignore-toast", "Title ignored")
     end
 
     test "a forged ref changes nothing", %{conn: conn, user: user} do
@@ -205,7 +221,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
       render_click(view, "ignore_title", %{"ref" => "imdb:tt1", "media_type" => "movie"})
       render_click(view, "ignore_title", %{"ref" => "tmdb:1", "media_type" => "episode"})
 
-      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+      assert DiscoverIgnores.keys(user) == MapSet.new()
       assert has_element?(view, "#discover-grid")
     end
 
@@ -258,7 +274,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
       refute has_element?(view, "#discover-detail-modal[open]")
       refute has_element?(view, "#discover-grid h3", "Paper Comet")
-      assert MapSet.member?(Accounts.ignored_discover_keys(user), {:movie, {:tmdb, id}})
+      assert MapSet.member?(DiscoverIgnores.keys(user), {:movie, {:tmdb, id}})
     end
   end
 
@@ -267,7 +283,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
     test "search shows an ignored title with Unignore", %{conn: conn, user: user} do
       id = unique_provider_id()
-      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :movie)
+      :ok = DiscoverIgnores.ignore(user, {:tmdb, id}, :movie)
 
       warm_movie_search_cache("paper comet", [], [
         %{"id" => id, "title" => "Paper Comet", "release_date" => "2024-01-01"}
@@ -293,6 +309,14 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
                  %{"ref" => "tmdb:1", "media_type" => "movie"},
                  socket
                )
+    end
+
+    test "ignored?/3 takes the key set and page media type explicitly" do
+      item = %SearchResult{provider: :tmdb, provider_id: 5, media_type: :movie, title: "Velvet"}
+
+      assert Ignores.ignored?(MapSet.new([{:movie, {:tmdb, 5}}]), :movie, item)
+      refute Ignores.ignored?(MapSet.new([{:tv_show, {:tmdb, 5}}]), :movie, item)
+      refute Ignores.ignored?(MapSet.new(), :movie, item)
     end
 
     test "ignored_key falls back to the page media type" do

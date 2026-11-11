@@ -106,6 +106,41 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       assert LazyHTML.attribute(button, "phx-value-media_type") == ["movie"]
     end
 
+    test "the ignore button hides only on hover-capable devices, never by width" do
+      html = card(%{current_user: admin(), ignore_event: "ignore_title"})
+
+      [class] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#discover-ignore-tmdb-693134")
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "[@media(hover:hover)]:opacity-0"
+      refute class =~ "md:opacity-0"
+    end
+
+    test "media_rail badges a title in ignored_keys and offers Unignore" do
+      item = %SearchResult{
+        provider_id: "693134",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Vertex Horizon",
+        year: 2024
+      }
+
+      html =
+        render_component(&DiscoverComponents.media_rail/1, %{
+          items: [Map.merge(item, %{in_library: false, monitored: false, id: nil})],
+          media_type: :movie,
+          current_user: admin(),
+          unignore_event: "unignore_title",
+          ignored_keys: MapSet.new([{:movie, {:tmdb, 693_134}}])
+        })
+
+      assert html =~ "Ignored"
+      assert [_] = query(html, "#discover-unignore-tmdb-693134")
+    end
+
     test "an owned card renders no ignore button" do
       html =
         card(%{

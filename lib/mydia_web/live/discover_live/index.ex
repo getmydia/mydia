@@ -41,6 +41,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   @page_size 20
   @max_auto_advance 3
   @max_auto_advance_restricted 8
+  @browse_filter_events ~w(toggle_hide_owned toggle_show_ignored ignore_title unignore_title)
 
   @impl true
   def mount(_params, session, socket) do
@@ -69,7 +70,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
-      |> assign_hide_owned()
       |> Ignores.assign_initial()
       |> assign_home_country()
       |> assign_streaming_services()
@@ -517,58 +517,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, GridDensity.put(socket, density)}
   end
 
-  def handle_event("toggle_hide_owned", _params, socket) do
-    value = not socket.assigns.hide_owned
-
-    # A rejected write leaves the toggle where it was rather than flipping the
-    # grid for a preference that will be gone on the next mount.
-    case persist_preference(socket, "discover_hide_owned", value) do
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(:hide_owned, value)
-         |> assign_visible_items()
-         |> maybe_auto_advance(0, @page_size)}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, gettext("Could not save that filter preference"))}
-    end
-  end
-
-  def handle_event(event, params, socket) when event in ["ignore_title", "unignore_title"] do
+  # "Hide in library" and the ignore list (#1379) live in Ignores.
+  def handle_event(event, params, socket) when event in @browse_filter_events do
     {:noreply, socket} = Ignores.handle_event(event, params, socket)
     {:noreply, socket |> assign_visible_items() |> maybe_auto_advance(0, @page_size)}
-  end
-
-  def handle_event("toggle_show_ignored", _params, socket) do
-    value = not socket.assigns.show_ignored
-
-    case persist_preference(socket, "discover_show_ignored", value) do
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(:show_ignored, value)
-         |> assign_visible_items()
-         |> maybe_auto_advance(0, @page_size)}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, gettext("Could not save that filter preference"))}
-    end
-  end
-
-  defp persist_preference(socket, key, value) do
-    case socket.assigns[:current_user] do
-      nil ->
-        :ok
-
-      user ->
-        preference = Accounts.get_user_preference!(user)
-
-        case Accounts.update_preference(preference, %{"preferences" => %{key => value}}) do
-          {:ok, _} -> :ok
-          {:error, _changeset} -> :error
-        end
-    end
   end
 
   # Info handlers
@@ -1000,16 +952,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   # Private helpers
 
-  defp assign_hide_owned(socket) do
-    value =
-      case socket.assigns[:current_user] do
-        nil -> false
-        user -> user |> Accounts.get_user_preference!() |> UserPreference.discover_hide_owned()
-      end
-
-    assign(socket, :hide_owned, value)
-  end
-
   defp landing?(assigns),
     do: assigns.category == :home and is_nil(assigns.source) and not assigns.search_mode
 
@@ -1165,23 +1107,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  # Derives :visible_items from :items, :hide_owned and the ignore list. Call
-  # this everywhere any of those is assigned, so the template never filters.
-  # Search never hides ignored titles: it is how a user finds one again.
-  defp assign_visible_items(socket) do
-    %{assigns: assigns} = socket
-
-    visible =
-      if assigns.search_mode do
-        if assigns.hide_owned,
-          do: Enum.reject(assigns.items, & &1.in_library),
-          else: assigns.items
-      else
-        Enum.reject(assigns.items, &Ignores.hidden?(assigns, &1))
-      end
-
-    assign(socket, :visible_items, visible)
-  end
+  # Call everywhere :items or a browse filter is assigned, so the template
+  # never filters.
+  defp assign_visible_items(socket),
+    do: assign(socket, :visible_items, Ignores.visible_items(socket.assigns))
 
   # `target` is how many unowned titles the grid should end up holding. A fresh
   # load asks for a full page; "Load more" asks for a full page on top of what

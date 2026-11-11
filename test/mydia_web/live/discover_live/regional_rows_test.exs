@@ -120,7 +120,12 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
   test "rows drop ignored titles", %{conn: conn, bypass: bypass, user: user} do
     stub_discover(bypass)
     # The stub ids each row's single title by the hash of its name.
-    :ok = Accounts.ignore_discover_title(user, {:tmdb, :erlang.phash2("Cinema Lantern")}, :movie)
+    :ok =
+      Mydia.Accounts.DiscoverIgnores.ignore(
+        user,
+        {:tmdb, :erlang.phash2("Cinema Lantern")},
+        :movie
+      )
 
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
     render_async(view, 5_000)

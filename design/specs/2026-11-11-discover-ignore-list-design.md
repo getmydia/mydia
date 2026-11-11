@@ -57,15 +57,15 @@ live provider page, so there is nothing to render from a snapshot.
 Schema `Mydia.Accounts.IgnoredDiscoverTitle`, with a changeset that checks
 `media_type` and `provider` against allowlists.
 
-In `Mydia.Accounts`, next to the other per-user Discover state:
+In `Mydia.Accounts.DiscoverIgnores`, a focused module rather than the
+oversized `Mydia.Accounts` (the ratchet lets that one only shrink):
 
-- `ignore_discover_title(user, %SearchResult{})` builds the key from
-  `Mydia.Metadata.Ref.from_search_result/1` and `media_type`, then inserts with
-  `on_conflict: :nothing`. Idempotent, so a double click or a second tab is
-  harmless.
-- `unignore_discover_title(user, ref, media_type)` deletes by key. Also
-  idempotent.
-- `ignored_discover_keys(user)` returns a `MapSet` of `{media_type, ref}`.
+- `ignore(user, ref, media_type)` inserts with `on_conflict: :nothing`.
+  Idempotent, so a double click or a second tab is harmless.
+- `unignore(user, ref, media_type)` deletes by key. Also idempotent.
+- `keys(user)` returns a `MapSet` of `{media_type, ref}`.
+- `key_for(item, fallback_media_type)` and `ignored?(keys, fallback, item)` are
+  the pure key helpers the LiveView and `media_rail` share.
 
 `Mydia.Accounts.UserPreference` gains `discover_show_ignored` (default `false`,
 boolean validation, accessor `discover_show_ignored/1`), handled the same way as

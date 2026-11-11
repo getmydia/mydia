@@ -9,6 +9,7 @@ defmodule MydiaWeb.DiscoverComponents do
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
 
+  alias Mydia.Accounts.DiscoverIgnores
   alias Mydia.Metadata.ImageUrl
   alias Mydia.Metadata.Ref
   alias MydiaWeb.LibraryComponents
@@ -94,7 +95,7 @@ defmodule MydiaWeb.DiscoverComponents do
         <div class="absolute top-2 left-2 z-10">
           <span class="badge badge-neutral badge-sm gap-1 shadow-md">
             <.icon name="hero-eye-slash-mini" class="w-3 h-3" />
-            {gettext("Ignored")}
+            {pgettext("discover title state", "Ignored")}
           </span>
         </div>
       <% end %>
@@ -107,7 +108,7 @@ defmodule MydiaWeb.DiscoverComponents do
         phx-value-media_type={@media_type}
         aria-label={gettext("Ignore")}
         title={gettext("Ignore")}
-        class="btn btn-circle btn-sm absolute top-2 right-2 z-10 bg-base-100/85 border-0 shadow-md transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+        class="btn btn-circle btn-sm absolute top-2 right-2 z-10 bg-base-100/85 border-0 shadow-md transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
       >
         <.icon name="hero-eye-slash" class="w-4 h-4" />
       </button>
@@ -279,10 +280,11 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :expanded, :boolean, default: true
   attr :toggle_event, :string, default: nil
   # Discover's ignore controls, passed through to each card (see
-  # trending_card/1). `ignored_fun` is a 1-arity predicate over an item.
+  # trending_card/1). `ignored_keys` is a set from DiscoverIgnores.keys/1; a
+  # plain MapSet rather than a predicate so LiveView can change-track it.
   attr :ignore_event, :string, default: nil
   attr :unignore_event, :string, default: nil
-  attr :ignored_fun, :any, default: nil
+  attr :ignored_keys, MapSet, default: MapSet.new()
 
   slot :badge
 
@@ -347,7 +349,7 @@ defmodule MydiaWeb.DiscoverComponents do
             poster_size="w342"
             ignore_event={@ignore_event}
             unignore_event={@unignore_event}
-            ignored={@ignored_fun != nil and @ignored_fun.(item)}
+            ignored={DiscoverIgnores.ignored?(@ignored_keys, @media_type, item)}
           />
         </div>
       </.poster_rail>

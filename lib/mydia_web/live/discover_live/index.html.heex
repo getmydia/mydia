@@ -82,7 +82,7 @@
             </label>
 
             <label
-              :if={@media_type != :person and MapSet.size(@ignored_keys) > 0}
+              :if={@media_type != :person and (MapSet.size(@ignored_keys) > 0 or @show_ignored)}
               class="flex items-center gap-2 cursor-pointer"
             >
               <input
@@ -293,10 +293,11 @@
           country={@home_country}
           media_type={@media_type}
           has_services={@streaming_services != []}
-          hidden_fun={&Ignores.hidden?(assigns, &1)}
+          hide_owned={@hide_owned}
+          show_ignored={@show_ignored}
+          ignored_keys={@ignored_keys}
           ignore_event={@current_user && "ignore_title"}
           unignore_event={@current_user && "unignore_title"}
-          ignored_fun={&Ignores.ignored?(assigns, &1)}
           current_user={@current_user}
           adding_ids={@adding_item_ids}
           requesting_item_id={@requesting_item_id}
@@ -367,7 +368,7 @@
               loading={if(index < 6, do: nil, else: "lazy")}
               ignore_event={@current_user && "ignore_title"}
               unignore_event={@current_user && "unignore_title"}
-              ignored={Ignores.ignored?(assigns, item)}
+              ignored={Ignores.ignored?(@ignored_keys, @media_type, item)}
             />
           <% end %>
         </div>
@@ -414,7 +415,9 @@
     person_event="show_person"
     ignore_event={@current_user && "ignore_title"}
     unignore_event={@current_user && "unignore_title"}
-    ignored={@selected_item != nil and Ignores.ignored?(assigns, @selected_item)}
+    ignored={
+      @selected_item != nil and Ignores.ignored?(@ignored_keys, @media_type, @selected_item)
+    }
   >
     <:rail>
       <.media_rail
@@ -425,6 +428,8 @@
         current_user={@current_user}
         adding_ids={@adding_item_ids}
         requesting_item_id={@requesting_item_id}
+        unignore_event={@current_user && "unignore_title"}
+        ignored_keys={@ignored_keys}
       />
     </:rail>
   </.live_component>
@@ -434,7 +439,10 @@
   <div :if={@ignore_toast} id="discover-ignore-toast" class="toast toast-center toast-bottom z-40">
     <div class="alert shadow-lg">
       <.icon name="hero-eye-slash" class="w-5 h-5" />
-      <span>{gettext("Ignored %{title}", title: @ignore_toast.title)}</span>
+      <span :if={@ignore_toast.title}>
+        {gettext("Ignored %{title}", title: @ignore_toast.title)}
+      </span>
+      <span :if={is_nil(@ignore_toast.title)}>{gettext("Title ignored")}</span>
       <button
         id="discover-ignore-toast-undo"
         type="button"
