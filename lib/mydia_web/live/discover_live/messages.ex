@@ -33,12 +33,16 @@ defmodule MydiaWeb.DiscoverLive.Messages do
     ]
   end
 
-  def sort_options do
+  # TMDB's TV discover sorts by first_air_date and silently ignores
+  # primary_release_date, falling back to popularity (#1381).
+  def sort_options(media_type) do
+    date = if media_type == :tv_show, do: "first_air_date", else: "primary_release_date"
+
     [
       {"popularity.desc", gettext("Most Popular")},
       {"vote_average.desc", gettext("Highest Rated")},
-      {"primary_release_date.desc", gettext("Newest First")},
-      {"primary_release_date.asc", gettext("Oldest First")}
+      {"#{date}.desc", gettext("Newest First")},
+      {"#{date}.asc", gettext("Oldest First")}
     ]
   end
 
