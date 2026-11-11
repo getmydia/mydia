@@ -25,7 +25,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
                  year: 2024,
                  metadata: metadata(genres: ["Thriller"], content_rating: "R")
                },
-               skip_episode_refresh: true
+               episodes: :skip
              )
   end
 
@@ -39,7 +39,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
                  year: 2024,
                  metadata: metadata(genres: ["Animation"], content_rating: "G")
                },
-               skip_episode_refresh: true
+               episodes: :skip
              )
 
     assert item.category == "cartoon_movie"
@@ -55,7 +55,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
                  year: 2024,
                  metadata: metadata(genres: ["Thriller"], content_rating: "R")
                },
-               skip_episode_refresh: true
+               episodes: :skip
              )
   end
 
@@ -71,7 +71,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
                  year: 2024,
                  metadata: metadata(genres: ["Animation"], content_rating: "R")
                },
-               skip_episode_refresh: true
+               episodes: :skip
              )
   end
 
@@ -87,7 +87,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
           year: 2024,
           metadata: metadata(genres: ["Animation"], content_rating: "G")
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     assert {:error, :restricted} =
@@ -108,7 +108,7 @@ defmodule Mydia.Media.RestrictedWritesTest do
           year: 2024,
           metadata: metadata(genres: ["Animation"], content_rating: "G")
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     assert {:ok, updated} = Media.update_media_item(scope, item, %{title: "Cartoon Renamed"})

@@ -126,7 +126,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
             year: 2008,
             tmdb_id: 1396
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, episode} =
@@ -169,7 +169,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
             year: 2008,
             tmdb_id: 1396
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, episode} =
@@ -234,7 +234,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
             year: 2008,
             tmdb_id: 1396
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       # Create an episode

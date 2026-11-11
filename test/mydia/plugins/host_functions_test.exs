@@ -488,7 +488,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
         Mydia.Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Show", type: "tv_show", tmdb_id: System.unique_integer([:positive])},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, episode} =
@@ -711,7 +711,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
         Mydia.Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Show", type: "tv_show", tvdb_id: 999},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, ep} =

@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.DownloadComponents
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
+  alias MydiaWeb.MediaLive.Show.EpisodeFetchEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
   alias MydiaWeb.MediaLive.Show.LibraryEvents
@@ -81,6 +82,7 @@ defmodule MydiaWeb.MediaLive.Show do
     {:ok,
      socket
      |> assign(:media_item, media_item)
+     |> EpisodeFetchEvents.assign_fetching()
      |> assign_downloads(downloads_with_status)
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)
@@ -766,19 +768,8 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply, socket}
   end
 
-  def handle_info({:event_created, event}, socket) do
-    # Check if this event is related to the current media item
-    if event.resource_type == "media_item" &&
-         event.resource_id == socket.assigns.media_item.id do
-      # Reload timeline events to include the new event
-      timeline_events =
-        load_timeline_events(socket.assigns.media_item, socket.assigns.current_user)
-
-      {:noreply, assign(socket, :timeline_events, timeline_events)}
-    else
-      {:noreply, socket}
-    end
-  end
+  def handle_info({:event_created, event}, socket),
+    do: {:noreply, EpisodeFetchEvents.handle_event_created(event, socket)}
 
   def handle_info({:job_updated, _job_id}, socket) do
     # Refresh transcode jobs for the current media item

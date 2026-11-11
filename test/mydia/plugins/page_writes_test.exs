@@ -1,5 +1,6 @@
 defmodule Mydia.Plugins.PageWritesTest do
   use Mydia.DataCase, async: true
+  use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
@@ -58,6 +59,31 @@ defmodule Mydia.Plugins.PageWritesTest do
 
       assert {:error, :conflict} =
                PageWrites.undo("watch_state", args, %{}, inverse, user, @origin)
+    end
+  end
+
+  describe "media_add" do
+    test "a tv show enqueues EpisodeFetch with the defaults", %{user: user} do
+      attrs = %{type: "tv_show", title: "Lantern Ridge", year: 2020, tvdb_id: 5_150_001}
+
+      defaults = %Mydia.Media.AddDefaults{
+        monitored: true,
+        season_monitoring: "first",
+        search_on_add: true
+      }
+
+      assert {:ok, %{"media_item_id" => id}, _} =
+               PageWrites.execute("media_add", %{}, user, @origin, %{
+                 attrs: attrs,
+                 defaults: defaults
+               })
+
+      assert_enqueued(
+        worker: Mydia.Jobs.EpisodeFetch,
+        args: %{"media_item_id" => id, "season_monitoring" => "first", "search_on_add" => true}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
     end
   end
 

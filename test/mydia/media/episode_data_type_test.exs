@@ -18,7 +18,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
             year: 2018,
             tmdb_id: 12345
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       # Create an episode with full metadata
@@ -72,7 +72,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
             title: "Test Show",
             year: 2024
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, episode} =
@@ -97,7 +97,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
             title: "Test Show",
             year: 2024
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, episode} =

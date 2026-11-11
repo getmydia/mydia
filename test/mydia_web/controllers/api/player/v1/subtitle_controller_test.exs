@@ -48,7 +48,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
           library_path_id: library_path.id,
           year: 2024
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     {:ok, episode} =

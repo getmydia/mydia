@@ -2,8 +2,8 @@ defmodule Mydia.Plugins.PageActionsTest do
   # Not async: the media_add tests point the global metadata relay URL at a
   # Bypass server.
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
-  import ExUnit.CaptureLog
   import Ecto.Query
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
@@ -395,7 +395,7 @@ defmodule Mydia.Plugins.PageActionsTest do
                )
     end
 
-    test "a TV add fetches episodes after the transaction, not inside it", %{user: user} do
+    test "a TV add enqueues its episode fetch and after_commit does nothing", %{user: user} do
       tmdb_id = 900_000_000 + System.unique_integer([:positive])
       paths = stub_relay_tv(tmdb_id)
 
@@ -407,7 +407,6 @@ defmodule Mydia.Plugins.PageActionsTest do
         "year" => 2031
       }
 
-      # Inside the transaction: the write itself makes no episode call.
       assert {:ok, prepared} = Mydia.Plugins.PageWrites.prepare("media_add", args, user)
 
       assert {:ok, %{"media_item_id" => id} = result, _} =
@@ -419,37 +418,35 @@ defmodule Mydia.Plugins.PageActionsTest do
                  prepared
                )
 
+      assert_enqueued(worker: Mydia.Jobs.EpisodeFetch, args: %{"media_item_id" => id})
+
+      assert :ok = Mydia.Plugins.PageWrites.after_commit("media_add", result, user, prepared)
+
+      # No episodes created and no season call to the relay.
       assert Agent.get(paths, & &1) == []
-      assert id
 
-      # After commit: the episode fetch runs.
-      capture_log(fn ->
-        assert :ok = Mydia.Plugins.PageWrites.after_commit("media_add", result, user, prepared)
-      end)
-
-      assert Agent.get(paths, & &1) != []
+      assert Repo.aggregate(from(e in Mydia.Media.Episode, where: e.media_item_id == ^id), :count) ==
+               0
     end
 
-    test "a TV add through PageActions still fetches its episodes", %{plugin: plugin, user: user} do
+    test "a TV add through PageActions enqueues the episode fetch", %{plugin: plugin, user: user} do
       tmdb_id = 900_000_000 + System.unique_integer([:positive])
       paths = stub_relay_tv(tmdb_id)
       :ok = Grants.grant("helper", user.id, "media:add", "session", "s1")
 
-      capture_log(fn ->
-        assert {:ok, {:done, json}} =
-                 PageActions.media_add(plugin, ctx(user), %{
-                   "media-type": "tv_show",
-                   "tmdb-id": {:some, tmdb_id},
-                   "tvdb-id": :none
-                 })
+      assert {:ok, {:done, json}} =
+               PageActions.media_add(plugin, ctx(user), %{
+                 "media-type": "tv_show",
+                 "tmdb-id": {:some, tmdb_id},
+                 "tvdb-id": :none
+               })
 
-        assert %{"media_item_id" => _} = Jason.decode!(json)
-      end)
-
-      assert Agent.get(paths, & &1) != []
+      assert %{"media_item_id" => id} = Jason.decode!(json)
+      assert_enqueued(worker: Mydia.Jobs.EpisodeFetch, args: %{"media_item_id" => id})
+      assert Agent.get(paths, & &1) == []
     end
 
-    test "an add that is already in the library fetches nothing after commit", %{user: user} do
+    test "after_commit is a no-op for every media_add result", %{user: user} do
       result = %{"media_item_id" => Ecto.UUID.generate(), "status" => "already-in-library"}
 
       assert :ok =

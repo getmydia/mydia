@@ -22,7 +22,7 @@ defmodule Mydia.Media.ContentRatingAgeTest do
             content_rating: rating
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.get!(MediaItem, item.id)

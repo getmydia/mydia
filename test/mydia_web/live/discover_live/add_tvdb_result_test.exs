@@ -59,6 +59,8 @@ defmodule MydiaWeb.DiscoverLive.AddTvdbResultTest do
     assert media_item.type == "tv_show"
     assert media_item.title == MetadataStubProvider.series_title()
 
+    assert render(view) =~ "has been added. Episodes are being fetched in the background."
+
     assert is_nil(media_item.tmdb_id),
            "a TVDB-sourced result must not be stored as a TMDB id, or the add fetches the wrong provider"
   end

@@ -723,10 +723,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> PersonModal.refresh_titles()
          |> ShelfFeedback.record_add(ref, media_type)
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
-         |> put_flash(
-           :info,
-           gettext("%{title} has been added to your library", title: media_item.title)
-         )}
+         |> put_flash(:info, MediaAddHelpers.added_message(media_item))}
 
       {:already_in_library, media_item, updated_map} ->
         request_status_map = MediaRequestHelpers.request_status_map()

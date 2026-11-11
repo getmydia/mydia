@@ -118,7 +118,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
           year: 2024,
           tvdb_id: tvdb
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     {:ok, ep} =

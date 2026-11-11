@@ -1073,13 +1073,13 @@ defmodule Mydia.ImportListsTest do
     end
 
     test "the title+year fallback respects media type" do
-      # skip_episode_refresh: true avoids Mydia.Media's post-insert TVDB
+      # episodes: :skip avoids Mydia.Media's post-insert TVDB
       # lookup for a tv_show with no provider id, which would otherwise
       # reach the network in this test.
       Mydia.Media.create_media_item(
         Scope.unrestricted(),
         %{type: "tv_show", title: "Silverback Station", year: 2019},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
       assert :not_found =
@@ -1525,7 +1525,7 @@ defmodule Mydia.ImportListsTest do
         Mydia.Media.create_media_item(
           Scope.unrestricted(),
           %{type: "tv_show", title: "Paper Harbour", year: 2020, tmdb_id: 51_010},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       awareness_item(list, %{tmdb_id: 51_010, title: "Paper Harbour", year: 2020})

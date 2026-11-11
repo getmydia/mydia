@@ -244,7 +244,7 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
         Media.create_media_item(
           Mydia.Accounts.Scope.system(),
           %{type: "movie", title: "Restricted Subtitle Movie", year: 2024},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: "movie"])

@@ -22,7 +22,6 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Media.MediaItem
   alias Mydia.Media.MediaRequest
   alias Mydia.DB
-  alias Mydia.Search
 
   @doc """
   Returns the list of media requests.
@@ -178,22 +177,16 @@ defmodule Mydia.MediaRequests do
   ## Options
     - `:config` - Relay config to fetch with. Defaults to
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
+    - `:episodes` - How a new TV show gets its episodes, as for
+      `Mydia.Media.create_media_item/3`. An injected `:config` alone means `:inline`.
   """
   def approve_request(%Scope{} = scope, %MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
     with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
-         {:ok, result, created?} <- insert_approval(scope, request, media_attrs, attrs, opts) do
-      # After the transaction, never inside it. Repo.transaction defers event
-      # broadcasts until commit, and a search queued against an uncommitted
-      # media item is a race.
-      #
-      # Only queued when the approval created a new media item. A request
-      # that linked to an already-in-library item must not enqueue a search
-      # for a row someone else set up; the Add flow makes the same
-      # distinction (see MediaAddHelpers.handle_add_media_to_library/5).
-      if created? do
-        Search.maybe_queue_search(result.media_item, Keyword.get(opts, :search_on_add, false))
-      end
-
+         {:ok, result, _created?} <- insert_approval(scope, request, media_attrs, attrs, opts) do
+      # `Add` owns the search-on-add decision (see `Mydia.Media.Add`): a
+      # background TV approval carries the flag to `EpisodeFetch`, so the search
+      # runs once episodes exist. A request linked to an already-in-library item
+      # never searches, since `Add` returns `{:already_in_library, _}` for it.
       {:ok, result}
     end
   end
@@ -273,7 +266,7 @@ defmodule Mydia.MediaRequests do
              actor_type: :user,
              actor_id: attrs[:approved_by_id],
              exclude_request_id: request.id
-           ] ++ Keyword.take(opts, [:season_monitoring])
+           ] ++ Keyword.take(opts, [:season_monitoring, :episodes, :search_on_add])
          ) do
       {:ok, media_item} ->
         {media_item, true}

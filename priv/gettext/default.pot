@@ -2345,15 +2345,14 @@ msgstr ""
 msgid "%{title} deleted from disk."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:728
-#: lib/mydia_web/live/discover_live/index.ex:779
+#: lib/mydia_web/live/helpers/media_add_helpers.ex:37
 #, elixir-autogen, elixir-format
 msgid "%{title} has been added to your library"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:762
-#: lib/mydia_web/live/discover_live/index.ex:811
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:218
+#: lib/mydia_web/live/dashboard_live/index.ex:759
+#: lib/mydia_web/live/discover_live/index.ex:808
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:217
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:323
 #, elixir-autogen, elixir-format
 msgid "%{title} is already in your library"
@@ -2379,9 +2378,9 @@ msgstr ""
 msgid "%{title} removed, but %{files} could not be deleted from disk. Check permissions and remove them manually."
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:839
-#: lib/mydia_web/live/discover_live/index.ex:874
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:313
+#: lib/mydia_web/live/dashboard_live/index.ex:836
+#: lib/mydia_web/live/discover_live/index.ex:871
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:312
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:266
 #, elixir-autogen, elixir-format
 msgid "%{title} requested. An admin will review it soon."
@@ -2640,12 +2639,6 @@ msgid "Added %{count} item to %{name}"
 msgid_plural "Added %{count} items to %{name}"
 msgstr[0] ""
 msgstr[1] ""
-
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:201
-#: lib/mydia_web/live/media_live/show/recommendation_events.ex:314
-#, elixir-autogen, elixir-format
-msgid "Added %{title} to your library"
-msgstr ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:280
 #, elixir-autogen, elixir-format
@@ -3796,12 +3789,12 @@ msgstr ""
 msgid "Could not add that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:239
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:238
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:229
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:228
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie: %{reason}"
 msgstr ""
@@ -3929,7 +3922,7 @@ msgstr ""
 msgid "Could not request that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:319
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:318
 #, elixir-autogen, elixir-format
 msgid "Could not request that movie"
 msgstr ""
@@ -4045,7 +4038,7 @@ msgstr ""
 msgid "Could not update the section"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/match_dialog.ex:283
+#: lib/mydia_web/live/downloads_live/match_dialog.ex:284
 #, elixir-autogen, elixir-format
 msgid "Couldn't add that title to your library."
 msgstr ""
@@ -4060,7 +4053,7 @@ msgstr ""
 msgid "Couldn't check folders. Folders are removed only if nothing else is in them."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/match_dialog.ex:282
+#: lib/mydia_web/live/downloads_live/match_dialog.ex:283
 #, elixir-autogen, elixir-format
 msgid "Couldn't fetch metadata for that title."
 msgstr ""
@@ -4627,9 +4620,9 @@ msgstr ""
 msgid "Download speed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:640
-#: lib/mydia_web/live/media_live/show.ex:649
-#: lib/mydia_web/live/media_live/show.ex:653
+#: lib/mydia_web/live/media_live/show.ex:642
+#: lib/mydia_web/live/media_live/show.ex:651
+#: lib/mydia_web/live/media_live/show.ex:655
 #, elixir-autogen, elixir-format
 msgid "Download started: %{title}"
 msgstr ""
@@ -4934,13 +4927,13 @@ msgstr ""
 msgid "Failed to add to library: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:826
+#: lib/mydia_web/live/discover_live/index.ex:823
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{errors}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:417
-#: lib/mydia_web/live/dashboard_live/index.ex:777
+#: lib/mydia_web/live/dashboard_live/index.ex:774
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{reason}"
 msgstr ""
@@ -4995,8 +4988,8 @@ msgstr ""
 msgid "Failed to dismiss download"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/index.ex:788
-#: lib/mydia_web/live/discover_live/index.ex:837
+#: lib/mydia_web/live/dashboard_live/index.ex:785
+#: lib/mydia_web/live/discover_live/index.ex:834
 #, elixir-autogen, elixir-format
 msgid "Failed to fetch metadata: %{reason}"
 msgstr ""
@@ -8519,12 +8512,12 @@ msgstr ""
 msgid "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, but none matched quality criteria"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:757
+#: lib/mydia_web/live/media_live/show.ex:759
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for S%{season}E%{episode}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:736
+#: lib/mydia_web/live/media_live/show.ex:738
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for season %{season}"
 msgstr ""
@@ -8627,7 +8620,7 @@ msgstr ""
 msgid "Search prefers releases with this audio. A language other than the original falls back to the original."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:692
+#: lib/mydia_web/live/media_live/show.ex:694
 #, elixir-autogen, elixir-format
 msgid "Search timed out - no response from search job"
 msgstr ""
@@ -9591,7 +9584,7 @@ msgid "That library is already being imported."
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:628
-#: lib/mydia_web/live/helpers/media_add_helpers.ex:27
+#: lib/mydia_web/live/helpers/media_add_helpers.ex:41
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:90
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:125
 #, elixir-autogen, elixir-format
@@ -10955,7 +10948,7 @@ msgstr ""
 msgid "the file's location on disk could not be resolved."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:370
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:369
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:530
 #, elixir-autogen, elixir-format
 msgid "the metadata service could not be reached"
@@ -21664,4 +21657,14 @@ msgstr ""
 #: lib/mydia_web/components/add_media_components.ex:88
 #, elixir-autogen, elixir-format
 msgid "Automatic uses the library its franchise is in, else your default."
+msgstr ""
+
+#: lib/mydia_web/live/helpers/media_add_helpers.ex:32
+#, elixir-autogen, elixir-format
+msgid "%{title} has been added. Episodes are being fetched in the background."
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/episode_fetch_events.ex:75
+#, elixir-autogen, elixir-format
+msgid "Fetching episodes..."
 msgstr ""

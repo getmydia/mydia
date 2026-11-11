@@ -59,7 +59,7 @@ defmodule MydiaWeb.Schema.StreamingAccessTest do
           title: "Streaming Access Test Movie #{System.unique_integer([:positive])}",
           year: 2024
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: "movie"])

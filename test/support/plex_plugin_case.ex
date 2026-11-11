@@ -186,7 +186,7 @@ defmodule Mydia.PlexPluginCase do
       Media.create_media_item(
         Scope.unrestricted(),
         %{title: "Harbor Lights #{tvdb}", type: "tv_show", year: 2024, tvdb_id: tvdb},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     {:ok, ep} =

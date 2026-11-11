@@ -22,6 +22,20 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
 
+  @doc """
+  Success flash for a completed add. TV shows get their episodes from a
+  background job, so the copy says so.
+  """
+  @spec added_message(Mydia.Media.MediaItem.t()) :: String.t()
+  def added_message(%{type: "tv_show", title: title}),
+    do:
+      gettext("%{title} has been added. Episodes are being fetched in the background.",
+        title: title
+      )
+
+  def added_message(%{title: title}),
+    do: gettext("%{title} has been added to your library", title: title)
+
   @doc "Flash shown when a submitted library id is not a candidate for the chosen type."
   def unknown_library_message,
     do: gettext("That library is no longer available. Nothing was added.")
@@ -133,19 +147,19 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   view: the show the user asked for is in the library, just under a row that
   was already there. Callers should flash it as info rather than an error.
 
-  An optional `config` (relay config map) can be injected for testing; it
-  defaults to `Metadata.default_relay_config()`.
+  An optional `config` (relay config map) can be injected for testing. Without
+  one, metadata resolution uses `Metadata.default_relay_config()`. Only an
+  injected config (without `:episodes`) forces inline episodes; otherwise a TV
+  show's episodes are fetched by a background job.
 
-  `opts` are forwarded to `Mydia.Media.Add`, except `:search_on_add`, which is
-  popped off first: `Add` does not accept it. `:monitored`,
+  `opts` are forwarded to `Mydia.Media.Add`, including `:search_on_add`. `:monitored`,
   `:quality_profile_id` and `:library_path_id` let a caller inherit settings
   from an item the user is already looking at, or pin an explicit target
   library. TV shows ignore monitored and quality profile today.
 
-  On a successful add, queues an automatic indexer search when
-  `:search_on_add` is true. A queue failure is logged and does not fail the
-  add: adding the title is what the user asked for, the search is a
-  convenience on top of it.
+  `Add` queues the automatic indexer search when `:search_on_add` is true (for a
+  TV show, after its episodes are fetched). A queue failure does not fail the
+  add.
   """
   def handle_add_media_to_library(
         scope,
@@ -155,19 +169,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
         config \\ nil,
         opts \\ []
       ) do
-    {search_on_add, add_opts} = Keyword.pop(opts, :search_on_add, false)
-
-    case Add.from_provider(scope, ref, media_type, config, add_opts) do
+    case Add.from_provider(scope, ref, media_type, config, opts) do
       {:ok, media_item} ->
-        Mydia.Search.maybe_queue_search(media_item, search_on_add)
-
         {:ok, media_item, update_library_status_map(library_status_map, media_item)}
 
       # Not an error from here up: the show the user asked for is in the
       # library. Callers flash it as info and flip the card.
       {:error, {:already_in_library, media_item}} ->
         with {:ok, _approved} <-
-               MediaRequests.auto_approve_matching_requests(media_item, add_opts) do
+               MediaRequests.auto_approve_matching_requests(media_item, opts) do
           {:already_in_library, media_item,
            update_library_status_map(library_status_map, media_item)}
         else

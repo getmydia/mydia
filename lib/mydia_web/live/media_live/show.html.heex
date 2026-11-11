@@ -359,6 +359,10 @@
             can_add={@can_create_media}
           />
           <%!-- Episodes Section (TV Shows Only) --%>
+          <EpisodeFetchEvents.notice
+            media_item={@media_item}
+            fetching_episodes?={@fetching_episodes?}
+          />
           <Components.episodes_section
             media_item={@media_item}
             download_summary={@download_summary}

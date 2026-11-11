@@ -101,9 +101,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(Scope.unrestricted(), attrs_without_year,
-                 skip_episode_refresh: true
-               )
+               Media.create_media_item(Scope.unrestricted(), attrs_without_year, episodes: :skip)
 
       assert media_item.type == "tv_show"
       assert media_item.title == "Test Show"
@@ -983,7 +981,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, episodes: :skip)
 
       assert media_item.category == "tv_show"
     end
@@ -999,7 +997,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, episodes: :skip)
 
       assert media_item.category == "anime_series"
     end
@@ -1015,7 +1013,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, episodes: :skip)
 
       assert media_item.category == "cartoon_series"
     end
@@ -3692,7 +3690,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Cascade Show", type: "tv_show", tvdb_id: 378_982},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       # A Plex episode carries all three ids on its show; only tvdb is local.
@@ -3712,7 +3710,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Tmdb Show", type: "tv_show", tmdb_id: 108_255},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert %{id: id} =
@@ -3750,7 +3748,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Real Show", type: "tv_show", tvdb_id: 777},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert %{id: id} =
@@ -3814,7 +3812,7 @@ defmodule Mydia.MediaTest do
       # not guarantee LIMIT 1 returns insertion order, and since the crawl now
       # repeats daily a nondeterministic pick could flip the stored mapping
       # between runs.
-      # skip_episode_refresh: true — this test is only about imdb_id
+      # episodes: :skip — this test is only about imdb_id
       # duplicate-ordering, not episodes. Without it, a tv_show with no
       # tmdb_id/tvdb_id sends refresh_episodes_for_tv_show/2 straight to the
       # live relay trying to recover one by title (#530).
@@ -3826,7 +3824,7 @@ defmodule Mydia.MediaTest do
             type: "tv_show",
             imdb_id: "tt-dup-order"
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, _newer} =
@@ -3837,7 +3835,7 @@ defmodule Mydia.MediaTest do
             type: "tv_show",
             imdb_id: "tt-dup-order"
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       # `timestamps(type: :utc_datetime)` is SECOND precision, so two rows
@@ -3871,7 +3869,7 @@ defmodule Mydia.MediaTest do
           Media.create_media_item(
             Scope.unrestricted(),
             %{title: title, type: "tv_show", imdb_id: "tt-dup-tie"},
-            skip_episode_refresh: true
+            episodes: :skip
           )
       end
 
@@ -3909,7 +3907,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Tmdb Fallback Show", type: "tv_show", tmdb_id: 555_555},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert %{id: id} =
@@ -3930,7 +3928,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Trailing Garbage Show", type: "tv_show", tvdb_id: 123},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: "123abc"}) == nil
@@ -3941,7 +3939,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Numeric String Show", type: "tv_show", tvdb_id: 42},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: "42"})
@@ -3953,7 +3951,7 @@ defmodule Mydia.MediaTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{title: "Integer Id Show", type: "tv_show", tvdb_id: 43},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: 43})
