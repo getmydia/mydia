@@ -227,6 +227,25 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
 
     test "Ignore from the detail modal closes it and hides the card",
          %{conn: conn, user: user, ignored_id: id} do
+      # Opening the modal fetches the title's details (with append_to_response,
+      # so warm_movie_details_cache/1's key does not cover it). Serve it locally.
+      bypass = Bypass.open()
+      previous = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"id" => id, "title" => "Paper Comet"}))
+      end)
+
       {:ok, view, _html} = live(conn, ~p"/discover")
 
       view
