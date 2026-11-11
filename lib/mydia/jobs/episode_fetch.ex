@@ -15,7 +15,7 @@ defmodule Mydia.Jobs.EpisodeFetch do
 
   use Oban.Worker,
     queue: :media,
-    max_attempts: 5,
+    max_attempts: 3,
     unique: [
       period: :infinity,
       keys: [:media_item_id],
@@ -92,13 +92,8 @@ defmodule Mydia.Jobs.EpisodeFetch do
     # Filtered in Elixir: JSON path operators differ between SQLite and PostgreSQL.
     Oban.Job
     |> where([j], j.worker == @worker_name and j.state in @pending_states)
-    |> select([j], %{id: j.id, args: j.args})
     |> Repo.all()
     |> Enum.find(&(&1.args["media_item_id"] == media_item_id))
-    |> case do
-      nil -> nil
-      %{id: id} -> Repo.get(Oban.Job, id)
-    end
   end
 
   @impl Oban.Worker
