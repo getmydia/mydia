@@ -133,8 +133,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   view: the show the user asked for is in the library, just under a row that
   was already there. Callers should flash it as info rather than an error.
 
-  An optional `config` (relay config map) can be injected for testing; it
-  defaults to `Metadata.default_relay_config()`.
+  An optional `config` (relay config map) can be injected for testing. Without
+  one, metadata resolution uses `Metadata.default_relay_config()`. Only an
+  injected config (without `:episodes`) forces inline episodes; otherwise a TV
+  show's episodes are fetched by a background job.
 
   `opts` are forwarded to `Mydia.Media.Add`, including `:search_on_add`. `:monitored`,
   `:quality_profile_id` and `:library_path_id` let a caller inherit settings

@@ -763,6 +763,60 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
+  describe "approve_request/4 search on add" do
+    setup do
+      %{user: create_user(), admin: create_user(%{role: "admin"})}
+    end
+
+    test "a tv approval defers the search to EpisodeFetch", %{user: user, admin: admin} do
+      {:ok, request} =
+        MediaRequests.create_request(Scope.unrestricted(), %{
+          media_type: "tv_show",
+          title: "Beacons Over Ilmarry",
+          tmdb_id: 771_004,
+          requester_id: user.id
+        })
+
+      bypass = Bypass.open()
+      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title)
+      stub_tvdb_search_empty(bypass)
+
+      assert {:ok, %{media_item: item}} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass),
+                 episodes: :background,
+                 search_on_add: true
+               )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.EpisodeFetch,
+        args: %{"media_item_id" => item.id, "search_on_add" => true}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "a movie approval still queues MovieSearch", %{user: user, admin: admin} do
+      request = create_request(user, %{media_type: "movie", title: "Harbor Lights"})
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+
+      assert {:ok, %{media_item: item}} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass),
+                 search_on_add: true
+               )
+
+      assert_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{"media_item_id" => item.id})
+    end
+  end
+
   describe "approve_request/4 season monitoring" do
     setup do
       user = create_user()

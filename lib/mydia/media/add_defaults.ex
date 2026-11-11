@@ -99,8 +99,9 @@ defmodule Mydia.Media.AddDefaults do
   @doc """
   Converts resolved defaults into the option list `Mydia.Media.Add` accepts.
 
-  `search_on_add` is deliberately omitted: it drives an Oban job after the add,
-  not the media item's attributes, and `Add` would ignore it.
+  `search_on_add` is deliberately omitted: it does not shape the media item's
+  attributes. Callers that want the search pass it on with
+  `to_add_opts_with_search/1`.
   """
   @spec to_add_opts(t()) :: keyword()
   def to_add_opts(%__MODULE__{} = defaults) do
@@ -115,12 +116,11 @@ defmodule Mydia.Media.AddDefaults do
   @doc """
   Same as `to_add_opts/1`, with `:search_on_add` put back on.
 
-  For the callers that queue the search themselves, or forward the opts to
-  one that will: `MediaAddHelpers.add_opts_from_config/3` pops it back off
-  before calling `Add`, and `AdminRequestsLive.Index.do_approve/4` passes it
-  straight through to `MediaRequests.approve_request/3`. Both used to build
-  this list inline with `to_add_opts(defaults) |> Keyword.put(:search_on_add,
-  defaults.search_on_add)`; kept here once so they cannot drift.
+  For the callers that want an indexer search after the add: `Add` reads
+  `:search_on_add` and queues it (for a TV show, after its episodes land), and
+  `AdminRequestsLive.Index.do_approve/4` passes it through
+  `MediaRequests.approve_request/3` to `Add`. Kept here once so the callers
+  cannot drift.
   """
   @spec to_add_opts_with_search(t()) :: keyword()
   def to_add_opts_with_search(%__MODULE__{} = defaults) do

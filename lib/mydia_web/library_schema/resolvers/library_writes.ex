@@ -4,8 +4,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
 
   Adding goes through `Mydia.Media.Add.from_provider/5`, the entry point the
   search page's Add button uses. `searchNow` rides in as `:search_on_add`, so
-  `Add` queues the search itself, after the episodes for a TV show. Removing is `Mydia.Media.delete_media_item/3`.
-  Both run under `Scope.system/0`: only admin keys reach the Library API.
+  `Add` queues the search itself, after the episodes for a TV show. Removing is
+  `Mydia.Media.delete_media_item/3`. Both run under `Scope.system/0`: only admin keys reach the Library API.
   """
 
   alias Mydia.Accounts.Scope
