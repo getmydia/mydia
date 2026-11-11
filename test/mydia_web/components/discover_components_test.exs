@@ -82,6 +82,57 @@ defmodule MydiaWeb.DiscoverComponentsTest do
     render_component(&DiscoverComponents.media_rail/1, assigns)
   end
 
+  describe "ignore controls" do
+    defp admin, do: %{role: "admin", id: "admin-1"}
+
+    defp query(html, selector) do
+      html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> Enum.to_list()
+    end
+
+    test "no ignore button without ignore_event" do
+      html = card(%{current_user: admin()})
+
+      assert query(html, "[id^=discover-ignore-]") == []
+    end
+
+    test "an unowned card with ignore_event renders the ignore button" do
+      html = card(%{current_user: admin(), ignore_event: "ignore_title"})
+      doc = LazyHTML.from_fragment(html)
+      button = LazyHTML.query(doc, "#discover-ignore-tmdb-693134")
+
+      assert LazyHTML.attribute(button, "aria-label") == ["Ignore"]
+      assert LazyHTML.attribute(button, "phx-click") == ["ignore_title"]
+      assert LazyHTML.attribute(button, "phx-value-ref") == ["tmdb:693134"]
+      assert LazyHTML.attribute(button, "phx-value-media_type") == ["movie"]
+    end
+
+    test "an owned card renders no ignore button" do
+      html =
+        card(%{
+          current_user: admin(),
+          ignore_event: "ignore_title",
+          item: %{in_library: true, monitored: true, id: 7}
+        })
+
+      assert query(html, "[id^=discover-ignore-]") == []
+    end
+
+    test "an ignored card shows the badge and Unignore in place of Add" do
+      html =
+        card(%{
+          current_user: admin(),
+          ignore_event: "ignore_title",
+          unignore_event: "unignore_title",
+          ignored: true
+        })
+
+      assert html =~ "Ignored"
+      assert [_] = query(html, "#discover-unignore-tmdb-693134")
+      assert query(html, "[id^=discover-ignore-]") == []
+      assert query(html, ~s(button[phx-click="add_to_library"])) == []
+    end
+  end
+
   describe "guest request button" do
     test "renders a request_media button rather than a link to the search page" do
       html = card(%{})

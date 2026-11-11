@@ -70,16 +70,48 @@ defmodule MydiaWeb.DiscoverComponents do
   # w500 is the right size for a grid card; a rail card is w-36 (144px), which
   # wants the smaller w342 step.
   attr :poster_size, :string, default: "w500"
+  # Discover's ignore list (#1379). Only Discover passes these, so every other
+  # host renders exactly as before. `ignore_event` draws the eye-slash button
+  # on an unowned card; `ignored` dims the card and, with `unignore_event`,
+  # swaps its action for Unignore.
+  attr :ignore_event, :string, default: nil
+  attr :unignore_event, :string, default: nil
+  attr :ignored, :boolean, default: false
 
   def trending_card(assigns) do
-    assigns = assign(assigns, :adding?, adding?(assigns))
+    assigns =
+      assigns
+      |> assign(:adding?, adding?(assigns))
+      |> assign(:ref_param, ignore_ref_param(assigns))
 
     ~H"""
     <div class={[
       "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow relative group h-full",
-      @current && "ring-2 ring-primary"
+      @current && "ring-2 ring-primary",
+      @ignored && "[&_figure]:opacity-50 [&_figure]:grayscale"
     ]}>
-      <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 do %>
+      <%= if @ignored do %>
+        <div class="absolute top-2 left-2 z-10">
+          <span class="badge badge-neutral badge-sm gap-1 shadow-md">
+            <.icon name="hero-eye-slash-mini" class="w-3 h-3" />
+            {gettext("Ignored")}
+          </span>
+        </div>
+      <% end %>
+      <button
+        :if={@ignore_event && not @item.in_library && not @ignored && not @current}
+        id={"discover-ignore-#{dom_ref(@ref_param)}"}
+        type="button"
+        phx-click={@ignore_event}
+        phx-value-ref={@ref_param}
+        phx-value-media_type={@media_type}
+        aria-label={gettext("Ignore")}
+        title={gettext("Ignore")}
+        class="btn btn-circle btn-sm absolute top-2 right-2 z-10 bg-base-100/85 border-0 shadow-md transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+      >
+        <.icon name="hero-eye-slash" class="w-4 h-4" />
+      </button>
+      <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 && not @ignored do %>
         <div class="absolute top-2 left-2 z-10">
           <div class="badge badge-warning gap-1 shadow-md">
             <.icon name="hero-star-solid" class="w-3 h-3" />
@@ -149,8 +181,19 @@ defmodule MydiaWeb.DiscoverComponents do
       <.poster_card_body title={@item.title}>
         <:meta>
           <p :if={@item.year} class="text-xs text-base-content/60">{@item.year}</p>
+          <button
+            :if={@ignored && @unignore_event}
+            id={"discover-unignore-#{dom_ref(@ref_param)}"}
+            type="button"
+            phx-click={@unignore_event}
+            phx-value-ref={@ref_param}
+            phx-value-media_type={@media_type}
+            class="btn btn-sm mt-2 w-full"
+          >
+            <.icon name="hero-eye" class="w-4 h-4" /> {gettext("Unignore")}
+          </button>
           <.trending_card_action
-            :if={not @current}
+            :if={not @current and not (@ignored and @unignore_event != nil)}
             item={@item}
             media_type={@media_type}
             current_user={@current_user}
@@ -165,6 +208,17 @@ defmodule MydiaWeb.DiscoverComponents do
     </div>
     """
   end
+
+  # "tmdb:123" -> "tmdb-123": a colon in an id needs escaping in every CSS
+  # selector a test or hook writes against it.
+  @doc false
+  def dom_ref(ref_param), do: String.replace(ref_param, ":", "-")
+
+  # Only built when Discover asked for ignore controls: other hosts (the
+  # franchise strip's current-title card) pass plain maps, which
+  # Ref.from_search_result/1 rejects on purpose.
+  defp ignore_ref_param(%{ignore_event: nil, ignored: false}), do: nil
+  defp ignore_ref_param(%{item: item}), do: Ref.to_param(Ref.from_search_result(item))
 
   # Members and provider ids are normalised to strings on both sides, except a
   # ref-tuple member (DiscoverLive), which is compared by full ref equality
