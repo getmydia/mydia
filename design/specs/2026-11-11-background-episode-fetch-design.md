@@ -127,7 +127,11 @@ job is enqueued inside the transaction and runs once it commits.
 download straight away, so they pass `episodes: :inline`. A fast grab can finish
 and import while the background job has only created some of the episode rows,
 and `MediaImport` then marks the download imported with files left unresolved.
-Fetching inline guarantees every episode exists before the download starts.
+Fetching inline means the episodes the relay returned exist before the download
+starts. It is not a hard guarantee: a relay failure or a partially failed season
+fetch is logged and the add still succeeds, which is the same behaviour these
+flows had before this change. Such a show is completed by the next metadata
+refresh, and files left unresolved go through manual import.
 
 ### UI
 
