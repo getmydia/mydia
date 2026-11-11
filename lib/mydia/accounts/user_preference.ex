@@ -24,6 +24,7 @@ defmodule Mydia.Accounts.UserPreference do
     "close_manual_search_after_grab" => false,
     "recommendations_expanded" => false,
     "discover_hide_owned" => false,
+    "discover_show_ignored" => false,
     "hide_player" => false,
     "player_banner_dismissed" => false,
     "clock_format" => "auto"
@@ -142,6 +143,14 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def discover_hide_owned(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "discover_hide_owned", @defaults["discover_hide_owned"])
+  end
+
+  @doc """
+  Whether Discover puts the user's ignored titles back in the browse grid,
+  dimmed with an Unignore action, instead of hiding them.
+  """
+  def discover_show_ignored(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs || %{}, "discover_show_ignored", @defaults["discover_show_ignored"])
   end
 
   @doc """
@@ -279,6 +288,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("recommendations_expanded", [true, false])
     |> validate_preference_value("discover_hide_owned", [true, false])
+    |> validate_preference_value("discover_show_ignored", [true, false])
     |> validate_discover_home_country()
     |> validate_discover_streaming_services()
     |> validate_preference_value("add_monitored", [true, false])

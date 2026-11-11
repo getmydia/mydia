@@ -7,6 +7,27 @@ defmodule Mydia.Accounts.UserPreferenceTest do
   alias Mydia.Accounts
   alias Mydia.Accounts.UserPreference
 
+  describe "discover_show_ignored" do
+    test "defaults to false" do
+      assert UserPreference.discover_show_ignored(%UserPreference{preferences: %{}}) == false
+    end
+
+    test "reads back a stored true" do
+      pref = %UserPreference{preferences: %{"discover_show_ignored" => true}}
+
+      assert UserPreference.discover_show_ignored(pref) == true
+    end
+
+    test "rejects a non-boolean" do
+      pref = Accounts.get_user_preference!(user_fixture())
+
+      changeset =
+        UserPreference.changeset(pref, %{"preferences" => %{"discover_show_ignored" => "yes"}})
+
+      refute changeset.valid?
+    end
+  end
+
   describe "add-option getters" do
     test "return nil when unset, meaning inherit" do
       pref = %UserPreference{preferences: %{}}
