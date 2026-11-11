@@ -149,6 +149,24 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
       assert MapSet.member?(DiscoverIgnores.keys(user), {:movie, {:tmdb, id}})
     end
 
+    # Below lg the mobile dock is fixed z-50 at the bottom; a toast in the same
+    # corner was covered by it, so phone users never saw Undo.
+    test "the toast sits above the mobile dock", %{conn: conn, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-ignore-tmdb-#{id}") |> render_click()
+
+      [class] =
+        view
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#discover-ignore-toast")
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+      assert class =~ "z-[60]"
+    end
+
     test "Undo restores the card", %{conn: conn, user: user, ignored_id: id} do
       {:ok, view, _html} = live(conn, ~p"/discover")
 

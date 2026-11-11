@@ -436,7 +436,13 @@
 
   <.add_config_modal config={@add_config} quality_profiles={@quality_profiles} />
 
-  <div :if={@ignore_toast} id="discover-ignore-toast" class="toast toast-center toast-bottom z-40">
+  <%!-- Above the mobile dock (fixed z-50 at the bottom below lg), or phone
+       users never see Undo. --%>
+  <div
+    :if={@ignore_toast}
+    id="discover-ignore-toast"
+    class="toast toast-center toast-bottom z-[60] max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+  >
     <div class="alert shadow-lg">
       <.icon name="hero-eye-slash" class="w-5 h-5" />
       <span :if={@ignore_toast.title}>
