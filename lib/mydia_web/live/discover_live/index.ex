@@ -32,7 +32,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   import MydiaWeb.GridDensityComponents
 
   import MydiaWeb.DiscoverLive.Messages,
-    only: [movie_categories: 0, tv_categories: 0, sort_options: 0, request_error_message: 1]
+    only: [movie_categories: 0, tv_categories: 0, sort_options: 1, request_error_message: 1]
 
   # The provider returns fixed-size pages of this many results. Removing owned
   # titles from one leaves a short grid, or an empty one, which looks like the
@@ -49,7 +49,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:page_title, gettext("Discover"))
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:countries, Countries.all())
-      |> assign(:sort_options, sort_options())
+      |> assign(:sort_options, sort_options(:movie))
       |> assign(:items, [])
       |> assign(:visible_items, [])
       |> assign(:loading, true)
@@ -167,11 +167,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
       default_sort =
         if source, do: RegionalSources.default_sort(source, media_type), else: "popularity.desc"
 
+      sort_options = sort_options(media_type)
+
       socket =
         socket
         |> assign(:source, source)
         |> assign(:default_sort, default_sort)
-        |> assign(:sort_by, params["sort"] || default_sort)
+        |> assign(:sort_options, sort_options)
+        |> assign(:sort_by, parse_sort(params["sort"], sort_options, default_sort))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -240,7 +243,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("switch_category", %{"category" => category}, socket) do
     # A tab click always lands on the tab itself, so the country tab opens
     # on its rows even when clicked from one of its See all grids.
-    params = build_url_params(socket.assigns, category: category) |> Map.delete("source")
+    params =
+      if category in ["discover", "home"] do
+        build_url_params(socket.assigns, category: category) |> Map.delete("source")
+      else
+        # TMDB's fixed lists take no filters, and carrying them along would
+        # bounce the click straight back to Custom (#1381).
+        params = %{"type" => to_string(socket.assigns.media_type)}
+        if category == "trending", do: params, else: Map.put(params, "category", category)
+      end
+
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -1193,6 +1205,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
     if Scope.restricted?(socket.assigns.current_scope),
       do: @max_auto_advance_restricted,
       else: @max_auto_advance
+  end
+
+  # A sort the media type cannot use (a movie date sort on a TV link) falls
+  # back to the default rather than reaching TMDB, which would ignore it.
+  defp parse_sort(sort, sort_options, default_sort) do
+    if sort == default_sort or List.keymember?(sort_options, sort, 0),
+      do: sort,
+      else: default_sort
   end
 
   defp build_discover_opts(assigns) do
