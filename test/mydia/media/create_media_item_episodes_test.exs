@@ -40,8 +40,7 @@ defmodule Mydia.Media.CreateMediaItemEpisodesTest do
               "id" => season_id,
               "number" => 1,
               "name" => "Season 1",
-              "type" => %{"type" => "official"},
-              "episodeCount" => 1
+              "type" => %{"type" => "official"}
             }
           ]
         }

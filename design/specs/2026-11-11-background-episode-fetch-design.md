@@ -124,10 +124,10 @@ write transaction commits. With the background default, `execute/5` drops
 job is enqueued inside the transaction and runs once it commits.
 
 `ReleaseAdd` and the search page's manual add create the show and then start a
-download. Import happens when the download completes, by which point the job
-has normally finished. If an import does run before episodes exist, it fails
-the same way an import into an unrefreshed show does today and is retried by
-the import pipeline. They keep the default.
+download straight away, so they pass `episodes: :inline`. A fast grab can finish
+and import while the background job has only created some of the episode rows,
+and `MediaImport` then marks the download imported with files left unresolved.
+Fetching inline guarantees every episode exists before the download starts.
 
 ### UI
 

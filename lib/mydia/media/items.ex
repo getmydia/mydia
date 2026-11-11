@@ -492,8 +492,9 @@ defmodule Mydia.Media.Items do
           "Failed to enqueue episode fetch for #{media_item.title}: #{inspect(reason)}"
         )
 
-        # The job would have queued the search, so queue it here to keep the
-        # user's request. In this rare case it may find no episodes yet.
+        # The job would have fetched the episodes and then queued the search.
+        # Fetch inline instead, so the search finds episodes to look for.
+        fetch_episodes_for_new_show(media_item, opts)
         if opts[:search_on_add], do: Mydia.Search.maybe_queue_search(media_item, true)
         :ok
     end

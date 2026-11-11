@@ -327,13 +327,13 @@ defmodule MydiaWeb.SearchLive.Index do
            case ReleaseAdd.fetch_full_metadata(config, selected_match, media_type_atom) do
              {:ok, metadata} ->
                # Create media item without parsed data (since parsing failed)
-               # A background EpisodeFetch job fetches a TV show's episodes (queued by create_media_item)
+               # Inline episodes: a release download follows, and an early import leaves files unresolved
                attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
                attrs =
                  Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
 
-               case Media.create_media_item(scope, attrs) do
+               case Media.create_media_item(scope, attrs, episodes: :inline) do
                  {:ok, item} -> {:ok, item, :created}
                  other -> other
                end

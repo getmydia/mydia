@@ -24,6 +24,8 @@ defmodule Mydia.Jobs.EpisodeFetch do
 
   import Ecto.Query
 
+  require Logger
+
   alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
@@ -99,19 +101,53 @@ defmodule Mydia.Jobs.EpisodeFetch do
   end
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: raw_args}), do: run(Args.parse(raw_args), nil)
+  def perform(%Oban.Job{args: raw_args} = job) do
+    run(Args.parse(raw_args), nil, final_attempt?: job.attempt >= job.max_attempts)
+  end
 
-  @spec run(Args.t(), map() | nil) :: :ok | {:discard, :not_found} | {:error, term()}
-  def run(%Args{} = args, config) do
+  @doc """
+  Runs the fetch.
+
+  ## Options
+
+    * `:final_attempt?` - when true, a partial season fetch is accepted instead
+      of retried. Defaults to `true`, so direct callers never get a retry error.
+  """
+  @spec run(Args.t(), map() | nil, keyword()) ::
+          :ok | {:discard, :not_found} | {:error, term()}
+  def run(%Args{} = args, config, opts \\ []) do
+    final_attempt? = Keyword.get(opts, :final_attempt?, true)
+
     with {:ok, item} <- load_tv_show(args.media_item_id),
          {:ok, count} <-
            Media.fetch_episodes_for_new_show(item,
              season_monitoring: args.season_monitoring,
              config: config
-           ) do
+           ),
+         :ok <- check_complete(item, final_attempt?) do
       Events.episodes_refreshed(item, count, :job, "episode_fetch")
       Mydia.Search.maybe_queue_search(item, args.search_on_add)
       :ok
+    end
+  end
+
+  # EpisodeSync returns {:ok, count} even when some seasons failed, and then
+  # leaves seasons_refreshed_at unstamped. Retry until the last attempt, which
+  # keeps what exists so the user still gets their episodes and search.
+  defp check_complete(item, final_attempt?) do
+    case Repo.get(MediaItem, item.id) do
+      %MediaItem{seasons_refreshed_at: nil} when final_attempt? ->
+        Logger.warning(
+          "Episode fetch for #{item.title} finished with failed seasons, keeping the partial result"
+        )
+
+        :ok
+
+      %MediaItem{seasons_refreshed_at: nil} ->
+        {:error, :partial_refresh}
+
+      _ ->
+        :ok
     end
   end
 

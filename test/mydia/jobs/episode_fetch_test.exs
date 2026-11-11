@@ -41,7 +41,7 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
           Plug.Conn.resp(conn, 500, "boom")
         end)
 
-      :ok ->
+      mode when mode in [:ok, :partial] ->
         Bypass.stub(bypass, "GET", "/tvdb/series/#{series_id}/extended", fn conn ->
           json(conn, %{
             "data" => %{
@@ -57,8 +57,7 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
                     "id" => sid,
                     "number" => n,
                     "name" => "Season #{n}",
-                    "type" => %{"type" => "official"},
-                    "episodeCount" => 1
+                    "type" => %{"type" => "official"}
                   }
                 end
             }
@@ -69,24 +68,28 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
           ep_id = sid * 10
 
           Bypass.stub(bypass, "GET", "/tvdb/seasons/#{sid}/extended", fn conn ->
-            json(conn, %{
-              "data" => %{
-                "id" => sid,
-                "number" => n,
-                "name" => "Season #{n}",
-                "episodes" => [
-                  %{
-                    "id" => ep_id,
-                    "seasonNumber" => n,
-                    "number" => 1,
-                    "name" => "Chapter #{n}",
-                    "overview" => "o",
-                    "aired" => "2023-01-08",
-                    "runtime" => 40
-                  }
-                ]
-              }
-            })
+            if mode == :partial and n == 2 do
+              Plug.Conn.resp(conn, 500, "boom")
+            else
+              json(conn, %{
+                "data" => %{
+                  "id" => sid,
+                  "number" => n,
+                  "name" => "Season #{n}",
+                  "episodes" => [
+                    %{
+                      "id" => ep_id,
+                      "seasonNumber" => n,
+                      "number" => 1,
+                      "name" => "Chapter #{n}",
+                      "overview" => "o",
+                      "aired" => "2023-01-08",
+                      "runtime" => 40
+                    }
+                  ]
+                }
+              })
+            end
           end)
 
           Bypass.stub(bypass, "GET", "/tvdb/episodes/#{ep_id}/extended", fn conn ->
@@ -102,7 +105,8 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
     }
   end
 
-  defp run(args, config), do: EpisodeFetch.run(EpisodeFetch.Args.parse(args), config)
+  defp run(args, config, opts \\ []),
+    do: EpisodeFetch.run(EpisodeFetch.Args.parse(args), config, opts)
 
   test "creates episodes and records the event" do
     item = tv_item()
@@ -152,6 +156,41 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
 
     assert {:error, _} = run(%{"media_item_id" => item.id, "search_on_add" => true}, config)
     refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+  end
+
+  describe "partial season fetch" do
+    test "retries before the final attempt and records nothing" do
+      item = tv_item()
+      config = relay_config(Bypass.open(), item, :partial)
+      args = %{"media_item_id" => item.id, "search_on_add" => true}
+
+      assert {:error, :partial_refresh} = run(args, config, final_attempt?: false)
+
+      refute Repo.exists?(
+               from e in Event,
+                 where: e.type == "media_item.episodes_refreshed" and e.resource_id == ^item.id
+             )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "accepts the partial result on the final attempt" do
+      item = tv_item()
+      config = relay_config(Bypass.open(), item, :partial)
+      args = %{"media_item_id" => item.id, "search_on_add" => true}
+
+      assert :ok = run(args, config, final_attempt?: true)
+
+      assert Repo.exists?(
+               from e in Event,
+                 where: e.type == "media_item.episodes_refreshed" and e.resource_id == ^item.id
+             )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.TVShowSearch,
+        args: %{"mode" => "show", "media_item_id" => item.id}
+      )
+    end
   end
 
   test "discards a deleted item or a movie" do

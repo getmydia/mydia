@@ -161,8 +161,9 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
 
         attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, attr_opts)
 
-        # A background EpisodeFetch job fetches a TV show's episodes (queued by create_media_item)
-        case Media.create_media_item(scope, attrs) do
+        # Episodes are fetched inline here: a release download starts right after,
+        # and an import that runs before every episode exists leaves files unresolved.
+        case Media.create_media_item(scope, attrs, episodes: :inline) do
           {:ok, media_item} ->
             {:ok, media_item, :created}
 
