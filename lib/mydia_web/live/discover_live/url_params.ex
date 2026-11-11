@@ -1,10 +1,13 @@
 defmodule MydiaWeb.DiscoverLive.UrlParams do
   @moduledoc """
-  Reads Discover's URL params. Imported by `MydiaWeb.DiscoverLive.Index`.
+  Reads and builds Discover's URL params. Imported by
+  `MydiaWeb.DiscoverLive.Index`.
 
   Every parser is lenient: URL params are user-typed, so anything unexpected
   falls back to a default rather than erroring.
   """
+
+  alias Mydia.Metadata.RegionalSources
 
   @doc "An unknown `?type=` falls back to movies."
   def parse_media_type("tv_show"), do: :tv_show
@@ -59,6 +62,91 @@ defmodule MydiaWeb.DiscoverLive.UrlParams do
       {rating, _} when rating >= 0 and rating <= 10 -> rating
       _ -> nil
     end
+  end
+
+  @doc """
+  A sort the media type cannot use (a movie date sort on a TV link) falls back
+  to the default rather than reaching TMDB, which would ignore it (#1381).
+  """
+  def parse_sort(sort, sort_options, default_sort) do
+    if sort == default_sort or List.keymember?(sort_options, sort, 0),
+      do: sort,
+      else: default_sort
+  end
+
+  @doc """
+  The URL a category tab click lands on. It always opens the tab itself, so
+  the country tab opens on its rows even from one of its See all grids.
+  Custom and the country tab keep the filters. TMDB's fixed lists take none,
+  and carrying them along would bounce the click straight back to Custom.
+  """
+  def tab_url_params(assigns, category) when category in ["discover", "home"],
+    do: assigns |> build_url_params(category: category) |> Map.delete("source")
+
+  def tab_url_params(assigns, "trending"), do: %{"type" => to_string(assigns.media_type)}
+
+  def tab_url_params(assigns, category),
+    do: %{"type" => to_string(assigns.media_type), "category" => category}
+
+  @doc "The URL params for the page's current state, with `overrides` applied."
+  def build_url_params(assigns, overrides) do
+    params = %{"type" => to_string(assigns.media_type)}
+
+    category = Keyword.get(overrides, :category, to_string(assigns.category))
+
+    params =
+      if category != "trending" do
+        Map.put(params, "category", category)
+      else
+        params
+      end
+
+    params =
+      case {category, assigns[:source]} do
+        {"home", source} when not is_nil(source) ->
+          Map.put(params, "source", RegionalSources.to_param(source))
+
+        _ ->
+          params
+      end
+
+    genre = Keyword.get(overrides, :genre)
+
+    params =
+      cond do
+        genre != nil and genre != "" ->
+          Map.put(params, "genre", genre)
+
+        assigns.selected_genres != [] ->
+          Map.put(params, "genre", Enum.join(assigns.selected_genres, ","))
+
+        true ->
+          params
+      end
+
+    language = Keyword.get(overrides, :language, assigns.selected_language)
+
+    params =
+      if language && language != "", do: Map.put(params, "language", language), else: params
+
+    params =
+      Enum.reduce([:year_from, :year_to], params, fn key, acc ->
+        case Keyword.get(overrides, key, Map.get(assigns, key)) do
+          value when value in [nil, ""] -> acc
+          value -> Map.put(acc, to_string(key), to_string(value))
+        end
+      end)
+
+    rating = Keyword.get(overrides, :rating, assigns.min_rating)
+
+    params =
+      if rating && rating != "", do: Map.put(params, "rating", to_string(rating)), else: params
+
+    default_sort = assigns[:default_sort] || "popularity.desc"
+    sort = Keyword.get(overrides, :sort, assigns.sort_by)
+    params = if sort && sort != default_sort, do: Map.put(params, "sort", sort), else: params
+
+    params
   end
 
   def parse_page_param(nil), do: 1
