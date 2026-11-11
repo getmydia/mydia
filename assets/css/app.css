@@ -44,6 +44,20 @@
 @plugin "./catppuccinTheme.macchiato.ts";
 @plugin "./catppuccinTheme.mocha.ts";
 
+/* Badges grow with their text. daisyUI 5 fixes `.badge` at
+   `height: var(--size)` but lets the label wrap, so a long one (a release's
+   quality on a phone, #1376) painted outside the fill. A one-line badge keeps
+   its height. daisyUI's rules sit in sublayers nested inside `utilities`, which
+   a rule directly in that layer outranks; `:where()` keeps its specificity at
+   zero, so a Tailwind height utility on a badge still wins. The mobile layout
+   sweep's `spilled_text` check catches a regression. */
+@layer utilities {
+  :where(.badge) {
+    height: auto;
+    min-height: var(--size);
+  }
+}
+
 /* Phone-only floor for daisyUI's extra-small sizes. The mobile layout sweep
    (test/mydia_web/features/mobile_layout_sweep_test.exs) requires text of at
    least 12px and tap targets of at least 24px, and daisyUI's xs/sm sizes

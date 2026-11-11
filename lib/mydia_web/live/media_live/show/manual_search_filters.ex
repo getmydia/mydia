@@ -289,11 +289,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               />
             </div>
           </fieldset>
-          <fieldset :if={@filter_options.indexers != []} class="fieldset">
+          <%!-- A truncating name still counts its full width toward the
+               fieldset grid's track and toward the line of daisyUI's wrapping
+               menu (and of each wrapping item), which pushed the form sideways
+               on phones. min-w-0 down the chain and w-full on the items and
+               labels cap each level. --%>
+          <fieldset :if={@filter_options.indexers != []} class="fieldset min-w-0">
             <legend class="fieldset-legend">{gettext("Indexer")}</legend>
-            <ul class="menu menu-sm w-full p-0">
-              <li :for={{name, count} <- @filter_options.indexers}>
-                <label class="flex items-center gap-2">
+            <ul class="menu menu-sm w-full min-w-0 p-0">
+              <li :for={{name, count} <- @filter_options.indexers} class="w-full min-w-0">
+                <label class="flex w-full min-w-0 items-center gap-2">
                   <input
                     type="checkbox"
                     class="checkbox checkbox-sm checkbox-primary"
@@ -301,7 +306,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
                     value={name}
                     checked={name in @indexer_filters}
                   />
-                  <span class="flex-1 truncate">{name}</span>
+                  <span class="min-w-0 flex-1 truncate" title={name}>{name}</span>
                   <span class="text-xs text-base-content/60">{count}</span>
                 </label>
               </li>
