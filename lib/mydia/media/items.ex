@@ -491,6 +491,11 @@ defmodule Mydia.Media.Items do
         Logger.warning(
           "Failed to enqueue episode fetch for #{media_item.title}: #{inspect(reason)}"
         )
+
+        # The job would have queued the search, so queue it here to keep the
+        # user's request. In this rare case it may find no episodes yet.
+        if opts[:search_on_add], do: Mydia.Search.maybe_queue_search(media_item, true)
+        :ok
     end
   end
 
@@ -532,8 +537,6 @@ defmodule Mydia.Media.Items do
   Returns `{:ok, episode_count}` or `{:error, reason}`.
 
   `create_media_item/3` calls this itself with `episodes: :inline`.
-  Callers that skip it because they are inside a transaction call this once the
-  transaction has committed.
 
   ## Options
 

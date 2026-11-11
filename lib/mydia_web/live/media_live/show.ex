@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.DownloadComponents
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
+  alias MydiaWeb.MediaLive.Show.EpisodeFetchEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
   alias MydiaWeb.MediaLive.Show.LibraryEvents
@@ -30,7 +31,6 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SearchEvents
   alias MydiaWeb.MediaLive.Show.SearchFilterEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
-  alias MydiaWeb.MediaLive.Show.EpisodeFetchEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents

@@ -161,7 +161,7 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
 
         attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, attr_opts)
 
-        # Episodes are automatically fetched for TV shows via create_media_item
+        # A background EpisodeFetch job fetches a TV show's episodes (queued by create_media_item)
         case Media.create_media_item(scope, attrs) do
           {:ok, media_item} ->
             {:ok, media_item, :created}

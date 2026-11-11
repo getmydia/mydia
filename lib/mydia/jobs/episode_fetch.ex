@@ -90,6 +90,8 @@ defmodule Mydia.Jobs.EpisodeFetch do
 
   defp pending_job(media_item_id) do
     # Filtered in Elixir: JSON path operators differ between SQLite and PostgreSQL.
+    # The pending set is expected to stay tiny (one row per in-flight add), so
+    # loading it all is acceptable.
     Oban.Job
     |> where([j], j.worker == @worker_name and j.state in @pending_states)
     |> Repo.all()

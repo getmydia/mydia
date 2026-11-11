@@ -153,10 +153,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       :movie,
       %{},
       config,
-      Keyword.merge(
-        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
-        opts
-      )
+      [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id]
+      |> Keyword.merge(opts)
+      |> Keyword.put_new(:episodes, :background)
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}

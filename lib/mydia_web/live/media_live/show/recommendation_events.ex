@@ -295,7 +295,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       media_type,
       %{},
       config,
-      Keyword.merge(defaults, opts)
+      defaults |> Keyword.merge(opts) |> Keyword.put_new(:episodes, :background)
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}

@@ -327,7 +327,7 @@ defmodule MydiaWeb.SearchLive.Index do
            case ReleaseAdd.fetch_full_metadata(config, selected_match, media_type_atom) do
              {:ok, metadata} ->
                # Create media item without parsed data (since parsing failed)
-               # Episodes are automatically fetched for TV shows via create_media_item
+               # A background EpisodeFetch job fetches a TV show's episodes (queued by create_media_item)
                attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
                attrs =
