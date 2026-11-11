@@ -2351,7 +2351,7 @@ msgid "%{title} has been added to your library"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:759
-#: lib/mydia_web/live/discover_live/index.ex:808
+#: lib/mydia_web/live/discover_live/index.ex:820
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:217
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:323
 #, elixir-autogen, elixir-format
@@ -2379,7 +2379,7 @@ msgid "%{title} removed, but %{files} could not be deleted from disk. Check perm
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:836
-#: lib/mydia_web/live/discover_live/index.ex:871
+#: lib/mydia_web/live/discover_live/index.ex:883
 #: lib/mydia_web/live/media_live/show/franchise_events.ex:312
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:266
 #, elixir-autogen, elixir-format
@@ -3784,7 +3784,7 @@ msgid "Copy stream link"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:383
-#: lib/mydia_web/live/discover_live/index.ex:473
+#: lib/mydia_web/live/discover_live/index.ex:485
 #, elixir-autogen, elixir-format
 msgid "Could not add that item"
 msgstr ""
@@ -3917,7 +3917,7 @@ msgid "Could not remove the section"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:400
-#: lib/mydia_web/live/discover_live/index.ex:490
+#: lib/mydia_web/live/discover_live/index.ex:502
 #, elixir-autogen, elixir-format
 msgid "Could not request that item"
 msgstr ""
@@ -3947,7 +3947,7 @@ msgstr ""
 msgid "Could not save preference"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:533
+#: lib/mydia_web/live/discover_live/index.ex:545
 #, elixir-autogen, elixir-format
 msgid "Could not save that filter preference"
 msgstr ""
@@ -3975,8 +3975,8 @@ msgstr ""
 msgid "Could not save your Home layout."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:355
-#: lib/mydia_web/live/discover_live/index.ex:380
+#: lib/mydia_web/live/discover_live/index.ex:367
+#: lib/mydia_web/live/discover_live/index.ex:392
 #, elixir-autogen, elixir-format
 msgid "Could not save your country settings"
 msgstr ""
@@ -4013,12 +4013,12 @@ msgid "Could not start the re-sync."
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/text.ex:55
-#: lib/mydia_web/live/discover_live/messages.ex:59
+#: lib/mydia_web/live/discover_live/messages.ex:63
 #, elixir-autogen, elixir-format
 msgid "Could not submit the request. Please try again."
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/messages.ex:55
+#: lib/mydia_web/live/discover_live/messages.ex:59
 #, elixir-autogen, elixir-format
 msgid "Could not submit the request: %{errors}"
 msgstr ""
@@ -4927,7 +4927,7 @@ msgstr ""
 msgid "Failed to add to library: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/index.ex:823
+#: lib/mydia_web/live/discover_live/index.ex:835
 #, elixir-autogen, elixir-format
 msgid "Failed to add: %{errors}"
 msgstr ""
@@ -4989,7 +4989,7 @@ msgid "Failed to dismiss download"
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:785
-#: lib/mydia_web/live/discover_live/index.ex:834
+#: lib/mydia_web/live/discover_live/index.ex:846
 #, elixir-autogen, elixir-format
 msgid "Failed to fetch metadata: %{reason}"
 msgstr ""
@@ -5524,7 +5524,7 @@ msgstr ""
 msgid "Hide in library"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/messages.ex:39
+#: lib/mydia_web/live/discover_live/messages.ex:43
 #, elixir-autogen, elixir-format
 msgid "Highest Rated"
 msgstr ""
@@ -6301,7 +6301,7 @@ msgstr ""
 msgid "More like this"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/messages.ex:38
+#: lib/mydia_web/live/discover_live/messages.ex:42
 #, elixir-autogen, elixir-format
 msgid "Most Popular"
 msgstr ""
@@ -6456,7 +6456,7 @@ msgstr ""
 msgid "Newest"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/messages.ex:40
+#: lib/mydia_web/live/discover_live/messages.ex:44
 #, elixir-autogen, elixir-format
 msgid "Newest First"
 msgstr ""
@@ -6982,7 +6982,7 @@ msgstr ""
 msgid "Offset must be between -%{max} and %{max} milliseconds"
 msgstr ""
 
-#: lib/mydia_web/live/discover_live/messages.ex:41
+#: lib/mydia_web/live/discover_live/messages.ex:45
 #, elixir-autogen, elixir-format
 msgid "Oldest First"
 msgstr ""
@@ -9139,7 +9139,7 @@ msgid "Some of this show's episodes are missing their provider id. Refresh this 
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/text.ex:45
-#: lib/mydia_web/live/discover_live/messages.ex:49
+#: lib/mydia_web/live/discover_live/messages.ex:53
 #, elixir-autogen, elixir-format
 msgid "Someone has already requested that title."
 msgstr ""
@@ -9592,7 +9592,7 @@ msgid "That library is no longer available. Nothing was added."
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:379
-#: lib/mydia_web/live/discover_live/index.ex:469
+#: lib/mydia_web/live/discover_live/index.ex:481
 #, elixir-autogen, elixir-format
 msgid "That media type is not supported."
 msgstr ""
@@ -9636,7 +9636,7 @@ msgid "That show was already created from this folder."
 msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/text.ex:42
-#: lib/mydia_web/live/discover_live/messages.ex:46
+#: lib/mydia_web/live/discover_live/messages.ex:50
 #, elixir-autogen, elixir-format
 msgid "That title is already in the library."
 msgstr ""
