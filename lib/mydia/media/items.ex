@@ -480,8 +480,11 @@ defmodule Mydia.Media.Items do
 
   @doc """
   Fetches the episodes of a just-added TV show and applies the initial season
-  monitoring. Failures are logged, never raised: the show is still usable and
-  its episodes can be refreshed later.
+  monitoring. Failures are logged and returned, never raised: the show is still
+  usable and its episodes can be refreshed later. Season monitoring is applied
+  only when the fetch succeeds.
+
+  Returns `{:ok, episode_count}` or `{:error, reason}`.
 
   `create_media_item/3` calls this itself unless `:skip_episode_refresh` is set.
   Callers that skip it because they are inside a transaction call this once the
@@ -492,7 +495,8 @@ defmodule Mydia.Media.Items do
     * `:season_monitoring` - defaults to `"all"`
     * `:config` - relay config to use
   """
-  @spec fetch_episodes_for_new_show(MediaItem.t(), keyword()) :: :ok
+  @spec fetch_episodes_for_new_show(MediaItem.t(), keyword()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
   def fetch_episodes_for_new_show(%MediaItem{} = media_item, opts \\ []) do
     season_monitoring = Keyword.get(opts, :season_monitoring, "all")
 
@@ -504,12 +508,12 @@ defmodule Mydia.Media.Items do
       {:ok, count} ->
         Logger.info("Created #{count} episodes for #{media_item.title}")
         apply_initial_season_monitoring(media_item, season_monitoring)
+        {:ok, count}
 
-      {:error, reason} ->
+      {:error, reason} = error ->
         Logger.warning("Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}")
+        error
     end
-
-    :ok
   end
 
   defp apply_initial_season_monitoring(%MediaItem{monitored: false}, _season_monitoring), do: :ok
