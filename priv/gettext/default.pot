@@ -2352,7 +2352,7 @@ msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:759
 #: lib/mydia_web/live/discover_live/index.ex:808
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:218
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:217
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:323
 #, elixir-autogen, elixir-format
 msgid "%{title} is already in your library"
@@ -2380,7 +2380,7 @@ msgstr ""
 
 #: lib/mydia_web/live/dashboard_live/index.ex:836
 #: lib/mydia_web/live/discover_live/index.ex:871
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:313
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:312
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:266
 #, elixir-autogen, elixir-format
 msgid "%{title} requested. An admin will review it soon."
@@ -3789,12 +3789,12 @@ msgstr ""
 msgid "Could not add that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:239
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:238
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:229
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:228
 #, elixir-autogen, elixir-format
 msgid "Could not add that movie: %{reason}"
 msgstr ""
@@ -3922,7 +3922,7 @@ msgstr ""
 msgid "Could not request that item"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:319
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:318
 #, elixir-autogen, elixir-format
 msgid "Could not request that movie"
 msgstr ""
@@ -10948,7 +10948,7 @@ msgstr ""
 msgid "the file's location on disk could not be resolved."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/franchise_events.ex:370
+#: lib/mydia_web/live/media_live/show/franchise_events.ex:369
 #: lib/mydia_web/live/media_live/show/recommendation_events.ex:530
 #, elixir-autogen, elixir-format
 msgid "the metadata service could not be reached"
