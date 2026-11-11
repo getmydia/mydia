@@ -247,7 +247,7 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       for (var n = walker.nextNode(); n; n = walker.nextNode()) {
         if (n.textContent.trim() === '') continue;
         var box = edgeBox(n);
-        if (!box || hits.has(box) || !scopeRoot.contains(box) && box !== scopeRoot) continue;
+        if (!box || hits.has(box) || !scopeRoot.contains(box)) continue;
         var bs = getComputedStyle(box);
         if (bs.overflowX !== 'visible' || bs.overflowY !== 'visible') continue;
         if (!visible(box, bs, box.getBoundingClientRect())) continue;

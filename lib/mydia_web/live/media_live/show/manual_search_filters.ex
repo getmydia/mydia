@@ -289,11 +289,11 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
               />
             </div>
           </fieldset>
-          <%!-- A truncating name still counts its full width toward the
-               fieldset grid's track and toward the line of daisyUI's wrapping
-               menu (and of each wrapping item), which pushed the form sideways
-               on phones. min-w-0 down the chain and w-full on the items and
-               labels cap each level. --%>
+          <%!-- Names wrap: a phone cannot reveal a truncated name's title, and
+               trackers sharing a prefix would look alike. The fieldset grid's
+               track and daisyUI's wrapping menu (and each wrapping item) size
+               to their content, which pushed the form sideways on phones, so
+               min-w-0 runs down the chain and the items and labels are w-full. --%>
           <fieldset :if={@filter_options.indexers != []} class="fieldset min-w-0">
             <legend class="fieldset-legend">{gettext("Indexer")}</legend>
             <ul class="menu menu-sm w-full min-w-0 p-0">
@@ -306,7 +306,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
                     value={name}
                     checked={name in @indexer_filters}
                   />
-                  <span class="min-w-0 flex-1 truncate" title={name}>{name}</span>
+                  <span class="min-w-0 flex-1 wrap-anywhere">{name}</span>
                   <span class="text-xs text-base-content/60">{count}</span>
                 </label>
               </li>
