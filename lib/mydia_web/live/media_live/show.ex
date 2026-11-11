@@ -81,6 +81,7 @@ defmodule MydiaWeb.MediaLive.Show do
     {:ok,
      socket
      |> assign(:media_item, media_item)
+     |> assign(:fetching_episodes?, fetching_episodes?(media_item))
      |> assign_downloads(downloads_with_status)
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)
@@ -770,6 +771,11 @@ defmodule MydiaWeb.MediaLive.Show do
     # Check if this event is related to the current media item
     if event.resource_type == "media_item" &&
          event.resource_id == socket.assigns.media_item.id do
+      socket =
+        if event.type == "media_item.episodes_refreshed",
+          do: reload_episodes(socket),
+          else: socket
+
       # Reload timeline events to include the new event
       timeline_events =
         load_timeline_events(socket.assigns.media_item, socket.assigns.current_user)
@@ -973,4 +979,24 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)
+
+  # Episodes arrived from the background fetch: reload everything that
+  # depends on them.
+  defp reload_episodes(socket) do
+    media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+    {next_episode, next_episode_state} = load_next_episode(media_item, socket)
+
+    socket
+    |> assign(:media_item, media_item)
+    |> assign(:fetching_episodes?, false)
+    |> assign_downloads(load_downloads_with_status(media_item))
+    |> assign(:next_episode, next_episode)
+    |> assign(:next_episode_state, next_episode_state)
+    |> assign(:expanded_seasons, default_expanded_seasons(media_item, next_episode))
+  end
+
+  defp fetching_episodes?(%{type: "tv_show", episodes: []} = media_item),
+    do: Mydia.Jobs.EpisodeFetch.pending?(media_item.id)
+
+  defp fetching_episodes?(_media_item), do: false
 end

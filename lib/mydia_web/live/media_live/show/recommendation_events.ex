@@ -311,7 +311,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     {:noreply,
      socket
      |> mark_added(tmdb_id, added)
-     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
+     |> put_flash(:info, MediaAddHelpers.added_message(added))}
   end
 
   # Not an error from here up: the title the user clicked is already in the

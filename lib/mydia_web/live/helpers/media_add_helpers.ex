@@ -22,6 +22,20 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
 
+  @doc """
+  Success flash for a completed add. TV shows get their episodes from a
+  background job, so the copy says so.
+  """
+  @spec added_message(Mydia.Media.MediaItem.t()) :: String.t()
+  def added_message(%{type: "tv_show", title: title}),
+    do:
+      gettext("%{title} has been added. Episodes are being fetched in the background.",
+        title: title
+      )
+
+  def added_message(%{title: title}),
+    do: gettext("%{title} has been added to your library", title: title)
+
   @doc "Flash shown when a submitted library id is not a candidate for the chosen type."
   def unknown_library_message,
     do: gettext("That library is no longer available. Nothing was added.")

@@ -344,9 +344,18 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :season_order_suggestion, :any, default: nil
   attr :season_order_options, :any, default: nil
   attr :can_update_media, :boolean, required: true
+  attr :fetching_episodes?, :boolean, default: false
 
   def episodes_section(assigns) do
     ~H"""
+    <div
+      :if={@media_item.type == "tv_show" && @fetching_episodes?}
+      class="card bg-base-200 shadow-lg"
+    >
+      <div id="episodes-fetching" class="flex items-center gap-2 p-6 text-base-content/70">
+        <span class="loading loading-spinner loading-sm"></span>{gettext("Fetching episodes...")}
+      </div>
+    </div>
     <%= if @media_item.type == "tv_show" && length(@media_item.episodes) > 0 do %>
       <% grouped_seasons = group_episodes_by_season(@media_item.episodes) %>
 

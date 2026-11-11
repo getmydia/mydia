@@ -198,7 +198,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
+     |> put_flash(:info, MediaAddHelpers.added_message(added))}
   end
 
   # Not an error from here up: the movie the user clicked is already in the

@@ -774,10 +774,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
          end)
-         |> put_flash(
-           :info,
-           gettext("%{title} has been added to your library", title: media_item.title)
-         )}
+         |> put_flash(:info, MediaAddHelpers.added_message(media_item))}
 
       {:already_in_library, media_item, updated_map} ->
         request_status_map = MediaRequestHelpers.request_status_map()
