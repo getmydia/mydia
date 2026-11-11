@@ -3,8 +3,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
   Resolves `addMovie`, `addTvShow` and `removeMediaItem`.
 
   Adding goes through `Mydia.Media.Add.from_provider/5`, the entry point the
-  search page's Add button uses, then `Mydia.Search.maybe_queue_search/2` for
-  `searchNow`, as the UI does. Removing is `Mydia.Media.delete_media_item/3`.
+  search page's Add button uses. `searchNow` rides in as `:search_on_add`, so
+  `Add` queues the search itself, after the episodes for a TV show. Removing is `Mydia.Media.delete_media_item/3`.
   Both run under `Scope.system/0`: only admin keys reach the Library API.
   """
 
@@ -13,7 +13,6 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.DiskRemoval
-  alias Mydia.Search
   alias MydiaWeb.LibrarySchema.Loaders
   alias MydiaWeb.LibrarySchema.UserError
 
@@ -59,33 +58,32 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
       {:ok, opts} ->
         Scope.system()
         |> Add.from_provider(ref, media_type, nil, opts)
-        |> added(input[:search_now] == true)
+        |> added()
 
       {:error, error} ->
         {:ok, add_failure([error])}
     end
   end
 
-  defp added({:ok, item}, search_now?) do
-    :ok = Search.maybe_queue_search(item, search_now?)
+  defp added({:ok, item}) do
     {:ok, %{media_item: Loaders.item_map(item.id), user_errors: []}}
   end
 
   # The existing item comes back beside the error, so a client that only needed
   # the title present can carry on with its id.
-  defp added({:error, {:already_in_library, existing}}, _search_now?) do
+  defp added({:error, {:already_in_library, existing}}) do
     error = UserError.new(:already_in_library, "#{existing.title} is already in the library")
     {:ok, %{media_item: Loaders.item_map(existing.id), user_errors: [error]}}
   end
 
-  defp added({:error, {:metadata, _reason}}, _search_now?) do
+  defp added({:error, {:metadata, _reason}}) do
     error =
       UserError.new(:metadata_unavailable, "The metadata relay could not provide this title")
 
     {:ok, add_failure([error])}
   end
 
-  defp added({:error, {:changeset, changeset}}, _search_now?) do
+  defp added({:error, {:changeset, changeset}}) do
     {:ok, add_failure(UserError.from_changeset(changeset, ["input"]))}
   end
 
@@ -97,6 +95,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
         principal
         |> Principal.actor_opts()
         |> Keyword.put(:monitored, input[:monitored] != false)
+        |> Keyword.put(:search_on_add, input[:search_now] == true)
         |> put_present(:quality_profile_id, profile_id)
         |> put_present(:library_path_id, path_id)
         |> put_present(:season_monitoring, season_monitoring(input[:season_monitoring]))

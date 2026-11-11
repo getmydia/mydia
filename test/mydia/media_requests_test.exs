@@ -720,6 +720,49 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
+  describe "approve_request/4 rollback" do
+    test "rolled back approval leaves no EpisodeFetch job" do
+      user = create_user()
+
+      {:ok, request} =
+        MediaRequests.create_request(Scope.unrestricted(), %{
+          media_type: "tv_show",
+          title: "Beacons Over Ilmarry",
+          tmdb_id: 771_003,
+          requester_id: user.id
+        })
+
+      bypass = Bypass.open()
+      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title)
+      stub_tvdb_search_empty(bypass)
+
+      # A bare `%{}` fails `approve_changeset/2` (approved_by_id is required)
+      # after the item insert, so the whole transaction rolls back. Passing
+      # `episodes: :background` makes the insert enqueue its job inside it.
+      assert {:error, %Ecto.Changeset{}} =
+               MediaRequests.approve_request(Scope.unrestricted(), request, %{},
+                 config: relay_config(bypass),
+                 episodes: :background
+               )
+
+      refute_enqueued(worker: Mydia.Jobs.EpisodeFetch)
+
+      # Control: the same approval with an approver commits and leaves the job.
+      admin = create_user(%{role: "admin"})
+
+      assert {:ok, %{media_item: item}} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass),
+                 episodes: :background
+               )
+
+      assert_enqueued(worker: Mydia.Jobs.EpisodeFetch, args: %{"media_item_id" => item.id})
+    end
+  end
+
   describe "approve_request/4 season monitoring" do
     setup do
       user = create_user()

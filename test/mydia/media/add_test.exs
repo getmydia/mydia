@@ -1,5 +1,6 @@
 defmodule Mydia.Media.AddTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
@@ -137,6 +138,105 @@ defmodule Mydia.Media.AddTest do
 
       refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: tvdb_id})
       refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: tvdb_id})
+    end
+  end
+
+  describe "search_on_add" do
+    defp tv_attrs(tvdb_id) do
+      %{type: "tv_show", title: "Lantern Ridge", year: 2020, tvdb_id: tvdb_id, monitored: true}
+    end
+
+    test "tv add with search_on_add defers the search to EpisodeFetch" do
+      attrs = tv_attrs(System.unique_integer([:positive]))
+
+      assert {:ok, item} = Add.from_attrs(Scope.unrestricted(), attrs, nil, search_on_add: true)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.EpisodeFetch,
+        args: %{"media_item_id" => item.id, "search_on_add" => true}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "tv add without search_on_add leaves the flag out of the job" do
+      attrs = tv_attrs(System.unique_integer([:positive]))
+
+      assert {:ok, item} = Add.from_attrs(Scope.unrestricted(), attrs, nil, [])
+
+      [job] = all_enqueued(worker: Mydia.Jobs.EpisodeFetch)
+      assert job.args["media_item_id"] == item.id
+      refute Map.has_key?(job.args, "search_on_add")
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "inline tv add with search_on_add queues the search directly" do
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      stub_tvdb_search(bypass, [])
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => tmdb_id,
+            "name" => "Lantern Ridge",
+            "first_air_date" => "2020-04-17",
+            "credits" => %{"cast" => [], "crew" => []},
+            "seasons" => []
+          })
+        )
+      end)
+
+      assert {:ok, item} =
+               Add.from_provider(
+                 Scope.unrestricted(),
+                 {:tmdb, tmdb_id},
+                 :tv_show,
+                 relay_config(bypass),
+                 episodes: :inline,
+                 search_on_add: true
+               )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.TVShowSearch,
+        args: %{"mode" => "show", "media_item_id" => item.id}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.EpisodeFetch)
+    end
+
+    test "skipped tv add with search_on_add queues the search directly" do
+      attrs = tv_attrs(System.unique_integer([:positive]))
+
+      assert {:ok, item} =
+               Add.from_attrs(Scope.unrestricted(), attrs, nil,
+                 episodes: :skip,
+                 search_on_add: true
+               )
+
+      assert_enqueued(worker: Mydia.Jobs.TVShowSearch, args: %{"media_item_id" => item.id})
+      refute_enqueued(worker: Mydia.Jobs.EpisodeFetch)
+    end
+
+    test "movie add with search_on_add queues MovieSearch" do
+      attrs = %{type: "movie", title: "Harbor Lights", year: 2020, tmdb_id: 4_242_001}
+
+      assert {:ok, item} = Add.from_attrs(Scope.unrestricted(), attrs, nil, search_on_add: true)
+
+      assert_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{"media_item_id" => item.id})
+    end
+
+    test "an item already in the library never searches" do
+      attrs = %{type: "movie", title: "Harbor Lights", year: 2020, tmdb_id: 4_242_002}
+      assert {:ok, _} = Add.from_attrs(Scope.unrestricted(), attrs, nil, [])
+
+      assert {:error, {:already_in_library, _}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, nil, search_on_add: true)
+
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch)
     end
   end
 

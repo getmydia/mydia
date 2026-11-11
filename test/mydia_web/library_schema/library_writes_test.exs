@@ -203,6 +203,21 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
                payload["mediaItem"]
     end
 
+    test "searchNow defers the show search to the episode fetch", %{bypass: bypass} do
+      tvdb_id = System.unique_integer([:positive])
+      stub_tvdb_series(bypass, tvdb_id, "Quiet Harbor")
+
+      assert {:ok, %{data: %{"addTvShow" => %{"mediaItem" => %{"id" => item_id}}}}} =
+               run(@add_show, %{"input" => %{"tvdbId" => tvdb_id, "searchNow" => true}})
+
+      assert_enqueued(
+        worker: Mydia.Jobs.EpisodeFetch,
+        args: %{"media_item_id" => item_id, "search_on_add" => true}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
     test "neither id is INVALID_INPUT on input" do
       assert {:ok, %{data: %{"addTvShow" => payload}}} = run(@add_show, %{"input" => %{}})
 

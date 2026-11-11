@@ -1,5 +1,6 @@
 defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.AccountsFixtures
   import Mydia.MetadataCacheHelpers
@@ -245,6 +246,79 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert updated_map[{:tv_show, :tvdb, tvdb_id}][:in_library] == true
       refute Map.has_key?(updated_map, {:tv_show, :tmdb, tvdb_id})
       refute Map.has_key?(updated_map, {:movie, :tmdb, tvdb_id})
+    end
+  end
+
+  describe "handle_add_media_to_library/6 search on add" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "a TV add defers the search to EpisodeFetch", %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+      stub_tmdb_show(bypass, id, "Deferred Search Show", 2019)
+      stub_tvdb_search_empty(bypass)
+
+      assert {:ok, item, _map} =
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :tv_show,
+                 %{},
+                 config,
+                 episodes: :background,
+                 search_on_add: true
+               )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.EpisodeFetch,
+        args: %{"media_item_id" => item.id, "search_on_add" => true}
+      )
+
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "a movie add queues MovieSearch", %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+      stub_tmdb_movie(bypass, id, "Searched Movie", 2019)
+
+      assert {:ok, item, _map} =
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :movie,
+                 %{},
+                 config,
+                 search_on_add: true
+               )
+
+      assert_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{"media_item_id" => item.id})
+    end
+
+    test "an item already in the library queues no search", %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+      Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Present", tmdb_id: id})
+      stub_tmdb_movie(bypass, id, "Present", 2019)
+
+      assert {:already_in_library, _item, _map} =
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :movie,
+                 %{},
+                 config,
+                 search_on_add: true
+               )
+
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch)
     end
   end
 

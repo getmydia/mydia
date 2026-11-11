@@ -347,6 +347,24 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert item.tvdb_id == 81_189
     end
 
+    test "adding a new show offers its episodes" do
+      dialog =
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :postimport,
+          query: "Stub",
+          type: :tv_show
+        }
+        |> MatchDialog.search("Stub")
+
+      [result | _] = dialog.external_results
+
+      assert {:added, item} = MatchDialog.add_external(dialog, result.provider_id)
+      assert {:episodes, opened} = MatchDialog.select(dialog, item.id)
+      assert opened.episodes != []
+    end
+
     test "treats an item already in the library as a plain selection" do
       _existing = media_item_fixture(%{type: "movie", title: "Unrelated", tmdb_id: 550})
 

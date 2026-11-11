@@ -178,6 +178,8 @@ defmodule Mydia.MediaRequests do
   ## Options
     - `:config` - Relay config to fetch with. Defaults to
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
+    - `:episodes` - How a new TV show gets its episodes, as for
+      `Mydia.Media.create_media_item/3`. An injected `:config` alone means `:inline`.
   """
   def approve_request(%Scope{} = scope, %MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
     with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
@@ -273,7 +275,7 @@ defmodule Mydia.MediaRequests do
              actor_type: :user,
              actor_id: attrs[:approved_by_id],
              exclude_request_id: request.id
-           ] ++ Keyword.take(opts, [:season_monitoring])
+           ] ++ Keyword.take(opts, [:season_monitoring, :episodes])
          ) do
       {:ok, media_item} ->
         {media_item, true}
