@@ -535,6 +535,27 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  def handle_event(event, params, socket) when event in ["ignore_title", "unignore_title"] do
+    {:noreply, socket} = Ignores.handle_event(event, params, socket)
+    {:noreply, socket |> assign_visible_items() |> maybe_auto_advance(0, @page_size)}
+  end
+
+  def handle_event("toggle_show_ignored", _params, socket) do
+    value = not socket.assigns.show_ignored
+
+    case persist_preference(socket, "discover_show_ignored", value) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:show_ignored, value)
+         |> assign_visible_items()
+         |> maybe_auto_advance(0, @page_size)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, gettext("Could not save that filter preference"))}
+    end
+  end
+
   defp persist_preference(socket, key, value) do
     case socket.assigns[:current_user] do
       nil ->
@@ -553,6 +574,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # Info handlers
 
   @impl true
+  def handle_info({:clear_ignore_toast, key}, socket),
+    do: {:noreply, Ignores.clear_toast(socket, key)}
+
   def handle_info(:load_genres, socket) do
     case Metadata.genres(socket.assigns.media_type) do
       {:ok, genres} ->

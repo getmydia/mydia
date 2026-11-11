@@ -5,6 +5,7 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
   import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.UserPreference
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverLive.Ignores
@@ -122,7 +123,159 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
     end
   end
 
+  describe "ignoring and undoing" do
+    setup :setup_user
+
+    setup do
+      ignored_id = unique_provider_id()
+      kept_id = unique_provider_id()
+
+      warm_trending_cache(:movie, [
+        %{"id" => ignored_id, "title" => "Paper Comet"},
+        %{"id" => kept_id, "title" => "Velvet Quarry"}
+      ])
+
+      %{ignored_id: ignored_id, kept_id: kept_id}
+    end
+
+    test "clicking ignore hides the card and shows the toast",
+         %{conn: conn, user: user, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-ignore-tmdb-#{id}") |> render_click()
+
+      refute has_element?(view, "#discover-grid h3", "Paper Comet")
+      assert has_element?(view, "#discover-ignore-toast", "Paper Comet")
+      assert MapSet.member?(Accounts.ignored_discover_keys(user), {:movie, {:tmdb, id}})
+    end
+
+    test "Undo restores the card", %{conn: conn, user: user, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-ignore-tmdb-#{id}") |> render_click()
+      view |> element("#discover-ignore-toast-undo") |> render_click()
+
+      assert has_element?(view, "#discover-grid h3", "Paper Comet")
+      refute has_element?(view, "#discover-ignore-toast")
+      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+    end
+
+    test "the ignore survives a remount", %{conn: conn, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      view |> element("#discover-ignore-tmdb-#{id}") |> render_click()
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      refute has_element?(view, "#discover-grid h3", "Paper Comet")
+    end
+
+    test "the toggle appears only with ignores and persists",
+         %{conn: conn, user: user, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      refute has_element?(view, "#discover-show-ignored")
+
+      view |> element("#discover-ignore-tmdb-#{id}") |> render_click()
+      assert has_element?(view, "label", "Show ignored (1)")
+
+      view |> element("#discover-show-ignored") |> render_click()
+
+      assert UserPreference.discover_show_ignored(Accounts.get_user_preference!(user))
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      assert has_element?(view, "#discover-show-ignored[checked]")
+      assert has_element?(view, "#discover-unignore-tmdb-#{id}")
+    end
+
+    test "Unignore from the dimmed card restores it",
+         %{conn: conn, user: user, ignored_id: id} do
+      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :movie)
+      show_ignored!(user)
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      view |> element("#discover-unignore-tmdb-#{id}") |> render_click()
+
+      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+      assert has_element?(view, "#discover-ignore-tmdb-#{id}")
+    end
+
+    test "a forged ref changes nothing", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      render_click(view, "ignore_title", %{"ref" => "imdb:tt1", "media_type" => "movie"})
+      render_click(view, "ignore_title", %{"ref" => "tmdb:1", "media_type" => "episode"})
+
+      assert Accounts.ignored_discover_keys(user) == MapSet.new()
+      assert has_element?(view, "#discover-grid")
+    end
+
+    test "a stale toast timer does not clear a newer toast",
+         %{conn: conn, ignored_id: first, kept_id: second} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-ignore-tmdb-#{first}") |> render_click()
+      view |> element("#discover-ignore-tmdb-#{second}") |> render_click()
+
+      send(view.pid, {:clear_ignore_toast, {:movie, {:tmdb, first}}})
+
+      assert has_element?(view, "#discover-ignore-toast", "Velvet Quarry")
+
+      send(view.pid, {:clear_ignore_toast, {:movie, {:tmdb, second}}})
+
+      refute has_element?(view, "#discover-ignore-toast")
+    end
+
+    test "Ignore from the detail modal closes it and hides the card",
+         %{conn: conn, user: user, ignored_id: id} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view
+      |> element("div[phx-click='show_details'][phx-value-id='#{id}']")
+      |> render_click()
+
+      assert has_element?(view, "#discover-detail-modal[open]")
+
+      view |> element("#detail-ignore") |> render_click()
+
+      refute has_element?(view, "#discover-detail-modal[open]")
+      refute has_element?(view, "#discover-grid h3", "Paper Comet")
+      assert MapSet.member?(Accounts.ignored_discover_keys(user), {:movie, {:tmdb, id}})
+    end
+  end
+
+  describe "search" do
+    setup :setup_user
+
+    test "search shows an ignored title with Unignore", %{conn: conn, user: user} do
+      id = unique_provider_id()
+      :ok = Accounts.ignore_discover_title(user, {:tmdb, id}, :movie)
+
+      warm_movie_search_cache("paper comet", [], [
+        %{"id" => id, "title" => "Paper Comet", "release_date" => "2024-01-01"}
+      ])
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=paper+comet")
+
+      assert has_element?(view, "#discover-grid h3", "Paper Comet")
+      assert has_element?(view, "#discover-unignore-tmdb-#{id}")
+    end
+  end
+
   describe "Ignores helpers" do
+    test "no user: no ignores, and events are no-ops" do
+      socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_user: nil}}
+      socket = Ignores.assign_initial(socket)
+
+      assert socket.assigns.ignored_keys == MapSet.new()
+
+      assert {:noreply, ^socket} =
+               Ignores.handle_event(
+                 "ignore_title",
+                 %{"ref" => "tmdb:1", "media_type" => "movie"},
+                 socket
+               )
+    end
+
     test "ignored_key falls back to the page media type" do
       result =
         %SearchResult{provider: :tmdb, provider_id: 5, media_type: :movie, title: "Velvet Quarry"}

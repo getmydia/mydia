@@ -80,6 +80,22 @@
                 {gettext("Hide in library")}
               </span>
             </label>
+
+            <label
+              :if={@media_type != :person and MapSet.size(@ignored_keys) > 0}
+              class="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                id="discover-show-ignored"
+                type="checkbox"
+                phx-click="toggle_show_ignored"
+                checked={@show_ignored}
+                class="toggle toggle-sm toggle-primary"
+              />
+              <span class={["text-sm", !@show_ignored && "text-base-content/50"]}>
+                {gettext("Show ignored (%{count})", count: MapSet.size(@ignored_keys))}
+              </span>
+            </label>
           </div>
 
           <%= cond do %>
@@ -396,6 +412,9 @@
     open={@selected_item != nil}
     config_open={@add_config != nil}
     person_event="show_person"
+    ignore_event={@current_user && "ignore_title"}
+    unignore_event={@current_user && "unignore_title"}
+    ignored={@selected_item != nil and Ignores.ignored?(assigns, @selected_item)}
   >
     <:rail>
       <.media_rail
@@ -411,4 +430,21 @@
   </.live_component>
 
   <.add_config_modal config={@add_config} quality_profiles={@quality_profiles} />
+
+  <div :if={@ignore_toast} id="discover-ignore-toast" class="toast toast-center toast-bottom z-40">
+    <div class="alert shadow-lg">
+      <.icon name="hero-eye-slash" class="w-5 h-5" />
+      <span>{gettext("Ignored %{title}", title: @ignore_toast.title)}</span>
+      <button
+        id="discover-ignore-toast-undo"
+        type="button"
+        class="btn btn-sm btn-ghost"
+        phx-click="unignore_title"
+        phx-value-ref={Mydia.Metadata.Ref.to_param(elem(@ignore_toast.key, 1))}
+        phx-value-media_type={elem(@ignore_toast.key, 0)}
+      >
+        {gettext("Undo")}
+      </button>
+    </div>
+  </div>
 </Layouts.app>
