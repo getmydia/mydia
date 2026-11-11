@@ -42,7 +42,14 @@ defmodule MydiaWeb.MobileLayoutManifest do
       "/movies/:id" => %{
         path: &"/movies/#{&1.movie}",
         states: [
-          {"manual-search", [{:click, "#manual-search-button"}, {:wait, "#manual-search-modal"}]},
+          # Waits for the stub indexer's rows (MobileLayoutSeed.search_results/0).
+          {"manual-search",
+           [
+             {:click, "#manual-search-button"},
+             {:wait, "#manual-search-modal"},
+             {:wait, "#indexer-search-status[aria-busy='false']"},
+             {:wait, "#manual-search-results-pane [id^='search-result-']"}
+           ]},
           {"manual-search-filters",
            [
              {:click, "#manual-search-button"},

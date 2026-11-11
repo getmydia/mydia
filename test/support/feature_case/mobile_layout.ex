@@ -1,6 +1,6 @@
 defmodule MydiaWeb.FeatureCase.MobileLayout do
   @moduledoc """
-  Measures the six mobile layout defects (seven checks: a small target and
+  Measures the seven mobile layout defects (eight checks: a small target and
   overlapping targets are both target defects) from
   `lib/mydia_web/components/README.md`, "Mobile layout sweep", in one JS pass.
 
@@ -20,7 +20,7 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
   alias MydiaWeb.FeatureCase.MobileLayout.Violation
 
   @checks ~w(page_overflow inner_scroll escapes_viewport small_target
-             overlapping_targets clipped_text tiny_text)a
+             overlapping_targets clipped_text spilled_text tiny_text)a
 
   def audit(session, opts \\ []) do
     scope = Keyword.get(opts, :scope, "body")
@@ -204,6 +204,76 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
       }
       return false;
     }
+    // Whether a box paints an edge text can visibly cross: a background or a
+    // border. An inline box wraps with its text, so it has no such edge.
+    function paintsEdge(s) {
+      if (s.display === 'inline' || s.display === 'contents') return false;
+      if (s.backgroundImage !== 'none') return true;
+      var bg = s.backgroundColor;
+      if (bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) return true;
+      return ['Top', 'Right', 'Bottom', 'Left'].some(function (side) {
+        return parseFloat(s['border' + side + 'Width']) > 0 && s['border' + side + 'Style'] !== 'none' &&
+               !/rgba\(.*,\s*0\)$/.test(s['border' + side + 'Color']) && s['border' + side + 'Color'] !== 'transparent';
+      });
+    }
+    // The nearest box between a text node and the scope that paints an edge.
+    var edgeCache = new Map();
+    function edgeBox(n) {
+      for (var a = n.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+        if (!edgeCache.has(a)) edgeCache.set(a, paintsEdge(getComputedStyle(a)));
+        if (edgeCache.get(a)) return a;
+      }
+      return null;
+    }
+    // Whether something between an element and the box is laid out apart
+    // from it: an absolute or fixed layer, or a popover or dialog in the top
+    // layer. A menu or tooltip placed outside its trigger's card is deliberate.
+    function outOfFlow(el, box) {
+      for (var a = el; a && a !== box; a = a.parentElement) {
+        var p = getComputedStyle(a).position;
+        if (p === 'absolute' || p === 'fixed') return true;
+        if (a.tagName === 'DIALOG' || a.hasAttribute('popover')) return true;
+      }
+      return false;
+    }
+    // Glyphs painted outside the fill or border of the nearest box that has
+    // one, with nothing on the way cutting them: a fixed-height badge whose
+    // label wraps (#1376), an unbroken token running out of a card. A box with
+    // overflow hidden cuts its text instead, which is clipped_text's case.
+    function spilledText(scopeRoot) {
+      var hits = new Map();
+      var walker = document.createTreeWalker(scopeRoot, NodeFilter.SHOW_TEXT);
+      var range = document.createRange();
+      for (var n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.textContent.trim() === '') continue;
+        var box = edgeBox(n);
+        if (!box || hits.has(box) || !scopeRoot.contains(box)) continue;
+        var bs = getComputedStyle(box);
+        if (bs.overflowX !== 'visible' || bs.overflowY !== 'visible') continue;
+        if (!visible(box, bs, box.getBoundingClientRect())) continue;
+        if (n.parentElement.closest('[aria-hidden="true"], .sr-only')) continue;
+        // The body of a closed <details> is never painted.
+        if (n.parentElement.checkVisibility && !n.parentElement.checkVisibility()) continue;
+        if (outOfFlow(n.parentElement, box)) continue;
+        var b = box.getBoundingClientRect();
+        var c = {L: b.left, T: b.top, R: b.right, B: b.bottom};
+        range.selectNodeContents(n);
+        var rs = range.getClientRects();
+        for (var k = 0; k < rs.length; k++) {
+          var q = rs[k];
+          if (q.width === 0 || q.height === 0) continue;
+          if (cutsY(q, c) && !cutter(n, q, 'y')) {
+            hits.set(box, 'box=' + Math.round(c.T) + '..' + Math.round(c.B) + ' text=' + Math.round(q.top) + '..' + Math.round(q.bottom));
+            break;
+          }
+          if (cutsX(q, c) && !cutter(n, q, 'x')) {
+            hits.set(box, 'box=' + Math.round(c.L) + '..' + Math.round(c.R) + ' text=' + Math.round(q.left) + '..' + Math.round(q.right));
+            break;
+          }
+        }
+      }
+      return hits;
+    }
     // A closed drawer parks its side panel off screen on purpose.
     function closedDrawer(el) {
       return !!el.closest('.drawer-side') && !document.querySelector('.drawer-toggle:checked');
@@ -289,6 +359,9 @@ defmodule MydiaWeb.FeatureCase.MobileLayout do
         }
       }
     }
+
+    // 5b. spilled_text
+    spilledText(root).forEach(function (detail, box) { push('spilled_text', box, detail); });
 
     // 4b. overlapping_targets
     for (var a = 0; a < targets.length; a++) {
