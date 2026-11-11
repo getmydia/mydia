@@ -25,7 +25,7 @@ defmodule Mydia.Jobs.EpisodeFetchTest do
           metadata_source: :tvdb,
           monitored: true
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     item

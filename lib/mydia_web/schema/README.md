@@ -25,7 +25,7 @@ The checked-in contract the player is built against is
 - `endStreamingSession` returns a raw `:boolean`, not a result object.
 
 Key context module signatures: `Mydia.Media.create_media_item/2` (attrs, then an
-opts keyword list carrying `skip_episode_refresh`),
+opts keyword list carrying `episodes: :skip`),
 `Mydia.Library.create_media_file/1` (attrs map),
 `Mydia.Settings.create_library_path/1` (attrs: path, type), and
 `Mydia.RemoteAccess.p2p_status/0`, which returns `{:ok, %P2p.Server.Status{}}`.

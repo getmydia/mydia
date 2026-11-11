@@ -415,7 +415,7 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
 
   # Helper functions for test setup
   #
-  # skip_episode_refresh: true — these tests only need a persisted media item
+  # episodes: :skip — these tests only need a persisted media item
   # to exercise the playback controller's own validation (not found, wrong
   # type), not a real episode list. Without it, a "tv_show" item with a fake
   # tmdb_id sends refresh_episodes_for_tv_show/2 to the live relay for both a
@@ -431,7 +431,7 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
         year: 2024,
         monitored: true
       },
-      skip_episode_refresh: true
+      episodes: :skip
     )
   end
 
@@ -445,7 +445,7 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
           type: "tv_show",
           monitored: true
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Media.create_episode(%{

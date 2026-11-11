@@ -27,7 +27,7 @@ defmodule Mydia.Collections.RestrictedCollectionsTest do
             content_rating: rating
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.update_all(from(m in MediaItem, where: m.id == ^item.id),

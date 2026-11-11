@@ -215,7 +215,7 @@ defmodule Mydia.Plugins.PageWrites do
 
     with {:ok, %{attrs: attrs, defaults: defaults}} <- require_prepared(prepared) do
       # The episode fetch is a relay round trip, so it waits for `after_commit/4`.
-      opts = Keyword.put(Media.AddDefaults.to_add_opts(defaults), :skip_episode_refresh, true)
+      opts = Keyword.put(Media.AddDefaults.to_add_opts(defaults), :episodes, :skip)
 
       case Media.Add.from_attrs(scope, attrs, nil, opts) do
         {:ok, item} ->
@@ -247,7 +247,8 @@ defmodule Mydia.Plugins.PageWrites do
       when not is_map_key(result, "status") do
     with {:ok, %Media.MediaItem{type: "tv_show"} = item} <-
            fetch_media_item(Scope.for_user(user), id) do
-      Media.fetch_episodes_for_new_show(item, season_monitoring: defaults.season_monitoring)
+      _ = Media.fetch_episodes_for_new_show(item, season_monitoring: defaults.season_monitoring)
+      :ok
     else
       _ -> :ok
     end

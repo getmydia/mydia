@@ -386,18 +386,24 @@ defmodule Mydia.Media.Items do
   @doc """
   Creates a media item.
 
-  For TV shows, this automatically fetches and creates all episodes from the
-  metadata provider. This ensures TV shows are never created without their
-  episode data.
+  For TV shows, the episodes are fetched from the metadata provider by an
+  `Mydia.Jobs.EpisodeFetch` job enqueued here, so the add returns without
+  waiting on the relay. See the `:episodes` option.
 
   ## Options
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
     - `:season_monitoring` - For TV shows, which seasons to monitor ("all", "future", "first", "latest", "none") - defaults to "all"
-    - `:skip_episode_refresh` - Skip automatic episode fetching (for tests or special cases) - defaults to false
-    - `:config` - Metadata relay config forwarded to `refresh_episodes_for_tv_show/2`.
-      Callers that inject a Bypass (or any non-default relay) must pass it here;
-      otherwise the automatic refresh silently uses `Metadata.default_relay_config/0`.
+    - `:episodes` - How a new TV show gets its episodes:
+      `:background` (default) enqueues an `EpisodeFetch` job and returns at once;
+      `:inline` fetches before returning; `:skip` fetches nothing (the caller
+      handles episodes itself). Any other value raises `ArgumentError`. When
+      `:config` is given without `:episodes` the mode is `:inline`.
+    - `:search_on_add` - Forwarded to the `EpisodeFetch` job, which queues the
+      show search once episodes exist. Only used with `:background`. Defaults to false.
+    - `:config` - Metadata relay config forwarded to `refresh_episodes_for_tv_show/2`
+      for `:inline`. Callers that inject a Bypass (or any non-default relay) must
+      pass it here; otherwise the refresh silently uses `Metadata.default_relay_config/0`.
   """
   @spec create_media_item(Scope.t(), map(), keyword()) ::
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
@@ -432,9 +438,8 @@ defmodule Mydia.Media.Items do
              exclude_request_id: Keyword.get(opts, :exclude_request_id)
            ) do
         {:ok, _approved_requests} ->
-          # For TV shows, automatically fetch episodes unless explicitly skipped
-          if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
-            fetch_episodes_for_new_show(media_item, opts)
+          if media_item.type == "tv_show" do
+            fetch_new_show_episodes(media_item, episodes_mode(opts), opts)
           end
 
           {:ok, media_item}
@@ -446,6 +451,46 @@ defmodule Mydia.Media.Items do
 
           {:error, changeset}
       end
+    end
+  end
+
+  @doc false
+  # Resolves the `:episodes` option of `create_media_item/3`. An injected
+  # `:config` without `:episodes` means the caller wants the relay used right
+  # now (tests with a Bypass), so it stays inline.
+  @spec episodes_mode(keyword()) :: :background | :inline | :skip
+  def episodes_mode(opts) do
+    case Keyword.fetch(opts, :episodes) do
+      {:ok, mode} when mode in [:background, :inline, :skip] ->
+        mode
+
+      {:ok, other} ->
+        raise ArgumentError,
+              "invalid :episodes option #{inspect(other)}, expected :background, :inline or :skip"
+
+      :error ->
+        if Keyword.has_key?(opts, :config), do: :inline, else: :background
+    end
+  end
+
+  defp fetch_new_show_episodes(_media_item, :skip, _opts), do: :ok
+
+  defp fetch_new_show_episodes(media_item, :inline, opts) do
+    fetch_episodes_for_new_show(media_item, opts)
+  end
+
+  defp fetch_new_show_episodes(media_item, :background, opts) do
+    case Mydia.Jobs.EpisodeFetch.enqueue(media_item,
+           season_monitoring: opts[:season_monitoring] || "all",
+           search_on_add: opts[:search_on_add] || false
+         ) do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to enqueue episode fetch for #{media_item.title}: #{inspect(reason)}"
+        )
     end
   end
 
@@ -486,7 +531,7 @@ defmodule Mydia.Media.Items do
 
   Returns `{:ok, episode_count}` or `{:error, reason}`.
 
-  `create_media_item/3` calls this itself unless `:skip_episode_refresh` is set.
+  `create_media_item/3` calls this itself with `episodes: :inline`.
   Callers that skip it because they are inside a transaction call this once the
   transaction has committed.
 

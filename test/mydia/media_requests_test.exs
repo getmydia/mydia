@@ -323,7 +323,7 @@ defmodule Mydia.MediaRequestsTest do
         Media.create_media_item(
           Scope.unrestricted(),
           %{type: "tv_show", title: "Existing Series", tvdb_id: 54321},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       attrs = %{
@@ -1226,7 +1226,7 @@ defmodule Mydia.MediaRequestsTest do
           },
           actor_type: :user,
           actor_id: admin.id,
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = MediaRequests.get_request!(request.id)

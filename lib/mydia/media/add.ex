@@ -25,7 +25,8 @@ defmodule Mydia.Media.Add do
   @create_opt_keys [
     :actor_type,
     :actor_id,
-    :skip_episode_refresh,
+    :episodes,
+    :search_on_add,
     :season_monitoring,
     :exclude_request_id
   ]
@@ -72,9 +73,9 @@ defmodule Mydia.Media.Add do
   @doc """
   Inserts a media item from attrs produced by `resolve_attrs/4`.
 
-  Makes no provider calls of its own. Note that `Media.create_media_item/2`
-  still fetches episodes for TV shows, which is a network call; that is
-  pre-existing behaviour and is deliberately left where it is.
+  Makes no provider calls of its own. `Media.create_media_item/3` enqueues an
+  episode fetch job for TV shows by default (`episodes: :background`); only
+  `episodes: :inline` (or a `:config` without `:episodes`) makes a network call.
   """
   @spec from_attrs(Scope.t(), map(), map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()}

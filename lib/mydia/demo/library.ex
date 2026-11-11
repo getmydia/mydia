@@ -296,7 +296,7 @@ defmodule Mydia.Demo.Library do
   defp create_item!(attrs, library_path) do
     attrs = Map.put(attrs, :library_path_id, library_path.id)
 
-    {:ok, item} = Media.create_media_item(Scope.system(), attrs, skip_episode_refresh: true)
+    {:ok, item} = Media.create_media_item(Scope.system(), attrs, episodes: :skip)
     item
   end
 

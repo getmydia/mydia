@@ -31,7 +31,7 @@ defmodule Mydia.Plugins.MatcherTest do
           %{title: "Show", type: "tv_show", tmdb_id: System.unique_integer([:positive])},
           attrs
         ),
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     item

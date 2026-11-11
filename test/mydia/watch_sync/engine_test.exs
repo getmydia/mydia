@@ -203,7 +203,7 @@ defmodule Mydia.WatchSync.EngineTest do
       Mydia.Media.create_media_item(
         Scope.unrestricted(),
         %{title: "Tvdb Only Show", type: "tv_show", tvdb_id: 378_982},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     {:ok, episode} =

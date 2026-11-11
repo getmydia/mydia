@@ -43,7 +43,7 @@ defmodule MydiaWeb.Schema.DownloadMutationsTest do
       Media.create_media_item(
         Scope.system(),
         %{type: "movie", title: "Restricted Download Movie", year: 2024},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: "movie"])

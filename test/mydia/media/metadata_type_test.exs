@@ -23,7 +23,7 @@ defmodule Mydia.Media.MetadataTypeTest do
               schema_version: 1
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
@@ -46,7 +46,7 @@ defmodule Mydia.Media.MetadataTypeTest do
               "title" => "The Lantern Keepers"
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
@@ -138,7 +138,7 @@ defmodule Mydia.Media.MetadataTypeTest do
               ]
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = Repo.get!(Mydia.Media.MediaItem, media_item.id)
@@ -188,7 +188,7 @@ defmodule Mydia.Media.MetadataTypeTest do
               ]
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = Repo.get!(Mydia.Media.MediaItem, media_item.id)
@@ -321,7 +321,7 @@ defmodule Mydia.Media.MetadataTypeTest do
     end
 
     test "external_ids survive a database round trip" do
-      # skip_episode_refresh: true — this test is only about metadata JSON
+      # episodes: :skip — this test is only about metadata JSON
       # round-tripping, not episodes. Without it, the real tvdb_id here sends
       # refresh_episodes_for_tv_show/2 to the live relay for the series'
       # extended details (#530).
@@ -341,7 +341,7 @@ defmodule Mydia.Media.MetadataTypeTest do
               "external_ids" => %{"tmdb" => 1399, "tvdb" => nil, "imdb" => "tt0944947"}
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)

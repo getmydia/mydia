@@ -167,7 +167,7 @@ defmodule Mydia.Media.AddTest do
         }
       }
 
-      assert {:error, :restricted} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+      assert {:error, :restricted} = Add.from_attrs(scope, attrs, nil, episodes: :skip)
     end
 
     test "an in-bounds item still creates normally under a restricted scope" do
@@ -187,7 +187,7 @@ defmodule Mydia.Media.AddTest do
         }
       }
 
-      assert {:ok, item} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+      assert {:ok, item} = Add.from_attrs(scope, attrs, nil, episodes: :skip)
       assert item.category == "cartoon_movie"
     end
   end
@@ -374,7 +374,7 @@ defmodule Mydia.Media.AddTest do
       before_count = Repo.aggregate(MediaItem, :count)
 
       assert {:ok, added} =
-               Add.from_attrs(Scope.unrestricted(), attrs, nil, skip_episode_refresh: true)
+               Add.from_attrs(Scope.unrestricted(), attrs, nil, episodes: :skip)
 
       assert added.imdb_id == shared_imdb_id
       assert Repo.aggregate(MediaItem, :count) == before_count + 1

@@ -464,7 +464,7 @@ defmodule Mydia.Library.MetadataEnricher do
       attrs,
       [type: media_type_to_string(media_type), title: attrs[:title]],
       fn attrs ->
-        Media.create_media_item(Scope.system(), attrs, skip_episode_refresh: true)
+        Media.create_media_item(Scope.system(), attrs, episodes: :skip)
       end
     )
   end

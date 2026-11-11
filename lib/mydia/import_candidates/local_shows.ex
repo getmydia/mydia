@@ -115,7 +115,7 @@ defmodule Mydia.ImportCandidates.LocalShows do
     case Media.create_media_item(
            Scope.system(),
            %{title: title, year: year, type: "tv_show", monitored: false},
-           skip_episode_refresh: true
+           episodes: :skip
          ) do
       {:ok, item} ->
         Enum.each(candidates, &link_local_candidate(&1, item))
