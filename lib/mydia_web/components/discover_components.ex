@@ -278,6 +278,11 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :collapsible, :boolean, default: false
   attr :expanded, :boolean, default: true
   attr :toggle_event, :string, default: nil
+  # Discover's ignore controls, passed through to each card (see
+  # trending_card/1). `ignored_fun` is a 1-arity predicate over an item.
+  attr :ignore_event, :string, default: nil
+  attr :unignore_event, :string, default: nil
+  attr :ignored_fun, :any, default: nil
 
   slot :badge
 
@@ -340,6 +345,9 @@ defmodule MydiaWeb.DiscoverComponents do
             request_event={@request_event}
             can_add={@can_add}
             poster_size="w342"
+            ignore_event={@ignore_event}
+            unignore_event={@unignore_event}
+            ignored={@ignored_fun != nil and @ignored_fun.(item)}
           />
         </div>
       </.poster_rail>

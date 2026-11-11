@@ -13,7 +13,12 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
   attr :country, :string, required: true
   attr :media_type, :atom, required: true
   attr :has_services, :boolean, required: true
-  attr :hide_owned, :boolean, required: true
+  # Whether browsing drops an item (owned and hidden, or ignored and hidden).
+  # The same predicate the grid uses, so the two cannot disagree.
+  attr :hidden_fun, :any, required: true
+  attr :ignore_event, :string, default: nil
+  attr :unignore_event, :string, default: nil
+  attr :ignored_fun, :any, default: nil
   attr :current_user, :map, required: true
   attr :adding_ids, MapSet, required: true
   attr :requesting_item_id, :string, default: nil
@@ -41,7 +46,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
       <%= for source <- @sources do %>
         <% param = RegionalSources.to_param(source) %>
         <% row = Map.get(@rows, param, %{status: :loading, items: []}) %>
-        <% items = if @hide_owned, do: Enum.reject(row.items, & &1.in_library), else: row.items %>
+        <% items = Enum.reject(row.items, @hidden_fun) %>
         <section id={"discover-row-#{param}"} class="mb-6 md:mb-8">
           <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-lg md:text-xl font-semibold truncate">
@@ -87,6 +92,9 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
                 current_user={@current_user}
                 adding_ids={@adding_ids}
                 requesting_item_id={@requesting_item_id}
+                ignore_event={@ignore_event}
+                unignore_event={@unignore_event}
+                ignored_fun={@ignored_fun}
               />
           <% end %>
         </section>

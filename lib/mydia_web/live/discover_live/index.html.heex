@@ -277,7 +277,10 @@
           country={@home_country}
           media_type={@media_type}
           has_services={@streaming_services != []}
-          hide_owned={@hide_owned}
+          hidden_fun={&Ignores.hidden?(assigns, &1)}
+          ignore_event={@current_user && "ignore_title"}
+          unignore_event={@current_user && "unignore_title"}
+          ignored_fun={&Ignores.ignored?(assigns, &1)}
           current_user={@current_user}
           adding_ids={@adding_item_ids}
           requesting_item_id={@requesting_item_id}
@@ -346,6 +349,9 @@
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               loading={if(index < 6, do: nil, else: "lazy")}
+              ignore_event={@current_user && "ignore_title"}
+              unignore_event={@current_user && "unignore_title"}
+              ignored={Ignores.ignored?(assigns, item)}
             />
           <% end %>
         </div>

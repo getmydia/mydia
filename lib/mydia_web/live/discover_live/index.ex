@@ -24,7 +24,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.{Messages, People, RegionalRows}
+  alias MydiaWeb.DiscoverLive.{Ignores, Messages, People, RegionalRows}
   alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
@@ -70,6 +70,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
       |> assign_hide_owned()
+      |> Ignores.assign_initial()
       |> assign_home_country()
       |> assign_streaming_services()
       |> assign(:regional_sources, [])
@@ -1140,14 +1141,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  # Derives :visible_items from :items and :hide_owned. Call this everywhere
-  # either of those is assigned, so the template never filters.
+  # Derives :visible_items from :items, :hide_owned and the ignore list. Call
+  # this everywhere any of those is assigned, so the template never filters.
+  # Search never hides ignored titles: it is how a user finds one again.
   defp assign_visible_items(socket) do
+    %{assigns: assigns} = socket
+
     visible =
-      if socket.assigns.hide_owned do
-        Enum.reject(socket.assigns.items, & &1.in_library)
+      if assigns.search_mode do
+        if assigns.hide_owned,
+          do: Enum.reject(assigns.items, & &1.in_library),
+          else: assigns.items
       else
-        socket.assigns.items
+        Enum.reject(assigns.items, &Ignores.hidden?(assigns, &1))
       end
 
     assign(socket, :visible_items, visible)
@@ -1185,7 +1191,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # Anything that drops results after the page arrives can strand the grid:
   # "Hide in library", and any access restriction.
   defp filtering?(socket),
-    do: socket.assigns.hide_owned or Scope.restricted?(socket.assigns.current_scope)
+    do:
+      socket.assigns.hide_owned or Ignores.hiding_ignored?(socket.assigns) or
+        Scope.restricted?(socket.assigns.current_scope)
 
   # A restricted page loses more per fetch, so it may go further before giving
   # up.
