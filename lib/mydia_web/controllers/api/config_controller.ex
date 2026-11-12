@@ -67,16 +67,17 @@ defmodule MydiaWeb.Api.ConfigController do
     # Get default value from schema
     default_value = get_default_value(path)
 
-    setting = %{
-      key: key,
-      value: serialize_value(current_value),
-      source: source,
-      default_value: serialize_value(default_value),
-      category: determine_category(path),
-      description: db_setting && db_setting.description,
-      updated_at: db_setting && db_setting.updated_at,
-      updated_by_id: db_setting && db_setting.updated_by_id
-    }
+    setting =
+      %{
+        key: key,
+        source: source,
+        default_value: serialize_value(default_value),
+        category: determine_category(path),
+        description: db_setting && db_setting.description,
+        updated_at: db_setting && db_setting.updated_at,
+        updated_by_id: db_setting && db_setting.updated_by_id
+      }
+      |> Map.merge(value_fields(key, current_value))
 
     json(conn, %{data: setting})
   end
@@ -180,7 +181,7 @@ defmodule MydiaWeb.Api.ConfigController do
             json(conn, %{
               message: "Database override removed, setting will use YAML config or default",
               key: key,
-              new_value: serialize_value(fallback_value),
+              new_value: serialize_value(redact(key, fallback_value)),
               new_source: "yaml_or_default"
             })
 
@@ -310,7 +311,7 @@ defmodule MydiaWeb.Api.ConfigController do
         # Create new setting
         case Settings.create_config_setting(attrs) do
           {:ok, setting} ->
-            Logger.info("Configuration setting created", key: key, value: value)
+            Logger.info("Configuration setting created", key: key, value: redact(key, value))
 
             json(conn, %{
               message: "Configuration setting created successfully",
@@ -329,7 +330,7 @@ defmodule MydiaWeb.Api.ConfigController do
 
         case Settings.update_config_setting(setting, update_attrs) do
           {:ok, updated_setting} ->
-            Logger.info("Configuration setting updated", key: key, value: value)
+            Logger.info("Configuration setting updated", key: key, value: redact(key, value))
 
             json(conn, %{
               message: "Configuration setting updated successfully",
@@ -362,12 +363,12 @@ defmodule MydiaWeb.Api.ConfigController do
 
       %{
         key: key,
-        value: serialize_value(value),
         source: source,
         category: db_setting && db_setting.category,
         description: db_setting && db_setting.description,
         updated_at: db_setting && db_setting.updated_at
       }
+      |> Map.merge(value_fields(key, value))
     end)
     |> Enum.sort_by(& &1.key)
   end
@@ -502,10 +503,29 @@ defmodule MydiaWeb.Api.ConfigController do
   defp serialize_value(nil), do: nil
   defp serialize_value(value), do: to_string(value)
 
+  # Write-only settings (the built-in client's VPN credentials) are never sent
+  # back: `value` is nil, `secret` is true and `set` says whether one is stored.
+  @secret_keys Enum.map(
+                 Mydia.Config.Schema.BuiltInTorrent.secret_fields(),
+                 &"built_in_torrent.#{&1}"
+               )
+
+  defp secret_key?(key), do: key in @secret_keys
+
+  defp redact(key, value), do: if(secret_key?(key), do: nil, else: value)
+
+  defp value_fields(key, value) do
+    if secret_key?(key) do
+      %{value: nil, secret: true, set: not is_nil(value) and value != ""}
+    else
+      %{value: serialize_value(value)}
+    end
+  end
+
   defp serialize_config_setting(setting) do
     %{
       key: setting.key,
-      value: setting.value,
+      value: redact(setting.key, setting.value),
       category: setting.category,
       description: setting.description,
       source: "database",

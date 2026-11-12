@@ -33,6 +33,66 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
     end
   end
 
+  describe "built-in VPN secrets" do
+    @password "hunter2-openvpn-secret"
+    @private_key "wg-private-key-secret-value"
+
+    setup %{conn: conn, token: token} do
+      {:ok, _} =
+        Mydia.Settings.create_config_setting(%{
+          key: "built_in_torrent.vpn_openvpn_password",
+          value: @password,
+          category: :built_in_torrent
+        })
+
+      {:ok, _} =
+        Mydia.Settings.create_config_setting(%{
+          key: "built_in_torrent.vpn_wireguard_private_key",
+          value: @private_key,
+          category: :built_in_torrent
+        })
+
+      {:ok, _} = Mydia.Config.Loader.reload()
+      {:ok, conn: put_req_header(conn, "authorization", "Bearer #{token}")}
+    end
+
+    test "index never includes a set secret value", %{conn: conn} do
+      body = conn |> get("/api/v1/config") |> response(200)
+      refute body =~ @password
+      refute body =~ @private_key
+
+      %{"data" => data} = Jason.decode!(body)
+      row = Enum.find(data, &(&1["key"] == "built_in_torrent.vpn_openvpn_password"))
+      assert row["value"] == nil
+      assert row["secret"] == true
+      assert row["set"] == true
+    end
+
+    test "show never includes a set secret value", %{conn: conn} do
+      for {key, secret} <- [
+            {"built_in_torrent.vpn_openvpn_password", @password},
+            {"built_in_torrent.vpn_wireguard_private_key", @private_key}
+          ] do
+        body = conn |> get("/api/v1/config/#{key}") |> response(200)
+        refute body =~ secret
+
+        assert %{"data" => %{"value" => nil, "secret" => true, "set" => true}} =
+                 Jason.decode!(body)
+      end
+    end
+
+    test "update and delete do not echo the secret", %{conn: conn} do
+      key = "built_in_torrent.vpn_openvpn_password"
+
+      body =
+        conn |> put("/api/v1/config/#{key}", %{"value" => "another-secret-xyz"}) |> response(200)
+
+      refute body =~ "another-secret-xyz"
+      body = conn |> delete("/api/v1/config/#{key}") |> response(200)
+      refute body =~ "another-secret-xyz"
+    end
+  end
+
   describe "auth settings set by environment variable" do
     setup %{conn: conn, token: token} do
       originals = Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES), &{&1, System.get_env(&1)})
