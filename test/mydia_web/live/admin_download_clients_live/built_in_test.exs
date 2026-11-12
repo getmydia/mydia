@@ -170,9 +170,28 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     refute has_element?(view, "#built-in-restart")
   end
 
-  test "no panel when the built-in client is not running", %{conn: conn} do
+  test "an off client shows the compact off state, not the status", %{conn: conn} do
     BuiltIn.clear_runtime()
     {:ok, view, _html} = live(conn, ~p"/admin/clients")
-    refute has_element?(view, "#built-in-torrent")
+    assert has_element?(view, "#built-in-torrent")
+    assert has_element?(view, "#built-in-off-reason")
+    refute has_element?(view, "#built-in-engine-state")
+    refute has_element?(view, "#built-in-status-unavailable")
+  end
+
+  test "a status broadcast after the client starts shows its progress", %{conn: conn} do
+    BuiltIn.clear_runtime()
+    {:ok, view, _html} = live(conn, ~p"/admin/clients")
+    assert has_element?(view, "#built-in-off-reason")
+
+    BuiltIn.put_runtime(%BuiltIn.Runtime{
+      api_port: 3030,
+      credentials: {"mydia", "x"},
+      config: %Config{enabled?: true}
+    })
+
+    Status.put(:engine, :starting)
+    assert render(element(view, "#built-in-engine-state")) =~ "Starting"
+    refute has_element?(view, "#built-in-off-reason")
   end
 end
