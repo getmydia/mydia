@@ -1218,7 +1218,7 @@ msgstr ""
 msgid "Round"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:487
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:491
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:210
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:169
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:201
@@ -21822,7 +21822,7 @@ msgstr ""
 msgid "VPN experimental"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:411
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:415
 #, elixir-autogen, elixir-format
 msgid "%{provider} also needs these variables, which must be set in the container environment:"
 msgstr ""
@@ -22018,17 +22018,17 @@ msgstr ""
 msgid "Torrent engine and VPN settings"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:450
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:454
 #, elixir-autogen, elixir-format
 msgid "Torrents will connect without the VPN, from this server's own address. Save again to turn the VPN off."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:486
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:490
 #, elixir-autogen, elixir-format
 msgid "Turn VPN off and save"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:485
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:489
 #, elixir-autogen, elixir-format
 msgid "Turn off and save"
 msgstr ""
@@ -22038,7 +22038,7 @@ msgstr ""
 msgid "Turning on the built-in torrent client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:435
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:439
 #, elixir-autogen, elixir-format
 msgid "Turning the built-in client off stops %{count} download that is still in progress. Save again to turn it off."
 msgid_plural "Turning the built-in client off stops %{count} downloads that are still in progress. Save again to turn it off."
