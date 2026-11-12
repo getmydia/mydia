@@ -60,5 +60,11 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
       assert {:ok, _} = Loader.reload(sources: [:yaml, :env])
       assert_receive {:runtime_config_reloaded, %Mydia.Config.Schema{}}
     end
+
+    test "skips the broadcast when the PubSub is not running (boot)" do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Loader.topic())
+      assert {:ok, _} = Loader.reload(sources: [:yaml, :env], pubsub: :not_running_pubsub)
+      refute_receive {:runtime_config_reloaded, _}, 50
+    end
   end
 end

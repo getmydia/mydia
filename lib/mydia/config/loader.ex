@@ -91,18 +91,33 @@ defmodule Mydia.Config.Loader do
   without an application restart. Returns `{:ok, config}` on success or
   `{:error, reason}` when the merged configuration fails validation; on error the
   previously cached config is left untouched.
+
+  After a successful reload the new config is broadcast on `topic/0` when the
+  PubSub (`:pubsub`, default `Mydia.PubSub`) is running, and silently not
+  otherwise.
   """
   @spec reload(keyword()) :: {:ok, Mydia.Config.Schema.t()} | {:error, term()}
   def reload(opts \\ []) do
     case load(opts) do
       {:ok, config} ->
         Application.put_env(:mydia, :runtime_config, config)
-        Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:runtime_config_reloaded, config})
+        broadcast_reload(Keyword.get(opts, :pubsub, Mydia.PubSub), config)
         {:ok, config}
 
       error ->
         error
     end
+  end
+
+  # Bootstrap reloads during application start, before the PubSub child is up.
+  # Nobody can be subscribed then, so skipping is correct. Phoenix.PubSub
+  # registers a Registry under its own name, so whereis tells us.
+  defp broadcast_reload(pubsub, config) do
+    if Process.whereis(pubsub) do
+      Phoenix.PubSub.broadcast(pubsub, @topic, {:runtime_config_reloaded, config})
+    end
+
+    :ok
   end
 
   @doc "PubSub topic carrying `{:runtime_config_reloaded, config}` after each `reload/1`."
