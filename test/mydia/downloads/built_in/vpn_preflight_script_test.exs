@@ -61,6 +61,43 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
   end
 
+  describe "rotate_log" do
+    @describetag :tmp_dir
+
+    defp rotate(log, max) do
+      runner = ~s(. "$1" && rotate_log "$2" "$3")
+
+      {_, 0} =
+        System.cmd("sh", ["-c", runner, "sh", @script, log, Integer.to_string(max)],
+          env: [{"VPN_PREFLIGHT_FUNCTIONS_ONLY", "1"}]
+        )
+
+      :ok
+    end
+
+    test "moves a log over the limit aside, replacing the previous one", %{tmp_dir: dir} do
+      log = Path.join(dir, "gluetun.log")
+      File.write!(log <> ".1", "older")
+      File.write!(log, String.duplicate("x", 11))
+
+      rotate(log, 10)
+
+      refute File.exists?(log)
+      assert File.read!(log <> ".1") == String.duplicate("x", 11)
+    end
+
+    test "leaves a log within the limit, or a missing one, alone", %{tmp_dir: dir} do
+      log = Path.join(dir, "gluetun.log")
+      rotate(log, 10)
+      refute File.exists?(log <> ".1")
+
+      File.write!(log, "short")
+      rotate(log, 10)
+      assert File.read!(log) == "short"
+      refute File.exists?(log <> ".1")
+    end
+  end
+
   test "a whitespace-only provider leaves the VPN off" do
     assert {"", 0} =
              System.cmd("sh", [@script],

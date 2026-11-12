@@ -16,6 +16,12 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   alias Mydia.Downloads.BuiltIn.{Engine, GluetunClient, LeakCheck, Status}
 
+  # A gluetun restart between two polls can come back on the same public and
+  # tunnel addresses, so a passed leak check also expires with time. This
+  # bounds how long such a restart goes unverified, at two relay requests per
+  # check.
+  @reverify_ms 60_000
+
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
 
@@ -37,17 +43,24 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
           LeakCheck.run(relay_url: Mydia.Metadata.metadata_relay_url(), expected_ip: public_ip)
         end),
       tunnel_ip_fun: Keyword.get(opts, :tunnel_ip_fun, &read_tunnel_ip/1),
-      verified_ip: nil,
+      reverify_ms: Keyword.get(opts, :reverify_ms, @reverify_ms),
+      verified: nil,
       last_vpn: :connecting,
       last_port: nil
     }
 
-    # Vpn can restart without Engine restarting (rest_for_one only restarts
-    # later siblings), so a fresh Vpn must not inherit a running, ungated engine.
-    call_engine(state, {:stop, :vpn_down})
     Status.put(state.status, :vpn, :connecting)
+    {:ok, state, {:continue, :stop_engine}}
+  end
+
+  # Vpn can restart without Engine restarting (rest_for_one only restarts
+  # later siblings), so a fresh Vpn must not inherit a running, ungated engine.
+  # Done after init: stopping rqbit can take longer than start_link waits.
+  @impl true
+  def handle_continue(:stop_engine, state) do
+    call_engine(state, {:stop, :vpn_connecting})
     send(self(), :poll)
-    {:ok, state}
+    {:noreply, state}
   end
 
   @impl true
@@ -80,37 +93,39 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
     end
   end
 
+  # The engine listens on the tunnel address, so an unreadable one gets the
+  # same treatment as an unreadable public address. Both are read every poll,
+  # so a changed address restarts the engine through `Engine.start_engine/3`.
   defp up(req, state) do
-    case GluetunClient.public_ip(req) do
-      {:ok, ip} when is_binary(ip) and ip != "" -> verify_and_start(req, ip, state)
+    with {:ok, ip} when is_binary(ip) and ip != "" <- GluetunClient.public_ip(req),
+         {:ok, tunnel_ip} <- state.tunnel_ip_fun.(state.config.vpn_interface) do
+      verify_and_start(req, ip, tunnel_ip, state)
+    else
       _ -> connecting(state)
     end
   end
 
-  # The tunnel is up but its address is unreadable, so it cannot be verified.
+  # The tunnel is up but an address is unreadable, so it cannot be verified.
   defp connecting(state) do
     state = put_vpn(state, :connecting)
-    call_engine(state, {:stop, :vpn_down})
-    %{state | verified_ip: nil}
+    call_engine(state, {:stop, :vpn_connecting})
+    %{state | verified: nil}
   end
 
-  # A new address means the tunnel restarted since the last leak check.
-  defp verify_and_start(req, ip, %{verified_ip: ip} = state), do: start_engine(req, ip, state)
+  # A new public or tunnel address means the tunnel restarted since the last
+  # leak check; so may an old check, see @reverify_ms.
+  defp verify_and_start(req, ip, tunnel_ip, state) do
+    now = System.monotonic_time(:millisecond)
 
-  defp verify_and_start(req, ip, state) do
-    case state.leak_check.(ip) do
-      :ok -> start_engine(req, ip, %{state | verified_ip: ip})
-      {:error, reason} -> down(state, reason)
-    end
-  end
+    case state.verified do
+      {^ip, ^tunnel_ip, at} when now - at < state.reverify_ms ->
+        start_engine(req, ip, tunnel_ip, state)
 
-  # The engine listens on the tunnel address, so an unreadable one gets the
-  # same treatment as an unreadable public address. It is read every poll, so
-  # a changed address restarts the engine through `Engine.start_engine/3`.
-  defp start_engine(req, ip, state) do
-    case state.tunnel_ip_fun.(state.config.vpn_interface) do
-      {:ok, tunnel_ip} -> start_engine(req, ip, tunnel_ip, state)
-      {:error, _} -> connecting(state)
+      _ ->
+        case state.leak_check.(ip) do
+          :ok -> start_engine(req, ip, tunnel_ip, %{state | verified: {ip, tunnel_ip, now}})
+          {:error, reason} -> down(state, reason)
+        end
     end
   end
 
@@ -168,14 +183,20 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp down(state, reason) do
     state = put_vpn(state, {:down, reason})
     call_engine(state, {:stop, reason})
-    %{state | verified_ip: nil, last_port: nil}
+    %{state | verified: nil, last_port: nil}
   end
 
+  # An engine that does not answer must not crash the gate: the next poll
+  # repeats the call, since engine calls are idempotent.
   defp call_engine(state, message) do
     case state.engine_fun.(message) do
       :ok -> :ok
       other -> Logger.warning("Engine #{inspect(message)} returned #{inspect(other)}")
     end
+  catch
+    :exit, reason ->
+      Logger.error("Engine #{inspect(message)} failed: #{inspect(reason)}")
+      :error
   end
 
   defp put_vpn(%{last_vpn: value} = state, value), do: state
@@ -242,7 +263,8 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   @log_tail_bytes 65_536
 
-  # The last ERROR line in the tail of gluetun.log, which grows without bound.
+  # The last ERROR line in the tail of gluetun.log, which the entrypoint
+  # rotates only between gluetun restarts, so it can still be large.
   defp last_error(dir, fallback) do
     with {:ok, tail} <- read_tail(Path.join(dir, "gluetun.log"), @log_tail_bytes),
          line when is_binary(line) <-

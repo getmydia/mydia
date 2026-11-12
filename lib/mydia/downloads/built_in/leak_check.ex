@@ -55,10 +55,14 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   defp parse_address(_ip), do: {:error, "invalid address from relay"}
 
   # torrent-curl must not inherit the VPN credentials or Mydia's secrets.
+  # `-4` keeps both sides on IPv4: Mydia's own request (Req/Mint) never uses
+  # IPv6 by default, and gluetun's split-tunnel marks cover only IPv4, so over
+  # IPv6 the two addresses would come from different families and never match
+  # the VPN's.
   defp torrent_ip(url) do
     env = Config.child_env_unset(System.get_env())
 
-    case Mydia.BoundedCommand.run("torrent-curl", ["-fsS", "--max-time", "10", url], 15_000,
+    case Mydia.BoundedCommand.run("torrent-curl", ["-4", "-fsS", "--max-time", "10", url], 15_000,
            env: env
          ) do
       {:ok, body} -> decode(body)

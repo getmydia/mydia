@@ -3,32 +3,51 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
 
   alias Mydia.Downloads.BuiltIn.Config
 
-  # rqbit is "installed" unless a test says otherwise, so the auto-enable rule
-  # does not depend on the machine running the tests.
+  # rqbit is "installed" and nothing is recorded in the state directory unless
+  # a test says otherwise, so the auto-enable rule does not depend on the
+  # machine running the tests.
   defp load(env, types, opts \\ []) do
-    Config.load(
-      env,
-      types,
-      Keyword.put_new(opts, :find_executable, fn "rqbit" -> "/bin/rqbit" end)
-    )
+    opts =
+      opts
+      |> Keyword.put_new(:find_executable, fn "rqbit" -> "/bin/rqbit" end)
+      |> Keyword.put_new(:file_exists?, fn _path -> false end)
+
+    Config.load(env, types, opts)
   end
 
   defp no_rqbit, do: [find_executable: fn "rqbit" -> nil end]
 
+  defp remembered, do: [file_exists?: &(&1 == "/config/rqbit/enabled")]
+
   describe "load/3 auto-enable" do
-    test "is on when no torrent client is configured" do
-      assert %Config{enabled?: true} = load(%{}, [:sabnzbd])
+    test "is on for a new install, one with no other download client" do
+      assert %Config{enabled?: true, explicit: nil} = load(%{}, [])
     end
 
-    test "is off when a torrent client is configured" do
-      for type <- [:qbittorrent, :transmission, :rqbit, :rtorrent] do
-        assert %Config{enabled?: false} = load(%{}, [type])
+    test "is off for an existing install with a client of any kind" do
+      for type <-
+            [:qbittorrent, :transmission, :rqbit, :rtorrent, :debrid, :blackhole] ++
+              [:sabnzbd, :nzbget] do
+        assert %Config{enabled?: false} = load(%{}, [type]), inspect(type)
       end
     end
 
-    test "is off when a debrid or blackhole client already takes torrents" do
-      assert %Config{enabled?: false} = load(%{}, [:debrid])
-      assert %Config{enabled?: false} = load(%{}, [:blackhole])
+    test "stays on once recorded, whatever clients are added later" do
+      assert %Config{enabled?: true} = load(%{}, [:qbittorrent, :sabnzbd], remembered())
+      assert %Config{enabled?: true} = load(%{}, :unknown, remembered())
+      assert %Config{enabled?: true} = load(%{}, [:qbittorrent], remembered() ++ no_rqbit())
+    end
+
+    test "the record is looked for under MYDIA_TORRENT_STATE_PATH" do
+      opts = [file_exists?: &(&1 == "/state/enabled")]
+      assert %Config{enabled?: true} = load(%{"MYDIA_TORRENT_STATE_PATH" => "/state"}, [:x], opts)
+      assert %Config{enabled?: false} = load(%{}, [:x], opts)
+      assert Config.marker_path(%Config{state_dir: "/state"}) == "/state/enabled"
+    end
+
+    test "MYDIA_TORRENT_ENABLED=false turns a recorded install off" do
+      assert %Config{enabled?: false, explicit: false} =
+               load(%{"MYDIA_TORRENT_ENABLED" => "false"}, [], remembered())
     end
 
     test "is off when rqbit is not installed" do
@@ -72,29 +91,28 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
     end
   end
 
+  # Clients are looked up by name, so the built-in client never runs beside
+  # another client that has its name.
   describe "load/3 reserved name" do
-    test "automatic activation is skipped, with a warning, when the name is taken" do
-      config = load(%{}, [:sabnzbd], name_taken: true)
+    test "a recorded install is kept off, with a warning, when the name is taken" do
+      config = load(%{}, [:sabnzbd], [{:name_taken, true} | remembered()])
       refute config.enabled?
       assert {:reserved_name_taken} in config.warnings
     end
 
-    test "an invalid MYDIA_TORRENT_ENABLED is still automatic" do
-      config = load(%{"MYDIA_TORRENT_ENABLED" => "maybe"}, [], name_taken: true)
-      refute config.enabled?
-      assert {:reserved_name_taken} in config.warnings
-    end
-
-    test "an explicit true still enables it" do
+    test "an explicit true is kept off too" do
       config = load(%{"MYDIA_TORRENT_ENABLED" => "true"}, [:sabnzbd], name_taken: true)
-      assert config.enabled?
-      refute {:reserved_name_taken} in config.warnings
+      refute config.enabled?
+      assert {:reserved_name_taken} in config.warnings
     end
 
-    test "no warning when automatic activation was off anyway" do
+    test "no warning when it was off anyway" do
       assert %Config{enabled?: false, warnings: []} = load(%{}, [:qbittorrent], name_taken: true)
       assert %Config{warnings: []} = load(%{}, [], [{:name_taken, true} | no_rqbit()])
       assert %Config{warnings: []} = load(%{}, :unknown, name_taken: true)
+
+      assert %Config{warnings: []} =
+               load(%{"MYDIA_TORRENT_ENABLED" => "false"}, [], name_taken: true)
     end
 
     test "a free name changes nothing" do

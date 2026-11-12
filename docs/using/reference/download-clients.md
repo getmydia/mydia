@@ -20,17 +20,17 @@ Mydia bundles rqbit and runs it for you, so a fresh install can download
 torrents with no client to set up. It appears in Admin, Download Clients as a
 managed client named after the built-in engine, with a status panel.
 
-- **Auto-enable.** It turns on when the rqbit binary is installed (it is in
-  the Docker image) and no qBittorrent, Transmission, rqbit, rTorrent, Debrid
-  or Blackhole client is configured. `MYDIA_TORRENT_ENABLED=true` or `false`
-  overrides that. Adding your own torrent client later turns it off after a
-  restart.
+- **Auto-enable.** A new install turns it on: the rqbit binary is installed
+  (it is in the Docker image) and no download client of any kind is
+  configured yet. Once on, it stays on after restarts and after you add
+  clients of your own, until you set `MYDIA_TORRENT_ENABLED=false`. An
+  existing install that already has a client, Usenet included, keeps it off
+  unless you set `MYDIA_TORRENT_ENABLED=true`.
 - **Reserved name.** The client is listed as "Built-in", and no other client
   may use that name. If an existing client already has it (a database row from
   before the name was reserved, or a `DOWNLOAD_CLIENT_<N>_NAME` of `Built-in`),
-  the built-in client does not auto-enable and logs why; rename that client
-  and restart. With `MYDIA_TORRENT_ENABLED=true` the built-in client takes the
-  name anyway and the other client is hidden until it is renamed.
+  the built-in client stays off, even with `MYDIA_TORRENT_ENABLED=true`, and
+  logs why; rename that client and restart.
 - **Download path.** `/data/downloads` by default, from
   `MYDIA_TORRENT_DOWNLOAD_PATH`. Torrent state lives in `/config/rqbit`, from
   `MYDIA_TORRENT_STATE_PATH`. In the Docker image, files the engine writes

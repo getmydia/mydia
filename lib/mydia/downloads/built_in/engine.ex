@@ -21,6 +21,9 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   @stable_ms 60_000
   @kill_wait_ms 5_000
   @poll_ms 50
+  # Every call may kill the child first, which waits up to twice
+  # @kill_wait_ms (TERM, then KILL), so the default 5s call timeout is too short.
+  @call_timeout_ms 4 * @kill_wait_ms
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -36,16 +39,17 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   address in VPN mode and `nil` otherwise.
   """
   def start_engine(server \\ __MODULE__, listen_port, listen_ip \\ nil),
-    do: GenServer.call(server, {:start, listen_port, listen_ip})
+    do: GenServer.call(server, {:start, listen_port, listen_ip}, @call_timeout_ms)
 
-  def stop_engine(server \\ __MODULE__, reason), do: GenServer.call(server, {:stop, reason})
+  def stop_engine(server \\ __MODULE__, reason),
+    do: GenServer.call(server, {:stop, reason}, @call_timeout_ms)
 
   @doc """
   Spawns rqbit again after a crash. Returns `{:error, :not_crashed}` and does
   nothing unless the engine crashed while meant to run.
   """
   @spec restart(GenServer.server()) :: :ok | {:error, :not_crashed}
-  def restart(server \\ __MODULE__), do: GenServer.call(server, :restart)
+  def restart(server \\ __MODULE__), do: GenServer.call(server, :restart, @call_timeout_ms)
 
   # `--listen-ip` pins the listening sockets to the tunnel address. Bound to
   # 0.0.0.0, replies to inbound UDP (uTP, DHT) pick the eth0 source address

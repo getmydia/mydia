@@ -148,15 +148,15 @@ startup, so changing it takes a restart.
 
 ## Built-in torrent client
 
-Mydia ships with a torrent client (rqbit) that it runs itself. It turns on
-when the `rqbit` binary is installed (the Docker image has it) and no
-qBittorrent, Transmission, rqbit, rTorrent, Debrid or Blackhole client is
-configured. See [Download Clients](download-clients.md#built-in) for what it
+Mydia ships with a torrent client (rqbit) that it runs itself. A new install
+turns it on, when the `rqbit` binary is installed (the Docker image has it)
+and no download client is configured yet, and it then stays on until
+`MYDIA_TORRENT_ENABLED=false`. See [Download Clients](download-clients.md#built-in) for what it
 does. A blank value counts as unset.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MYDIA_TORRENT_ENABLED` | auto | `true` or `false` (also `1`/`0`, `yes`/`no`, `on`/`off`, in any case) overrides the auto-enable rule. `true` turns it on even without `rqbit` on the `PATH`. Any other value is ignored with a warning in the admin UI. |
+| `MYDIA_TORRENT_ENABLED` | auto | `true` or `false` (also `1`/`0`, `yes`/`no`, `on`/`off`, in any case) overrides the auto-enable rule. `true` turns it on even without `rqbit` on the `PATH`. `false` turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI. |
 | `MYDIA_TORRENT_DOWNLOAD_PATH` | `/data/downloads` | Where the built-in client writes downloads. Must be writable by the Mydia user. |
 | `MYDIA_TORRENT_STATE_PATH` | `/config/rqbit` | Where the built-in client keeps its torrent state. Must be writable by the Mydia user. |
 | `MYDIA_TORRENT_PORT` | `51413` | Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below). |

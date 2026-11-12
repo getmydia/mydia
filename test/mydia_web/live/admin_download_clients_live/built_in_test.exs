@@ -33,7 +33,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     start_supervised!(Mydia.Indexers.Health)
     start_supervised!({Status, name: Status})
 
-    BuiltIn.put_runtime(%{
+    BuiltIn.put_runtime(%BuiltIn.Runtime{
       api_port: 3030,
       credentials: {"mydia", "x"},
       config: %Config{enabled?: true, vpn?: true, vpn_provider: "protonvpn"}

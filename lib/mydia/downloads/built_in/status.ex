@@ -73,7 +73,7 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe({:reserved_name_taken}),
     do:
-      "Another download client is named \"Built-in\", a name reserved for the built-in torrent client, so the built-in client was not enabled. Rename that client (Admin, Download Clients) and restart Mydia, or set MYDIA_TORRENT_ENABLED=true to let the built-in client take the name."
+      "Another download client is named \"Built-in\", a name reserved for the built-in torrent client, so the built-in client was not enabled. Rename that client (Admin, Download Clients, or its DOWNLOAD_CLIENT_<N>_NAME) and restart Mydia."
 
   def describe({:invalid_port, value}),
     do: "MYDIA_TORRENT_PORT is #{inspect(value)}, not a port number. Using 51413."

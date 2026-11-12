@@ -8,9 +8,7 @@ defmodule Mydia.Downloads.BuiltIn do
   client of type `rqbit` driven by `Mydia.Downloads.Client.Rqbit`.
   """
 
-  require Logger
-
-  alias Mydia.Downloads.BuiltIn.Status
+  alias Mydia.Downloads.BuiltIn.{Runtime, Status}
   alias Mydia.Downloads.Client.Error
   alias Mydia.Settings.DownloadClientConfig
   alias Mydia.Settings.RuntimeConfig
@@ -18,8 +16,10 @@ defmodule Mydia.Downloads.BuiltIn do
   @key {__MODULE__, :runtime}
   @name "Built-in"
 
-  def put_runtime(runtime), do: :persistent_term.put(@key, runtime)
+  @spec put_runtime(Runtime.t()) :: :ok
+  def put_runtime(%Runtime{} = runtime), do: :persistent_term.put(@key, runtime)
   def clear_runtime, do: :persistent_term.erase(@key)
+  @spec runtime() :: Runtime.t() | nil
   def runtime, do: :persistent_term.get(@key, nil)
 
   @doc "The name the built-in client is listed under."
@@ -27,8 +27,9 @@ defmodule Mydia.Downloads.BuiltIn do
 
   @doc """
   Whether `name` is the built-in client's, ignoring case and surrounding
-  whitespace. Other clients may not use it: lists of clients are merged by
-  name, so one would hide the other.
+  whitespace. Other clients may not use it: clients are merged and looked up
+  by name, so downloads of one would be routed to the other. The supervisor
+  therefore leaves the built-in client off while another client has the name.
   """
   @spec reserved_name?(term()) :: boolean()
   def reserved_name?(name) when is_binary(name),
@@ -36,33 +37,13 @@ defmodule Mydia.Downloads.BuiltIn do
 
   def reserved_name?(_name), do: false
 
-  @doc """
-  Logs, once per boot and `source`, that a client other than the built-in one
-  uses its name. Callers run on every client listing, hence the once.
-  """
-  @spec warn_name_taken(String.t()) :: :ok
-  def warn_name_taken(source) do
-    key = {__MODULE__, :name_taken_warned, source}
-
-    unless :persistent_term.get(key, false) do
-      :persistent_term.put(key, true)
-
-      Logger.warning(
-        "A download client from #{source} is named #{inspect(@name)}, which is reserved for " <>
-          "the built-in torrent client. While the built-in client is active it is hidden from the client list; rename it to bring it back (a database row can be renamed by its ID, an environment client in its DOWNLOAD_CLIENT_<N>_NAME)."
-      )
-    end
-
-    :ok
-  end
-
   @spec client_configs() :: [DownloadClientConfig.t()]
   def client_configs do
     case runtime() do
       nil ->
         []
 
-      %{api_port: port, credentials: {user, pass}, config: config} ->
+      %Runtime{api_port: port, credentials: {user, pass}, config: config} ->
         [
           %DownloadClientConfig{
             id: RuntimeConfig.build_runtime_id(:download_client, @name),

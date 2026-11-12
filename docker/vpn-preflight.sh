@@ -39,7 +39,19 @@ run_with_gluetun_env() {
         "$bin"
 }
 
-# Tests source this file for the function above and stop here.
+# The gluetun log lives on the persistent /config volume, next to the
+# database, and a gluetun that fails at startup restarts every 5s. Before each
+# start, a log over $2 bytes (5 MiB by default) moves to $1.1, replacing the
+# previous one, so the two files stay bounded however long the loop runs.
+# Mydia reads only the tail of the current log.
+rotate_log() {
+    size=$(wc -c < "$1" 2>/dev/null || echo 0)
+    if [ "$size" -gt "${2:-5242880}" ]; then
+        mv -f "$1" "$1.1"
+    fi
+}
+
+# Tests source this file for the functions above and stop here.
 if [ "${VPN_PREFLIGHT_FUNCTIONS_ONLY:-}" = 1 ]; then
     # shellcheck disable=SC2317 # exit is the fallback when run, not sourced
     return 0 2>/dev/null || exit 0
@@ -105,6 +117,7 @@ key=$(cat "$dir/apikey")
 
 (
     while true; do
+        rotate_log "$dir/gluetun.log"
         run_with_gluetun_env /usr/local/bin/gluetun "$gid" "$key" >> "$dir/gluetun.log" 2>&1
         echo "gluetun exited with $?; restarting in 5s" >> "$dir/gluetun.log"
         sleep 5

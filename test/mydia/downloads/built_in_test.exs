@@ -2,7 +2,7 @@ defmodule Mydia.Downloads.BuiltInTest do
   use ExUnit.Case, async: false
 
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.{Config, Status}
+  alias Mydia.Downloads.BuiltIn.{Config, Runtime, Status}
   alias Mydia.Settings.DownloadClientConfig
 
   setup do
@@ -15,7 +15,7 @@ defmodule Mydia.Downloads.BuiltInTest do
   end
 
   test "client_configs/0 describes the local engine" do
-    BuiltIn.put_runtime(%{
+    BuiltIn.put_runtime(%Runtime{
       api_port: 3030,
       credentials: {"mydia", "s3cret"},
       config: %Config{download_path: "/data/downloads"}

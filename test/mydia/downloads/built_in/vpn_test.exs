@@ -47,8 +47,9 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
        name: :"vpn_#{System.unique_integer([:positive])}",
        config: ctx.config,
        status: ctx.status,
-       engine_fun: engine_fun,
+       engine_fun: Map.get(ctx, :engine_fun, engine_fun),
        tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
+       reverify_ms: Map.get(ctx, :reverify_ms, 60_000),
        base_url: "http://localhost:#{ctx.bypass.port}",
        interval_ms: 50,
        leak_check: leak_fun}
@@ -190,10 +191,62 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     end
   end
 
-  test "a fresh gate stops an engine it did not start", ctx do
+  # The reason matches the VPN's :connecting, so the panel does not say the
+  # tunnel is down while it says it is connecting.
+  test "a fresh gate stops an engine it did not start, as connecting", ctx do
     gluetun(ctx.bypass, "stopped", 0)
     start_vpn(ctx, :ok)
-    assert_receive {:engine_stop, :vpn_down}, 1_000
+    assert_receive {:engine_stop, :vpn_connecting}, 1_000
+  end
+
+  test "an engine call that exits does not crash the gate", ctx do
+    gluetun(ctx.bypass, "running", 0)
+    test_pid = self()
+
+    ctx =
+      Map.put(ctx, :engine_fun, fn message ->
+        send(test_pid, {:engine_call, message})
+        exit({:timeout, {GenServer, :call, [:engine, message, 20_000]}})
+      end)
+
+    pid = start_vpn(ctx, :ok)
+
+    assert_receive {:engine_call, {:stop, :vpn_connecting}}, 1_000
+    assert_receive {:engine_call, {:start, 51413, "10.2.0.2"}}, 1_000
+    assert_receive {:engine_call, {:start, 51413, "10.2.0.2"}}, 1_000
+    assert Process.alive?(pid)
+  end
+
+  test "a passed leak check is not repeated while it is fresh", ctx do
+    gluetun(ctx.bypass, "running", 0)
+    start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
+
+    assert_receive {:leak_check, 1}, 1_000
+    for _ <- 1..3, do: assert_receive({:engine_start, 51413}, 1_000)
+    refute_received {:leak_check, 2}
+  end
+
+  # A gluetun restart between polls can land on the same addresses.
+  test "a passed leak check expires and is run again on unchanged addresses", ctx do
+    gluetun(ctx.bypass, "running", 0)
+    ctx = Map.put(ctx, :reverify_ms, 0)
+    start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
+
+    assert_receive {:leak_check, 1}, 1_000
+    assert_receive {:leak_check, 2}, 1_000
+  end
+
+  test "a changed tunnel address re-runs the leak check", ctx do
+    gluetun(ctx.bypass, "running", 0)
+    agent = start_state("10.2.0.2")
+    ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:ok, Agent.get(agent, & &1)} end)
+    start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
+
+    assert_receive {:leak_check, 1}, 1_000
+    assert_receive {:engine_listen, 51413, "10.2.0.2"}, 1_000
+    Agent.update(agent, fn _ -> "10.2.0.9" end)
+    assert_receive {:leak_check, 2}, 1_000
+    assert_receive {:engine_listen, 51413, "10.2.0.9"}, 1_000
   end
 
   @tag :capture_log
@@ -240,7 +293,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
 
-    assert_receive {:engine_stop, :vpn_down}, 1_000
+    assert_receive {:engine_stop, :vpn_connecting}, 1_000
+    Process.sleep(150)
     refute_received {:engine_start, _}
     refute_received {:leak_check, _}
     assert %Status{vpn: :connecting} = Status.get(ctx.status)
@@ -255,9 +309,10 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
   test "an unreadable tunnel address stops the engine and leaves the VPN connecting", ctx do
     gluetun(ctx.bypass, "running", 40_123)
     ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:error, :no_tunnel_address} end)
-    start_vpn(ctx, :ok)
+    start_vpn(ctx, counting_leak_check(fn _ -> :ok end))
 
-    assert_receive {:engine_stop, :vpn_down}, 1_000
+    assert_receive {:engine_stop, :vpn_connecting}, 1_000
+    refute_received {:leak_check, _}
     Process.sleep(150)
     refute_received {:engine_start, _}
     assert %Status{vpn: :connecting} = Status.get(ctx.status)

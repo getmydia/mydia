@@ -6,11 +6,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   download clients, so tests never touch global env.
   """
 
-  # Clients that already handle torrents. Any of them configured keeps the
-  # built-in client off unless MYDIA_TORRENT_ENABLED says otherwise: debrid
-  # and blackhole take torrents too, so a second engine would compete.
-  @torrent_handler_types [:qbittorrent, :transmission, :rqbit, :rtorrent, :debrid, :blackhole]
-  def torrent_handler_types, do: @torrent_handler_types
+  # Written to the state directory once the client is on, so a later boot
+  # keeps it on after the user adds clients of their own.
+  @marker "enabled"
 
   @reserved ~w(SPLIT_TUNNEL_GID HTTP_CONTROL_SERVER_ADDRESS HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE DNS_ADDRESS DNS_SERVER)
   @default_port 51413
@@ -28,6 +26,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   @type t :: %__MODULE__{
           enabled?: boolean(),
+          explicit: boolean() | nil,
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
@@ -40,6 +39,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         }
 
   defstruct enabled?: false,
+            explicit: nil,
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
@@ -51,23 +51,33 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             warnings: []
 
   @doc """
+  Decides whether the built-in client runs. With MYDIA_TORRENT_ENABLED unset,
+  it turns on for a new install, one with no other download client of any
+  kind (`other_client_types == []`) and `rqbit` on the PATH, and the
+  supervisor then records that in the state directory (`marker_path/1`). A
+  recorded install stays on whatever clients are added later, until
+  MYDIA_TORRENT_ENABLED=false. An existing install with clients of its own
+  stays off unless MYDIA_TORRENT_ENABLED=true.
+
   `other_client_types` is `:unknown` when the configured clients could not be
-  read. It never turns the client on by itself, only an explicit
-  MYDIA_TORRENT_ENABLED does.
+  read, which never turns a new install on.
 
-  Options: `:find_executable` (default `System.find_executable/1`). Left
-  unset, MYDIA_TORRENT_ENABLED only turns the client on when `rqbit` is on the
-  PATH, so installs without it (bare releases, the NixOS module) stay off.
+  Options:
 
-  `:name_taken` (default `false`) says some other configured client, enabled
-  or not, already uses the built-in client's reserved name. Automatic
-  activation then stays off, since the built-in client would hide that client
-  from the lists, and a `{:reserved_name_taken}` warning is recorded. An
-  explicit MYDIA_TORRENT_ENABLED=true still wins.
+    * `:find_executable` (default `System.find_executable/1`) locates `rqbit`.
+      Installs without it (bare releases, the NixOS module) stay off unless
+      MYDIA_TORRENT_ENABLED=true.
+    * `:file_exists?` (default `File.regular?/1`) checks the marker.
+    * `:name_taken` (default `false`) says some other configured client,
+      enabled or not, already uses the built-in client's reserved name.
+      Clients are looked up by name, so the two cannot coexist: the built-in
+      client stays off, even with MYDIA_TORRENT_ENABLED=true, and a
+      `{:reserved_name_taken}` warning is recorded.
   """
   @spec load(%{String.t() => String.t()}, [atom()] | :unknown, keyword()) :: t()
   def load(env, other_client_types, opts \\ []) do
     finder = Keyword.get(opts, :find_executable, &System.find_executable/1)
+    exists? = Keyword.get(opts, :file_exists?, &File.regular?/1)
     {port, port_warnings} = parse_port(env["MYDIA_TORRENT_PORT"], @default_port, :invalid_port)
 
     {api_port, api_port_warnings} =
@@ -76,15 +86,24 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     {enabled, enabled_warnings} = parse_enabled(env["MYDIA_TORRENT_ENABLED"])
     provider = blank_to_nil(env["MYDIA_VPN_SERVICE_PROVIDER"])
     name_taken? = Keyword.get(opts, :name_taken, false)
+    state_dir = blank_to_nil(env["MYDIA_TORRENT_STATE_PATH"]) || @default_state_dir
 
-    auto? = enabled == :unset and auto_enabled?(other_client_types, finder)
+    wanted? =
+      case enabled do
+        :unset ->
+          exists?.(Path.join(state_dir, @marker)) or new_install?(other_client_types, finder)
 
-    name_warnings = if auto? and name_taken?, do: [{:reserved_name_taken}], else: []
+        explicit ->
+          explicit
+      end
+
+    name_warnings = if wanted? and name_taken?, do: [{:reserved_name_taken}], else: []
 
     %__MODULE__{
-      enabled?: enabled?(enabled, auto? and not name_taken?),
+      enabled?: wanted? and not name_taken?,
+      explicit: if(enabled == :unset, do: nil, else: enabled),
       download_path: blank_to_nil(env["MYDIA_TORRENT_DOWNLOAD_PATH"]) || @default_download_path,
-      state_dir: blank_to_nil(env["MYDIA_TORRENT_STATE_PATH"]) || @default_state_dir,
+      state_dir: state_dir,
       port: port,
       api_port: api_port,
       vpn?: provider != nil,
@@ -123,14 +142,12 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     end
   end
 
-  defp enabled?(true, _auto), do: true
-  defp enabled?(false, _auto), do: false
-  defp enabled?(:unset, auto), do: auto
+  @doc "Where the supervisor records that this install runs the built-in client."
+  @spec marker_path(t()) :: Path.t()
+  def marker_path(%__MODULE__{state_dir: state_dir}), do: Path.join(state_dir, @marker)
 
-  defp auto_enabled?(:unknown, _finder), do: false
-
-  defp auto_enabled?(types, finder),
-    do: not Enum.any?(types, &(&1 in @torrent_handler_types)) and finder.("rqbit") != nil
+  defp new_install?([], finder), do: finder.("rqbit") != nil
+  defp new_install?(_types_or_unknown, _finder), do: false
 
   # Gluetun names the tunnel wg0 for WireGuard and tun0 for OpenVPN.
   defp vpn_interface(env) do

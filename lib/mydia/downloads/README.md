@@ -93,8 +93,11 @@ seeding), so it needs no warning.
 
 `Mydia.Downloads.BuiltIn` runs rqbit and, optionally, the VPN that tunnels it.
 `BuiltIn.Config` reads the `MYDIA_TORRENT_*` and `MYDIA_VPN_*` variables and
-decides auto-enable: on when `rqbit` is on the `PATH` and no qBittorrent,
-Transmission, rqbit, rTorrent, Debrid or Blackhole client is configured.
+decides auto-enable: on for a new install (`rqbit` on the `PATH`, no download
+client of any kind), which the supervisor records as `<state_dir>/enabled` so
+it stays on once the user adds clients, until `MYDIA_TORRENT_ENABLED=false`
+removes the record. It never runs beside another client named `Built-in`,
+since clients are looked up by name.
 `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
