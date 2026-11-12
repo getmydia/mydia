@@ -163,24 +163,86 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   @doc """
   Why the client is off: `:name_taken` (another client holds the reserved
   name), `:env` (the environment variable), `:ui` (a saved choice) or
-  `:automatic` (the default rule). Accepts a nil config.
+  `:automatic` (the default rule). Accepts a nil config. The second argument
+  is a getenv function, or a map from `sources/1` already read by the caller.
   """
-  @spec off_reason(Config.t() | nil, getenv()) :: :env | :ui | :automatic | :name_taken
-  def off_reason(config, getenv \\ &System.get_env/1)
+  @spec off_reason(Config.t() | nil, getenv() | map()) ::
+          :env | :ui | :automatic | :name_taken
+  def off_reason(config, getenv_or_sources \\ &System.get_env/1)
 
-  def off_reason(%Config{warnings: warnings} = config, getenv) do
-    if {:reserved_name_taken} in warnings, do: :name_taken, else: source_reason(config, getenv)
+  def off_reason(config, getenv) when is_function(getenv, 1),
+    do: off_reason(config, sources(getenv))
+
+  def off_reason(%Config{warnings: warnings}, sources) when is_map(sources) do
+    if {:reserved_name_taken} in warnings, do: :name_taken, else: source_reason(sources)
   end
 
-  def off_reason(config, getenv), do: source_reason(config, getenv)
+  def off_reason(_config, sources) when is_map(sources), do: source_reason(sources)
 
-  defp source_reason(_config, getenv) do
-    case sources(getenv).enabled do
+  defp source_reason(sources) do
+    case sources.enabled do
       :env -> :env
       :database -> :ui
       :default -> :automatic
     end
   end
+
+  @doc """
+  Whether saving `params` would stop work in progress or expose the server's
+  address, so the form asks first. `running` is the config of the running
+  client (nil when none runs, which makes nothing disruptive).
+
+    * `{:disable, count}` when `enabled` resolves to off while `count`
+      built-in downloads are active. `"false"` is off; `"automatic"` is
+      resolved with `Config.from_runtime/4`'s rule against the running
+      section, the configured clients and the environment.
+    * `:vpn_off` when `vpn_enabled` is `"false"` and the VPN is on.
+
+  Options (tests): `:clients` (`{types, name_taken?}` or `:unknown`, default
+  `Manager.configured_clients/0`), `:env` (default `System.get_env/0`), and
+  `:find_executable` / `:file_exists?`, passed to `Config.from_runtime/4`.
+  """
+  @spec disruptive_change(map(), Config.t() | nil, keyword()) ::
+          nil | {:disable, pos_integer()} | :vpn_off
+  def disruptive_change(params, running, opts \\ [])
+
+  def disruptive_change(_params, nil, _opts), do: nil
+
+  def disruptive_change(params, %Config{} = running, opts) do
+    params = stringify_keys(params)
+
+    cond do
+      turns_off?(params["enabled"], running, opts) ->
+        case active_download_count() do
+          0 -> nil
+          count -> {:disable, count}
+        end
+
+      params["vpn_enabled"] == "false" and running.vpn? ->
+        :vpn_off
+
+      true ->
+        nil
+    end
+  end
+
+  defp turns_off?("false", _running, _opts), do: true
+
+  defp turns_off?("automatic", running, opts) do
+    {types, _name_taken?} =
+      case Keyword.get_lazy(opts, :clients, &BuiltIn.Manager.configured_clients/0) do
+        :unknown -> {:unknown, false}
+        summary -> summary
+      end
+
+    env = Keyword.get_lazy(opts, :env, &System.get_env/0)
+    section = %{running.vpn_section | enabled: nil}
+    config_opts = Keyword.take(opts, [:find_executable, :file_exists?])
+
+    not Config.from_runtime(section, env, types, config_opts).enabled?
+  end
+
+  defp turns_off?(_enabled, _running, _opts), do: false
 
   ## Persistence
 

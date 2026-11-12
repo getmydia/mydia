@@ -259,11 +259,15 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
   def remember(%Config{}), do: :ok
 
-  # The clients configured other than the built-in one: database rows plus
-  # DOWNLOAD_CLIENT_<N>_* blocks. The built-in client is rejected explicitly:
-  # once running it is in the runtime list, and counting it as an rqbit client
-  # would switch it off.
-  defp configured_clients do
+  @doc """
+  The clients configured other than the built-in one, as `summarize_clients/1`
+  returns them, or `:unknown` when they could not be read: database rows plus
+  DOWNLOAD_CLIENT_<N>_* blocks. The built-in client is rejected explicitly:
+  once running it is in the runtime list, and counting it as an rqbit client
+  would switch it off.
+  """
+  @spec configured_clients() :: {[atom()], boolean()} | :unknown
+  def configured_clients do
     Mydia.Settings.list_download_client_configs()
     |> Enum.reject(&BuiltIn.managed?(%{connection_settings: &1.connection_settings}))
     |> summarize_clients()

@@ -236,6 +236,48 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
                Mydia.Settings.get_config_setting_by_key("built_in_torrent.enabled")
     end
 
+    test "switching to automatic when that resolves off asks like off", %{conn: conn} do
+      # Another torrent client is configured, so automatic resolves off.
+      create_test_download_client()
+      run_built_in(%Config{enabled?: true})
+      insert(:download, download_client: BuiltIn.name())
+      view = open_settings(conn)
+
+      render_submit(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"enabled" => "automatic"}
+      })
+
+      assert has_element?(view, "#built-in-confirm-disable", "1 download")
+      assert has_element?(view, "#built-in-settings-modal")
+    end
+
+    test "the download path explains what a change affects; Cancel has an id", %{conn: conn} do
+      view = open_settings(conn)
+
+      assert has_element?(
+               view,
+               "#built-in-section-torrent",
+               "Torrents already in the session finish in their original folder"
+             )
+
+      render_click(element(view, "#built-in-settings-cancel"))
+      refute has_element?(view, "#built-in-settings-modal")
+    end
+
+    test "a secret's label points at an input only when one is shown", %{conn: conn} do
+      put_row(:vpn_openvpn_password, "hunter2-secret-value")
+      view = open_settings(conn)
+
+      render_change(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"vpn_provider" => "private internet access"}
+      })
+
+      refute has_element?(view, "label[for='built-in-field-vpn_openvpn_password']")
+
+      render_click(element(view, "#built-in-secret-replace-vpn_openvpn_password"))
+      assert has_element?(view, "label[for='built-in-field-vpn_openvpn_password']")
+    end
+
     test "turning the VPN off while the engine runs asks first", %{conn: conn} do
       run_built_in(%Config{enabled?: true, vpn?: true, vpn_provider: "mullvad"})
       view = open_settings(conn)

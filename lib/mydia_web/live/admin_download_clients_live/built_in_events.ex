@@ -46,6 +46,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
   @doc "Re-reads whether the client runs, its status and, when off, why."
   def refresh(socket, status \\ :fetch) do
     runtime = BuiltIn.runtime()
+    # One read of the config sources per refresh, shared with off_reason.
     sources = Settings.sources(&System.get_env/1)
 
     status =
@@ -56,15 +57,31 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
       end
 
     socket
+    |> assign_runtime(runtime, status)
+    |> assign(:built_in_enable_locked?, sources.enabled == :env)
+    |> assign(:built_in_off_reason, if(runtime, do: nil, else: off_reason(sources)))
+  end
+
+  @doc """
+  Applies a status broadcast. Only a client starting or stopping changes the
+  off state, so the config sources are re-read only then.
+  """
+  def put_status(socket, status) do
+    runtime = BuiltIn.runtime()
+
+    if runtime != nil == socket.assigns.built_in? do
+      assign_runtime(socket, runtime, if(runtime, do: status))
+    else
+      refresh(socket, status)
+    end
+  end
+
+  defp assign_runtime(socket, runtime, status) do
+    socket
     |> assign(:built_in?, runtime != nil)
     |> assign(:built_in_vpn?, runtime != nil and runtime.config.vpn?)
     |> assign(:built_in_status, status)
-    |> assign(:built_in_enable_locked?, sources.enabled == :env)
-    |> assign(:built_in_off_reason, off_reason(runtime))
   end
-
-  @doc "Applies a status broadcast."
-  def put_status(socket, status), do: refresh(socket, status)
 
   def handle_event("open_built_in_settings", _params, socket) do
     manager_config = safe_current()
@@ -185,24 +202,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
 
   # Asks before stopping work in progress or exposing the server's address.
   defp confirmation(params) do
-    runtime = BuiltIn.runtime()
-
-    cond do
-      is_nil(runtime) ->
-        nil
-
-      params["enabled"] == "false" ->
-        case Settings.active_download_count() do
-          0 -> nil
-          count -> {:disable, count}
-        end
-
-      params["vpn_enabled"] == "false" and runtime.config.vpn? ->
-        :vpn_off
-
-      true ->
-        nil
-    end
+    running = with %{config: config} <- BuiltIn.runtime(), do: config
+    Settings.disruptive_change(params, running)
   end
 
   # Shows the section holding the first field error, so a failed save never
@@ -227,8 +228,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
   # what updates the panel then.
   defp start_applied(socket), do: start_async(socket, :built_in_applied, &safe_await_applied/0)
 
-  defp off_reason(nil), do: Settings.off_reason(nil, &System.get_env/1)
-  defp off_reason(_runtime), do: nil
+  # The last evaluated config carries the reserved-name warning while off.
+  defp off_reason(sources), do: Settings.off_reason(safe_current(), sources)
 
   defp current_section, do: Mydia.Settings.get_runtime_config().built_in_torrent
 

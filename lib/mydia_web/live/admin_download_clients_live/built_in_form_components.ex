@@ -76,7 +76,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         <.confirmation confirm={@confirm} />
 
         <.admin_modal_actions>
-          <button type="button" class="btn" phx-click="close_built_in_settings">
+          <button
+            id="built-in-settings-cancel"
+            type="button"
+            class="btn"
+            phx-click="close_built_in_settings"
+          >
             {gettext("Cancel")}
           </button>
           <button
@@ -124,7 +129,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         field={:download_path}
         sources={@sources}
         label={gettext("Download path")}
-      />
+      >
+        <:hint>
+          {gettext(
+            "A new path applies to new grabs. Torrents already in the session finish in their original folder."
+          )}
+        </:hint>
+      </.text_field>
       <.text_field
         form={@form}
         field={:listen_port}

@@ -56,6 +56,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
   attr :sources, :map, required: true
   attr :type, :string, default: "text"
   attr :rest, :global, include: ~w(placeholder autocomplete)
+  slot :hint, doc: "help text under the field"
 
   def text_field(assigns) do
     assigns = assign(assigns, :id, field_id(assigns.field))
@@ -69,6 +70,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
         disabled={locked?(@sources, @field)}
         {@rest}
       />
+      <:hint :if={@hint != []}>{render_slot(@hint)}</:hint>
     </.field_row>
     """
   end
@@ -134,7 +136,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
       |> assign(:errors, secret_errors(assigns.form, field, assigns.typed_secrets))
 
     ~H"""
-    <.field_row field={@field} label={@label} sources={@sources} for={@id}>
+    <%!-- The label points at the input only when one is rendered. --%>
+    <.field_row
+      field={@field}
+      label={@label}
+      sources={@sources}
+      for={if(@locked? or @show_saved?, do: nil, else: @id)}
+    >
       <%= cond do %>
         <% @locked? -> %>
           <p class="text-sm text-base-content/70">{gettext("Set in the environment")}</p>

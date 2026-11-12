@@ -353,5 +353,86 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
 
       assert Settings.off_reason(%Config{}, env) == :env
     end
+
+    test "accepts sources already read" do
+      sources = Settings.sources(@no_env)
+      assert Settings.off_reason(nil, sources) == :automatic
+      assert Settings.off_reason(nil, %{sources | enabled: :env}) == :env
+
+      assert Settings.off_reason(%Config{warnings: [{:reserved_name_taken}]}, sources) ==
+               :name_taken
+    end
+  end
+
+  describe "disruptive_change/3" do
+    @running %Config{enabled?: true, vpn_section: %BuiltInTorrent{}}
+    # Automatic resolves off: another torrent client, no marker, no rqbit.
+    @auto_off [
+      clients: {[:qbittorrent], false},
+      env: %{},
+      find_executable: &__MODULE__.no_env/1,
+      file_exists?: &__MODULE__.never/1
+    ]
+
+    def never(_path), do: false
+    def rqbit("rqbit"), do: "/usr/bin/rqbit"
+
+    defp active_download, do: download_fixture(%{download_client: BuiltIn.name()})
+
+    test "nothing is disruptive when the client does not run" do
+      active_download()
+      assert Settings.disruptive_change(%{"enabled" => "false"}, nil, @auto_off) == nil
+    end
+
+    test "turning off with active downloads names the count" do
+      active_download()
+      active_download()
+
+      assert Settings.disruptive_change(%{"enabled" => "false"}, @running, @auto_off) ==
+               {:disable, 2}
+    end
+
+    test "turning off with nothing active does not ask" do
+      assert Settings.disruptive_change(%{"enabled" => "false"}, @running, @auto_off) == nil
+    end
+
+    test "automatic that resolves to off asks like false" do
+      active_download()
+
+      assert Settings.disruptive_change(%{"enabled" => "automatic"}, @running, @auto_off) ==
+               {:disable, 1}
+    end
+
+    test "automatic that resolves to on does not ask" do
+      active_download()
+
+      new_install =
+        Keyword.merge(@auto_off, clients: {[], false}, find_executable: &__MODULE__.rqbit/1)
+
+      assert Settings.disruptive_change(%{"enabled" => "automatic"}, @running, new_install) == nil
+
+      marker = Keyword.put(@auto_off, :file_exists?, fn _ -> true end)
+      assert Settings.disruptive_change(%{"enabled" => "automatic"}, @running, marker) == nil
+    end
+
+    test "unreadable clients never resolve automatic to on" do
+      active_download()
+      opts = Keyword.merge(@auto_off, clients: :unknown, find_executable: &__MODULE__.rqbit/1)
+
+      assert Settings.disruptive_change(%{"enabled" => "automatic"}, @running, opts) ==
+               {:disable, 1}
+    end
+
+    test "on keeps it running" do
+      active_download()
+      assert Settings.disruptive_change(%{"enabled" => "true"}, @running, @auto_off) == nil
+    end
+
+    test "turning the VPN off while it runs asks" do
+      vpn = %{@running | vpn?: true}
+      assert Settings.disruptive_change(%{"vpn_enabled" => "false"}, vpn, @auto_off) == :vpn_off
+      assert Settings.disruptive_change(%{"vpn_enabled" => "true"}, vpn, @auto_off) == nil
+      assert Settings.disruptive_change(%{"vpn_enabled" => "false"}, @running, @auto_off) == nil
+    end
   end
 end
