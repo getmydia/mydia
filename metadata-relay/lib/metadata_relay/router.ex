@@ -85,6 +85,35 @@ defmodule MetadataRelay.Router do
     |> send_resp(200, Jason.encode!(MetadataRelay.ClientConfig.document()))
   end
 
+  # The caller's public address, as the relay sees it. Mydia's built-in
+  # torrent client compares the address its torrent traffic leaves from with
+  # Mydia's own to prove the VPN is in the path.
+  #
+  # Threat model. Production is Cloudflare -> Traefik -> relay, so the TCP peer
+  # is always Traefik and ClientIp.resolve/1 would return its pod address for
+  # everyone. This route therefore reads cf-connecting-ip from any peer. The
+  # precondition in metadata-relay/CLAUDE.md and ClientIp's moduledoc protects
+  # shared state keyed on the address (rate-limit buckets). /ip keys nothing
+  # and returns the value only to the requester, so a forger can only mislead
+  # themselves. A peer-based gate would not help, because the peer is always
+  # Traefik. The header is validated as an IP; anything else falls back to the
+  # resolved peer address.
+  get "/ip" do
+    ip =
+      with [value | _] <- get_req_header(conn, "cf-connecting-ip"),
+           {:ok, parsed} <-
+             value |> String.trim() |> String.to_charlist() |> :inet.parse_address() do
+        parsed |> :inet.ntoa() |> to_string()
+      else
+        _ -> MetadataRelay.ClientIp.resolve(conn)
+      end
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> put_resp_header("cache-control", "no-store")
+    |> send_resp(200, Jason.encode!(%{ip: ip}))
+  end
+
   # TMDB Configuration
   get "/configuration" do
     handle_tmdb_request(conn, fn -> Handler.configuration() end)

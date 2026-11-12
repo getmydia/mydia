@@ -88,3 +88,44 @@ confirms and the media page's cancel dialog add a hit-and-run warning while the
 goal is unmet (`MydiaWeb.SeedingComponents`). Deleting a media item does not
 touch the client (its downloads rows cascade away and the torrent keeps
 seeding), so it needs no warning.
+
+## Built-in client
+
+`Mydia.Downloads.BuiltIn` runs rqbit and, optionally, the VPN that tunnels it.
+`BuiltIn.Config` reads the `MYDIA_TORRENT_*` and `MYDIA_VPN_*` variables and
+decides auto-enable: on for a new install (`rqbit` on the `PATH`, no download
+client of any kind), which the supervisor records as `<state_dir>/enabled` so
+it stays on once the user adds clients, until `MYDIA_TORRENT_ENABLED=false`
+removes the record. It never runs beside another client named `Built-in`,
+since clients are looked up by name.
+`ClientRemoval` and the other config builders must carry
+`connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
+unmanaged and the guard below is skipped.
+
+**Child environment.** rqbit and `torrent-curl` are spawned with every
+`MYDIA_VPN_*` variable and Mydia's secrets unset
+(`BuiltIn.Config.child_env_unset/1`).
+
+**Runtime injection.** `Mydia.Settings.RuntimeConfig.get_runtime_download_clients/0`
+appends `BuiltIn.client_configs/0` to the clients from env and YAML, so the
+built-in client is a synthetic `rqbit` row that exists only at runtime. Its
+connection settings carry `"managed" => true`.
+
+**Managed guard.** `Mydia.Downloads.Client.Rqbit` wraps every call in
+`BuiltIn.guard/1` when the config is managed. A stopped engine, a VPN that is
+down or a failed leak check returns `{:error, reason}` with a named reason
+instead of a connection error to loopback, so a grab fails with the cause and
+`ClientHealth` shows it. Unmanaged rqbit configs skip the guard.
+
+**State.** The engine's and the VPN's state, the listen port and the config
+warnings live in `BuiltIn.Status`, which broadcasts every change for the admin
+panel. `BuiltIn.Vpn` polls gluetun's control server and gates the engine on
+`running` plus a passed leak check. The entrypoint's `docker/vpn-preflight.sh`
+writes `/config/gluetun/preflight` before the BEAM starts; it records
+`net_admin`, `tun` and `src_valid_mark`, and only the first two fail the VPN.
+`src_valid_mark` is informational and Mydia does not read it yet.
+
+In VPN mode the engine is started with `--listen-ip <tunnel IPv4>`, read from
+`ip -4 -o addr show dev <iface>` as the mydia user, so that inbound UDP replies
+leave the tunnel from the port the peer contacted. See
+`vendor/gluetun/README.md`, "Inbound UDP needs a bound socket".

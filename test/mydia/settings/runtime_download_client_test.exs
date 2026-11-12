@@ -50,6 +50,36 @@ defmodule Mydia.Settings.RuntimeDownloadClientTest do
     end)
   end
 
+  describe "the built-in client" do
+    alias Mydia.Downloads.BuiltIn
+
+    setup do
+      on_exit(&BuiltIn.clear_runtime/0)
+    end
+
+    test "is listed after the configured runtime clients while it runs" do
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "x"},
+        config: %BuiltIn.Config{download_path: "/data/downloads"}
+      })
+
+      setup_runtime_config([client_config(%{})])
+
+      clients = RuntimeConfig.get_runtime_download_clients()
+      assert Enum.map(clients, & &1.name) == ["runtime-qbit", "Built-in"]
+      assert [%{type: :rqbit}] = Enum.filter(clients, &BuiltIn.managed?/1)
+
+      assert Enum.map(Mydia.Settings.list_download_client_configs(), & &1.name) ==
+               ["runtime-qbit", "Built-in"]
+    end
+
+    test "is not listed while it is off" do
+      setup_runtime_config([client_config(%{})])
+      assert [%{name: "runtime-qbit"}] = RuntimeConfig.get_runtime_download_clients()
+    end
+  end
+
   describe "map_to_download_client_config/1 external_torrents" do
     test "carries an explicit mode through to the struct" do
       setup_runtime_config([client_config(%{external_torrents: :ignore})])
