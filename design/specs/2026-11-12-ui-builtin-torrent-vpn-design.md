@@ -60,9 +60,12 @@ it shows the compose snippet that does.
 
 ## Configuration
 
-A new `built_in` embed under `downloads` in `Mydia.Config.Schema`, resolved by
-`Mydia.Config.Loader` like every other section (yaml, then db, then env; env
-wins). Source badges come from `Mydia.Settings.config_source/3`.
+A new top-level `built_in_torrent` section in `Mydia.Config.Schema`, resolved
+by `Mydia.Config.Loader` like every other section (yaml, then db, then env;
+env wins). Source badges come from `Mydia.Settings.config_source/3`. The
+section is flat, with `vpn_` prefixes rather than a nested `vpn` embed,
+because `Mydia.Config.Schema.Paths` indexes database overlay keys one level
+deep (`section.field`); a nested embed could not be set from the database.
 
 | Field | Env variable | Default |
 | --- | --- | --- |
@@ -71,28 +74,31 @@ wins). Source badges come from `Mydia.Settings.config_source/3`.
 | `state_path` | `MYDIA_TORRENT_STATE_PATH` | `/config/rqbit` |
 | `listen_port` | `MYDIA_TORRENT_PORT` | `51413` |
 | `api_port` | `MYDIA_TORRENT_API_PORT` | `3030` |
-| `vpn.enabled` | implied by `MYDIA_VPN_SERVICE_PROVIDER` being set | false |
-| `vpn.provider` | `MYDIA_VPN_SERVICE_PROVIDER` | nil |
-| `vpn.vpn_type` (openvpn, wireguard) | `MYDIA_VPN_VPN_TYPE` | provider's first supported type |
-| `vpn.openvpn_user` | `MYDIA_VPN_OPENVPN_USER` | nil |
-| `vpn.openvpn_password` | `MYDIA_VPN_OPENVPN_PASSWORD` | nil |
-| `vpn.wireguard_private_key` | `MYDIA_VPN_WIREGUARD_PRIVATE_KEY` | nil |
-| `vpn.wireguard_addresses` | `MYDIA_VPN_WIREGUARD_ADDRESSES` | nil |
-| `vpn.server_countries` | `MYDIA_VPN_SERVER_COUNTRIES` | nil |
-| `vpn.server_regions` | `MYDIA_VPN_SERVER_REGIONS` | nil |
-| `vpn.server_cities` | `MYDIA_VPN_SERVER_CITIES` | nil |
-| `vpn.server_hostnames` | `MYDIA_VPN_SERVER_HOSTNAMES` | nil |
-| `vpn.port_forwarding` | `MYDIA_VPN_VPN_PORT_FORWARDING` | false |
+| `vpn_enabled` | implied by `MYDIA_VPN_SERVICE_PROVIDER` being set | false |
+| `vpn_provider` | `MYDIA_VPN_SERVICE_PROVIDER` | nil |
+| `vpn_type` (openvpn, wireguard) | `MYDIA_VPN_VPN_TYPE` | provider's first supported type |
+| `vpn_openvpn_user` | `MYDIA_VPN_OPENVPN_USER` | nil |
+| `vpn_openvpn_password` | `MYDIA_VPN_OPENVPN_PASSWORD` | nil |
+| `vpn_wireguard_private_key` | `MYDIA_VPN_WIREGUARD_PRIVATE_KEY` | nil |
+| `vpn_wireguard_addresses` | `MYDIA_VPN_WIREGUARD_ADDRESSES` | nil |
+| `vpn_server_countries` | `MYDIA_VPN_SERVER_COUNTRIES` | nil |
+| `vpn_server_regions` | `MYDIA_VPN_SERVER_REGIONS` | nil |
+| `vpn_server_cities` | `MYDIA_VPN_SERVER_CITIES` | nil |
+| `vpn_server_hostnames` | `MYDIA_VPN_SERVER_HOSTNAMES` | nil |
+| `vpn_port_forwarding` | `MYDIA_VPN_VPN_PORT_FORWARDING` | false |
 
 - `enabled: nil` keeps the automatic rule from the 2026-11-04 spec: on when
   `rqbit` is on the `PATH` and no torrent-capable client is configured. The
   marker-file stickiness applies to this case only; an explicit db or env
   value always beats it.
-- `vpn.enabled` is its own field, so a user can fill in the form and switch it
+- `vpn_enabled` is its own field, so a user can fill in the form and switch it
   on afterwards. From env it is implied by a non-blank
   `MYDIA_VPN_SERVICE_PROVIDER`, as today.
-- `vpn_type` is a fixed-enum parser, per `lib/mydia/config/README.md`; it
-  never goes through `parse_atom/1`.
+- `vpn_provider` and `vpn_type` are strings in the schema, trimmed and
+  downcased, never atoms. They are validated against `VpnProviders` by the
+  form at save time, not by the schema: an env value naming a provider newer
+  than the table must not fail the whole config load, and gluetun reports a
+  bad one itself.
 - `MYDIA_VPN_*` variables outside this table still reach gluetun from env
   through the root loop, unchanged. The panel lists their names, never their
   values, under "Also set from environment".
@@ -100,7 +106,7 @@ wins). Source badges come from `Mydia.Settings.config_source/3`.
   release with its supported VPN types and whether it forwards ports. It
   drives the form and validation. A test fails when `vendor/gluetun/VERSION`
   changes without the table's recorded version changing with it.
-- **Secrets.** `openvpn_password` and `wireguard_private_key` are stored in
+- **Secrets.** `vpn_openvpn_password` and `vpn_wireguard_private_key` are stored in
   the database the way download-client passwords are, never rendered back to
   the browser, never logged, and redacted wherever download-client passwords
   are redacted (config export, crash reports).
@@ -109,19 +115,20 @@ wins). Source badges come from `Mydia.Settings.config_source/3`.
 
 ### Change signal
 
-After a successful save and `Loader.reload/0`, `Mydia.Settings` broadcasts
-`{:config_changed, sections}` on a `"config"` PubSub topic. The broadcast is
-general; this feature is its first subscriber.
+`Mydia.Config.Loader.reload/1` broadcasts `{:runtime_config_reloaded,
+config}` on the `"config:runtime"` PubSub topic after it stores a new runtime
+config. Every save path already ends in `reload/1`, so one broadcast there
+covers them all. It is general; this feature is its first subscriber.
 
 ### Engine
 
 `BuiltIn.Manager` replaces the decision logic in `BuiltIn.Supervisor.init/1`.
 It builds `BuiltIn.Config` from the runtime config rather than
-`System.get_env/0`, subscribes to `config_changed`, and on each message
+`System.get_env/0`, subscribes to `"config:runtime"`, and on each message
 compares the new effective config with the running one. Only a difference
-restarts anything: it stops the engine gracefully, replaces the `Runtime`
-entry, and starts the children again. A save that does not change the
-effective built-in config restarts nothing.
+restarts anything: it stops the running `BuiltIn.Supervisor` tree under a
+`DynamicSupervisor`, replaces the `Runtime` entry, and starts a new tree. A
+save that does not change the effective built-in config restarts nothing.
 
 - rqbit persists its session, so torrents resume after a restart.
 - A new download path applies to new grabs. Torrents already in the session
@@ -131,17 +138,21 @@ effective built-in config restarts nothing.
 
 ### VPN, Mydia side
 
-On save, `BuiltIn.VpnSettings` validates the `vpn` fields against
-`VpnProviders` and writes `/config/gluetun/settings.env` atomically (write a
-temp file, rename), mode 600, owned by `mydia`. The file holds only the
-allowlisted gluetun keys plus `VPN_ENABLED`, one `KEY=value` per line.
-Values are written so the root loop can read each one back as a single
-argument (no shell evaluation of values).
+The form validates the VPN fields against `VpnProviders` at save time. Each
+time `Manager` applies a config, `BuiltIn.VpnSettings` writes
+`/config/gluetun/settings.env` atomically (write a temp file, rename), mode
+600, owned by `mydia`, and only when its content changed. The file holds
+`VPN_ENABLED` plus the allowlisted gluetun keys whose value does not come
+from env (env values reach gluetun from the root's own environment, so they
+are never copied to disk), one `KEY=value` per line. Values containing a
+newline are rejected at save. The root loop reads each value back as a single
+argument, with no shell evaluation.
 
-`Vpn` now runs whenever the built-in client is on and reports `:off` while the
-VPN is disabled. When it sees a settings change it goes to `connecting`, which
-stops the engine, then waits for gluetun to report running on the new
-settings, runs `LeakCheck`, and lets the engine start.
+`Vpn` runs while the VPN is enabled. It learns the SHA-256 of the file
+`Manager` wrote and stays `connecting`, with the engine stopped, until
+`loop-status` reports that hash applied. This keeps a gluetun still running
+the previous settings from passing the leak check. Then it waits for gluetun
+to report running, runs `LeakCheck`, and lets the engine start.
 
 Turning the VPN off while the engine runs asks for confirmation ("torrents
 will use this server's real IP"). After that the engine restarts without
@@ -166,9 +177,14 @@ will use this server's real IP"). After that the engine restarts without
   3. Mydia's own variables last, as today.
 - After each start the loop writes `/config/gluetun/loop-status` with the
   applied file hash and any dropped keys, readable by `mydia`.
-- The control server's default role gains a route list:
-  `GET /v1/vpn/status`, `GET /v1/publicip/ip`, `GET /v1/portforward`. The
-  BEAM's key can no longer change settings or status through the API.
+- The control server is locked to three routes: `GET /v1/vpn/status`,
+  `GET /v1/publicip/ip`, `GET /v1/portforward`. Gluetun ignores `routes` in
+  `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` (the default role covers every route
+  no other role names), so the script instead writes a root-owned TOML file,
+  `/config/gluetun/auth.toml`, with one apikey role listing those routes, and
+  passes `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH` with an empty default
+  role. A route no role lists is refused. The BEAM's key can no longer change
+  settings or status through the API.
 
 ### Missing capabilities
 
@@ -229,7 +245,7 @@ unchanged. `{:reserved_variable, name}` still applies to env.
 ## Testing
 
 - **Unit:** Loader env-to-field mapping and precedence for every field in the
-  table; the `vpn_type` parser rejecting unknown values by name;
+  table; `vpn_provider` and `vpn_type` normalized to lowercase strings;
   `VpnProviders` pinned to `vendor/gluetun/VERSION`; `VpnSettings`
   validation and atomic write; `Manager` restarting on an effective change and
   not on an unrelated save, against the fake `rqbit` script; `Vpn` closing the
