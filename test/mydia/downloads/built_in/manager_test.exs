@@ -206,6 +206,27 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert :sys.get_state(Vpn).expected_hash == VpnSettings.hash(content)
     end
 
+    test "changing a VPN field replaces the tree with the new settings hash", ctx do
+      set(ctx, vpn_enabled: true, vpn_provider: "mullvad", vpn_type: "wireguard")
+      manager = start_manager(ctx)
+
+      old_content = File.read!(settings_file(ctx))
+      old_hash = :sys.get_state(Vpn).expected_hash
+      assert old_hash == VpnSettings.hash(old_content)
+      [old_pid] = instance_pids(ctx)
+
+      set(ctx, vpn_provider: "protonvpn")
+      reload(manager)
+
+      assert [new_pid] = instance_pids(ctx)
+      refute new_pid == old_pid
+      new_content = File.read!(settings_file(ctx))
+      assert new_content =~ "VPN_SERVICE_PROVIDER=protonvpn\n"
+      new_hash = :sys.get_state(Vpn).expected_hash
+      assert new_hash == VpnSettings.hash(new_content)
+      refute new_hash == old_hash
+    end
+
     test "a failed settings write is a Status warning, and Vpn stays gated", ctx do
       blocker = Path.join(ctx.tmp_dir, "blocker")
       File.write!(blocker, "")
