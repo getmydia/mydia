@@ -13,8 +13,24 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
   # through su-exec.
   defp sh(runner, args, vars \\ []) do
     System.cmd("sh", ["-c", ~s(. "$1" && ) <> runner, "sh", @script | args],
-      env: [{"VPN_PREFLIGHT_FUNCTIONS_ONLY", "1"}, {"VPN_AS_MYDIA", "env"} | vars]
+      env: isolated_env([{"VPN_PREFLIGHT_FUNCTIONS_ONLY", "1"}, {"VPN_AS_MYDIA", "env"} | vars])
     )
+  end
+
+  # The child inherits this VM's environment, so a MYDIA_VPN_* or
+  # MYDIA_TORRENT_* variable set where the suite runs would change what the
+  # script decides. Every such variable `vars` does not set is unset (a nil
+  # value unsets it in the child only).
+  defp isolated_env(vars) do
+    set = MapSet.new(vars, fn {name, _value} -> name end)
+
+    inherited =
+      for {name, _value} <- System.get_env(),
+          String.starts_with?(name, ["MYDIA_VPN_", "MYDIA_TORRENT_", "VPN_"]),
+          not MapSet.member?(set, name),
+          do: {name, nil}
+
+    inherited ++ vars
   end
 
   defp gluetun_env(vars, settings \\ "/nonexistent/settings.env") do
@@ -286,7 +302,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
   test "the client turned off in env leaves the VPN off" do
     assert {out, 0} =
              System.cmd("sh", [@script],
-               env: [{"MYDIA_TORRENT_ENABLED", " Off "}],
+               env: isolated_env([{"MYDIA_TORRENT_ENABLED", " Off "}]),
                stderr_to_stdout: true
              )
 

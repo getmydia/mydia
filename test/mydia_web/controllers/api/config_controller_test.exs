@@ -38,6 +38,17 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
     @private_key "wg-private-key-secret-value"
 
     setup %{conn: conn, token: token} do
+      # Loader.reload/0 below puts these secrets into the global
+      # :runtime_config, which the sandbox rollback does not undo.
+      previous = Application.fetch_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        case previous do
+          {:ok, config} -> Application.put_env(:mydia, :runtime_config, config)
+          :error -> Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
       {:ok, _} =
         Mydia.Settings.create_config_setting(%{
           key: "built_in_torrent.vpn_openvpn_password",
