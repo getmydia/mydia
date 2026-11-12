@@ -126,6 +126,23 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettingsTest do
   end
 
   @tag :tmp_dir
+  test "write/2 keeps the settings directory private, new or existing", %{tmp_dir: dir} do
+    mode = fn path -> File.stat!(path).mode |> Bitwise.band(0o777) end
+
+    fresh = config(mullvad(), dir: Path.join(dir, "fresh"))
+    assert {:ok, _} = VpnSettings.write(fresh, %{})
+    assert mode.(Path.dirname(VpnSettings.path(fresh))) == 0o700
+    assert mode.(VpnSettings.path(fresh)) == 0o600
+
+    wide = config(mullvad(), dir: Path.join(dir, "wide"))
+    File.mkdir_p!(Path.dirname(VpnSettings.path(wide)))
+    File.chmod!(Path.dirname(VpnSettings.path(wide)), 0o755)
+    assert {:ok, _} = VpnSettings.write(wide, %{})
+    assert mode.(Path.dirname(VpnSettings.path(wide))) == 0o700
+    assert mode.(VpnSettings.path(wide)) == 0o600
+  end
+
+  @tag :tmp_dir
   test "write/2 creates the gluetun dir and the settings subdir", %{tmp_dir: dir} do
     cfg = config(mullvad(), dir: Path.join(dir, "nested/gluetun"))
     assert {:ok, _} = VpnSettings.write(cfg, %{})

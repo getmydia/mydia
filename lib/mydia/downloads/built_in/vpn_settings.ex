@@ -7,8 +7,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
   Fields whose environment variable is set are left out: those values reach
   gluetun from the root's own environment and are never copied to disk. Nil
   and blank fields are left out too. The file is written atomically (temp
-  file, then rename) with mode 600, and not at all when it already holds the
-  same bytes.
+  file, then rename) with mode 600 in a mode 700 directory, and not at all
+  when it already holds the same bytes.
   """
 
   alias Mydia.Config.Schema.BuiltInTorrent
@@ -90,8 +90,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
     content = render(config, env)
     target = path(config)
 
-    with :ok <- unless_unchanged(target, content),
-         :ok <- File.mkdir_p(Path.dirname(target)),
+    with :ok <- private_dir(Path.dirname(target)),
+         :ok <- unless_unchanged(target, content),
          :ok <- atomic_write(target, content) do
       {:ok, hash(content)}
     else
@@ -107,11 +107,19 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
     end
   end
 
+  # 0700 whatever the umask or an earlier mode, so no other account can reach
+  # the file. The root-side loop reads it as mydia, the owner.
+  defp private_dir(dir) do
+    with :ok <- File.mkdir_p(dir), do: File.chmod(dir, 0o700)
+  end
+
+  # The temp file is narrowed to 0600 while still empty, so the secrets are
+  # never in a file with the umask's wider mode.
   defp atomic_write(target, content) do
     tmp = "#{target}.#{System.unique_integer([:positive])}.tmp"
 
-    with :ok <- File.write(tmp, content, [:exclusive]),
-         :ok <- File.chmod(tmp, 0o600),
+    with {:ok, io} <- File.open(tmp, [:write, :exclusive, :binary]),
+         :ok <- write_private(io, tmp, content),
          :ok <- File.rename(tmp, target) do
       :ok
     else
@@ -119,6 +127,14 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
         File.rm(tmp)
         error
     end
+  end
+
+  defp write_private(io, tmp, content) do
+    with :ok <- File.chmod(tmp, 0o600) do
+      IO.binwrite(io, content)
+    end
+  after
+    File.close(io)
   end
 
   defp env_set?(env, name) do
