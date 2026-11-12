@@ -7,7 +7,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
 
   alias Mydia.Config.Schema.BuiltInTorrent
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.{Config, Manager, Status, Vpn, VpnSettings}
+  alias Mydia.Downloads.BuiltIn.{Config, Manager, Settings, Status, Vpn, VpnSettings}
 
   @fake Path.expand("../../../support/fixtures/fake_rqbit.sh", __DIR__)
 
@@ -31,6 +31,20 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
 
     test "no clients is a new install" do
       assert {[], false} = Manager.summarize_clients([])
+    end
+  end
+
+  describe "retry_delay/2" do
+    test "backs off 5s, 30s, then every 60s" do
+      delays = Manager.retry_delays()
+
+      assert Enum.map(1..5, &Manager.retry_delay(delays, &1)) == [
+               5_000,
+               30_000,
+               60_000,
+               60_000,
+               60_000
+             ]
     end
   end
 
@@ -123,6 +137,23 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
     end
 
     defp settings_file(ctx), do: Path.join([ctx.gluetun_dir, "settings", "settings.env"])
+
+    # Holding Status's registered name makes the tree fail to start, until
+    # the returned process is sent :stop.
+    defp block_status_name do
+      blocker = spawn(fn -> receive do: (:stop -> :ok) end)
+      Process.register(blocker, Status)
+      on_exit(fn -> Process.exit(blocker, :kill) end)
+      blocker
+    end
+
+    defp wait_until(fun, tries \\ 100) do
+      cond do
+        fun.() -> true
+        tries == 0 -> false
+        true -> Process.sleep(20) && wait_until(fun, tries - 1)
+      end
+    end
 
     test "starts the tree and publishes the runtime entry", ctx do
       manager = start_manager(ctx)
@@ -250,6 +281,54 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert {:vpn_settings_write_failed, :enotdir} in Status.get().warnings
       expected = VpnSettings.hash(VpnSettings.render(config, %{}))
       assert :sys.get_state(Vpn).expected_hash == expected
+    end
+
+    test "a tree that fails to start is reported and retried until it starts", ctx do
+      blocker = block_status_name()
+
+      log =
+        capture_log(fn ->
+          manager = start_manager(ctx, retry_delays: [50, 50])
+
+          assert Manager.await_applied(manager) == nil
+          assert instance_pids(ctx) == []
+          assert BuiltIn.runtime() == nil
+
+          assert %Config{warnings: warnings} = config = Manager.current(manager)
+
+          assert [{:start_failed, _reason}] =
+                   Enum.filter(warnings, &match?({:start_failed, _}, &1))
+
+          assert {:start_failed, _} = Settings.off_reason(config, %{enabled: :database})
+
+          send(blocker, :stop)
+          assert wait_until(fn -> instance_pids(ctx) != [] end)
+
+          assert %Config{enabled?: true} = Manager.await_applied(manager)
+          assert %BuiltIn.Runtime{} = BuiltIn.runtime()
+          refute Enum.any?(Manager.current(manager).warnings, &match?({:start_failed, _}, &1))
+        end)
+
+      assert log =~ "built-in torrent client not started"
+      assert log =~ "retrying in"
+    end
+
+    test "a config change stops the retries of a tree that failed", ctx do
+      blocker = block_status_name()
+
+      capture_log(fn ->
+        manager = start_manager(ctx, retry_delays: [50])
+        assert Manager.await_applied(manager) == nil
+
+        set(ctx, enabled: false)
+        reload(manager)
+        send(blocker, :stop)
+        Process.sleep(200)
+
+        assert instance_pids(ctx) == []
+        assert Manager.await_applied(manager) == nil
+        refute Enum.any?(Manager.current(manager).warnings, &match?({:start_failed, _}, &1))
+      end)
     end
 
     test "current/1 keeps the evaluated config while the client is off", ctx do

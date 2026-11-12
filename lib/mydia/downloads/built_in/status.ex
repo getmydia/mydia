@@ -141,5 +141,15 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set #{variable} to a writable directory."
 
+  def describe({:start_failed, reason}),
+    do:
+      "The built-in torrent client failed to start (#{start_failure(reason)}). Mydia retries automatically; saving its settings again retries at once."
+
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
+
+  # Peels the supervisor's wrapping off down to the child that failed.
+  defp start_failure({:shutdown, {:failed_to_start_child, child, reason}}),
+    do: "#{inspect(child)}: #{start_failure(reason)}"
+
+  defp start_failure(reason), do: inspect(reason)
 end

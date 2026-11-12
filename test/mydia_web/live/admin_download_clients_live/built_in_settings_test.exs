@@ -122,6 +122,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       refute has_element?(view, "#built-in-off-reason", "another download client")
     end
 
+    test "a client whose tree failed to start says so", %{conn: conn} do
+      BuiltIn.clear_runtime()
+      config = %Config{enabled?: true, warnings: [{:start_failed, :eaddrinuse}]}
+      start_supervised!({FakeManager, config})
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "#built-in-off-reason", "failed to start")
+      assert has_element?(view, "#built-in-off-reason", "eaddrinuse")
+    end
+
     test "a running client offers Configure and no Enable", %{conn: conn} do
       run_built_in(%Config{enabled?: true})
       {:ok, view, _html} = live(conn, ~p"/admin/clients")

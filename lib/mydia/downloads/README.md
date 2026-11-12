@@ -117,7 +117,10 @@ restarts the tree only when `Config.restart_key/1` changes, so a save that
 leaves the effective config alone restarts nothing, and rqbit resumes its
 session after one that does. While the VPN is off its fields are not part of
 the key, so editing them never interrupts a running client. A failure while applying is logged and keeps what
-already runs. `Manager.current/0` reads a `:persistent_term`, so callers (the
+already runs. A new tree that fails to start cannot keep the old one (both
+need the API port), so the client stays off with a `{:start_failed, reason}`
+warning the panel shows, and the manager retries after 5s, 30s, then every
+minute until it starts or the config changes. `Manager.current/0` reads a `:persistent_term`, so callers (the
 adapter guard, the panel) never wait on the GenServer while an apply is
 stopping rqbit; `Manager.await_applied/1` is the call that does wait, for
 tests and for callers that need the result of a save.

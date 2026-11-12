@@ -11,7 +11,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
   attr :status, Status, default: nil
   attr :vpn?, :boolean, required: true
   attr :display, Mydia.TimeDisplay, required: true
-  attr :off_reason, :atom, default: nil, doc: "Settings.off_reason/2 when the client is off"
+  attr :off_reason, :any, default: nil, doc: "Settings.off_reason/2 when the client is off"
   attr :enable_locked?, :boolean, default: false, doc: "enabled comes from the environment"
 
   def built_in_panel(assigns) do
@@ -142,6 +142,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
   defp off_reason_label(:env), do: gettext("Off: turned off by MYDIA_TORRENT_ENABLED.")
   defp off_reason_label(:ui), do: gettext("Off: turned off in these settings.")
   defp off_reason_label(:name_taken), do: Status.describe({:reserved_name_taken})
+
+  defp off_reason_label({:start_failed, _} = reason),
+    do: gettext("Off: %{why}", why: Status.describe(reason))
+
   defp off_reason_label(_), do: gettext("Off.")
 
   defp engine_label(:running), do: gettext("Running")

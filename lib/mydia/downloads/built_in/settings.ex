@@ -165,18 +165,22 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   name), `:env` (the environment variable), `:ui` (a saved choice),
   `:rqbit_missing` (the default rule, with no other client but no `rqbit` on
   the PATH) or `:automatic` (the default rule, another client configured).
-  Accepts a nil config. The second argument is a getenv function, or a map
-  from `sources/1` already read by the caller.
+  `{:start_failed, reason}` means it should run but its last start failed
+  (`BuiltIn.Manager` retries it). Accepts a nil config. The second argument
+  is a getenv function, or a map from `sources/1` already read by the caller.
   """
   @spec off_reason(Config.t() | nil, getenv() | map()) ::
-          :env | :ui | :automatic | :rqbit_missing | :name_taken
+          :env | :ui | :automatic | :rqbit_missing | :name_taken | {:start_failed, term()}
   def off_reason(config, getenv_or_sources \\ &System.get_env/1)
 
   def off_reason(config, getenv) when is_function(getenv, 1),
     do: off_reason(config, sources(getenv))
 
   def off_reason(%Config{warnings: warnings} = config, sources) when is_map(sources) do
+    start_failed = Enum.find(warnings, &match?({:start_failed, _}, &1))
+
     cond do
+      start_failed -> start_failed
       {:reserved_name_taken} in warnings -> :name_taken
       config.rqbit_missing? and sources.enabled == :default -> :rqbit_missing
       true -> source_reason(sources)

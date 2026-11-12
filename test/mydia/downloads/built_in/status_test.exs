@@ -116,6 +116,15 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
 
+      failed = Status.describe({:start_failed, :eaddrinuse})
+      assert failed =~ "failed to start"
+      assert failed =~ "eaddrinuse"
+      assert failed =~ "retries"
+
+      # A supervisor's wrapping is peeled down to the child and its reason.
+      nested = {:shutdown, {:failed_to_start_child, Status, {:already_started, self()}}}
+      assert Status.describe({:start_failed, nested}) =~ "Status: {:already_started"
+
       taken = Status.describe({:reserved_name_taken})
       assert taken =~ "save the built-in client's settings again"
       refute taken =~ "restart"

@@ -13,13 +13,17 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   root loop to apply it before the engine runs again.
 
   The built-in client is on by default, so nothing here may take the
-  application down: a failure is logged and the manager keeps running.
+  application down: a failure is logged and the manager keeps running. A tree
+  that fails to start leaves the client off with a `{:start_failed, reason}`
+  warning on `current/1`, and is retried after 5s, 30s and then every minute
+  until one starts or the config changes.
 
   Options (tests override all of them): `:name`, `:instances` (the
   `DynamicSupervisor`), `:runtime_fun` (returns the `BuiltInTorrent` section),
   `:env_fun` (returns the environment map), `:clients_fun` (returns
-  `{types, name_taken?}` or `:unknown`), `:rqbit_path`, `:gluetun_dir` and
-  `:api_port`.
+  `{types, name_taken?}` or `:unknown`), `:rqbit_path`, `:gluetun_dir`,
+  `:api_port` and `:retry_delays` (the start retry schedule in ms; the last
+  one repeats).
   """
 
   use GenServer
@@ -34,6 +38,9 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   # behind an apply that does so.
   @call_timeout_ms 60_000
   @retry_ms 1_000
+  # After a tree fails to start: 5s, 30s, then every minute, until one starts
+  # or the config changes.
+  @start_retry_delays [5_000, 30_000, 60_000]
 
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -77,8 +84,14 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
       rqbit_path: Keyword.get(opts, :rqbit_path, "rqbit"),
       gluetun_dir: Keyword.get(opts, :gluetun_dir),
       api_port: Keyword.get(opts, :api_port),
+      retry_delays: Keyword.get(opts, :retry_delays, @start_retry_delays),
       instances_ref: nil,
-      current: nil
+      current: nil,
+      # The restart key of the config that last failed to start, how many
+      # times in a row it failed, and the pending retry's token.
+      failed_key: nil,
+      start_failures: 0,
+      retry: nil
     }
 
     {:ok, state, {:continue, :apply}}
@@ -103,6 +116,13 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   end
 
   def handle_info(:retry, state), do: {:noreply, safe_apply(state)}
+
+  # Only the latest scheduled start retry counts; an apply in between
+  # replaced or cancelled it.
+  def handle_info({:retry_start, token}, %{retry: token} = state),
+    do: {:noreply, safe_apply(%{state | retry: nil})}
+
+  def handle_info({:retry_start, _stale}, state), do: {:noreply, state}
   def handle_info(_message, state), do: {:noreply, state}
 
   # A failure keeps whatever already runs: a broken reload must not stop a
@@ -184,7 +204,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
   defp stopped(state) do
     BuiltIn.clear_runtime()
-    %{state | current: nil}
+    %{reset_failures(state) | current: nil}
   end
 
   defp start_instance(state, config, expected_hash) do
@@ -202,14 +222,48 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
     case DynamicSupervisor.start_child(state.instances, {BuiltIn.Supervisor, tree_opts}) do
       {:ok, _pid} ->
-        %{state | current: config}
+        %{reset_failures(state) | current: config}
 
       {:error, reason} ->
-        Logger.error("built-in torrent client not started: #{inspect(reason)}")
         BuiltIn.clear_runtime()
-        %{state | current: nil}
+        start_failed(%{state | current: nil}, config, reason)
     end
   end
+
+  # The previous tree is already gone (both need the same API port), so the
+  # client stays off until a retry starts it. The failure is kept on the
+  # published config, where the admin panel reads why the client is off.
+  defp start_failed(state, config, reason) do
+    key = Config.restart_key(config)
+    failures = if state.failed_key == key, do: state.start_failures + 1, else: 1
+    delay = retry_delay(state.retry_delays, failures)
+
+    Logger.error(
+      "built-in torrent client not started: #{inspect(reason)}; retrying in #{div(delay, 1000)}s"
+    )
+
+    warning = {:start_failed, reason}
+
+    :persistent_term.put({__MODULE__, state.name}, %{
+      config
+      | warnings: config.warnings ++ [warning]
+    })
+
+    token = make_ref()
+    Process.send_after(self(), {:retry_start, token}, delay)
+    %{state | failed_key: key, start_failures: failures, retry: token}
+  end
+
+  defp reset_failures(state), do: %{state | failed_key: nil, start_failures: 0, retry: nil}
+
+  @doc false
+  # The default start retry schedule, for tests.
+  def retry_delays, do: @start_retry_delays
+
+  @doc false
+  # The wait before retry `n` (1-based); the last delay repeats.
+  @spec retry_delay([pos_integer()], pos_integer()) :: pos_integer()
+  def retry_delay(delays, n), do: Enum.at(delays, n - 1, List.last(delays))
 
   # Terminating a tree runs Engine.terminate/2, which stops rqbit.
   defp stop_instances(instances) do
