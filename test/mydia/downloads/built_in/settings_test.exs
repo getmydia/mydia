@@ -237,6 +237,57 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert row("api_port") == nil
     end
 
+    test "ignores params that are not form fields and env-locked secrets" do
+      getenv = fn
+        "MYDIA_VPN_OPENVPN_PASSWORD" -> "from-env"
+        _ -> nil
+      end
+
+      assert :ok =
+               save(
+                 %{
+                   "listen_port" => "6881",
+                   "updated_by_id" => "999",
+                   "category" => "server",
+                   "bogus" => "x",
+                   "vpn_openvpn_password" => "typed-secret"
+                 },
+                 getenv: getenv
+               )
+
+      rows = AppSettings.list_config_settings()
+      assert Enum.map(rows, & &1.key) == ["built_in_torrent.listen_port"]
+      assert [%{category: :built_in_torrent, updated_by_id: nil}] = rows
+    end
+
+    test "whitespace-only text deletes the row" do
+      put_row("vpn_server_cities", "Oslo")
+      assert :ok = save(%{"vpn_server_cities" => "   "})
+      assert row("vpn_server_cities") == nil
+    end
+
+    test "error changesets never expose secrets" do
+      put_row("vpn_wireguard_private_key", "stored-wg-secret")
+      secret = "typed-ovpn-secret"
+      params = vpn(%{"vpn_openvpn_user" => "u", "vpn_openvpn_password" => secret})
+
+      # failing validation
+      assert {:error, cs} = save(Map.put(params, "vpn_provider", "nopevpn"))
+      refute inspect(cs) =~ secret
+      refute inspect(cs) =~ "stored-wg-secret"
+
+      # failing reload, whose reason holds the secret
+      assert {:error, cs} = save(params, reload: fn -> {:error, {:leaked, secret}} end)
+      refute inspect(cs) =~ secret
+      refute inspect(cs) =~ "stored-wg-secret"
+      {message, _} = Keyword.fetch!(cs.errors, :base)
+      refute message =~ secret
+      assert row("vpn_openvpn_password") == nil
+
+      # the form changeset is clean too
+      refute inspect(changeset(params, %BuiltInTorrent{vpn_openvpn_password: secret})) =~ secret
+    end
+
     test "reload runs once after the writes" do
       parent = self()
 

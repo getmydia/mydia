@@ -65,10 +65,16 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   Validates form params against the current layered section.
 
   Returns a changeset with action `:validate`. `current` supplies the values
-  of fields the params leave out. Options: `:getenv`.
+  of fields the params leave out. Options: `:getenv`. Secret values are
+  removed from the returned changeset, so rendering or inspecting it never
+  exposes them.
   """
   @spec form_changeset(map(), BuiltInTorrent.t(), keyword()) :: Ecto.Changeset.t()
   def form_changeset(params, %BuiltInTorrent{} = current, opts \\ []) do
+    params |> build_changeset(current, opts) |> redact_secrets()
+  end
+
+  defp build_changeset(params, current, opts) do
     getenv = Keyword.get(opts, :getenv, &System.get_env/1)
     locked = locked_fields(getenv)
 
@@ -100,12 +106,12 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     getenv = Keyword.get(opts, :getenv, &System.get_env/1)
     reload = Keyword.get(opts, :reload, &Loader.reload/0)
     current = Keyword.get_lazy(opts, :current, &current_section/0)
-    changeset = form_changeset(params, current, getenv: getenv)
+    changeset = build_changeset(params, current, getenv: getenv)
 
     if changeset.valid? do
       persist(changeset, current, opts[:updated_by_id], reload)
     else
-      {:error, changeset}
+      {:error, redact_secrets(changeset)}
     end
   end
 
@@ -195,8 +201,13 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
       {:ok, :ok} ->
         :ok
 
-      {:error, reason} ->
-        {:error, add_error(changeset, :base, "Settings could not be applied: #{inspect(reason)}")}
+      {:error, _reason} ->
+        # The reason can be a changeset or an error holding a submitted secret,
+        # so it is never put into the message or logged.
+        {:error,
+         changeset
+         |> add_error(:base, "The settings could not be saved. Nothing was changed.")
+         |> redact_secrets()}
     end
   end
 
@@ -236,8 +247,10 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   defp encode(_field, nil), do: nil
   defp encode(_field, value) when is_boolean(value), do: to_string(value)
   defp encode(_field, value) when is_integer(value), do: Integer.to_string(value)
-  defp encode(_field, ""), do: nil
-  defp encode(_field, value), do: value
+
+  defp encode(_field, value) when is_binary(value) do
+    if String.trim(value) == "", do: nil, else: value
+  end
 
   defp apply_ops(ops, updated_by_id) do
     Enum.reduce_while(ops, :ok, fn op, :ok ->
@@ -274,9 +287,21 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
 
   defp current_section, do: Settings.get_runtime_config().built_in_torrent
 
+  # Stored secrets stay out of the changeset data; `require_value/3` asks
+  # `secret_saved?/1` instead.
   defp current_data(current) do
-    data = Map.take(current, @fields)
+    data = current |> Map.take(@fields) |> Map.merge(Map.new(@secret_fields, &{&1, nil}))
     %{data | enabled: enabled_choice(data.enabled)}
+  end
+
+  defp redact_secrets(changeset) do
+    keys = Enum.map(@secret_fields, &Atom.to_string/1)
+
+    %{
+      changeset
+      | changes: Map.drop(changeset.changes, @secret_fields),
+        params: changeset.params && Map.drop(changeset.params, keys)
+    }
   end
 
   defp enabled_choice(nil), do: "automatic"
