@@ -92,13 +92,41 @@ seeding), so it needs no warning.
 ## Built-in client
 
 `Mydia.Downloads.BuiltIn` runs rqbit and, optionally, the VPN that tunnels it.
-`BuiltIn.Config` reads the `MYDIA_TORRENT_*` and `MYDIA_VPN_*` variables and
-decides auto-enable: on for a new install (`rqbit` on the `PATH`, no download
-client of any kind), which `BuiltIn.Manager` records as `<state_dir>/enabled` so
-it stays on once the user adds clients, until `MYDIA_TORRENT_ENABLED=false`
-removes the record. It never runs beside another client named `Built-in`,
-since clients are looked up by name.
-`ClientRemoval` and the other config builders must carry
+The design is `design/specs/2026-11-12-ui-builtin-torrent-vpn-design.md`.
+
+**Configuration.** The `built_in_torrent` section of `Mydia.Config.Schema`
+(`Config.Schema.BuiltInTorrent`) is layered like any other: yaml, then
+`config_settings` rows keyed `built_in_torrent.<field>`, then env, which wins.
+`MYDIA_TORRENT_*` and `MYDIA_VPN_*` are the env side. The section is flat
+(`vpn_` prefixes) because the overlay paths are one level deep. `vpn_provider`
+and `vpn_type` are trimmed, downcased strings, never atoms, and the schema does
+not check them against `VpnProviders` (an env value newer than the table must
+not fail the config load); `Settings.save/2` does. The two secrets are
+`redact: true`. `BuiltIn.Settings` is the form's API: it skips fields whose env
+var is set, never writes them, and keeps a stored secret when the field is
+submitted blank. `Loader.reload/1` broadcasts `{:runtime_config_reloaded, config}`
+on `Loader.topic/0` after every save, and skips the broadcast while
+`Mydia.PubSub` is not running (boot).
+
+**Manager.** `BuiltIn.Manager` builds `BuiltIn.Config` from that section
+(`Config` is pure: the environment is passed in and read only for warnings,
+reserved names and `MYDIA_VPN_VPN_INTERFACE`), decides auto-enable, writes the
+VPN settings file, and runs one `BuiltIn.Supervisor` tree under the
+`BuiltIn.Instances` `DynamicSupervisor`. It subscribes to the reload topic and
+restarts the tree only when `Config.restart_key/1` changes, so a save that
+leaves the effective config alone restarts nothing, and rqbit resumes its
+session after one that does. A failure while applying is logged and keeps what
+already runs. `Manager.current/0` reads a `:persistent_term`, so callers (the
+adapter guard, the panel) never wait on the GenServer while an apply is
+stopping rqbit; `Manager.await_applied/1` is the call that does wait, for
+tests and for callers that need the result of a save.
+
+Auto-enable (`enabled` unset) is on for a new install (`rqbit` on the `PATH`,
+no download client of any kind), which the manager records as
+`<state_dir>/enabled` so it stays on once the user adds clients, until the
+setting says off. An explicit db or env value always beats it. The client never
+runs beside another client named `Built-in`, since clients are looked up by
+name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
 
@@ -119,11 +147,72 @@ instead of a connection error to loopback, so a grab fails with the cause and
 
 **State.** The engine's and the VPN's state, the listen port and the config
 warnings live in `BuiltIn.Status`, which broadcasts every change for the admin
-panel. `BuiltIn.Vpn` polls gluetun's control server and gates the engine on
-`running` plus a passed leak check. The entrypoint's `docker/vpn-preflight.sh`
-writes `/config/gluetun/preflight` before the BEAM starts; it records
-`net_admin`, `tun` and `src_valid_mark`, and only the first two fail the VPN.
-`src_valid_mark` is informational and Mydia does not read it yet.
+panel.
+
+### The VPN settings file and the root loop
+
+Mydia never talks to gluetun's settings API. `BuiltIn.VpnSettings` renders
+`/config/gluetun/settings/settings.env` (the `settings/` subdirectory is
+mydia's own; see the trust boundary below): `VPN_ENABLED` plus the allowlisted
+gluetun keys, one `KEY=value` per line, mode 600, written atomically (temp
+file, rename) and only when the bytes changed. Fields whose env var is set are
+left out, since env reaches gluetun from the root loop's own environment and is
+never copied to disk. A value with a newline is rejected at save.
+
+`docker/vpn-preflight.sh` runs as root from the entrypoint and supervises
+gluetun in a loop, every 2 seconds:
+
+1. It snapshots the settings file and hashes the snapshot. On a change, or
+   when gluetun exits, it stops gluetun if running and starts it with the
+   file's allowlisted keys, then the operator's `MYDIA_VPN_*` env (prefix
+   stripped, so env wins), then Mydia's own values.
+2. The loop idles while neither `VPN_ENABLED=true` in the file nor
+   `MYDIA_VPN_SERVICE_PROVIDER` enables the VPN.
+3. After each start or stop it writes `/config/gluetun/loop-status`:
+   `hash=<sha256 hex or none>`, `dropped=<comma-separated keys outside the
+   allowlist>` and, only when nonzero, `invalid=<n>`, the count of lines that
+   are not `KEY=value` with an upper-case key. Invalid lines are counted and
+   never echoed, so their text never reaches a file mydia can read.
+
+`BuiltIn.Vpn` learns the hash `Manager` expects and stays `connecting`, with the
+engine stopped, until `loop-status` reports that hash. This keeps a gluetun still
+running the previous settings from passing the leak check. It then waits for
+gluetun to report `running`, runs `LeakCheck`, and opens the engine gate.
+`dropped` or `invalid` entries surface as `{:vpn_settings_rejected, keys}`
+(`2 invalid lines` for the count); no match within 30 seconds is
+`:vpn_apply_timeout`; a write that failed is `{:vpn_settings_write_failed,
+posix}`. `Vpn` keeps polling after a timeout.
+
+`BuiltIn.VpnProviders` is the table behind the form: every provider in the
+pinned gluetun release, its VPN types, whether it forwards ports and its
+`extra_env` (gluetun variables it requires that the form cannot take, such as
+client certificates; the form tells the user to set them as `MYDIA_VPN_<NAME>`).
+A test fails when `vendor/gluetun/VERSION` changes without the table's recorded
+version changing with it.
+
+**Root never touches /config.** `/config` belongs to mydia, so a compromised
+BEAM can replace `/config/gluetun`, or any file in it, with a symlink at any
+moment. Root therefore never opens a path under `/config`: every read and write
+there in `vpn-preflight.sh` runs as mydia through `su-exec`. The settings file
+is copied as mydia (5 second timeout, in case the path is a FIFO; 64 KiB cap)
+into a root-private snapshot, and root parses only the snapshot, with an
+allowlist and no `eval`. State that root must trust lives in `/run/mydia-vpn`
+(root, mode 700): the snapshot and gluetun's `auth.toml`.
+
+**Control server lockdown.** Gluetun's default role covers every route no other
+role names, and ignores a route list set in `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`.
+The script therefore writes `/run/mydia-vpn/auth.toml` with one apikey role
+listing `GET /v1/vpn/status`, `GET /v1/publicip/ip` and `GET /v1/portforward`,
+passes it as `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH` and sets the default
+role to `{}`. The key in `/config/gluetun/apikey` can read those three and
+nothing else; before this, it could `PUT /v1/vpn/settings`, which accepts
+OpenVPN options that run as root.
+
+**Preflight file.** The script writes `/config/gluetun/preflight` on every boot
+unless `MYDIA_TORRENT_ENABLED` turns the client off in env. It records
+`net_admin`, `tun`, `split_group` and `src_valid_mark`, and only the first
+three fail the VPN (`BuiltIn.Preflight`). `src_valid_mark` is informational and
+Mydia does not read it yet.
 
 In VPN mode the engine is started with `--listen-ip <tunnel IPv4>`, read from
 `ip -4 -o addr show dev <iface>` as the mydia user, so that inbound UDP replies

@@ -146,29 +146,94 @@ clears them.
 3. `go build ./... && go test ./internal/splittunnel/ ./internal/firewall/... ./internal/wireguard/...`
 4. Re-export with `git format-patch`, bump `VERSION`, run the smoke test below.
 
+## How Mydia drives gluetun
+
+Gluetun is configured from a file, not from its settings API. Mydia writes
+`/config/gluetun/settings/settings.env`; the root loop in
+`docker/vpn-preflight.sh` polls it every 2 seconds and (re)starts gluetun with
+the allowlisted keys, then the operator's `MYDIA_VPN_*` env, then Mydia's own
+values. The full flow, the `loop-status` file and the error reasons are in
+`lib/mydia/downloads/README.md`, "The VPN settings file and the root loop".
+What matters when changing gluetun or the script:
+
+- **Allowlist.** `VPN_SERVICE_PROVIDER VPN_TYPE OPENVPN_USER OPENVPN_PASSWORD
+  WIREGUARD_PRIVATE_KEY WIREGUARD_ADDRESSES SERVER_COUNTRIES SERVER_REGIONS
+  SERVER_CITIES SERVER_HOSTNAMES VPN_PORT_FORWARDING`. `VPN_ENABLED` is read by
+  the loop and never passed to gluetun. Any other key is dropped and named in
+  `loop-status`; lines that are not `KEY=value` are counted as `invalid=<n>`
+  and never echoed.
+- **Idle by default.** With no VPN env and `VPN_ENABLED` absent or not `true`,
+  the loop runs but gluetun does not.
+- **Control server.** Gluetun ignores a route list in the default role, so the
+  script writes `/run/mydia-vpn/auth.toml` with one apikey role allowed
+  `GET /v1/vpn/status`, `GET /v1/publicip/ip` and `GET /v1/portforward`, and
+  sets the default role to `{}`. `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH`
+  points at that file. The key Mydia reads from `/config/gluetun/apikey`
+  cannot call `PUT /v1/vpn/settings`, which accepts OpenVPN options that run as
+  root.
+- **Root never opens a path under /config.** Mydia owns `/config` and could
+  swap `/config/gluetun` for a symlink at any time. Every read and write there
+  in the script runs as mydia through `su-exec`: the settings file is copied
+  (5 second timeout, 64 KiB cap) into a snapshot in `/run/mydia-vpn` (root,
+  mode 700), and root parses only the snapshot. `auth.toml` lives there too.
+  Keep any new file access to that rule.
+- **Bump together.** `Mydia.Downloads.BuiltIn.VpnProviders` is built from the
+  gluetun release in `VERSION`; refresh it (including `extra_env`) when the
+  version changes.
+
 ## Smoke test
 
 Build the image (`docker build -t mydia:builtin-vpn .`) and run it with
 `--cap-add NET_ADMIN --device /dev/net/tun
---sysctl net.ipv4.conf.all.src_valid_mark=1` and a ProtonVPN WireGuard login
-(`MYDIA_VPN_SERVICE_PROVIDER=protonvpn`, `MYDIA_VPN_VPN_TYPE=wireguard`,
-`MYDIA_VPN_WIREGUARD_PRIVATE_KEY`, `MYDIA_VPN_VPN_PORT_FORWARDING=on`). Then:
+--sysctl net.ipv4.conf.all.src_valid_mark=1` and **no** `MYDIA_VPN_*`
+variables. Then:
 
-1. `docker exec <c> su-exec mydia torrent-curl -s https://relay.mydia.dev/ip`
-   prints the VPN address; the same with plain `curl` prints the host's.
-2. Admin, Download Clients shows the VPN connected, its public IP, a forwarded
-   port, and the engine running.
-3. `docker exec <c> ip link del wg0`: `torrent-curl --max-time 5` fails,
-   plain `curl` still works, and within 10 seconds the admin page shows the
-   VPN down and the engine stopped.
-4. Without `--cap-add NET_ADMIN` the admin page shows the `cap_add` message
-   and the engine stays stopped.
-5. A magnet grabbed from the UI downloads and imports. While rqbit churns
-   peers, `docker exec <c> tcpdump -ni eth0 'not host <vpn endpoint>'` shows
-   nothing from the engine: no final ACKs, RSTs or ICMP errors for its
-   connections.
-6. Gluetun's log has no reverse path filtering warning, or the container has
-   the `src_valid_mark` sysctl.
+1. **Idle boot.** `docker exec <c> pgrep gluetun` finds nothing: with no VPN
+   configured the loop is running and gluetun is not. Admin, Download Clients
+   shows the built-in client running without a VPN, and the VPN tab offers the
+   form (no setup card).
+2. **Enable from the UI.** On the VPN tab choose ProtonVPN, WireGuard, paste
+   a private key, turn on port forwarding and save. The panel goes through
+   applying, connecting and leak check, then shows the VPN's public IP, a
+   forwarded port and the engine running.
+3. **Split IPs.** `docker exec <c> su-exec mydia torrent-curl -s
+   https://relay.mydia.dev/ip` prints the VPN address; the same with plain
+   `curl` prints the host's.
+4. **Change the server.** Set the server country to another country and save.
+   The engine stops, gluetun restarts, the panel shows a new public IP, and the
+   engine resumes with its torrents still in the session.
+5. **Control server lockdown.** From inside the container, with the key Mydia
+   uses:
+
+   ```sh
+   key=$(cat /config/gluetun/apikey)
+   curl -s -o /dev/null -w '%{http_code}\n' -X PUT -H "X-API-Key: $key" \
+     http://127.0.0.1:8000/v1/vpn/settings   # 401
+   for r in vpn/status publicip/ip portforward; do
+     curl -s -o /dev/null -w "$r %{http_code}\n" -H "X-API-Key: $key" \
+       http://127.0.0.1:8000/v1/$r            # 200 each
+   done
+   ```
+
+   The `PUT` returns 401 and the three `GET` routes return 200.
+6. **Drop.** `docker exec <c> ip link del wg0`: `torrent-curl --max-time 5`
+   fails, plain `curl` still works, and within 10 seconds the admin page shows
+   the VPN down and the engine stopped.
+7. **Env wins.** Recreate the container with `MYDIA_VPN_SERVER_COUNTRIES` set:
+   the field shows the ENV badge and is read-only, and the value is not in
+   `/config/gluetun/settings/settings.env`.
+8. **Turn it off.** Turn the VPN off in the UI and confirm the dialog: gluetun
+   stops (`pgrep gluetun` finds nothing) and the engine restarts without the
+   VPN.
+9. **No capabilities.** Without `--cap-add NET_ADMIN` the VPN tab is disabled
+   and shows the compose lines; the engine stays stopped if the VPN was
+   configured.
+10. A magnet grabbed from the UI downloads and imports. While rqbit churns
+    peers, `docker exec <c> tcpdump -ni eth0 'not host <vpn endpoint>'` shows
+    nothing from the engine: no final ACKs, RSTs or ICMP errors for its
+    connections.
+11. Gluetun's log has no reverse path filtering warning, or the container has
+    the `src_valid_mark` sysctl.
 
 On `docker stop`, gluetun gets SIGKILL with no teardown. That is harmless: the
 rules, routes and tunnel live in the container's network namespace, which dies
@@ -177,4 +242,4 @@ with the container.
 The smoke test needs real VPN credentials and has not been run against the
 image yet. Record any deviation here after the first run. `docker/vpn-preflight.sh`
 records `src_valid_mark=ok|missing` in `/config/gluetun/preflight`; Mydia does
-not read that key yet, so check 6 is done by hand.
+not read that key yet, so check 11 is done by hand.

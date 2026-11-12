@@ -117,8 +117,9 @@ deep (`section.field`); a nested embed could not be set from the database.
 
 `Mydia.Config.Loader.reload/1` broadcasts `{:runtime_config_reloaded,
 config}` on the `"config:runtime"` PubSub topic after it stores a new runtime
-config. Every save path already ends in `reload/1`, so one broadcast there
-covers them all. It is general; this feature is its first subscriber.
+config, and skips the broadcast while `Mydia.PubSub` is not running (boot).
+Every save path already ends in `reload/1`, so one broadcast there covers them
+all. It is general; this feature is its first subscriber.
 
 ### Engine
 
@@ -130,6 +131,10 @@ restarts anything: it stops the running `BuiltIn.Supervisor` tree under a
 `DynamicSupervisor`, replaces the `Runtime` entry, and starts a new tree. A
 save that does not change the effective built-in config restarts nothing.
 
+`Manager.current/0` reads a `:persistent_term`, so callers never wait on the
+GenServer while an apply is stopping rqbit; `Manager.await_applied/1` is the
+call that waits for an apply to finish.
+
 - rqbit persists its session, so torrents resume after a restart.
 - A new download path applies to new grabs. Torrents already in the session
   finish in their original folder; the form says so next to the field.
@@ -140,13 +145,20 @@ save that does not change the effective built-in config restarts nothing.
 
 The form validates the VPN fields against `VpnProviders` at save time. Each
 time `Manager` applies a config, `BuiltIn.VpnSettings` writes
-`/config/gluetun/settings.env` atomically (write a temp file, rename), mode
-600, owned by `mydia`, and only when its content changed. The file holds
+`/config/gluetun/settings/settings.env` atomically (write a temp file,
+rename), mode 600, owned by `mydia`, and only when its content changed. The
+file sits in a `settings/` subdirectory of its own so the root side can treat
+it as mydia's (see "Root side never opens /config"). The file holds
 `VPN_ENABLED` plus the allowlisted gluetun keys whose value does not come
 from env (env values reach gluetun from the root's own environment, so they
 are never copied to disk), one `KEY=value` per line. Values containing a
 newline are rejected at save. The root loop reads each value back as a single
 argument, with no shell evaluation.
+
+`VpnProviders` entries also carry `extra_env`: the gluetun variables a provider
+requires that the form cannot take (client certificates and keys, a WireGuard
+preshared key). The form tells the user to set those as `MYDIA_VPN_<NAME>` in
+the container environment.
 
 `Vpn` runs while the VPN is enabled. It learns the SHA-256 of the file
 `Manager` wrote and stays `connecting`, with the engine stopped, until
@@ -172,19 +184,33 @@ will use this server's real IP"). After that the engine restarts without
   gluetun exiting, it stops gluetun if running and starts it with, in order:
   1. keys from the file that are in a fixed allowlist in the script (the
      table's keys above, prefix stripped); any other key is dropped and named
-     in the loop's status file;
+     in the loop's status file, and a line that is not `KEY=value` with an
+     upper-case key is only counted (`invalid=<n>`), never echoed;
   2. the operator's `MYDIA_VPN_*` env, prefix stripped, so env wins;
   3. Mydia's own variables last, as today.
-- After each start the loop writes `/config/gluetun/loop-status` with the
-  applied file hash and any dropped keys, readable by `mydia`.
+- After each start or stop the loop writes `/config/gluetun/loop-status`
+  with the applied file hash, any dropped keys and, when nonzero, an
+  `invalid=<n>` line, readable by `mydia`. `Vpn` reports invalid lines as
+  `{:vpn_settings_rejected, keys}` with an entry such as `2 invalid lines`.
 - The control server is locked to three routes: `GET /v1/vpn/status`,
   `GET /v1/publicip/ip`, `GET /v1/portforward`. Gluetun ignores `routes` in
   `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` (the default role covers every route
   no other role names), so the script instead writes a root-owned TOML file,
-  `/config/gluetun/auth.toml`, with one apikey role listing those routes, and
+  `/run/mydia-vpn/auth.toml`, with one apikey role listing those routes, and
   passes `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH` with an empty default
   role. A route no role lists is refused. The BEAM's key can no longer change
   settings or status through the API.
+
+### Root side never opens /config
+
+`/config` is mydia-owned, so a compromised BEAM can swap `/config/gluetun`, or
+any file under it, for a symlink at any moment. Root therefore never opens or
+writes a path under `/config`: every read and write there in
+`vpn-preflight.sh` runs as mydia through `su-exec`. The settings file is read
+as mydia with a 5 second timeout (a FIFO planted in its place cannot hang the
+loop) and a 64 KiB cap, into a snapshot in `/run/mydia-vpn` (root, mode 700);
+root parses only the snapshot. Root-private state lives in that directory: the
+snapshot and `auth.toml`.
 
 ### Missing capabilities
 
@@ -233,7 +259,7 @@ adapter's `{:error, reason}`, and an `error` log on each transition.
 
 | Reason | Shown as |
 | --- | --- |
-| `{:vpn_settings_write_failed, posix}` | Could not write `/config/gluetun/settings.env`; the VPN keeps its previous settings |
+| `{:vpn_settings_write_failed, posix}` | Could not write `/config/gluetun/settings/settings.env`; the VPN keeps its previous settings |
 | `{:vpn_settings_rejected, keys}` | The root loop dropped keys outside its allowlist; a version mismatch between Mydia and the image's script, named by key |
 | `:vpn_apply_timeout` | Gluetun did not pick up the new settings within 30 seconds (the hash in `loop-status` differs from the one written) |
 | `{:invalid_vpn_settings, field, message}` | A form error at save time, never a runtime state |
@@ -259,9 +285,11 @@ unchanged. `{:reserved_variable, name}` still applies to env.
   card when capabilities are missing, the off-state panel with Enable.
 - **Browser:** the modal measured at phone width.
 - **Manual Docker smoke**, added to `vendor/gluetun/README.md`: start with no
-  VPN env, enable ProtonVPN from the UI, confirm the torrent group's public IP
-  is the VPN's and Mydia's is the host's, change the server country, confirm
-  the reconnect and that torrents resume.
+  VPN env and confirm gluetun idles, enable ProtonVPN from the UI, confirm the
+  torrent group's public IP is the VPN's and Mydia's is the host's, change the
+  server country, confirm the reconnect and that torrents resume, and confirm
+  the control server refuses `PUT /v1/vpn/settings` with the BEAM's key (401)
+  while the three read routes return 200.
 
 ## Docs
 

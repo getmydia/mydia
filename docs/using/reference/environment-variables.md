@@ -150,19 +150,30 @@ startup, so changing it takes a restart.
 
 Mydia ships with a torrent client (rqbit) that it runs itself. A new install
 turns it on, when the `rqbit` binary is installed (the Docker image has it)
-and no download client is configured yet, and it then stays on until
-`MYDIA_TORRENT_ENABLED=false`. See [Download Clients](download-clients.md#built-in) for what it
-does. A blank value counts as unset.
+and no download client is configured yet, and it then stays on until you turn
+it off. See [Download Clients](download-clients.md#built-in) for what it
+does and how to set it up from Admin, Download Clients.
+
+Every variable below is optional, because the same settings can be made in the
+UI. A variable that is set **overrides** the UI: the field shows an ENV badge
+and is read-only, and nothing from it is saved to the database. Remove the
+variable (and recreate the container) to edit the field in the UI again. A
+blank value counts as unset.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MYDIA_TORRENT_ENABLED` | auto | `true` or `false` (also `1`/`0`, `yes`/`no`, `on`/`off`, in any case) overrides the auto-enable rule. `true` turns it on even without `rqbit` on the `PATH`. `false` turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI. |
+| `MYDIA_TORRENT_ENABLED` | auto | `true` or `false` (also `1`/`0`, `yes`/`no`, `on`/`off`, in any case) overrides the auto-enable rule and the UI. `true` turns it on even without `rqbit` on the `PATH`. `false` turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI. |
 | `MYDIA_TORRENT_DOWNLOAD_PATH` | `/data/downloads` | Where the built-in client writes downloads. Must be writable by the Mydia user. |
 | `MYDIA_TORRENT_STATE_PATH` | `/config/rqbit` | Where the built-in client keeps its torrent state. Must be writable by the Mydia user. |
 | `MYDIA_TORRENT_PORT` | `51413` | Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below). |
 | `MYDIA_TORRENT_API_PORT` | `3030` | Port of the built-in client's HTTP API on `127.0.0.1`. Change it when something else on the host uses 3030. |
-| `MYDIA_VPN_SERVICE_PROVIDER` | unset | Turns the experimental VPN on, for example `protonvpn` or `pia`. It reaches gluetun as `VPN_SERVICE_PROVIDER`. |
-| `MYDIA_VPN_*` | unset | Any other [gluetun variable](https://github.com/qdm12/gluetun-wiki) with the `MYDIA_VPN_` prefix. The prefix is stripped, so `MYDIA_VPN_VPN_TYPE=wireguard` reaches gluetun as `VPN_TYPE=wireguard`. |
+| `MYDIA_VPN_SERVICE_PROVIDER` | unset | Sets the provider, for example `protonvpn` or `pia`, and turns the experimental VPN on. It reaches gluetun as `VPN_SERVICE_PROVIDER`. |
+| `MYDIA_VPN_VPN_TYPE` | provider's first type | `openvpn` or `wireguard`. |
+| `MYDIA_VPN_OPENVPN_USER`, `MYDIA_VPN_OPENVPN_PASSWORD` | unset | OpenVPN login. |
+| `MYDIA_VPN_WIREGUARD_PRIVATE_KEY`, `MYDIA_VPN_WIREGUARD_ADDRESSES` | unset | WireGuard key and address. |
+| `MYDIA_VPN_SERVER_COUNTRIES`, `MYDIA_VPN_SERVER_REGIONS`, `MYDIA_VPN_SERVER_CITIES`, `MYDIA_VPN_SERVER_HOSTNAMES` | unset | Where to connect, comma-separated. |
+| `MYDIA_VPN_VPN_PORT_FORWARDING` | `off` | `on` asks the provider to forward a port. |
+| `MYDIA_VPN_*` | unset | Any other [gluetun variable](https://github.com/qdm12/gluetun-wiki) with the `MYDIA_VPN_` prefix, for settings the UI does not have (a provider's client certificate, for example). The prefix is stripped, so `MYDIA_VPN_VPN_TYPE=wireguard` reaches gluetun as `VPN_TYPE=wireguard`. The admin panel lists the names of these under "Also set from environment", never their values. |
 
 The VPN is **experimental**. It runs a patched gluetun that tunnels only the
 built-in client, so the rest of Mydia keeps its normal network. If the VPN is
@@ -190,9 +201,13 @@ Two more things the VPN depends on:
   pick another `PGID`.
 
 Mydia sets `SPLIT_TUNNEL_GID`, `HTTP_CONTROL_SERVER_ADDRESS`,
-`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`, `DNS_ADDRESS` and `DNS_SERVER` itself.
+`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`, `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH`,
+`DNS_ADDRESS` and `DNS_SERVER` itself.
 Setting them with the `MYDIA_VPN_` prefix is ignored and shown as a warning in
 the admin UI. With `MYDIA_TORRENT_ENABLED=false`, the VPN is not started.
+Mydia also limits gluetun's control server to the three read-only calls it
+needs, so nothing in the Mydia process can change the VPN's settings through
+it.
 
 The tunnel interface defaults to `wg0` when `MYDIA_VPN_VPN_TYPE` is
 `wireguard` and `tun0` otherwise, as gluetun names them;
