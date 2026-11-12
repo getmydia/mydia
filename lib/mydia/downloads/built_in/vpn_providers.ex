@@ -14,8 +14,12 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
       accept `VPN_PORT_FORWARDING=on`.
 
   `name` is gluetun's exact `VPN_SERVICE_PROVIDER` string; `label` is for
-  display. Some providers need more than the form's fields (for example
-  client certificates for OpenVPN); gluetun reports that when it starts.
+  display. `extra_env` lists the gluetun variables a provider requires that
+  the form cannot supply (client certificates and keys, a WireGuard preshared
+  key), from the `validate` functions in `internal/configuration/settings/openvpn.go`
+  (`validateOpenVPNClientCertificate`, `validateOpenVPNClientKey`,
+  `validateOpenVPNEncryptedKey`) and `wireguard.go` (the AirVPN preshared key
+  check). They go in the container environment as `MYDIA_VPN_<NAME>`.
   Refresh this table when `vendor/gluetun/VERSION` changes.
   """
 
@@ -50,11 +54,19 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
     {"windscribe", "Windscribe"}
   ]
 
+  @extra_env %{
+    "airvpn" => ["OPENVPN_CERT", "OPENVPN_KEY", "WIREGUARD_PRESHARED_KEY"],
+    "cyberghost" => ["OPENVPN_CERT", "OPENVPN_KEY"],
+    "vpnsecure" => ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"],
+    "vpn unlimited" => ["OPENVPN_CERT", "OPENVPN_KEY"]
+  }
+
   @type provider :: %{
           name: String.t(),
           label: String.t(),
           types: [String.t()],
-          port_forwarding?: boolean()
+          port_forwarding?: boolean(),
+          extra_env: [String.t()]
         }
 
   @table Enum.map(@providers, fn {name, label} ->
@@ -62,7 +74,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
              name: name,
              label: label,
              types: if(name in @wireguard, do: ["openvpn", "wireguard"], else: ["openvpn"]),
-             port_forwarding?: name in @port_forwarding
+             port_forwarding?: name in @port_forwarding,
+             extra_env: Map.get(@extra_env, name, [])
            }
          end)
 

@@ -116,6 +116,10 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
 
+      taken = Status.describe({:reserved_name_taken})
+      assert taken =~ "save the built-in client's settings again"
+      refute taken =~ "restart"
+
       assert Status.describe(
                {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"}
              ) =~

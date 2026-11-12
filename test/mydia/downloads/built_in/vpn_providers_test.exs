@@ -36,6 +36,16 @@ defmodule Mydia.Downloads.BuiltIn.VpnProvidersTest do
     assert %{port_forwarding?: false} = VpnProviders.get("mullvad")
   end
 
+  test "extra_env names what the form cannot supply, empty by default" do
+    assert %{extra_env: ["OPENVPN_CERT", "OPENVPN_KEY"]} = VpnProviders.get("cyberghost")
+
+    assert %{extra_env: ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"]} =
+             VpnProviders.get("vpnsecure")
+
+    assert "WIREGUARD_PRESHARED_KEY" in VpnProviders.get("airvpn").extra_env
+    assert VpnProviders.get("mullvad").extra_env == []
+  end
+
   test "get/1 returns nil for unknown names" do
     assert VpnProviders.get("nope") == nil
     assert VpnProviders.get(nil) == nil
