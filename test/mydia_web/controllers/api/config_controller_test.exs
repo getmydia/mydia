@@ -135,6 +135,20 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
     end
   end
 
+  describe "config_key_to_env_var/1" do
+    # Every built-in torrent key resolves to its variable, so an env-set one
+    # reports source environment_variable and update/delete refuse it.
+    test "maps every built_in_torrent key to its schema variable" do
+      for {field, env} <- Mydia.Config.Schema.BuiltInTorrent.env_vars() do
+        assert MydiaWeb.Api.ConfigController.config_key_to_env_var("built_in_torrent.#{field}") ==
+                 env
+      end
+
+      assert MydiaWeb.Api.ConfigController.config_key_to_env_var("server.port") == "PORT"
+      assert MydiaWeb.Api.ConfigController.config_key_to_env_var("built_in_torrent.nope") == nil
+    end
+  end
+
   describe "cardigann.engine" do
     alias Mydia.Indexers.Cardigann.EngineSwitcher
     alias Mydia.Settings.ConfigSetting

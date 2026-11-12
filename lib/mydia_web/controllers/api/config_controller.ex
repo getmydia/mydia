@@ -438,7 +438,15 @@ defmodule MydiaWeb.Api.ConfigController do
     Settings.env_var_set?(config_key_to_env_var(key))
   end
 
-  defp config_key_to_env_var(key) do
+  # From the schema's own table, so the two cannot drift.
+  @built_in_torrent_env_vars Map.new(
+                               Mydia.Config.Schema.BuiltInTorrent.env_vars(),
+                               fn {field, env} -> {"built_in_torrent.#{field}", env} end
+                             )
+
+  @doc false
+  # The environment variable that sets a config key, or nil.
+  def config_key_to_env_var(key) do
     # Map common config keys to their environment variable names
     # This is a subset - add more as needed
     mapping = %{
@@ -465,7 +473,7 @@ defmodule MydiaWeb.Api.ConfigController do
       "cardigann.engine" => "CARDIGANN_ENGINE"
     }
 
-    Map.get(mapping, key)
+    Map.get(mapping, key) || Map.get(@built_in_torrent_env_vars, key)
   end
 
   defp get_default_value(path) do
