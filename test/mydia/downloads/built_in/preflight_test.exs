@@ -19,6 +19,11 @@ defmodule Mydia.Downloads.BuiltIn.PreflightTest do
     assert :absent = Preflight.read(dir)
   end
 
+  test "a file that exists but cannot be read is an error, not :absent", %{tmp_dir: dir} do
+    File.mkdir!(Path.join(dir, "preflight"))
+    assert {:error, :eisdir} = Preflight.read(dir)
+  end
+
   test "blocking reasons" do
     ok = %{net_admin: :ok, tun: :ok, split_group: :ok, src_valid_mark: :ok}
     assert nil == Preflight.blocking_reason(ok)

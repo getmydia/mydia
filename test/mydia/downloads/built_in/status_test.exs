@@ -116,6 +116,10 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
 
+      unreadable = Status.describe({:preflight_unreadable, :eacces})
+      assert unreadable =~ "/config/gluetun/preflight"
+      assert unreadable =~ "permission denied"
+
       failed = Status.describe({:start_failed, :eaddrinuse})
       assert failed =~ "failed to start"
       assert failed =~ "eaddrinuse"

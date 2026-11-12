@@ -307,6 +307,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
       :ok
     else
       :absent -> {:down, :vpn_unreachable}
+      {:error, posix} -> {:down, {:preflight_unreadable, posix}}
       reason when is_atom(reason) -> {:down, reason}
     end
   end

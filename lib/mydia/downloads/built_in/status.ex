@@ -111,6 +111,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe(:vpn_applying),
     do: "Applying the new VPN settings. Torrents start once the tunnel is verified."
 
+  def describe({:preflight_unreadable, posix}),
+    do:
+      "Could not read /config/gluetun/preflight, the container's VPN capability check (#{:file.format_error(posix)}). Make it readable by the Mydia user, or recreate the container. Torrents are stopped until it can be read."
+
   def describe(:vpn_unreachable),
     do: "The VPN service is not answering. Torrents are stopped until it does."
 

@@ -7,11 +7,17 @@ defmodule Mydia.Downloads.BuiltIn.Preflight do
 
   @keys [:net_admin, :tun, :split_group, :src_valid_mark]
 
-  @spec read(Path.t()) :: {:ok, map()} | :absent
+  @doc """
+  The parsed file, `:absent` when there is none (the entrypoint has not run
+  yet, or this is not the container), or `{:error, posix}` when it exists
+  but cannot be read.
+  """
+  @spec read(Path.t()) :: {:ok, map()} | :absent | {:error, File.posix()}
   def read(dir) do
     case File.read(Path.join(dir, "preflight")) do
       {:ok, body} -> {:ok, parse(body)}
-      {:error, _} -> :absent
+      {:error, :enoent} -> :absent
+      {:error, _posix} = error -> error
     end
   end
 

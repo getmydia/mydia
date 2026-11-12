@@ -126,6 +126,16 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert %Status{vpn: {:down, :split_group_missing}} = Status.get(ctx.status)
   end
 
+  test "an unreadable preflight file is reported as such, not as unreachable", ctx do
+    File.rm!(Path.join(ctx.dir, "preflight"))
+    File.mkdir!(Path.join(ctx.dir, "preflight"))
+    gluetun(ctx.bypass, "running", 0)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop, {:preflight_unreadable, :eisdir}}, 1_000
+    assert %Status{vpn: {:down, {:preflight_unreadable, :eisdir}}} = Status.get(ctx.status)
+  end
+
   test "an unreachable gluetun is reported", ctx do
     Bypass.down(ctx.bypass)
     start_vpn(ctx, :ok)
