@@ -86,11 +86,23 @@ run_with_gluetun_env() {
         if blank "$value" && { settings_key_allowed "$key" || [ "$key" = SERVICE_PROVIDER ]; }; then
             continue
         fi
+        # A blank pprof rate would replace the 0 default below with an empty
+        # value, which gluetun reads as unset and panics on.
+        case $key in
+            PPROF_BLOCK_PROFILE_RATE | PPROF_MUTEX_PROFILE_RATE)
+                blank "$value" && continue ;;
+        esac
         set -- "$@" "$key=$value"
     done
     blank "${MYDIA_VPN_SERVICE_PROVIDER:-}" ||
         set -- "$@" "VPN_SERVICE_PROVIDER=$MYDIA_VPN_SERVICE_PROVIDER"
-    exec env -i PATH="$PATH" "$@" \
+    # gluetun has no code default for the two pprof rates (upstream's image
+    # sets them as Dockerfile ENV) and panics on a nil pointer without them.
+    # They come first so the operator's MYDIA_VPN_* can still override them.
+    exec env -i PATH="$PATH" \
+        PPROF_BLOCK_PROFILE_RATE=0 \
+        PPROF_MUTEX_PROFILE_RATE=0 \
+        "$@" \
         SPLIT_TUNNEL_GID="$split_gid" \
         HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \
         HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH="$auth_toml" \

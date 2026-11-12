@@ -37,7 +37,11 @@ Unset, gluetun behaves exactly as upstream.
   which would otherwise route marked packets by their container source address
   out of the default interface.
 - **Firewall.** Chain policies stay `ACCEPT`. Marked packets may only leave on
-  `lo` or the tunnel. Inbound on the tunnel only established traffic and the
+  `lo` or the tunnel, enforced in `mangle POSTROUTING`
+  (`patches/0002-kill-switch-in-postrouting.patch`). It cannot be `filter
+  OUTPUT`: every OUTPUT chain sees the device the socket's route chose before
+  the mark existed, so `-o <tunnel>` never matched there and every tunneled
+  packet was dropped. Inbound on the tunnel only established traffic and the
   forwarded port are accepted. Marked traffic leaving on the tunnel is
   masqueraded, because a socket picks its source address from the main table
   before its packets are marked.
@@ -131,6 +135,18 @@ clears them.
   does not reap orphans. An OpenVPN child left behind when gluetun dies
   becomes a zombie. Run the container with `init: true` (the compose examples
   in the download client docs do) so an init process reaps it.
+- **Gluetun's own lookups need a loopback or tunnel-reachable resolver.**
+  Its system lookups (health check, provider API, public IP) run as uid 0,
+  which the DNS redirect skips, so they go to the `/etc/resolv.conf` server
+  marked. Docker's embedded `127.0.0.11` is on `lo` and works. Podman's
+  bridge resolver (the bridge gateway, e.g. `10.88.0.1`) is on the container
+  network, so the kill switch drops those lookups and the startup health check
+  fails; mount a `resolv.conf` naming public resolvers, which the tunnel
+  reaches.
+- **The bundled server list ages.** Gluetun's hardcoded list is from its
+  release; a provider's retired servers stay in it and never answer. Narrow
+  with `MYDIA_VPN_SERVER_NAMES` (or `MYDIA_VPN_SERVER_HOSTNAMES`) to live
+  ones.
 - **The image is referenced by tag, not digest.** Upstream gluetun and the
   Mydia image are not pinned by digest.
 - **The engine is reported running before its API listens.** Mydia marks

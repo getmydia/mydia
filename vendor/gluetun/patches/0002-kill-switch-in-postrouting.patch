@@ -1,0 +1,147 @@
+From dd1f6ccb3c2349e13281d5404ef7ca59de83d0fd Mon Sep 17 00:00:00 2001
+From: mydia <build@mydia>
+Date: Thu, 12 Nov 2026 15:01:14 -0500
+Subject: [PATCH] Enforce the split tunnel kill switch in mangle POSTROUTING
+
+Every OUTPUT chain sees the output device the socket's route chose
+before mangle OUTPUT set the mark, so the filter OUTPUT rule
+'-m mark -o <tunnel> -j ACCEPT' never matched and every tunneled
+packet hit the DROP. POSTROUTING runs after the reroute.
+---
+ internal/firewall/splittunnel_test.go | 10 +++++-----
+ internal/splittunnel/rules.go         | 16 ++++++++++++----
+ internal/splittunnel/rules_test.go    | 12 ++++++------
+ 3 files changed, 23 insertions(+), 15 deletions(-)
+
+diff --git a/internal/firewall/splittunnel_test.go b/internal/firewall/splittunnel_test.go
+index ef86f4b..86d7ec6 100644
+--- a/internal/firewall/splittunnel_test.go
++++ b/internal/firewall/splittunnel_test.go
+@@ -61,9 +61,9 @@ func killSwitchRules() []string {
+ 	return []string{
+ 		"iptables -t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
+ 		"iptables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
+-		"iptables -A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"iptables -t mangle -A POSTROUTING -m mark --mark 0x5154 -j DROP",
+ 		"ip6tables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
+-		"ip6tables -A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"ip6tables -t mangle -A POSTROUTING -m mark --mark 0x5154 -j DROP",
+ 	}
+ }
+ 
+@@ -118,7 +118,7 @@ func Test_splitTunnel_firstConnectionOverPreviousRun(t *testing.T) {
+ 		"iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN",
+ 		"iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x5154",
+ 		"iptables -t mangle -A PREROUTING -i wg0 -j CONNMARK --set-mark 0x5154",
+-		"iptables -I OUTPUT -m mark --mark 0x5154 -o wg0 -j ACCEPT",
++		"iptables -t mangle -I POSTROUTING -m mark --mark 0x5154 -o wg0 -j ACCEPT",
+ 		"iptables -A INPUT -i wg0 -j DROP",
+ 		"iptables -t nat -A POSTROUTING -m mark --mark 0x5154 -o wg0 -j MASQUERADE",
+ 	}
+@@ -168,7 +168,7 @@ func Test_splitTunnel(t *testing.T) {
+ 	assert.Contains(t, runner.commands,
+ 		"iptables -t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154")
+ 	assert.Contains(t, runner.commands,
+-		"ip6tables -A OUTPUT -m mark --mark 0x5154 -j DROP")
++		"ip6tables -t mangle -A POSTROUTING -m mark --mark 0x5154 -j DROP")
+ 	assert.NotContains(t, strings.Join(runner.commands, "\n"), "tun0",
+ 		"no tunnel rules before the first VPN connection")
+ 
+@@ -181,7 +181,7 @@ func Test_splitTunnel(t *testing.T) {
+ 	require.NoError(t, config.SetVPNConnection(ctx, connection, "wg0"))
+ 	assert.Contains(t, runner.commands,
+ 		"iptables -t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 51820 -j RETURN")
+-	assert.Contains(t, runner.commands, "iptables -I OUTPUT -m mark --mark 0x5154 -o wg0 -j ACCEPT")
++	assert.Contains(t, runner.commands, "iptables -t mangle -I POSTROUTING -m mark --mark 0x5154 -o wg0 -j ACCEPT")
+ 	assert.Contains(t, runner.commands, "ip6tables -A INPUT -i wg0 -j DROP")
+ 
+ 	runner.commands = nil
+diff --git a/internal/splittunnel/rules.go b/internal/splittunnel/rules.go
+index 0526cf9..06cb09b 100644
+--- a/internal/splittunnel/rules.go
++++ b/internal/splittunnel/rules.go
+@@ -11,8 +11,16 @@
+ //
+ // Packets from those sockets get the firewall mark Mark in mangle OUTPUT. An
+ // ip rule sends the mark to the VPN routing table, which holds the route
+-// through the tunnel and an unreachable fallback. The filter table drops
++// through the tunnel and an unreachable fallback. mangle POSTROUTING drops
+ // marked packets that would leave on any interface but lo and the tunnel.
++//
++// The kill switch cannot live in filter OUTPUT. The mark is set in mangle
++// OUTPUT, and the kernel reroutes the packet after that chain, but every
++// OUTPUT chain sees the output device the socket's route chose before the
++// mark existed (the hook's state is fixed when the hook starts). There a
++// marked packet always matches -o <default interface>, never -o <tunnel>,
++// so an "-o tunnel ACCEPT" never matches and every tunneled packet is
++// dropped. POSTROUTING runs after the reroute and sees the real device.
+ package splittunnel
+ 
+ import (
+@@ -83,8 +91,8 @@ func (s Settings) BaseInstructions(ipv6, remove bool) []string {
+ 		fmt.Sprintf("-t mangle %s OUTPUT -m connmark --mark %s -j MARK --set-mark %s", appendOp, mark, mark),
+ 		fmt.Sprintf("-t mangle %s OUTPUT -m owner --gid-owner %d -j MARK --set-mark %s", appendOp, s.GID, mark),
+ 		fmt.Sprintf("-t mangle %s OUTPUT -m mark --mark %s -j CONNMARK --save-mark", appendOp, mark),
+-		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o lo -j ACCEPT", appendOp, mark),
+-		fmt.Sprintf("%s OUTPUT -m mark --mark %s -j DROP", appendOp, mark),
++		fmt.Sprintf("-t mangle %s POSTROUTING -m mark --mark %s -o lo -j ACCEPT", appendOp, mark),
++		fmt.Sprintf("-t mangle %s POSTROUTING -m mark --mark %s -j DROP", appendOp, mark),
+ 	}
+ 	for _, protocol := range []string{"udp", "tcp"} {
+ 		if ipv6 {
+@@ -126,7 +134,7 @@ func (s Settings) TunnelInstructions(ipv6, remove bool) []string {
+ 	return append(instructions,
+ 		fmt.Sprintf("-t mangle %s PREROUTING -i %s -j MARK --set-mark %s", appendOp, s.Interface, mark),
+ 		fmt.Sprintf("-t mangle %s PREROUTING -i %s -j CONNMARK --set-mark %s", appendOp, s.Interface, mark),
+-		fmt.Sprintf("%s OUTPUT -m mark --mark %s -o %s -j ACCEPT", insertOp, mark, s.Interface),
++		fmt.Sprintf("-t mangle %s POSTROUTING -m mark --mark %s -o %s -j ACCEPT", insertOp, mark, s.Interface),
+ 		fmt.Sprintf("%s INPUT -i %s -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT", appendOp, s.Interface),
+ 		fmt.Sprintf("%s INPUT -i %s -j DROP", appendOp, s.Interface),
+ 		fmt.Sprintf("-t nat %s POSTROUTING -m mark --mark %s -o %s -j MASQUERADE", appendOp, mark, s.Interface),
+diff --git a/internal/splittunnel/rules_test.go b/internal/splittunnel/rules_test.go
+index 3a43734..ff43486 100644
+--- a/internal/splittunnel/rules_test.go
++++ b/internal/splittunnel/rules_test.go
+@@ -44,8 +44,8 @@ func TestBaseInstructionsIPv4(t *testing.T) {
+ 		"-t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A OUTPUT -m mark --mark 0x5154 -j CONNMARK --save-mark",
+-		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
+-		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"-t mangle -A POSTROUTING -m mark --mark 0x5154 -o lo -j ACCEPT",
++		"-t mangle -A POSTROUTING -m mark --mark 0x5154 -j DROP",
+ 		"-t nat -I OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 " +
+ 			"-j DNAT --to-destination 127.0.0.1:53",
+ 		"-t nat -I OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p tcp --dport 53 " +
+@@ -61,8 +61,8 @@ func TestBaseInstructionsIPv6DropsDNSInsteadOfRedirecting(t *testing.T) {
+ 		"-t mangle -A OUTPUT -m connmark --mark 0x5154 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A OUTPUT -m owner --gid-owner 1500 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A OUTPUT -m mark --mark 0x5154 -j CONNMARK --save-mark",
+-		"-A OUTPUT -m mark --mark 0x5154 -o lo -j ACCEPT",
+-		"-A OUTPUT -m mark --mark 0x5154 -j DROP",
++		"-t mangle -A POSTROUTING -m mark --mark 0x5154 -o lo -j ACCEPT",
++		"-t mangle -A POSTROUTING -m mark --mark 0x5154 -j DROP",
+ 		"-t mangle -A OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p udp --dport 53 -j DROP",
+ 		"-t mangle -A OUTPUT -m mark --mark 0x5154 -m owner ! --uid-owner 0 -p tcp --dport 53 -j DROP",
+ 	}
+@@ -133,7 +133,7 @@ func TestTunnelInstructionsIPv4(t *testing.T) {
+ 		"-t mangle -I OUTPUT -d 192.0.2.10 -p udp --dport 1194 -j RETURN",
+ 		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A PREROUTING -i tun0 -j CONNMARK --set-mark 0x5154",
+-		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
++		"-t mangle -I POSTROUTING -m mark --mark 0x5154 -o tun0 -j ACCEPT",
+ 		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
+ 		"-A INPUT -i tun0 -j DROP",
+ 		"-t nat -A POSTROUTING -m mark --mark 0x5154 -o tun0 -j MASQUERADE",
+@@ -147,7 +147,7 @@ func TestTunnelInstructionsIPv6SkipsIPv4Endpoint(t *testing.T) {
+ 	want := []string{
+ 		"-t mangle -A PREROUTING -i tun0 -j MARK --set-mark 0x5154",
+ 		"-t mangle -A PREROUTING -i tun0 -j CONNMARK --set-mark 0x5154",
+-		"-I OUTPUT -m mark --mark 0x5154 -o tun0 -j ACCEPT",
++		"-t mangle -I POSTROUTING -m mark --mark 0x5154 -o tun0 -j ACCEPT",
+ 		"-A INPUT -i tun0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
+ 		"-A INPUT -i tun0 -j DROP",
+ 		"-t nat -A POSTROUTING -m mark --mark 0x5154 -o tun0 -j MASQUERADE",
+-- 
+2.55.0
+

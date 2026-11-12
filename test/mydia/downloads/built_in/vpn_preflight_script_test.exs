@@ -93,6 +93,36 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       assert last_value(lines, "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE") == "{}"
     end
 
+    # gluetun dereferences nil without these; upstream's image sets them as ENV.
+    test "sets the pprof rates gluetun has no code default for" do
+      lines = gluetun_env([{"MYDIA_VPN_SERVICE_PROVIDER", "mullvad"}])
+
+      assert last_value(lines, "PPROF_BLOCK_PROFILE_RATE") == "0"
+      assert last_value(lines, "PPROF_MUTEX_PROFILE_RATE") == "0"
+    end
+
+    test "the operator can override the pprof rates" do
+      lines =
+        gluetun_env([
+          {"MYDIA_VPN_SERVICE_PROVIDER", "mullvad"},
+          {"MYDIA_VPN_PPROF_BLOCK_PROFILE_RATE", "5"}
+        ])
+
+      assert last_value(lines, "PPROF_BLOCK_PROFILE_RATE") == "5"
+    end
+
+    test "a blank pprof rate keeps the 0 default" do
+      lines =
+        gluetun_env([
+          {"MYDIA_VPN_SERVICE_PROVIDER", "mullvad"},
+          {"MYDIA_VPN_PPROF_BLOCK_PROFILE_RATE", ""},
+          {"MYDIA_VPN_PPROF_MUTEX_PROFILE_RATE", "  "}
+        ])
+
+      assert last_value(lines, "PPROF_BLOCK_PROFILE_RATE") == "0"
+      assert last_value(lines, "PPROF_MUTEX_PROFILE_RATE") == "0"
+    end
+
     test "a line inside a multi-line value is not taken for a variable" do
       out =
         [
