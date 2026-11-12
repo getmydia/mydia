@@ -105,7 +105,7 @@ not fail the config load); `Settings.save/2` does. The two secrets are
 `redact: true`. `BuiltIn.Settings` is the form's API: it skips fields whose env
 var is set, never writes them, and keeps a stored secret when the field is
 submitted blank. `Loader.reload/1` broadcasts `{:runtime_config_reloaded, config}`
-on `Loader.topic/0` after every save, and skips the broadcast while
+on `Mydia.Config.Broadcast.topic/0` after every save, and skips the broadcast while
 `Mydia.PubSub` is not running (boot).
 
 **Manager.** `BuiltIn.Manager` builds `BuiltIn.Config` from that section

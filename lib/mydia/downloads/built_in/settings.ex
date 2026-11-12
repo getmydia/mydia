@@ -392,19 +392,14 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
 
   defp validate_single_line(changeset, fields) do
     Enum.reduce(fields, changeset, fn field, acc ->
-      case get_field(acc, field) do
-        value when is_binary(value) ->
-          if String.contains?(value, ["\n", "\r"]) do
-            add_error(acc, field, "cannot contain a line break")
-          else
-            acc
-          end
-
-        _ ->
-          acc
-      end
+      if line_break?(get_field(acc, field)),
+        do: add_error(acc, field, "cannot contain a line break"),
+        else: acc
     end)
   end
+
+  defp line_break?(value) when is_binary(value), do: String.contains?(value, ["\n", "\r"])
+  defp line_break?(_), do: false
 
   defp validate_vpn(changeset, locked) do
     provider = get_field(changeset, :vpn_provider)

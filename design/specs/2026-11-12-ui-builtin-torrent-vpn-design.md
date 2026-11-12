@@ -115,7 +115,7 @@ deep (`section.field`); a nested embed could not be set from the database.
 
 ### Change signal
 
-`Mydia.Config.Loader.reload/1` broadcasts `{:runtime_config_reloaded,
+`Mydia.Config.Loader.reload/1` broadcasts (through `Mydia.Config.Broadcast`) `{:runtime_config_reloaded,
 config}` on the `"config:runtime"` PubSub topic after it stores a new runtime
 config, and skips the broadcast while `Mydia.PubSub` is not running (boot).
 Every save path already ends in `reload/1`, so one broadcast there covers them

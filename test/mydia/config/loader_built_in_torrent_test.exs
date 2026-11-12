@@ -2,43 +2,44 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
   # async: false because Loader.reload/1 mutates the global :runtime_config env.
   use ExUnit.Case, async: false
 
+  alias Mydia.Config.Env.BuiltInTorrentEnv
   alias Mydia.Config.Loader
 
   defp env(map), do: fn name -> Map.get(map, name) end
 
   test "port parses" do
-    assert Loader.built_in_torrent_env(env(%{"MYDIA_TORRENT_PORT" => "6881"})).listen_port == 6881
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_PORT" => "6881"})).listen_port == 6881
   end
 
   test "bad port is left out" do
     refute Map.has_key?(
-             Loader.built_in_torrent_env(env(%{"MYDIA_TORRENT_PORT" => "abc"})),
+             BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_PORT" => "abc"})),
              :listen_port
            )
   end
 
   test "enabled accepts off and ignores junk" do
-    assert Loader.built_in_torrent_env(env(%{"MYDIA_TORRENT_ENABLED" => " OFF "})).enabled ==
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_ENABLED" => " OFF "})).enabled ==
              false
 
-    assert Loader.built_in_torrent_env(env(%{"MYDIA_TORRENT_ENABLED" => "yes"})).enabled == true
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_ENABLED" => "yes"})).enabled == true
 
     refute Map.has_key?(
-             Loader.built_in_torrent_env(env(%{"MYDIA_TORRENT_ENABLED" => "maybe"})),
+             BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_ENABLED" => "maybe"})),
              :enabled
            )
   end
 
   test "provider implies vpn_enabled, blank does not" do
-    r = Loader.built_in_torrent_env(env(%{"MYDIA_VPN_SERVICE_PROVIDER" => " ProtonVPN "}))
+    r = BuiltInTorrentEnv.load(env(%{"MYDIA_VPN_SERVICE_PROVIDER" => " ProtonVPN "}))
     assert r.vpn_enabled == true
     assert r.vpn_provider == "protonvpn"
 
-    assert Loader.built_in_torrent_env(env(%{"MYDIA_VPN_SERVICE_PROVIDER" => "  "})) == %{}
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_VPN_SERVICE_PROVIDER" => "  "})) == %{}
   end
 
   test "port forwarding accepts on" do
-    r = Loader.built_in_torrent_env(env(%{"MYDIA_VPN_VPN_PORT_FORWARDING" => "on"}))
+    r = BuiltInTorrentEnv.load(env(%{"MYDIA_VPN_VPN_PORT_FORWARDING" => "on"}))
     assert r.vpn_port_forwarding == true
   end
 
@@ -55,14 +56,14 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
     end
 
     test "broadcasts the new config" do
-      assert Loader.topic() == "config:runtime"
-      Phoenix.PubSub.subscribe(Mydia.PubSub, Loader.topic())
+      assert Mydia.Config.Broadcast.topic() == "config:runtime"
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Mydia.Config.Broadcast.topic())
       assert {:ok, _} = Loader.reload(sources: [:yaml, :env])
       assert_receive {:runtime_config_reloaded, %Mydia.Config.Schema{}}
     end
 
     test "skips the broadcast when the PubSub is not running (boot)" do
-      Phoenix.PubSub.subscribe(Mydia.PubSub, Loader.topic())
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Mydia.Config.Broadcast.topic())
       assert {:ok, _} = Loader.reload(sources: [:yaml, :env], pubsub: :not_running_pubsub)
       refute_receive {:runtime_config_reloaded, _}, 50
     end

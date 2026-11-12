@@ -1059,10 +1059,6 @@ defmodule Mydia.Config.Schema do
     # Run through changeset to apply defaults from field definitions
     changeset = changeset(base_config, %{})
 
-    if changeset.valid? do
-      Ecto.Changeset.apply_changes(changeset)
-    else
-      base_config
-    end
+    if changeset.valid?, do: Ecto.Changeset.apply_changes(changeset), else: base_config
   end
 end

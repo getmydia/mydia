@@ -6,7 +6,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   It builds `Config` from the layered runtime config, writes the VPN settings
   file for the root-side gluetun loop and starts one `BuiltIn.Supervisor` tree
   under the `Mydia.Downloads.BuiltIn.Instances` `DynamicSupervisor`. It then
-  listens on `Mydia.Config.Loader.topic/0`: after every reload it rebuilds the
+  listens on `Mydia.Config.Broadcast.topic/0`: after every reload it rebuilds the
   config and, only when `Config.restart_key/1` differs from the running one,
   stops the whole tree and starts a fresh one with new credentials. A fresh
   tree means a fresh `Vpn` gate, so a new VPN setting always waits for the
@@ -25,7 +25,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   use GenServer
   require Logger
 
-  alias Mydia.Config.Loader
+  alias Mydia.Config.Broadcast
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.BuiltIn.{Config, Runtime, Status, VpnSettings}
 
@@ -63,7 +63,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
   @impl true
   def init(opts) do
-    Phoenix.PubSub.subscribe(Mydia.PubSub, Loader.topic())
+    Phoenix.PubSub.subscribe(Mydia.PubSub, Broadcast.topic())
 
     state = %{
       name: Keyword.get(opts, :name, __MODULE__),
