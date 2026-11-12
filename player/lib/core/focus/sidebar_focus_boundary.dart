@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'focus_memory.dart';
+
 /// The sidebar/content focus boundary's memory and its two moves.
 ///
 /// Extracted from `AppShell`'s state rather than left inline because the shell
@@ -102,7 +104,12 @@ class SidebarFocusBoundary {
       return _landed(origin);
     }
 
-    final fallback = _firstFocusableInContent();
+    // A page that names where focus lands (its grid, not the filter bar
+    // above it) gets that, ahead of whatever comes first in the tree.
+    final scope = contentScope;
+    final fallback =
+        (scope == null ? null : FocusMemory.landingTargetWithin(scope)) ??
+            _firstFocusableInContent();
     if (fallback == null) return false;
     fallback.requestFocus();
     return _landed(fallback);

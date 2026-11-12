@@ -344,7 +344,7 @@
             <% end %>
           <% end %>
           <%!-- Overview Section --%>
-          <Components.overview_section media_item={@media_item} />
+          <MydiaWeb.MediaLive.Show.OverviewComponents.overview_section media_item={@media_item} />
           <%!-- Recommendations, TV placement. A show renders this collapsed, so
                 it costs one row and pushes the episode list down by nothing.
                 Movies get it at the bottom of the page instead: see below. --%>
@@ -359,6 +359,10 @@
             can_add={@can_create_media}
           />
           <%!-- Episodes Section (TV Shows Only) --%>
+          <EpisodeFetchEvents.notice
+            media_item={@media_item}
+            fetching_episodes?={@fetching_episodes?}
+          />
           <Components.episodes_section
             media_item={@media_item}
             download_summary={@download_summary}
@@ -623,6 +627,7 @@
     config_open={@add_config != nil}
     add_event="add_selected_item"
     request_event="request_selected_item"
+    person_event="show_person"
   >
     <:rail>
       <DiscoverComponents.media_rail
@@ -639,6 +644,19 @@
       />
     </:rail>
   </.live_component>
+
+  <%!-- Person popup, opened from the cast panel or the dialog's cast. Sits
+       below the detail modal, so a title opened from its posters stacks on
+       top; Escape belongs to whichever layer is uppermost. --%>
+  <MydiaWeb.PersonComponents.person_modal
+    id="person-modal"
+    person={@selected_person}
+    stub={@person_stub}
+    titles={@person_titles}
+    loading={@person_loading}
+    error={@person_error}
+    escape_enabled={is_nil(@selected_item) and is_nil(@add_config)}
+  />
 
   <MydiaWeb.AddMediaComponents.add_config_modal
     config={@add_config}

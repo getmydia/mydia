@@ -14,6 +14,7 @@ import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/router/push_route.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/theme/glass_material.dart';
+import 'package:player/core/theme/linux_desktop.dart';
 import 'package:player/core/theme/theme_preset.dart';
 import 'package:player/core/update/update_problem.dart';
 import 'package:player/core/update/update_provider.dart';
@@ -174,6 +175,18 @@ void main() {
     expect(en.themePresetName(ThemePreset.oledBlack), 'OLED Black');
     expect(en.themePresetName(ThemePreset.slate), 'Slate');
     expect(en.themePresetName(ThemePreset.macos), 'macOS');
+    expect(en.themePresetName(ThemePreset.linux), 'System');
+    expect(
+        en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.gnome),
+        'System (GNOME)');
+    expect(
+        en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.kde),
+        'System (KDE Plasma)');
+    final es = await l10n('es');
+    expect(
+        es.themePresetName(ThemePreset.linux,
+            linuxDesktop: LinuxDesktop.elementary),
+        'Sistema (elementary OS)');
     expect(en.glassMaterialName(GlassMaterial.liquid), 'Liquid Glass');
     expect(en.glassMaterialName(GlassMaterial.frosted), 'Frosted');
     expect(en.subtitleSizeName(SubtitleSize.small), 'Small');

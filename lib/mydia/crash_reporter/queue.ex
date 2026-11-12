@@ -31,7 +31,8 @@ defmodule Mydia.CrashReporter.Queue do
   - Max delay cap: 8 minutes (configurable)
   - Reports are deleted only after:
     - Exceeding max retries (default: 10 attempts), OR
-    - Exceeding max retry duration (default: 24 hours)
+    - Exceeding max retry duration (default: 24 hours), OR
+    - The relay rejecting the body with a 400 or 413, which no retry can fix
   - Successful delivery immediately stops further retries
 
   This strategy ensures crash reports survive temporary network issues and server
@@ -191,6 +192,17 @@ defmodule Mydia.CrashReporter.Queue do
           # Success - remove from queue
           :ets.delete(@table_name, entry.id)
           Logger.debug("Crash report #{entry.id} sent successfully")
+
+        {:error, {:validation_error, response}} ->
+          # The relay rejected the body. The same body can never succeed, so
+          # retrying only repeats the rejection up to max_retries times.
+          :ets.delete(@table_name, entry.id)
+
+          Logger.warning(
+            "Crash report #{entry.id} (#{inspect(Map.get(entry.report, :error_type))}) " <>
+              "rejected by the relay, discarding. Response: " <>
+              inspect(response, limit: 10, printable_limit: 500)
+          )
 
         {:error, reason} ->
           # Failed - increment retry count and schedule next retry

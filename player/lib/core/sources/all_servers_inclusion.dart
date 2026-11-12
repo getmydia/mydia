@@ -4,7 +4,8 @@ library;
 import 'source.dart';
 
 /// A stored choice, or the kind's default: every kind but Stash, whose
-/// scenes have no movie or show identity to sit beside the others.
+/// scenes have no movie or show identity to sit beside the others. Files
+/// libraries are included: their titles carry TMDB ids.
 bool includedInAllServers(Source source, Map<SourceId, bool> choices) =>
     choices[source.id] ?? source.kind != SourceKind.stash;
 

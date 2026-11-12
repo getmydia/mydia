@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/merged/merge_rows.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/ranked_item.dart';
 
 import 'fake_merged_source.dart';
 
@@ -35,5 +36,29 @@ void main() {
       [item(b, 'b1', title: 'Same'), item(b, 'b2', title: 'Able')],
     ], order);
     expect(d.items.map((i) => i.ref.externalId), ['b2', 'a2', 'b1', 'a1']);
+  });
+
+  test('mergeRanked orders globally and dedupes', () {
+    const ids = ExternalIds(tmdb: '9');
+    final d = mergeRanked([
+      [
+        RankedItem(item: item(a, 'a1'), rank: 1),
+        RankedItem(item: item(a, 'a4', ids: ids), rank: 4),
+      ],
+      [
+        RankedItem(item: item(b, 'b2'), rank: 2),
+        RankedItem(item: item(b, 'b4', ids: ids), rank: 4),
+      ],
+    ], order);
+    expect(d.items.map((i) => i.ref.externalId), ['a1', 'b2', 'a4']);
+    expect(d.extraCopies[d.items.last.ref], 1);
+  });
+
+  test('mergeRanked ties go to server order and honours the limit', () {
+    final d = mergeRanked([
+      [RankedItem(item: item(a, 'a1'), rank: 1)],
+      [RankedItem(item: item(b, 'b1'), rank: 1)],
+    ], order, limit: 1);
+    expect(d.items.map((i) => i.ref.externalId), ['a1']);
   });
 }

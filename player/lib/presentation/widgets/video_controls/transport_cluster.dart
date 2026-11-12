@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../l10n/l10n.dart';
 import 'control_button.dart';
 
@@ -86,15 +87,19 @@ class TransportSurface extends StatelessWidget {
   /// and would break the _rounded family coherence the icon_family_test
   /// enforces.
   Widget _playPause(BuildContext context) {
-    return ControlButton(
-      key: playPauseKey,
-      focusNode: playPauseFocusNode,
-      animateIcon: true,
-      icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-      size: 40,
-      iconSize: 24,
-      tooltip: isPlaying ? context.l10n.commonPause : context.l10n.commonPlay,
-      onTap: onPlayPause,
+    return FocusMemoryItem(
+      id: playPauseKey,
+      index: 2,
+      child: ControlButton(
+        key: playPauseKey,
+        focusNode: playPauseFocusNode,
+        animateIcon: true,
+        icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        size: 40,
+        iconSize: 24,
+        tooltip: isPlaying ? context.l10n.commonPause : context.l10n.commonPlay,
+        onTap: onPlayPause,
+      ),
     );
   }
 
@@ -104,48 +109,69 @@ class TransportSurface extends StatelessWidget {
       return _playPause(context);
     }
 
+    // Each button is an item of the OSD control bar's focus memory region
+    // (see `PlaybackChrome`), keyed by its own widget key so the bar
+    // remembers the control, not the slot: the episode buttons come and go
+    // between episodes. Indexes are left-to-right positions with every
+    // optional button counted, so they stay put when one is absent.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (onPreviousEpisode != null) ...[
-          ControlButton(
-            key: previousEpisodeKey,
-            icon: Icons.skip_previous_rounded,
-            size: 36,
-            iconSize: 18,
-            tooltip: context.l10n.videoPreviousEpisode,
-            onTap: onPreviousEpisode,
+          FocusMemoryItem(
+            id: previousEpisodeKey,
+            index: 0,
+            child: ControlButton(
+              key: previousEpisodeKey,
+              icon: Icons.skip_previous_rounded,
+              size: 36,
+              iconSize: 18,
+              tooltip: context.l10n.videoPreviousEpisode,
+              onTap: onPreviousEpisode,
+            ),
           ),
           const SizedBox(width: gap),
         ],
-        ControlButton(
-          key: back10Key,
-          icon: Icons.replay_10_rounded,
-          size: 36,
-          iconSize: 20,
-          tooltip: context.l10n.videoRewind10,
-          onTap: onBack10,
+        FocusMemoryItem(
+          id: back10Key,
+          index: 1,
+          child: ControlButton(
+            key: back10Key,
+            icon: Icons.replay_10_rounded,
+            size: 36,
+            iconSize: 20,
+            tooltip: context.l10n.videoRewind10,
+            onTap: onBack10,
+          ),
         ),
         const SizedBox(width: gap),
         _playPause(context),
         const SizedBox(width: gap),
-        ControlButton(
-          key: forward10Key,
-          icon: Icons.forward_10_rounded,
-          size: 36,
-          iconSize: 20,
-          tooltip: context.l10n.videoForward10,
-          onTap: onForward10,
+        FocusMemoryItem(
+          id: forward10Key,
+          index: 3,
+          child: ControlButton(
+            key: forward10Key,
+            icon: Icons.forward_10_rounded,
+            size: 36,
+            iconSize: 20,
+            tooltip: context.l10n.videoForward10,
+            onTap: onForward10,
+          ),
         ),
         if (onNextEpisode != null) ...[
           const SizedBox(width: gap),
-          ControlButton(
-            key: nextEpisodeKey,
-            icon: Icons.skip_next_rounded,
-            size: 36,
-            iconSize: 18,
-            tooltip: context.l10n.videoNextEpisode,
-            onTap: onNextEpisode,
+          FocusMemoryItem(
+            id: nextEpisodeKey,
+            index: 4,
+            child: ControlButton(
+              key: nextEpisodeKey,
+              icon: Icons.skip_next_rounded,
+              size: 36,
+              iconSize: 18,
+              tooltip: context.l10n.videoNextEpisode,
+              onTap: onNextEpisode,
+            ),
           ),
         ],
       ],

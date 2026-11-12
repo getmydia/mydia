@@ -21,6 +21,7 @@ import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/ranked_item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../calendar/calendar_window.dart';
 
@@ -175,6 +176,25 @@ final sourceRecentlyAddedProvider =
       fetch: recentlyAdded.recentlyAdded,
       encode: encodeSummaries,
       decode: decodeSummaries,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
+/// Empty for a source without the capability. A failure stays in the row's own
+/// state: Home hides the trending rows and shows the rest.
+final sourceTrendingProvider =
+    StreamProvider.autoDispose.family<List<RankedItem>, (SourceId, ItemKind)>(
+  (ref, args) {
+    final (id, kind) = args;
+    final trending = requireSource(ref, id).as<Trending>();
+    if (trending == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.trending(id, kind),
+      fetch: () => trending.trending(kind),
+      encode: encodeRanked,
+      decode: decodeRanked,
     ).stream;
   },
   retry: (_, __) => null,

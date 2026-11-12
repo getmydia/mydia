@@ -32,7 +32,7 @@ defmodule MydiaWeb.Api.MediaAccessTest do
             content_rating: "R"
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: "movie"])
@@ -54,7 +54,7 @@ defmodule MydiaWeb.Api.MediaAccessTest do
             content_rating: "TV-MA"
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Repo.update_all(from(m in MediaItem, where: m.id == ^show.id), set: [category: "tv_show"])

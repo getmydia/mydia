@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_channel_name">Actualizaciones de la app</string>
+    <string name="update_installed_title">Mydia Player se actualizó</string>
+    <string name="update_installed_text">Toca para abrir la nueva versión.</string>
+</resources>

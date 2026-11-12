@@ -33,3 +33,18 @@ Future<Map<String, int>> subtitleStreamIndices(Player player) async {
     return const {};
   }
 }
+
+/// See `selectedMpvSubtitleId` in `subtitle_stream_index.dart`. mpv reports
+/// `no` with nothing selected, which is not a track id.
+Future<String?> selectedMpvSubtitleId(Player player) async {
+  final platform = player.platform;
+  if (platform is! NativePlayer) return null;
+
+  try {
+    final sid = await platform.getProperty('sid');
+    return int.tryParse(sid) == null ? null : sid;
+  } catch (e) {
+    debugPrint('[SubtitleStreamIndex] Could not read sid: $e');
+    return null;
+  }
+}

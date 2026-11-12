@@ -204,6 +204,9 @@ defmodule Mydia.Application do
         # Last status each download client answered with, read when a page's
         # bounded poll times out. Table-only init, safe in every environment.
         Mydia.Downloads.ClientStatusCache,
+        # qBittorrent session cookies, reused so polling does not evict the
+        # operator's WebUI session. Table-only init, like the cache above.
+        Mydia.Downloads.Client.QBittorrent.SessionCache,
         # Which Prowlarr indexers are private. Table-only init, like the
         # status cache above.
         Mydia.Indexers.Adapter.ProwlarrPrivacy,

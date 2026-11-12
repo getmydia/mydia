@@ -29,6 +29,36 @@ class RelayApiClient {
   })  : _client = client ?? http.Client(),
         _pairingKeys = pairingKeys ?? defaultPairingKeyFactory;
 
+  /// Publishes a sealed claim code to the relay.
+  Future<({String lookupKey, String sealed})> publishClaimCode({
+    required String code,
+    required String nodeAddr,
+    required String instanceId,
+  }) async {
+    final keys = _pairingKeys(code);
+    final sealedClaim = await keys.seal(nodeAddr, instanceId);
+
+    final response = await _post(
+      '$baseUrl/pairing/v2/claim',
+      jsonEncode({
+        'lookup_key': sealedClaim.lookupKey,
+        'sealed': sealedClaim.sealed,
+      }),
+    );
+
+    _throwForStatus(response.statusCode);
+    return sealedClaim;
+  }
+
+  /// Deletes a claim code from the relay using its blinded lookup key.
+  Future<void> deleteClaimCode(String lookupKey) async {
+    final response = await _delete('$baseUrl/pairing/v2/claim/$lookupKey');
+    if (response.statusCode == 404) {
+      return;
+    }
+    _throwForStatus(response.statusCode);
+  }
+
   /// Resolves a claim code to the server's node address.
   ///
   /// Derives a blinded lookup key from the code and fetches a sealed blob, so
@@ -90,12 +120,36 @@ class RelayApiClient {
     }
   }
 
+  Future<http.Response> _post(String url, String body) async {
+    try {
+      return await _client.post(
+        Uri.parse(url),
+        headers: {'content-type': 'application/json'},
+        body: body,
+      );
+    } on FormatException catch (e) {
+      throw Exception('Invalid response from relay server: $e');
+    } catch (e) {
+      throw Exception('Network error connecting to relay: $e');
+    }
+  }
+
+  Future<http.Response> _delete(String url) async {
+    try {
+      return await _client.delete(Uri.parse(url));
+    } on FormatException catch (e) {
+      throw Exception('Invalid response from relay server: $e');
+    } catch (e) {
+      throw Exception('Network error connecting to relay: $e');
+    }
+  }
+
   void _throwForStatus(int status) {
     if (status == 429) {
       throw RateLimitedException();
     }
 
-    if (status != 200) {
+    if (status != 200 && status != 204) {
       throw Exception('Relay API error: $status');
     }
   }

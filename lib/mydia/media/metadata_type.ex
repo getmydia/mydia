@@ -182,7 +182,8 @@ defmodule Mydia.Media.MetadataType do
         name: member.name || member[:name],
         character: member[:character],
         order: member[:order],
-        profile_path: member[:profile_path]
+        profile_path: member[:profile_path],
+        tmdb_person_id: member[:tmdb_person_id]
       }
     end)
   end

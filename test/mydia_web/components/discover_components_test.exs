@@ -82,6 +82,151 @@ defmodule MydiaWeb.DiscoverComponentsTest do
     render_component(&DiscoverComponents.media_rail/1, assigns)
   end
 
+  describe "ignore controls" do
+    defp admin, do: %{role: "admin", id: "admin-1"}
+
+    defp query(html, selector) do
+      html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> Enum.to_list()
+    end
+
+    test "no ignore button without ignore_event" do
+      html = card(%{current_user: admin()})
+
+      assert query(html, "[id^=discover-ignore-]") == []
+    end
+
+    test "an unowned card with ignore_event renders the ignore button" do
+      html = card(%{current_user: admin(), ignore_event: "ignore_title"})
+      doc = LazyHTML.from_fragment(html)
+      button = LazyHTML.query(doc, "#discover-ignore-tmdb-693134")
+
+      assert LazyHTML.attribute(button, "aria-label") == ["Ignore"]
+      assert LazyHTML.attribute(button, "phx-click") == ["ignore_title"]
+      assert LazyHTML.attribute(button, "phx-value-ref") == ["tmdb:693134"]
+      assert LazyHTML.attribute(button, "phx-value-media_type") == ["movie"]
+    end
+
+    test "the ignore button hides only on hover-capable devices, never by width" do
+      html = card(%{current_user: admin(), ignore_event: "ignore_title"})
+
+      [class] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#discover-ignore-tmdb-693134")
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "[@media(hover:hover)]:opacity-0"
+      refute class =~ "md:opacity-0"
+    end
+
+    test "media_rail badges a title in ignored_keys and offers Unignore" do
+      item = %SearchResult{
+        provider_id: "693134",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Vertex Horizon",
+        year: 2024
+      }
+
+      html =
+        render_component(&DiscoverComponents.media_rail/1, %{
+          items: [Map.merge(item, %{in_library: false, monitored: false, id: nil})],
+          media_type: :movie,
+          current_user: admin(),
+          unignore_event: "unignore_title",
+          ignored_keys: MapSet.new([{:movie, {:tmdb, 693_134}}])
+        })
+
+      assert html =~ "Ignored"
+      # media_rail's default id is "media-rail", which scopes the card's id.
+      assert [_] = query(html, "#discover-unignore-media-rail-movie-tmdb-693134")
+    end
+
+    test "rail cards scope their ignore ids by rail, so one title in two rows stays unique" do
+      item =
+        %SearchResult{provider_id: "693134", provider: :tmdb, media_type: :movie, title: "Vertex"}
+        |> Map.merge(%{in_library: false, monitored: false, id: nil})
+
+      render_rail = fn id ->
+        render_component(&DiscoverComponents.media_rail/1, %{
+          id: id,
+          items: [item],
+          media_type: :movie,
+          current_user: admin(),
+          ignore_event: "ignore_title"
+        })
+      end
+
+      assert [_] =
+               query(
+                 render_rail.("discover-row-a-rail"),
+                 "#discover-ignore-discover-row-a-rail-movie-tmdb-693134"
+               )
+
+      assert [_] =
+               query(
+                 render_rail.("discover-row-b-rail"),
+                 "#discover-ignore-discover-row-b-rail-movie-tmdb-693134"
+               )
+    end
+
+    test "a mixed rail keeps a movie and a show with the same id distinct" do
+      base = %{in_library: false, monitored: false, id: nil}
+
+      movie =
+        %SearchResult{provider_id: "777", provider: :tmdb, media_type: :movie, title: "Velvet"}
+        |> Map.merge(base)
+
+      show =
+        %SearchResult{provider_id: "777", provider: :tmdb, media_type: :tv_show, title: "Quarry"}
+        |> Map.merge(base)
+
+      html =
+        render_component(&DiscoverComponents.media_rail/1, %{
+          id: "mixed-rail",
+          items: [movie, show],
+          media_type: :movie,
+          current_user: admin(),
+          ignore_event: "ignore_title"
+        })
+
+      ids =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("[id^=discover-ignore-]")
+        |> LazyHTML.attribute("id")
+
+      assert length(ids) == 2
+      assert length(Enum.uniq(ids)) == 2
+    end
+
+    test "an owned card renders no ignore button" do
+      html =
+        card(%{
+          current_user: admin(),
+          ignore_event: "ignore_title",
+          item: %{in_library: true, monitored: true, id: 7}
+        })
+
+      assert query(html, "[id^=discover-ignore-]") == []
+    end
+
+    test "an ignored card shows the badge and Unignore in place of Add" do
+      html =
+        card(%{
+          current_user: admin(),
+          ignore_event: "ignore_title",
+          unignore_event: "unignore_title",
+          ignored: true
+        })
+
+      assert html =~ "Ignored"
+      assert [_] = query(html, "#discover-unignore-tmdb-693134")
+      assert query(html, "[id^=discover-ignore-]") == []
+      assert query(html, ~s(button[phx-click="add_to_library"])) == []
+    end
+  end
+
   describe "guest request button" do
     test "renders a request_media button rather than a link to the search page" do
       html = card(%{})
@@ -232,6 +377,49 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       assert LazyHTML.attribute(button, "aria-label") == ["Add to Library"]
       assert LazyHTML.attribute(button, "title") == ["Add to Library"]
       assert button |> LazyHTML.text() |> String.trim() == "Add"
+    end
+  end
+
+  describe "load_more_sentinel/1" do
+    defp sentinel(overrides) do
+      assigns =
+        Map.merge(%{id: "x", has_more: true, loading_more: false, error?: false}, overrides)
+
+      render_component(&DiscoverComponents.load_more_sentinel/1, assigns)
+      |> LazyHTML.from_fragment()
+    end
+
+    test "has more and idle arms the hook" do
+      doc = sentinel(%{})
+      hook = LazyHTML.query(doc, "#x")
+
+      assert LazyHTML.attribute(hook, "phx-hook") == ["LoadMoreSentinel"]
+      assert LazyHTML.attribute(hook, "data-has-more") == ["true"]
+      assert LazyHTML.attribute(hook, "data-event") == ["load_more"]
+      refute Enum.empty?(LazyHTML.query(doc, ".loading-spinner"))
+      assert Enum.empty?(LazyHTML.query(doc, "#x-error"))
+    end
+
+    test "a page in flight disarms the hook" do
+      assert sentinel(%{loading_more: true})
+             |> LazyHTML.query("#x")
+             |> LazyHTML.attribute("data-has-more") == ["false"]
+    end
+
+    test "a failed page disarms the hook and offers Retry" do
+      doc = sentinel(%{error?: true})
+
+      assert doc |> LazyHTML.query("#x") |> LazyHTML.attribute("data-has-more") == ["false"]
+      assert doc |> LazyHTML.query("#x-retry") |> LazyHTML.attribute("phx-click") == ["load_more"]
+    end
+
+    test "a custom event is carried on the hook and Retry" do
+      doc = sentinel(%{error?: true, event: "more_people"})
+
+      assert doc |> LazyHTML.query("#x") |> LazyHTML.attribute("data-event") == ["more_people"]
+
+      assert doc |> LazyHTML.query("#x-retry") |> LazyHTML.attribute("phx-click") ==
+               ["more_people"]
     end
   end
 end

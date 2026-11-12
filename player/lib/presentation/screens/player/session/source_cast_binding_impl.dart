@@ -12,6 +12,7 @@ import '../../../../core/p2p/local_proxy_service.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/periodic_progress_reporter.dart';
+import '../../../../core/sources/files/files_providers.dart';
 import '../../../../core/sources/sources_providers.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/models/quality_rung.dart';
@@ -50,10 +51,11 @@ class SessionSourceCastBinding implements SourceCastBinding {
         );
       }
 
-      final isChromecast = protocol == CastProtocolKind.chromecast;
-      final subtitles = isChromecast
-          ? await _session.receiverSubtitles(version)
-          : const <CastSubtitleTrack>[];
+      final isDlna = protocol == CastProtocolKind.dlna;
+      final isProgressiveBridge = _session.castsAsProgressive;
+      var subtitles = isDlna
+          ? const <CastSubtitleTrack>[]
+          : await _session.receiverSubtitles(version);
       final burn = subtitles
           .where((t) => t.burnedIn && t.trackId == subtitleTrackId)
           .firstOrNull
@@ -62,16 +64,16 @@ class SessionSourceCastBinding implements SourceCastBinding {
           burn != null ||
           !receiverCanCopyVideo(version.videoCodec);
 
-      final PlaybackPlan plan = isChromecast
-          ? HlsPlan(
+      final PlaybackPlan plan = (isDlna || isProgressiveBridge)
+          ? const DirectPlayPlan(reason: PlanReason.directPlayAccepted)
+          : HlsPlan(
               strategy: transcode ? HlsStrategy.transcode : HlsStrategy.copy,
               rung: QualityRung.original,
               adaptive: false,
               reason: forceTranscode
                   ? PlanReason.fallbackFromFailure
                   : PlanReason.copyAccepted,
-            )
-          : const DirectPlayPlan(reason: PlanReason.directPlayAccepted);
+            );
 
       final resolver = _session.createReceiverResolver(detail, version,
           // Plex burns the part's selected stream; '0' clears a previous
@@ -83,13 +85,30 @@ class SessionSourceCastBinding implements SourceCastBinding {
       final sessionId = stream.sessionId;
       if (sessionId != null) _resolvers[sessionId] = resolver;
 
+      if (stream.subtitleUrl != null && subtitles.isNotEmpty) {
+        subtitles = [
+          for (final track in subtitles)
+            if (!track.burnedIn)
+              () {
+                final url = stream.subtitleUrl!(track.trackId);
+                return url.isNotEmpty ? track.copyWith(url: url) : null;
+              }()
+            else
+              track,
+        ].whereType<CastSubtitleTrack>().toList();
+      }
+
       return CastRoute(
         mediaUrl: stream.url,
-        kind: CastRouteKind.directServer,
-        mediaKind: CastRouteResolver.mediaKindFor(protocol),
+        kind: isProgressiveBridge
+            ? CastRouteKind.localBridge
+            : CastRouteKind.directServer,
+        mediaKind: (isDlna || isProgressiveBridge)
+            ? CastMediaKind.progressive
+            : CastMediaKind.hls,
         hlsSessionId: sessionId,
         subtitles: subtitles,
-        transcoded: isChromecast && transcode,
+        transcoded: !isDlna && !isProgressiveBridge && transcode,
       );
     } on SourceException catch (e) {
       throw CastBackendException(
@@ -146,6 +165,7 @@ Future<SourceCastBinding> bindSourceCast(
     content.item,
     content.versionId,
     proxy: () => ref.read(localProxyServiceProvider),
+    bridge: () => ref.read(filesCastBridgeProvider),
   );
   if (session is! SourcePlaybackSession) {
     throw CastBackendException(

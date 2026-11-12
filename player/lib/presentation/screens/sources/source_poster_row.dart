@@ -75,6 +75,9 @@ class SourcePosterRow extends StatelessWidget {
             height: height ?? rowHeight,
             leftFadeKey: Key('source-rail-left-$railId'),
             rightFadeKey: Key('source-rail-right-$railId'),
+            // The item, not its slot: Continue Watching reorders as titles
+            // are played, and focus must return to the title it left.
+            itemId: (index) => items[index].ref,
             itemBuilder: (context, index) {
               final item = items[index];
               return SizedBox(

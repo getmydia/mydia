@@ -274,6 +274,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   defp add_opts do
     [
       monitored: true,
+      episodes: :inline,
       season_monitoring: "all",
       quality_profile_id: Settings.get_default_quality_profile_id()
     ]

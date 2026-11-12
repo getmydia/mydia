@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../p2p/peer_sync_service.dart' show peerGroupRosterProvider;
 import '../router/legacy_routes.dart';
 import '../sources/capabilities.dart';
 import '../sources/source.dart';
@@ -10,10 +11,14 @@ import 'remote_roster.dart';
 /// instances is listed once, by p2p node id, which is the identity a
 /// device shares across instances.
 class MergedRoster implements DeviceRoster {
-  MergedRoster(Map<SourceId, DeviceRoster> rosters)
-      : _rosters = Map.unmodifiable(rosters);
+  MergedRoster(
+    Map<SourceId, DeviceRoster> rosters, {
+    List<DeviceRoster> extras = const [],
+  })  : _rosters = Map.unmodifiable(rosters),
+        _extras = List.unmodifiable(extras);
 
   final Map<SourceId, DeviceRoster> _rosters;
+  final List<DeviceRoster> _extras;
 
   /// Equal when it holds the same instances in the same order with the very
   /// same roster objects, so a rebuild that changes nothing does not notify
@@ -30,12 +35,19 @@ class MergedRoster implements DeviceRoster {
         return false;
       }
     }
+    if (_extras.length != other._extras.length) return false;
+    for (var i = 0; i < _extras.length; i++) {
+      if (!identical(_extras[i], other._extras[i])) {
+        return false;
+      }
+    }
     return true;
   }
 
   @override
   int get hashCode => Object.hashAll([
         for (final e in _rosters.entries) ...[e.key, identityHashCode(e.value)],
+        for (final extra in _extras) identityHashCode(extra),
       ]);
 
   @override
@@ -48,8 +60,9 @@ class MergedRoster implements DeviceRoster {
 
   @override
   Future<bool> allows(String peerNodeId) async {
+    final allRosters = [..._rosters.values, ..._extras];
     final answers = await Future.wait(
-      _rosters.values.map((roster) async {
+      allRosters.map((roster) async {
         try {
           return await roster.allows(peerNodeId);
         } catch (_) {
@@ -73,9 +86,26 @@ class MergedRoster implements DeviceRoster {
   Future<List<RemoteDeviceEntry>> _merged(
     Future<List<RemoteDeviceEntry>> Function(DeviceRoster) read,
   ) async {
+    final serverListsFuture = _perRoster(read);
+    final extraListsFuture = Future.wait([
+      for (final extra in _extras)
+        () async {
+          try {
+            return await read(extra);
+          } catch (_) {
+            return const <RemoteDeviceEntry>[];
+          }
+        }(),
+    ]);
+    final (serverLists, extraLists) =
+        await (serverListsFuture, extraListsFuture).wait;
+
     final seen = <String>{};
     return [
-      for (final (_, entries) in await _perRoster(read))
+      for (final (_, entries) in serverLists)
+        for (final entry in entries)
+          if (seen.add(entry.nodeId.toLowerCase())) entry,
+      for (final entries in extraLists)
         for (final entry in entries)
           if (seen.add(entry.nodeId.toLowerCase())) entry,
     ];
@@ -123,5 +153,6 @@ final mergedRosterProvider = Provider<MergedRoster>((ref) {
         ref.watch(mediaSourceProvider(id))?.as<RemoteTargets>()?.roster;
     if (roster != null) rosters[id] = roster;
   }
-  return MergedRoster(rosters);
+  final peerGroupRoster = ref.watch(peerGroupRosterProvider);
+  return MergedRoster(rosters, extras: [peerGroupRoster]);
 });

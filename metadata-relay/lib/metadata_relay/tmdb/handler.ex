@@ -190,4 +190,28 @@ defmodule MetadataRelay.TMDB.Handler do
   def get_collection(id, params) do
     Client.get("/collection/#{id}", params: params)
   end
+
+  @doc """
+  GET /tmdb/person/search
+  Search TMDB people by name.
+  """
+  def search_people(params) do
+    Client.get("/search/person", params: params)
+  end
+
+  @doc """
+  GET /tmdb/person/popular
+  TMDB's popular people list, paged by `page`.
+  """
+  def popular_people(params) do
+    Client.get("/person/popular", params: params)
+  end
+
+  @doc """
+  GET /tmdb/person/{id}
+  Get a person by ID. `append_to_response` (e.g. `combined_credits`) passes through.
+  """
+  def get_person(id, params) do
+    Client.get("/person/#{id}", params: params)
+  end
 end

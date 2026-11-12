@@ -9,6 +9,7 @@ defmodule MydiaWeb.DiscoverComponents do
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
 
+  alias Mydia.Accounts.DiscoverIgnores
   alias Mydia.Metadata.ImageUrl
   alias Mydia.Metadata.Ref
   alias MydiaWeb.LibraryComponents
@@ -70,16 +71,54 @@ defmodule MydiaWeb.DiscoverComponents do
   # w500 is the right size for a grid card; a rail card is w-36 (144px), which
   # wants the smaller w342 step.
   attr :poster_size, :string, default: "w500"
+  # Discover's ignore list (#1379). Only Discover passes these, so every other
+  # host renders exactly as before. `ignore_event` draws the eye-slash button
+  # on an unowned card; `ignored` dims the card and, with `unignore_event`,
+  # swaps its action for Unignore.
+  attr :ignore_event, :string, default: nil
+  attr :unignore_event, :string, default: nil
+  attr :ignored, :boolean, default: false
+  # Set by media_rail to its own id, so a title shown in two rails (two
+  # regional rows) still gets unique ignore/unignore ids. The grid leaves it
+  # nil, where each title appears once.
+  attr :dom_scope, :string, default: nil
 
   def trending_card(assigns) do
-    assigns = assign(assigns, :adding?, adding?(assigns))
+    assigns =
+      assigns
+      |> assign(:adding?, adding?(assigns))
+      |> assign(:ref_param, ignore_ref_param(assigns))
+
+    assigns = assign(assigns, :ignore_dom_id, ignore_dom_id(assigns))
 
     ~H"""
     <div class={[
       "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow relative group h-full",
-      @current && "ring-2 ring-primary"
+      @current && "ring-2 ring-primary",
+      @ignored && "[&_figure]:opacity-50 [&_figure]:grayscale"
     ]}>
-      <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 do %>
+      <%= if @ignored do %>
+        <div class="absolute top-2 left-2 z-10">
+          <span class="badge badge-neutral badge-sm gap-1 shadow-md">
+            <.icon name="hero-eye-slash-mini" class="w-3 h-3" />
+            {pgettext("discover title state", "Ignored")}
+          </span>
+        </div>
+      <% end %>
+      <button
+        :if={@ignore_event && not @item.in_library && not @ignored && not @current}
+        id={"discover-ignore-#{@ignore_dom_id}"}
+        type="button"
+        phx-click={@ignore_event}
+        phx-value-ref={@ref_param}
+        phx-value-media_type={@media_type}
+        aria-label={gettext("Ignore")}
+        title={gettext("Ignore")}
+        class="btn btn-circle btn-sm absolute top-2 right-2 z-10 bg-base-100/85 border-0 shadow-md transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <.icon name="hero-eye-slash" class="w-4 h-4" />
+      </button>
+      <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 && not @ignored do %>
         <div class="absolute top-2 left-2 z-10">
           <div class="badge badge-warning gap-1 shadow-md">
             <.icon name="hero-star-solid" class="w-3 h-3" />
@@ -149,8 +188,19 @@ defmodule MydiaWeb.DiscoverComponents do
       <.poster_card_body title={@item.title}>
         <:meta>
           <p :if={@item.year} class="text-xs text-base-content/60">{@item.year}</p>
+          <button
+            :if={@ignored && @unignore_event}
+            id={"discover-unignore-#{@ignore_dom_id}"}
+            type="button"
+            phx-click={@unignore_event}
+            phx-value-ref={@ref_param}
+            phx-value-media_type={@media_type}
+            class="btn btn-sm mt-2 w-full"
+          >
+            <.icon name="hero-eye" class="w-4 h-4" /> {gettext("Unignore")}
+          </button>
           <.trending_card_action
-            :if={not @current}
+            :if={not @current and not (@ignored and @unignore_event != nil)}
             item={@item}
             media_type={@media_type}
             current_user={@current_user}
@@ -165,6 +215,26 @@ defmodule MydiaWeb.DiscoverComponents do
     </div>
     """
   end
+
+  # "tmdb:123" -> "tmdb-123": a colon in an id needs escaping in every CSS
+  # selector a test or hook writes against it.
+  @doc false
+  def dom_ref(ref_param), do: String.replace(ref_param, ":", "-")
+
+  # The grid holds one media type per page, so its ids stay
+  # "tmdb-123". A rail can mix a movie and a show with the same provider id, so
+  # rail ids carry the rail and the media type: "<rail id>-tv_show-tmdb-123".
+  defp ignore_dom_id(%{ref_param: nil}), do: nil
+  defp ignore_dom_id(%{dom_scope: nil, ref_param: ref}), do: dom_ref(ref)
+
+  defp ignore_dom_id(%{dom_scope: scope, media_type: type, ref_param: ref}),
+    do: "#{scope}-#{type}-#{dom_ref(ref)}"
+
+  # Only built when Discover asked for ignore controls: other hosts (the
+  # franchise strip's current-title card) pass plain maps, which
+  # Ref.from_search_result/1 rejects on purpose.
+  defp ignore_ref_param(%{ignore_event: nil, ignored: false}), do: nil
+  defp ignore_ref_param(%{item: item}), do: Ref.to_param(Ref.from_search_result(item))
 
   # Members and provider ids are normalised to strings on both sides, except a
   # ref-tuple member (DiscoverLive), which is compared by full ref equality
@@ -224,6 +294,12 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :collapsible, :boolean, default: false
   attr :expanded, :boolean, default: true
   attr :toggle_event, :string, default: nil
+  # Discover's ignore controls, passed through to each card (see
+  # trending_card/1). `ignored_keys` is a set from DiscoverIgnores.keys/1; a
+  # plain MapSet rather than a predicate so LiveView can change-track it.
+  attr :ignore_event, :string, default: nil
+  attr :unignore_event, :string, default: nil
+  attr :ignored_keys, MapSet, default: MapSet.new()
 
   slot :badge
 
@@ -286,6 +362,10 @@ defmodule MydiaWeb.DiscoverComponents do
             request_event={@request_event}
             can_add={@can_add}
             poster_size="w342"
+            ignore_event={@ignore_event}
+            unignore_event={@unignore_event}
+            ignored={DiscoverIgnores.ignored?(@ignored_keys, @media_type, item)}
+            dom_scope={@id}
           />
         </div>
       </.poster_rail>
@@ -392,6 +472,138 @@ defmodule MydiaWeb.DiscoverComponents do
 
   defp library_path(:movie, id), do: "/movies/#{id}"
   defp library_path(:tv_show, id), do: "/tv/#{id}"
+
+  @doc """
+  The infinite-scroll sentinel under a Discover grid.
+
+  It asks for the next page about a screen and a half before the end. The host
+  replies to `event` before the page is fetched and sets `loading_more`, so
+  `data-has-more` is false while one is in flight; flipping back to true when
+  it lands is what makes the hook ask again. A failed page keeps it false until
+  Retry, which emits the same `event`.
+  """
+  attr :id, :string, required: true
+  attr :has_more, :boolean, required: true
+  attr :loading_more, :boolean, required: true
+  attr :error?, :boolean, required: true
+  attr :event, :string, default: "load_more"
+
+  def load_more_sentinel(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      phx-hook="LoadMoreSentinel"
+      data-event={@event}
+      data-has-more={to_string(@has_more and not @loading_more and not @error?)}
+      class="flex justify-center py-8"
+    >
+      <%= cond do %>
+        <% @error? -> %>
+          <div id={"#{@id}-error"} class="flex items-center gap-3 text-sm text-base-content/60">
+            {gettext("Couldn't load more results.")}
+            <button
+              id={"#{@id}-retry"}
+              type="button"
+              class="btn btn-ghost btn-sm"
+              phx-click={@event}
+            >
+              <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
+            </button>
+          </div>
+        <% @has_more -> %>
+          <span class="loading loading-spinner loading-md text-primary"></span>
+        <% true -> %>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders Discover's People grid (popular people or search results): round headshots with the name
+  and a known-for line, each a button emitting `event` with the person's
+  `id`, `name` and `profile_path`, the params the person popup opens with.
+  The error state's Try again emits `retry_people_search`, which the host must
+  handle.
+  """
+  attr :people, :list, required: true, doc: "`Mydia.Metadata.Structs.PersonSearchResult`s"
+  attr :loading, :boolean, default: false
+  attr :error, :any, default: nil
+  attr :event, :string, required: true
+
+  def people_results(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @loading -> %>
+        <div id="discover-people-loading" class="flex justify-center py-16">
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+      <% @error != nil -> %>
+        <div
+          id="discover-people-error"
+          role="alert"
+          class="alert alert-error alert-soft max-w-xl mx-auto"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>{gettext("Could not load people. The metadata service may be unavailable.")}</span>
+          <button
+            id="discover-people-retry"
+            type="button"
+            phx-click="retry_people_search"
+            class="btn btn-sm"
+          >
+            {gettext("Try again")}
+          </button>
+        </div>
+      <% @people == [] -> %>
+        <div
+          id="discover-people-empty"
+          class="flex flex-col items-center justify-center py-16 gap-4"
+        >
+          <div class="bg-base-200 rounded-full p-6">
+            <.icon name="hero-user" class="w-10 h-10 text-base-content/40" />
+          </div>
+          <p class="text-lg font-medium text-base-content/80">{gettext("No people found")}</p>
+        </div>
+      <% true -> %>
+        <div
+          id="discover-people-results"
+          class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-6"
+        >
+          <button
+            :for={person <- @people}
+            id={"discover-person-#{person.tmdb_id}"}
+            type="button"
+            phx-click={@event}
+            phx-value-id={person.tmdb_id}
+            phx-value-name={person.name}
+            phx-value-profile_path={person.profile_path}
+            class="group self-start text-center cursor-pointer min-w-0"
+          >
+            <%= if person.profile_path do %>
+              <img
+                src={ImageUrl.profile_url(person.profile_path)}
+                alt={person.name}
+                loading="lazy"
+                class="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover mx-auto mb-2 transition group-hover:ring-2 group-hover:ring-primary"
+              />
+            <% else %>
+              <div class="w-20 h-20 md:w-24 md:h-24 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2 transition group-hover:ring-2 group-hover:ring-primary">
+                <.icon name="hero-user" class="w-10 h-10 text-base-content/30" />
+              </div>
+            <% end %>
+            <p class="text-sm font-medium line-clamp-1">{person.name}</p>
+            <p :if={known_for_line(person)} class="text-xs text-base-content/60 line-clamp-2">
+              {known_for_line(person)}
+            </p>
+          </button>
+        </div>
+    <% end %>
+    """
+  end
+
+  # TMDB's known-for titles, or the person's department when it lists none.
+  defp known_for_line(%{known_for: [_ | _] = titles}), do: Enum.join(titles, ", ")
+  defp known_for_line(%{known_for_department: department}), do: department
 
   attr :item, :map, required: true
   attr :media_type, :atom, required: true

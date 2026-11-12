@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../widgets/glass/glass_badge.dart';
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_actions.dart';
+import '../../widgets/files/fix_match_sheet.dart';
+
 import '../detail/detail_links.dart';
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
@@ -101,6 +104,9 @@ class ShowDetailScreen extends ConsumerWidget {
   /// no state to own one; the hero is the first sliver, so the minimum extent
   /// is the hero by construction.
   void _revealHero(BuildContext railContext) {
+    // The picked episode is now the hero's, so on a remote focus follows it
+    // to Play rather than staying on the card. Inert off the television tier.
+    FocusMemory.claimLanding(railContext);
     final position = Scrollable.maybeOf(railContext)?.position;
     if (position == null || position.pixels <= position.minScrollExtent) {
       return;
@@ -357,6 +363,7 @@ class ShowDetailScreen extends ConsumerWidget {
               episode.files.isEmpty
           ? null
           : () => showMediaInfo(context: context, item: item),
+      onFixMatch: fixMatchAction(context, ref, target.ref, show.title),
     );
   }
 

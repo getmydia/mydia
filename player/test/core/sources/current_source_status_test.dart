@@ -68,6 +68,34 @@ void main() {
     expect(isOffline(null), isFalse);
   });
 
+  test('an unreachable files source never holds navigation back', () {
+    final files = _FilesSource()..setStatus(SourceConnectionStatus.unreachable);
+    final server = FakeMediaSource()
+      ..setStatus(SourceConnectionStatus.unreachable);
+    final container = ProviderContainer(overrides: [
+      selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
+      activeSourceIdProvider
+          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
+      mediaSourceProvider(_idA).overrideWithValue(files),
+      mediaSourceProvider(_idB).overrideWithValue(server),
+    ]);
+    addTearDown(container.dispose);
+
+    // Still offline, as the banner shows it.
+    expect(isOffline(container.read(routeSourceStatusProvider('/'))), isTrue);
+    expect(container.read(routeNavigationOfflineProvider('/')), isFalse);
+    expect(
+        container.read(
+            routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1')),
+        isTrue);
+
+    server.setStatus(SourceConnectionStatus.remote);
+    expect(
+        container.read(
+            routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1')),
+        isFalse);
+  });
+
   test('is null with no selection', () {
     final t = _setup(selected: null);
     expect(t.container.read(currentSourceStatusProvider), isNull);
@@ -107,6 +135,11 @@ void main() {
     expect(a.notifier.hasListening, isFalse);
     expect(b.notifier.hasListening, isTrue);
   });
+}
+
+class _FilesSource extends FakeMediaSource {
+  @override
+  SourceKind get kind => SourceKind.files;
 }
 
 class _ProbedNotifier extends ValueNotifier<SourceConnectionStatus> {

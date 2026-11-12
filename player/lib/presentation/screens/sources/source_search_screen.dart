@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -211,8 +212,10 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
       return Center(child: Text(context.l10n.sourcesSearchNothingFound));
     }
     return BrowseGrid(
+      landing: false,
       scrollTopPadding: 8,
       itemCount: items.length,
+      itemId: (index) => items[index].ref,
       itemBuilder: (context, index) => SourcePoster(
         key: ValueKey('source-poster-${items[index].ref.externalId}'),
         item: items[index],
@@ -230,25 +233,31 @@ class _KindChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return HorizontalWheelScroll(
-      builder: (context, controller) => SingleChildScrollView(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: BackdropGroup(
-          child: Row(
-            children: [
-              for (final kind in _KindFilter.values) ...[
-                GlassChip(
-                  chipKey: Key('source-search-kind-${kind.name}'),
-                  avatar: Icon(kind.icon, size: 18),
-                  label: Text(kind.label(context.l10n)),
-                  selected: selected == kind,
-                  onSelected: (_) => onSelected(kind),
-                ),
-                const SizedBox(width: 8),
+    return FocusMemoryRegion(
+      child: HorizontalWheelScroll(
+        builder: (context, controller) => SingleChildScrollView(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: BackdropGroup(
+            child: Row(
+              children: [
+                for (final (index, kind) in _KindFilter.values.indexed) ...[
+                  FocusMemoryItem(
+                    id: kind,
+                    index: index,
+                    child: GlassChip(
+                      chipKey: Key('source-search-kind-${kind.name}'),
+                      avatar: Icon(kind.icon, size: 18),
+                      label: Text(kind.label(context.l10n)),
+                      selected: selected == kind,
+                      onSelected: (_) => onSelected(kind),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

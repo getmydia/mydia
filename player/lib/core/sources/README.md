@@ -253,9 +253,12 @@ Every Mydia instance lists the player devices paired to it, and a device
 paired to several instances is one entry.
 
 - `MergedRoster` (`core/remote/merged_roster.dart`) joins the instances'
-  rosters and dedupes by p2p node id, the identity a device shares across
-  instances. An instance whose roster throws contributes nothing. A sender
-  is allowed when any instance allows it.
+  rosters and `peerGroupRosterProvider` (`core/p2p/peer_group_roster.dart`),
+  deduping by p2p node id, the identity a device shares across instances and
+  peer groups. An instance whose roster throws contributes nothing. A sender
+  is allowed when any instance or the paired peer group allows it. This allows
+  paired players to remote-control each other even in pure local or files-only
+  setups without a Mydia server.
 - Commands answer against the instance that listed the sender.
   `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
   content command resolves the item on the server it names
@@ -510,6 +513,116 @@ Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Every Mydia joins
 through `mediaSourceProvider` like any other server, and every item opens
 `/s/<sourceId>/...` for its own source, whatever the kind.
+
+## Files libraries
+
+`SourceKind.files` (`files/`) is media in folders on this device (account
+`flocal`, server `local`, one per device), on a WebDAV share (account and
+server `w<sha16 of the normalized URL>`, `connections[0]` the share's URL,
+`WebDavCredentials` JSON as the account token), or on an SMB share (account
+and server `s<16 hex>`, the SHA-256 of `smb://<host>[:port]/<share>`, one
+share per account, `SmbCredentials` JSON as the account token). There is no
+server: every listing is read from the account's `FileLibraryIndex` (Hive box
+`files_index`, opened at startup with the progress box so the source builds
+synchronously; `filesIndexProvider` holds one index per account, which
+scans and add flows must share).
+
+`files_queries.dart` turns one read of the index into items: matched groups
+by TMDB id, groups the relay has not answered for under a provisional id with
+their parsed title and no artwork, and files with no readable name or no
+winning match as `video` items in the Folders library, which exists only
+while there is one. Ids are built and parsed only in `files_ids.dart`.
+Watched is the index's flag or a stored position at 90%; resume needs 30
+seconds. Positions are the shared `PlaybackProgressStore`'s.
+
+The backend is only probed for the status: reachable is `local`, a refused
+WebDAV login or a lost folder permission flags `needsReauth`, anything else is
+`unreachable`, and browsing reads the index either way. Opening the source
+scans when the last scan is over six hours old (`filesScanProvider`); each
+group that lands, and each finished scan, invalidates the source's listings.
+Artwork is TMDB's image CDN, which needs no key.
+
+Accounts and roots are added and removed only through `FilesAccounts`
+(`filesAccountsProvider`): Add server, Folder (`/sources/add/folder`, Linux,
+Windows and macOS only) and WebDAV (`/sources/add/webdav`, everywhere but
+web). A root's id is `r` + the first 12 hex characters of the SHA-256 of its
+path, so adding the same folder twice keeps one root, and adding one starts a
+scan. The WebDAV form probes the share before anything is written, then
+writes the credentials, then the record; saving a URL already saved reuses
+its account, replaces the credentials and clears `needsReauth`. Signing a
+files account in again (`/sources/add/files?account=`) redirects to the
+folder picker for `flocal` and to the prefilled WebDAV form otherwise.
+`removeFilesAccount` removes the record and secrets, then clears the index.
+
+### Peer-to-peer watch-state and match-pin sync
+
+When players pair directly over iroh (`/settings/paired-devices`), watch
+state, resume positions, and manual match pins synchronize automatically
+without a central Mydia server.
+
+- Storage: Hive box `peer_sync` managed by `PeerSyncStore` (`core/p2p/peer_sync_store.dart`).
+  On first run, existing local watch progress and manual pins in `files_index`
+  are seeded into `peer_sync` via `seedPeerSyncStoreIfNeeded`.
+- Identity & keys: A 32-byte shared `PeerGroupSecret` stored in `AuthStorage`
+  generates a 16-hex group ID and HMAC-SHA256 authentication tokens for 1-RTT
+  sync requests. Records use canonical sync keys:
+  - `tmdb:movie:<id>`
+  - `tmdb:ep:<showId>:<season>:<episode>`
+  - `file:<accountId>:<fileKey>` (for unmatched files)
+  - `pin:<m|s>:<groupKey>` (for manual metadata matcher overrides)
+- Convergence: Updates use Last-Write-Wins (LWW) with monotonically assigned
+  `landedAt` watermarks. Delta sync exchanges only records updated since the
+  peer's last received landed watermark, allowing transitive gossiping across
+  partially connected peer topologies (A ↔ B ↔ C). Equal timestamps are
+  settled the same way on every device (watched, then position, then
+  duration; pinned, then the larger TMDB id). A device accepting a change
+  passes it on to the other members, and a reply to a sync request is not
+  counted as delivered until the requester sends its next cursor, so a lost
+  reply is sent again.
+- Membership: the group secret proves a device once belonged, not that it
+  still does, so only a node id the roster already holds may sync. A device
+  that pairs reaches the other members through the one it paired with. A
+  revocation always carries a time later than the stored record (the sender's
+  own, so another device can hold an active record with the same time, and a
+  revocation wins that tie), and a
+  revoked member comes back only through a newer record from another member
+  (a re-enrollment by pairing), never one it sends about itself. A sync reply
+  that arrives after `leaveGroup` is dropped.
+- Handshake & lifecycle: `PeerSyncService` (`core/p2p/peer_sync_service.dart`)
+  manages pairing offers with 6-character claim codes or direct QR payloads,
+  with a 5-attempt rate limit locking out brute-force attempts. Mutations
+  trigger immediate notifications, failing dials enter a 60-second cooldown,
+  and leaving a group revokes the local device while preserving local watch
+  records.
+
+### SMB
+
+`SmbBackend` is a thin layer over the Rust crate `player/rust/mydia_smb`
+(client on `smb2`), exposed through `mydia_player_p2p/src/smb.rs`. Playback
+goes through a loopback HTTP range server: `playable()` returns
+`http://127.0.0.1:<port>/smb/<token>` with no headers. Tokens are opaque,
+carry no path or credential, expire after 12 hours unused (never while a
+response is streaming) and go when the account is removed. A source rebuilt
+by a sign-in or a new folder keeps them, because a playback in progress
+streams through them. Connections idle for 60 seconds are closed. Access
+denied after connect is `BackendPermissionLost`; at session setup or tree
+connect it is `BackendUnauthorized`. Discovered servers are connected by
+their IPv4 addresses, then global IPv6 addresses, then the hostname, since
+`.local` names do not resolve on Android or Linux without nss-mdns; an
+unreachable address moves on to the next, and the one that answers is
+saved. A new SMB account
+is named `<host>/<share>`, or `<discovered name> / <share>` when the server was
+found on the network, so two shares on one server are told apart; signing in
+again keeps the saved name.
+
+The Rust tests run against a real Samba. It needs passwordless sudo and
+`smbd` on PATH:
+
+```
+eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
+cargo test --manifest-path player/rust/mydia_smb/Cargo.toml --features test-introspection
+player/rust/mydia_smb/tests/samba/run-samba.sh stop
+```
 
 ## Tests
 

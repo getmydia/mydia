@@ -247,14 +247,14 @@ defmodule MydiaWeb.Api.MediaControllerTest do
             genres: ["Animation"]
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     assert item.category == "cartoon_movie"
     item
   end
 
-  # skip_episode_refresh: true keeps this at the controller's own validation
+  # episodes: :skip keeps this at the controller's own validation
   # (provider_id parsing) rather than a real network-backed episode list, the
   # same reasoning test/mydia_web/controllers/api/playback_controller_test.exs
   # uses for its own create_media_item/1 helper.
@@ -268,7 +268,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
         year: 2024,
         monitored: true
       },
-      skip_episode_refresh: true
+      episodes: :skip
     )
   end
 
@@ -295,7 +295,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
               genres: ["Drama"]
             }
           },
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       conn =
@@ -326,7 +326,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
         Media.create_media_item(
           Scope.system(),
           %{type: "tv_show", title: "Stub Series", year: 2010},
-          skip_episode_refresh: true
+          episodes: :skip
         )
 
       {:ok, _episode} =

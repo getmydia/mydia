@@ -18,8 +18,9 @@ import '../../core/player/input_capabilities.dart';
 /// row parked wherever traversal put it vertically, which is the same
 /// disorientation this widget exists to fix, on the other axis.
 ///
-/// Shared by every horizontal rail (`ContentRail`, `HorizontalRail`) so the
-/// behaviour lives in one place instead of three copies.
+/// Applied by `HorizontalRail`, which every horizontal rail (`EpisodeRail`,
+/// `SourcePosterRow`, `DownloadedEpisodeRail`) builds on, so the behaviour
+/// lives in one place instead of a copy per rail.
 class RailFocusScroller extends StatefulWidget {
   final Widget child;
 

@@ -16,3 +16,83 @@ html {
 body {
   min-height: 100dvh;
 }
+
+/* Poster wall: rows of demo posters drifting sideways behind a hero. */
+.poster-wall {
+  position: absolute;
+  inset: 0 0 auto 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.poster-wall-tilt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transform: rotate(-6deg) scale(1.2);
+  transform-origin: center;
+  width: 120%;
+  margin: -3rem 0 0 -10%;
+}
+
+.poster-row {
+  display: flex;
+  gap: 0.75rem;
+  width: max-content;
+  animation: poster-drift var(--drift-duration, 120s) linear infinite;
+  will-change: transform;
+}
+
+.poster-row[data-reverse] {
+  animation-direction: reverse;
+}
+
+.poster-tile {
+  width: 6.5rem;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  flex: none;
+}
+
+@media (min-width: 640px) {
+  .poster-tile {
+    width: 9rem;
+  }
+}
+
+@keyframes poster-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-row {
+    animation: none;
+  }
+}
+
+/* Darkens the middle of a poster wall so the headline stays readable. */
+.hero-spotlight {
+  background: radial-gradient(
+    ellipse 60% 55% at center,
+    color-mix(in oklab, var(--color-base-100) 80%, transparent) 0%,
+    color-mix(in oklab, var(--color-base-100) 35%, transparent) 70%,
+    transparent 100%
+  );
+}
+
+/* Soft glow behind framed product shots. */
+.shot-glow {
+  position: absolute;
+  inset: -2.5rem;
+  z-index: -1;
+  border-radius: 3rem;
+  background: radial-gradient(ellipse at center, color-mix(in oklab, var(--color-primary) 35%, transparent), transparent 70%);
+  filter: blur(40px);
+}

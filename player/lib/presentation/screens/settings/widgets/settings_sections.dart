@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/build_channel.dart';
+import '../../../../core/p2p/peer_sync_service.dart';
 import '../../../../core/remote/node_registration_providers.dart';
 import '../../../../core/remote/registration_status.dart';
 import '../../../../core/remote/remote_control_settings.dart';
@@ -24,6 +25,7 @@ import '../../../../l10n/l10n.dart';
 import '../../../widgets/hls_quality_selector.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
+import '../settings_nav.dart';
 import 'glass_material_row.dart';
 import 'language_row.dart';
 import 'settings_row.dart';
@@ -102,7 +104,10 @@ class PlaybackSettingsSection extends ConsumerWidget {
             );
           },
         ),
-        if (includeRemoteControl) ...remoteControlRows(context, ref),
+        if (includeRemoteControl) ...[
+          ...remoteControlRows(context, ref),
+          pairedDevicesRow(context, ref),
+        ],
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
@@ -173,6 +178,39 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
   ];
 }
 
+Widget pairedDevicesRow(BuildContext context, WidgetRef ref) {
+  final syncService = ref.watch(peerSyncServiceProvider);
+  final store = ref.watch(peerSyncStoreProvider);
+  final roster = ref.watch(peerGroupRosterProvider);
+  return StreamBuilder<void>(
+    stream: syncService.onStateChanged,
+    builder: (context, _) {
+      final l10n = context.l10n;
+      final localNodeId = roster.localNodeId() ?? '';
+      final activePeers = store
+          .members()
+          .values
+          .where(
+            (m) =>
+                !m.revoked &&
+                m.nodeId.toLowerCase() != localNodeId.toLowerCase(),
+          )
+          .length;
+      final subtitle = !syncService.isPaired || activePeers == 0
+          ? l10n.settingsPairedDevicesNotPaired
+          : l10n.settingsPairedDevicesCount(activePeers);
+
+      return SettingsRow.navigation(
+        key: const Key('paired-devices-row'),
+        icon: Icons.devices,
+        title: l10n.settingsPairedDevicesTitle,
+        subtitle: subtitle,
+        onTap: () => SettingsNavScope.of(context).openPairedDevices(),
+      );
+    },
+  );
+}
+
 /// Persists the opt-in/opt-out and invalidates [remoteControlEnabledProvider]
 /// so the switch reflects it immediately. This only ever affects whether
 /// this device *answers* as a target; it never touches pairing or this
@@ -202,12 +240,16 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
   final updateState = ref.watch(updateProvider);
   final l10n = context.l10n;
   return [
-    const UpdateTrackSection(),
+    // Keyed because `SettingsSection` names its rows for TV focus memory by
+    // key, falling back to position. The retry row above it comes and goes
+    // with registration, so a positional id would hand the picker's place to
+    // the retry row.
+    const UpdateTrackSection(key: Key('update-track-row')),
     if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
       SettingsRow.action(
         key: const Key('check-for-updates-row'),
         icon: Icons.refresh,
-        title: updateState.manualCheck == ManualCheckBehaviour.checksAndInstalls
+        title: updateState.manualCheck.pressInstalls
             ? l10n.settingsCheckAndInstallUpdates
             : l10n.settingsCheckForUpdates,
         subtitle: updateCheckSubtitle(
@@ -216,10 +258,10 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
           update: updateState.availableUpdate,
         ),
         // isChecking covers the checksOnly/unavailable path (_refresh);
-        // isApplying covers checksAndInstalls (requestUpdate). The
-        // Flatpak row's press goes straight to requestUpdate, so without
-        // isApplying here a multi-second check-and-install transaction
-        // shows no feedback at all.
+        // isApplying covers the rows whose press installs (requestUpdate).
+        // Those go straight to requestUpdate, so without isApplying here a
+        // multi-second check-and-install transaction shows no feedback at
+        // all.
         trailing: (updateState.isChecking || updateState.isApplying)
             ? const SizedBox(
                 width: 20,
@@ -234,9 +276,13 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
   ];
 }
 
-/// A press on a check-and-install row installs, so it asks first. There is
-/// no version to preview, because the portal reports commits, so the dialog
-/// says what the press does rather than what it will fetch.
+/// A press on a Flatpak check-and-install row installs, so it asks first.
+/// There is no version to preview, because the portal reports commits, so the
+/// dialog says what the press does rather than what it will fetch.
+///
+/// An installsWithoutAsking row (sideloaded Android) does not ask: one press
+/// from checking to installed is the point of it, and Android's own installer
+/// is the confirmation on the occasions it shows one.
 Future<void> _check(BuildContext context, WidgetRef ref) async {
   final state = ref.read(updateProvider);
 
@@ -315,7 +361,7 @@ String updateCheckSubtitle(
   if (version != null) return l10n.settingsUpdateCheckVersionAvailable(version);
   if (update != null) return l10n.settingsUpdateCheckAvailable;
 
-  return behaviour == ManualCheckBehaviour.checksAndInstalls
+  return behaviour.pressInstalls
       ? l10n.settingsUpdateCheckInstallsNewest
       : l10n.settingsUpdateCheckUpToDate;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/screens/player/subtitle_preference.dart';
+import 'package:player/presentation/screens/player/subtitle_track_builder.dart';
 
 SubtitleTrack track(
   String id,
@@ -234,6 +235,61 @@ void main() {
     });
   });
 
+  group('preferenceWaitsForMpv', () {
+    const embedded =
+        SubtitleTrack(id: '3', language: 'eng', embedded: true, url: null);
+    const sidecar = SubtitleTrack(
+      id: 'side-1',
+      language: 'eng',
+      url: '/api/player/v1/subtitles/file/file-1/side-1?format=vtt',
+    );
+    const mpvOwn = SubtitleTrack(id: 'mk_1', language: 'eng', embedded: true);
+
+    bool waits({
+      bool nativeDirectPlay = true,
+      bool mpvListedSubtitles = false,
+      bool backstopExpired = false,
+      SubtitleTrack? target = embedded,
+    }) =>
+        preferenceWaitsForMpv(
+          nativeDirectPlay: nativeDirectPlay,
+          mpvListedSubtitles: mpvListedSubtitles,
+          backstopExpired: backstopExpired,
+          target: target,
+        );
+
+    test('an embedded server track waits while mpv has listed nothing', () {
+      expect(waits(), isTrue);
+    });
+
+    test('mpv having listed subtitles ends the wait', () {
+      expect(waits(mpvListedSubtitles: true), isFalse,
+          reason: 'mpv listed its tracks and the preferred one is not among '
+              "them by stream index, so the server's copy is the only one");
+    });
+
+    test('the backstop ends the wait', () {
+      expect(waits(backstopExpired: true), isFalse);
+    });
+
+    test('a sidecar has nothing to wait for', () {
+      expect(waits(target: sidecar), isFalse);
+    });
+
+    test("mpv's own track and Off apply at once", () {
+      expect(waits(target: mpvOwn), isFalse);
+      expect(waits(target: null), isFalse);
+    });
+
+    test('a streamed source never waits', () {
+      expect(waits(nativeDirectPlay: false), isFalse);
+    });
+
+    test('the backstop is five seconds', () {
+      expect(embeddedPreferenceBackstop, const Duration(seconds: 5));
+    });
+  });
+
   group('preferredSubtitleJsonForFile', () {
     // The generated shape of `subtitle_preference.graphql`: a root field, its
     // files, and each file's `preferredSubtitle`. Written as raw JSON because
@@ -290,6 +346,27 @@ void main() {
       ]) {
         expect(missing, isNull);
       }
+    });
+  });
+
+  group('mpvMayStillListSubtitles', () {
+    test('only in native direct play, before mpv lists, inside the backstop',
+        () {
+      bool may({
+        bool nativeDirectPlay = true,
+        bool mpvListedSubtitles = false,
+        bool backstopExpired = false,
+      }) =>
+          mpvMayStillListSubtitles(
+            nativeDirectPlay: nativeDirectPlay,
+            mpvListedSubtitles: mpvListedSubtitles,
+            backstopExpired: backstopExpired,
+          );
+
+      expect(may(), isTrue);
+      expect(may(nativeDirectPlay: false), isFalse);
+      expect(may(mpvListedSubtitles: true), isFalse);
+      expect(may(backstopExpired: true), isFalse);
     });
   });
 
@@ -367,6 +444,64 @@ void main() {
         ),
         isNull,
       );
+    });
+  });
+
+  group('carriedPreferenceRestore', () {
+    final serverTracks = [
+      const SubtitleTrack(
+          id: '4', language: 'eng', title: 'Full', embedded: true),
+      const SubtitleTrack(id: 'side-1', language: 'fre', title: 'Fan subs'),
+    ];
+
+    test('a track preference lands on the new source by the same matching', () {
+      // Direct play to a transcode: the server's own track is on screen.
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferTrack(language: 'eng'),
+          serverTracks: serverTracks,
+          tracks: serverTracks,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreTrack>().having((r) => r.track.id, 'track', '4'),
+      );
+      // A transcode to direct play: mpv's own stream, by index.
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferTrack(language: 'eng'),
+          serverTracks: serverTracks,
+          tracks: [track('mk_1', 'eng'), serverTracks[1]],
+          streamIndexByMpvId: const {'1': 4},
+        ),
+        isA<RestoreTrack>().having((r) => r.track.id, 'track', 'mk_1'),
+      );
+    });
+
+    test('an Off preference stays off', () {
+      expect(
+        carriedPreferenceRestore(
+          pref: const PreferOff(),
+          serverTracks: serverTracks,
+          tracks: serverTracks,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreOff>(),
+      );
+    });
+
+    test('a preference matching nothing on the new source is reported', () {
+      for (final pref in [const PreferTrack(language: 'jpn'), null]) {
+        expect(
+          carriedPreferenceRestore(
+            pref: pref,
+            serverTracks: serverTracks,
+            tracks: serverTracks,
+            streamIndexByMpvId: const {},
+          ),
+          isA<RestoreUnavailable>()
+              .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        );
+      }
     });
   });
 }

@@ -415,4 +415,160 @@ void main() {
       });
     });
   });
+
+  group('AmbientTargets.stopped', () {
+    test('reports every node a sweep found not playing', () async {
+      final scripted = ScriptedProbe({
+        'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+        'node-den': null,
+      });
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv', 'node-den']),
+        probe: scripted.call,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      await targets.sweep();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, ['node-den']);
+    });
+
+    test('reports a held node once a refresh finds it stopped', () {
+      fakeAsync((async) {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+        final stopped = <String>[];
+        targets.stopped.listen(stopped.add);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        expect(stopped, isEmpty);
+
+        scripted.update({'node-tv': null});
+        async.elapse(const Duration(seconds: 5));
+
+        expect(stopped, ['node-tv']);
+
+        targets.dispose();
+      });
+    });
+
+    test(
+        'ignores a refresh that was in flight across a background and '
+        'resume', () {
+      fakeAsync((async) {
+        var pending = false;
+        final late = Completer<FlutterPlaybackSnapshot?>();
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: (nodeId) {
+            if (pending) return late.future;
+            return Future.value(playingSnapshot(title: 'The Lantern Keepers'));
+          },
+        );
+        final stopped = <String>[];
+        targets.stopped.listen(stopped.add);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        pending = true;
+        async.elapse(const Duration(seconds: 5)); // refresh starts, waits
+
+        targets.onBackground();
+        targets.onForeground();
+        // The connection the probe was using died with the background, so
+        // it fails late. That says nothing about the player.
+        late.complete(null);
+        async.flushMicrotasks();
+
+        expect(stopped, isEmpty);
+
+        targets.dispose();
+      });
+    });
+
+    test(
+        'a refresh in flight across a background and resume does not refill '
+        'the held list', () {
+      fakeAsync((async) {
+        var pending = false;
+        final late = Completer<FlutterPlaybackSnapshot?>();
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: (nodeId) => pending
+              ? late.future
+              : Future.value(playingSnapshot(title: 'The Lantern Keepers')),
+        );
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        pending = true;
+        async.elapse(const Duration(seconds: 5)); // refresh starts, waits
+
+        targets.onBackground();
+        targets.onForeground();
+        // Answers playing, so only the epoch guard keeps it out of `_held`;
+        // the next sweep after resume is what repopulates.
+        late.complete(playingSnapshot(title: 'The Lantern Keepers'));
+        async.flushMicrotasks();
+
+        expect(latest, isEmpty);
+
+        targets.dispose();
+      });
+    });
+
+    test('ignores a sweep that was in flight across a background and resume',
+        () async {
+      final late = Completer<FlutterPlaybackSnapshot?>();
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv']),
+        probe: (nodeId) => late.future,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      final sweep = targets.sweep();
+      await Future<void>.delayed(Duration.zero);
+      targets.onBackground();
+      targets.onForeground();
+      late.complete(null);
+      await sweep;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, isEmpty);
+    });
+
+    test('does not report anything when the app backgrounds', () async {
+      final scripted = ScriptedProbe({
+        'node-tv': playingSnapshot(title: 'The Lantern Keepers'),
+      });
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv']),
+        probe: scripted.call,
+      );
+      addTearDown(targets.dispose);
+      final stopped = <String>[];
+      targets.stopped.listen(stopped.add);
+
+      await targets.sweep();
+      targets.onBackground();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stopped, isEmpty,
+          reason: 'dropping connections on background says nothing about '
+              'whether the player stopped');
+    });
+  });
 }

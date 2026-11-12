@@ -52,6 +52,7 @@ class _PlayButtonState extends State<PlayButton>
         child: FocusHighlight(
           onActivate: widget.onPressed,
           circular: true,
+          emphasis: true,
           child: Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,

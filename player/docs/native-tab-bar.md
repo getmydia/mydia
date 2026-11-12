@@ -163,11 +163,28 @@ Rules both sides keep:
   `select`. Flutter's route is the only source of truth for the selection, so a
   tap the shell refuses (offline, say) never leaves the bar on the wrong tab.
   A disabled tab reports nothing.
-- `insetsChanged(0)` is ignored by Dart. Zero means the bar is hidden (drawer
-  open, or a route covers the shell), and reflowing the content behind the
-  drawer would make every screen jump. Dart keeps the last real height.
+- `insetsChanged(0)` is ignored by Dart. Zero means the bar is hidden (a
+  route such as the menu page covers the shell), and reflowing the content
+  behind it would make every screen jump. Dart keeps the last real height.
 - A native failure is logged and swallowed in Dart: the bar is chrome, never a
   reason to crash.
+
+## The menu page
+
+iOS has no navigation drawer, and its left-edge swipe is the system back
+gesture. So in the iOS app the phone layout's menu button pushes `MenuPage`, a
+full page holding the same `SidebarContent` the drawer holds, and the shell's
+Scaffold has no drawer (`AppShell.usesMenuPage`). This holds with or without
+the native bar. Safari on an iPhone keeps the drawer.
+
+- Screens open the navigation through `AppShell.openNavigation`, which finds
+  the shell's `ShellMenuScope` or falls back to the drawer.
+- The page is on the root navigator, so `PageCoverObserver` sees it as a page
+  over the shell: the bar and accessory hide, as under the player.
+- A row pops the page, then navigates. A server switch navigates underneath
+  and leaves the page open; the page follows the shell's location and offline
+  state through a `ValueNotifier` the shell updates after each frame.
+- Leaving the page ends sidebar edit mode, as closing the drawer does.
 
 ## Insets
 
@@ -188,7 +205,8 @@ The bar is visible when all three hold (`AppShell.nativeBarVisible`):
 - the shell's route is current on the root navigator (no page, dialog or
   sheet above it: not the immersive player),
 - no popup is on the ShellRoute's own navigator, and
-- the drawer is closed.
+- the drawer is closed. The iOS app has no drawer (see "The menu page"
+  below), so this rule only matters to the shared code path.
 
 A native bar must not sit over a Flutter sheet. The second rule exists because
 `showModalBottomSheet` defaults to `useRootNavigator: false` (and `showDialog`
@@ -230,8 +248,8 @@ Artwork is the media's image URL when there is one. The accessory shows the
 symbol at once, swaps in the artwork if it loads, and keeps the symbol if it
 fails (artwork is cached in memory by URL).
 
-The accessory shows only while the bar is visible, so it follows the drawer,
-the player and the shell route. While it is the cast bar, `CastBarLayer`
+The accessory shows only while the bar is visible, so it follows the menu
+page, the player and the shell route. While it is the cast bar, `CastBarLayer`
 unmounts the floating `CastMiniController` (`DockExtents.nativeBar`, reported
 by `ReportedNativeBar`), which also drops that bar's reported height, since
 the native inset already includes the accessory.
@@ -548,8 +566,11 @@ From the shipped build:
   back to its root.
 - [ ] The Settings badge shows `1` while an update is waiting.
 - [ ] Offline: every tab but Downloads is dimmed and does nothing.
-- [ ] The drawer hides the bar and the accessory; closing brings both back;
-  content does not reflow.
+- [ ] The menu page hides the bar and the accessory; going back brings both
+  back; content does not reflow.
+- [ ] A left-edge swipe on a shell screen does nothing (no drawer). The menu
+  page uses the app's fade-forwards transition, which has no swipe-back: its
+  back button returns to the shell.
 - [ ] The player hides the bar; leaving it brings the bar back.
 - [ ] Every accessory state while casting: ambient, offline, connecting,
   stale, idle, playing, paused, and syncing (background the app for a minute,
@@ -561,7 +582,7 @@ From the shipped build:
 - [ ] Open the cast sheet from the accessory: no second cast pill appears.
 - [ ] Open a dialog from a shell screen: the floating cast pill does not
   appear.
-- [ ] Close the drawer: screens do not jump.
+- [ ] Leave the menu page: screens do not jump.
 - [ ] Scroll in the middle of the screen right after a tab switch.
 - [ ] Status-bar tap scrolls the screen to the top (unverified after the root
   swap, see Known limits).

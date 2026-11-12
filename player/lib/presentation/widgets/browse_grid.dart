@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
+import '../../core/focus/focus_memory.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
 import '../../core/player/input_capabilities.dart';
@@ -31,10 +32,28 @@ class BrowseGrid extends StatelessWidget {
     required this.itemBuilder,
     required this.scrollTopPadding,
     this.controller,
+    this.itemId,
+    this.landing = true,
   });
+
+  /// Whether focus lands on the grid when its page opens on the television
+  /// tier (see `FocusMemoryRegion.landing`). A grid is what a browse page is
+  /// for, so it is on by default; search turns it off, because there the
+  /// query field is where the viewer starts.
+  final bool landing;
 
   final int itemCount;
   final Widget? Function(BuildContext context, int index) itemBuilder;
+
+  /// The stable identity of the item at an index, which the grid remembers
+  /// on the television tier so focus entering the grid from outside (DOWN
+  /// from a filter or tab row above it) returns to the cell that last had it
+  /// (see `FocusMemoryRegion`).
+  ///
+  /// Pass the item's identity (`ItemSummary.ref`), never its position, so a
+  /// re-sorted or refreshed grid returns to the title rather than the slot.
+  /// Without it the index stands in.
+  final Object Function(int index)? itemId;
 
   /// Top padding that clears the glass bar, from `BrowseScaffold`'s body
   /// builder. Never computed here: only the scaffold knows the bar's height.
@@ -48,12 +67,13 @@ class BrowseGrid extends StatelessWidget {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
+    final directional = InputCapabilities.directionalPrimary;
 
-    return LayoutBuilder(
+    final grid = LayoutBuilder(
       builder: (context, constraints) {
         return GridView.builder(
           controller: controller,
-          scrollCacheExtent: InputCapabilities.directionalPrimary
+          scrollCacheExtent: directional
               ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
               : null,
           padding: EdgeInsets.fromLTRB(
@@ -69,9 +89,27 @@ class BrowseGrid extends StatelessWidget {
             mainAxisSpacing: cardSpacing + 4,
           ),
           itemCount: itemCount,
-          itemBuilder: itemBuilder,
+          // Gated here as well as inside the widgets so the tree off the
+          // television tier is exactly what it was, not merely inert.
+          itemBuilder: directional ? _rememberedItem : itemBuilder,
         );
       },
+    );
+
+    return directional
+        ? FocusMemoryRegion(landing: landing, child: grid)
+        : grid;
+  }
+
+  /// [itemBuilder]'s cell wrapped as an item of the grid's region. A null
+  /// cell stays null, which is how a caller ends the grid early.
+  Widget? _rememberedItem(BuildContext context, int index) {
+    final cell = itemBuilder(context, index);
+    if (cell == null) return null;
+    return FocusMemoryItem(
+      id: itemId?.call(index) ?? index,
+      index: index,
+      child: cell,
     );
   }
 }

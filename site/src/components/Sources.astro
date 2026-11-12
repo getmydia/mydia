@@ -1,0 +1,32 @@
+---
+import { sources } from '../data/sources';
+---
+
+<section id="sources" class="py-16 px-4 scroll-mt-16">
+  <div class="max-w-4xl mx-auto text-center">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      {sources.map(source => (
+        <div
+          class:list={[
+            'card bg-base-100 border border-base-300',
+            source.status === 'soon' && 'opacity-50',
+          ]}
+        >
+          <div class="card-body items-center text-center p-5">
+            <h3 class="font-semibold">{source.name}</h3>
+            {source.status === 'soon' && <span class="badge badge-ghost">Coming soon</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+    <p class="text-base-content/60 text-sm max-w-xl mx-auto">
+      Sign in to the servers you already have. There is nothing to install on them.
+      <a
+        href="https://docs.mydia.dev/latest/using/how-to/connect-other-servers/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="link link-primary"
+      >How to connect them</a>.
+    </p>
+  </div>
+</section>

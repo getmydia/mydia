@@ -7,6 +7,14 @@ defmodule MydiaWeb.DiscoverLive.Messages do
 
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
+  def page_subtitle(:movie), do: gettext("Find new movies to add to your library")
+  def page_subtitle(:tv_show), do: gettext("Find new TV shows to add to your library")
+  def page_subtitle(:person), do: gettext("Find people and the titles they appear in")
+
+  def search_placeholder(:movie), do: gettext("Search for a movie to add")
+  def search_placeholder(:tv_show), do: gettext("Search for a show to add")
+  def search_placeholder(:person), do: gettext("Search people")
+
   def movie_categories do
     [
       {:trending, gettext("Trending")},
@@ -25,12 +33,16 @@ defmodule MydiaWeb.DiscoverLive.Messages do
     ]
   end
 
-  def sort_options do
+  # TMDB's TV discover sorts by first_air_date and silently ignores
+  # primary_release_date, falling back to popularity (#1381).
+  def sort_options(media_type) do
+    date = if media_type == :tv_show, do: "first_air_date", else: "primary_release_date"
+
     [
       {"popularity.desc", gettext("Most Popular")},
       {"vote_average.desc", gettext("Highest Rated")},
-      {"primary_release_date.desc", gettext("Newest First")},
-      {"primary_release_date.asc", gettext("Oldest First")}
+      {"#{date}.desc", gettext("Newest First")},
+      {"#{date}.asc", gettext("Oldest First")}
     ]
   end
 

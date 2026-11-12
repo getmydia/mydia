@@ -51,7 +51,9 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Stream<AvailableUpdate?> get availability => _controller.stream;
 
   @override
-  ManualCheckBehaviour get manualCheck => ManualCheckBehaviour.checksOnly;
+  ManualCheckBehaviour get manualCheck => _updater.installsWithoutAsking
+      ? ManualCheckBehaviour.installsWithoutAsking
+      : ManualCheckBehaviour.checksOnly;
 
   @override
   bool get canUpdateInPlace => _updater.canUpdateInPlace;
@@ -76,6 +78,11 @@ class ReleaseUpdateBackend implements UpdateBackend {
     }
 
     _track = track;
+    // An update held from the old track belongs to it. Forgotten here so a
+    // refresh that fails below cannot leave it on offer, or let a one-press
+    // install fall back to a build from the track the user just left.
+    _latest = null;
+    if (!_controller.isClosed) _controller.add(null);
     // Look immediately rather than waiting for the next scheduled check, so
     // the choice visibly does something. The switch itself already
     // succeeded by this point, so a failed look does not undo it: catch
@@ -103,6 +110,22 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
   }) async {
+    // A one-press install is "check and install", so it checks fresh even
+    // when it already holds an update: the one found at startup can be hours
+    // old, and a newer release since then is the one to install. A failed
+    // check falls back to the update already held, if there is one.
+    if (_updater.installsWithoutAsking) {
+      try {
+        await refresh(force: true);
+      } catch (e) {
+        if (_latest == null) {
+          return UpdateFailed(
+              UpdateProblem(UpdateIssue.checkFailed, detail: '$e'));
+        }
+        debugPrint('[ReleaseUpdateBackend] Check failed, using held: $e');
+      }
+    }
+
     final update = _latest;
     if (update == null) return const AlreadyUpToDate();
 

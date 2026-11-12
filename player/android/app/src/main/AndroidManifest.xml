@@ -11,6 +11,10 @@
          it distributes from updating itself by any other mechanism, and
          UpdateHost refuses to build a backend for them. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Android 12+: lets ApkInstaller update this app without the system
+         confirmation dialog, once this app is its own installer of record.
+         A normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
     <!-- Television support. Both are optional so a single bundle keeps
          serving phones: `required="false"` declares the app runs with or
          without them. Google TV filters out any app that does not mark
@@ -71,6 +75,17 @@
         <receiver
             android:name=".ApkInstallReceiver"
             android:exported="false" />
+
+        <!-- Reopens the app after an update it started itself. Only the
+             system sends MY_PACKAGE_REPLACED, and it is one of the implicit
+             broadcasts still delivered to manifest receivers. -->
+        <receiver
+            android:name=".UpdateRelaunchReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

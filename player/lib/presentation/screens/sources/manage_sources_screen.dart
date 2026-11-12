@@ -1,5 +1,7 @@
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
+import '../../../core/sources/files/files_account.dart'
+    show kFilesLocalAccountId;
+import '../../../core/sources/files/files_accounts.dart';
+import '../../../core/sources/files/files_providers.dart'
+    show filesIndexProvider;
+import '../../../core/sources/files/files_scan_controller.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/mydia/mydia_secrets.dart';
 import '../../../core/sources/source.dart';
@@ -14,11 +22,13 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/files/files_scan_banner.dart' show filesScanProgressText;
 import '../../widgets/toast/toaster.dart';
 import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'confirm_remove_account.dart';
+import 'files_library_kind_picker.dart' show filesLibraryKindLabel;
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
 
@@ -162,6 +172,84 @@ class _AllServersSwitch extends ConsumerWidget {
       );
 }
 
+/// A files account's folders, each removable, and a Rescan of them all.
+class _FilesRoots extends ConsumerStatefulWidget {
+  const _FilesRoots({required this.source});
+
+  final Source source;
+
+  @override
+  ConsumerState<_FilesRoots> createState() => _FilesRootsState();
+}
+
+class _FilesRootsState extends ConsumerState<_FilesRoots> {
+  Future<void> _removeRoot(String rootId) async {
+    final toaster = Toaster.of(context);
+    final l10n = context.l10n;
+    try {
+      await ref
+          .read(filesAccountsProvider)
+          .removeRoot(widget.source.id, rootId);
+    } catch (e) {
+      debugPrint('[Sources] Could not remove folder $rootId: $e');
+      toaster.show(l10n.sourcesRemoveAccountFailed, kind: ToastKind.error);
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final source = widget.source;
+    final roots = ref.watch(filesIndexProvider(source.account.id)).roots()
+      ..sort((a, b) => a.title.compareTo(b.title));
+    final scan = ref.watch(filesScanProvider(source.id));
+    final scanning = scan.running;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final root in roots)
+          ListTile(
+            key: ValueKey('manage-root-${root.id}'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_rounded),
+            title: Text(root.title),
+            subtitle: Text(context.l10n.filesManageRootSubtitle(
+                filesLibraryKindLabel(context.l10n, root.kind), root.path)),
+            trailing: IconButton(
+              key: ValueKey('manage-remove-root-${root.id}'),
+              tooltip: context.l10n.filesManageRemoveFolder,
+              icon: const Icon(Icons.remove_circle_outline_rounded),
+              onPressed: () => _removeRoot(root.id),
+            ),
+          ),
+        TextButton.icon(
+          key: ValueKey('manage-rescan-${source.account.id}'),
+          onPressed: scanning || roots.isEmpty
+              ? null
+              : () => unawaited(ref
+                      .read(filesScanProvider(source.id).notifier)
+                      .rescan()
+                      .catchError((Object e) {
+                    debugPrint('[Sources] Rescan failed: $e');
+                  })),
+          // A disabled Rescan alone reads as broken: while a scan runs, the
+          // button says how far it has got.
+          icon: scanning
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+          label: Text(scanning
+              ? filesScanProgressText(context.l10n, scan)
+              : context.l10n.filesManageRescan),
+        ),
+      ],
+    );
+  }
+}
+
 class _AccountCard extends ConsumerWidget {
   const _AccountCard({super.key, required this.record, required this.unlocked});
 
@@ -174,7 +262,13 @@ class _AccountCard extends ConsumerWidget {
     final toaster = Toaster.of(context);
     final l10n = context.l10n;
     try {
-      await removeMydiaInstance(ref, record.account);
+      if (record.account.kind == SourceKind.files) {
+        await ref
+            .read(filesAccountsProvider)
+            .removeFilesAccount(record.account.id);
+      } else {
+        await removeMydiaInstance(ref, record.account);
+      }
     } catch (_) {
       toaster.show(l10n.sourcesRemoveAccountFailed, kind: ToastKind.error);
     }
@@ -197,6 +291,7 @@ class _AccountCard extends ConsumerWidget {
                   SourceKind.stash => context.l10n.sourcesAccountStash,
                   SourceKind.jellyfin => context.l10n.sourcesAccountJellyfin,
                   SourceKind.mydia => context.l10n.sourcesAccountMydia,
+                  SourceKind.files => context.l10n.sourcesAccountFiles,
                 },
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
@@ -232,6 +327,9 @@ class _AccountCard extends ConsumerWidget {
                     case final source?)
                   _AllServersSwitch(source: source),
               ],
+            if (account.kind == SourceKind.files)
+              if (record.sources.firstOrNull case final source?)
+                _FilesRoots(source: source),
             Wrap(
               spacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -260,16 +358,20 @@ class _AccountCard extends ConsumerWidget {
                   key: Key('manage-reauth-${account.id}'),
                   onPressed: () => SettingsNavScope.of(context)
                       .reauth(account.kind, account.id),
-                  child: Text(account.needsReauth
-                      ? context.l10n.navSourceSignInAgain
-                      : switch (account.kind) {
-                          SourceKind.plex => context.l10n.sourcesReauthPlex,
-                          SourceKind.jellyfin =>
-                            context.l10n.sourcesReauthJellyfin,
-                          SourceKind.stash ||
-                          SourceKind.mydia =>
-                            context.l10n.sourcesReauthKey,
-                        }),
+                  child: Text(switch ((account.kind, account.needsReauth)) {
+                    (SourceKind.files, final reauth)
+                        when account.id == kFilesLocalAccountId =>
+                      reauth
+                          ? context.l10n.filesChooseFolderAgain
+                          : context.l10n.filesManageAddFolder,
+                    (_, true) => context.l10n.navSourceSignInAgain,
+                    (SourceKind.plex, _) => context.l10n.sourcesReauthPlex,
+                    (SourceKind.jellyfin, _) =>
+                      context.l10n.sourcesReauthJellyfin,
+                    (SourceKind.files, _) => context.l10n.filesManageEditShare,
+                    (SourceKind.stash || SourceKind.mydia, _) =>
+                      context.l10n.sourcesReauthKey,
+                  }),
                 ),
                 TextButton(
                   key: Key('manage-remove-${account.id}'),

@@ -16,6 +16,8 @@ defmodule Mydia.Media.Add do
   alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
+  alias Mydia.Media.FranchiseLibrary
+  alias Mydia.Media.Items
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
   alias Mydia.Settings
@@ -24,7 +26,8 @@ defmodule Mydia.Media.Add do
   @create_opt_keys [
     :actor_type,
     :actor_id,
-    :skip_episode_refresh,
+    :episodes,
+    :search_on_add,
     :season_monitoring,
     :exclude_request_id
   ]
@@ -71,9 +74,13 @@ defmodule Mydia.Media.Add do
   @doc """
   Inserts a media item from attrs produced by `resolve_attrs/4`.
 
-  Makes no provider calls of its own. Note that `Media.create_media_item/2`
-  still fetches episodes for TV shows, which is a network call; that is
-  pre-existing behaviour and is deliberately left where it is.
+  Makes no provider calls of its own. For TV shows an episode fetch job is
+  enqueued by default (`episodes: :background`); only `episodes: :inline` makes
+  a network call. An injected `config` without `:episodes` also means `:inline`.
+
+  `search_on_add: true` queues an indexer search for the new item. A background
+  TV add runs it after the episodes land; every other add queues it here.
+  `{:already_in_library, _}` never searches.
   """
   @spec from_attrs(Scope.t(), map(), map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()}
@@ -82,8 +89,6 @@ defmodule Mydia.Media.Add do
              | {:already_in_library, Media.MediaItem.t()}
              | :restricted}
   def from_attrs(%Scope{} = scope, attrs, config \\ nil, opts \\ []) do
-    config = config || Metadata.default_relay_config()
-
     case existing_item(scope, attrs) do
       nil -> insert_media_item(scope, attrs, config, opts)
       item -> {:error, {:already_in_library, backfill_ids(scope, item, attrs)}}
@@ -91,10 +96,18 @@ defmodule Mydia.Media.Add do
   end
 
   defp insert_media_item(scope, attrs, config, opts) do
+    search_on_add = opts[:search_on_add] == true
+
+    # Only an injected config travels on: it is what makes an add `:inline`
+    # unless `:episodes` says otherwise (see `Items.episodes_mode/1`). The
+    # default relay config is what `create_media_item/3` falls back to anyway.
     create_opts =
       opts
       |> Keyword.take(@create_opt_keys)
-      |> Keyword.put(:config, config)
+      |> Keyword.put(:search_on_add, search_on_add)
+      |> then(&if config, do: Keyword.put(&1, :config, config), else: &1)
+
+    mode = Items.episodes_mode(create_opts)
 
     result =
       ExternalIds.write(attrs, [type: attrs[:type], title: attrs[:title]], fn attrs ->
@@ -102,13 +115,22 @@ defmodule Mydia.Media.Add do
       end)
 
     case result do
-      {:ok, media_item} -> {:ok, media_item}
+      {:ok, media_item} -> {:ok, queue_search(media_item, mode, search_on_add)}
       # Passed through bare, not wrapped as {:changeset, :restricted}: it is
       # not a changeset, and callers that ran it through
       # `MediaAddHelpers.format_changeset_errors/1` would crash on the atom.
       {:error, :restricted} -> {:error, :restricted}
       {:error, changeset} -> {:error, {:changeset, changeset}}
     end
+  end
+
+  # A background TV add carries the flag in the `EpisodeFetch` args, so the
+  # search runs once episodes exist. Every other add searches here.
+  defp queue_search(%{type: "tv_show"} = item, :background, _search_on_add), do: item
+
+  defp queue_search(item, _mode, search_on_add) do
+    _ = Mydia.Search.maybe_queue_search(item, search_on_add)
+    item
   end
 
   # The unique indexes on tmdb_id and tvdb_id turn "you already have this" into
@@ -224,8 +246,6 @@ defmodule Mydia.Media.Add do
   @spec from_provider(Scope.t(), Ref.t() | nil, :movie | :tv_show, map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()} | {:error, error()}
   def from_provider(%Scope{} = scope, ref, media_type, config \\ nil, opts \\ []) do
-    config = config || Metadata.default_relay_config()
-
     with {:ok, attrs} <- resolve_attrs(ref, media_type, config, opts) do
       from_attrs(scope, attrs, config, opts)
     end
@@ -387,10 +407,31 @@ defmodule Mydia.Media.Add do
   defp resolve_movie_attrs(ref, config, opts) do
     case Metadata.fetch_by_ref(config, ref, media_type: :movie) do
       {:ok, metadata} ->
-        {:ok, build_media_item_attrs(metadata, :movie, Keyword.put(opts, :tmdb_id, Ref.id(ref)))}
+        opts =
+          opts
+          |> Keyword.put(:tmdb_id, Ref.id(ref))
+          |> put_franchise_library(Ref.id(ref), metadata, config)
+
+        {:ok, build_media_item_attrs(metadata, :movie, opts)}
 
       {:error, reason} ->
         {:error, {:metadata, reason}}
+    end
+  end
+
+  # A movie added with no library lands beside its franchise (#1366). Every
+  # add path that leaves the library to import-time resolution reaches here:
+  # the franchise strip on a movie page, recommendations, GraphQL, import lists
+  # with no library and the downloads match dialog. The metadata already
+  # carries the collection, so this costs no extra details call. A nil answer
+  # leaves the item on import-time resolution as before.
+  defp put_franchise_library(opts, tmdb_id, metadata, config) do
+    with nil <- opts[:library_path_id],
+         id when is_binary(id) <-
+           FranchiseLibrary.library_for_collection(tmdb_id, metadata.collection_id, config) do
+      Keyword.put(opts, :library_path_id, id)
+    else
+      _ -> opts
     end
   end
 

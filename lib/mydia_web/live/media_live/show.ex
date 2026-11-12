@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.DownloadComponents
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
+  alias MydiaWeb.MediaLive.Show.EpisodeFetchEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
   alias MydiaWeb.MediaLive.Show.LibraryEvents
@@ -81,6 +82,7 @@ defmodule MydiaWeb.MediaLive.Show do
     {:ok,
      socket
      |> assign(:media_item, media_item)
+     |> EpisodeFetchEvents.assign_fetching()
      |> assign_downloads(downloads_with_status)
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)
@@ -184,11 +186,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # Mydia.Subtitles.Format.detect/1 on the received bytes is the real gate,
      # in SubtitleEvents.finish_upload/6, and the size and count limits below
      # are independent of accept.
-     |> allow_upload(:subtitle,
-       accept: :any,
-       max_entries: 1,
-       max_file_size: 2_000_000
-     )
+     |> allow_upload(:subtitle, accept: :any, max_entries: 1, max_file_size: 2_000_000)
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
@@ -200,6 +198,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(:add_config, nil)
      |> DetailModal.init()
+     |> MydiaWeb.Live.Helpers.PersonModal.attach()
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -769,19 +768,8 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply, socket}
   end
 
-  def handle_info({:event_created, event}, socket) do
-    # Check if this event is related to the current media item
-    if event.resource_type == "media_item" &&
-         event.resource_id == socket.assigns.media_item.id do
-      # Reload timeline events to include the new event
-      timeline_events =
-        load_timeline_events(socket.assigns.media_item, socket.assigns.current_user)
-
-      {:noreply, assign(socket, :timeline_events, timeline_events)}
-    else
-      {:noreply, socket}
-    end
-  end
+  def handle_info({:event_created, event}, socket),
+    do: {:noreply, EpisodeFetchEvents.handle_event_created(event, socket)}
 
   def handle_info({:job_updated, _job_id}, socket) do
     # Refresh transcode jobs for the current media item
@@ -965,8 +953,8 @@ defmodule MydiaWeb.MediaLive.Show do
   # The key is deliberately not :load_recommendations: that one is the page's
   # own rail, and sharing a key would let the dialog's lookup overwrite it,
   # since start_async/3 overwrites rather than cancels under an existing key.
-  def handle_async(:load_selected_recommendations, result, socket),
-    do: DetailModalEvents.handle_recommendations_result(result, socket)
+  def handle_async({:load_selected_recommendations, ref, media_type}, result, socket),
+    do: DetailModalEvents.handle_recommendations_result(ref, media_type, result, socket)
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)

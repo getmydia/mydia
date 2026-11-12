@@ -30,7 +30,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Cinder Lantern", tmdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert movie.tmdb_id == id
@@ -44,14 +44,14 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Harrow Bay", tmdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert {:error, changeset} =
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Harrow Bay Redux", tmdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
@@ -74,7 +74,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Pale Orchard", tvdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert movie.tvdb_id == id
@@ -88,14 +88,14 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Vellum Coast", tvdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert {:error, changeset} =
                Media.create_media_item(
                  Scope.unrestricted(),
                  %{type: "tv_show", title: "Vellum Coast Redux", tvdb_id: id},
-                 skip_episode_refresh: true
+                 episodes: :skip
                )
 
       assert %{tvdb_id: ["has already been taken"]} = errors_on(changeset)

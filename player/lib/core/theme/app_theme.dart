@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../player/input_capabilities.dart';
 import 'colors.dart';
 import 'liquid_glass/glass_style.dart';
 import 'palette.dart';
@@ -40,6 +41,20 @@ class AppTheme {
           );
     final InteractiveInkFeatureFactory? buttonSplash =
         liquid ? NoSplash.splashFactory : null;
+    // On a television the only cue for where focus is. Material's focus
+    // overlay is a faint tint, invisible on the white fills these buttons
+    // use, so a focused button gets an accent border. Elsewhere the buttons
+    // keep their style; the outlined one keeps its borderless look.
+    ButtonStyle withTvFocus(ButtonStyle style, {BorderSide? rest}) =>
+        InputCapabilities.directionalPrimary
+            ? style.copyWith(
+                side: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.focused)
+                      ? BorderSide(color: p.primary, width: 3)
+                      : rest,
+                ),
+              )
+            : style;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -217,7 +232,7 @@ class AppTheme {
 
       // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
+        style: withTvFocus(ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: p.background,
           elevation: 0,
@@ -229,12 +244,12 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: buttonShape,
           splashFactory: buttonSplash,
-        ),
+        )),
       ),
 
       // Text Button
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
+        style: withTvFocus(TextButton.styleFrom(
           foregroundColor: p.textPrimary,
           textStyle: const TextStyle(
             fontFamily: displayFamily,
@@ -244,24 +259,26 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: buttonShape,
           splashFactory: buttonSplash,
-        ),
+        )),
       ),
 
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: p.textPrimary,
-          backgroundColor: secondaryButtonFill,
-          side: BorderSide.none,
-          textStyle: const TextStyle(
-            fontFamily: displayFamily,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: buttonShape,
-          splashFactory: buttonSplash,
-        ),
+        style: withTvFocus(
+            rest: BorderSide.none,
+            OutlinedButton.styleFrom(
+              foregroundColor: p.textPrimary,
+              backgroundColor: secondaryButtonFill,
+              side: BorderSide.none,
+              textStyle: const TextStyle(
+                fontFamily: displayFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: buttonShape,
+              splashFactory: buttonSplash,
+            )),
       ),
 
       // Icon Button
@@ -273,7 +290,7 @@ class AppTheme {
 
       // Filled Button (for primary actions)
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
+        style: withTvFocus(FilledButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: p.background,
           elevation: 0,
@@ -285,7 +302,7 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: buttonShape,
           splashFactory: buttonSplash,
-        ),
+        )),
       ),
 
       // Input Decoration - uses radiusInput

@@ -9,6 +9,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/focus/focus_memory.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../l10n/l10n.dart';
@@ -23,6 +25,9 @@ class DetailSimilarRail extends ConsumerStatefulWidget {
 
   /// Test and lookup handle for the disclosure chevron.
   static const disclosureKey = ValueKey('content-rail-disclosure');
+
+  /// The disclosure header's section on the television tier, for tests.
+  static const headerSectionKey = ValueKey('similar-disclosure-section');
 
   @override
   ConsumerState<DetailSimilarRail> createState() => _DetailSimilarRailState();
@@ -48,47 +53,61 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
       );
     }
 
+    final header = Semantics(
+      button: true,
+      expanded: _expanded,
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  context.l10n.detailSimilarInLibrary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
+                      ),
+                ),
+              ),
+              AnimatedRotation(
+                key: DetailSimilarRail.disclosureKey,
+                turns: _expanded ? 0.5 : 0,
+                duration: _disclosureDuration,
+                curve: Curves.easeOutCubic,
+                child: Icon(
+                  Icons.expand_more_rounded,
+                  size: 26,
+                  color: context.palette.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          button: true,
-          expanded: _expanded,
-          child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      context.l10n.detailSimilarInLibrary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.3,
-                              ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    key: DetailSimilarRail.disclosureKey,
-                    turns: _expanded ? 0.5 : 0,
-                    duration: _disclosureDuration,
-                    curve: Curves.easeOutCubic,
-                    child: Icon(
-                      Icons.expand_more_rounded,
-                      size: 26,
-                      color: context.palette.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        // On the television tier the disclosure is a section of the page's
+        // FocusMemoryColumn, so stepping down the page stops on it rather
+        // than passing a collapsed row with no way to open it.
+        if (InputCapabilities.directionalPrimary)
+          FocusMemoryRegion(
+            debugLabel: 'similar-disclosure',
+            child: FocusMemoryItem(
+                key: DetailSimilarRail.headerSectionKey,
+                id: 'disclosure',
+                index: 0,
+                child: header),
+          )
+        else
+          header,
         AnimatedSize(
           duration: _disclosureDuration,
           curve: Curves.easeOutCubic,

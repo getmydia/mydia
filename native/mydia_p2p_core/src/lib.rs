@@ -59,9 +59,13 @@ fn duration_nanos(d: std::time::Duration) -> u64 {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
 pub mod pairing_seal;
+pub mod peer_sync;
 pub mod remote_control;
 pub mod runtime;
+#[cfg(not(target_arch = "wasm32"))]
+mod trace_file;
 
+pub use peer_sync::*;
 pub use remote_control::{
     LoadContentRequest, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
     RemoteControlResponse, TargetCapabilities, TrackInfo, PROTOCOL_VERSION,
@@ -80,6 +84,7 @@ pub enum MydiaRequest {
     HlsStream(HlsRequest),
     Custom(Vec<u8>),
     RemoteControl(RemoteControlRequest),
+    PeerSync(PeerSyncRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -146,6 +151,7 @@ pub enum MydiaResponse {
     Custom(Vec<u8>),
     Error(String),
     RemoteControl(RemoteControlResponse),
+    PeerSync(PeerSyncResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -505,10 +511,29 @@ fn init_tracing(event_tx: mpsc::Sender<Event>) {
         let filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
 
-        let _ = tracing_subscriber::registry()
-            .with(filter)
-            .with(ElixirLogLayer)
-            .try_init();
+        // Each layer carries its own filter, so the opt-in trace file can run
+        // at `trace` while the Elixir forwarding stays at the level above.
+        let registry = tracing_subscriber::registry().with(ElixirLogLayer.with_filter(filter));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let trace_file = trace_file::layer();
+            let trace_requested = trace_file.is_some();
+            if let Err(e) = registry.with(trace_file).try_init() {
+                // Another subscriber got there first, so the requested trace
+                // file will stay empty. Nothing else would say so.
+                if trace_requested {
+                    #[expect(
+                        clippy::print_stderr,
+                        reason = "the subscriber that would carry this failed to install"
+                    )]
+                    {
+                        eprintln!("mydia_p2p_core: MYDIA_P2P_TRACE_FILE is set but tracing could not be installed: {e}");
+                    }
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = registry.try_init();
     });
 }
 
@@ -2922,13 +2947,29 @@ const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_m
 /// probe promptly, so a probe tells a dead path from a slow query, and only
 /// the dead path is given up on.
 ///
+/// The probe is cheap and a live connection always answers it, so it runs
+/// early. A dead path shows up hardest at startup: a client on the same LAN
+/// as its server moves from the relay to a direct path within milliseconds of
+/// connecting, while its first batch of requests is in flight, and a Wi-Fi
+/// mesh backhaul that drops most of that flow's packets leaves every one of
+/// them unanswered. iroh keeps sending on the selected path rather than
+/// falling back to the relay, so this probe is what ends the stall. At 6s
+/// plus a 3s probe it cost every such launch 9 seconds; now it costs about
+/// 4.5. A probe that answers is repeated every interval while the request is
+/// still pending, so a path that dies later is caught too.
+///
 /// Shrunk under `cfg(test)` to stay below the test `RESPONSE_TIMEOUT`.
 #[cfg(not(test))]
-const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
+const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_millis(1500);
 #[cfg(test)]
 const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// How long the `Ping` sent after [`STALL_PROBE_AFTER`] may take.
+///
+/// Kept generous: a probe that fails closes the whole connection, which
+/// interrupts any media stream sharing it and can report failure for a
+/// mutation that already committed. Relayed and cellular round trips can spike
+/// well past their usual 20 to 150ms, so a live path gets the full 3s.
 #[cfg(not(test))]
 const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 #[cfg(test)]
@@ -2942,33 +2983,37 @@ enum StallOutcome<T> {
     Stalled,
 }
 
-/// Await `request`. If it is still pending after `probe_after`, run `probe`,
-/// bounded by `probe_timeout`, while the request keeps running.
+/// Await `request`. Each time it has been pending for another `probe_after`,
+/// run `probe`, bounded by `probe_timeout`, while the request keeps running.
 ///
-/// A probe that answers means the path is alive, so the request is awaited
-/// with no further limit. A probe that errors or times out means it is not.
+/// A probe that answers means the path is alive for now, so the request gets
+/// no deadline, but it is probed again after the next `probe_after`: a path
+/// can die after answering once. A probe that errors or times out means it is
+/// dead.
 async fn await_with_stall_probe<T, R, P, PF>(
     request: R,
-    probe: P,
+    mut probe: P,
     probe_after: std::time::Duration,
     probe_timeout: std::time::Duration,
 ) -> StallOutcome<T>
 where
     R: std::future::Future<Output = T>,
-    P: FnOnce() -> PF,
+    P: FnMut() -> PF,
     PF: std::future::Future<Output = Result<(), String>>,
 {
     futures::pin_mut!(request);
-    if let Ok(result) = runtime::time::timeout(probe_after, &mut request).await {
-        return StallOutcome::Finished(result);
-    }
+    loop {
+        if let Ok(result) = runtime::time::timeout(probe_after, &mut request).await {
+            return StallOutcome::Finished(result);
+        }
 
-    let probe = runtime::time::timeout(probe_timeout, probe());
-    futures::pin_mut!(probe);
-    match futures::future::select(&mut request, probe).await {
-        futures::future::Either::Left((result, _)) => StallOutcome::Finished(result),
-        futures::future::Either::Right((Ok(Ok(())), _)) => StallOutcome::Finished(request.await),
-        futures::future::Either::Right(_) => StallOutcome::Stalled,
+        let probe = runtime::time::timeout(probe_timeout, probe());
+        futures::pin_mut!(probe);
+        match futures::future::select(&mut request, probe).await {
+            futures::future::Either::Left((result, _)) => return StallOutcome::Finished(result),
+            futures::future::Either::Right((Ok(Ok(())), _)) => {}
+            futures::future::Either::Right(_) => return StallOutcome::Stalled,
+        }
     }
 }
 
@@ -2989,10 +3034,13 @@ async fn send_request_on(conn: Connection, request: MydiaRequest) -> Result<Mydi
         let probe_conn = conn.clone();
         let outcome = await_with_stall_probe(
             do_send_request(conn.clone(), request),
-            move || async move {
-                match do_send_request(probe_conn, MydiaRequest::Ping).await? {
-                    MydiaResponse::Pong => Ok(()),
-                    other => Err(format!("unexpected probe response: {other:?}")),
+            move || {
+                let probe_conn = probe_conn.clone();
+                async move {
+                    match do_send_request(probe_conn, MydiaRequest::Ping).await? {
+                        MydiaResponse::Pong => Ok(()),
+                        other => Err(format!("unexpected probe response: {other:?}")),
+                    }
                 }
             },
             STALL_PROBE_AFTER,
@@ -3700,9 +3748,9 @@ mod tests {
         let p = probed.clone();
         let result = await_with_stall_probe(
             async { Ok::<_, String>(7) },
-            move || async move {
+            move || {
                 p.store(true, Ordering::SeqCst);
-                Ok(())
+                async { Ok(()) }
             },
             std::time::Duration::from_millis(50),
             std::time::Duration::from_millis(50),
@@ -3749,6 +3797,30 @@ mod tests {
         )
         .await;
         assert_eq!(result, StallOutcome::Stalled);
+    }
+
+    #[tokio::test]
+    async fn stall_probe_probes_again_and_catches_a_path_that_dies_later() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c = calls.clone();
+        let result = await_with_stall_probe(
+            std::future::pending::<Result<i32, String>>(),
+            move || {
+                let n = c.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if n < 2 {
+                        Ok(())
+                    } else {
+                        Err("connection lost".to_string())
+                    }
+                }
+            },
+            std::time::Duration::from_millis(10),
+            std::time::Duration::from_millis(20),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Stalled);
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]

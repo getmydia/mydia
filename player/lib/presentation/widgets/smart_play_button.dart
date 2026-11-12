@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../core/focus/focus_memory.dart';
 import '../../core/player/best_file.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
 import '../../l10n/l10n.dart';
+import 'focus_emphasis.dart';
 import 'focus_highlight.dart';
 import 'next_up_labels.dart';
 import 'primary_play_button.dart';
@@ -55,6 +58,9 @@ class SmartPlayButton extends StatefulWidget {
     this.episode,
     this.playLabel,
   });
+
+  /// The version picker beside Play, shown when there is more than one file.
+  static const versionPickerKey = ValueKey('smart-play-version-picker');
 
   @override
   State<SmartPlayButton> createState() => _SmartPlayButtonState();
@@ -158,25 +164,21 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
           const SizedBox(width: 8),
         ],
         // Play button
-        PrimaryPlayButton(
-          label: widget.playLabel ?? context.l10n.commonPlay,
-          iconOnly: iconOnly,
-          onPressed: _selectedFile != null
-              ? () => widget.onFileSelected(_selectedFile!)
-              : null,
+        _remembered(
+          _playId,
+          0,
+          PrimaryPlayButton(
+            label: widget.playLabel ?? context.l10n.commonPlay,
+            iconOnly: iconOnly,
+            onPressed: _selectedFile != null
+                ? () => widget.onFileSelected(_selectedFile!)
+                : null,
+          ),
         ),
         // Dropdown button (only when multiple files)
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
-          _DropdownButton(
-            onTap: () async {
-              final picked = await showQualitySelector(context, widget.files);
-              if (picked != null) {
-                setState(() => _selectedFile = picked);
-                widget.onFileSelected(picked);
-              }
-            },
-          ),
+          SizedBox(width: _pickerGap),
+          _versionPicker(context),
         ],
       ],
     );
@@ -189,57 +191,101 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FilledButton.icon(
-          onPressed: _selectedFile != null
-              ? () => widget.onFileSelected(_selectedFile!)
-              : null,
-          icon: const Icon(Icons.play_arrow_rounded, size: 20),
-          label: Text(nextUpLabel(context.l10n, widget.state!)),
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: palette.background,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(
-                Radius.circular(AppTheme.radiusButton),
-              ),
-            ),
-            textStyle: const TextStyle(
-              fontFamily: AppTheme.displayFamily,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ).copyWith(
-            // The default focus overlay is invisible on a white fill, so a
-            // focused pill gets a gold outline.
-            side: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.focused)
-                  ? BorderSide(color: palette.primary, width: 2)
-                  : null,
-            ),
-          ),
-        ),
+        _remembered(
+            _playId,
+            0,
+            FocusEmphasis(
+                borderRadius: const BorderRadius.all(
+                  Radius.circular(AppTheme.radiusButton),
+                ),
+                child: FilledButton.icon(
+                  onPressed: _selectedFile != null
+                      ? () => widget.onFileSelected(_selectedFile!)
+                      : null,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: Text(nextUpLabel(context.l10n, widget.state!)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: palette.background,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(AppTheme.radiusButton),
+                      ),
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: AppTheme.displayFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ).copyWith(
+                    // The default focus overlay is invisible on a white fill, so a
+                    // focused pill gets a gold outline. On a television
+                    // FocusEmphasis draws a larger ring outside it instead.
+                    side: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.focused) &&
+                              !InputCapabilities.directionalPrimary
+                          ? BorderSide(color: palette.primary, width: 2)
+                          : BorderSide.none,
+                    ),
+                  ),
+                ))),
         if (hasMultiple) ...[
-          const SizedBox(width: 6),
-          _DropdownButton(
-            onTap: () async {
-              final picked = await showQualitySelector(context, widget.files);
-              if (picked != null) {
-                setState(() => _selectedFile = picked);
-                widget.onFileSelected(picked);
-              }
-            },
-          ),
+          SizedBox(width: _pickerGap),
+          _versionPicker(context),
         ],
       ],
     );
   }
+
+  /// The dropdown beside Play that opens the quality selector.
+  Widget _versionPicker(BuildContext context) => _remembered(
+        _versionId,
+        1,
+        _DropdownButton(
+          key: SmartPlayButton.versionPickerKey,
+          onTap: () async {
+            final picked = await showQualitySelector(context, widget.files);
+            if (picked != null) {
+              setState(() => _selectedFile = picked);
+              widget.onFileSelected(picked);
+            }
+          },
+        ),
+      );
+
+  static const _playId = 'play';
+  static const _versionId = 'version';
+
+  /// Space between Play and the version picker. On a television both grow
+  /// and ring when focused (`FocusEmphasis`), which needs room enough that
+  /// Play's ring is not drawn under the picker.
+  static double get _pickerGap => InputCapabilities.directionalPrimary ? 18 : 6;
+
+  /// On the television tier, Play and the version picker are separate items
+  /// of the enclosing `FocusMemoryRegion` (the detail hero's Play section).
+  ///
+  /// As one item the section could only land on whichever of the two came
+  /// first in the focus tree: always the picker once a second version
+  /// exists, because Play's node attaches after the best file is picked.
+  /// As two, a first entry lands on Play by index and a return lands on the
+  /// one the viewer left. Off the television tier the control is returned
+  /// untouched.
+  Widget _remembered(String id, int index, Widget control) =>
+      InputCapabilities.directionalPrimary
+          ? FocusMemoryItem(
+              id: id,
+              index: index,
+              child: control,
+            )
+          : control;
 }
 
 class _DropdownButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _DropdownButton({required this.onTap});
+  const _DropdownButton({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +297,7 @@ class _DropdownButton extends StatelessWidget {
     return FocusHighlight(
       onActivate: onTap,
       circular: true,
+      emphasis: true,
       child: GestureDetector(
         onTap: onTap,
         child: Container(

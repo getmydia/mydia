@@ -263,6 +263,7 @@ class P2pService {
   // burst of inbound control requests can never block the loop and, with it,
   // stall the unbounded generic channel `_eventSubscription` reads from.
   StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
+  StreamSubscription<FlutterInboundPeerSyncRequest>? _peerSyncSubscription;
 
   // Stream of P2P status updates
   /// Set by [dispose]. Checked after every await in [_initialize], which can
@@ -311,6 +312,37 @@ class P2pService {
     final host = _host;
     if (host == null) return;
     await host.respondToRemoteControl(requestId: requestId, res: response);
+  }
+
+  // Stream of inbound peer sync requests from another player.
+  final _peerSyncRequestController =
+      StreamController<FlutterInboundPeerSyncRequest>.broadcast();
+
+  /// Peer sync requests arriving from another player.
+  Stream<FlutterInboundPeerSyncRequest> get onPeerSyncRequest =>
+      _peerSyncRequestController.stream;
+
+  /// Answer an inbound peer sync request carried on [onPeerSyncRequest].
+  ///
+  /// A no-op host (never initialized, or torn down since the request arrived)
+  /// silently drops the response rather than throwing.
+  Future<void> respondToPeerSync(
+    String requestId,
+    FlutterPeerSyncResponse response,
+  ) async {
+    final host = _host;
+    if (host == null) return;
+    await host.respondToPeerSync(requestId: requestId, res: response);
+  }
+
+  /// Send a peer sync request to a peer and await its answer.
+  Future<FlutterPeerSyncResponse> sendPeerSync(
+    String peer,
+    FlutterPeerSyncRequest request,
+  ) async {
+    final host = _host;
+    if (host == null) throw Exception('P2P host not initialized');
+    return host.sendPeerSync(peer: peer, req: request);
   }
 
   /// Returns true if the P2P host is initialized
@@ -377,9 +409,11 @@ class P2pService {
   void debugAdoptNativeSubscriptions({
     StreamSubscription<String>? events,
     StreamSubscription<FlutterInboundControlRequest>? control,
+    StreamSubscription<FlutterInboundPeerSyncRequest>? peerSync,
   }) {
     _eventSubscription = events;
     _controlSubscription = control;
+    _peerSyncSubscription = peerSync;
   }
 
   /// Get the active relay URL (null before initialization)
@@ -623,6 +657,14 @@ class P2pService {
             '[P2P] Control request: ${request.requestId} from ${request.peer}');
         if (_controlRequestController.isClosed) return;
         _controlRequestController.add(request);
+      });
+
+      // Start Peer-Sync Stream.
+      _peerSyncSubscription = _host!.peerSyncStream().listen((request) {
+        debugPrint(
+            '[P2P] Peer sync request: ${request.requestId} from ${request.peer}');
+        if (_peerSyncRequestController.isClosed) return;
+        _peerSyncRequestController.add(request);
       });
 
       _isInitialized = true;
@@ -1070,6 +1112,12 @@ class P2pService {
     unawaited(controlSubscription?.cancel().catchError((Object e) {
       debugPrint('[P2P] Error cancelling control subscription on $reason: $e');
     }));
+    final peerSyncSubscription = _peerSyncSubscription;
+    _peerSyncSubscription = null;
+    unawaited(peerSyncSubscription?.cancel().catchError((Object e) {
+      debugPrint(
+          '[P2P] Error cancelling peer sync subscription on $reason: $e');
+    }));
   }
 
   Future<void> dispose() async {
@@ -1086,6 +1134,7 @@ class P2pService {
     await _statusController.close();
     await _peerConnectedController.close();
     await _controlRequestController.close();
+    await _peerSyncRequestController.close();
   }
 }
 

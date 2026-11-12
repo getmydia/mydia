@@ -8,7 +8,6 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
-  alias Mydia.Media.AddDefaults
   alias MydiaWeb.Live.{Helpers.MediaAddHelpers, SearchResultRef}
   alias MydiaWeb.OperationErrors
   alias MydiaWeb.SearchLive.{ReleaseAdd, ResultType}
@@ -328,13 +327,13 @@ defmodule MydiaWeb.SearchLive.Index do
            case ReleaseAdd.fetch_full_metadata(config, selected_match, media_type_atom) do
              {:ok, metadata} ->
                # Create media item without parsed data (since parsing failed)
-               # Episodes are automatically fetched for TV shows via create_media_item
+               # Inline episodes: a release download follows, and an early import leaves files unresolved
                attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
                attrs =
                  Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
 
-               case Media.create_media_item(scope, attrs) do
+               case Media.create_media_item(scope, attrs, episodes: :inline) do
                  {:ok, item} -> {:ok, item, :created}
                  other -> other
                end
@@ -437,7 +436,7 @@ defmodule MydiaWeb.SearchLive.Index do
          {:ok, media_type} <- parse_media_type(params["media_type"]),
          {:ok, defaults} <-
            MediaAddHelpers.resolve_add_defaults(params["config"] || %{}, media_type, user) do
-      defaults = %{defaults | search_on_add: false}
+      defaults = ReleaseAdd.submitted_defaults(defaults, params["config"], media_type)
       scope = socket.assigns.current_scope
 
       {:noreply,
@@ -1036,7 +1035,7 @@ defmodule MydiaWeb.SearchLive.Index do
       available_types: available,
       media_type: media_type,
       libraries: if(media_type, do: MediaAddHelpers.candidate_libraries(media_type), else: []),
-      defaults: media_type && AddDefaults.resolve(socket.assigns.current_user, media_type)
+      defaults: media_type && ReleaseAdd.dialog_defaults(socket.assigns.current_user, media_type)
     }
   end
 

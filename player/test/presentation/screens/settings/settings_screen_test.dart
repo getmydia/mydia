@@ -29,6 +29,7 @@ import 'package:player/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/update/update_backend.dart';
+import 'package:player/presentation/widgets/glass/glass_dialog.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
@@ -73,8 +74,14 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 
   final UpdateState _state;
 
+  /// Records presses on the check-for-updates row that got past any dialog.
+  static int checks = 0;
+
   @override
   UpdateState build() => _state;
+
+  @override
+  Future<void> checkForUpdate() async => checks++;
 }
 
 /// Serves a fixed settings value, or fails, without touching secure storage.
@@ -309,13 +316,11 @@ void main() {
     expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
   });
 
-  testWidgets('sign out and paired devices live on each server, not here',
-      (tester) async {
+  testWidgets('sign out lives on each server, not here', (tester) async {
     await _pump(tester);
 
     expect(find.byKey(const Key('settings-sign-out')), findsNothing);
     expect(find.text('Sign out'), findsNothing);
-    expect(find.text('Paired devices'), findsNothing);
   });
 
   testWidgets('the footer names the running version', (tester) async {
@@ -550,6 +555,51 @@ void main() {
       findsOneWidget,
     );
     expect(tester.widget<SettingsRow>(row).onTap, isNull);
+  });
+
+  testWidgets(
+      'an install-without-asking row (Android) installs on the first press, '
+      'with no dialog', (tester) async {
+    _FakeUpdateNotifier.checks = 0;
+    await _pump(
+      tester,
+      updateState: const UpdateState(
+        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+      ),
+    );
+
+    final row = find.byKey(const Key('check-for-updates-row'));
+    expect(
+      find.descendant(
+          of: row, matching: find.text('Check and install updates')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GlassDialog), findsNothing);
+    expect(_FakeUpdateNotifier.checks, 1);
+  });
+
+  testWidgets('a Flatpak check-and-install row still asks first',
+      (tester) async {
+    _FakeUpdateNotifier.checks = 0;
+    await _pump(
+      tester,
+      updateState: const UpdateState(
+        manualCheck: ManualCheckBehaviour.checksAndInstalls,
+      ),
+    );
+
+    final row = find.byKey(const Key('check-for-updates-row'));
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GlassDialog), findsOneWidget);
+    expect(_FakeUpdateNotifier.checks, 0);
   });
 
   testWidgets('renders in Spanish under an es locale', (tester) async {

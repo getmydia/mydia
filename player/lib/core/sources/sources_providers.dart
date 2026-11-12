@@ -13,6 +13,8 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
+import 'files/files_providers.dart'
+    show closeRemovedFilesAccount, filesIndexProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -91,7 +93,12 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// A sign-in flow writes a fresh record with no locks. Keep the stored
   /// record's locks for servers the new record still lists, so signing in
   /// again never unhides a server.
-  Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+  ///
+  /// With [replaceOnly], an account that is no longer stored (removed while
+  /// a sign-in was in flight) throws [StateError] instead of coming back.
+  Future<void> putAccount(SourceAccountRecord record,
+          {bool replaceOnly = false}) =>
+      _serialise(() {
         if (ref.read(isWebProvider) &&
             !sourceKindAllowedOnWeb(record.account.kind)) {
           debugPrint(
@@ -99,6 +106,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
           return Future<void>.value();
         }
         final stored = _record(record.account.id);
+        if (replaceOnly && stored == null) {
+          throw StateError('Account ${record.account.id} was removed');
+        }
         final ids = {for (final s in record.servers) s.id};
         final kept = {
           for (final e in (stored?.serverLocks ?? const {}).entries)
@@ -135,6 +145,18 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       await ref.read(sourceCacheProvider).deleteAccount(accountId);
     } catch (e) {
       debugPrint('[Sources] Could not clear cached data for $accountId: $e');
+    }
+  }
+
+  /// Deletes a files account's index: its folders, file names, matches and
+  /// watched flags. The local account's id is fixed, so an index left behind
+  /// would come back with the next folder added. Best effort, like
+  /// [_dropCache].
+  Future<void> _dropFilesIndex(String accountId) async {
+    try {
+      await ref.read(filesIndexProvider(accountId)).clear();
+    } catch (e) {
+      debugPrint('[Sources] Could not clear the files index of $accountId: $e');
     }
   }
 
@@ -183,6 +205,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      await closeRemovedFilesAccount(ref, accountId);
       // Legacy bare-id entries record no owner and read as the legacy
       // instance's, so they go with the account the legacy rule picked.
       await _dropCollectionSync({
@@ -277,6 +300,10 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         });
         await ref.read(sourceSecretsProvider).deleteAll(record);
         await _dropCache(id);
+        if (record.account.kind == SourceKind.files) {
+          await _dropFilesIndex(id);
+          await closeRemovedFilesAccount(ref, id);
+        }
         ids.add(id);
       }
       return ids;
@@ -498,7 +525,9 @@ final activeSourceIdProvider = Provider<SourceId?>((ref) {
       sources.firstOrNull?.id;
 });
 
-/// The [MediaSource] for [id], or null when no such source exists.
+/// The [MediaSource] for [id], or null when no such source exists, or when
+/// it cannot be built on this launch (a files source whose storage failed to
+/// open), so the lists that read every source carry on without it.
 ///
 /// Watches only whether the source exists. A third-party source owns a
 /// connection race and timers, so a change to its stored record (a
@@ -509,6 +538,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
       ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
+  if (!canBuildSource(ref, source)) return null;
   final MediaSource media = buildThirdPartySource(ref, source);
   ref.onDispose(media.dispose);
   return media;

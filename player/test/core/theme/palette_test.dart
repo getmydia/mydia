@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:player/core/theme/contrast.dart';
+import 'package:player/core/theme/linux_desktop.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import '../../test_utils/linux_accents.dart';
 import '../../test_utils/mac_accents.dart';
 
 void main() {
@@ -91,6 +93,108 @@ void main() {
     });
   }
 
+  group('Linux', () {
+    void expectRamp(MydiaPalette p, List<int> expected) {
+      final actual = [
+        p.background,
+        p.surfaceDim,
+        p.surfaceLow,
+        p.surface,
+        p.surfaceHigh,
+        p.surfaceVariant,
+        p.surfaceBright,
+        p.textPrimary,
+        p.textSecondary,
+        p.textDisabled,
+        p.divider,
+        p.border,
+      ];
+      expect(actual, [for (final c in expected) Color(c)]);
+      expect(p.cardHover, p.surfaceVariant);
+      expect(p.shimmerBase, p.surface);
+      expect(p.shimmerHighlight, p.surfaceVariant);
+      expect(p.ambientTint, isFalse);
+    }
+
+    test('Adwaita ramp is pinned', () {
+      expectRamp(Palettes.linux(LinuxDesktop.gnome, null), [
+        0xFF1D1D20, 0xFF202023, 0xFF222226, 0xFF28282C, 0xFF2E2E32, //
+        0xFF36363A, 0xFF3E3E43, 0xFFFFFFFF, 0xFFB4B4B6, 0xFF8E8E91,
+        0xFF2A2A2E, 0xFF3A3A3E,
+      ]);
+    });
+
+    test('Breeze ramp is pinned', () {
+      expectRamp(Palettes.linux(LinuxDesktop.kde, null), [
+        0xFF141618, 0xFF1A1C1E, 0xFF202326, 0xFF25282B, 0xFF292C30, //
+        0xFF31363B, 0xFF3B4045, 0xFFFCFCFC, 0xFFA1A9B1, 0xFF7F8C8D,
+        0xFF25282B, 0xFF3F444A,
+      ]);
+    });
+
+    test('elementary ramp is pinned', () {
+      expectRamp(Palettes.linux(LinuxDesktop.elementary, null), [
+        0xFF1A1A1A, 0xFF202020, 0xFF262626, 0xFF2C2C2C, 0xFF333333, //
+        0xFF3A3A3A, 0xFF404040, 0xFFFFFFFF, 0xFFABACAE, 0xFF8A8A8A,
+        0xFF2B2B2B, 0xFF474747,
+      ]);
+    });
+
+    test('other desktops are drawn like GNOME', () {
+      expect(
+        Palettes.linux(LinuxDesktop.other, null).surfaceTones,
+        Palettes.linux(LinuxDesktop.gnome, null).surfaceTones,
+      );
+    });
+
+    for (final d in LinuxDesktop.values) {
+      test('${d.name} surface tones rise in luminance', () {
+        final tones = Palettes.linux(d, null).surfaceTones;
+        for (var i = 1; i < tones.length; i++) {
+          expect(
+            relativeLuminance(tones[i]),
+            greaterThan(relativeLuminance(tones[i - 1])),
+            reason: '${d.name} tone $i',
+          );
+        }
+      });
+
+      test("${d.name}: a null accent uses the desktop's stock accent, lifted",
+          () {
+        final p = Palettes.linux(d, null);
+        expect(
+          p.primary,
+          Palettes.legibleAccent(d.stockAccent, background: p.background),
+        );
+      });
+
+      test('${d.name}: extreme accents stay legible', () {
+        for (final entry in linuxAccents.entries) {
+          final p = Palettes.linux(d, entry.value);
+          expect(contrastRatio(p.primary, p.background),
+              greaterThanOrEqualTo(4.55),
+              reason: '${d.name}/${entry.key} primary');
+          expect(
+              contrastRatio(p.onPrimary, p.primary), greaterThanOrEqualTo(4.5),
+              reason: '${d.name}/${entry.key} onPrimary');
+        }
+      });
+    }
+
+    test('legibleAccent leaves a legible accent alone', () {
+      const accent = Color(0xFFFFD60A);
+      expect(
+        Palettes.legibleAccent(accent, background: const Color(0xFF141618)),
+        accent,
+      );
+    });
+
+    test('a passed accent replaces the stock one', () {
+      const accent = Color(0xFFF6D32D);
+      expect(Palettes.linux(LinuxDesktop.kde, accent).primary, accent);
+    });
+  });
+
   group('ThemePreset availability', () {
     test('macOS is offered only on native macOS', () {
       expect(
@@ -101,11 +205,53 @@ void main() {
       expect(
           ThemePreset.macos.isAvailableOn(TargetPlatform.android, isWeb: false),
           isFalse);
-      expect(ThemePreset.availableOn(TargetPlatform.linux, isWeb: false), [
+      expect(ThemePreset.availableOn(TargetPlatform.android, isWeb: false), [
         ThemePreset.projectionBooth,
         ThemePreset.oledBlack,
         ThemePreset.slate
       ]);
+    });
+
+    test('linux is offered only on native Linux', () {
+      expect(
+          ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: false),
+          isTrue);
+      expect(ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: true),
+          isFalse);
+      for (final platform in [
+        TargetPlatform.macOS,
+        TargetPlatform.android,
+        TargetPlatform.windows,
+      ]) {
+        expect(ThemePreset.linux.isAvailableOn(platform, isWeb: false), isFalse,
+            reason: platform.name);
+      }
+      expect(ThemePreset.availableOn(TargetPlatform.linux, isWeb: false), [
+        ThemePreset.projectionBooth,
+        ThemePreset.oledBlack,
+        ThemePreset.slate,
+        ThemePreset.linux,
+      ]);
+      expect(ThemePreset.availableOn(TargetPlatform.macOS, isWeb: false),
+          isNot(contains(ThemePreset.linux)));
+    });
+
+    test('defaults to linux on native Linux', () {
+      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: false),
+          ThemePreset.linux);
+      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: true),
+          ThemePreset.projectionBooth);
+    });
+
+    test('a stored linux elsewhere falls back', () {
+      expect(ThemePreset.resolve('linux', TargetPlatform.macOS, isWeb: false),
+          ThemePreset.macos);
+      expect(ThemePreset.resolve('linux', TargetPlatform.android, isWeb: false),
+          ThemePreset.projectionBooth);
+      expect(ThemePreset.resolve('linux', TargetPlatform.linux, isWeb: true),
+          ThemePreset.projectionBooth);
+      expect(ThemePreset.resolve('slate', TargetPlatform.linux, isWeb: false),
+          ThemePreset.slate);
     });
 
     test('defaults to macOS on native macOS, Projection Booth elsewhere', () {
@@ -121,6 +267,8 @@ void main() {
       expect(ThemePreset.resolve(null, TargetPlatform.macOS, isWeb: false),
           ThemePreset.macos);
       expect(ThemePreset.resolve('bogus', TargetPlatform.linux, isWeb: false),
+          ThemePreset.linux);
+      expect(ThemePreset.resolve('bogus', TargetPlatform.windows, isWeb: false),
           ThemePreset.projectionBooth);
       expect(ThemePreset.resolve('macos', TargetPlatform.android, isWeb: false),
           ThemePreset.projectionBooth);

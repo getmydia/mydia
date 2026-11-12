@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/player/input_capabilities.dart';
+import 'focus_emphasis.dart';
+
 /// A focus ring plus keyboard activation, wrapped around any child.
 ///
 /// Extracted from `video_controls/control_button.dart`, which grew the pattern
@@ -48,6 +51,15 @@ class FocusHighlight extends StatefulWidget {
   /// child into view or lift the state.
   final ValueChanged<bool>? onFocusChange;
 
+  /// A button: on the television tier it takes [FocusEmphasis]'s look (it
+  /// grows, with an accent ring and glow) in place of this widget's ring.
+  /// Off that tier it changes nothing.
+  final bool emphasis;
+
+  /// [FocusEmphasis.gap], for a child that already carries space for a ring
+  /// around its visible edge.
+  final double emphasisGap;
+
   const FocusHighlight({
     super.key,
     required this.child,
@@ -61,6 +73,8 @@ class FocusHighlight extends StatefulWidget {
     this.ringInset = EdgeInsets.zero,
     this.circular = false,
     this.onFocusChange,
+    this.emphasis = false,
+    this.emphasisGap = FocusEmphasis.defaultGap,
   });
 
   /// Finder handle for the ring itself, so tests assert on the decoration
@@ -95,6 +109,8 @@ class _FocusHighlightState extends State<FocusHighlight> {
 
   @override
   Widget build(BuildContext context) {
+    final emphasized = widget.emphasis && InputCapabilities.directionalPrimary;
+    final showRing = _showRing && !emphasized;
     final Widget ringed = Padding(
       padding: widget.ringInset,
       child: DecoratedBox(
@@ -103,7 +119,7 @@ class _FocusHighlightState extends State<FocusHighlight> {
         decoration: BoxDecoration(
           borderRadius: widget.circular ? null : widget.borderRadius,
           shape: widget.circular ? BoxShape.circle : BoxShape.rectangle,
-          border: _showRing
+          border: showRing
               ? Border.all(
                   color: widget.ringColor.withValues(alpha: widget.ringOpacity),
                   width: widget.ringWidth,
@@ -114,7 +130,7 @@ class _FocusHighlightState extends State<FocusHighlight> {
       ),
     );
 
-    return FocusableActionDetector(
+    final detector = FocusableActionDetector(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       enabled: _interactive,
@@ -135,6 +151,13 @@ class _FocusHighlightState extends State<FocusHighlight> {
         ),
       },
       child: ringed,
+    );
+    if (!emphasized) return detector;
+    return FocusEmphasis(
+      borderRadius: widget.borderRadius,
+      circular: widget.circular,
+      gap: widget.emphasisGap,
+      child: detector,
     );
   }
 }

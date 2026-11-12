@@ -34,7 +34,8 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     "DownloadJobStatus" => "needs a transcode job",
     "CancelDownloadJob" => "needs a transcode job",
     "RegisterDeviceNode" => "device management, reads no media",
-    "RevokeDevice" => "device management, reads no media"
+    "RevokeDevice" => "device management, reads no media",
+    "TrendingInLibrary" => "calls metadata-relay; covered by trending_in_library_test.exs"
   }
 
   # operation name => exact error message expected with seeded data, and why.

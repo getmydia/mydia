@@ -13,6 +13,7 @@ import '../../detail/detail_links.dart';
 import '../../sources/manage_sources_screen.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
+import '../paired_devices_screen.dart';
 import '../settings_controller.dart';
 import '../settings_nav.dart';
 import '../widgets/settings_sections.dart';
@@ -75,6 +76,16 @@ class _PlaybackPage extends ConsumerWidget {
   }
 }
 
+class _PairedDevicesPage extends StatelessWidget {
+  const _PairedDevicesPage();
+
+  @override
+  Widget build(BuildContext context) => SettingsPane(
+        title: context.l10n.settingsPairedDevicesTitle,
+        child: const PairedDevicesBody(padding: _bodyPadding),
+      );
+}
+
 class _MydiaInstancePage extends ConsumerWidget {
   const _MydiaInstancePage({required this.sourceId});
 
@@ -101,6 +112,8 @@ class DialogSettingsNav implements SettingsNav {
   final GoRouter router;
 
   NavigatorState get _servers => scope.paneNavigator(SettingsCategory.servers);
+  NavigatorState get _playback =>
+      scope.paneNavigator(SettingsCategory.playback);
 
   @override
   void openInstance(SourceId id) => _servers.push(MaterialPageRoute<void>(
@@ -109,6 +122,11 @@ class DialogSettingsNav implements SettingsNav {
 
   @override
   void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
+
+  @override
+  void openPairedDevices() => _playback.push(MaterialPageRoute<void>(
+        builder: (_) => const _PairedDevicesPage(),
+      ));
 
   @override
   void instanceRemoved() => _servers.popUntil((route) => route.isFirst);

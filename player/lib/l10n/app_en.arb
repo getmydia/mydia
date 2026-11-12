@@ -672,6 +672,10 @@
   "@themePresetSlate": {"description": "Name of a color theme in Settings, Appearance and the theme picker."},
   "themePresetMacos": "macOS",
   "@themePresetMacos": {"description": "Name of the color theme that follows the macOS system accent. Shown in Settings, Appearance and the theme picker."},
+  "themePresetLinux": "System ({desktop})",
+  "@themePresetLinux": {"description": "Name of the color theme that follows the Linux desktop's accent and greys. Shown in Settings, Appearance and the theme picker. The placeholder is the desktop's proper name and is not translated.", "placeholders": {"desktop": {"type": "String", "example": "GNOME"}}},
+  "themePresetLinuxGeneric": "System",
+  "@themePresetLinuxGeneric": {"description": "Name of the color theme that follows the Linux desktop, when the desktop is not one the player recognises. Shown in Settings, Appearance and the theme picker."},
   "glassMaterialLiquid": "Liquid Glass",
   "@glassMaterialLiquid": {"description": "Name of the Liquid Glass look for controls and panels, in Settings, Appearance."},
   "glassMaterialFrosted": "Frosted",
@@ -1574,6 +1578,152 @@
   "@sourcesAccountJellyfin": {"description": "Caption under a saved Jellyfin user on the server management screen."},
   "sourcesAccountMydia": "Mydia account",
   "@sourcesAccountMydia": {"description": "Caption under a saved Mydia account on the server management screen."},
+  "sourcesAccountFiles": "Files library",
+  "@sourcesAccountFiles": {"description": "Caption under a saved files library (folders on this device or a WebDAV share) on the server management screen."},
+  "navSourceFilesCaption": "Files · {account}",
+  "@navSourceFilesCaption": {"description": "Caption under a files library's name in the server switcher. The account is where the files live, such as This device or a WebDAV server's name.", "placeholders": {"account": {"type": "String"}}},
+  "filesThisDevice": "This device",
+  "@filesThisDevice": {"description": "Name of the files library made of folders on this device."},
+  "filesScanProgress": "Scanning {done} of {total}",
+  "@filesScanProgress": {"description": "Banner above a files library while it scans its folders: how many files are handled out of the total, both already formatted with digit grouping, such as 312 and 2,040.", "placeholders": {"done": {"type": "String"}, "total": {"type": "String"}}},
+  "filesScanReadingFolders": "Reading folders: {count}",
+  "@filesScanReadingFolders": {"description": "Banner above a files library, and the Rescan button on the server management screen, while a scan is still listing the library's folders and does not know how many files there are yet: how many folders it has read so far, already formatted with digit grouping, such as 1,204.", "placeholders": {"count": {"type": "String"}}},
+  "filesScanSkippedItems": "{count, plural, one{{count} item skipped: it could not be read} other{{count} items skipped: they could not be read}}",
+  "@filesScanSkippedItems": {"description": "Banner above a files library after a scan that had to leave out folders or files it was not allowed to read (or that vanished). What the library already held for them stays as it was.", "placeholders": {"count": {"type": "int"}}},
+  "filesFixMatch": "Fix match",
+  "@filesFixMatch": {"description": "Action on a files library item that opens a search to choose by hand which movie or show it is."},
+  "filesFixMatchTitleLabel": "Title",
+  "@filesFixMatchTitleLabel": {"description": "Label of the title search field in the Fix match sheet."},
+  "filesFixMatchYearLabel": "Year",
+  "@filesFixMatchYearLabel": {"description": "Label of the optional year field in the Fix match sheet."},
+  "filesFixMatchNoResults": "No matches found",
+  "@filesFixMatchNoResults": {"description": "Shown in the Fix match sheet when the search finds nothing."},
+  "filesFixMatchUnmatch": "Unmatch",
+  "@filesFixMatchUnmatch": {"description": "Button in the Fix match sheet that removes the chosen match, so the files move back to Folders."},
+  "filesFoldersLibrary": "Folders",
+  "@filesFoldersLibrary": {"description": "Name of the library in a files library that lists, folder by folder, the files that matched no movie or show."},
+  "filesFolderUnavailable": "Folder unavailable",
+  "@filesFolderUnavailable": {"description": "Shown when playback cannot start because the folder or share holding the file cannot be reached."},
+  "filesSeasonTitle": "Season {number}",
+  "@filesSeasonTitle": {"description": "Name of a season in a files library, for example Season 2.", "placeholders": {"number": {"type": "int"}}},
+  "filesSpecialsTitle": "Specials",
+  "@filesSpecialsTitle": {"description": "Name of season 0 in a files library, the conventional home of special episodes."},
+  "filesEpisodeTitle": "Episode {number}",
+  "@filesEpisodeTitle": {"description": "Title of an episode in a files library that has no title of its own, for example Episode 5.", "placeholders": {"number": {"type": "int"}}},
+  "sourcesAddFolderTitle": "Folder",
+  "@sourcesAddFolderTitle": {"description": "Title of the Add server entry that adds a folder on this computer as a files library."},
+  "sourcesAddFolderSubtitle": "Movies and shows in a folder on this computer",
+  "@sourcesAddFolderSubtitle": {"description": "Subtitle of the Folder entry on the Add server screen."},
+  "sourcesAddWebDavSubtitle": "A shared folder on a NAS or file server",
+  "@sourcesAddWebDavSubtitle": {"description": "Subtitle of the WebDAV entry on the Add server screen. WebDAV is a protocol name and is not translated."},
+  "filesExperimentalBadge": "Experimental",
+  "@filesExperimentalBadge": {"description": "Small label beside the Folder and WebDAV entries on the Add server screen, warning that files libraries are an experimental feature."},
+  "filesExperimentalNotice": "Folder and WebDAV libraries are very experimental. Expect rough edges in scanning, matching and playback, and please report anything that goes wrong.",
+  "@filesExperimentalNotice": {"description": "Notice at the top of the Add folder and Add WebDAV screens, warning that files libraries are an experimental feature. WebDAV is a protocol name and is not translated."},
+  "filesKindLabel": "What is in this folder",
+  "@filesKindLabel": {"description": "Label of the choice of what a folder added to a files library holds: movies, TV shows or both."},
+  "filesKindMovies": "Movies",
+  "@filesKindMovies": {"description": "Choice for a folder in a files library that holds movies."},
+  "filesKindSeries": "TV shows",
+  "@filesKindSeries": {"description": "Choice for a folder in a files library that holds TV shows."},
+  "filesKindMixed": "Movies and TV shows",
+  "@filesKindMixed": {"description": "Choice for a folder in a files library that holds both movies and TV shows."},
+  "filesAddFolderTitle": "Add a folder",
+  "@filesAddFolderTitle": {"description": "Title of the screen that adds a folder on this computer as a files library."},
+  "filesChooseFolder": "Choose folder",
+  "@filesChooseFolder": {"description": "Button that opens the system folder picker when adding a folder to a files library."},
+  "filesNoFolderChosen": "No folder chosen yet",
+  "@filesNoFolderChosen": {"description": "Shown on the Add a folder screen before a folder has been picked."},
+  "filesAddFolderButton": "Add folder",
+  "@filesAddFolderButton": {"description": "Button that adds the chosen folder to the files library."},
+  "filesAddFolderFailed": "Could not add this folder.",
+  "@filesAddFolderFailed": {"description": "Error shown when the chosen folder could not be saved on this device."},
+  "filesWebDavTitle": "Connect a WebDAV share",
+  "@filesWebDavTitle": {"description": "Title of the screen that connects a WebDAV share as a files library. WebDAV is a protocol name and is not translated."},
+  "filesWebDavUserLabel": "User",
+  "@filesWebDavUserLabel": {"description": "Label of the user name field when connecting a WebDAV share."},
+  "filesWebDavPasswordLabel": "Password",
+  "@filesWebDavPasswordLabel": {"description": "Label of the password field when connecting a WebDAV share."},
+  "filesWebDavAddressInvalid": "Enter an address that starts with http:// or https://.",
+  "@filesWebDavAddressInvalid": {"description": "Error shown when the WebDAV share address cannot be read."},
+  "filesWebDavHttpsRequired": "Use https:// for a WebDAV share outside your network, so your password is not sent in the clear.",
+  "@filesWebDavHttpsRequired": {"description": "Error on the WebDAV connect screen when a plain http address points outside the home network and a user or password is set. WebDAV is a protocol name and is not translated."},
+  "filesWebDavUnauthorized": "Wrong user or password.",
+  "@filesWebDavUnauthorized": {"description": "Error shown when the WebDAV server refuses the user name and password."},
+  "filesWebDavUnreachable": "Can't reach the server.",
+  "@filesWebDavUnreachable": {"description": "Error shown when the WebDAV server does not answer."},
+  "filesWebDavPickFolders": "Tick the folders to add and say what each holds.",
+  "@filesWebDavPickFolders": {"description": "Instructions above the folder list after a WebDAV share connects."},
+  "filesPickThisFolder": "This folder",
+  "@filesPickThisFolder": {"description": "Row that adds the folder currently open in the remote folder list, shown when connecting a WebDAV or SMB share."},
+  "filesPickNoFolders": "No folders here.",
+  "@filesPickNoFolders": {"description": "Shown in the remote folder list when the open folder has no subfolders."},
+  "filesPickUp": "Up one folder",
+  "@filesPickUp": {"description": "Tooltip of the button that goes to the parent folder in the remote folder list."},
+  "filesPickUnauthorized": "Wrong user or password.",
+  "@filesPickUnauthorized": {"description": "Error shown in the remote folder list when the server refuses the saved user name and password while opening a folder."},
+  "filesPickUnreachable": "Can't reach the server.",
+  "@filesPickUnreachable": {"description": "Error shown in the remote folder list when the server does not answer while opening a folder."},
+  "filesWebDavSaveFailed": "Could not save this share on this device.",
+  "@filesWebDavSaveFailed": {"description": "Error shown when the WebDAV share answered but could not be saved on this device."},
+  "sourcesAddSmbSubtitle": "A shared folder on a NAS, PC or Mac on your network",
+  "@sourcesAddSmbSubtitle": {"description": "Subtitle of the SMB entry on the Add server screen. SMB is a protocol name and is not translated."},
+  "filesSmbTitle": "Connect an SMB share",
+  "@filesSmbTitle": {"description": "Title of the screen that connects an SMB share as a files library. SMB is a protocol name and is not translated."},
+  "filesSmbServersHeading": "File shares on this network",
+  "@filesSmbServersHeading": {"description": "Heading above the list of SMB servers found on the local network."},
+  "filesSmbSearching": "Looking for file shares...",
+  "@filesSmbSearching": {"description": "Shown on the SMB screen while the local network is searched for servers."},
+  "filesSmbManualEntry": "Enter address",
+  "@filesSmbManualEntry": {"description": "Row on the SMB screen that lets the viewer type a server's address instead of picking a discovered one."},
+  "filesSmbManualHint": "Windows PCs usually need to be entered by address.",
+  "@filesSmbManualHint": {"description": "Hint under the Enter address row on the SMB screen."},
+  "filesSmbNoneFound": "No file shares found on this network.",
+  "@filesSmbNoneFound": {"description": "Shown on the SMB screen when the network search found no servers."},
+  "filesSmbLocalNetworkDenied": "Allow local network access in Settings to find shares, or enter an address.",
+  "@filesSmbLocalNetworkDenied": {"description": "Shown on the SMB screen on iOS when no servers were found, because the app may not have permission to use the local network."},
+  "filesSmbHostLabel": "Server address",
+  "@filesSmbHostLabel": {"description": "Label of the field holding the SMB server's host name or IP address."},
+  "filesSmbPortLabel": "Port (optional)",
+  "@filesSmbPortLabel": {"description": "Label of the optional SMB port field. The default port is 445."},
+  "filesSmbUserLabel": "User",
+  "@filesSmbUserLabel": {"description": "Label of the user name field when connecting an SMB share."},
+  "filesSmbPasswordLabel": "Password",
+  "@filesSmbPasswordLabel": {"description": "Label of the password field when connecting an SMB share."},
+  "filesSmbDomainLabel": "Domain (optional)",
+  "@filesSmbDomainLabel": {"description": "Label of the optional Windows domain or workgroup field when connecting an SMB share."},
+  "filesSmbGuest": "Connect as guest",
+  "@filesSmbGuest": {"description": "Button that connects to an SMB server without a user name or password."},
+  "filesSmbPickShare": "Choose a shared folder.",
+  "@filesSmbPickShare": {"description": "Instructions above the list of shares an SMB server offers."},
+  "filesSmbAddressInvalid": "Enter the server's address and, if you give one, a port between 1 and 65535.",
+  "@filesSmbAddressInvalid": {"description": "Error shown when the SMB server address or port cannot be used."},
+  "filesSmbUnreachable": "Can't reach the server.",
+  "@filesSmbUnreachable": {"description": "Error shown when the SMB server does not answer."},
+  "filesSmbUnauthorized": "The username or password is wrong.",
+  "@filesSmbUnauthorized": {"description": "Error shown when the SMB server refuses the user name and password."},
+  "filesSmbNotFound": "That shared folder no longer exists on this server.",
+  "@filesSmbNotFound": {"description": "Error shown when the SMB share or folder being opened does not exist on the server, in the add-share flow and in the remote folder list."},
+  "filesSmbAccessDenied": "This account can't open that folder.",
+  "@filesSmbAccessDenied": {"description": "Error shown when the SMB server accepted the sign-in but the account has no permission to open the share or folder, in the add-share flow and in the remote folder list."},
+  "filesSmbSmb1Only": "This server only speaks SMB1, which the player doesn't support. Turn on SMB2 or later in its settings.",
+  "@filesSmbSmb1Only": {"description": "Error shown when an SMB server only supports the old SMB1 protocol. SMB1 and SMB2 are protocol names and are not translated."},
+  "filesSmbNoShares": "This server has no shared folders you can open.",
+  "@filesSmbNoShares": {"description": "Error shown when an SMB server lists no shares the viewer can open."},
+  "filesSmbSaveFailed": "Could not save this share on this device.",
+  "@filesSmbSaveFailed": {"description": "Error shown when the SMB share answered but could not be saved on this device."},
+  "filesManageRescan": "Rescan",
+  "@filesManageRescan": {"description": "Button on the server management screen that scans a files library's folders again."},
+  "filesManageRemoveFolder": "Remove folder",
+  "@filesManageRemoveFolder": {"description": "Tooltip of the button that removes one folder from a files library on the server management screen."},
+  "filesManageRootSubtitle": "{kind} · {path}",
+  "@filesManageRootSubtitle": {"description": "Line under a folder of a files library on the server management screen: what it holds (Movies, TV shows, or Movies and TV shows), then where it is.", "placeholders": {"kind": {"type": "String"}, "path": {"type": "String"}}},
+  "filesManageAddFolder": "Add folder",
+  "@filesManageAddFolder": {"description": "Button on the server management screen that adds another folder on this device."},
+  "filesManageEditShare": "Add folders",
+  "@filesManageEditShare": {"description": "Button on the server management screen that reopens a WebDAV share to add folders or change its password."},
+  "filesChooseFolderAgain": "Choose the folder again",
+  "@filesChooseFolderAgain": {"description": "Button shown when a folder on this device can no longer be read and has to be picked again."},
   "sourcesServerGone": "No longer on this account",
   "@sourcesServerGone": {"description": "Subtitle of a saved server that the Plex account no longer lists."},
   "sourcesLockTooltip": "Lock",
@@ -2092,6 +2242,10 @@
   "@homeRecentMovies": {"description": "Heading of the Home row of newly added movies."},
   "homeRecentShows": "Recently Added TV",
   "@homeRecentShows": {"description": "Heading of the Home row of newly added TV shows."},
+  "homeTrendingMovies": "Trending movies",
+  "@homeTrendingMovies": {"description": "Heading of the Home row of movies in the library that are trending this week."},
+  "homeTrendingShows": "Trending shows",
+  "@homeTrendingShows": {"description": "Heading of the Home row of TV shows in the library that are trending this week."},
   "homeNothingToShow": "Nothing to show yet.",
   "@homeNothingToShow": {"description": "Empty state on Home when no server has anything to list."},
   "librarySortBy": "Sort by",
@@ -2315,5 +2469,119 @@
   "@freshnessFailedBanner": {
     "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
     "placeholders": {"time": {"type": "String"}}
+  },
+  "settingsPairedDevicesTitle": "Paired devices",
+  "@settingsPairedDevicesTitle": {
+    "description": "Title of the paired devices settings screen and navigation row."
+  },
+  "settingsPairedDevicesNotPaired": "Not paired",
+  "@settingsPairedDevicesNotPaired": {
+    "description": "Subtitle of the paired devices settings row when no devices are paired."
+  },
+  "settingsPairedDevicesCount": "{count, plural, =1{1 paired device} other{{count} paired devices}}",
+  "@settingsPairedDevicesCount": {
+    "description": "Subtitle of the paired devices settings row showing the number of paired devices.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairedDevicesIntroTitle": "Sync between devices",
+  "@pairedDevicesIntroTitle": {
+    "description": "Heading explaining watch-state & pin syncing."
+  },
+  "pairedDevicesIntroBody": "Sync watch progress and pinned media directly between your devices over P2P.",
+  "@pairedDevicesIntroBody": {
+    "description": "Introductory text explaining watch-state & pin syncing between devices."
+  },
+  "pairedDevicesShowCodeButton": "Show pairing code",
+  "@pairedDevicesShowCodeButton": {
+    "description": "Button to generate and display a pairing code."
+  },
+  "pairedDevicesCancelOfferButton": "Cancel",
+  "@pairedDevicesCancelOfferButton": {
+    "description": "Button to cancel an active pairing offer."
+  },
+  "pairedDevicesActiveOfferInstructions": "Enter this code on your other device, or scan the QR code:",
+  "@pairedDevicesActiveOfferInstructions": {
+    "description": "Instructions shown above active pairing code and QR code."
+  },
+  "pairedDevicesCodeInputLabel": "Pairing code",
+  "@pairedDevicesCodeInputLabel": {
+    "description": "Label for the pairing code input field."
+  },
+  "pairedDevicesCodeInputHint": "ABC-123",
+  "@pairedDevicesCodeInputHint": {
+    "description": "Hint for pairing code input field."
+  },
+  "pairedDevicesSubmitCodeButton": "Pair device",
+  "@pairedDevicesSubmitCodeButton": {
+    "description": "Button to submit a pairing code."
+  },
+  "pairedDevicesScanQrButton": "Scan QR code",
+  "@pairedDevicesScanQrButton": {
+    "description": "Button to open the QR code scanner."
+  },
+  "pairedDevicesSyncNowButton": "Sync now",
+  "@pairedDevicesSyncNowButton": {
+    "description": "Button to trigger immediate sync with paired devices."
+  },
+  "pairedDevicesLeaveGroupButton": "Leave sync group",
+  "@pairedDevicesLeaveGroupButton": {
+    "description": "Button to leave the current peer sync group."
+  },
+  "pairedDevicesLeaveGroupConfirmTitle": "Leave sync group?",
+  "@pairedDevicesLeaveGroupConfirmTitle": {
+    "description": "Title of the dialog confirming leaving the sync group."
+  },
+  "pairedDevicesLeaveGroupConfirmBody": "This device will stop syncing watch state and pins with other paired devices.",
+  "@pairedDevicesLeaveGroupConfirmBody": {
+    "description": "Body text of the dialog confirming leaving the sync group."
+  },
+  "pairedDevicesRemovePeerButton": "Remove",
+  "@pairedDevicesRemovePeerButton": {
+    "description": "Tooltip or label for removing a paired peer device."
+  },
+  "pairedDevicesStatusActive": "Active",
+  "@pairedDevicesStatusActive": {
+    "description": "Status subtitle for an active paired peer."
+  },
+  "pairedDevicesStatusRevoked": "Revoked",
+  "@pairedDevicesStatusRevoked": {
+    "description": "Status subtitle for a revoked paired peer."
+  },
+  "pairedDevicesConnectedToast": "Paired with {deviceName}",
+  "@pairedDevicesConnectedToast": {
+    "description": "Toast notification when a peer device successfully pairs.",
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "pairedDevicesOrDivider": "or",
+  "@pairedDevicesOrDivider": {
+    "description": "Divider text between show code and enter code sections."
+  },
+  "pairedDevicesPairingFailed": "Pairing failed",
+  "@pairedDevicesPairingFailed": {
+    "description": "Error message when pairing with a code or QR fails."
+  },
+  "pairedDevicesOfferFailed": "Couldn't start pairing. Check your connection and try again.",
+  "@pairedDevicesOfferFailed": {
+    "description": "Error message when this device cannot start offering a pairing code and QR code."
+  },
+  "pairedDevicesQrOnlyInstructions": "The pairing code is unavailable right now. Scan this QR code on your other device:",
+  "@pairedDevicesQrOnlyInstructions": {
+    "description": "Instructions shown above the QR code alone, when the pairing code could not be published and can only be used through the QR code."
+  },
+  "pairedDevicesListSection": "Paired devices",
+  "@pairedDevicesListSection": {
+    "description": "Section header for the list of paired devices."
+  },
+  "pairedDevicesPairNewSection": "Pair another device",
+  "@pairedDevicesPairNewSection": {
+    "description": "Section header for pairing an additional device."
   }
 }

@@ -11,7 +11,9 @@ import '../../domain/navigation/media_filter.dart';
 import '../../domain/sources/collection.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../domain/sources/ranked_item.dart';
 import '../remote/remote_roster.dart';
+import 'files/media_names.dart' show TmdbCandidate;
 
 abstract interface class WatchedState {
   Future<void> setWatched(ItemRef ref, bool watched);
@@ -57,6 +59,14 @@ abstract interface class NextUp {
 abstract interface class RecentlyAdded {
   /// Newest first, at most 20.
   Future<List<ItemSummary>> recentlyAdded();
+}
+
+/// What is trending among the titles the source holds. A source implementing
+/// this also lists [SourceCapability.trending].
+abstract interface class Trending {
+  /// Rank order, at most 20. Empty when the server has no list. [kind] is
+  /// [ItemKind.movie] or [ItemKind.show].
+  Future<List<RankedItem>> trending(ItemKind kind);
 }
 
 /// Intro and credits regions. A source implementing this also lists
@@ -136,6 +146,26 @@ abstract interface class FavoritesListing {
 abstract interface class MediaInfo {
   /// One entry per file of a movie or episode. Empty when it has none.
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref);
+}
+
+/// Choosing by hand which TMDB title an item is (Fix match). A source
+/// implementing this also lists [SourceCapability.matchEditing].
+abstract interface class MatchEditing {
+  /// Whether [ref] can be matched by hand: a movie or show, or a loose file
+  /// whose name could be read. Fix match is hidden when this is false.
+  bool canEditMatch(ItemRef ref);
+
+  /// TMDB titles of [ref]'s kind (movies for a movie or a loose file, shows
+  /// for a show) matching [query].
+  Future<List<TmdbCandidate>> searchMatches(
+    ItemRef ref,
+    String query, {
+    int? year,
+  });
+
+  /// Pins [ref] to [choice]; null unmatches it, which moves its files to
+  /// Folders.
+  Future<void> setMatch(ItemRef ref, TmdbCandidate? choice);
 }
 
 /// Other players signed into the same server, and this device's entry in

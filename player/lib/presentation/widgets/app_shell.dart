@@ -1,6 +1,6 @@
 import 'dart:math' show max;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard, KeyEvent;
@@ -12,6 +12,7 @@ import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/orphan_download_sweep.dart';
+import '../../core/focus/focus_memory.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/layout/window_chrome_inset.dart';
@@ -40,6 +41,7 @@ import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
 import 'nav/current_source.dart';
 import 'nav/floating_rail.dart';
+import 'nav/menu_page.dart';
 import 'nav/mobile_drawer.dart';
 import 'nav/nav_badges.dart';
 import 'nav/native_sidebar_host.dart';
@@ -63,8 +65,31 @@ class AppShell extends ConsumerStatefulWidget {
   final Widget child;
   final String location;
 
-  /// Key for the mobile scaffold, used to open the drawer from inner screens.
+  /// Key for the mobile scaffold. Inner screens open the navigation through
+  /// [openNavigation], and test for the phone layout by its presence.
   static final scaffoldKey = GlobalKey<ScaffoldState>();
+
+  /// Whether the phone layout pushes [MenuPage] instead of sliding in the
+  /// drawer: in the iOS app, which has no drawer and whose left-edge swipe
+  /// is the system back gesture. Safari on an iPhone keeps the drawer.
+  @visibleForTesting
+  static bool usesMenuPage({
+    required TargetPlatform platform,
+    required bool isWeb,
+  }) =>
+      !isWeb && platform == TargetPlatform.iOS;
+
+  /// Opens the phone layout's navigation from a screen inside the shell: the
+  /// menu page where the shell provides one ([usesMenuPage]), the drawer
+  /// everywhere else.
+  static void openNavigation(BuildContext context) {
+    final menu = ShellMenuScope.maybeOf(context);
+    if (menu != null) {
+      menu.open();
+    } else {
+      scaffoldKey.currentState?.openDrawer();
+    }
+  }
 
   const AppShell({
     super.key,
@@ -507,6 +532,12 @@ class _AppShellState extends ConsumerState<AppShell>
   /// cast bar's fade through [ReportedDrawer].
   bool _drawerOpen = false;
 
+  /// What an open [MenuPage] shows. The page lives on the root navigator,
+  /// outside this widget, so it follows the shell through this rather than
+  /// through a rebuild.
+  final ValueNotifier<MenuPageState> _menuState =
+      ValueNotifier((location: '/', isOffline: false));
+
   /// Node for the sidebar's selected row. Also the boundary's target, so one
   /// node serves both the row that takes focus and the shell that asks for it.
   ///
@@ -644,7 +675,33 @@ class _AppShellState extends ConsumerState<AppShell>
     _sidebarFocusNode.dispose();
     _sidebarScopeNode.dispose();
     _contentScopeNode.dispose();
+    _menuState.dispose();
     super.dispose();
+  }
+
+  /// Hands [state] to an open menu page. After the frame, because the shell
+  /// rebuilds during build and the page is not below it. Every build
+  /// schedules its own, so the last build's state is the one that stays; the
+  /// notifier skips the ones that change nothing.
+  void _syncMenuState(MenuPageState state) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _menuState.value = state;
+    });
+  }
+
+  /// Pushes the menu page, current as of now: the tap that opens it is not
+  /// part of a build, so the state can be set directly.
+  void _openMenu() {
+    _menuState.value = (
+      location: shellNavLocation(widget.location, origin: _originLocation),
+      isOffline: ref.read(routeNavigationOfflineProvider(widget.location)),
+    );
+    MenuPage.open(
+      context,
+      state: _menuState,
+      onNavigate: _navigateTo,
+      onSwitchSource: _navigateTo,
+    );
   }
 
   void _showAutoSyncToast(int totalQueued) {
@@ -669,7 +726,8 @@ class _AppShellState extends ConsumerState<AppShell>
 
   void _navigateTo(String route) {
     if (openSettingsForRoute(context, route)) return;
-    if (_isOfflineMode() && !offlineRouteAllowed(route)) {
+    if (ref.read(routeNavigationOfflineProvider(widget.location)) &&
+        !offlineRouteAllowed(route)) {
       _showOfflineToast();
       return;
     }
@@ -703,6 +761,15 @@ class _AppShellState extends ConsumerState<AppShell>
   /// consulted — so the boundary would silently stop calling back and the
   /// sidebar would become unreachable again, with no test failing. Do not
   /// reconfigure these nodes.
+  ///
+  /// [FocusMemory.requestFocus] is what makes a row remember its place: every
+  /// move the policy makes lands through it, and a move entering a
+  /// `FocusMemoryRegion` from outside is redirected to that region's
+  /// remembered item (see `docs/tv-focus.md`). It changes only where inside a
+  /// region a move lands, never whether the move leaves the region, so the
+  /// `onExit` handoff above is untouched. Both regions get it because they are
+  /// built here; only the content region holds rows, so in the sidebar it
+  /// only delegates.
   static Widget _region({
     required bool enabled,
     required Widget child,
@@ -711,7 +778,10 @@ class _AppShellState extends ConsumerState<AppShell>
   }) {
     if (!enabled) return child;
     return FocusTraversalGroup(
-      policy: RegionTraversalPolicy(onExit: onExit),
+      policy: RegionTraversalPolicy(
+        onExit: onExit,
+        requestFocusCallback: FocusMemory.requestFocus,
+      ),
       child: FocusScope(node: node, child: child),
     );
   }
@@ -734,6 +804,19 @@ class _AppShellState extends ConsumerState<AppShell>
     final location = shellNavLocation(widget.location, origin: _originLocation);
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
+    // The banner shows the real status; navigation is held back only for a
+    // source that serves nothing without its server.
+    final navOffline =
+        ref.watch(routeNavigationOfflineProvider(widget.location));
+    final usesMenu = AppShell.usesMenuPage(
+      platform: defaultTargetPlatform,
+      isWeb: kIsWeb,
+    );
+    // Before the layouts split: a menu page opened in the phone layout stays
+    // open if an iPad widens into the sidebar layout, and must keep following.
+    if (usesMenu) {
+      _syncMenuState((location: location, isOffline: navOffline));
+    }
 
     // Keeps the offline progress flush alive for the whole app session:
     // AppShell mounts for every reachable route before the immersive player
@@ -837,7 +920,7 @@ class _AppShellState extends ConsumerState<AppShell>
                           shellPopup: shellPopup,
                           coveredByPage: coveredByPage,
                         ),
-                        isOffline: isOffline,
+                        isOffline: navOffline,
                         showBackToMydia: showBackToMydia,
                         settingsBadge: settingsTabBadge(
                             updatePending: settingsUpdatePending(ref)),
@@ -846,7 +929,7 @@ class _AppShellState extends ConsumerState<AppShell>
                         location: location,
                         onNavigate: _navigateTo,
                         showBackToMydia: showBackToMydia,
-                        isOffline: isOffline,
+                        isOffline: navOffline,
                         // Gated like the regions: off-tier the sidebar row falls
                         // back to the per-row node FocusHighlight creates, which
                         // is what keeps `region`'s "unchanged off-tier" claim
@@ -875,69 +958,77 @@ class _AppShellState extends ConsumerState<AppShell>
     final navEntries = ref.watch(sourceNavEntriesProvider(location));
     final native = NativeTabBarSupport.supported;
 
+    final scaffold = Scaffold(
+      key: AppShell.scaffoldKey,
+      backgroundColor: Colors.transparent,
+      extendBody: true,
+      drawerScrimColor: AppShell.drawerScrimColor(context),
+      onDrawerChanged: (isOpen) {
+        if (!mounted) return;
+        setState(() => _drawerOpen = isOpen);
+        AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
+      },
+      // No drawer where the menu page stands in for it, which also leaves
+      // the left edge to the system back swipe.
+      drawer: usesMenu
+          ? null
+          : MobileDrawer(
+              location: location,
+              onNavigate: (route) {
+                Navigator.of(context).pop();
+                _navigateTo(route);
+              },
+              // Navigates without popping, so the drawer stays open on the
+              // new server's nav and the viewer sees the switch land.
+              onSwitchSource: _navigateTo,
+              showBackToMydia: showBackToMydia,
+              isOffline: navOffline,
+            ),
+      body: Stack(
+        children: [
+          Positioned.fill(child: backdrop),
+          // Insets pass through unchanged here: a narrow mobile/macOS window
+          // has no sidebar to cover the window-control reserve, so the row
+          // still needs the full ambient value.
+          AppShell.contentGutter(
+            child: Column(
+              children: [
+                AppShell.bannerArea(child: _banners(isOffline)),
+                Expanded(child: widget.child),
+              ],
+            ),
+          ),
+          if (native) const NativeCastAccessory(),
+        ],
+      ),
+      bottomNavigationBar: AppShell.mobileBottomBar(
+        native: native,
+        drawerOpen: _drawerOpen,
+        shellCurrent: shellCurrent,
+        shellPopup: shellPopup,
+        location: location,
+        entries: bottomNavEntries(
+          navEntries,
+          downloadSupported: isDownloadSupported,
+        ),
+        libraryEntries: libraryNavEntries(navEntries),
+        isOffline: navOffline,
+        showBackToMydia: showBackToMydia,
+        settingsBadge: native
+            ? settingsTabBadge(updatePending: settingsUpdatePending(ref))
+            : null,
+        onNavigate: _navigateTo,
+      ),
+    );
+
     return ReportedNativeBar(
       shown: AppShell.nativeBarReported(
           native: native, coveredByPage: coveredByPage),
       child: ReportedDrawer(
         open: _drawerOpen,
-        child: Scaffold(
-          key: AppShell.scaffoldKey,
-          backgroundColor: Colors.transparent,
-          extendBody: true,
-          drawerScrimColor: AppShell.drawerScrimColor(context),
-          onDrawerChanged: (isOpen) {
-            if (!mounted) return;
-            setState(() => _drawerOpen = isOpen);
-            AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
-          },
-          drawer: MobileDrawer(
-            location: location,
-            onNavigate: (route) {
-              Navigator.of(context).pop();
-              _navigateTo(route);
-            },
-            // Navigates without popping, so the drawer stays open on the new
-            // server's nav and the viewer sees the switch land.
-            onSwitchSource: _navigateTo,
-            showBackToMydia: showBackToMydia,
-            isOffline: isOffline,
-          ),
-          body: Stack(
-            children: [
-              Positioned.fill(child: backdrop),
-              // Insets pass through unchanged here: a narrow mobile/macOS window
-              // has no sidebar to cover the window-control reserve, so the row
-              // still needs the full ambient value.
-              AppShell.contentGutter(
-                child: Column(
-                  children: [
-                    AppShell.bannerArea(child: _banners(isOffline)),
-                    Expanded(child: widget.child),
-                  ],
-                ),
-              ),
-              if (native) const NativeCastAccessory(),
-            ],
-          ),
-          bottomNavigationBar: AppShell.mobileBottomBar(
-            native: native,
-            drawerOpen: _drawerOpen,
-            shellCurrent: shellCurrent,
-            shellPopup: shellPopup,
-            location: location,
-            entries: bottomNavEntries(
-              navEntries,
-              downloadSupported: isDownloadSupported,
-            ),
-            libraryEntries: libraryNavEntries(navEntries),
-            isOffline: isOffline,
-            showBackToMydia: showBackToMydia,
-            settingsBadge: native
-                ? settingsTabBadge(updatePending: settingsUpdatePending(ref))
-                : null,
-            onNavigate: _navigateTo,
-          ),
-        ),
+        child: usesMenu
+            ? ShellMenuScope(open: _openMenu, child: scaffold)
+            : scaffold,
       ),
     );
   }

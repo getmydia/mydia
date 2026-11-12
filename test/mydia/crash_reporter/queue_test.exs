@@ -17,18 +17,15 @@ defmodule Mydia.CrashReporter.QueueTest do
     # (127.0.0.1:1) because they only care that a report got *enqueued*, this
     # module's tests exercise the queue's actual send-and-retry behaviour, so
     # the request needs a real round trip and a real HTTP response — just not
-    # one that leaves the machine (#530). Bypass replies 400, matching the
-    # "no API key configured" failure these tests were written against when
-    # they still hit the real relay, so every retry/entry-shape assertion
-    # below keeps exercising the same failure path it always did.
+    # one that leaves the machine (#530). Bypass replies 503, a failure the
+    # queue retries, so every retry/entry-shape assertion below exercises the
+    # retry path. A 400 is never retried; see "rejected reports".
     bypass = Bypass.open()
     previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
     Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
 
     Bypass.stub(bypass, "POST", "/crashes/report", fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(400, Jason.encode!(%{"error" => "no_api_key_configured"}))
+      Plug.Conn.resp(conn, 503, "")
     end)
 
     # Configure for testing with reasonable defaults
@@ -221,6 +218,41 @@ defmodule Mydia.CrashReporter.QueueTest do
         # last_attempt_at might be nil if not attempted yet, or an integer if attempted
         assert entry.last_attempt_at == nil or is_integer(entry.last_attempt_at)
       end
+    end
+  end
+
+  describe "rejected reports" do
+    # The relay answers 400 when it rejects the body. Resending the same body
+    # can never succeed, so the queue drops it instead of retrying it up to
+    # max_retries times.
+    for status <- [400, 413] do
+      test "a report the relay rejects with #{status} is dropped, not retried" do
+        bypass = Bypass.open()
+        Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+        test_pid = self()
+
+        Bypass.expect_once(bypass, "POST", "/crashes/report", fn conn ->
+          send(test_pid, :relay_hit)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(unquote(status), Jason.encode!(%{"error" => "Rejected"}))
+        end)
+
+        Queue.enqueue(%{error_type: "Rejected", error_message: "x", stacktrace: []})
+        assert_receive :relay_hit, 2_000
+        Queue.process_all()
+
+        assert Queue.count() == 0
+      end
+    end
+
+    test "a report that fails with 503 stays queued for retry" do
+      Queue.enqueue(%{error_type: "Unavailable", error_message: "x", stacktrace: []})
+      Queue.process_all()
+
+      assert [%{retries: retries}] = Queue.list_all()
+      assert retries >= 1
     end
   end
 

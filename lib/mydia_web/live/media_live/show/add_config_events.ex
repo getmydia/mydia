@@ -63,16 +63,23 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   """
   def submit_add_config(%{"config" => params}, socket) do
     case MediaAddHelpers.resolve_add_config_submit(socket, params) do
-      {:ok, ref, _media_type, opts, socket} -> dispatch(ref, opts, socket)
+      {:ok, ref, media_type, opts, socket} -> dispatch(ref, media_type, opts, socket)
       {:halt, socket} -> {:noreply, socket}
     end
   end
 
-  defp dispatch(ref, opts, socket) do
-    if franchise_entry?(socket.assigns[:franchise], ref) do
+  # The dialog's own media type, not the viewed item's: a person's TV credit
+  # configured on a movie's page is added as a show, and never as a franchise
+  # movie that happens to share its TMDB id.
+  defp dispatch(ref, media_type, opts, socket) do
+    if media_type == :movie and franchise_entry?(socket.assigns[:franchise], ref) do
       FranchiseEvents.add_franchise_movie_with_opts(ref, opts, socket)
     else
-      RecommendationEvents.add_recommendation_with_opts(ref, opts, socket)
+      RecommendationEvents.add_recommendation_with_opts(
+        ref,
+        Keyword.put(opts, :media_type, media_type),
+        socket
+      )
     end
   end
 

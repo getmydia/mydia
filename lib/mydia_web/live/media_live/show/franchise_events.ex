@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
@@ -152,10 +153,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       :movie,
       %{},
       config,
-      Keyword.merge(
-        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
-        opts
-      )
+      [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id]
+      |> Keyword.merge(opts)
+      |> Keyword.put_new(:episodes, :background)
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}
@@ -192,11 +192,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       socket
       |> clear_in_flight(tmdb_id)
       |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+      |> PersonModal.refresh_titles()
 
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
+     |> put_flash(:info, MediaAddHelpers.added_message(added))}
   end
 
   # Not an error from here up: the movie the user clicked is already in the
@@ -208,6 +209,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       socket
       |> clear_in_flight(tmdb_id)
       |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+      |> PersonModal.refresh_titles()
 
     {:noreply,
      socket
@@ -295,11 +297,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
         # handle_add_result/3 above: an argument expression evaluates against
         # this function's own `socket` parameter, not a later pipeline step.
         socket =
-          assign(
-            socket,
+          socket
+          |> assign(
             :franchise,
             mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
           )
+          |> PersonModal.refresh_titles()
 
         {:noreply,
          socket

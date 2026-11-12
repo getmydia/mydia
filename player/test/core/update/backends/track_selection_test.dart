@@ -7,6 +7,7 @@ import 'package:player/core/update/backends/sparkle_update_backend.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/platform_updater.dart';
 import 'package:player/core/update/update_backend.dart';
+import 'package:player/core/update/update_service.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/core/update/update_track_store.dart';
 import 'package:player/domain/models/available_update.dart';
@@ -20,6 +21,42 @@ class _NoopUpdater extends PlatformUpdater {
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {}
+}
+
+/// Sideloaded Android's shape: one press checks and installs.
+class _OnePressUpdater extends PlatformUpdater {
+  AppUpdate? applied;
+
+  @override
+  bool get canUpdateInPlace => true;
+
+  @override
+  bool get installsWithoutAsking => true;
+
+  @override
+  Future<void> applyUpdate(
+    AppUpdate update, {
+    void Function(double progress)? onProgress,
+  }) async =>
+      applied = update;
+}
+
+/// Answers with [update] until [failing] is set, then throws.
+class _FlakyService implements UpdateService {
+  _FlakyService(this.update);
+
+  final AppUpdate update;
+  bool failing = false;
+
+  @override
+  Future<AppUpdate?> checkForUpdate({
+    required String currentVersion,
+    required UpdateTrack track,
+    bool force = false,
+  }) async {
+    if (failing) throw Exception('feed unreachable');
+    return update;
+  }
 }
 
 /// An in-memory [AuthStorage], so a test can read back what a
@@ -72,6 +109,41 @@ void main() {
     expect((outcome as TrackSwitchNotPublished).track, UpdateTrack.dev);
     expect(outcome.macos, isFalse);
     expect(backend.currentTrack, UpdateTrack.stable);
+  });
+
+  test(
+      'a switch whose check fails forgets the old track\'s update, so a '
+      'one-press install cannot fall back to it', () async {
+    final updater = _OnePressUpdater();
+    final service = _FlakyService(
+      AppUpdate(
+        version: '0.16.0-beta.1',
+        downloadUrl: 'https://example.invalid/player-v0.16.0-beta.1.apk',
+        releaseNotesUrl: 'https://example.invalid/releases/0.16.0-beta.1',
+        releaseTitle: 'Beta',
+        publishedAt: DateTime.utc(2026, 9, 1),
+      ),
+    );
+    final backend = ReleaseUpdateBackend(
+      updater: updater,
+      currentVersion: '0.15.0',
+      service: service,
+      trackStore: UpdateTrackStore(
+          settings: SettingsService(storage: _FakeAuthStorage())),
+    );
+    addTearDown(backend.dispose);
+
+    final seen = <AvailableUpdate?>[];
+    backend.availability.listen(seen.add);
+    await backend.refresh(force: true);
+    service.failing = true;
+    await backend.selectTrack(UpdateTrack.stable);
+    final outcome = await backend.requestUpdate();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(seen.last, isNull, reason: 'the banner stops offering it');
+    expect(outcome, isA<UpdateFailed>());
+    expect(updater.applied, isNull);
   });
 
   test('a selected track is actually persisted, not just held in memory',

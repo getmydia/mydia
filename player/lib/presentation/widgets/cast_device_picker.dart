@@ -7,6 +7,7 @@ import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_capabilities.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/mydia_cast_backend.dart' show sourceIdsOfCastDevice;
+import '../../core/remote/ambient_dismissals.dart';
 import '../../core/sources/source.dart' show SourceKind;
 import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
@@ -19,7 +20,14 @@ import 'osd_dialog.dart';
 /// Shows a dialog to pick a cast receiver.
 ///
 /// Returns the selected device, or null if cancelled.
+///
+/// Opening it also brings back every "Playing on X" banner the user hid:
+/// the picker is where other players are, so it is the place to ask for them
+/// again. `CastButton` draws a dot while one is hidden.
 Future<CastDevice?> showCastDevicePicker(BuildContext context) {
+  ProviderScope.containerOf(context, listen: false)
+      .read(ambientDismissalsProvider.notifier)
+      .clear();
   return showDialog<CastDevice>(
     context: context,
     builder: (context) => const CastDevicePickerDialog(),

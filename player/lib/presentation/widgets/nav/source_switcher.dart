@@ -307,6 +307,8 @@ class _Header extends StatelessWidget {
           : 'Plex · ${source.account.displayName} · $homeUser',
       SourceKind.jellyfin => 'Jellyfin · ${source.account.displayName}',
       SourceKind.stash => 'Stash · ${source.account.displayName}',
+      SourceKind.files =>
+        l10n.navSourceFilesCaption(source.account.displayName),
     };
   }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/focus/focus_memory.dart';
+import '../../../../core/player/input_capabilities.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../widgets/glass_surface.dart';
@@ -68,6 +70,22 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final order = InputCapabilities.directionalPrimary
+        ? SettingsFocusOrder.maybeOf(context)
+        : null;
+    final rows = order == null
+        ? children
+        : [
+            for (final (i, row) in children.indexed)
+              FocusMemoryItem(
+                // The label and the row's own key where it has one: a row
+                // shown conditionally then does not shift its neighbours'
+                // ids. The position stands in only for unkeyed rows.
+                id: (label, row.key ?? i),
+                index: order * SettingsFocusOrder.rowsPerSection + i,
+                child: row,
+              ),
+          ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -83,8 +101,39 @@ class SettingsSection extends StatelessWidget {
             ),
           ),
         ),
-        SettingsCard(children: children),
+        SettingsCard(children: rows),
       ],
     );
   }
+}
+
+/// Where the [SettingsSection]s under it sit in the Settings list, for the
+/// television's focus memory.
+///
+/// Settings is one list of sections, each built by its own widget, so a
+/// section cannot know on its own how its rows order against the others'.
+/// The screen places each section in this with its position, and on a
+/// television the section makes each row an item of the list's
+/// `FocusMemoryRegion`, indexed by section then row. A section with no
+/// order above it (the same sections on a server's own settings screen or
+/// in the desktop dialog) is left as it was.
+class SettingsFocusOrder extends InheritedWidget {
+  const SettingsFocusOrder({
+    super.key,
+    required this.order,
+    required super.child,
+  });
+
+  /// Room left for each section's rows in the item indices; a section has
+  /// far fewer.
+  static const int rowsPerSection = 100;
+
+  final int order;
+
+  static int? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SettingsFocusOrder>()?.order;
+
+  @override
+  bool updateShouldNotify(SettingsFocusOrder oldWidget) =>
+      order != oldWidget.order;
 }

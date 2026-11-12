@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/focus/focus_reveal_section.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/sources/media_source.dart' show ArtworkRequest;
@@ -18,6 +19,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/focus_emphasis.dart';
 import '../../widgets/glass/glass_badge.dart';
 import '../../widgets/glass/glass_button.dart';
 import '../../widgets/primary_play_button.dart';
@@ -342,18 +344,26 @@ class _HeroActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glass = GlassStyle.of(context);
-    final Widget play = glass
+    Widget play = glass
         ? PrimaryPlayButton(
             key: const Key('source-home-hero-play'),
             onPressed: onPlay,
             grouped: grouped,
           )
-        : FilledButton.icon(
-            key: const Key('source-home-hero-play'),
-            onPressed: onPlay,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(context.l10n.commonPlay),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
+        : FocusEmphasis(
+            borderRadius:
+                const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+            child: FilledButton.icon(
+              key: const Key('source-home-hero-play'),
+              onPressed: onPlay,
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: Text(context.l10n.commonPlay),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, _height),
+                // FocusEmphasis draws the television focus ring.
+                side: BorderSide.none,
+              ),
+            ),
           );
     Widget secondary = GlassButton(
       buttonKey: const Key('source-home-hero-more'),
@@ -370,18 +380,29 @@ class _HeroActions extends StatelessWidget {
         child: secondary,
       );
     }
+    // On a television the two buttons are a button bar that remembers its
+    // place. Without it, UP into the hero from the full-width row heading
+    // below lands on whichever button sits nearer the heading's centre,
+    // which is More, not Play. Keyed by action, so the first entry is Play
+    // and a return lands on the button that left.
+    play = FocusMemoryItem(id: 'play', index: 0, child: play);
+    secondary = FocusMemoryItem(id: 'more', index: 1, child: secondary);
     if (wide) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [play, const SizedBox(width: 12), secondary],
+      return FocusMemoryRegion(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [play, const SizedBox(width: 12), secondary],
+        ),
       );
     }
-    return Column(
-      children: [
-        SizedBox(width: double.infinity, child: play),
-        const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: secondary),
-      ],
+    return FocusMemoryRegion(
+      child: Column(
+        children: [
+          SizedBox(width: double.infinity, child: play),
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: secondary),
+        ],
+      ),
     );
   }
 }

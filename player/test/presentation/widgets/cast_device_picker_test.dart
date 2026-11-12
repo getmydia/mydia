@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/cast_device.dart';
@@ -399,5 +400,39 @@ void main() {
 
     expect(find.byType(OsdDialog), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('opening the picker brings back hidden Playing on banners',
+      (tester) async {
+    final container = ProviderContainer(overrides: [
+      castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    ]);
+    addTearDown(container.dispose);
+    container
+        .read(ambientDismissalsProvider.notifier)
+        .dismissKey(const AmbientDismissal('node-tv', 'The Lantern Keepers'));
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              key: const Key('open-picker'),
+              onPressed: () => showCastDevicePicker(context),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const Key('open-picker')));
+    await tester.pump();
+
+    expect(container.read(ambientDismissalsProvider), isEmpty);
   });
 }

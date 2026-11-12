@@ -252,7 +252,9 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
           %{
             name: actor.name,
             character: actor.character,
-            profile_path: actor.profile_path
+            profile_path: actor.profile_path,
+            # Absent on cast stored before people pages; renders unlinked.
+            tmdb_person_id: Map.get(actor, :tmdb_person_id)
           }
         end)
 
@@ -284,12 +286,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     do: Video.youtube_videos(videos)
 
   def trailer_videos(_media_item), do: []
-
-  def get_profile_image_url(nil), do: nil
-
-  def get_profile_image_url(path) when is_binary(path) do
-    Mydia.Metadata.ImageUrl.profile_url(path)
-  end
 
   def group_episodes_by_season(episodes) do
     episodes

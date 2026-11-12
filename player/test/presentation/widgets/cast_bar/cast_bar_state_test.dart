@@ -4,9 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/remote/ambient_dismissals.dart';
+import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/native/lib.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
 
 const _device = CastDevice(
@@ -20,6 +23,22 @@ const _media = CastMediaInfo(
   duration: Duration(minutes: 50),
   position: Duration(seconds: 29),
 );
+
+FlutterPlaybackSnapshot _snapshot(String title) => FlutterPlaybackSnapshot(
+      state: FlutterPlaybackState.playing,
+      title: title,
+      positionMs: BigInt.zero,
+      durationMs: BigInt.from(60000),
+      muted: false,
+      audioTracks: const [],
+      subtitleTracks: const [],
+      capabilities: const FlutterTargetCapabilities(
+        volume: true,
+        trackSelection: true,
+        nextPrevious: false,
+      ),
+      sequence: BigInt.one,
+    );
 
 /// Records play and pause; anything else it is asked fails the test.
 class _RecordingManager implements CastSessionManager {
@@ -135,6 +154,75 @@ void main() {
         ),
       );
       expect(manager.calls, isEmpty);
+    });
+  });
+
+  group('castBarAmbientHiddenProvider', () {
+    Future<ProviderContainer> containerFor({
+      required CastSession? session,
+      required Set<AmbientDismissal> dismissed,
+    }) async {
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        hasMydiaProvider.overrideWithValue(true),
+        castSessionProvider.overrideWith((ref) => Stream.value(session)),
+        ambientPlayingProvider.overrideWith((ref) => Stream.value([
+              AmbientTarget(
+                device: const CastDevice(
+                  id: 'node-tv',
+                  name: 'node-tv',
+                  protocol: CastProtocolKind.mydia,
+                ),
+                snapshot: _snapshot('The Lantern Keepers'),
+              ),
+            ])),
+      ]);
+      addTearDown(container.dispose);
+      final notifier = container.read(ambientDismissalsProvider.notifier);
+      dismissed.forEach(notifier.dismissKey);
+      final sub =
+          container.listen(castBarAmbientHiddenProvider, (prev, next) {});
+      addTearDown(sub.close);
+      // With a session, nothing under test watches the ambient list, so
+      // hold it here or awaiting it disposes it mid-load.
+      final ambientSub =
+          container.listen(ambientPlayingProvider, (prev, next) {});
+      addTearDown(ambientSub.close);
+      await container.read(castSessionProvider.future);
+      await container.read(ambientPlayingProvider.future);
+      return container;
+    }
+
+    test('true while a dismissed player is still playing', () async {
+      final container = await containerFor(
+        session: null,
+        dismissed: {
+          const AmbientDismissal('node-tv', 'The Lantern Keepers'),
+        },
+      );
+      expect(container.read(castBarAmbientHiddenProvider), isTrue);
+      expect(container.read(castBarStateProvider), isNull);
+    });
+
+    test('false when the banner is showing', () async {
+      final container = await containerFor(session: null, dismissed: {});
+      expect(container.read(castBarAmbientHiddenProvider), isFalse);
+    });
+
+    test('false while this device has a session of its own', () async {
+      final container = await containerFor(
+        session: const CastSession(
+          device: _device,
+          playbackState: CastPlaybackState.idle,
+        ),
+        dismissed: {
+          const AmbientDismissal('node-tv', 'The Lantern Keepers'),
+        },
+      );
+      expect(container.read(castBarAmbientHiddenProvider), isFalse,
+          reason: 'the bar is busy with that session; the banner would not '
+              'show even if restored');
     });
   });
 

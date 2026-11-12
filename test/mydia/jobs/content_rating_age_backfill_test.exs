@@ -26,7 +26,7 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfillTest do
             content_rating: rating
           }
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     # Clear the derived column so the row looks like one written before the

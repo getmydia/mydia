@@ -82,7 +82,8 @@ class SourceException implements Exception {
   const SourceException._fault(this.kind, SourceFault this.fault, this.detail)
       : message = null;
 
-  const SourceException.unreachable() : this(SourceErrorKind.unreachable);
+  const SourceException.unreachable([String? message])
+      : this(SourceErrorKind.unreachable, message);
   const SourceException.unauthorized() : this(SourceErrorKind.unauthorized);
   const SourceException.notFound() : this(SourceErrorKind.notFound);
   const SourceException.unsupported([String? message])

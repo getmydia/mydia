@@ -8,7 +8,7 @@
 
 **Your personal media companion, built with Phoenix LiveView**
 
-A modern, self-hosted media management platform for tracking, organizing, and monitoring your movies and TV shows.
+Mydia Server is a modern, self-hosted media management platform for tracking, organizing, and monitoring your movies and TV shows.
 
 > **Warning:** Mydia is in early development (0.x.x). Expect breaking changes. [Report issues](https://github.com/getmydia/mydia/issues) or [request features](https://github.com/getmydia/mydia/issues/new).
 
@@ -125,8 +125,8 @@ and [Custom Formats](docs/configuration/custom-formats.md).
 A cross-platform app that streams your library from anywhere over an encrypted
 peer-to-peer connection. No port forwarding, no VPN.
 
-It can also browse and play from Plex, Jellyfin and Stash servers. This is
-experimental: [Connect Plex, Jellyfin or Stash](https://docs.mydia.dev/latest/using/how-to/connect-other-servers/).
+It can also browse and play from Plex, Jellyfin and Stash servers.
+[Connect Plex, Jellyfin or Stash](https://docs.mydia.dev/latest/using/how-to/connect-other-servers/).
 
 <p align="center">
   <img src="screenshots/player-desktop.png" alt="Mydia Player on the desktop" width="800" />

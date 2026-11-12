@@ -1,5 +1,5 @@
 /// Home, for every included server or for one: a hero, Continue Watching,
-/// Recently Added (movies, TV), Favorites, then a row per library.
+/// Recently Added (movies, TV), Trending (movies, TV), Favorites, then a row per library.
 library;
 
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/startup/startup_timeline.dart';
@@ -158,7 +159,9 @@ class HomeScreen extends ConsumerWidget {
                     unavailable: rows.unavailable,
                     onRetry: () => refreshHome(ref, ids)),
               if (hero != null)
-                KeyedSubtree(
+                (InputCapabilities.directionalPrimary
+                    ? _KeepAliveOnTv.new
+                    : KeyedSubtree.new)(
                   key: const Key('home-hero'),
                   child: SourceHomeHero(
                     key: ValueKey(
@@ -191,6 +194,16 @@ class HomeScreen extends ConsumerWidget {
                     items: rows.recentShows,
                     location: _listing(SourceListing.recentlyAdded,
                         '$allServersRecentlyAddedLocation?kind=shows')),
+              if (rows.trendingMovies.isNotEmpty)
+                _rail(context, rows,
+                    key: 'home-trending-movies',
+                    title: context.l10n.homeTrendingMovies,
+                    items: rows.trendingMovies),
+              if (rows.trendingShows.isNotEmpty)
+                _rail(context, rows,
+                    key: 'home-trending-shows',
+                    title: context.l10n.homeTrendingShows,
+                    items: rows.trendingShows),
               if (rows.favorites.isNotEmpty)
                 _rail(context, rows,
                     key: 'home-favorites',
@@ -242,14 +255,14 @@ class HomeScreen extends ConsumerWidget {
     required String key,
     required String title,
     required List<ItemSummary> items,
-    required String location,
+    String? location,
   }) =>
       SourcePosterRow(
         key: Key(key),
         title: title,
         railId: key,
         items: items,
-        onTitleTap: () => context.push(location),
+        onTitleTap: location == null ? null : () => context.push(location),
         posterFor: rows.labelled
             ? (context, item) => AllServersPoster(
                   item: item,
@@ -257,4 +270,34 @@ class HomeScreen extends ConsumerWidget {
                 )
             : null,
       );
+}
+
+/// Keeps Home's hero built on the television tier while the list scrolls it
+/// out of view, as `HorizontalRail` does for every rail below it. Used only
+/// there, so the tree off the television tier is the plain `KeyedSubtree` it
+/// always was.
+///
+/// The hero's Play and More buttons are a `FocusMemoryRegion`. A few rows
+/// down on a television's logical height the lazy home list drops the hero,
+/// and with it the button the viewer left from, so climbing back would land
+/// on Play whichever button they had used.
+class _KeepAliveOnTv extends StatefulWidget {
+  const _KeepAliveOnTv({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAliveOnTv> createState() => _KeepAliveOnTvState();
+}
+
+class _KeepAliveOnTvState extends State<_KeepAliveOnTv>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => InputCapabilities.directionalPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

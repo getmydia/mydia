@@ -109,6 +109,14 @@ class AmbientTargets {
   /// timer calls [sweep].
   bool _backgrounded = false;
 
+  /// Bumped by every [onBackground]. A [sweep] or held-target refresh that
+  /// began under an earlier value is stale, even if the app has resumed
+  /// since: the connections its probes used died with the background, so a
+  /// late failure from one says nothing about the player.
+  int _epoch = 0;
+
+  bool _staleSince(int epoch) => _backgrounded || _epoch != epoch;
+
   /// The currently held targets, replayed to every new listener before any
   /// later update. Without the replay, `await playing.first` right after
   /// [sweep] would hang past that sweep's own result: nothing was listening
@@ -126,6 +134,18 @@ class AmbientTargets {
     yield* _updates.stream;
   }
 
+  /// Node IDs a probe just answered as not playing (idle, unreachable or
+  /// timed out), from [sweep] and from the held-target refresh. Never from
+  /// [onBackground]: dropping connections says nothing about the player,
+  /// so an empty [playing] list is no evidence that anything stopped.
+  Stream<String> get stopped => _stopped.stream;
+  final _stopped = StreamController<String>.broadcast();
+
+  void _reportStopped(Iterable<String> nodeIds) {
+    if (_stopped.isClosed) return;
+    nodeIds.forEach(_stopped.add);
+  }
+
   /// Probes every rostered device once, in parallel, and holds a connection
   /// to whichever ones answered playing — capped at [_maxHeldTargets],
   /// taking the first three in roster order — then starts polling those.
@@ -138,6 +158,7 @@ class AmbientTargets {
   /// be true regardless of which caller's timer is the one dialing this.
   Future<void> sweep() async {
     if (_backgrounded) return;
+    final epoch = _epoch;
     final ids = await rosterSource();
     // A background transition can land while the roster fetch above was in
     // flight. Checking only at entry (the guard two lines up) is not
@@ -146,7 +167,7 @@ class AmbientTargets {
     // keeps calling this regardless of foreground state (see the class
     // doc), so a sweep already past its first await has to re-check itself
     // rather than assume nothing changed underneath it.
-    if (_backgrounded) return;
+    if (_staleSince(epoch)) return;
     final probed = await Future.wait(ids.map((id) async {
       final snapshot = await probe(id);
       return MapEntry(id, snapshot);
@@ -155,7 +176,12 @@ class AmbientTargets {
     // arrived while the probe fan-out was in flight must win. Publishing
     // here would repopulate `_held` and restart the poll timer behind a
     // backgrounded app — exactly the state this guard exists to prevent.
-    if (_backgrounded) return;
+    // A background and resume in between counts too (see [_epoch]).
+    if (_staleSince(epoch)) return;
+    _reportStopped([
+      for (final entry in probed)
+        if (entry.value == null) entry.key,
+    ]);
     _setHeld(_takePlaying(Map.fromEntries(probed)));
     _restartPolling();
   }
@@ -165,6 +191,7 @@ class AmbientTargets {
   /// class doc; the next [sweep] *after* [onForeground] is what recovers.
   void onBackground() {
     _backgrounded = true;
+    _epoch++;
     _pollTimer?.cancel();
     _pollTimer = null;
     _setHeld(const []);
@@ -182,6 +209,7 @@ class AmbientTargets {
   Future<void> dispose() async {
     _pollTimer?.cancel();
     _pollTimer = null;
+    await _stopped.close();
     await _updates.close();
   }
 
@@ -237,10 +265,16 @@ class AmbientTargets {
   /// class) that decides how wide that window gets.
   Future<void> _refreshHeld() async {
     if (_held.isEmpty) return;
+    final epoch = _epoch;
     final probed = await Future.wait(_held.map((target) async {
       final snapshot = await probe(target.device.id);
       return MapEntry(target, snapshot);
     }));
+    if (_staleSince(epoch)) return;
+    _reportStopped([
+      for (final entry in probed)
+        if (entry.value == null) entry.key.device.id,
+    ]);
     final refreshed = <AmbientTarget>[
       for (final entry in probed)
         if (entry.value != null)

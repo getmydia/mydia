@@ -23,6 +23,15 @@ abstract class PlatformUpdater {
   /// an update that was merely offered.
   bool get handsOffUnconfirmed => false;
 
+  /// True when one press should check, download and install, with no
+  /// confirmation dialog of the app's own.
+  ///
+  /// Android only. Its package installer is already the confirmation, when
+  /// it asks at all, and a self-update on Android 12+ does not. The desktop
+  /// updaters close the running app with no warning from the OS, so they
+  /// keep asking first.
+  bool get installsWithoutAsking => false;
+
   /// Applies the update. [onProgress] receives values from 0.0 to 1.0.
   Future<void> applyUpdate(
     AppUpdate update, {

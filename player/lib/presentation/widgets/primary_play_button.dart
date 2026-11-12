@@ -157,6 +157,11 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
         borderRadius: ringRadius,
         ringColor: glass ? Colors.white : palette.primary,
         ringOpacity: 1,
+        // On a television the ring above is too thin to find from the sofa.
+        // The padding below already holds the gap, so the larger ring sits
+        // where this one would.
+        emphasis: true,
+        emphasisGap: 0,
         child: Padding(
           padding: const EdgeInsets.all(PrimaryPlayButton.ringGap),
           child: pill,

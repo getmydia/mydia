@@ -11,6 +11,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
+import 'package:player/presentation/widgets/files/experimental_badge.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 
@@ -67,6 +68,35 @@ void main() {
     final mydia =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
     expect(mydia.enabled, isTrue);
+  });
+
+  testWidgets('Folder and WebDAV are marked experimental', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: false, foldersSupported: true),
+      ),
+    ));
+    for (final key in ['add-source-folder', 'add-source-webdav']) {
+      final label = find.descendant(
+          of: find.byKey(Key(key)), matching: find.text('Experimental'));
+      expect(label, findsOneWidget);
+      expect(label.hitTestable(), findsOneWidget);
+    }
+    for (final key in [
+      'add-source-plex',
+      'add-source-jellyfin',
+      'add-source-stash',
+      'add-source-mydia',
+    ]) {
+      expect(
+          find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(ExperimentalBadge)),
+          findsNothing);
+    }
   });
 
   testWidgets('with a Mydia account, the tile is enabled and adds another',
@@ -135,6 +165,47 @@ void main() {
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
     expect(tile.enabled, isTrue);
     expect(find.text('Sign in to a Mydia server'), findsOneWidget);
+  });
+
+  testWidgets('SMB is offered off web, marked experimental, and opens its form',
+      (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(
+          path: '/', builder: (_, __) => const AddSourceScreen(isWeb: false)),
+      GoRoute(
+        path: '/sources/add/smb',
+        builder: (_, __) => const SizedBox(key: Key('smb-marker')),
+      ),
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final tile = find.byKey(const Key('add-source-smb'));
+    expect(find.descendant(of: tile, matching: find.text('Experimental')),
+        findsOneWidget);
+    expect(find.text('A shared folder on a NAS, PC or Mac on your network'),
+        findsOneWidget);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('smb-marker')), findsOneWidget);
+  });
+
+  testWidgets('SMB is hidden on web', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: true),
+      ),
+    ));
+    expect(find.byKey(const Key('add-source-smb')), findsNothing);
   });
 
   test('the add Mydia route redirects home on an instance-hosted web only', () {

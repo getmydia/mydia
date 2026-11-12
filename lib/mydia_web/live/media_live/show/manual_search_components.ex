@@ -428,7 +428,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
         <button
           id={@id}
           type="button"
-          class="badge badge-outline badge-sm max-w-full min-w-0 cursor-pointer gap-1 hover:border-primary hover:text-primary transition-colors"
+          class="badge badge-outline badge-sm max-w-full min-w-0 max-sm:min-h-6 cursor-pointer gap-1 hover:border-primary hover:text-primary transition-colors"
           popovertarget={"#{@id}-menu"}
           style={"anchor-name:--#{@id}"}
           title={@all_indexers}
@@ -462,7 +462,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           href={@info_page_url}
           target="_blank"
           rel="noopener noreferrer"
-          class="badge badge-outline badge-sm max-w-full min-w-0 gap-1 hover:border-primary hover:text-primary transition-colors"
+          class="badge badge-outline badge-sm max-w-full min-w-0 max-sm:min-h-6 gap-1 hover:border-primary hover:text-primary transition-colors"
           title={gettext("View this release on %{indexer}", indexer: @result.indexer)}
         >
           <span class="truncate">{indexer_label(@result)}</span>

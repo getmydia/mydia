@@ -24,13 +24,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
-  alias MydiaWeb.DiscoverLive.RegionalRows
+  alias MydiaWeb.DiscoverLive.{Ignores, Messages, People, RegionalRows}
+  alias MydiaWeb.Live.Helpers.PersonModal
 
   import MydiaWeb.DiscoverLive.RegionalComponents
+  import MydiaWeb.DiscoverLive.UrlParams
   import MydiaWeb.GridDensityComponents
 
   import MydiaWeb.DiscoverLive.Messages,
-    only: [movie_categories: 0, tv_categories: 0, sort_options: 0, request_error_message: 1]
+    only: [movie_categories: 0, tv_categories: 0, sort_options: 1, request_error_message: 1]
 
   # The provider returns fixed-size pages of this many results. Removing owned
   # titles from one leaves a short grid, or an empty one, which looks like the
@@ -39,6 +41,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   @page_size 20
   @max_auto_advance 3
   @max_auto_advance_restricted 8
+  @browse_filter_events ~w(toggle_hide_owned toggle_show_ignored ignore_title unignore_title)
 
   @impl true
   def mount(_params, session, socket) do
@@ -47,7 +50,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:page_title, gettext("Discover"))
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:countries, Countries.all())
-      |> assign(:sort_options, sort_options())
+      |> assign(:sort_options, sort_options(:movie))
       |> assign(:items, [])
       |> assign(:visible_items, [])
       |> assign(:loading, true)
@@ -61,11 +64,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:requesting_item_id, nil)
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
+      |> PersonModal.attach()
+      |> People.reset()
       |> assign(:load_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
-      |> assign_hide_owned()
+      |> Ignores.assign_initial()
       |> assign_home_country()
       |> assign_streaming_services()
       |> assign(:regional_sources, [])
@@ -78,6 +83,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_params(%{"type" => "person"} = params, _url, socket),
+    do: People.handle_params(params, socket)
+
+  def handle_params(%{"scope" => "people", "q" => q} = params, _url, socket) when q != "",
+    do: People.handle_params(params, socket)
+
   def handle_params(params, _url, socket) do
     if connected?(socket) do
       media_type = parse_media_type(params["type"])
@@ -161,7 +172,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
         socket
         |> assign(:source, source)
         |> assign(:default_sort, default_sort)
-        |> assign(:sort_by, params["sort"] || default_sort)
+        |> assign(:sort_options, sort_options(media_type))
+        |> assign(:sort_by, parse_sort(params["sort"], sort_options(media_type), default_sort))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -228,9 +240,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("switch_category", %{"category" => category}, socket) do
-    # A tab click always lands on the tab itself, so the country tab opens
-    # on its rows even when clicked from one of its See all grids.
-    params = build_url_params(socket.assigns, category: category) |> Map.delete("source")
+    params = tab_url_params(socket.assigns, category)
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -238,14 +248,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
     query = String.trim(query)
 
     params =
-      if query == "" do
-        %{"type" => to_string(socket.assigns.media_type)}
-      else
-        %{"type" => to_string(socket.assigns.media_type), "q" => query}
+      cond do
+        socket.assigns.media_type == :person -> People.params(query)
+        query == "" -> %{"type" => to_string(socket.assigns.media_type)}
+        true -> %{"type" => to_string(socket.assigns.media_type), "q" => query}
       end
 
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
+
+  def handle_event("retry_people_search", _params, socket), do: {:noreply, People.retry(socket)}
 
   def handle_event("clear_search", _, socket) do
     params = %{"type" => to_string(socket.assigns.media_type)}
@@ -387,6 +399,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
+  def handle_event("load_more", _, %{assigns: %{media_type: :person}} = socket),
+    do: {:noreply, People.load_more(socket)}
+
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
       next_page = socket.assigns.page + 1
@@ -476,13 +491,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  # The type is part of the lookup: a person's titles mix movies and shows, and
+  # TMDB numbers the two catalogs independently.
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <-
-           DetailModal.find_selectable_item(
-             selectable_lists(socket.assigns),
-             id
-           ) do
+           DetailModal.find_selectable_item(selectable_lists(socket.assigns), id, media_type) do
       # Recommendations are not sent here: the TMDB cross-reference they need
       # only exists once the detail metadata comes back (see
       # handle_info({:fetch_detail_metadata, ...})), and sending the item's own
@@ -502,42 +516,18 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, GridDensity.put(socket, density)}
   end
 
-  def handle_event("toggle_hide_owned", _params, socket) do
-    value = not socket.assigns.hide_owned
-
-    # A rejected write leaves the toggle where it was rather than flipping the
-    # grid for a preference that will be gone on the next mount.
-    case persist_preference(socket, "discover_hide_owned", value) do
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(:hide_owned, value)
-         |> assign_visible_items()
-         |> maybe_auto_advance(0, @page_size)}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, gettext("Could not save that filter preference"))}
-    end
-  end
-
-  defp persist_preference(socket, key, value) do
-    case socket.assigns[:current_user] do
-      nil ->
-        :ok
-
-      user ->
-        preference = Accounts.get_user_preference!(user)
-
-        case Accounts.update_preference(preference, %{"preferences" => %{key => value}}) do
-          {:ok, _} -> :ok
-          {:error, _changeset} -> :error
-        end
-    end
+  # "Hide in library" and the ignore list (#1379) live in Ignores.
+  def handle_event(event, params, socket) when event in @browse_filter_events do
+    {:noreply, socket} = Ignores.handle_event(event, params, socket)
+    {:noreply, socket |> assign_visible_items() |> maybe_auto_advance(0, @page_size)}
   end
 
   # Info handlers
 
   @impl true
+  def handle_info({:clear_ignore_toast, key}, socket),
+    do: {:noreply, Ignores.clear_toast(socket, key)}
+
   def handle_info(:load_genres, socket) do
     case Metadata.genres(socket.assigns.media_type) do
       {:ok, genres} ->
@@ -548,6 +538,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
         {:noreply, socket}
     end
   end
+
+  def handle_info(msg, %{assigns: %{media_type: :person}} = socket)
+      when msg == :load_data or (is_tuple(msg) and elem(msg, 0) == :load_page),
+      do: {:noreply, People.handle_info(msg, socket)}
 
   def handle_info(:load_data, socket) do
     %{
@@ -756,10 +750,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
          end)
-         |> put_flash(
-           :info,
-           gettext("%{title} has been added to your library", title: media_item.title)
-         )}
+         |> put_flash(:info, MediaAddHelpers.added_message(media_item))}
 
       {:already_in_library, media_item, updated_map} ->
         request_status_map = MediaRequestHelpers.request_status_map()
@@ -864,6 +855,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_async(:people, result, socket),
+    do: {:noreply, People.handle_result(socket, result)}
+
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end
@@ -957,16 +951,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   # Private helpers
 
-  defp assign_hide_owned(socket) do
-    value =
-      case socket.assigns[:current_user] do
-        nil -> false
-        user -> user |> Accounts.get_user_preference!() |> UserPreference.discover_hide_owned()
-      end
-
-    assign(socket, :hide_owned, value)
-  end
-
   defp landing?(assigns),
     do: assigns.category == :home and is_nil(assigns.source) and not assigns.search_mode
 
@@ -990,20 +974,24 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :regional_sources, RegionalSources.sources_for(country, services, media_type))
   end
 
-  # Country-tab rows are a third list of the same shape as the grid and the
-  # rail. Without re-enriching them a row keeps offering "Add" for a title
-  # that was just added from it, and a second click fails on the tmdb_id index.
+  # Country-tab rows and an open person's titles are lists of the same shape as
+  # the grid and the rail. Without re-enriching them a row keeps offering "Add"
+  # for a title that was just added from it, a person's poster never gains its
+  # badge, and a second click fails on the tmdb_id index.
   defp refresh_lists(socket, items, recommendations, enrich_rows) do
-    socket = RegionalRows.map_items(socket, enrich_rows)
+    socket = socket |> RegionalRows.map_items(enrich_rows) |> PersonModal.refresh_titles()
 
     DetailModal.refresh_selected(socket, [
       items,
-      recommendations | RegionalRows.item_lists(socket.assigns)
+      recommendations,
+      PersonModal.titles(socket.assigns) | RegionalRows.item_lists(socket.assigns)
     ])
   end
 
-  defp selectable_lists(assigns),
-    do: [assigns.items, assigns.selected_recommendations | RegionalRows.item_lists(assigns)]
+  defp selectable_lists(assigns) do
+    [assigns.items, assigns.selected_recommendations, PersonModal.titles(assigns)] ++
+      RegionalRows.item_lists(assigns)
+  end
 
   defp enrich(results, socket) do
     results
@@ -1071,14 +1059,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
-        enriched = enrich(results, socket)
-
-        items =
-          if mode == :append do
-            socket.assigns.items ++ enriched
-          else
-            enriched
-          end
+        items = merge_items(socket.assigns.items, enrich(results, socket), mode)
 
         socket
         |> assign(:items, items)
@@ -1091,14 +1072,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       {:ok, results} when is_list(results) ->
         # Search returns a flat list
-        enriched = enrich(results, socket)
-
-        items =
-          if mode == :append do
-            socket.assigns.items ++ enriched
-          else
-            enriched
-          end
+        items = merge_items(socket.assigns.items, enrich(results, socket), mode)
 
         socket
         |> assign(:items, items)
@@ -1118,18 +1092,21 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  # Derives :visible_items from :items and :hide_owned. Call this everywhere
-  # either of those is assigned, so the template never filters.
-  defp assign_visible_items(socket) do
-    visible =
-      if socket.assigns.hide_owned do
-        Enum.reject(socket.assigns.items, & &1.in_library)
-      else
-        socket.assigns.items
-      end
+  # TMDB ranks these lists by popularity and each page is fetched, and cached
+  # upstream, on its own. When the ranking shifts between two fetches, a title
+  # near the boundary arrives on both pages, and a page cached long before its
+  # neighbour can repeat a whole block (#1378). Keep the first sighting. This
+  # runs before :visible_items is derived, so repeats do not count toward the
+  # hide-owned auto-advance target and it keeps fetching.
+  defp merge_items(_shown, incoming, :replace), do: incoming
 
-    assign(socket, :visible_items, visible)
-  end
+  defp merge_items(shown, incoming, :append),
+    do: Enum.uniq_by(shown ++ incoming, &{&1.media_type, Ref.from_search_result(&1)})
+
+  # Call everywhere :items or a browse filter is assigned, so the template
+  # never filters.
+  defp assign_visible_items(socket),
+    do: assign(socket, :visible_items, Ignores.visible_items(socket.assigns))
 
   # `target` is how many unowned titles the grid should end up holding. A fresh
   # load asks for a full page; "Load more" asks for a full page on top of what
@@ -1138,6 +1115,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp maybe_auto_advance(socket, advances, target) do
     cond do
       not filtering?(socket) ->
+        socket
+
+      # A page is already on its way, and its handler clears this flag before
+      # deciding whether to advance again. Queuing another would fetch the
+      # same page twice and append its titles twice.
+      socket.assigns.loading_more ->
         socket
 
       advances >= advance_cap(socket) ->
@@ -1163,7 +1146,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # Anything that drops results after the page arrives can strand the grid:
   # "Hide in library", and any access restriction.
   defp filtering?(socket),
-    do: socket.assigns.hide_owned or Scope.restricted?(socket.assigns.current_scope)
+    do:
+      socket.assigns.hide_owned or Ignores.hiding_ignored?(socket.assigns) or
+        Scope.restricted?(socket.assigns.current_scope)
 
   # A restricted page loses more per fetch, so it may go further before giving
   # up.
@@ -1240,131 +1225,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp narrow_release_bound(:release_date_gte, source, user), do: max(source, user)
   defp narrow_release_bound(:release_date_lte, source, user), do: min(source, user)
 
-  defp build_url_params(assigns, overrides) do
-    params = %{"type" => to_string(assigns.media_type)}
-
-    category = Keyword.get(overrides, :category, to_string(assigns.category))
-
-    params =
-      if category != "trending" do
-        Map.put(params, "category", category)
-      else
-        params
-      end
-
-    params =
-      case {category, assigns[:source]} do
-        {"home", source} when not is_nil(source) ->
-          Map.put(params, "source", RegionalSources.to_param(source))
-
-        _ ->
-          params
-      end
-
-    genre = Keyword.get(overrides, :genre)
-
-    params =
-      cond do
-        genre != nil and genre != "" ->
-          Map.put(params, "genre", genre)
-
-        assigns.selected_genres != [] ->
-          Map.put(params, "genre", Enum.join(assigns.selected_genres, ","))
-
-        true ->
-          params
-      end
-
-    language = Keyword.get(overrides, :language, assigns.selected_language)
-
-    params =
-      if language && language != "", do: Map.put(params, "language", language), else: params
-
-    params =
-      Enum.reduce([:year_from, :year_to], params, fn key, acc ->
-        case Keyword.get(overrides, key, Map.get(assigns, key)) do
-          value when value in [nil, ""] -> acc
-          value -> Map.put(acc, to_string(key), to_string(value))
-        end
-      end)
-
-    rating = Keyword.get(overrides, :rating, assigns.min_rating)
-
-    params =
-      if rating && rating != "", do: Map.put(params, "rating", to_string(rating)), else: params
-
-    default_sort = assigns[:default_sort] || "popularity.desc"
-    sort = Keyword.get(overrides, :sort, assigns.sort_by)
-    params = if sort && sort != default_sort, do: Map.put(params, "sort", sort), else: params
-
-    params
-  end
-
-  # Lenient: URL params are user-typed, so an unknown ?type= falls back to
-  # movies rather than erroring.
-  defp parse_media_type("tv_show"), do: :tv_show
-  defp parse_media_type(_), do: :movie
-
   # Strict: phx-value payloads are client-controlled, and
   # String.to_existing_atom/1 would raise on anything unexpected and take the
   # LiveView down with it. Match the two known types explicitly instead.
   defp parse_event_media_type("movie"), do: {:ok, :movie}
   defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_event_media_type(_), do: :error
-
-  defp parse_category(nil, _), do: :trending
-  defp parse_category("discover", _), do: :discover
-  defp parse_category("home", _), do: :home
-  defp parse_category("popular", _), do: :popular
-  defp parse_category("upcoming", :movie), do: :upcoming
-  defp parse_category("now_playing", :movie), do: :now_playing
-  defp parse_category("on_the_air", :tv_show), do: :on_the_air
-  defp parse_category("airing_today", :tv_show), do: :airing_today
-  defp parse_category(_, _), do: :trending
-
-  defp parse_genres_param(nil), do: []
-  defp parse_genres_param(""), do: []
-
-  defp parse_genres_param(genres_string) do
-    genres_string
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-  end
-
-  defp parse_year_param(nil), do: nil
-  defp parse_year_param(""), do: nil
-
-  defp parse_year_param(year_string) do
-    case Integer.parse(year_string) do
-      {year, ""} when year >= 1900 and year < 2100 -> year
-      _ -> nil
-    end
-  end
-
-  # A reversed range is almost always a slip, so it is read as the range the
-  # user meant rather than one that matches nothing.
-  defp order_years(from, to) when is_integer(from) and is_integer(to) and from > to,
-    do: {to, from}
-
-  defp order_years(from, to), do: {from, to}
-
-  defp parse_rating_param(nil), do: nil
-  defp parse_rating_param(""), do: nil
-
-  defp parse_rating_param(rating_string) do
-    case Float.parse(rating_string) do
-      {rating, _} when rating >= 0 and rating <= 10 -> rating
-      _ -> nil
-    end
-  end
-
-  defp parse_page_param(nil), do: 1
-
-  defp parse_page_param(page_string) do
-    case Integer.parse(page_string) do
-      {page, ""} when page > 0 -> page
-      _ -> 1
-    end
-  end
 end

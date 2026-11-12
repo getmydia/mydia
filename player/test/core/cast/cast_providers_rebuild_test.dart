@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/merged_roster.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/core/sources/capabilities.dart';
@@ -296,6 +297,33 @@ void main() {
 
       expect(identical(container.read(ambientTargetsProvider), before), isTrue,
           reason: 'the provider never reads nodeAddr');
+    });
+
+    test(
+        'a player found stopped clears its hidden banner, with nothing '
+        'watching ambientPlayingProvider', () async {
+      final statusNotifier = _FakeP2pStatusNotifier();
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        _rosterOf(<String, dynamic>{
+          '__typename': 'Query',
+          'devices': [_device('hall-screen', 'b' * 64, online: true)],
+        }),
+      ]);
+      addTearDown(container.dispose);
+      expect(container.read(ambientTargetsProvider), isNull);
+      statusNotifier.publish('a' * 64);
+      container
+          .read(ambientDismissalsProvider.notifier)
+          .dismissKey(AmbientDismissal('b' * 64, 'The Lantern Keepers'));
+
+      // The fake host cannot reach the player, so the probe answers "not
+      // playing", as it does for any device that stopped or went away.
+      await container.read(ambientTargetsProvider)!.sweep();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(ambientDismissalsProvider), isEmpty);
     });
   });
 

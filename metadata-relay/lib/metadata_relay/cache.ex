@@ -19,6 +19,7 @@ defmodule MetadataRelay.Cache do
   - Season/episode data still being filled in: 6 hours TTL (see
     `MetadataRelay.Cache.Settling`)
   - Search results: 7 days TTL
+  - Person details and credits: 3 days TTL
   - Trending: 1 hour TTL
   - Default: 24 hours TTL
 
@@ -38,6 +39,14 @@ defmodule MetadataRelay.Cache do
   @details_ttl :timer.hours(24 * 30)
   @season_ttl :timer.hours(24 * 14)
   @watch_providers_ttl :timer.hours(24)
+  @person_ttl :timer.hours(24 * 3)
+
+  # Lists TMDB ranks by popularity or date, paged by `page=`. Each page is
+  # cached on its own, whenever it is first asked for, so a long TTL serves a
+  # client page 6 from one week's ranking and page 7 from another's, and the
+  # titles that moved between them show up twice (#1378). Fixed lists
+  # (`/tmdb/list/:id`) are not ranked and keep the default.
+  @ranked_list_pattern ~r{:/tmdb/(movies|tv|person)/(discover|popular|upcoming|now_playing|on_the_air|airing_today):}
 
   @doc """
   Builds a cache key from request method, path, and query string.
@@ -130,6 +139,11 @@ defmodule MetadataRelay.Cache do
       String.contains?(key, "/trending") ->
         @trending_ttl
 
+      # Ranked lists drift as fast as trending does. Ahead of the person rule,
+      # which would otherwise claim /tmdb/person/popular.
+      Regex.match?(@ranked_list_pattern, key) ->
+        @trending_ttl
+
       # Streaming catalogues per region change slowly but do change
       String.contains?(key, "/watch/providers") ->
         @watch_providers_ttl
@@ -149,6 +163,11 @@ defmodule MetadataRelay.Cache do
       # Season/episode data - stable once aired
       String.contains?(key, "/tv/shows/") and String.match?(key, ~r{/\d+/\d+:}) ->
         @season_ttl
+
+      # A person's details and credits gain new titles as they are announced.
+      # The person search route matched "/search" above.
+      String.contains?(key, "/tmdb/person/") ->
+        @person_ttl
 
       # Default for other endpoints
       true ->

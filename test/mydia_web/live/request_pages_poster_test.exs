@@ -69,7 +69,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
       Mydia.Media.create_media_item(
         Scope.unrestricted(),
         %{type: "movie", title: "Lantern Harbor", year: 2021},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     request = request_fixture(guest, %{poster_path: "/stub-movie-poster.jpg"})

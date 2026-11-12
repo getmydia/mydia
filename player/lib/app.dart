@@ -12,6 +12,7 @@ import 'core/sources/lock/source_lock_controller.dart';
 import 'core/sources/lock/window_privacy.dart';
 import 'core/sources/sources_providers.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
+import 'core/sources/connection/app_foreground.dart';
 import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
@@ -28,6 +29,8 @@ import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'presentation/widgets/toast/toaster.dart' show showToast;
 import 'core/p2p/media_proxy_factory.dart' show mediaProxyProvider;
+import 'core/sources/files/files_providers.dart' show filesCastBridgeProvider;
+import 'core/sources/files/smb_native.dart' show smbNativeProvider;
 import 'core/providers/providers.dart';
 import 'core/cache/resume_gate.dart';
 import 'core/cache/watcher_registry.dart';
@@ -55,6 +58,8 @@ import 'presentation/screens/settings/dialog/open_settings.dart'
     show routeMenuNavigation, settingsDialogEnabledProvider;
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/p2p/peer_sync_service.dart'
+    show peerSyncServiceProvider;
 import 'package:player/native/lib.dart';
 
 /// Answers one inbound control [request], re-checking the opt-out first.
@@ -251,8 +256,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // startup. Restoring a cast session before one exists is meaningless
     // anyway: there is no instance to sync progress to or reach.
     //
-    // Starting remote control shares the same gate for the same reason:
-    // `NodeRegistration` and `RemoteRoster` both need a Mydia instance.
+    // The receiver that answers other devices is not gated on an account: two
+    // Files-only players paired with each other have no Mydia server, and
+    // each must still answer the other's discovery (`Hello`) request. Only
+    // registering the node id needs a Mydia instance, and that is done by
+    // `nodeRegistrationsProvider`, not here. Started once at launch, and
+    // retried by the listeners below.
+    unawaited(_initRemoteControlIfEnabled());
     ref.listenManual<bool>(
       hasMydiaProvider,
       (previous, next) {
@@ -269,14 +279,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // `_initRemoteControlIfEnabled` no-ops once a receiver is actually
     // wired (see `RemoteControlInitGate`), so re-invoking it here on every
     // change is safe, and is what makes the settings switch take effect for
-    // the rest of this launch instead of only the next one. Gated on auth
-    // the same way `_initRemoteControlIfEnabled` itself is: with no Mydia
-    // server stored there is nothing to register with.
+    // the rest of this launch instead of only the next one.
     ref.listenManual<AsyncValue<bool>>(
       remoteControlEnabledProvider,
       (previous, next) {
         if (next.value != true) return;
-        if (!ref.read(hasMydiaProvider)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
     );
@@ -294,6 +301,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       },
       fireImmediately: true,
     );
+
+    // Initialize P2P peer sync service alongside node registrations.
+    unawaited(ref.read(peerSyncServiceProvider).start());
 
     // Fire and forget: the source starts on its fallback layout, so the
     // chrome renders correctly before this completes and simply re-renders
@@ -484,6 +494,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     ref.read(sourceLockProvider.notifier).onLifecycle(state);
+    ref.read(appForegroundProvider).onLifecycle(state);
     if (state == AppLifecycleState.resumed) {
       ref
           .read(connectionRefreshBusProvider)
@@ -495,6 +506,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       ref.read(mediaProxyProvider).healListener().then<void>((_) {},
           onError: (Object e) =>
               debugPrint('[MyApp] Media proxy heal failed: $e'));
+      // The SMB loopback listener is reclaimed the same way. Its heals reach
+      // the player through `SmbNative.heals`. Web has no SMB native.
+      if (!kIsWeb) {
+        ref.read(smbNativeProvider).healListener().then<void>((_) {},
+            onError: (Object e) =>
+                debugPrint('[MyApp] SMB listener heal failed: $e'));
+      }
+      ref.read(filesCastBridgeProvider).healListener().then<void>((_) {},
+          onError: (Object e) =>
+              debugPrint('[MyApp] Files cast bridge heal failed: $e'));
     }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.

@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media
   alias Mydia.Media.Add
+  alias Mydia.Media.AddDefaults
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata.Ref
@@ -17,6 +18,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.PersonModal
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
@@ -89,19 +91,27 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   @doc """
-  Adds a recommended title, inheriting the viewed item's quality profile and
-  monitored flag.
+  Adds a recommended title. One of the viewed item's type inherits its quality
+  profile and monitored flag; any other type gets that type's add defaults.
 
   Keyed per TMDB id so several can be in flight at once: `start_async/3`
   overwrites rather than cancels under an existing key, which would silently drop
   the first result.
+
+  The media type is the clicked card's (`params["media_type"]`), falling back to
+  the viewed item's: a person's TV credit opened on a movie's page is a show.
   """
   def add_recommendation(%{"ref" => raw_ref} = params, socket) do
-    media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
+    media_type = param_media_type(params["media_type"]) || viewed_media_type(socket)
 
     with :ok <- Authorization.authorize_create_media(socket),
          {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], media_type) do
+      opts =
+        opts
+        |> Keyword.put(:media_type, media_type)
+        |> Keyword.put(:add_defaults_user, socket.assigns[:current_user])
+
       dispatch_add(ref, opts, socket)
     else
       {:unauthorized, socket} ->
@@ -124,7 +134,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   Adds a recommendation with opts already resolved by the configure dialog.
 
   Skips `library_path_opts/2` because
-  `MediaAddHelpers.add_opts_from_config/3` has already run it.
+  `MediaAddHelpers.add_opts_from_config/3` has already run it. `opts` may carry
+  `:media_type` (see `perform_add/5`).
   """
   def add_recommendation_with_opts(ref, opts, socket) do
     dispatch_add(ref, opts, socket)
@@ -137,7 +148,9 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # The in-flight set stays keyed on the tmdb id alone (recommendations are
   # always TMDB-sourced, so the ref's tag never varies) and `opts` rides beside
   # it. Folding the library into the key would let a double-click through two
-  # different libraries past this guard and onto the unique index.
+  # different libraries past this guard and onto the unique index. A person's
+  # movie and show that share a TMDB id therefore cannot be added at the same
+  # moment; the second click is dropped until the first lands.
   defp dispatch_add(ref, opts, socket) do
     tmdb_id = Ref.id(ref)
 
@@ -174,8 +187,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   The rail renders a Request button rather than Add for guests, so this LiveView
   needs its own handler for it: the card's event reaches `MediaLive.Show`, which
   otherwise has no `request_media` clause at all.
+
+  The click is resolved by `params["media_type"]` when it is sent, since a
+  person's titles can hold a movie and a show with one TMDB id, and the
+  request is recorded under the resolved item's own media type.
   """
-  def request_recommendation(%{"ref" => raw_ref}, socket) do
+  def request_recommendation(%{"ref" => raw_ref} = params, socket) do
     with :ok <- Authorization.authorize_submit_request(socket),
          {:ok, ref} <- Ref.parse(raw_ref) do
       id_string = to_string(Ref.id(ref))
@@ -187,7 +204,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       # :recommendations dropped a guest's Request click there silently.
       # Discover hit the same failure for its modal; see the explanatory
       # comment on its `{:request_media, ...}` handle_info clause.
-      case DetailModal.find_selectable_item(DetailModalEvents.item_lists(socket), id_string) do
+      case DetailModal.find_selectable_item(
+             DetailModalEvents.item_lists(socket),
+             id_string,
+             param_media_type(params["media_type"])
+           ) do
         nil -> {:noreply, socket}
         item -> submit_request(item, id_string, socket)
       end
@@ -198,7 +219,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   defp submit_request(item, tmdb_id, socket) do
-    media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
+    media_type = item_media_type(item) || viewed_media_type(socket)
 
     socket = assign(socket, :requesting_recommendation_id, tmdb_id)
 
@@ -235,6 +256,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
               status_map
             )
           )
+          |> PersonModal.refresh_titles()
 
         {:noreply,
          socket
@@ -257,9 +279,15 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   @doc """
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
+
+  `opts[:media_type]` is the type of the title being added, defaulting to the
+  viewed `media_item`'s. `opts[:add_defaults_user]`, when present, asks for
+  the add defaults of a title whose type differs from the viewed item's. The
+  rest of `opts` goes to the add.
   """
   def perform_add(scope, media_item, ref, config, opts \\ []) do
-    media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
+    {media_type, opts} = Keyword.pop(opts, :media_type, item_type(media_item))
+    {defaults, opts} = default_add_opts(media_item, media_type, ref, opts)
 
     MediaAddHelpers.handle_add_media_to_library(
       scope,
@@ -267,10 +295,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       media_type,
       %{},
       config,
-      Keyword.merge(
-        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
-        opts
-      )
+      defaults |> Keyword.merge(opts) |> Keyword.put_new(:episodes, :background)
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}
@@ -283,36 +308,18 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
-    socket =
-      socket
-      |> clear_in_flight(tmdb_id)
-      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
-      |> assign(
-        :selected_recommendations,
-        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
-      )
-
     {:noreply,
      socket
-     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
+     |> mark_added(tmdb_id, added)
+     |> put_flash(:info, MediaAddHelpers.added_message(added))}
   end
 
   # Not an error from here up: the title the user clicked is already in the
   # library, just under a card this rail had not linked up yet.
   def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
-    socket =
-      socket
-      |> clear_in_flight(tmdb_id)
-      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
-      |> assign(
-        :selected_recommendations,
-        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
-      )
-
     {:noreply,
      socket
-     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
+     |> mark_added(tmdb_id, added)
      |> put_flash(:info, gettext("%{title} is already in your library", title: added.title))}
   end
 
@@ -338,6 +345,36 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   ## Private
+
+  # A title of the viewed item's own type inherits its monitored flag and
+  # quality profile. Any other type (a person's TV credit on a movie's page)
+  # must not: a one-click add (`:add_defaults_user` set) resolves that type's
+  # add defaults the way Discover does, and the configure dialog's opts already
+  # carry them. Resolved here, in the add task, because the franchise layer can
+  # reach the relay.
+  defp default_add_opts(media_item, media_type, ref, opts) do
+    {defaults_user, opts} = Keyword.pop(opts, :add_defaults_user, :none)
+
+    cond do
+      media_type == item_type(media_item) ->
+        {[monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
+         opts}
+
+      defaults_user == :none ->
+        {[], opts}
+
+      true ->
+        defaults =
+          defaults_user
+          |> AddDefaults.resolve(media_type,
+            library_path_id: opts[:library_path_id],
+            tmdb_id: Ref.tmdb_id(ref)
+          )
+          |> AddDefaults.to_add_opts_with_search()
+
+        {defaults, opts}
+    end
+  end
 
   # The library join lives here rather than in Mydia.Media.Recommendations
   # because it needs MediaAddHelpers, and a context under Mydia.* must not depend
@@ -432,11 +469,16 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # and closes the dialog out from under the user mid-browse, instead of
   # re-opening the dialog over that title. See the module doc on
   # `DetailModalEvents.decorate/2` for the read-path half of the same rule.
+  #
+  # Matched on media type as well as TMDB id: a show added from a person's
+  # titles must not mark a same-id movie recommendation owned.
   defp mark_owned(recommendations, added, opts \\ []) do
     navigate? = Keyword.get(opts, :navigate, true)
+    added_type = item_type(added)
 
     Enum.map(recommendations, fn item ->
-      if safe_provider_id(item) == added.tmdb_id do
+      if safe_provider_id(item) == added.tmdb_id and
+           Map.get(item, :media_type) in [nil, added_type] do
         item =
           item
           |> Map.put(:in_library, true)
@@ -453,6 +495,34 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       end
     end)
   end
+
+  defp mark_added(socket, tmdb_id, added) do
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+      |> assign(
+        :selected_recommendations,
+        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
+      )
+      |> PersonModal.refresh_titles()
+
+    DetailModal.refresh_selected(socket, DetailModalEvents.item_lists(socket))
+  end
+
+  defp viewed_media_type(socket), do: item_type(socket.assigns.media_item)
+
+  defp item_type(%{type: "tv_show"}), do: :tv_show
+  defp item_type(_), do: :movie
+
+  defp item_media_type(%{media_type: media_type}) when media_type in [:movie, :tv_show],
+    do: media_type
+
+  defp item_media_type(_), do: nil
+
+  defp param_media_type("movie"), do: :movie
+  defp param_media_type("tv_show"), do: :tv_show
+  defp param_media_type(_), do: nil
 
   defp describe({:changeset, changeset}),
     do: MediaAddHelpers.format_changeset_errors(changeset)

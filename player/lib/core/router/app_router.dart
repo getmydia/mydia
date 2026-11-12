@@ -30,7 +30,12 @@ import '../../presentation/screens/favorites/favorites_screen.dart';
 import '../../presentation/screens/recently_added/recently_added_screen.dart';
 import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/add_smb_screen.dart';
+import '../../presentation/screens/sources/add_webdav_screen.dart';
+import '../sources/files/files_account.dart'
+    show isSmbAccountId, kFilesLocalAccountId;
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -38,6 +43,7 @@ import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
+import '../../presentation/screens/settings/paired_devices_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../l10n/l10n.dart';
@@ -194,6 +200,19 @@ String? addMydiaRouteRedirect({
 }) =>
     (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
+/// Where signing files account [accountId] in again goes: Add folder for
+/// this device's folders, the SMB or WebDAV form, address filled in, for a
+/// share.
+String filesReauthLocation(String? accountId) =>
+    accountId == null || accountId == kFilesLocalAccountId
+        ? '/sources/add/folder'
+        : Uri(
+            path: isSmbAccountId(accountId)
+                ? '/sources/add/smb'
+                : '/sources/add/webdav',
+            queryParameters: {'account': accountId},
+          ).toString();
+
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
 String? appRedirect({
@@ -345,6 +364,38 @@ GoRouter appRouter(Ref ref) {
         builder: (context, state) => StashConnectScreen(
           reauthAccountId: state.uri.queryParameters['account'],
         ),
+      ),
+      GoRoute(
+        path: '/sources/add/folder',
+        name: 'add_source_folder',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const AddFolderScreen(),
+      ),
+      GoRoute(
+        path: '/sources/add/webdav',
+        name: 'add_source_webdav',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => AddWebDavScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/smb',
+        name: 'add_source_smb',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => AddSmbScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      // Signing a files account in again (`SettingsNav.reauth`): the folder
+      // picker for this device, the login form for a WebDAV share.
+      GoRoute(
+        path: '/sources/add/files',
+        name: 'add_source_files',
+        parentNavigatorKey: rootNavigatorKey,
+        redirect: (context, state) =>
+            filesReauthLocation(state.uri.queryParameters['account']),
+        builder: (context, state) => const SizedBox.shrink(),
       ),
       GoRoute(
         path: '/sources/add/jellyfin',
@@ -608,6 +659,12 @@ GoRouter appRouter(Ref ref) {
         name: 'diagnostics',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DiagnosticsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/paired-devices',
+        name: 'paired_devices',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const PairedDevicesScreen(),
       ),
       GoRoute(
         path: '/collection/:id',

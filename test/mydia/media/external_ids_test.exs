@@ -137,7 +137,7 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, log} =
         with_log(fn ->
           ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
-            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
+            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, episodes: :skip)
           end)
         end)
 
@@ -163,7 +163,7 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, _log} =
         with_log(fn ->
           ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
-            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
+            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, episodes: :skip)
           end)
         end)
 
@@ -240,9 +240,7 @@ defmodule Mydia.Media.ExternalIdsTest do
             # the retry hits a constraint the pre-pass could not have seen.
             attrs
             |> Map.put_new(:tmdb_id, 1399)
-            |> then(
-              &Mydia.Media.create_media_item(Scope.unrestricted(), &1, skip_episode_refresh: true)
-            )
+            |> then(&Mydia.Media.create_media_item(Scope.unrestricted(), &1, episodes: :skip))
           end)
         end)
 

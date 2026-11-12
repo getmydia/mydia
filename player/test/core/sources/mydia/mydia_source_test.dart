@@ -49,6 +49,72 @@ void main() {
     expect(b.t.calls.last.vars['first'], 20);
   });
 
+  group('trending', () {
+    Map<String, dynamic> row(String id, String type, int? rank) => {
+          ...fx.recentlyAdded(id, type: type, addedAt: '2024-05-01T00:00:00Z'),
+          'trendingRank': rank,
+        };
+
+    test('trending maps rows with trendingRank', () async {
+      final b = build();
+      b.t.handlers['TrendingInLibrary'] = (_) => {
+            'trendingInLibrary': [
+              row('m-4', 'MOVIE', 1),
+              row('m-1', 'MOVIE', 2),
+            ]
+          };
+      final items = await (b.source as Trending).trending(ItemKind.movie);
+      expect(
+          items.map((i) => i.item.ref.kind), [ItemKind.movie, ItemKind.movie]);
+      expect(items.map((i) => i.item.title),
+          ['Invented Arrival m-4', 'Invented Arrival m-1']);
+      expect(items.map((i) => i.rank), [1, 2]);
+      expect(b.t.calls.last.operation, 'TrendingInLibrary');
+      expect(b.t.calls.last.vars['type'], 'MOVIE');
+      expect(b.t.calls.last.vars['first'], 20);
+    });
+
+    test('shows ask for TV_SHOW', () async {
+      final b = build();
+      b.t.handlers['TrendingInLibrary'] = (_) => {
+            'trendingInLibrary': [row('s-1', 'TV_SHOW', 1)]
+          };
+      final items = await (b.source as Trending).trending(ItemKind.show);
+      expect(items.single.item.ref.kind, ItemKind.show);
+      expect(b.t.calls.last.vars['type'], 'TV_SHOW');
+    });
+
+    test('rows without trendingRank are dropped', () async {
+      final b = build();
+      b.t.handlers['TrendingInLibrary'] = (_) => {
+            'trendingInLibrary': [
+              row('m-4', 'MOVIE', null),
+              row('m-1', 'MOVIE', 3)
+            ]
+          };
+      final items = await (b.source as Trending).trending(ItemKind.movie);
+      expect(items.map((i) => i.item.ref.externalId), ['m-1']);
+    });
+
+    test('old server answers an empty list', () async {
+      final b = build();
+      b.t.handlers['TrendingInLibrary'] = (_) => throw const SourceException
+          .server(
+          'Cannot query field "trendingInLibrary" on type "RootQueryType".');
+      expect(await (b.source as Trending).trending(ItemKind.movie), isEmpty);
+    });
+
+    test('other GraphQL errors still throw', () async {
+      final b = build();
+      b.t.handlers['TrendingInLibrary'] =
+          (_) => throw const SourceException.server('boom');
+      await expectLater(
+        (b.source as Trending).trending(ItemKind.movie),
+        throwsA(isA<SourceException>()),
+      );
+    });
+  });
+
   test('browse offers every sort but random, tagging the shared three',
       () async {
     final libs = await build().source.libraries();

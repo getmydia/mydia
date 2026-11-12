@@ -1,36 +1,11 @@
 ---
-const features = [
-  {
-    title: 'Media Library',
-    description: 'Organize your movies and TV shows with automatic file detection and library management.',
-    icon: 'film',
-  },
-  {
-    title: 'Automatic Metadata',
-    description: 'Fetches artwork, descriptions, ratings, and episode data from TVDB and TMDB automatically.',
-    icon: 'sparkles',
-  },
-  {
-    title: 'P2P Remote Access',
-    description: 'Stream your media from anywhere with decentralized peer-to-peer connectivity. No port forwarding needed.',
-    icon: 'globe',
-  },
-  {
-    title: 'Self-Hosted',
-    description: 'Run on your own hardware. Your data stays yours with complete privacy and control.',
-    icon: 'server',
-  },
-  {
-    title: 'Episode Tracking',
-    description: 'Track seasons, episodes, and watch progress across your entire TV collection.',
-    icon: 'list',
-  },
-  {
-    title: 'Docker Deploy',
-    description: 'Get up and running in minutes with a single Docker Compose file. Zero configuration hassle.',
-    icon: 'box',
-  },
-];
+interface Props {
+  title: string;
+  subtitle: string;
+  items: { title: string; description: string; icon: string }[];
+}
+
+const { title, subtitle, items } = Astro.props;
 
 const iconPaths: Record<string, string> = {
   film: 'M7 4v16M17 4v16M3 8h4m6 0h4m2 0h4M3 12h18M3 16h4m6 0h4m2 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z',
@@ -39,19 +14,27 @@ const iconPaths: Record<string, string> = {
   server: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01',
   list: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
   box: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+  download: 'M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4',
+  users: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+  play: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664zM21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  devices: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  cast: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 17.14 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0',
+  refresh: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+  sliders: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4',
+  lock: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
 };
 ---
 
 <section class="py-20 px-4 bg-base-200/50">
   <div class="max-w-6xl mx-auto">
     <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">
-      Everything you need
+      {title}
     </h2>
     <p class="text-base-content/60 text-center mb-14 max-w-xl mx-auto">
-      A complete media management solution built for self-hosters.
+      {subtitle}
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {features.map(feature => (
+      {items.map(feature => (
         <div class="card bg-base-100 border border-base-300 hover:border-primary/30 transition-colors">
           <div class="card-body">
             <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">

@@ -184,6 +184,7 @@ IconData sourceKindIcon(SourceKind kind) => switch (kind) {
       SourceKind.plex => Icons.live_tv_rounded,
       SourceKind.stash => Icons.video_library_rounded,
       SourceKind.jellyfin => Icons.smart_display_rounded,
+      SourceKind.files => Icons.folder_rounded,
     };
 
 /// Sources grouped by account, in the order each account first appears.

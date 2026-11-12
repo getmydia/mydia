@@ -230,6 +230,50 @@ defmodule MetadataRelay.CacheTest do
     end
   end
 
+  describe "ttl_for/1 for people" do
+    test "a person's details and credits expire after three days" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/4242:") == :timer.hours(24 * 3)
+    end
+
+    test "a person search keeps the search TTL" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/search:query=wren") ==
+               :timer.hours(24 * 7)
+    end
+
+    test "the popular people list is a ranked list and expires after an hour" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/person/popular:page=1") ==
+               :timer.hours(1)
+    end
+  end
+
+  # Each page of a ranked list is cached on its own, whenever it is first asked
+  # for. Held for weeks, page 7 comes from a different week's ranking than page
+  # 6 and a client paging through them shows whole blocks twice (#1378).
+  describe "ttl_for/1 for ranked lists" do
+    for path <- [
+          "/tmdb/movies/discover",
+          "/tmdb/tv/discover",
+          "/tmdb/movies/popular",
+          "/tmdb/tv/popular",
+          "/tmdb/movies/upcoming",
+          "/tmdb/movies/now_playing",
+          "/tmdb/tv/on_the_air",
+          "/tmdb/tv/airing_today"
+        ] do
+      test "#{path} expires after an hour" do
+        key =
+          MetadataRelay.Cache.build_key("GET", unquote(path), "page=7&sort_by=popularity.desc")
+
+        assert MetadataRelay.Cache.ttl_for(key) == :timer.hours(1)
+      end
+    end
+
+    test "a fixed TMDB list keeps the long metadata TTL" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/list/8512:page=1") ==
+               :timer.hours(24 * 30)
+    end
+  end
+
   describe "integration scenarios" do
     test "handles typical API request caching workflow" do
       # Simulate caching an API request/response

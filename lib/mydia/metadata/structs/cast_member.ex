@@ -14,14 +14,16 @@ defmodule Mydia.Metadata.Structs.CastMember do
     :name,
     :character,
     :order,
-    :profile_path
+    :profile_path,
+    :tmdb_person_id
   ]
 
   @type t :: %__MODULE__{
           name: String.t(),
           character: String.t() | nil,
           order: integer() | nil,
-          profile_path: String.t() | nil
+          profile_path: String.t() | nil,
+          tmdb_person_id: integer() | nil
         }
 
   @doc """

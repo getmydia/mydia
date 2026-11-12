@@ -56,7 +56,7 @@ defmodule Mydia.WatchSync.SchemasTest do
       Mydia.Media.create_media_item(
         Mydia.Accounts.Scope.unrestricted(),
         %{title: "Copy Index Show", type: "tv_show", tvdb_id: 900_001},
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     {:ok, episode} =

@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
   # Not async: these insert library paths, which candidate_libraries/1 reads
   # back through the shared sandbox connection.
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
@@ -138,6 +139,49 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
 
       assert {:ok, resolved, _reason} = TargetResolver.resolve(added)
       assert resolved.id == default.id
+    end
+  end
+
+  describe "episode fetch on a show-page add" do
+    test "a TV add through the rail enqueues the background episode fetch" do
+      source = media_item_fixture(%{type: "tv_show", title: "Source Show", year: 2001})
+      tmdb_id = unique_provider_id()
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => tmdb_id,
+            "name" => "Harbor Lights",
+            "first_air_date" => "2020-04-17",
+            "credits" => %{"cast" => [], "crew" => []},
+            "seasons" => []
+          })
+        )
+      end)
+
+      # The LiveView always passes a non-nil config, which alone would make
+      # the add inline.
+      config = %{Metadata.default_relay_config() | base_url: "http://localhost:#{bypass.port}"}
+
+      assert {:ok, added} =
+               RecommendationEvents.perform_add(
+                 Scope.unrestricted(),
+                 source,
+                 {:tmdb, tmdb_id},
+                 config
+               )
+
+      assert_enqueued(worker: Mydia.Jobs.EpisodeFetch, args: %{"media_item_id" => added.id})
     end
   end
 end

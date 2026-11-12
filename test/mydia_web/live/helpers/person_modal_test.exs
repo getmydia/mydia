@@ -1,0 +1,169 @@
+defmodule MydiaWeb.Live.Helpers.PersonModalTest do
+  use Mydia.DataCase, async: false
+
+  import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
+  import Mydia.MetadataCacheHelpers
+
+  alias Mydia.Accounts.Scope
+  alias Mydia.Media.RemoteSignals
+  alias Mydia.Metadata.Structs.{Person, PersonCredit, SearchResult}
+  alias MydiaWeb.Live.Helpers.PersonModal
+
+  defp person(movie_ids, show_ids) do
+    %Person{
+      tmdb_id: 1,
+      name: "Test Person",
+      movie_credits: Enum.map(movie_ids, &credit(&1, :movie)),
+      tv_credits: Enum.map(show_ids, &credit(&1, :tv_show))
+    }
+  end
+
+  defp credit(id, type),
+    do: %PersonCredit{tmdb_id: id, media_type: type, title: "Title #{id}", year: 2020}
+
+  describe "open/close/handle_result" do
+    defp host_socket do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          metadata_config: %{type: :metadata_relay, base_url: "http://localhost:1", options: %{}},
+          current_scope: Scope.unrestricted()
+        }
+      }
+      |> PersonModal.init()
+    end
+
+    test "open ignores params without an id or with a bad id" do
+      socket = host_socket()
+      assert PersonModal.open(socket, %{"name" => "x"}) == socket
+      assert PersonModal.open(socket, %{"id" => "abc"}) == socket
+    end
+
+    test "a result landing after close does not reopen the dialog" do
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.close()
+        |> PersonModal.handle_result({:ok, {:ok, {person([], []), []}}})
+
+      assert socket.assigns.selected_person == nil
+      assert socket.assigns.person_stub == nil
+    end
+
+    test "a stale result for another person is ignored" do
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "2", "name" => "Other"})
+        |> PersonModal.handle_result({:ok, {:ok, {person([], []), []}}})
+
+      assert socket.assigns.selected_person == nil
+      assert socket.assigns.person_loading
+    end
+
+    test "a result assigns the titles the fetch enriched, without re-reading them" do
+      # The enrichment (remote filter, library and request status) runs in the
+      # async fetch; handle_result must take its titles as given.
+      titles = [
+        %SearchResult{
+          provider: :metadata_relay,
+          provider_id: "77",
+          media_type: :movie,
+          title: "Given Title"
+        }
+      ]
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.handle_result({:ok, {:ok, {person([5], []), titles}}})
+
+      assert socket.assigns.person_titles == titles
+      assert %Person{tmdb_id: 1} = socket.assigns.selected_person
+      refute socket.assigns.person_loading
+    end
+  end
+
+  describe "refresh_titles/1" do
+    defp tmdb_title(id, type \\ :movie) do
+      %SearchResult{
+        provider: :tmdb,
+        provider_id: Integer.to_string(id),
+        media_type: type,
+        title: "Title #{id}"
+      }
+    end
+
+    test "an add that lands while the fetch runs is reflected when the titles arrive" do
+      id = unique_provider_id()
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.refresh_titles()
+
+      media_item_fixture(%{type: "movie", tmdb_id: id})
+
+      socket =
+        PersonModal.handle_result(
+          socket,
+          {:ok, {:ok, {person([id], []), [Map.put(tmdb_title(id), :in_library, false)]}}}
+        )
+
+      assert [%{in_library: true}] = socket.assigns.person_titles
+      refute socket.assigns.person_status_stale
+    end
+
+    test "re-reads status for the titles already shown, without re-filtering the credits" do
+      shown = unique_provider_id()
+      filtered_out = unique_provider_id()
+
+      socket =
+        host_socket()
+        |> PersonModal.open(%{"id" => "1", "name" => "Test Person"})
+        |> PersonModal.handle_result(
+          {:ok, {:ok, {person([shown, filtered_out], []), [tmdb_title(shown)]}}}
+        )
+
+      media_item_fixture(%{type: "movie", tmdb_id: shown})
+
+      socket = PersonModal.refresh_titles(socket)
+
+      assert [%{provider_id: provider_id, in_library: true}] = socket.assigns.person_titles
+      assert provider_id == Integer.to_string(shown)
+    end
+  end
+
+  describe "enrich_titles/2" do
+    test "library status is per media type when a movie and a show share an id" do
+      media_item_fixture(%{type: "movie", tmdb_id: 500})
+
+      titles = PersonModal.enrich_titles(person([500], [500]), Scope.unrestricted())
+
+      assert [%{media_type: :movie, in_library: true}, %{media_type: :tv_show, in_library: false}] =
+               titles
+    end
+
+    test "a restricted scope drops titles the remote filter refuses" do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      ok_id = unique_provider_id()
+      bad_id = unique_provider_id()
+
+      warm_remote_signals({:tmdb, ok_id}, :movie, %RemoteSignals{
+        content_rating: "PG",
+        age: 8,
+        category: "movie"
+      })
+
+      warm_remote_signals({:tmdb, bad_id}, :movie, %RemoteSignals{
+        content_rating: "R",
+        age: 17,
+        category: "movie"
+      })
+
+      titles = PersonModal.enrich_titles(person([ok_id, bad_id], []), scope)
+
+      assert Enum.map(titles, & &1.provider_id) == [Integer.to_string(ok_id)]
+    end
+  end
+end

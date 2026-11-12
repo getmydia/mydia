@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../../domain/detail/detail_art.dart';
@@ -68,7 +69,11 @@ class DetailScreenFrame<T> extends StatelessWidget {
                 ),
                 Expanded(
                   child: value.when(
-                    data: (data) => builder(context, data),
+                    // The page's sections, top to bottom, are the order UP
+                    // and DOWN step through on the television tier (see
+                    // FocusMemoryColumn); inert elsewhere.
+                    data: (data) =>
+                        FocusMemoryColumn(child: builder(context, data)),
                     loading: () => const DetailLoadingState(),
                     error: (error, _) => DetailErrorState(
                       noun: noun,

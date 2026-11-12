@@ -645,7 +645,7 @@ defmodule Mydia.PlaybackTest do
           type: "tv_show",
           monitored: true
         },
-        skip_episode_refresh: true
+        episodes: :skip
       )
 
     Media.create_episode(%{
@@ -666,7 +666,7 @@ defmodule Mydia.PlaybackTest do
         type: "tv_show",
         monitored: true
       },
-      skip_episode_refresh: true
+      episodes: :skip
     )
   end
 

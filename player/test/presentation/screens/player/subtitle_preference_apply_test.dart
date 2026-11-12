@@ -105,6 +105,11 @@ class _ProbedPlayer extends PlatformPlayer {
     tracksController.add(state.tracks);
   }
 
+  /// What mpv reports once a frame has decoded: `player.stream.width` is the
+  /// screen's first-frame signal, and the embedded preference's backstop is
+  /// timed from it.
+  void emitFirstFrame() => widthController.add(1920);
+
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     selectedSubtitleTracks.add(track);
@@ -668,9 +673,44 @@ void main() {
         reason: "the preference lands on mpv's own English track");
   });
 
-  testWidgets(
-      'if mpv never reports tracks, the preference fetches from the server',
+  testWidgets('an embedded preference keeps waiting for mpv past the track cap',
       (tester) async {
+    // The iPad sequence: the 3 s cap ran out before mpv listed anything, the
+    // preference matched the server's list and asked the server to extract an
+    // embedded stream mpv listed itself four seconds later.
+    final player = _SlowProbePlayer(
+      mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
+    );
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      file: _embeddedEnglishFile(),
+    );
+
+    await _mount(tester, link, player);
+    // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'the cap expiring is not mpv listing its tracks: an embedded '
+            'stream must not be fetched from the server while mpv may still '
+            'offer it');
+    expect(player.selectedSubtitleTracks, isEmpty);
+
+    player.probe();
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'mpv carries the stream itself, so the server must not be '
+            'asked to extract it');
+    expect(player.selectedSubtitleTracks.single.id, '1',
+        reason: "the preference lands on mpv's own English track");
+  });
+
+  testWidgets(
+      'if mpv never reports tracks, the preference fetches from the server '
+      'five seconds after the first frame', (tester) async {
     final player = _SlowProbePlayer(mpvSubtitles: const []);
     final link = _link(
       preferredSubtitle:
@@ -681,10 +721,43 @@ void main() {
     await _mount(tester, link, player);
     // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
     await tester.pump(const Duration(seconds: 4));
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'still inside the wait for mpv');
+
+    player.emitFirstFrame();
+    await tester.pump(const Duration(milliseconds: 4900));
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'the backstop runs from the first frame, not from the cap');
+
+    await tester.pump(const Duration(milliseconds: 200));
     await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
 
     expect(_subtitleContentRequests(link), 1,
-        reason: "with no mpv list the server's copy is the only one there is");
+        reason: "with no mpv list the server's copy is the only one there is: "
+            'the preference is delayed, never dropped');
+
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    expect(player.selectedSubtitleTracks.last.language, 'eng',
+        reason: "the server's English copy reached the player");
+  });
+
+  testWidgets('a sidecar preference applies as soon as the cap expires',
+      (tester) async {
+    final player = _SlowProbePlayer(mpvSubtitles: const []);
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      // The default fixture track: a sidecar with a URL of its own.
+      file: mediaFileWithSubtitle(),
+    );
+
+    await _mount(tester, link, player);
+    await tester.pump(const Duration(seconds: 4));
+    await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
+
+    expect(_subtitleContentRequests(link), 1,
+        reason: 'mpv will never list a sidecar, so there is nothing to wait '
+            'for, and no first frame is needed either');
   });
 
   testWidgets('selecting a track mpv already carries shows no loading toast',

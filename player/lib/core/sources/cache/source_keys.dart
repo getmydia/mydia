@@ -24,6 +24,7 @@ abstract final class SourceOps {
   static const String unwatched = 'unwatched';
   static const String favorites = 'favorites';
   static const String recentlyAdded = 'recentlyAdded';
+  static const String trending = 'trending';
 
   /// Every operation. `source_rules_test.dart` checks that
   /// `SourceRules.watchedChanged` covers each one except `libraries`,
@@ -36,6 +37,7 @@ abstract final class SourceOps {
     unwatched,
     favorites,
     recentlyAdded,
+    trending,
     libraries,
     browse,
     item,
@@ -95,6 +97,9 @@ abstract final class SourceKeys {
 
   static QueryKey recentlyAdded(SourceId id) =>
       QueryKey(operation(id, SourceOps.recentlyAdded));
+
+  static QueryKey trending(SourceId id, ItemKind kind) =>
+      QueryKey(operation(id, SourceOps.trending), {'kind': kind.name});
 
   /// Every key of [op] on source [id], whatever its arguments.
   static FamilyTarget family(SourceId id, String op) =>

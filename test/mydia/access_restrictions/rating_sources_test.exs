@@ -92,7 +92,7 @@ defmodule Mydia.AccessRestrictions.RatingSourcesTest do
       {:ok, attrs} = Add.resolve_attrs({:tmdb, id}, :movie, ctx.config)
 
       {:ok, item} =
-        Add.from_attrs(Scope.unrestricted(), attrs, ctx.config, skip_episode_refresh: true)
+        Add.from_attrs(Scope.unrestricted(), attrs, ctx.config, episodes: :skip)
 
       assert Media.get_media_item!(Scope.unrestricted(), item.id).content_rating_age == 8
     end
