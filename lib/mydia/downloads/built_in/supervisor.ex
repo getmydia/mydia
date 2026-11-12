@@ -1,97 +1,34 @@
 defmodule Mydia.Downloads.BuiltIn.Supervisor do
   @moduledoc """
-  Starts the built-in torrent client when `Config` says it is enabled.
+  One running instance of the built-in torrent client: `Status`, `Engine` and,
+  with the VPN on, the `Vpn` gate.
+
+  `Mydia.Downloads.BuiltIn.Manager` decides what runs and starts this tree
+  under a `DynamicSupervisor`, replacing the whole tree whenever the effective
+  config changes. The tree only builds its children from the options it is
+  given; it reads no environment and stores nothing globally.
 
   `rest_for_one`: if `Status` restarts, the engine and the VPN gate restart
   with it, so nothing reports into a fresh, empty status.
+
+  Options: `:config` (a `Config`, required), `:credentials` (required),
+  `:api_port` (default `config.api_port`), `:expected_hash` (the settings file
+  hash the `Vpn` gate waits for) and `:rqbit_path` (default `"rqbit"`).
   """
 
   use Supervisor
-  require Logger
 
-  alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.{Config, Engine, Runtime, Status, Vpn}
+  alias Mydia.Downloads.BuiltIn.{Config, Engine, Status, Vpn}
 
   # The engine's terminate waits up to 10s for rqbit to exit.
   @engine_shutdown_ms 15_000
 
-  def start_link(opts \\ []), do: Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+  def start_link(opts), do: Supervisor.start_link(__MODULE__, opts)
 
   @impl true
   def init(opts) do
-    # The built-in client is on by default, so nothing it does at boot may
-    # take the application down with it.
-    children =
-      try do
-        build_children(opts)
-      rescue
-        e ->
-          Logger.error("built-in torrent client not started: #{Exception.message(e)}")
-          BuiltIn.clear_runtime()
-          []
-      end
-
-    Supervisor.init(children, strategy: :rest_for_one)
+    opts |> Keyword.fetch!(:config) |> children(opts) |> Supervisor.init(strategy: :rest_for_one)
   end
-
-  defp build_children(opts) do
-    {types, name_taken?} =
-      case configured_clients() do
-        :unknown -> {:unknown, false}
-        summary -> summary
-      end
-
-    config = Config.load(System.get_env(), types, name_taken: name_taken?)
-
-    # With the client off it is not listed anywhere, so the log is the only
-    # place left to say why.
-    if {:reserved_name_taken} in config.warnings do
-      Logger.warning(Status.describe({:reserved_name_taken}))
-    end
-
-    credentials = {"mydia", Base.url_encode64(:crypto.strong_rand_bytes(24), padding: false)}
-    api_port = Keyword.get(opts, :api_port, config.api_port)
-
-    remember(config)
-
-    # Never leave an entry from an earlier start behind when this one is off.
-    if config.enabled? do
-      BuiltIn.put_runtime(%Runtime{api_port: api_port, credentials: credentials, config: config})
-    else
-      BuiltIn.clear_runtime()
-    end
-
-    children(config, Keyword.merge(opts, credentials: credentials, api_port: api_port))
-  end
-
-  @doc """
-  Records an enabled client in its state directory, so it stays on after the
-  user adds clients of their own, and forgets it on MYDIA_TORRENT_ENABLED=false.
-  A failed write only costs the stickiness, so it is logged, never raised.
-  """
-  @spec remember(Config.t()) :: :ok
-  def remember(%Config{enabled?: true} = config) do
-    path = Config.marker_path(config)
-
-    with false <- File.regular?(path),
-         :ok <- File.mkdir_p(Path.dirname(path)),
-         {:error, reason} <- File.write(path, "") do
-      Logger.warning(
-        "could not record the built-in torrent client at #{path}: #{inspect(reason)}"
-      )
-    else
-      _ -> :ok
-    end
-
-    :ok
-  end
-
-  def remember(%Config{explicit: false} = config) do
-    _ = File.rm(Config.marker_path(config))
-    :ok
-  end
-
-  def remember(%Config{}), do: :ok
 
   @spec children(Config.t(), keyword()) :: [Supervisor.child_spec() | {module(), keyword()}]
   def children(%Config{enabled?: false}, _opts), do: []
@@ -109,34 +46,9 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
       )
 
     base = [{Status, warnings: config.warnings}, engine]
-    if config.vpn?, do: base ++ [{Vpn, config: config}], else: base
-  end
 
-  # The clients configured other than the built-in one: database rows plus
-  # DOWNLOAD_CLIENT_<N>_* blocks. The built-in client is rejected explicitly:
-  # after a supervisor restart it is already in the runtime list, and counting
-  # it as an rqbit client would switch it off.
-  defp configured_clients do
-    Mydia.Settings.list_download_client_configs()
-    |> Enum.reject(&BuiltIn.managed?(%{connection_settings: &1.connection_settings}))
-    |> summarize_clients()
-  rescue
-    e ->
-      Logger.warning(
-        "could not read the download clients, so this boot does not count as a new install for the built-in torrent client: #{Exception.message(e)}"
-      )
-
-      :unknown
-  end
-
-  @doc """
-  Reduces client configs to `{types, name_taken?}` for `Config.load/3`. Every
-  configured client counts, of any type and enabled or not: any of them means
-  this is not a new install. A disabled client also takes the reserved name,
-  since enabling it later would collide with the built-in client.
-  """
-  @spec summarize_clients([map()]) :: {[atom()], boolean()}
-  def summarize_clients(clients) do
-    {Enum.map(clients, & &1.type), Enum.any?(clients, &BuiltIn.reserved_name?(&1.name))}
+    if config.vpn?,
+      do: base ++ [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
+      else: base
   end
 end

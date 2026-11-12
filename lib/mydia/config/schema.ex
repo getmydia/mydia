@@ -60,6 +60,7 @@ defmodule Mydia.Config.Schema do
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
           flaresolverr: __MODULE__.FlareSolverr.t() | nil,
+          built_in_torrent: __MODULE__.BuiltInTorrent.t() | nil,
           cardigann: __MODULE__.Cardigann.t() | nil,
           remote_access: __MODULE__.RemoteAccess.t() | nil,
           download_clients: [__MODULE__.DownloadClient.t()],
@@ -317,6 +318,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :flaresolverr, Mydia.Config.Schema.FlareSolverr, on_replace: :update
+    embeds_one :built_in_torrent, Mydia.Config.Schema.BuiltInTorrent, on_replace: :update
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
     embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
 
@@ -488,6 +490,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
     |> cast_embed(:flaresolverr)
+    |> cast_embed(:built_in_torrent)
     |> cast_embed(:cardigann)
     |> cast_embed(:remote_access, with: &remote_access_changeset/2)
     |> cast_embed(:download_clients, with: &DownloadClientChangeset.changeset/2)
@@ -1048,6 +1051,7 @@ defmodule Mydia.Config.Schema do
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
+      built_in_torrent: %__MODULE__.BuiltInTorrent{},
       cardigann: %__MODULE__.Cardigann{},
       remote_access: %__MODULE__.RemoteAccess{}
     }
@@ -1055,10 +1059,6 @@ defmodule Mydia.Config.Schema do
     # Run through changeset to apply defaults from field definitions
     changeset = changeset(base_config, %{})
 
-    if changeset.valid? do
-      Ecto.Changeset.apply_changes(changeset)
-    else
-      base_config
-    end
+    if changeset.valid?, do: Ecto.Changeset.apply_changes(changeset), else: base_config
   end
 end

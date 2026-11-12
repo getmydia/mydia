@@ -287,7 +287,10 @@ defmodule Mydia.Application do
   # config merge, so the read sees a migrated database.
   defp built_in_torrent_children do
     if Application.get_env(:mydia, :start_health_monitors, true) do
-      [Mydia.Downloads.BuiltIn.Supervisor]
+      [
+        {DynamicSupervisor, name: Mydia.Downloads.BuiltIn.Instances, strategy: :one_for_one},
+        Mydia.Downloads.BuiltIn.Manager
+      ]
     else
       []
     end

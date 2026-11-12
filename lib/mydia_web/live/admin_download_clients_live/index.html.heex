@@ -4,10 +4,12 @@
       <MydiaWeb.AdminDownloadClientsLive.Components.header_actions />
     </:actions>
     <MydiaWeb.AdminDownloadClientsLive.BuiltInComponents.built_in_panel
-      :if={@built_in?}
+      running?={@built_in?}
       status={@built_in_status}
       vpn?={@built_in_vpn?}
       display={@time_display}
+      off_reason={@built_in_off_reason}
+      enable_locked?={@built_in_enable_locked?}
     />
     <MydiaWeb.AdminDownloadClientsLive.Components.download_clients_tab
       download_clients={@download_clients}
@@ -21,6 +23,20 @@
         download_client_mode={@download_client_mode}
         testing_download_client_connection={assigns[:testing_download_client_connection] || false}
         editing_download_client={assigns[:editing_download_client]}
+      />
+    <% end %>
+
+    <%= if assigns[:show_built_in_settings] do %>
+      <MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents.built_in_settings_modal
+        form={@built_in_form}
+        section={@built_in_section}
+        sources={@built_in_sources}
+        saved_secrets={@built_in_saved_secrets}
+        replacing={@built_in_replacing}
+        typed_secrets={@built_in_typed_secrets}
+        confirm={@built_in_confirm}
+        preflight={@built_in_preflight}
+        env_vpn_names={@built_in_env_vpn_names}
       />
     <% end %>
 

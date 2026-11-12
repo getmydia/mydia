@@ -90,12 +90,15 @@ defmodule Mydia.Config.Loader do
   without an application restart. Returns `{:ok, config}` on success or
   `{:error, reason}` when the merged configuration fails validation; on error the
   previously cached config is left untouched.
+
+  A successful reload is broadcast (`Mydia.Config.Broadcast`).
   """
   @spec reload(keyword()) :: {:ok, Mydia.Config.Schema.t()} | {:error, term()}
   def reload(opts \\ []) do
     case load(opts) do
       {:ok, config} ->
         Application.put_env(:mydia, :runtime_config, config)
+        Mydia.Config.Broadcast.reloaded(Keyword.get(opts, :pubsub, Mydia.PubSub), config)
         {:ok, config}
 
       error ->
@@ -261,6 +264,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      built_in_torrent: Mydia.Config.Env.BuiltInTorrentEnv.load(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),
       download_clients: Mydia.Config.Loader.DownloadClientEnv.load(),
@@ -974,11 +978,7 @@ defmodule Mydia.Config.Loader do
   defp remove_empty_maps(map) when is_map(map) do
     map
     |> Enum.map(fn {key, value} ->
-      if is_map(value) do
-        {key, remove_empty_maps(value)}
-      else
-        {key, value}
-      end
+      {key, if(is_map(value), do: remove_empty_maps(value), else: value)}
     end)
     |> Enum.reject(fn {_key, value} -> value == %{} end)
     |> Enum.into(%{})

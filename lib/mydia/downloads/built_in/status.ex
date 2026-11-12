@@ -73,7 +73,7 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe({:reserved_name_taken}),
     do:
-      "Another download client is named \"Built-in\", a name reserved for the built-in torrent client, so the built-in client was not enabled. Rename that client (Admin, Download Clients, or its DOWNLOAD_CLIENT_<N>_NAME) and restart Mydia."
+      "Another download client is named \"Built-in\", a name reserved for the built-in torrent client, so the built-in client was not enabled. Rename that client (Admin, Download Clients, or its DOWNLOAD_CLIENT_<N>_NAME), then save the built-in client's settings again."
 
   def describe({:invalid_port, value}),
     do: "MYDIA_TORRENT_PORT is #{inspect(value)}, not a port number. Using 51413."
@@ -95,6 +95,25 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe(:vpn_connecting),
     do: "The VPN tunnel is connecting. Torrents start once it is verified."
+
+  def describe({:vpn_settings_write_failed, posix}),
+    do:
+      "Could not write the VPN settings file (#{:file.format_error(posix)}). The VPN keeps its previous settings."
+
+  def describe({:vpn_settings_rejected, keys}),
+    do:
+      "The VPN service ignored settings Mydia wrote: #{Enum.join(keys, ", ")}. The container image and Mydia may be out of step; recreate the container."
+
+  def describe(:vpn_apply_timeout),
+    do:
+      "The VPN service did not pick up the new settings within 30 seconds. Torrents are stopped until it does."
+
+  def describe(:vpn_applying),
+    do: "Applying the new VPN settings. Torrents start once the tunnel is verified."
+
+  def describe({:preflight_unreadable, posix}),
+    do:
+      "Could not read /config/gluetun/preflight, the container's VPN capability check (#{:file.format_error(posix)}). Make it readable by the Mydia user, or recreate the container. Torrents are stopped until it can be read."
 
   def describe(:vpn_unreachable),
     do: "The VPN service is not answering. Torrents are stopped until it does."
@@ -126,5 +145,15 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "Cannot write to #{path} (#{:file.format_error(reason)}). Make it writable, or set #{variable} to a writable directory."
 
+  def describe({:start_failed, reason}),
+    do:
+      "The built-in torrent client failed to start (#{start_failure(reason)}). Mydia retries automatically; saving its settings again retries at once."
+
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
+
+  # Peels the supervisor's wrapping off down to the child that failed.
+  defp start_failure({:shutdown, {:failed_to_start_child, child, reason}}),
+    do: "#{inspect(child)}: #{start_failure(reason)}"
+
+  defp start_failure(reason), do: inspect(reason)
 end

@@ -97,7 +97,11 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:engine_exit, 101},
         :engine_starting,
         :rqbit_not_found,
-        {:spawn_failed, "eacces"}
+        {:spawn_failed, "eacces"},
+        {:vpn_settings_write_failed, :eacces},
+        {:vpn_settings_rejected, ["X", "2 invalid lines"]},
+        :vpn_apply_timeout,
+        :vpn_applying
       ]
 
       for reason <- reasons do
@@ -106,10 +110,28 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         refute message =~ "—"
       end
 
+      assert Status.describe({:vpn_settings_rejected, ["X", "Y"]}) =~ "X, Y"
       assert Status.describe(:missing_net_admin) =~ "cap_add"
       assert Status.describe(:missing_tun) =~ "/dev/net/tun"
       assert Status.describe(:split_group_missing) =~ "PGID"
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
+
+      unreadable = Status.describe({:preflight_unreadable, :eacces})
+      assert unreadable =~ "/config/gluetun/preflight"
+      assert unreadable =~ "permission denied"
+
+      failed = Status.describe({:start_failed, :eaddrinuse})
+      assert failed =~ "failed to start"
+      assert failed =~ "eaddrinuse"
+      assert failed =~ "retries"
+
+      # A supervisor's wrapping is peeled down to the child and its reason.
+      nested = {:shutdown, {:failed_to_start_child, Status, {:already_started, self()}}}
+      assert Status.describe({:start_failed, nested}) =~ "Status: {:already_started"
+
+      taken = Status.describe({:reserved_name_taken})
+      assert taken =~ "save the built-in client's settings again"
+      refute taken =~ "restart"
 
       assert Status.describe(
                {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"}

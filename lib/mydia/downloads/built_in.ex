@@ -2,7 +2,7 @@ defmodule Mydia.Downloads.BuiltIn do
   @moduledoc """
   Facade for the built-in torrent client.
 
-  The supervisor stores the engine's address and credentials with
+  `BuiltIn.Manager` stores the engine's address and credentials with
   `put_runtime/1`; `Mydia.Settings.RuntimeConfig.get_runtime_download_clients/0`
   appends `client_configs/0`, so the rest of Mydia sees an ordinary runtime
   client of type `rqbit` driven by `Mydia.Downloads.Client.Rqbit`.
@@ -28,7 +28,7 @@ defmodule Mydia.Downloads.BuiltIn do
   @doc """
   Whether `name` is the built-in client's, ignoring case and surrounding
   whitespace. Other clients may not use it: clients are merged and looked up
-  by name, so downloads of one would be routed to the other. The supervisor
+  by name, so downloads of one would be routed to the other. `BuiltIn.Manager`
   therefore leaves the built-in client off while another client has the name.
   """
   @spec reserved_name?(term()) :: boolean()

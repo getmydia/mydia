@@ -44,15 +44,20 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     start_supervised!(
       {Vpn,
-       name: :"vpn_#{System.unique_integer([:positive])}",
-       config: ctx.config,
-       status: ctx.status,
-       engine_fun: Map.get(ctx, :engine_fun, engine_fun),
-       tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
-       reverify_ms: Map.get(ctx, :reverify_ms, 60_000),
-       base_url: "http://localhost:#{ctx.bypass.port}",
-       interval_ms: 50,
-       leak_check: leak_fun}
+       Keyword.merge(
+         [
+           name: :"vpn_#{System.unique_integer([:positive])}",
+           config: ctx.config,
+           status: ctx.status,
+           engine_fun: Map.get(ctx, :engine_fun, engine_fun),
+           tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
+           reverify_ms: Map.get(ctx, :reverify_ms, 60_000),
+           base_url: "http://localhost:#{ctx.bypass.port}",
+           interval_ms: 50,
+           leak_check: leak_fun
+         ],
+         Map.get(ctx, :vpn_opts, [])
+       )}
     )
   end
 
@@ -119,6 +124,16 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     assert_receive {:engine_stop, :split_group_missing}, 1_000
     assert %Status{vpn: {:down, :split_group_missing}} = Status.get(ctx.status)
+  end
+
+  test "an unreadable preflight file is reported as such, not as unreachable", ctx do
+    File.rm!(Path.join(ctx.dir, "preflight"))
+    File.mkdir!(Path.join(ctx.dir, "preflight"))
+    gluetun(ctx.bypass, "running", 0)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop, {:preflight_unreadable, :eisdir}}, 1_000
+    assert %Status{vpn: {:down, {:preflight_unreadable, :eisdir}}} = Status.get(ctx.status)
   end
 
   test "an unreachable gluetun is reported", ctx do
@@ -496,6 +511,110 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     occurrences = log |> String.split("needs the NET_ADMIN capability") |> length()
     assert occurrences - 1 == 1
+  end
+
+  describe "applied settings gate" do
+    defp loop(hash, dropped \\ [], invalid \\ 0),
+      do: fn -> {:ok, %{hash: hash, dropped: dropped, invalid: invalid}} end
+
+    test "a stale loop-status hash keeps the engine stopped and reports connecting", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "new", loop_status_fun: loop("old"))
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_stop, _}, 1_000
+      Process.sleep(300)
+      refute_received {:engine_start, _}
+      assert %Status{vpn: :connecting} = Status.get(ctx.status)
+    end
+
+    test "an unreadable loop-status counts as a mismatch", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "new", loop_status_fun: fn -> :error end)
+      start_vpn(ctx, :ok)
+
+      Process.sleep(300)
+      refute_received {:engine_start, _}
+      assert %Status{vpn: :connecting} = Status.get(ctx.status)
+    end
+
+    test "past the apply timeout the VPN is down with :vpn_apply_timeout", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+
+      ctx =
+        Map.put(ctx, :vpn_opts,
+          expected_hash: "new",
+          loop_status_fun: loop("old"),
+          apply_timeout_ms: 0
+        )
+
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_stop, :vpn_apply_timeout}, 1_000
+      refute_received {:engine_start, _}
+      assert %Status{vpn: {:down, :vpn_apply_timeout}} = Status.get(ctx.status)
+    end
+
+    test "a later hash match recovers after the timeout", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      {:ok, agent} = Agent.start_link(fn -> "old" end)
+
+      ctx =
+        Map.put(ctx, :vpn_opts,
+          expected_hash: "new",
+          loop_status_fun: fn ->
+            {:ok, %{hash: Agent.get(agent, & &1), dropped: [], invalid: 0}}
+          end,
+          apply_timeout_ms: 0
+        )
+
+      start_vpn(ctx, :ok)
+      assert_receive {:engine_stop, :vpn_apply_timeout}, 1_000
+      Agent.update(agent, fn _ -> "new" end)
+      assert_receive {:engine_start, 40_123}, 1_000
+      assert %Status{vpn: {:up, _}} = Status.get(ctx.status)
+    end
+
+    test "a matching hash with dropped keys is a rejection", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "new", loop_status_fun: loop("new", ["X"]))
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_stop, {:vpn_settings_rejected, ["X"]}}, 1_000
+      refute_received {:engine_start, _}
+      assert %Status{vpn: {:down, {:vpn_settings_rejected, ["X"]}}} = Status.get(ctx.status)
+    end
+
+    test "invalid lines are appended to the rejected keys", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "new", loop_status_fun: loop("new", ["X"], 2))
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_stop, {:vpn_settings_rejected, ["X", "2 invalid lines"]}}, 1_000
+    end
+
+    test "a matching hash with nothing dropped takes the normal up path", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "new", loop_status_fun: loop("new"))
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_start, 40_123}, 1_000
+    end
+
+    test "the default loop-status reader parses hash, dropped and invalid", ctx do
+      gluetun(ctx.bypass, "running", 40_123)
+
+      File.write!(
+        Path.join(ctx.dir, "loop-status"),
+        "hash=abc\ndropped=A,B\ninvalid=1\nfoo=bar\n"
+      )
+
+      ctx = Map.put(ctx, :vpn_opts, expected_hash: "abc")
+      start_vpn(ctx, :ok)
+
+      assert_receive {:engine_stop, {:vpn_settings_rejected, ["A", "B", "1 invalid lines"]}},
+                     1_000
+    end
   end
 
   # Drops queued engine messages: the gate also stops the engine on boot and

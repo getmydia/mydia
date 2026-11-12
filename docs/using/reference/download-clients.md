@@ -20,31 +20,81 @@ Mydia bundles rqbit and runs it for you, so a fresh install can download
 torrents with no client to set up. It appears in Admin, Download Clients as a
 managed client named after the built-in engine, with a status panel.
 
+### Set it up from the UI
+
+Everything about the built-in client, its VPN included, is set from Admin,
+Download Clients. Changes apply without restarting the container.
+
+1. Open Admin, Download Clients and press **Configure** on the Built-in panel.
+   When the client is off the panel still shows, with the reason and an
+   **Enable** button.
+2. On the **Torrent** tab, choose Automatic, On or Off, and set the download
+   path and listen port. State path and API port are under Advanced.
+3. On the **VPN** tab, turn the VPN on, pick your provider and VPN type, and
+   enter your credentials. Add a server country, region, city or hostname if
+   you want to choose where you connect, and turn on port forwarding if your
+   provider offers it. Lists are comma-separated.
+4. Save. The panel shows each step: applying, connecting, leak check, then
+   running with the VPN's public IP and forwarded port. If something fails, it
+   names the reason and what to fix.
+
+Each field shows where its value comes from: **ENV** when a container
+environment variable sets it, **DB** when you saved it in the UI, or Default.
+An ENV field is read-only in the UI, and its tooltip names the variable.
+Environment variables win over the UI, so you can keep secrets out of the
+database by setting them there. Secrets you save (the OpenVPN password and the
+WireGuard private key) are never shown again; the form shows "Saved" and a
+Replace button.
+
+What the UI cannot do is give the container the permissions the VPN needs
+(`NET_ADMIN`, the tun device and a sysctl). When one is missing, the VPN tab
+is disabled and shows the exact lines to add to your compose file. Recreate the
+container after adding them.
+
+Some providers need files or keys the form cannot take, such as a client
+certificate. The form lists the variables to set for those, named
+`MYDIA_VPN_<NAME>` (see
+[Environment Variables](environment-variables.md#built-in-torrent-client)).
+
+Two changes ask you to confirm first: turning the client off while downloads
+are active (the dialog says how many), and turning the VPN off while the client
+runs, since torrents would then use this server's real IP. A new download path
+applies to new grabs; torrents already running finish where they started.
+
+### How it behaves
+
 - **Auto-enable.** A new install turns it on: the rqbit binary is installed
   (it is in the Docker image) and no download client of any kind is
   configured yet. Once on, it stays on after restarts and after you add
-  clients of your own, until you set `MYDIA_TORRENT_ENABLED=false`. An
-  existing install that already has a client, Usenet included, keeps it off
-  unless you set `MYDIA_TORRENT_ENABLED=true`.
+  clients of your own, until you turn it off (in the UI or with
+  `MYDIA_TORRENT_ENABLED=false`). An existing install that already has a
+  client, Usenet included, keeps it off until you choose On in the UI or set
+  `MYDIA_TORRENT_ENABLED=true`.
 - **Reserved name.** The client is listed as "Built-in", and no other client
   may use that name. If an existing client already has it (a database row from
   before the name was reserved, or a `DOWNLOAD_CLIENT_<N>_NAME` of `Built-in`),
-  the built-in client stays off, even with `MYDIA_TORRENT_ENABLED=true`, and
-  logs why; rename that client and restart.
-- **Download path.** `/data/downloads` by default, from
-  `MYDIA_TORRENT_DOWNLOAD_PATH`. Torrent state lives in `/config/rqbit`, from
-  `MYDIA_TORRENT_STATE_PATH`. In the Docker image, files the engine writes
-  belong to group `mydia-torrent`, with or without the VPN.
-- **VPN (experimental).** Set `MYDIA_VPN_SERVICE_PROVIDER` and Mydia runs a
-  patched gluetun that tunnels only the built-in client. The engine starts
-  once the VPN is up and a leak check passes, and stops when it drops. The
-  panel shows the VPN state, public IP, forwarded port and the reason for any
-  failure. Variables are in
-  [Environment Variables](environment-variables.md#built-in-torrent-client).
+  the built-in client stays off, even when you turn it on, and logs why;
+  rename that client and restart.
+- **Download path.** `/data/downloads` by default. Torrent state lives in
+  `/config/rqbit`. In the Docker image, files the engine writes belong to group
+  `mydia-torrent`, with or without the VPN.
+- **VPN (experimental).** Mydia runs a patched gluetun that tunnels only the
+  built-in client. The engine starts once the VPN is up and a leak check
+  passes, and stops when it drops. Changing any VPN setting runs the same
+  checks again before the engine resumes. The panel shows the VPN state,
+  public IP, forwarded port and the reason for any failure.
 
-Both examples below need `NET_ADMIN`, the tun device and the `src_valid_mark`
+### Set it up with environment variables
+
+Every setting has an environment variable that overrides the UI; they are
+listed under
+[Environment Variables](environment-variables.md#built-in-torrent-client).
+Use them when you manage the container from a compose file. The VPN needs
+the container permissions shown below either way.
+
+Both examples need `NET_ADMIN`, the tun device and the `src_valid_mark`
 sysctl. `init: true` adds an init process that reaps a VPN process left
-behind when gluetun restarts. Values must not contain spaces.
+behind when gluetun restarts.
 
 ProtonVPN with WireGuard and port forwarding:
 

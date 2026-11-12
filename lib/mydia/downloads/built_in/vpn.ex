@@ -14,13 +14,17 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   use GenServer
   require Logger
 
-  alias Mydia.Downloads.BuiltIn.{Engine, GluetunClient, LeakCheck, Status}
+  alias Mydia.Downloads.BuiltIn.{Engine, GluetunClient, LeakCheck, Preflight, Status}
 
   # A gluetun restart between two polls can come back on the same public and
   # tunnel addresses, so a passed leak check also expires with time. This
   # bounds how long such a restart goes unverified, at two relay requests per
   # check.
   @reverify_ms 60_000
+
+  # How long a fresh Vpn waits for the root loop to apply the settings file
+  # before reporting `:vpn_apply_timeout`. It keeps polling afterwards.
+  @apply_timeout_ms 30_000
 
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -44,6 +48,14 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
         end),
       tunnel_ip_fun: Keyword.get(opts, :tunnel_ip_fun, &read_tunnel_ip/1),
       reverify_ms: Keyword.get(opts, :reverify_ms, @reverify_ms),
+      expected_hash: Keyword.get(opts, :expected_hash),
+      apply_timeout_ms: Keyword.get(opts, :apply_timeout_ms, @apply_timeout_ms),
+      started_at: System.monotonic_time(:millisecond),
+      loop_status_fun:
+        Keyword.get_lazy(opts, :loop_status_fun, fn ->
+          dir = Keyword.fetch!(opts, :config).gluetun_dir
+          fn -> read_loop_status(dir) end
+        end),
       verified: nil,
       last_vpn: :connecting,
       last_port: nil
@@ -85,11 +97,73 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   defp poll(state) do
     with :ok <- preflight(state.config.gluetun_dir),
+         :ok <- loop_status(state),
          {:ok, req} <- client(state),
          {:ok, "running"} <- status(req, state) do
       up(req, state)
     else
+      :applying -> connecting(state)
       {:down, reason} -> down(state, reason)
+    end
+  end
+
+  # Gluetun keeps running across a settings change, so its status says nothing
+  # about the new settings. The root loop reports the hash of the settings file
+  # it last applied; until that equals the one Mydia wrote, the engine stays
+  # stopped. No expected hash means no gate. A missing or unreadable file is a
+  # mismatch, so this fails closed.
+  defp loop_status(%{expected_hash: nil}), do: :ok
+
+  defp loop_status(state) do
+    case state.loop_status_fun.() do
+      {:ok, %{hash: hash} = applied} when hash == state.expected_hash ->
+        rejected(applied)
+
+      _ ->
+        if System.monotonic_time(:millisecond) - state.started_at >= state.apply_timeout_ms,
+          do: {:down, :vpn_apply_timeout},
+          else: :applying
+    end
+  end
+
+  defp rejected(%{dropped: dropped} = applied) do
+    keys = dropped ++ invalid_entry(Map.get(applied, :invalid, 0))
+    if keys == [], do: :ok, else: {:down, {:vpn_settings_rejected, keys}}
+  end
+
+  defp invalid_entry(n) when is_integer(n) and n > 0, do: ["#{n} invalid lines"]
+  defp invalid_entry(_), do: []
+
+  @doc false
+  # Parses `<gluetun_dir>/loop-status`; unknown lines are ignored.
+  def read_loop_status(dir) do
+    case File.read(Path.join(dir, "loop-status")) do
+      {:ok, body} -> {:ok, parse_loop_status(body)}
+      {:error, _} -> :error
+    end
+  end
+
+  @doc false
+  def parse_loop_status(body) do
+    body
+    |> String.split("\n", trim: true)
+    |> Enum.reduce(%{hash: nil, dropped: [], invalid: 0}, fn line, acc ->
+      case String.split(String.trim(line), "=", parts: 2) do
+        ["hash", v] -> %{acc | hash: String.trim(v)}
+        ["dropped", v] -> %{acc | dropped: split_keys(v)}
+        ["invalid", v] -> %{acc | invalid: parse_count(v)}
+        _ -> acc
+      end
+    end)
+  end
+
+  defp split_keys(v),
+    do: v |> String.split(",", trim: true) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+
+  defp parse_count(v) do
+    case Integer.parse(String.trim(v)) do
+      {n, ""} when n > 0 -> n
+      _ -> 0
     end
   end
 
@@ -228,17 +302,13 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   end
 
   defp preflight(dir) do
-    case File.read(Path.join(dir, "preflight")) do
-      {:ok, body} ->
-        cond do
-          body =~ "net_admin=missing" -> {:down, :missing_net_admin}
-          body =~ "tun=missing" -> {:down, :missing_tun}
-          body =~ "split_group=missing" -> {:down, :split_group_missing}
-          true -> :ok
-        end
-
-      {:error, _} ->
-        {:down, :vpn_unreachable}
+    with {:ok, map} <- Preflight.read(dir),
+         nil <- Preflight.blocking_reason(map) do
+      :ok
+    else
+      :absent -> {:down, :vpn_unreachable}
+      {:error, posix} -> {:down, {:preflight_unreadable, posix}}
+      reason when is_atom(reason) -> {:down, reason}
     end
   end
 
