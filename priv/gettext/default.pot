@@ -2605,8 +2605,8 @@ msgid "Add to Favorites"
 msgstr ""
 
 #: lib/mydia_web/components/add_media_components.ex:249
-#: lib/mydia_web/components/discover_components.ex:421
-#: lib/mydia_web/components/discover_components.ex:422
+#: lib/mydia_web/components/discover_components.ex:424
+#: lib/mydia_web/components/discover_components.ex:425
 #: lib/mydia_web/live/components/trending_detail_modal.ex:230
 #: lib/mydia_web/live/components/trending_detail_modal.ex:235
 #, elixir-autogen, elixir-format
@@ -2671,7 +2671,7 @@ msgstr ""
 msgid "Added to your library in the last 30 days."
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:426
+#: lib/mydia_web/components/discover_components.ex:429
 #: lib/mydia_web/live/components/disambiguation_modal_component.ex:86
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:121
 #: lib/mydia_web/live/downloads_live/components.ex:286
@@ -4063,7 +4063,7 @@ msgstr ""
 msgid "Couldn't find the imported file for this download."
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:500
+#: lib/mydia_web/components/discover_components.ex:503
 #, elixir-autogen, elixir-format
 msgid "Couldn't load more results."
 msgstr ""
@@ -5427,14 +5427,14 @@ msgstr ""
 msgid "Getting Started"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:440
+#: lib/mydia_web/components/discover_components.ex:443
 #: lib/mydia_web/live/components/trending_detail_modal.ex:483
 #: lib/mydia_web/live/components/trending_detail_modal.ex:485
 #, elixir-autogen, elixir-format
 msgid "Go to Movie"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:440
+#: lib/mydia_web/components/discover_components.ex:443
 #: lib/mydia_web/live/components/trending_detail_modal.ex:484
 #, elixir-autogen, elixir-format
 msgid "Go to Show"
@@ -5580,8 +5580,8 @@ msgstr ""
 msgid "Identity mismatch"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:121
-#: lib/mydia_web/components/discover_components.ex:122
+#: lib/mydia_web/components/discover_components.ex:115
+#: lib/mydia_web/components/discover_components.ex:116
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:226
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:42
 #: lib/mydia_web/live/admin_quality_profiles_live/standards_tab.ex:438
@@ -6299,7 +6299,7 @@ msgstr ""
 msgid "More file actions"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:313
+#: lib/mydia_web/components/discover_components.ex:316
 #, elixir-autogen, elixir-format
 msgid "More like this"
 msgstr ""
@@ -8123,7 +8123,7 @@ msgstr ""
 msgid "Request it"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:399
+#: lib/mydia_web/components/discover_components.ex:402
 #: lib/mydia_web/live/components/trending_detail_modal.ex:216
 #, elixir-autogen, elixir-format
 msgid "Requested"
@@ -8134,7 +8134,7 @@ msgstr ""
 msgid "Requested on %{date}"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:397
+#: lib/mydia_web/components/discover_components.ex:400
 #, elixir-autogen, elixir-format
 msgid "Requesting..."
 msgstr ""
@@ -8240,7 +8240,7 @@ msgid_plural "Retries %{count} downloads"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/discover_components.ex:507
+#: lib/mydia_web/components/discover_components.ex:510
 #: lib/mydia_web/components/indexer_components.ex:160
 #: lib/mydia_web/live/discover_live/regional_components.ex:87
 #: lib/mydia_web/live/discover_live/regional_components.ex:176
@@ -11048,7 +11048,7 @@ msgstr ""
 msgid "→ Local show"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:428
+#: lib/mydia_web/components/discover_components.ex:431
 #: lib/mydia_web/live/admin_import_lists_live/items_components.ex:157
 #: lib/mydia_web/live/components/trending_detail_modal.ex:234
 #, elixir-autogen, elixir-format
@@ -11363,7 +11363,7 @@ msgctxt "list column"
 msgid "Status"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:401
+#: lib/mydia_web/components/discover_components.ex:404
 #: lib/mydia_web/live/components/trending_detail_modal.ex:218
 #, elixir-autogen, elixir-format
 msgctxt "media request"
@@ -21622,13 +21622,13 @@ msgstr ""
 msgid "Shows"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:551
+#: lib/mydia_web/components/discover_components.ex:554
 #: lib/mydia_web/components/person_components.ex:166
 #, elixir-autogen, elixir-format
 msgid "Try again"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:562
+#: lib/mydia_web/components/discover_components.ex:565
 #, elixir-autogen, elixir-format
 msgid "No people found"
 msgstr ""
@@ -21638,7 +21638,7 @@ msgstr ""
 msgid "People"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:544
+#: lib/mydia_web/components/discover_components.ex:547
 #, elixir-autogen, elixir-format
 msgid "Could not load people. The metadata service may be unavailable."
 msgstr ""
@@ -21693,13 +21693,13 @@ msgstr ""
 msgid "Title ignored"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:206
+#: lib/mydia_web/components/discover_components.ex:200
 #: lib/mydia_web/live/components/trending_detail_modal.ex:254
 #, elixir-autogen, elixir-format
 msgid "Unignore"
 msgstr ""
 
-#: lib/mydia_web/components/discover_components.ex:110
+#: lib/mydia_web/components/discover_components.ex:104
 #, elixir-autogen, elixir-format
 msgctxt "discover title state"
 msgid "Ignored"

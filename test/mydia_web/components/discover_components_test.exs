@@ -139,7 +139,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
 
       assert html =~ "Ignored"
       # media_rail's default id is "media-rail", which scopes the card's id.
-      assert [_] = query(html, "#discover-unignore-media-rail-tmdb-693134")
+      assert [_] = query(html, "#discover-unignore-media-rail-movie-tmdb-693134")
     end
 
     test "rail cards scope their ignore ids by rail, so one title in two rows stays unique" do
@@ -160,14 +160,44 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       assert [_] =
                query(
                  render_rail.("discover-row-a-rail"),
-                 "#discover-ignore-discover-row-a-rail-tmdb-693134"
+                 "#discover-ignore-discover-row-a-rail-movie-tmdb-693134"
                )
 
       assert [_] =
                query(
                  render_rail.("discover-row-b-rail"),
-                 "#discover-ignore-discover-row-b-rail-tmdb-693134"
+                 "#discover-ignore-discover-row-b-rail-movie-tmdb-693134"
                )
+    end
+
+    test "a mixed rail keeps a movie and a show with the same id distinct" do
+      base = %{in_library: false, monitored: false, id: nil}
+
+      movie =
+        %SearchResult{provider_id: "777", provider: :tmdb, media_type: :movie, title: "Velvet"}
+        |> Map.merge(base)
+
+      show =
+        %SearchResult{provider_id: "777", provider: :tmdb, media_type: :tv_show, title: "Quarry"}
+        |> Map.merge(base)
+
+      html =
+        render_component(&DiscoverComponents.media_rail/1, %{
+          id: "mixed-rail",
+          items: [movie, show],
+          media_type: :movie,
+          current_user: admin(),
+          ignore_event: "ignore_title"
+        })
+
+      ids =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("[id^=discover-ignore-]")
+        |> LazyHTML.attribute("id")
+
+      assert length(ids) == 2
+      assert length(Enum.uniq(ids)) == 2
     end
 
     test "an owned card renders no ignore button" do

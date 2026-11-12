@@ -89,13 +89,7 @@ defmodule MydiaWeb.DiscoverComponents do
       |> assign(:adding?, adding?(assigns))
       |> assign(:ref_param, ignore_ref_param(assigns))
 
-    assigns =
-      assign(
-        assigns,
-        :ignore_dom_id,
-        assigns.ref_param &&
-          Enum.join(Enum.reject([assigns.dom_scope, dom_ref(assigns.ref_param)], &is_nil/1), "-")
-      )
+    assigns = assign(assigns, :ignore_dom_id, ignore_dom_id(assigns))
 
     ~H"""
     <div class={[
@@ -226,6 +220,15 @@ defmodule MydiaWeb.DiscoverComponents do
   # selector a test or hook writes against it.
   @doc false
   def dom_ref(ref_param), do: String.replace(ref_param, ":", "-")
+
+  # The grid holds one media type per page, so its ids stay
+  # "tmdb-123". A rail can mix a movie and a show with the same provider id, so
+  # rail ids carry the rail and the media type: "<rail id>-tv_show-tmdb-123".
+  defp ignore_dom_id(%{ref_param: nil}), do: nil
+  defp ignore_dom_id(%{dom_scope: nil, ref_param: ref}), do: dom_ref(ref)
+
+  defp ignore_dom_id(%{dom_scope: scope, media_type: type, ref_param: ref}),
+    do: "#{scope}-#{type}-#{dom_ref(ref)}"
 
   # Only built when Discover asked for ignore controls: other hosts (the
   # franchise strip's current-title card) pass plain maps, which
