@@ -96,6 +96,21 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe(:vpn_connecting),
     do: "The VPN tunnel is connecting. Torrents start once it is verified."
 
+  def describe({:vpn_settings_write_failed, posix}),
+    do:
+      "Could not write the VPN settings file (#{:file.format_error(posix)}). The VPN keeps its previous settings."
+
+  def describe({:vpn_settings_rejected, keys}),
+    do:
+      "The VPN service ignored settings Mydia wrote: #{Enum.join(keys, ", ")}. The container image and Mydia may be out of step; recreate the container."
+
+  def describe(:vpn_apply_timeout),
+    do:
+      "The VPN service did not pick up the new settings within 30 seconds. Torrents are stopped until it does."
+
+  def describe(:vpn_applying),
+    do: "Applying the new VPN settings. Torrents start once the tunnel is verified."
+
   def describe(:vpn_unreachable),
     do: "The VPN service is not answering. Torrents are stopped until it does."
 

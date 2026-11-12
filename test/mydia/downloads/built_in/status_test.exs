@@ -97,7 +97,11 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:engine_exit, 101},
         :engine_starting,
         :rqbit_not_found,
-        {:spawn_failed, "eacces"}
+        {:spawn_failed, "eacces"},
+        {:vpn_settings_write_failed, :eacces},
+        {:vpn_settings_rejected, ["X", "2 invalid lines"]},
+        :vpn_apply_timeout,
+        :vpn_applying
       ]
 
       for reason <- reasons do
@@ -106,6 +110,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         refute message =~ "—"
       end
 
+      assert Status.describe({:vpn_settings_rejected, ["X", "Y"]}) =~ "X, Y"
       assert Status.describe(:missing_net_admin) =~ "cap_add"
       assert Status.describe(:missing_tun) =~ "/dev/net/tun"
       assert Status.describe(:split_group_missing) =~ "PGID"
