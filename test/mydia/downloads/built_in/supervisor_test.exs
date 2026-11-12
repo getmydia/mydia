@@ -16,64 +16,6 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
     opts
   end
 
-  describe "summarize_clients/1" do
-    test "keeps every client type and flags a taken name, enabled or not" do
-      clients = [
-        %{name: "SAB", type: :sabnzbd, enabled: true},
-        %{name: " built-IN ", type: :sabnzbd, enabled: false}
-      ]
-
-      assert {[:sabnzbd, :sabnzbd], true} = BuiltInSupervisor.summarize_clients(clients)
-
-      assert {[:transmission], false} =
-               BuiltInSupervisor.summarize_clients([
-                 %{name: "T", type: :transmission, enabled: true}
-               ])
-    end
-
-    test "a disabled client still means an existing install" do
-      assert {[:qbittorrent], false} =
-               BuiltInSupervisor.summarize_clients([
-                 %{name: "qb", type: :qbittorrent, enabled: false}
-               ])
-    end
-
-    test "no clients is a new install" do
-      assert {[], false} = BuiltInSupervisor.summarize_clients([])
-    end
-  end
-
-  describe "remember/1" do
-    @describetag :tmp_dir
-
-    test "an enabled client is recorded in its state directory", %{tmp_dir: dir} do
-      config = %Config{enabled?: true, state_dir: Path.join(dir, "rqbit")}
-      assert :ok = BuiltInSupervisor.remember(config)
-      assert File.regular?(Config.marker_path(config))
-    end
-
-    test "an explicit false forgets it", %{tmp_dir: dir} do
-      config = %Config{enabled?: false, explicit: false, state_dir: dir}
-      File.write!(Config.marker_path(config), "")
-      assert :ok = BuiltInSupervisor.remember(config)
-      refute File.exists?(Config.marker_path(config))
-    end
-
-    test "a client off for any other reason keeps the record", %{tmp_dir: dir} do
-      config = %Config{enabled?: false, explicit: nil, state_dir: dir}
-      File.write!(Config.marker_path(config), "")
-      assert :ok = BuiltInSupervisor.remember(config)
-      assert File.regular?(Config.marker_path(config))
-    end
-
-    @tag :capture_log
-    test "an unwritable state directory is not fatal", %{tmp_dir: dir} do
-      blocker = Path.join(dir, "file")
-      File.write!(blocker, "")
-      assert :ok = BuiltInSupervisor.remember(%Config{enabled?: true, state_dir: blocker})
-    end
-  end
-
   test "disabled starts nothing" do
     assert BuiltInSupervisor.children(%Config{enabled?: false}, credentials: {"u", "p"}) == []
   end
@@ -102,5 +44,43 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
   test "the engine gets time to stop rqbit before it is killed" do
     children = BuiltInSupervisor.children(%Config{enabled?: true}, credentials: {"u", "p"})
     assert engine_spec(children).shutdown == 15_000
+  end
+
+  defp vpn_opts(children) do
+    spec = Enum.find(children, &(Supervisor.child_spec(&1, []).id == Vpn))
+    {Vpn, :start_link, [opts]} = Supervisor.child_spec(spec, []).start
+    opts
+  end
+
+  test "the gate gets the hash of the settings file it waits for" do
+    children =
+      BuiltInSupervisor.children(%Config{enabled?: true, vpn?: true},
+        credentials: {"u", "p"},
+        expected_hash: "abc123"
+      )
+
+    assert vpn_opts(children)[:expected_hash] == "abc123"
+  end
+
+  test "Status starts with the config's warnings" do
+    children =
+      BuiltInSupervisor.children(
+        %Config{enabled?: true, warnings: [{:vpn_settings_write_failed, :eacces}]},
+        credentials: {"u", "p"}
+      )
+
+    spec = Enum.find(children, &(Supervisor.child_spec(&1, []).id == Status))
+    {Status, :start_link, [opts]} = Supervisor.child_spec(spec, []).start
+    assert opts[:warnings] == [{:vpn_settings_write_failed, :eacces}]
+  end
+
+  test "start_link builds its children from :config and registers no name" do
+    pid =
+      start_supervised!(
+        {BuiltInSupervisor, config: %Config{enabled?: false}, credentials: {"u", "p"}}
+      )
+
+    assert Supervisor.which_children(pid) == []
+    refute Process.whereis(BuiltInSupervisor) == pid
   end
 end

@@ -65,7 +65,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   Decides whether the built-in client runs. With `enabled` nil in the
   section, it turns on for a new install, one with no other download client
   of any kind (`other_client_types == []`) and `rqbit` on the PATH, and the
-  supervisor then records that in the state directory (`marker_path/1`). A
+  manager then records that in the state directory (`marker_path/1`). A
   recorded install stays on whatever clients are added later, until `enabled`
   is false. An existing install with clients of its own stays off unless
   `enabled` is true.
@@ -120,7 +120,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   @doc """
-  The config minus `warnings`: what the supervisor compares to decide whether
+  The config minus `warnings`: what `BuiltIn.Manager` compares to decide whether
   a reload needs a restart.
   """
   @spec restart_key(t()) :: map()
@@ -153,7 +153,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       else: [{:invalid_enabled, value}]
   end
 
-  @doc "Where the supervisor records that this install runs the built-in client."
+  @doc "Where `BuiltIn.Manager` records that this install runs the built-in client."
   @spec marker_path(t()) :: Path.t()
   def marker_path(%__MODULE__{state_dir: state_dir}), do: Path.join(state_dir, @marker)
 

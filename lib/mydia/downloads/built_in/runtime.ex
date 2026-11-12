@@ -1,6 +1,6 @@
 defmodule Mydia.Downloads.BuiltIn.Runtime do
   @moduledoc """
-  What the supervisor publishes about a running built-in client: the engine's
+  What `BuiltIn.Manager` publishes about a running built-in client: the engine's
   API port and credentials and the `Config` it was started with. Stored by
   `Mydia.Downloads.BuiltIn.put_runtime/1`.
   """
