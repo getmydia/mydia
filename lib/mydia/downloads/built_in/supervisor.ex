@@ -41,7 +41,13 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
         summary -> summary
       end
 
-    config = Config.load(System.get_env(), types, name_taken: name_taken?)
+    config =
+      Config.from_runtime(
+        Mydia.Settings.get_runtime_config().built_in_torrent,
+        System.get_env(),
+        types,
+        name_taken: name_taken?
+      )
 
     # With the client off it is not listed anywhere, so the log is the only
     # place left to say why.
