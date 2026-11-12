@@ -4433,9 +4433,14 @@ allowlist, which is always limited to <code>http</code> and <code>https</code>.<
 <h2 id="built-in-torrent-client">Built-in torrent client</h2>
 <p>Mydia ships with a torrent client (rqbit) that it runs itself. A new install
 turns it on, when the <code>rqbit</code> binary is installed (the Docker image has it)
-and no download client is configured yet, and it then stays on until
-<code>MYDIA_TORRENT_ENABLED=false</code>. See <a href="../download-clients/#built-in">Download Clients</a> for what it
-does. A blank value counts as unset.</p>
+and no download client is configured yet, and it then stays on until you turn
+it off. See <a href="../download-clients/#built-in">Download Clients</a> for what it
+does and how to set it up from Admin, Download Clients.</p>
+<p>Every variable below is optional, because the same settings can be made in the
+UI. A variable that is set <strong>overrides</strong> the UI: the field shows an ENV badge
+and is read-only, and nothing from it is saved to the database. Remove the
+variable (and recreate the container) to edit the field in the UI again. A
+blank value counts as unset.</p>
 <table>
 <thead>
 <tr>
@@ -4448,7 +4453,7 @@ does. A blank value counts as unset.</p>
 <tr>
 <td><code>MYDIA_TORRENT_ENABLED</code></td>
 <td>auto</td>
-<td><code>true</code> or <code>false</code> (also <code>1</code>/<code>0</code>, <code>yes</code>/<code>no</code>, <code>on</code>/<code>off</code>, in any case) overrides the auto-enable rule. <code>true</code> turns it on even without <code>rqbit</code> on the <code>PATH</code>. <code>false</code> turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI.</td>
+<td><code>true</code> or <code>false</code> (also <code>1</code>/<code>0</code>, <code>yes</code>/<code>no</code>, <code>on</code>/<code>off</code>, in any case) overrides the auto-enable rule and the UI. <code>true</code> turns it on even without <code>rqbit</code> on the <code>PATH</code>. <code>false</code> turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI.</td>
 </tr>
 <tr>
 <td><code>MYDIA_TORRENT_DOWNLOAD_PATH</code></td>
@@ -4473,12 +4478,37 @@ does. A blank value counts as unset.</p>
 <tr>
 <td><code>MYDIA_VPN_SERVICE_PROVIDER</code></td>
 <td>unset</td>
-<td>Turns the experimental VPN on, for example <code>protonvpn</code> or <code>pia</code>. It reaches gluetun as <code>VPN_SERVICE_PROVIDER</code>.</td>
+<td>Sets the provider, for example <code>protonvpn</code> or <code>pia</code>, and turns the experimental VPN on. It reaches gluetun as <code>VPN_SERVICE_PROVIDER</code>.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_VPN_TYPE</code></td>
+<td>provider's first type</td>
+<td><code>openvpn</code> or <code>wireguard</code>.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_OPENVPN_USER</code>, <code>MYDIA_VPN_OPENVPN_PASSWORD</code></td>
+<td>unset</td>
+<td>OpenVPN login.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_WIREGUARD_PRIVATE_KEY</code>, <code>MYDIA_VPN_WIREGUARD_ADDRESSES</code></td>
+<td>unset</td>
+<td>WireGuard key and address.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_SERVER_COUNTRIES</code>, <code>MYDIA_VPN_SERVER_REGIONS</code>, <code>MYDIA_VPN_SERVER_CITIES</code>, <code>MYDIA_VPN_SERVER_HOSTNAMES</code></td>
+<td>unset</td>
+<td>Where to connect, comma-separated.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_VPN_PORT_FORWARDING</code></td>
+<td><code>off</code></td>
+<td><code>on</code> asks the provider to forward a port.</td>
 </tr>
 <tr>
 <td><code>MYDIA_VPN_*</code></td>
 <td>unset</td>
-<td>Any other <a href="https://github.com/qdm12/gluetun-wiki">gluetun variable</a> with the <code>MYDIA_VPN_</code> prefix. The prefix is stripped, so <code>MYDIA_VPN_VPN_TYPE=wireguard</code> reaches gluetun as <code>VPN_TYPE=wireguard</code>.</td>
+<td>Any other <a href="https://github.com/qdm12/gluetun-wiki">gluetun variable</a> with the <code>MYDIA_VPN_</code> prefix, for settings the UI does not have (a provider's client certificate, for example). The prefix is stripped, so <code>MYDIA_VPN_VPN_TYPE=wireguard</code> reaches gluetun as <code>VPN_TYPE=wireguard</code>. The admin panel lists the names of these under "Also set from environment", never their values.</td>
 </tr>
 </tbody>
 </table>
@@ -4507,9 +4537,13 @@ outside the tunnel. Provider settings are in gluetun's wiki, under
   pick another <code>PGID</code>.</li>
 </ul>
 <p>Mydia sets <code>SPLIT_TUNNEL_GID</code>, <code>HTTP_CONTROL_SERVER_ADDRESS</code>,
-<code>HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE</code>, <code>DNS_ADDRESS</code> and <code>DNS_SERVER</code> itself.
+<code>HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE</code>, <code>HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH</code>,
+<code>DNS_ADDRESS</code> and <code>DNS_SERVER</code> itself.
 Setting them with the <code>MYDIA_VPN_</code> prefix is ignored and shown as a warning in
-the admin UI. With <code>MYDIA_TORRENT_ENABLED=false</code>, the VPN is not started.</p>
+the admin UI. With <code>MYDIA_TORRENT_ENABLED=false</code>, the VPN is not started.
+Mydia also limits gluetun's control server to the three read-only calls it
+needs, so nothing in the Mydia process can change the VPN's settings through
+it.</p>
 <p>The tunnel interface defaults to <code>wg0</code> when <code>MYDIA_VPN_VPN_TYPE</code> is
 <code>wireguard</code> and <code>tun0</code> otherwise, as gluetun names them;
 <code>MYDIA_VPN_VPN_INTERFACE</code> overrides both.</p>

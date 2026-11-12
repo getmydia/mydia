@@ -1710,6 +1710,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Built-in">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-it-up-from-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set it up from the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-behaves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it behaves
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-it-up-with-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set it up with environment variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3435,6 +3474,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Built-in">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-it-up-from-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set it up from the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-behaves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it behaves
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-it-up-with-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set it up with environment variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3590,32 +3668,74 @@
 <p>Mydia bundles rqbit and runs it for you, so a fresh install can download
 torrents with no client to set up. It appears in Admin, Download Clients as a
 managed client named after the built-in engine, with a status panel.</p>
+<h3 id="set-it-up-from-the-ui">Set it up from the UI</h3>
+<p>Everything about the built-in client, its VPN included, is set from Admin,
+Download Clients. Changes apply without restarting the container.</p>
+<ol>
+<li>Open Admin, Download Clients and press <strong>Configure</strong> on the Built-in panel.
+   When the client is off the panel still shows, with the reason and an
+   <strong>Enable</strong> button.</li>
+<li>On the <strong>Torrent</strong> tab, choose Automatic, On or Off, and set the download
+   path and listen port. State path and API port are under Advanced.</li>
+<li>On the <strong>VPN</strong> tab, turn the VPN on, pick your provider and VPN type, and
+   enter your credentials. Add a server country, region, city or hostname if
+   you want to choose where you connect, and turn on port forwarding if your
+   provider offers it. Lists are comma-separated.</li>
+<li>Save. The panel shows each step: applying, connecting, leak check, then
+   running with the VPN's public IP and forwarded port. If something fails, it
+   names the reason and what to fix.</li>
+</ol>
+<p>Each field shows where its value comes from: <strong>ENV</strong> when a container
+environment variable sets it, <strong>DB</strong> when you saved it in the UI, or Default.
+An ENV field is read-only in the UI, and its tooltip names the variable.
+Environment variables win over the UI, so you can keep secrets out of the
+database by setting them there. Secrets you save (the OpenVPN password and the
+WireGuard private key) are never shown again; the form shows "Saved" and a
+Replace button.</p>
+<p>What the UI cannot do is give the container the permissions the VPN needs
+(<code>NET_ADMIN</code>, the tun device and a sysctl). When one is missing, the VPN tab
+is disabled and shows the exact lines to add to your compose file. Recreate the
+container after adding them.</p>
+<p>Some providers need files or keys the form cannot take, such as a client
+certificate. The form lists the variables to set for those, named
+<code>MYDIA_VPN_&lt;NAME&gt;</code> (see
+<a href="../environment-variables/#built-in-torrent-client">Environment Variables</a>).</p>
+<p>Two changes ask you to confirm first: turning the client off while downloads
+are active (the dialog says how many), and turning the VPN off while the client
+runs, since torrents would then use this server's real IP. A new download path
+applies to new grabs; torrents already running finish where they started.</p>
+<h3 id="how-it-behaves">How it behaves</h3>
 <ul>
 <li><strong>Auto-enable.</strong> A new install turns it on: the rqbit binary is installed
   (it is in the Docker image) and no download client of any kind is
   configured yet. Once on, it stays on after restarts and after you add
-  clients of your own, until you set <code>MYDIA_TORRENT_ENABLED=false</code>. An
-  existing install that already has a client, Usenet included, keeps it off
-  unless you set <code>MYDIA_TORRENT_ENABLED=true</code>.</li>
+  clients of your own, until you turn it off (in the UI or with
+  <code>MYDIA_TORRENT_ENABLED=false</code>). An existing install that already has a
+  client, Usenet included, keeps it off until you choose On in the UI or set
+  <code>MYDIA_TORRENT_ENABLED=true</code>.</li>
 <li><strong>Reserved name.</strong> The client is listed as "Built-in", and no other client
   may use that name. If an existing client already has it (a database row from
   before the name was reserved, or a <code>DOWNLOAD_CLIENT_&lt;N&gt;_NAME</code> of <code>Built-in</code>),
-  the built-in client stays off, even with <code>MYDIA_TORRENT_ENABLED=true</code>, and
-  logs why; rename that client and restart.</li>
-<li><strong>Download path.</strong> <code>/data/downloads</code> by default, from
-  <code>MYDIA_TORRENT_DOWNLOAD_PATH</code>. Torrent state lives in <code>/config/rqbit</code>, from
-  <code>MYDIA_TORRENT_STATE_PATH</code>. In the Docker image, files the engine writes
-  belong to group <code>mydia-torrent</code>, with or without the VPN.</li>
-<li><strong>VPN (experimental).</strong> Set <code>MYDIA_VPN_SERVICE_PROVIDER</code> and Mydia runs a
-  patched gluetun that tunnels only the built-in client. The engine starts
-  once the VPN is up and a leak check passes, and stops when it drops. The
-  panel shows the VPN state, public IP, forwarded port and the reason for any
-  failure. Variables are in
-  <a href="../environment-variables/#built-in-torrent-client">Environment Variables</a>.</li>
+  the built-in client stays off, even when you turn it on, and logs why;
+  rename that client and restart.</li>
+<li><strong>Download path.</strong> <code>/data/downloads</code> by default. Torrent state lives in
+  <code>/config/rqbit</code>. In the Docker image, files the engine writes belong to group
+  <code>mydia-torrent</code>, with or without the VPN.</li>
+<li><strong>VPN (experimental).</strong> Mydia runs a patched gluetun that tunnels only the
+  built-in client. The engine starts once the VPN is up and a leak check
+  passes, and stops when it drops. Changing any VPN setting runs the same
+  checks again before the engine resumes. The panel shows the VPN state,
+  public IP, forwarded port and the reason for any failure.</li>
 </ul>
-<p>Both examples below need <code>NET_ADMIN</code>, the tun device and the <code>src_valid_mark</code>
+<h3 id="set-it-up-with-environment-variables">Set it up with environment variables</h3>
+<p>Every setting has an environment variable that overrides the UI; they are
+listed under
+<a href="../environment-variables/#built-in-torrent-client">Environment Variables</a>.
+Use them when you manage the container from a compose file. The VPN needs
+the container permissions shown below either way.</p>
+<p>Both examples need <code>NET_ADMIN</code>, the tun device and the <code>src_valid_mark</code>
 sysctl. <code>init: true</code> adds an init process that reaps a VPN process left
-behind when gluetun restarts. Values must not contain spaces.</p>
+behind when gluetun restarts.</p>
 <p>ProtonVPN with WireGuard and port forwarding:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">services</span><span class="p">:</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">mydia</span><span class="p">:</span>
