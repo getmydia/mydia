@@ -229,8 +229,31 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
 
       refute Config.restart_key(load([listen_port: 1], [])) == Config.restart_key(b)
 
-      refute Config.restart_key(load([vpn_provider: "pia"], [])) ==
-               Config.restart_key(b)
+      vpn_on = load([vpn_enabled: true, vpn_provider: "mullvad"], [])
+
+      refute Config.restart_key(load([vpn_enabled: true, vpn_provider: "pia"], [])) ==
+               Config.restart_key(vpn_on)
+    end
+
+    test "with the VPN off, VPN fields do not count" do
+      off = load([], [])
+
+      for fields <- [
+            [vpn_provider: "pia"],
+            [vpn_type: "wireguard"],
+            [vpn_openvpn_user: "u", vpn_openvpn_password: "p"],
+            [vpn_server_countries: "Atlantis", vpn_port_forwarding: true]
+          ] do
+        assert Config.restart_key(load(fields, [])) == Config.restart_key(off), inspect(fields)
+      end
+
+      assert Config.restart_key(load([], [], env: %{"MYDIA_VPN_FOO" => "x"})) ==
+               Config.restart_key(off)
+
+      refute Config.restart_key(load([vpn_enabled: true], [])) == Config.restart_key(off)
+
+      refute Config.restart_key(load([download_path: "/elsewhere"], [])) ==
+               Config.restart_key(off)
     end
   end
 

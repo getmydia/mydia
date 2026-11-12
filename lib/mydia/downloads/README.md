@@ -115,7 +115,8 @@ VPN settings file, and runs one `BuiltIn.Supervisor` tree under the
 `BuiltIn.Instances` `DynamicSupervisor`. It subscribes to the reload topic and
 restarts the tree only when `Config.restart_key/1` changes, so a save that
 leaves the effective config alone restarts nothing, and rqbit resumes its
-session after one that does. A failure while applying is logged and keeps what
+session after one that does. While the VPN is off its fields are not part of
+the key, so editing them never interrupts a running client. A failure while applying is logged and keeps what
 already runs. `Manager.current/0` reads a `:persistent_term`, so callers (the
 adapter guard, the panel) never wait on the GenServer while an apply is
 stopping rqbit; `Manager.await_applied/1` is the call that does wait, for

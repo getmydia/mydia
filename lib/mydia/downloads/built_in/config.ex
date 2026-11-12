@@ -27,6 +27,12 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   # Inherited variables a child process must never see: the VPN credentials
   # and Mydia's own secrets. Matched by name so new secrets are covered too.
   @secret_names ~w(SECRET_KEY_BASE DATABASE_URL GUARDIAN_SECRET_KEY)
+
+  # What only the VPN reads: left out of `restart_key/1` while it is off.
+  @vpn_keys [:vpn_provider, :vpn_type, :vpn_interface, :env_vpn_names]
+  @section_vpn_fields for {field, _var} <- BuiltInTorrent.env_vars(),
+                          String.starts_with?(Atom.to_string(field), "vpn_"),
+                          do: field
   @secret_fragments ~w(SECRET PASSWORD TOKEN)
 
   @type t :: %__MODULE__{
@@ -125,12 +131,23 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   @doc """
-  The config minus `warnings`: what `BuiltIn.Manager` compares to decide whether
-  a reload needs a restart.
+  What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
+  the config minus `warnings` and, while the VPN is off, minus every VPN
+  field, since those do not reach a client running without it. Turning the
+  VPN on still changes the key.
   """
   @spec restart_key(t()) :: map()
-  def restart_key(%__MODULE__{} = config),
-    do: config |> Map.from_struct() |> Map.delete(:warnings)
+  def restart_key(%__MODULE__{} = config) do
+    key = config |> Map.from_struct() |> Map.delete(:warnings)
+
+    if config.vpn? do
+      key
+    else
+      key
+      |> Map.drop(@vpn_keys)
+      |> Map.update!(:vpn_section, &(&1 |> Map.from_struct() |> Map.drop(@section_vpn_fields)))
+    end
+  end
 
   @doc """
   The `{name, false}` entries that unset every secret in `env` for a child

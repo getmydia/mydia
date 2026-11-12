@@ -145,6 +145,19 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert BuiltIn.runtime() == runtime
     end
 
+    test "a VPN field edited while the VPN is off leaves the instance alone", ctx do
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+      runtime = BuiltIn.runtime()
+
+      set(ctx, vpn_provider: "protonvpn", vpn_server_countries: "Atlantis")
+      reload(manager)
+
+      assert [^pid] = instance_pids(ctx)
+      assert BuiltIn.runtime() == runtime
+      assert File.read!(settings_file(ctx)) == "VPN_ENABLED=false\n"
+    end
+
     test "a new listen port replaces the instance and the runtime entry", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)
