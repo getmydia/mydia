@@ -78,6 +78,7 @@ defmodule Mydia.Settings.ConfigSetting do
     :feedback,
     :general,
     :flaresolverr,
+    :built_in_torrent,
     :remote_access,
     :cardigann
   ]

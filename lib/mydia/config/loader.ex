@@ -18,6 +18,7 @@ defmodule Mydia.Config.Loader do
   require Logger
 
   @default_sources [:yaml, :database, :env]
+  @topic "config:runtime"
 
   @doc """
   Loads configuration from all sources and returns validated config.
@@ -96,10 +97,73 @@ defmodule Mydia.Config.Loader do
     case load(opts) do
       {:ok, config} ->
         Application.put_env(:mydia, :runtime_config, config)
+        Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:runtime_config_reloaded, config})
         {:ok, config}
 
       error ->
         error
+    end
+  end
+
+  @doc "PubSub topic carrying `{:runtime_config_reloaded, config}` after each `reload/1`."
+  @spec topic() :: String.t()
+  def topic, do: @topic
+
+  # Reads the `built_in_torrent` section from environment variables. Takes a
+  # one-argument getenv function so tests can inject values. Blank values count
+  # as unset; a value that does not parse leaves its key out.
+  @doc false
+  def built_in_torrent_env(getenv \\ &System.get_env/1) do
+    alias Mydia.Config.Schema.BuiltInTorrent
+
+    Enum.reduce(BuiltInTorrent.env_vars(), %{}, fn {field, var}, acc ->
+      case blank_to_nil(getenv.(var)) do
+        nil -> acc
+        raw -> put_built_in_torrent_field(acc, field, raw)
+      end
+    end)
+  end
+
+  @torrent_integer_fields [:listen_port, :api_port]
+  @torrent_boolean_fields [:enabled, :vpn_port_forwarding]
+  @torrent_downcased_fields [:vpn_provider, :vpn_type]
+
+  # vpn_enabled is implied by a non-blank provider variable, whatever its value.
+  defp put_built_in_torrent_field(acc, :vpn_enabled, _raw), do: Map.put(acc, :vpn_enabled, true)
+
+  defp put_built_in_torrent_field(acc, field, raw) when field in @torrent_integer_fields do
+    case parse_integer(raw) do
+      {:ok, int} -> Map.put(acc, field, int)
+      :error -> acc
+    end
+  end
+
+  defp put_built_in_torrent_field(acc, field, raw) when field in @torrent_boolean_fields do
+    case parse_torrent_boolean(raw) do
+      {:ok, bool} -> Map.put(acc, field, bool)
+      :error -> acc
+    end
+  end
+
+  defp put_built_in_torrent_field(acc, field, raw) when field in @torrent_downcased_fields,
+    do: Map.put(acc, field, String.downcase(raw))
+
+  defp put_built_in_torrent_field(acc, field, raw), do: Map.put(acc, field, raw)
+
+  defp parse_torrent_boolean(raw) do
+    case String.downcase(raw) do
+      v when v in ["true", "1", "yes", "on"] -> {:ok, true}
+      v when v in ["false", "0", "no", "off"] -> {:ok, false}
+      _ -> :error
+    end
+  end
+
+  defp blank_to_nil(nil), do: nil
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
     end
   end
 
@@ -261,6 +325,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      built_in_torrent: built_in_torrent_env(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),
       download_clients: Mydia.Config.Loader.DownloadClientEnv.load(),
