@@ -145,7 +145,8 @@ clears them.
   reaches.
 - **The bundled server list ages.** Gluetun's hardcoded list is from its
   release; a provider's retired servers stay in it and never answer. Narrow
-  with `MYDIA_VPN_SERVER_NAMES` (or `SERVER_HOSTNAMES`) to live ones.
+  with `MYDIA_VPN_SERVER_NAMES` (or `MYDIA_VPN_SERVER_HOSTNAMES`) to live
+  ones.
 - **The image is referenced by tag, not digest.** Upstream gluetun and the
   Mydia image are not pinned by digest.
 - **The engine is reported running before its API listens.** Mydia marks

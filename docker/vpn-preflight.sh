@@ -86,6 +86,12 @@ run_with_gluetun_env() {
         if blank "$value" && { settings_key_allowed "$key" || [ "$key" = SERVICE_PROVIDER ]; }; then
             continue
         fi
+        # A blank pprof rate would replace the 0 default below with an empty
+        # value, which gluetun reads as unset and panics on.
+        case $key in
+            PPROF_BLOCK_PROFILE_RATE | PPROF_MUTEX_PROFILE_RATE)
+                blank "$value" && continue ;;
+        esac
         set -- "$@" "$key=$value"
     done
     blank "${MYDIA_VPN_SERVICE_PROVIDER:-}" ||

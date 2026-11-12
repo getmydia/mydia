@@ -111,6 +111,18 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       assert last_value(lines, "PPROF_BLOCK_PROFILE_RATE") == "5"
     end
 
+    test "a blank pprof rate keeps the 0 default" do
+      lines =
+        gluetun_env([
+          {"MYDIA_VPN_SERVICE_PROVIDER", "mullvad"},
+          {"MYDIA_VPN_PPROF_BLOCK_PROFILE_RATE", ""},
+          {"MYDIA_VPN_PPROF_MUTEX_PROFILE_RATE", "  "}
+        ])
+
+      assert last_value(lines, "PPROF_BLOCK_PROFILE_RATE") == "0"
+      assert last_value(lines, "PPROF_MUTEX_PROFILE_RATE") == "0"
+    end
+
     test "a line inside a multi-line value is not taken for a variable" do
       out =
         [
