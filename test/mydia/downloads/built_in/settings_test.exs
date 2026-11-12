@@ -92,6 +92,17 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :vpn_server_cities)
     end
 
+    test "the pia alias is validated as private internet access" do
+      cs = changeset(vpn(%{"vpn_provider" => "pia", "vpn_port_forwarding" => "true"}))
+      refute Keyword.has_key?(cs.errors, :vpn_provider)
+      refute Keyword.has_key?(cs.errors, :vpn_port_forwarding)
+      assert Keyword.has_key?(cs.errors, :vpn_openvpn_user)
+      assert Keyword.has_key?(cs.errors, :vpn_openvpn_password)
+
+      cs = changeset(vpn(%{"vpn_provider" => "pia", "vpn_type" => "wireguard"}))
+      assert Keyword.has_key?(cs.errors, :vpn_type)
+    end
+
     test "openvpn needs a user and password when the VPN is on" do
       cs = changeset(vpn(%{}))
       assert Keyword.has_key?(cs.errors, :vpn_openvpn_user)

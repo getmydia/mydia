@@ -61,6 +61,10 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
     "vpn unlimited" => ["OPENVPN_CERT", "OPENVPN_KEY"]
   }
 
+  # gluetun's retro-compatible names (`readVPNServiceProvider` in
+  # `internal/configuration/settings/provider.go`).
+  @aliases %{"pia" => "private internet access"}
+
   @type provider :: %{
           name: String.t(),
           label: String.t(),
@@ -87,8 +91,18 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
   @spec all() :: [provider()]
   def all, do: @table
 
-  @doc "The provider with this exact gluetun name, or nil."
+  @doc """
+  The provider gluetun would pick for this `VPN_SERVICE_PROVIDER` value, or
+  nil. Matched like gluetun's `readVPNServiceProvider`
+  (`internal/configuration/settings/provider.go`): case-insensitive, with its
+  one alias, `pia`, standing for `private internet access`.
+  """
   @spec get(term()) :: provider() | nil
-  def get(name) when is_binary(name), do: Enum.find(@table, &(&1.name == name))
+  def get(name) when is_binary(name) do
+    name = name |> String.trim() |> String.downcase()
+    name = Map.get(@aliases, name, name)
+    Enum.find(@table, &(&1.name == name))
+  end
+
   def get(_), do: nil
 end

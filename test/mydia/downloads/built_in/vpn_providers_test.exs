@@ -32,6 +32,13 @@ defmodule Mydia.Downloads.BuiltIn.VpnProvidersTest do
              VpnProviders.get("private internet access")
   end
 
+  test "pia is gluetun's alias for private internet access, matched like gluetun" do
+    pia = VpnProviders.get("private internet access")
+    assert VpnProviders.get("pia") == pia
+    assert VpnProviders.get(" PIA ") == pia
+    assert VpnProviders.get("ProtonVPN") == VpnProviders.get("protonvpn")
+  end
+
   test "mullvad has no port forwarding" do
     assert %{port_forwarding?: false} = VpnProviders.get("mullvad")
   end

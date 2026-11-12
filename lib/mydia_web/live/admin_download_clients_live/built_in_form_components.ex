@@ -226,6 +226,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           type="select"
           prompt={gettext("Choose a provider")}
           options={Enum.map(VpnProviders.all(), &{&1.label, &1.name})}
+          value={if(@provider, do: @provider.name, else: @form[:vpn_provider].value)}
           disabled={locked?(@sources, :vpn_provider)}
         />
       </.field_row>

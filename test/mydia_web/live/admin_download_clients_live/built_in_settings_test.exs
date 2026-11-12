@@ -171,6 +171,23 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert has_element?(view, "#built-in-field-vpn_port_forwarding")
     end
 
+    test "gluetun's pia alias shows the Private Internet Access fields", %{conn: conn} do
+      view = open_settings(conn)
+
+      render_change(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"vpn_provider" => "pia"}
+      })
+
+      assert has_element?(view, "#built-in-field-vpn_openvpn_user")
+      assert has_element?(view, "#built-in-field-vpn_openvpn_password")
+      assert has_element?(view, "#built-in-field-vpn_port_forwarding")
+
+      assert has_element?(
+               view,
+               ~s(#built-in-field-vpn_provider option[value="private internet access"][selected])
+             )
+    end
+
     test "choosing WireGuard on the type control swaps the credential fields", %{conn: conn} do
       view = open_settings(conn)
 
