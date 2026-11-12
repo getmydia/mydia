@@ -1059,14 +1059,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
-        enriched = enrich(results, socket)
-
-        items =
-          if mode == :append do
-            socket.assigns.items ++ enriched
-          else
-            enriched
-          end
+        items = merge_items(socket.assigns.items, enrich(results, socket), mode)
 
         socket
         |> assign(:items, items)
@@ -1079,14 +1072,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       {:ok, results} when is_list(results) ->
         # Search returns a flat list
-        enriched = enrich(results, socket)
-
-        items =
-          if mode == :append do
-            socket.assigns.items ++ enriched
-          else
-            enriched
-          end
+        items = merge_items(socket.assigns.items, enrich(results, socket), mode)
 
         socket
         |> assign(:items, items)
@@ -1105,6 +1091,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:loading, false)
     end
   end
+
+  # TMDB ranks these lists by popularity and each page is fetched, and cached
+  # upstream, on its own. When the ranking shifts between two fetches, a title
+  # near the boundary arrives on both pages, and a page cached long before its
+  # neighbour can repeat a whole block (#1378). Keep the first sighting. This
+  # runs before :visible_items is derived, so repeats do not count toward the
+  # hide-owned auto-advance target and it keeps fetching.
+  defp merge_items(_shown, incoming, :replace), do: incoming
+
+  defp merge_items(shown, incoming, :append),
+    do: Enum.uniq_by(shown ++ incoming, &{&1.media_type, Ref.from_search_result(&1)})
 
   # Call everywhere :items or a browse filter is assigned, so the template
   # never filters.
