@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1733,6 +1733,17 @@
     <span class="md-ellipsis">
       
         Import Lists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-torrent-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in torrent client
       
     </span>
   </a>
@@ -3798,6 +3809,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#built-in-torrent-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in torrent client
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#download-clients" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4408,6 +4430,92 @@ revalidates every redirect hop.</p>
 network, for example a JSON file on a NAS. It never relaxes the scheme
 allowlist, which is always limited to <code>http</code> and <code>https</code>.</p>
 </div>
+<h2 id="built-in-torrent-client">Built-in torrent client</h2>
+<p>Mydia ships with a torrent client (rqbit) that it runs itself. A new install
+turns it on, when the <code>rqbit</code> binary is installed (the Docker image has it)
+and no download client is configured yet, and it then stays on until
+<code>MYDIA_TORRENT_ENABLED=false</code>. See <a href="../download-clients/#built-in">Download Clients</a> for what it
+does. A blank value counts as unset.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MYDIA_TORRENT_ENABLED</code></td>
+<td>auto</td>
+<td><code>true</code> or <code>false</code> (also <code>1</code>/<code>0</code>, <code>yes</code>/<code>no</code>, <code>on</code>/<code>off</code>, in any case) overrides the auto-enable rule. <code>true</code> turns it on even without <code>rqbit</code> on the <code>PATH</code>. <code>false</code> turns it off and clears the record that keeps a new install's client on. Any other value is ignored with a warning in the admin UI.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_DOWNLOAD_PATH</code></td>
+<td><code>/data/downloads</code></td>
+<td>Where the built-in client writes downloads. Must be writable by the Mydia user.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_STATE_PATH</code></td>
+<td><code>/config/rqbit</code></td>
+<td>Where the built-in client keeps its torrent state. Must be writable by the Mydia user.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_PORT</code></td>
+<td><code>51413</code></td>
+<td>Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below).</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_API_PORT</code></td>
+<td><code>3030</code></td>
+<td>Port of the built-in client's HTTP API on <code>127.0.0.1</code>. Change it when something else on the host uses 3030.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_SERVICE_PROVIDER</code></td>
+<td>unset</td>
+<td>Turns the experimental VPN on, for example <code>protonvpn</code> or <code>pia</code>. It reaches gluetun as <code>VPN_SERVICE_PROVIDER</code>.</td>
+</tr>
+<tr>
+<td><code>MYDIA_VPN_*</code></td>
+<td>unset</td>
+<td>Any other <a href="https://github.com/qdm12/gluetun-wiki">gluetun variable</a> with the <code>MYDIA_VPN_</code> prefix. The prefix is stripped, so <code>MYDIA_VPN_VPN_TYPE=wireguard</code> reaches gluetun as <code>VPN_TYPE=wireguard</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The VPN is <strong>experimental</strong>. It runs a patched gluetun that tunnels only the
+built-in client, so the rest of Mydia keeps its normal network. If the VPN is
+configured and not verified, the engine stays stopped rather than download
+outside the tunnel. Provider settings are in gluetun's wiki, under
+<a href="https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers">Providers</a>.</p>
+<p>The container needs these for the VPN:</p>
+<ul>
+<li><code>cap_add: [NET_ADMIN]</code></li>
+<li><code>devices: ["/dev/net/tun:/dev/net/tun"]</code></li>
+<li><code>sysctls: ["net.ipv4.conf.all.src_valid_mark=1"]</code>. Hosts with strict reverse
+  path filtering (<code>net.ipv4.conf.all.rp_filter=1</code>) drop the tunnel's replies
+  without it. Docker mounts <code>/proc/sys</code> read-only, so gluetun cannot set it
+  itself. It does no harm on other hosts.</li>
+</ul>
+<p>Two more things the VPN depends on:</p>
+<ul>
+<li>The built-in engine is a setgid binary, so the container must not run with
+  <code>no-new-privileges</code>. Files the engine writes belong to group
+  <code>mydia-torrent</code>, with or without the VPN.</li>
+<li>That group has the fixed GID 65530. <code>PGID=65530</code> is refused (the entrypoint
+  ignores it and says so). If the group is missing or shares the <code>mydia</code> GID,
+  the VPN stays off and the admin panel says so; recreate the container or
+  pick another <code>PGID</code>.</li>
+</ul>
+<p>Mydia sets <code>SPLIT_TUNNEL_GID</code>, <code>HTTP_CONTROL_SERVER_ADDRESS</code>,
+<code>HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE</code>, <code>DNS_ADDRESS</code> and <code>DNS_SERVER</code> itself.
+Setting them with the <code>MYDIA_VPN_</code> prefix is ignored and shown as a warning in
+the admin UI. With <code>MYDIA_TORRENT_ENABLED=false</code>, the VPN is not started.</p>
+<p>The tunnel interface defaults to <code>wg0</code> when <code>MYDIA_VPN_VPN_TYPE</code> is
+<code>wireguard</code> and <code>tun0</code> otherwise, as gluetun names them;
+<code>MYDIA_VPN_VPN_INTERFACE</code> overrides both.</p>
+<p>Values reach gluetun unchanged, spaces included, so
+<code>MYDIA_VPN_SERVER_CITIES=New York</code> works. A provider that is only whitespace
+counts as unset and leaves the VPN off.</p>
 <h2 id="download-clients">Download Clients</h2>
 <p>Configure multiple clients using numbered variables (<code>&lt;N&gt;</code> = 1, 2, 3, etc.):</p>
 <table>
@@ -5242,10 +5350,10 @@ incompatible 4K file would otherwise ask of it. Also settable under <strong>Admi
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
