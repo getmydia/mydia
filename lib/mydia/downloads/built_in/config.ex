@@ -108,9 +108,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     %__MODULE__{
       enabled?: wanted? and not name_taken?,
       explicit: section.enabled,
-      # Automatic, not recorded and no other client: the only thing keeping a
-      # new install off is rqbit missing from the PATH.
-      rqbit_missing?: section.enabled == nil and not wanted? and other_client_types == [],
+      rqbit_missing?: rqbit_missing?(section.enabled, wanted?, other_client_types),
       download_path: blank_to_nil(section.download_path) || @default_download_path,
       state_dir: state_dir,
       port: section.listen_port || @default_port,
@@ -187,6 +185,11 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   defp wanted?(explicit, _state_dir, _other_client_types, _opts), do: explicit
+
+  # Automatic, not recorded and no other client: the only thing keeping a new
+  # install off is rqbit missing from the PATH.
+  defp rqbit_missing?(nil = _explicit, false = _wanted?, []), do: true
+  defp rqbit_missing?(_explicit, _wanted?, _other_client_types), do: false
 
   defp new_install?([], finder), do: finder.("rqbit") != nil
   defp new_install?(_types_or_unknown, _finder), do: false
