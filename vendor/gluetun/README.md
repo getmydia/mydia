@@ -216,9 +216,15 @@ variables. Then:
    ```
 
    The `PUT` returns 401 and the three `GET` routes return 200.
-6. **Drop.** `docker exec <c> ip link del wg0`: `torrent-curl --max-time 5`
-   fails, plain `curl` still works, and within 10 seconds the admin page shows
-   the VPN down and the engine stopped.
+6. **Drop.** `docker exec <c> ip link del wg0`, then:
+
+   ```sh
+   docker exec <c> su-exec mydia torrent-curl --max-time 5 -s https://relay.mydia.dev/ip  # fails
+   docker exec <c> curl -s https://relay.mydia.dev/ip                                      # host address
+   ```
+
+   The first fails, the second still prints the host's address, and within
+   10 seconds the admin page shows the VPN down and the engine stopped.
 7. **Env wins.** Recreate the container with `MYDIA_VPN_SERVER_COUNTRIES` set:
    the field shows the ENV badge and is read-only, and the value is not in
    `/config/gluetun/settings/settings.env`.
@@ -228,10 +234,17 @@ variables. Then:
 9. **No capabilities.** Without `--cap-add NET_ADMIN` the VPN tab is disabled
    and shows the compose lines; the engine stays stopped if the VPN was
    configured.
-10. A magnet grabbed from the UI downloads and imports. While rqbit churns
-    peers, `docker exec <c> tcpdump -ni eth0 'not host <vpn endpoint>'` shows
-    nothing from the engine: no final ACKs, RSTs or ICMP errors for its
-    connections.
+10. A magnet grabbed from the UI downloads and imports. The image has no
+    `tcpdump`, so capture from a diagnostic container that shares the Mydia
+    container's network namespace while rqbit churns peers:
+
+    ```sh
+    docker run --rm --net container:<c> nicolaka/netshoot \
+      tcpdump -ni eth0 'not host <vpn endpoint>'
+    ```
+
+    It shows nothing from the engine: no final ACKs, RSTs or ICMP errors for
+    its connections.
 11. Gluetun's log has no reverse path filtering warning, or the container has
     the `src_valid_mark` sysctl.
 
