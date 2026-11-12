@@ -4,7 +4,8 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   environment (`MYDIA_TORRENT_*` and `MYDIA_VPN_*`).
 
   Takes a one-argument getenv function so tests can inject values. Blank values
-  count as unset; a value that does not parse leaves its key out.
+  count as unset; a value that does not parse, or a port outside 1..65535, leaves its key out
+  (`BuiltIn.Config` still warns about it from the raw environment).
   """
 
   alias Mydia.Config.Loader
@@ -29,8 +30,8 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
 
   defp put_field(acc, field, raw) when field in @integer_fields do
     case Loader.parse_integer(raw) do
-      {:ok, int} -> Map.put(acc, field, int)
-      :error -> acc
+      {:ok, int} when int in 1..65_535 -> Map.put(acc, field, int)
+      _ -> acc
     end
   end
 
