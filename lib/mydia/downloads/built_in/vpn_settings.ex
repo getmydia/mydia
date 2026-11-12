@@ -14,7 +14,9 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
   alias Mydia.Config.Schema.BuiltInTorrent
   alias Mydia.Downloads.BuiltIn.Config
 
-  @file_name "settings.env"
+  # In a subdirectory of its own: the root-side loop never opens anything
+  # under /config itself; it reads this file as mydia.
+  @file_name "settings/settings.env"
 
   # {section field, gluetun key}, in the loop's allowlist order.
   @fields [

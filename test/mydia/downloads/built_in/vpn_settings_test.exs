@@ -19,8 +19,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettingsTest do
     [vpn_provider: "mullvad", vpn_type: "wireguard", vpn_wireguard_private_key: @key] ++ extra
   end
 
-  test "path/1 is settings.env under the gluetun dir" do
-    assert VpnSettings.path(config([], dir: "/x/y")) == "/x/y/settings.env"
+  test "path/1 is settings/settings.env under the gluetun dir" do
+    assert VpnSettings.path(config([], dir: "/x/y")) == "/x/y/settings/settings.env"
   end
 
   test "render/2 writes the allowlisted keys in order" do
@@ -99,14 +99,14 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettingsTest do
     assert hash == VpnSettings.hash(content)
     assert File.read!(VpnSettings.path(cfg)) == content
     assert File.stat!(VpnSettings.path(cfg)).mode |> Bitwise.band(0o777) == 0o600
-    assert File.ls!(dir) == ["settings.env"]
+    assert File.ls!(Path.join(dir, "settings")) == ["settings.env"]
   end
 
   @tag :tmp_dir
-  test "write/2 creates the directory", %{tmp_dir: dir} do
+  test "write/2 creates the gluetun dir and the settings subdir", %{tmp_dir: dir} do
     cfg = config(mullvad(), dir: Path.join(dir, "nested/gluetun"))
     assert {:ok, _} = VpnSettings.write(cfg, %{})
-    assert File.exists?(VpnSettings.path(cfg))
+    assert File.exists?(Path.join(dir, "nested/gluetun/settings/settings.env"))
   end
 
   @tag :tmp_dir
