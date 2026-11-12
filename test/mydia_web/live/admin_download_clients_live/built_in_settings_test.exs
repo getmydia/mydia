@@ -22,6 +22,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
 
     @impl true
     def init(config) do
+      # So terminate/2 runs on the test supervisor's shutdown and the next
+      # test does not read this config.
+      Process.flag(:trap_exit, true)
+
       :persistent_term.put(
         {Mydia.Downloads.BuiltIn.Manager, Mydia.Downloads.BuiltIn.Manager},
         config
@@ -107,6 +111,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert has_element?(view, "#built-in-off-reason", "another download client is configured")
       assert has_element?(view, "#built-in-enable")
       assert has_element?(view, "#built-in-configure")
+    end
+
+    test "automatic off because rqbit is missing says so", %{conn: conn} do
+      BuiltIn.clear_runtime()
+      start_supervised!({FakeManager, %Config{enabled?: false, rqbit_missing?: true}})
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "#built-in-off-reason", "rqbit is not installed")
+      refute has_element?(view, "#built-in-off-reason", "another download client")
     end
 
     test "a running client offers Configure and no Enable", %{conn: conn} do

@@ -135,6 +135,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
   end
 
   defp off_reason_label(:automatic), do: gettext("Off: another download client is configured.")
+
+  defp off_reason_label(:rqbit_missing),
+    do: gettext("Off: rqbit is not installed on this system, so the built-in client cannot run.")
+
   defp off_reason_label(:env), do: gettext("Off: turned off by MYDIA_TORRENT_ENABLED.")
   defp off_reason_label(:ui), do: gettext("Off: turned off in these settings.")
   defp off_reason_label(:name_taken), do: Status.describe({:reserved_name_taken})

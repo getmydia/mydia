@@ -32,6 +32,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @type t :: %__MODULE__{
           enabled?: boolean(),
           explicit: boolean() | nil,
+          rqbit_missing?: boolean(),
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
@@ -48,6 +49,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   defstruct enabled?: false,
             explicit: nil,
+            rqbit_missing?: false,
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
@@ -100,6 +102,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     %__MODULE__{
       enabled?: wanted? and not name_taken?,
       explicit: section.enabled,
+      # Automatic, not recorded and no other client: the only thing keeping a
+      # new install off is rqbit missing from the PATH.
+      rqbit_missing?: section.enabled == nil and not wanted? and other_client_types == [],
       download_path: blank_to_nil(section.download_path) || @default_download_path,
       state_dir: state_dir,
       port: section.listen_port || @default_port,

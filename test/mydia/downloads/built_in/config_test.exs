@@ -58,7 +58,15 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
     end
 
     test "is off when rqbit is not installed" do
-      assert %Config{enabled?: false} = load([], [], no_rqbit())
+      assert %Config{enabled?: false, rqbit_missing?: true} = load([], [], no_rqbit())
+    end
+
+    test "names a missing rqbit only when it is what keeps a new install off" do
+      assert %Config{rqbit_missing?: false} = load([], [])
+      assert %Config{rqbit_missing?: false} = load([], [:qbittorrent], no_rqbit())
+      assert %Config{rqbit_missing?: false} = load([], :unknown, no_rqbit())
+      assert %Config{rqbit_missing?: false} = load([enabled: false], [], no_rqbit())
+      assert %Config{rqbit_missing?: false} = load([], [], remembered() ++ no_rqbit())
     end
 
     test "an explicit true turns it on even without rqbit on the PATH" do

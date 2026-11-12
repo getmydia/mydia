@@ -162,19 +162,25 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
 
   @doc """
   Why the client is off: `:name_taken` (another client holds the reserved
-  name), `:env` (the environment variable), `:ui` (a saved choice) or
-  `:automatic` (the default rule). Accepts a nil config. The second argument
-  is a getenv function, or a map from `sources/1` already read by the caller.
+  name), `:env` (the environment variable), `:ui` (a saved choice),
+  `:rqbit_missing` (the default rule, with no other client but no `rqbit` on
+  the PATH) or `:automatic` (the default rule, another client configured).
+  Accepts a nil config. The second argument is a getenv function, or a map
+  from `sources/1` already read by the caller.
   """
   @spec off_reason(Config.t() | nil, getenv() | map()) ::
-          :env | :ui | :automatic | :name_taken
+          :env | :ui | :automatic | :rqbit_missing | :name_taken
   def off_reason(config, getenv_or_sources \\ &System.get_env/1)
 
   def off_reason(config, getenv) when is_function(getenv, 1),
     do: off_reason(config, sources(getenv))
 
-  def off_reason(%Config{warnings: warnings}, sources) when is_map(sources) do
-    if {:reserved_name_taken} in warnings, do: :name_taken, else: source_reason(sources)
+  def off_reason(%Config{warnings: warnings} = config, sources) when is_map(sources) do
+    cond do
+      {:reserved_name_taken} in warnings -> :name_taken
+      config.rqbit_missing? and sources.enabled == :default -> :rqbit_missing
+      true -> source_reason(sources)
+    end
   end
 
   def off_reason(_config, sources) when is_map(sources), do: source_reason(sources)

@@ -14425,7 +14425,7 @@ msgstr ""
 msgid "Disable Cloudflare bypass for %{name}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:145
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:148
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:78
 #: lib/mydia_web/live/admin_indexers_live/components.ex:175
 #: lib/mydia_web/live/admin_indexers_live/components.ex:271
@@ -16857,7 +16857,7 @@ msgid "OIDC authentication is not configured."
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:24
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:156
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:159
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:119
 #: lib/mydia_web/live/admin_settings_live/components.ex:206
 #, elixir-autogen, elixir-format
@@ -21720,17 +21720,17 @@ msgctxt "discover title state"
 msgid "Ignored"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:165
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:168
 #, elixir-autogen, elixir-format
 msgid "%{port} (fixed)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:169
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:172
 #, elixir-autogen, elixir-format
 msgid "%{port} (forwarded since %{since})"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:175
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:178
 #, elixir-autogen, elixir-format
 msgid "%{port}: %{why}"
 msgstr ""
@@ -21741,17 +21741,17 @@ msgstr ""
 msgid "Built-in torrent client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:160
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:163
 #, elixir-autogen, elixir-format
 msgid "Connected via %{provider}, public IP %{ip}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:157
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:160
 #, elixir-autogen, elixir-format
 msgid "Connecting"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:154
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:157
 #, elixir-autogen, elixir-format
 msgid "Crashed after %{n} restarts: %{why}"
 msgstr ""
@@ -21761,12 +21761,12 @@ msgstr ""
 msgid "Engine"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:151
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:154
 #, elixir-autogen, elixir-format
 msgid "Not running: %{why}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:164
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:167
 #, elixir-autogen, elixir-format
 msgid "Not set yet"
 msgstr ""
@@ -21781,12 +21781,12 @@ msgstr ""
 msgid "Restarting the built-in torrent client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:143
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:146
 #, elixir-autogen, elixir-format
 msgid "Running"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:144
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:147
 #, elixir-autogen, elixir-format
 msgid "Starting"
 msgstr ""
@@ -21796,7 +21796,7 @@ msgstr ""
 msgid "Status unavailable: the built-in torrent client's status could not be read."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:148
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:151
 #, elixir-autogen, elixir-format
 msgid "Stopped: %{why}"
 msgstr ""
@@ -21907,7 +21907,7 @@ msgstr ""
 msgid "Missing: the mydia-torrent group (pick another PGID)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:141
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:144
 #, elixir-autogen, elixir-format
 msgid "Off."
 msgstr ""
@@ -21917,12 +21917,12 @@ msgstr ""
 msgid "Off: another download client is configured."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:138
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:141
 #, elixir-autogen, elixir-format
 msgid "Off: turned off by MYDIA_TORRENT_ENABLED."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:139
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:142
 #, elixir-autogen, elixir-format
 msgid "Off: turned off in these settings."
 msgstr ""
@@ -22074,4 +22074,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:157
 #, elixir-autogen, elixir-format
 msgid "Changing this starts a new, empty torrent session. Torrents in the old session stop being tracked by the engine."
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:139
+#, elixir-autogen, elixir-format
+msgid "Off: rqbit is not installed on this system, so the built-in client cannot run."
 msgstr ""

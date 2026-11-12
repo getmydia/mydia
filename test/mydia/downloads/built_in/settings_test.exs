@@ -354,6 +354,13 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Settings.off_reason(%Config{}, env) == :env
     end
 
+    test "automatic with rqbit missing and no other client names the binary" do
+      assert Settings.off_reason(%Config{rqbit_missing?: true}, @no_env) == :rqbit_missing
+
+      put_row("enabled", "false")
+      assert Settings.off_reason(%Config{rqbit_missing?: true}, @no_env) == :ui
+    end
+
     test "accepts sources already read" do
       sources = Settings.sources(@no_env)
       assert Settings.off_reason(nil, sources) == :automatic
