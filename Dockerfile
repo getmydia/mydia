@@ -468,6 +468,9 @@ RUN addgroup -g 1000 mydia && \
 
 COPY --from=rqbit /out/bin/rqbit /usr/local/bin/rqbit
 COPY --from=gluetun /out/gluetun /usr/local/bin/gluetun
+# gluetun execs OpenVPN as openvpn2.6 (or openvpn2.5), names upstream's image
+# provides and Alpine's package does not.
+RUN ln -s /usr/sbin/openvpn /usr/local/bin/openvpn2.6
 # The built-in engine and the leak check's curl run as group mydia-torrent:
 # gluetun's split mode tunnels exactly that group. setgid on the binaries is
 # what switches the group, so the BEAM needs no capabilities.
