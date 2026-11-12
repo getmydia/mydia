@@ -92,6 +92,20 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :vpn_server_cities)
     end
 
+    test "caps every VPN text field at 4096 bytes, secrets included" do
+      long = String.duplicate("é", 2049)
+
+      for field <- ~w(vpn_openvpn_user vpn_openvpn_password vpn_wireguard_private_key
+                      vpn_wireguard_addresses vpn_server_countries vpn_server_regions
+                      vpn_server_cities vpn_server_hostnames vpn_provider vpn_type) do
+        cs = changeset(%{field => long})
+        assert Keyword.has_key?(cs.errors, String.to_existing_atom(field)), field
+      end
+
+      cs = changeset(%{"vpn_server_countries" => String.duplicate("a", 4096)})
+      refute Keyword.has_key?(cs.errors, :vpn_server_countries)
+    end
+
     test "the pia alias is validated as private internet access" do
       cs = changeset(vpn(%{"vpn_provider" => "pia", "vpn_port_forwarding" => "true"}))
       refute Keyword.has_key?(cs.errors, :vpn_provider)

@@ -18,6 +18,11 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
   # under /config itself; it reads this file as mydia.
   @file_name "settings/settings.env"
 
+  # The root-side loop hashes only this much of the file
+  # (docker/vpn-preflight.sh), so a longer file could never match the hash
+  # the Vpn gate waits for.
+  @max_bytes 65_536
+
   # {section field, gluetun key}, in the loop's allowlist order.
   @fields [
     vpn_provider: "VPN_SERVICE_PROVIDER",
@@ -44,7 +49,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
   @doc """
   The file content for this config. `env` is the process environment (a map),
   used only to tell which fields come from env. Raises `ArgumentError` when a
-  value contains a newline; the message never includes the value.
+  value contains a newline, or when the content is over the 65536 bytes the
+  root-side loop reads; the message never includes a value.
   """
   @spec render(Config.t(), %{String.t() => String.t()}) :: String.t()
   def render(%Config{enabled?: true, vpn?: true, vpn_section: section}, env) do
@@ -62,7 +68,14 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettings do
         "#{key}=#{value}\n"
       end
 
-    IO.iodata_to_binary(["VPN_ENABLED=true\n" | lines])
+    content = IO.iodata_to_binary(["VPN_ENABLED=true\n" | lines])
+
+    if byte_size(content) > @max_bytes do
+      raise ArgumentError,
+            "VPN settings are #{byte_size(content)} bytes, over the #{@max_bytes} the VPN service reads"
+    end
+
+    content
   end
 
   def render(%Config{}, _env), do: "VPN_ENABLED=false\n"

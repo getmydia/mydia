@@ -85,6 +85,29 @@ defmodule Mydia.Downloads.BuiltIn.VpnSettingsTest do
     refute err.message =~ "sekrit"
   end
 
+  test "render/2 raises past the 65536 bytes the root-side loop reads, without the value" do
+    long = String.duplicate("k", 10_000)
+
+    fields =
+      mullvad(
+        vpn_wireguard_private_key: long,
+        vpn_wireguard_addresses: long,
+        vpn_server_countries: long,
+        vpn_server_regions: long,
+        vpn_server_cities: long,
+        vpn_server_hostnames: long,
+        vpn_openvpn_user: long
+      )
+
+    err = assert_raise ArgumentError, fn -> VpnSettings.render(config(fields), %{}) end
+    assert err.message =~ "65536"
+    refute err.message =~ "kkkk"
+
+    # Just under the limit still renders.
+    fits = mullvad(vpn_server_countries: String.duplicate("k", 60_000))
+    assert byte_size(VpnSettings.render(config(fits), %{})) <= 65_536
+  end
+
   test "hash/1 is lowercase sha256 hex" do
     assert VpnSettings.hash("abc") ==
              "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

@@ -39,6 +39,10 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   @enabled_choices ["automatic", "true", "false"]
   @text_fields @fields -- (@booleans ++ @integers ++ [:enabled])
   @identifier_fields [:vpn_provider, :vpn_type]
+  # Written to the VPN settings file, which the root-side loop reads only up
+  # to 64 KiB (`VpnSettings.render/2`): eleven fields of 4096 bytes fit.
+  @vpn_text_fields Enum.filter(@text_fields, &String.starts_with?(Atom.to_string(&1), "vpn_"))
+  @max_vpn_value_bytes 4096
 
   # Providers whose OpenVPN login is not a username and password
   # (gluetun's `isUserRequired` in settings/openvpn.go).
@@ -91,6 +95,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_single_line(@text_fields -- locked)
+    |> validate_lengths(@vpn_text_fields -- locked)
     |> validate_vpn(locked)
     |> Map.put(:action, :validate)
   end
@@ -405,6 +410,12 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
       if line_break?(get_field(acc, field)),
         do: add_error(acc, field, "cannot contain a line break"),
         else: acc
+    end)
+  end
+
+  defp validate_lengths(changeset, fields) do
+    Enum.reduce(fields, changeset, fn field, acc ->
+      validate_length(acc, field, max: @max_vpn_value_bytes, count: :bytes)
     end)
   end
 
