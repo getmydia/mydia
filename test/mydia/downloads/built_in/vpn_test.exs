@@ -162,22 +162,34 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     agent = start_state(initial)
 
     Bypass.stub(bypass, "GET", "/v1/vpn/status", fn conn ->
-      Plug.Conn.resp(conn, 200, Jason.encode!(%{status: Agent.get(agent, & &1.status)}))
+      gluetun_resp(conn, agent, &%{status: &1.status})
     end)
 
     Bypass.stub(bypass, "GET", "/v1/publicip/ip", fn conn ->
-      Plug.Conn.resp(conn, 200, Jason.encode!(%{public_ip: Agent.get(agent, & &1.ip)}))
+      gluetun_resp(conn, agent, &%{public_ip: &1.ip})
     end)
 
     # `port: :error` makes the port forward read fail.
     Bypass.stub(bypass, "GET", "/v1/portforward", fn conn ->
-      case Agent.get(agent, & &1.port) do
-        :error -> Plug.Conn.resp(conn, 500, "")
-        port -> Plug.Conn.resp(conn, 200, Jason.encode!(%{port: port}))
-      end
+      gluetun_resp(conn, agent, fn
+        %{port: :error} -> :error
+        %{port: port} -> %{port: port}
+      end)
     end)
 
     agent
+  end
+
+  # The gate polls every 50ms, so a request can still be in flight at teardown,
+  # after the state Agent is gone. Bypass fails the test on any error raised in
+  # a stub, so that read answers 503 instead of exiting.
+  defp gluetun_resp(conn, agent, fun) do
+    case Agent.get(agent, fun) do
+      :error -> Plug.Conn.resp(conn, 500, "")
+      body -> Plug.Conn.resp(conn, 200, Jason.encode!(body))
+    end
+  catch
+    :exit, _ -> Plug.Conn.resp(conn, 503, "")
   end
 
   defp counting_leak_check(results) do
