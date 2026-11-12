@@ -325,6 +325,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           disabled={locked?(@sources, :vpn_port_forwarding)}
         />
       </.field_row>
+      <%!-- Without the toggle, a value saved for the previous provider would
+           block Save with an error on a field the form no longer shows. --%>
+      <input
+        :if={!(@provider && @provider.port_forwarding?) and !locked?(@sources, :vpn_port_forwarding)}
+        type="hidden"
+        name={@form[:vpn_port_forwarding].name}
+        value="false"
+      />
 
       <div :if={@env_vpn_names != []} class="rounded-box border border-base-300 p-3 space-y-2">
         <p class="text-sm font-medium">{gettext("Also set from environment")}</p>

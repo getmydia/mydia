@@ -337,6 +337,28 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
                Mydia.Settings.get_config_setting_by_key("built_in_torrent.vpn_server_countries")
     end
 
+    test "switching to a provider without port forwarding clears it on save", %{conn: conn} do
+      put_row("vpn_provider", "protonvpn")
+      put_row("vpn_port_forwarding", "true")
+      {:ok, _} = Mydia.Config.Loader.reload()
+
+      view = open_settings(conn)
+      assert has_element?(view, "#built-in-field-vpn_port_forwarding[checked]")
+
+      render_change(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"vpn_provider" => "mullvad"}
+      })
+
+      refute has_element?(view, "#built-in-field-vpn_port_forwarding")
+
+      render_submit(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"vpn_provider" => "mullvad"}
+      })
+
+      refute has_element?(view, "#built-in-settings-modal")
+      assert Mydia.Settings.get_runtime_config().built_in_torrent.vpn_port_forwarding == false
+    end
+
     test "an invalid save keeps the modal open with the error", %{conn: conn} do
       view = open_settings(conn)
 
