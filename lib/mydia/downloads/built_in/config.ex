@@ -208,7 +208,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         []
 
       value ->
-        case Integer.parse(value) do
+        case Integer.parse(String.trim(value)) do
           {port, ""} when port in 1..65_535 -> []
           _ -> [{warning, value}]
         end

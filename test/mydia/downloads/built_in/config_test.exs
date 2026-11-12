@@ -203,6 +203,7 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert {:invalid_api_port, "70000"} in config.warnings
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => "6881"})
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " "})
+      assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
     end
 
     test "reserved gluetun variables are reported" do
