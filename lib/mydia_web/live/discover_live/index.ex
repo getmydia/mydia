@@ -32,7 +32,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   import MydiaWeb.GridDensityComponents
 
   import MydiaWeb.DiscoverLive.Messages,
-    only: [movie_categories: 0, tv_categories: 0, sort_options: 0, request_error_message: 1]
+    only: [movie_categories: 0, tv_categories: 0, sort_options: 1, request_error_message: 1]
 
   # The provider returns fixed-size pages of this many results. Removing owned
   # titles from one leaves a short grid, or an empty one, which looks like the
@@ -50,7 +50,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:page_title, gettext("Discover"))
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:countries, Countries.all())
-      |> assign(:sort_options, sort_options())
+      |> assign(:sort_options, sort_options(:movie))
       |> assign(:items, [])
       |> assign(:visible_items, [])
       |> assign(:loading, true)
@@ -172,7 +172,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
         socket
         |> assign(:source, source)
         |> assign(:default_sort, default_sort)
-        |> assign(:sort_by, params["sort"] || default_sort)
+        |> assign(:sort_options, sort_options(media_type))
+        |> assign(:sort_by, parse_sort(params["sort"], sort_options(media_type), default_sort))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -239,9 +240,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("switch_category", %{"category" => category}, socket) do
-    # A tab click always lands on the tab itself, so the country tab opens
-    # on its rows even when clicked from one of its See all grids.
-    params = build_url_params(socket.assigns, category: category) |> Map.delete("source")
+    params = tab_url_params(socket.assigns, category)
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -1222,66 +1221,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # Dates are ISO `YYYY-MM-DD`, so string order is date order.
   defp narrow_release_bound(:release_date_gte, source, user), do: max(source, user)
   defp narrow_release_bound(:release_date_lte, source, user), do: min(source, user)
-
-  defp build_url_params(assigns, overrides) do
-    params = %{"type" => to_string(assigns.media_type)}
-
-    category = Keyword.get(overrides, :category, to_string(assigns.category))
-
-    params =
-      if category != "trending" do
-        Map.put(params, "category", category)
-      else
-        params
-      end
-
-    params =
-      case {category, assigns[:source]} do
-        {"home", source} when not is_nil(source) ->
-          Map.put(params, "source", RegionalSources.to_param(source))
-
-        _ ->
-          params
-      end
-
-    genre = Keyword.get(overrides, :genre)
-
-    params =
-      cond do
-        genre != nil and genre != "" ->
-          Map.put(params, "genre", genre)
-
-        assigns.selected_genres != [] ->
-          Map.put(params, "genre", Enum.join(assigns.selected_genres, ","))
-
-        true ->
-          params
-      end
-
-    language = Keyword.get(overrides, :language, assigns.selected_language)
-
-    params =
-      if language && language != "", do: Map.put(params, "language", language), else: params
-
-    params =
-      Enum.reduce([:year_from, :year_to], params, fn key, acc ->
-        case Keyword.get(overrides, key, Map.get(assigns, key)) do
-          value when value in [nil, ""] -> acc
-          value -> Map.put(acc, to_string(key), to_string(value))
-        end
-      end)
-
-    rating = Keyword.get(overrides, :rating, assigns.min_rating)
-
-    params =
-      if rating && rating != "", do: Map.put(params, "rating", to_string(rating)), else: params
-
-    default_sort = assigns[:default_sort] || "popularity.desc"
-    sort = Keyword.get(overrides, :sort, assigns.sort_by)
-    params = if sort && sort != default_sort, do: Map.put(params, "sort", sort), else: params
-
-    params
-  end
 
   # Strict: phx-value payloads are client-controlled, and
   # String.to_existing_atom/1 would raise on anything unexpected and take the
