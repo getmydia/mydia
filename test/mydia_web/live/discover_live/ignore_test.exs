@@ -250,13 +250,10 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
       view |> element("#discover-ignore-tmdb-#{first}") |> render_click()
       view |> element("#discover-ignore-tmdb-#{second}") |> render_click()
 
-      send(view.pid, {:clear_ignore_toast, {:movie, {:tmdb, first}}})
+      # Any token but the live toast's is stale, including the first ignore's.
+      send(view.pid, {:clear_ignore_toast, make_ref()})
 
       assert has_element?(view, "#discover-ignore-toast", "Velvet Quarry")
-
-      send(view.pid, {:clear_ignore_toast, {:movie, {:tmdb, second}}})
-
-      refute has_element?(view, "#discover-ignore-toast")
     end
 
     test "Ignore from the detail modal closes it and hides the card",
@@ -315,6 +312,20 @@ defmodule MydiaWeb.DiscoverLive.IgnoreTest do
   end
 
   describe "Ignores helpers" do
+    # Ignore X, Undo, ignore X again: the first timer still names X, so the toast
+    # is matched on a per-toast token rather than on the title key.
+    test "clear_toast matches the toast's own token, not its title" do
+      key = {:movie, {:tmdb, 5}}
+      live_token = make_ref()
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, ignore_toast: %{key: key, token: live_token, title: "X"}}
+      }
+
+      assert Ignores.clear_toast(socket, make_ref()).assigns.ignore_toast != nil
+      assert Ignores.clear_toast(socket, live_token).assigns.ignore_toast == nil
+    end
+
     test "no user: no ignores, and events are no-ops" do
       socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_user: nil}}
       socket = Ignores.assign_initial(socket)

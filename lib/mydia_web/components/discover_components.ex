@@ -78,12 +78,24 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :ignore_event, :string, default: nil
   attr :unignore_event, :string, default: nil
   attr :ignored, :boolean, default: false
+  # Set by media_rail to its own id, so a title shown in two rails (two
+  # regional rows) still gets unique ignore/unignore ids. The grid leaves it
+  # nil, where each title appears once.
+  attr :dom_scope, :string, default: nil
 
   def trending_card(assigns) do
     assigns =
       assigns
       |> assign(:adding?, adding?(assigns))
       |> assign(:ref_param, ignore_ref_param(assigns))
+
+    assigns =
+      assign(
+        assigns,
+        :ignore_dom_id,
+        assigns.ref_param &&
+          Enum.join(Enum.reject([assigns.dom_scope, dom_ref(assigns.ref_param)], &is_nil/1), "-")
+      )
 
     ~H"""
     <div class={[
@@ -101,7 +113,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <% end %>
       <button
         :if={@ignore_event && not @item.in_library && not @ignored && not @current}
-        id={"discover-ignore-#{dom_ref(@ref_param)}"}
+        id={"discover-ignore-#{@ignore_dom_id}"}
         type="button"
         phx-click={@ignore_event}
         phx-value-ref={@ref_param}
@@ -184,7 +196,7 @@ defmodule MydiaWeb.DiscoverComponents do
           <p :if={@item.year} class="text-xs text-base-content/60">{@item.year}</p>
           <button
             :if={@ignored && @unignore_event}
-            id={"discover-unignore-#{dom_ref(@ref_param)}"}
+            id={"discover-unignore-#{@ignore_dom_id}"}
             type="button"
             phx-click={@unignore_event}
             phx-value-ref={@ref_param}
@@ -350,6 +362,7 @@ defmodule MydiaWeb.DiscoverComponents do
             ignore_event={@ignore_event}
             unignore_event={@unignore_event}
             ignored={DiscoverIgnores.ignored?(@ignored_keys, @media_type, item)}
+            dom_scope={@id}
           />
         </div>
       </.poster_rail>

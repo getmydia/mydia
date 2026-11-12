@@ -1120,6 +1120,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
       not filtering?(socket) ->
         socket
 
+      # A page is already on its way, and its handler clears this flag before
+      # deciding whether to advance again. Queuing another would fetch the
+      # same page twice and append its titles twice.
+      socket.assigns.loading_more ->
+        socket
+
       advances >= advance_cap(socket) ->
         socket
 

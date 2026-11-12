@@ -150,7 +150,10 @@ defmodule Mydia.Accounts.UserPreference do
   dimmed with an Unignore action, instead of hiding them.
   """
   def discover_show_ignored(%__MODULE__{preferences: prefs}) do
-    Map.get(prefs || %{}, "discover_show_ignored", @defaults["discover_show_ignored"])
+    case Map.get(prefs || %{}, "discover_show_ignored") do
+      nil -> @defaults["discover_show_ignored"]
+      value -> value
+    end
   end
 
   @doc """

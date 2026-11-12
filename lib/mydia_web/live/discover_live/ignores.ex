@@ -139,11 +139,14 @@ defmodule MydiaWeb.DiscoverLive.Ignores do
   defp apply_event("ignore_title", socket, user, {media_type, ref} = key) do
     case DiscoverIgnores.ignore(user, ref, media_type) do
       :ok ->
-        Process.send_after(self(), {:clear_ignore_toast, key}, @toast_ms)
+        # A per-toast token, not the title key: ignore X, Undo, ignore X again,
+        # and the first timer would otherwise clear the second toast early.
+        token = make_ref()
+        Process.send_after(self(), {:clear_ignore_toast, token}, @toast_ms)
 
         socket
         |> assign(:ignored_keys, MapSet.put(keys(socket.assigns), key))
-        |> assign(:ignore_toast, %{key: key, title: find_title(socket.assigns, key)})
+        |> assign(:ignore_toast, %{key: key, token: token, title: find_title(socket.assigns, key)})
         |> close_modal_for(key)
 
       {:error, _changeset} ->
@@ -154,15 +157,17 @@ defmodule MydiaWeb.DiscoverLive.Ignores do
   defp apply_event("unignore_title", socket, user, {media_type, ref} = key) do
     :ok = DiscoverIgnores.unignore(user, ref, media_type)
 
-    socket
-    |> assign(:ignored_keys, MapSet.delete(keys(socket.assigns), key))
-    |> clear_toast(key)
-  end
-
-  @doc "Clears the toast, but only if it still names `key`, so a stale timer cannot clear a newer toast."
-  def clear_toast(socket, key) do
     case socket.assigns[:ignore_toast] do
       %{key: ^key} -> assign(socket, :ignore_toast, nil)
+      _ -> socket
+    end
+    |> then(&assign(&1, :ignored_keys, MapSet.delete(keys(&1.assigns), key)))
+  end
+
+  @doc "Clears the toast only if `token` is still its own, so a stale timer cannot clear a newer toast."
+  def clear_toast(socket, token) do
+    case socket.assigns[:ignore_toast] do
+      %{token: ^token} -> assign(socket, :ignore_toast, nil)
       _ -> socket
     end
   end

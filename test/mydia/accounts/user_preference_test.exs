@@ -12,6 +12,12 @@ defmodule Mydia.Accounts.UserPreferenceTest do
       assert UserPreference.discover_show_ignored(%UserPreference{preferences: %{}}) == false
     end
 
+    test "a stored nil reads as false" do
+      pref = %UserPreference{preferences: %{"discover_show_ignored" => nil}}
+
+      assert UserPreference.discover_show_ignored(pref) == false
+    end
+
     test "reads back a stored true" do
       pref = %UserPreference{preferences: %{"discover_show_ignored" => true}}
 

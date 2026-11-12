@@ -221,6 +221,17 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
   # three-fetch bound can be asserted with assert_received/refute_received
   # instead of a polling loop.
   describe "auto-advance" do
+    # Two filter events in quick succession can both run before the first
+    # self-sent :load_page is handled; without this guard each queues the same
+    # page and its titles land in the grid twice.
+    test "a filter change while a page is in flight queues nothing more" do
+      socket = curated_socket(%{hide_owned: false, current_user: nil, loading_more: true})
+
+      {:noreply, _socket} = Index.handle_event("toggle_hide_owned", %{}, socket)
+
+      refute_received {:load_page, _page, _advances, _target}
+    end
+
     test "fetches the next page when a fully-owned page leaves the grid empty" do
       owned_id = unique_provider_id()
       visible_id = unique_provider_id()

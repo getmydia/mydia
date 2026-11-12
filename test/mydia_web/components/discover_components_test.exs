@@ -138,7 +138,36 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         })
 
       assert html =~ "Ignored"
-      assert [_] = query(html, "#discover-unignore-tmdb-693134")
+      # media_rail's default id is "media-rail", which scopes the card's id.
+      assert [_] = query(html, "#discover-unignore-media-rail-tmdb-693134")
+    end
+
+    test "rail cards scope their ignore ids by rail, so one title in two rows stays unique" do
+      item =
+        %SearchResult{provider_id: "693134", provider: :tmdb, media_type: :movie, title: "Vertex"}
+        |> Map.merge(%{in_library: false, monitored: false, id: nil})
+
+      render_rail = fn id ->
+        render_component(&DiscoverComponents.media_rail/1, %{
+          id: id,
+          items: [item],
+          media_type: :movie,
+          current_user: admin(),
+          ignore_event: "ignore_title"
+        })
+      end
+
+      assert [_] =
+               query(
+                 render_rail.("discover-row-a-rail"),
+                 "#discover-ignore-discover-row-a-rail-tmdb-693134"
+               )
+
+      assert [_] =
+               query(
+                 render_rail.("discover-row-b-rail"),
+                 "#discover-ignore-discover-row-b-rail-tmdb-693134"
+               )
     end
 
     test "an owned card renders no ignore button" do
