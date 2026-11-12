@@ -12,7 +12,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
 
   @moduletag :capture_log
 
-  # Answers BuiltIn.Manager.current/0 with a fixed config, so the page reads
+  # Publishes a fixed config where BuiltIn.Manager.current/0 reads it, so the page reads
   # the preflight file from a temp dir instead of /config/gluetun.
   defmodule FakeManager do
     use GenServer
@@ -21,7 +21,19 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       do: GenServer.start_link(__MODULE__, config, name: Mydia.Downloads.BuiltIn.Manager)
 
     @impl true
-    def init(config), do: {:ok, config}
+    def init(config) do
+      :persistent_term.put(
+        {Mydia.Downloads.BuiltIn.Manager, Mydia.Downloads.BuiltIn.Manager},
+        config
+      )
+
+      {:ok, config}
+    end
+
+    @impl true
+    def terminate(_reason, _config),
+      do:
+        :persistent_term.erase({Mydia.Downloads.BuiltIn.Manager, Mydia.Downloads.BuiltIn.Manager})
 
     @impl true
     def handle_call(:current, _from, config), do: {:reply, config, config}

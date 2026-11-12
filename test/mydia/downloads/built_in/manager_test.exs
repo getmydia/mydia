@@ -106,7 +106,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
 
       start_supervised!({Manager, opts})
       # init applies in handle_continue; a call returns after it.
-      Manager.current(name)
+      Manager.await_applied(name)
       name
     end
 
@@ -119,7 +119,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
     defp reload(manager) do
       send(manager, {:runtime_config_reloaded, :ignored})
       # Messages from one sender arrive in order, so the reload is handled first.
-      Manager.current(manager)
+      Manager.await_applied(manager)
     end
 
     defp settings_file(ctx), do: Path.join([ctx.gluetun_dir, "settings", "settings.env"])
@@ -128,7 +128,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       manager = start_manager(ctx)
 
       assert [_pid] = instance_pids(ctx)
-      assert %Config{enabled?: true, port: 6881} = Manager.current(manager)
+      assert %Config{enabled?: true, port: 6881} = Manager.await_applied(manager)
       assert %BuiltIn.Runtime{api_port: 39_031} = BuiltIn.runtime()
       assert Process.whereis(Mydia.Downloads.BuiltIn.Engine)
       assert Process.whereis(Status)
@@ -158,7 +158,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       refute Process.alive?(pid)
       assert %BuiltIn.Runtime{config: %Config{port: 6999}} = new_runtime = BuiltIn.runtime()
       refute new_runtime.credentials == runtime.credentials
-      assert %Config{port: 6999} = Manager.current(manager)
+      assert %Config{port: 6999} = Manager.await_applied(manager)
     end
 
     test "disabling the client stops the instance and clears the runtime", ctx do
@@ -178,7 +178,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       manager = start_manager(ctx)
       set(ctx, listen_port: 7001)
       assert :ok = Manager.apply_now(manager)
-      assert %Config{port: 7001} = Manager.current(manager)
+      assert %Config{port: 7001} = Manager.await_applied(manager)
     end
 
     test "with the VPN on, Vpn waits for the hash of the file it wrote", ctx do
@@ -188,7 +188,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       content = File.read!(settings_file(ctx))
       assert content =~ "VPN_ENABLED=true\n"
       assert content =~ "VPN_SERVICE_PROVIDER=mullvad\n"
-      assert %Config{vpn?: true} = Manager.current(manager)
+      assert %Config{vpn?: true} = Manager.await_applied(manager)
       assert :sys.get_state(Vpn).expected_hash == VpnSettings.hash(content)
     end
 
@@ -212,17 +212,45 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       set(ctx, vpn_enabled: true, vpn_provider: "mullvad")
       manager = start_manager(ctx, gluetun_dir: blocker)
 
-      config = Manager.current(manager)
+      config = Manager.await_applied(manager)
       assert {:vpn_settings_write_failed, :enotdir} in Status.get().warnings
       expected = VpnSettings.hash(VpnSettings.render(config, %{}))
       assert :sys.get_state(Vpn).expected_hash == expected
+    end
+
+    test "current/1 keeps the evaluated config while the client is off", ctx do
+      # Wanted, but off because another client holds the reserved name.
+      manager = start_manager(ctx, clients_fun: fn -> {[:sabnzbd], true} end)
+
+      assert %Config{enabled?: false, warnings: warnings} = Manager.current(manager)
+      assert {:reserved_name_taken} in warnings
+      assert instance_pids(ctx) == []
+    end
+
+    test "current/1 answers without the GenServer while it is busy", ctx do
+      manager = start_manager(ctx)
+      :ok = :sys.suspend(manager)
+
+      task = Task.async(fn -> Manager.current(manager) end)
+      assert %Config{enabled?: true} = Task.await(task, 500)
+
+      :ok = :sys.resume(manager)
+    end
+
+    test "current/1 is nil before any evaluation and after a raising build", ctx do
+      assert Manager.current(:never_started_manager) == nil
+
+      capture_log(fn ->
+        manager = start_manager(ctx, runtime_fun: fn -> raise "boom" end)
+        assert Manager.current(manager) == nil
+      end)
     end
 
     test "a raising runtime_fun leaves the manager up with no instance", ctx do
       log =
         capture_log(fn ->
           manager = start_manager(ctx, runtime_fun: fn -> raise "boom" end)
-          assert Manager.current(manager) == nil
+          assert Manager.await_applied(manager) == nil
           assert Process.alive?(Process.whereis(manager))
         end)
 

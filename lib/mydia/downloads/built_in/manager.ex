@@ -38,9 +38,24 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
 
-  @doc "The config of the running instance, or nil when none was applied."
-  @spec current(GenServer.server()) :: Config.t() | nil
-  def current(server \\ __MODULE__), do: GenServer.call(server, :current, @call_timeout_ms)
+  @doc """
+  The config last evaluated, whether the client is on or off, so warnings such
+  as `{:reserved_name_taken}` stay visible while it is off. Nil before the
+  first successful evaluation.
+
+  Reads a `:persistent_term`, never the GenServer: it returns at once even
+  while an apply is stopping rqbit.
+  """
+  @spec current(atom()) :: Config.t() | nil
+  def current(server \\ __MODULE__), do: :persistent_term.get({__MODULE__, server}, nil)
+
+  @doc """
+  Waits until the manager has handled every message sent before the call, then
+  returns the config of the running instance (nil when none runs). Blocks for as
+  long as an apply in progress takes.
+  """
+  @spec await_applied(GenServer.server()) :: Config.t() | nil
+  def await_applied(server \\ __MODULE__), do: GenServer.call(server, :current, @call_timeout_ms)
 
   @doc "Re-reads the runtime config and applies it now."
   @spec apply_now(GenServer.server()) :: :ok
@@ -51,6 +66,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
     Phoenix.PubSub.subscribe(Mydia.PubSub, Loader.topic())
 
     state = %{
+      name: Keyword.get(opts, :name, __MODULE__),
       instances: Keyword.get(opts, :instances, @instances),
       runtime_fun:
         Keyword.get(opts, :runtime_fun, fn ->
@@ -113,6 +129,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
     # which then reports :vpn_apply_timeout instead of running unverified.
     expected_hash = VpnSettings.hash(VpnSettings.render(config, env))
     config = %{config | warnings: config.warnings ++ write_settings(config, env)}
+    :persistent_term.put({__MODULE__, state.name}, config)
 
     if unchanged?(state, config), do: state, else: restart(state, config, expected_hash)
   end

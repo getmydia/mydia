@@ -225,7 +225,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
   # The manager handles the reload before this call, so the reply comes after
   # the save has been applied. Disabling sends no status broadcast, so this is
   # what updates the panel then.
-  defp start_applied(socket), do: start_async(socket, :built_in_applied, &safe_current/0)
+  defp start_applied(socket), do: start_async(socket, :built_in_applied, &safe_await_applied/0)
 
   defp off_reason(nil), do: Settings.off_reason(nil, &System.get_env/1)
   defp off_reason(_runtime), do: nil
@@ -234,9 +234,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
 
   defp user_id(socket), do: socket.assigns.current_user.id
 
-  # The manager is absent where health monitors are off (tests, some installs).
-  defp safe_current do
-    Manager.current()
+  # Reads the last evaluated config without calling the manager, so it never
+  # waits on an apply. Nil where the manager is absent (tests, some installs).
+  defp safe_current, do: Manager.current()
+
+  defp safe_await_applied do
+    Manager.await_applied()
   catch
     :exit, _ -> nil
   end
