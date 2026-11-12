@@ -76,8 +76,6 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   """
   @spec load(%{String.t() => String.t()}, [atom()] | :unknown, keyword()) :: t()
   def load(env, other_client_types, opts \\ []) do
-    finder = Keyword.get(opts, :find_executable, &System.find_executable/1)
-    exists? = Keyword.get(opts, :file_exists?, &File.regular?/1)
     {port, port_warnings} = parse_port(env["MYDIA_TORRENT_PORT"], @default_port, :invalid_port)
 
     {api_port, api_port_warnings} =
@@ -87,16 +85,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
     provider = blank_to_nil(env["MYDIA_VPN_SERVICE_PROVIDER"])
     name_taken? = Keyword.get(opts, :name_taken, false)
     state_dir = blank_to_nil(env["MYDIA_TORRENT_STATE_PATH"]) || @default_state_dir
-
-    wanted? =
-      case enabled do
-        :unset ->
-          exists?.(Path.join(state_dir, @marker)) or new_install?(other_client_types, finder)
-
-        explicit ->
-          explicit
-      end
-
+    wanted? = wanted?(enabled, state_dir, other_client_types, opts)
     name_warnings = if wanted? and name_taken?, do: [{:reserved_name_taken}], else: []
 
     %__MODULE__{
@@ -145,6 +134,15 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @doc "Where the supervisor records that this install runs the built-in client."
   @spec marker_path(t()) :: Path.t()
   def marker_path(%__MODULE__{state_dir: state_dir}), do: Path.join(state_dir, @marker)
+
+  # Whether the client should run, before the reserved-name check.
+  defp wanted?(:unset, state_dir, other_client_types, opts) do
+    finder = Keyword.get(opts, :find_executable, &System.find_executable/1)
+    exists? = Keyword.get(opts, :file_exists?, &File.regular?/1)
+    exists?.(Path.join(state_dir, @marker)) or new_install?(other_client_types, finder)
+  end
+
+  defp wanted?(explicit, _state_dir, _other_client_types, _opts), do: explicit
 
   defp new_install?([], finder), do: finder.("rqbit") != nil
   defp new_install?(_types_or_unknown, _finder), do: false
