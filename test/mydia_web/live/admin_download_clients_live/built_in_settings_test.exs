@@ -340,6 +340,44 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
     end
 
     @tag :tmp_dir
+    test "with capabilities missing and the VPN on, the toggle stays enabled to turn it off", %{
+      conn: conn,
+      tmp_dir: tmp_dir
+    } do
+      File.write!(Path.join(tmp_dir, "preflight"), "net_admin=missing\ntun=ok\n")
+
+      start_supervised!(
+        {FakeManager,
+         %Config{enabled?: true, vpn?: true, vpn_provider: "mullvad", gluetun_dir: tmp_dir}}
+      )
+
+      put_row(:vpn_enabled, "true")
+      put_row(:vpn_provider, "mullvad")
+      {:ok, _} = Mydia.Config.Loader.reload()
+      run_built_in(%Config{enabled?: true, vpn?: true, vpn_provider: "mullvad"})
+      view = open_settings(conn)
+
+      assert has_element?(view, "#built-in-vpn-setup-card")
+      assert has_element?(view, "#built-in-field-vpn_enabled")
+      refute has_element?(view, "#built-in-field-vpn_enabled[disabled]")
+
+      form = element(view, "#built-in-settings-form")
+      render_submit(form, %{"built_in" => %{"vpn_enabled" => "false"}})
+      assert has_element?(view, "#built-in-confirm-vpn-off")
+
+      render_submit(form, %{"built_in" => %{"vpn_enabled" => "false"}})
+      refute has_element?(view, "#built-in-settings-modal")
+
+      assert %{value: "false"} =
+               Mydia.Settings.get_config_setting_by_key("built_in_torrent.vpn_enabled")
+    end
+
+    test "the state path field explains that a new path starts a new session", %{conn: conn} do
+      view = open_settings(conn)
+      assert has_element?(view, "#built-in-hint-state_path")
+    end
+
+    @tag :tmp_dir
     test "a missing src_valid_mark alone shows the card but leaves the toggle", %{
       conn: conn,
       tmp_dir: tmp_dir

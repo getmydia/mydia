@@ -152,7 +152,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
             field={:state_path}
             sources={@sources}
             label={gettext("State path")}
-          />
+          >
+            <:hint>
+              {gettext(
+                "Changing this starts a new, empty torrent session. Torrents in the old session stop being tracked by the engine."
+              )}
+            </:hint>
+          </.text_field>
           <.text_field
             form={@form}
             field={:api_port}
@@ -185,6 +191,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
       |> assign(:vpn_type, effective_type(provider, assigns.form[:vpn_type].value))
       |> assign(:preflight_map, preflight)
       |> assign(:blocked?, preflight != nil and Preflight.blocking_reason(preflight) != nil)
+      # Missing capabilities only stop the VPN being turned on; it can always be turned off.
+      |> assign(
+        :vpn_on?,
+        Phoenix.HTML.Form.normalize_value("checkbox", assigns.form[:vpn_enabled].value)
+      )
 
     ~H"""
     <section id="built-in-section-vpn" class={["space-y-4", @hidden? && "hidden"]}>
@@ -204,7 +215,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           type="checkbox"
           class="toggle toggle-primary"
           label={gettext("Use the VPN")}
-          disabled={locked?(@sources, :vpn_enabled) or @blocked?}
+          disabled={locked?(@sources, :vpn_enabled) or (@blocked? and not @vpn_on?)}
         />
       </.field_row>
 

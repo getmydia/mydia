@@ -1218,7 +1218,7 @@ msgstr ""
 msgid "Round"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:467
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:478
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:210
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:169
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:201
@@ -7473,7 +7473,7 @@ msgstr ""
 msgid "Protocol"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:211
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:222
 #: lib/mydia_web/live/admin_download_clients_live/connection_fields_components.ex:29
 #: lib/mydia_web/live/import_media_live/labels.ex:61
 #, elixir-autogen, elixir-format
@@ -17727,7 +17727,7 @@ msgstr ""
 msgid "Reorganizing..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:161
+#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:167
 #: lib/mydia_web/live/admin_plugins_live/components.ex:409
 #, elixir-autogen, elixir-format
 msgid "Replace"
@@ -21822,12 +21822,12 @@ msgstr ""
 msgid "VPN experimental"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:391
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:402
 #, elixir-autogen, elixir-format
 msgid "%{provider} also needs these variables, which must be set in the container environment:"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:161
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:167
 #, elixir-autogen, elixir-format
 msgid "API port"
 msgstr ""
@@ -21837,12 +21837,12 @@ msgstr ""
 msgid "Add these lines to the Mydia service in your compose file, then recreate the container. The VPN can be switched on once they are in place."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:318
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:329
 #, elixir-autogen, elixir-format
 msgid "Also set from environment"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:312
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:323
 #, elixir-autogen, elixir-format
 msgid "Ask the provider for a forwarded port"
 msgstr ""
@@ -21857,17 +21857,17 @@ msgstr ""
 msgid "Built-in torrent client settings saved. Applying them now."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:216
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:227
 #, elixir-autogen, elixir-format
 msgid "Choose a provider"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:267
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:278
 #, elixir-autogen, elixir-format
 msgid "Choose a provider to see its sign-in fields."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:298
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:309
 #, elixir-autogen, elixir-format
 msgid "Comma-separated. Leave blank to let the provider choose."
 msgstr ""
@@ -21927,22 +21927,22 @@ msgstr ""
 msgid "Off: turned off in these settings."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:367
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:378
 #, elixir-autogen, elixir-format
 msgid "OpenVPN password"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:361
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:372
 #, elixir-autogen, elixir-format
 msgid "OpenVPN username"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:304
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:315
 #, elixir-autogen, elixir-format
 msgid "Port forwarding"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:198
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:209
 #, elixir-autogen, elixir-format
 msgid "Route torrents through a VPN"
 msgstr ""
@@ -21953,27 +21953,27 @@ msgstr ""
 msgid "Run the built-in client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:152
+#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:158
 #, elixir-autogen, elixir-format
 msgid "Saved"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:288
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:299
 #, elixir-autogen, elixir-format
 msgid "Server cities"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:276
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:287
 #, elixir-autogen, elixir-format
 msgid "Server countries"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:294
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:305
 #, elixir-autogen, elixir-format
 msgid "Server hostnames"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:282
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:293
 #, elixir-autogen, elixir-format
 msgid "Server regions"
 msgstr ""
@@ -21983,7 +21983,7 @@ msgstr ""
 msgid "Set by %{variable}; change it in the container environment."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:148
+#: lib/mydia_web/live/admin_download_clients_live/built_in_field_components.ex:154
 #, elixir-autogen, elixir-format
 msgid "Set in the environment"
 msgstr ""
@@ -22018,17 +22018,17 @@ msgstr ""
 msgid "Torrent engine and VPN settings"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:430
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:441
 #, elixir-autogen, elixir-format
 msgid "Torrents will connect without the VPN, from this server's own address. Save again to turn the VPN off."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:466
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:477
 #, elixir-autogen, elixir-format
 msgid "Turn VPN off and save"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:465
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:476
 #, elixir-autogen, elixir-format
 msgid "Turn off and save"
 msgstr ""
@@ -22038,30 +22038,30 @@ msgstr ""
 msgid "Turning on the built-in torrent client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:415
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:426
 #, elixir-autogen, elixir-format
 msgid "Turning the built-in client off stops %{count} download that is still in progress. Save again to turn it off."
 msgid_plural "Turning the built-in client off stops %{count} downloads that are still in progress. Save again to turn it off."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:206
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:217
 #, elixir-autogen, elixir-format
 msgid "Use the VPN"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:226
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:237
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:248
 #, elixir-autogen, elixir-format
 msgid "VPN type"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:352
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:363
 #, elixir-autogen, elixir-format
 msgid "WireGuard addresses"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:342
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:353
 #, elixir-autogen, elixir-format
 msgid "WireGuard private key"
 msgstr ""
@@ -22069,4 +22069,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:134
 #, elixir-autogen, elixir-format
 msgid "A new path applies to new grabs. Torrents already in the session finish in their original folder."
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:157
+#, elixir-autogen, elixir-format
+msgid "Changing this starts a new, empty torrent session. Torrents in the old session stop being tracked by the engine."
 msgstr ""

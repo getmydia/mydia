@@ -45,7 +45,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
         </span>
       </div>
       {render_slot(@inner_block)}
-      <p :if={@hint != []} class="text-xs text-base-content/60">{render_slot(@hint)}</p>
+      <p
+        :if={@hint != []}
+        id={"built-in-hint-#{@field}"}
+        class="text-xs text-base-content/60"
+      >
+        {render_slot(@hint)}
+      </p>
     </div>
     """
   end
