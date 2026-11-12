@@ -14,8 +14,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
       accept `VPN_PORT_FORWARDING=on`.
 
   `name` is gluetun's exact `VPN_SERVICE_PROVIDER` string; `label` is for
-  display. `extra_env` lists the gluetun variables a provider requires that
-  the form cannot supply (client certificates and keys, a WireGuard preshared
+  display. `extra_env/2` lists the gluetun variables a provider requires for a
+  VPN type that the form cannot supply (client certificates and keys, a WireGuard preshared
   key), from the `validate` functions in `internal/configuration/settings/openvpn.go`
   (`validateOpenVPNClientCertificate`, `validateOpenVPNClientKey`,
   `validateOpenVPNEncryptedKey`) and `wireguard.go` (the AirVPN preshared key
@@ -54,11 +54,17 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
     {"windscribe", "Windscribe"}
   ]
 
+  # Per provider and VPN type: a WireGuard AirVPN needs no OpenVPN certificate.
   @extra_env %{
-    "airvpn" => ["OPENVPN_CERT", "OPENVPN_KEY", "WIREGUARD_PRESHARED_KEY"],
-    "cyberghost" => ["OPENVPN_CERT", "OPENVPN_KEY"],
-    "vpnsecure" => ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"],
-    "vpn unlimited" => ["OPENVPN_CERT", "OPENVPN_KEY"]
+    "airvpn" => %{
+      "openvpn" => ["OPENVPN_CERT", "OPENVPN_KEY"],
+      "wireguard" => ["WIREGUARD_PRESHARED_KEY"]
+    },
+    "cyberghost" => %{"openvpn" => ["OPENVPN_CERT", "OPENVPN_KEY"]},
+    "vpnsecure" => %{
+      "openvpn" => ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"]
+    },
+    "vpn unlimited" => %{"openvpn" => ["OPENVPN_CERT", "OPENVPN_KEY"]}
   }
 
   # gluetun's retro-compatible names (`readVPNServiceProvider` in
@@ -69,8 +75,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
           name: String.t(),
           label: String.t(),
           types: [String.t()],
-          port_forwarding?: boolean(),
-          extra_env: [String.t()]
+          port_forwarding?: boolean()
         }
 
   @table Enum.map(@providers, fn {name, label} ->
@@ -78,8 +83,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
              name: name,
              label: label,
              types: if(name in @wireguard, do: ["openvpn", "wireguard"], else: ["openvpn"]),
-             port_forwarding?: name in @port_forwarding,
-             extra_env: Map.get(@extra_env, name, [])
+             port_forwarding?: name in @port_forwarding
            }
          end)
 
@@ -105,4 +109,21 @@ defmodule Mydia.Downloads.BuiltIn.VpnProviders do
   end
 
   def get(_), do: nil
+
+  @doc """
+  The gluetun variables this provider requires for `vpn_type` that the form
+  cannot supply. A nil type means the provider's first supported one; an
+  unknown provider has none.
+  """
+  @spec extra_env(term(), String.t() | nil) :: [String.t()]
+  def extra_env(provider_name, vpn_type) do
+    case get(provider_name) do
+      nil ->
+        []
+
+      %{name: name, types: types} ->
+        type = vpn_type || hd(types)
+        @extra_env |> Map.get(name, %{}) |> Map.get(type, [])
+    end
+  end
 end

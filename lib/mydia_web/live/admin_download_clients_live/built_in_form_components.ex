@@ -273,7 +273,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           typed_secrets={@typed_secrets}
         />
 
-        <.extra_env_note provider={@provider} />
+        <.extra_env_note provider={@provider} vpn_type={@vpn_type} />
       <% else %>
         <p class="text-sm text-base-content/60">
           {gettext("Choose a provider to see its sign-in fields.")}
@@ -396,11 +396,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
   end
 
   attr :provider, :map, required: true
+  attr :vpn_type, :string, required: true
 
   defp extra_env_note(assigns) do
+    assigns =
+      assign(assigns, :names, VpnProviders.extra_env(assigns.provider.name, assigns.vpn_type))
+
     ~H"""
     <div
-      :if={@provider.extra_env != []}
+      :if={@names != []}
       id="built-in-vpn-extra-env"
       role="note"
       class="alert alert-info alert-soft text-sm items-start"
@@ -414,7 +418,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           )}
         </p>
         <ul class="flex flex-wrap gap-2">
-          <li :for={name <- @provider.extra_env}>
+          <li :for={name <- @names}>
             <code class="font-mono text-xs break-all">MYDIA_VPN_{name}</code>
           </li>
         </ul>

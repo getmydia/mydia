@@ -43,14 +43,23 @@ defmodule Mydia.Downloads.BuiltIn.VpnProvidersTest do
     assert %{port_forwarding?: false} = VpnProviders.get("mullvad")
   end
 
-  test "extra_env names what the form cannot supply, empty by default" do
-    assert %{extra_env: ["OPENVPN_CERT", "OPENVPN_KEY"]} = VpnProviders.get("cyberghost")
+  test "extra_env/2 names what the form cannot supply for the chosen type" do
+    assert VpnProviders.extra_env("cyberghost", "openvpn") == ["OPENVPN_CERT", "OPENVPN_KEY"]
 
-    assert %{extra_env: ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"]} =
-             VpnProviders.get("vpnsecure")
+    assert VpnProviders.extra_env("vpnsecure", "openvpn") ==
+             ["OPENVPN_CERT", "OPENVPN_ENCRYPTED_KEY", "OPENVPN_KEY_PASSPHRASE"]
 
-    assert "WIREGUARD_PRESHARED_KEY" in VpnProviders.get("airvpn").extra_env
-    assert VpnProviders.get("mullvad").extra_env == []
+    assert VpnProviders.extra_env("airvpn", "openvpn") == ["OPENVPN_CERT", "OPENVPN_KEY"]
+    assert VpnProviders.extra_env("airvpn", "wireguard") == ["WIREGUARD_PRESHARED_KEY"]
+    assert VpnProviders.extra_env("mullvad", "wireguard") == []
+    assert VpnProviders.extra_env("mullvad", "openvpn") == []
+  end
+
+  test "extra_env/2 treats a nil type as the first supported one and resolves aliases" do
+    assert VpnProviders.extra_env("airvpn", nil) == ["OPENVPN_CERT", "OPENVPN_KEY"]
+    assert VpnProviders.extra_env("pia", nil) == []
+    assert VpnProviders.extra_env("nope", nil) == []
+    assert VpnProviders.extra_env(nil, "openvpn") == []
   end
 
   test "get/1 returns nil for unknown names" do
