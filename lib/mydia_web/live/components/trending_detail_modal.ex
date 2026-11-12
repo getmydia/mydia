@@ -242,6 +242,28 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                             />
                           </div>
                       <% end %>
+                      <button
+                        :if={@ignored && @unignore_event}
+                        id="detail-unignore"
+                        type="button"
+                        phx-click={@unignore_event}
+                        phx-value-ref={@item_ref}
+                        phx-value-media_type={media_type_string(@item)}
+                        class="btn btn-outline"
+                      >
+                        <.icon name="hero-eye" class="w-4 h-4" /> {gettext("Unignore")}
+                      </button>
+                      <button
+                        :if={not @ignored && @ignore_event}
+                        id="detail-ignore"
+                        type="button"
+                        phx-click={@ignore_event}
+                        phx-value-ref={@item_ref}
+                        phx-value-media_type={media_type_string(@item)}
+                        class="btn btn-outline"
+                      >
+                        <.icon name="hero-eye-slash" class="w-4 h-4" /> {gettext("Ignore")}
+                      </button>
                     <% else %>
                       <.link navigate={library_path(@item)} class="btn btn-ghost">
                         <.icon name="hero-arrow-right" class="w-4 h-4" />
@@ -375,7 +397,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:add_event, fn -> "add_to_library" end)
      |> assign_new(:request_event, fn -> "request_media" end)
      # Opt-in clickable cast; nil keeps the cast non-interactive.
-     |> assign_new(:person_event, fn -> nil end)}
+     |> assign_new(:person_event, fn -> nil end)
+     # Discover's ignore list (#1379). Opt-in like person_event: nil renders no
+     # button, so the Dashboard and request pages are unchanged.
+     |> assign_new(:ignore_event, fn -> nil end)
+     |> assign_new(:unignore_event, fn -> nil end)
+     |> assign_new(:ignored, fn -> false end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

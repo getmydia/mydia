@@ -80,6 +80,22 @@
                 {gettext("Hide in library")}
               </span>
             </label>
+
+            <label
+              :if={@media_type != :person and (MapSet.size(@ignored_keys) > 0 or @show_ignored)}
+              class="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                id="discover-show-ignored"
+                type="checkbox"
+                phx-click="toggle_show_ignored"
+                checked={@show_ignored}
+                class="toggle toggle-sm toggle-primary"
+              />
+              <span class={["text-sm", !@show_ignored && "text-base-content/50"]}>
+                {gettext("Show ignored (%{count})", count: MapSet.size(@ignored_keys))}
+              </span>
+            </label>
           </div>
 
           <%= cond do %>
@@ -278,6 +294,10 @@
           media_type={@media_type}
           has_services={@streaming_services != []}
           hide_owned={@hide_owned}
+          show_ignored={@show_ignored}
+          ignored_keys={@ignored_keys}
+          ignore_event={@current_user && "ignore_title"}
+          unignore_event={@current_user && "unignore_title"}
           current_user={@current_user}
           adding_ids={@adding_item_ids}
           requesting_item_id={@requesting_item_id}
@@ -346,6 +366,9 @@
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               loading={if(index < 6, do: nil, else: "lazy")}
+              ignore_event={@current_user && "ignore_title"}
+              unignore_event={@current_user && "unignore_title"}
+              ignored={Ignores.ignored?(@ignored_keys, @media_type, item)}
             />
           <% end %>
         </div>
@@ -390,6 +413,11 @@
     open={@selected_item != nil}
     config_open={@add_config != nil}
     person_event="show_person"
+    ignore_event={@current_user && "ignore_title"}
+    unignore_event={@current_user && "unignore_title"}
+    ignored={
+      @selected_item != nil and Ignores.ignored?(@ignored_keys, @media_type, @selected_item)
+    }
   >
     <:rail>
       <.media_rail
@@ -400,9 +428,37 @@
         current_user={@current_user}
         adding_ids={@adding_item_ids}
         requesting_item_id={@requesting_item_id}
+        unignore_event={@current_user && "unignore_title"}
+        ignored_keys={@ignored_keys}
       />
     </:rail>
   </.live_component>
 
   <.add_config_modal config={@add_config} quality_profiles={@quality_profiles} />
+
+  <%!-- Above the mobile dock (fixed z-50 at the bottom below lg), or phone
+       users never see Undo. --%>
+  <div
+    :if={@ignore_toast}
+    id="discover-ignore-toast"
+    class="toast toast-center toast-bottom z-[60] max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+  >
+    <div class="alert shadow-lg">
+      <.icon name="hero-eye-slash" class="w-5 h-5" />
+      <span :if={@ignore_toast.title}>
+        {gettext("Ignored %{title}", title: @ignore_toast.title)}
+      </span>
+      <span :if={is_nil(@ignore_toast.title)}>{gettext("Title ignored")}</span>
+      <button
+        id="discover-ignore-toast-undo"
+        type="button"
+        class="btn btn-sm btn-ghost"
+        phx-click="unignore_title"
+        phx-value-ref={Mydia.Metadata.Ref.to_param(elem(@ignore_toast.key, 1))}
+        phx-value-media_type={elem(@ignore_toast.key, 0)}
+      >
+        {gettext("Undo")}
+      </button>
+    </div>
+  </div>
 </Layouts.app>

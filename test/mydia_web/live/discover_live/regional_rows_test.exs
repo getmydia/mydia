@@ -117,6 +117,23 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     refute has_element?(view, "#discover-grid")
   end
 
+  test "rows drop ignored titles", %{conn: conn, bypass: bypass, user: user} do
+    stub_discover(bypass)
+    # The stub ids each row's single title by the hash of its name.
+    :ok =
+      Mydia.Accounts.DiscoverIgnores.ignore(
+        user,
+        {:tmdb, :erlang.phash2("Cinema Lantern")},
+        :movie
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
+    render_async(view, 5_000)
+
+    refute has_element?(view, "#discover-row-in_cinemas", "Cinema Lantern")
+    assert has_element?(view, "#discover-row-coming_soon", "Soon Lantern")
+  end
+
   test "rows send the regional params", %{conn: conn, bypass: bypass} do
     stub_discover(bypass)
 
