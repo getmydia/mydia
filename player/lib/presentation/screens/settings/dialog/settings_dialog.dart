@@ -31,7 +31,19 @@ enum SettingsCategory {
 }
 
 class SettingsDialogController extends ValueNotifier<SettingsCategory> {
-  SettingsDialogController(super.initial);
+  SettingsDialogController(super.initial, {String? connectionsSection})
+      : connectionsSection = ValueNotifier<String?>(connectionsSection);
+
+  /// A section the connections pane should scroll to (`'devices'`). Set
+  /// before the dialog opens, the pane takes it as it mounts; set while it
+  /// is open, the dialog returns the pane to the hub and selects it.
+  final ValueNotifier<String?> connectionsSection;
+
+  @override
+  void dispose() {
+    connectionsSection.dispose();
+    super.dispose();
+  }
 }
 
 /// Below this the dialog takes the whole window and the sidebar drops its
@@ -60,22 +72,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _navigators = {
     for (final c in SettingsCategory.values) c: GlobalKey<NavigatorState>(),
   };
-  final _connectionsSection = ValueNotifier<String?>(null);
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_changed);
+    // Added before any pane mounts, so this runs ahead of the connections
+    // pane taking (and clearing) the request.
+    widget.controller.connectionsSection.addListener(_sectionRequested);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
-    _connectionsSection.dispose();
+    widget.controller.connectionsSection.removeListener(_sectionRequested);
     super.dispose();
   }
 
   void _changed() => setState(() {});
+
+  /// A section lives on the hub: back to its root, then show the pane.
+  void _sectionRequested() {
+    if (widget.controller.connectionsSection.value == null) return;
+    _navigators[SettingsCategory.connections]!
+        .currentState
+        ?.popUntil((route) => route.isFirst);
+    widget.controller.value = SettingsCategory.connections;
+  }
 
   void _close() => Navigator.of(context).pop();
 
@@ -106,7 +129,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       close: _close,
       select: (c) => widget.controller.value = c,
       paneNavigator: (c) => _navigators[c]!.currentState!,
-      connectionsSection: _connectionsSection,
+      connectionsSection: widget.controller.connectionsSection,
       child: Dialog(
         insetPadding: EdgeInsets.all(inset),
         backgroundColor: palette.background,

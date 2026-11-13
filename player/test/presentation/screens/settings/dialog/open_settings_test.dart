@@ -228,6 +228,54 @@ void main() {
     expect(selected(tester), SettingsCategory.connections);
   });
 
+  final scrollingOverview = hubOverview(
+    servers: [
+      for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
+    ],
+    devices: [hubDevice('n1', 'Pixel phone', 'android')],
+  );
+
+  void expectDevicesInPane(WidgetTester tester) {
+    final dialog = tester.getRect(find.byKey(const Key('settings-dialog')));
+    final devices =
+        tester.getRect(find.byKey(const Key('connections-devices-section')));
+    expect(dialog.overlaps(devices), isTrue,
+        reason: 'the devices section is scrolled into the pane');
+    expect(devices.top, greaterThanOrEqualTo(dialog.top));
+  }
+
+  testWidgets('/settings/paired-devices opens the dialog on the devices',
+      (tester) async {
+    await pumpApp(tester, dialog: true, overview: scrollingOverview);
+    final context = tester.element(find.text('open'));
+    expect(openSettingsForRoute(context, '/settings/paired-devices'), isTrue);
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.connections);
+    expectDevicesInPane(tester);
+  });
+
+  testWidgets('/settings/paired-devices on an open dialog returns to the hub',
+      (tester) async {
+    await pumpApp(tester, dialog: true, overview: scrollingOverview);
+    await open(tester);
+    dialogNav(tester).openAccount('s0');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-category-diagnostics')));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byKey(const Key('settings-dialog')));
+    expect(openSettingsForRoute(context, '/settings/paired-devices'), isTrue);
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.connections);
+    expect(
+        SettingsDialogScope.of(
+                tester.element(find.byKey(const Key('settings-dialog'))))
+            .paneNavigator(SettingsCategory.connections)
+            .canPop(),
+        isFalse);
+    expectDevicesInPane(tester);
+  });
+
   testWidgets('a second open retargets instead of stacking', (tester) async {
     await pumpApp(tester, dialog: true);
     await open(tester);

@@ -95,8 +95,14 @@ class _ConnectionsPageState extends State<_ConnectionsPage> {
     final requests = SettingsDialogScope.of(context).connectionsSection;
     if (identical(requests, _requests)) return;
     _requests?.removeListener(_take);
-    // Every pane mounts with the dialog, before anything in it can ask.
     _requests = requests..addListener(_take);
+    // A dialog opened on a section (`/settings/paired-devices`) asked
+    // before this pane mounted.
+    final pending = requests.value;
+    if (pending != null) {
+      requests.value = null;
+      _show(pending);
+    }
   }
 
   @override
@@ -110,7 +116,11 @@ class _ConnectionsPageState extends State<_ConnectionsPage> {
     final section = requests?.value;
     if (requests == null || section == null) return;
     requests.value = null;
-    setState(() => _section = section);
+    setState(() => _show(section));
+  }
+
+  void _show(String section) {
+    _section = section;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() => _section = null);
     });
@@ -184,13 +194,10 @@ class DialogSettingsNav implements SettingsNav {
   @override
   void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
 
-  /// Paired devices are a section of the hub: back to its root, then scroll.
+  /// Paired devices are a section of the hub; the dialog returns the pane to
+  /// its root and selects it.
   @override
-  void openPairedDevices() {
-    _connections.popUntil((route) => route.isFirst);
-    scope.select(SettingsCategory.connections);
-    scope.connectionsSection.value = 'devices';
-  }
+  void openPairedDevices() => scope.connectionsSection.value = 'devices';
 
   @override
   void openConnections() => scope.select(SettingsCategory.connections);

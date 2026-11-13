@@ -96,13 +96,21 @@ bool openSettingsForRoute(BuildContext context, String route) {
       .read(settingsDialogEnabledProvider)) {
     return false;
   }
-  openSettings(context, initial: category);
+  openSettings(
+    context,
+    initial: category,
+    // As the router's redirect does: paired devices are the hub's devices.
+    connectionsSection: route == '/settings/paired-devices' ? 'devices' : null,
+  );
   return true;
 }
 
+/// Opens settings on [initial]. A [connectionsSection] (`'devices'`) also
+/// scrolls the connections hub to it.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory initial = SettingsCategory.playback,
+  String? connectionsSection,
 }) async {
   final enabled = ProviderScope.containerOf(context, listen: false)
       .read(settingsDialogEnabledProvider);
@@ -114,7 +122,9 @@ Future<void> openSettings(
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
       case SettingsCategory.connections:
-        unawaited(router.push<void>('/sources/manage'));
+        unawaited(router.push<void>(connectionsSection == null
+            ? '/sources/manage'
+            : '/sources/manage?section=$connectionsSection'));
     }
     return;
   }
@@ -122,10 +132,14 @@ Future<void> openSettings(
   final open = _open;
   if (open != null) {
     open.value = initial;
+    if (connectionsSection != null) {
+      open.connectionsSection.value = connectionsSection;
+    }
     return;
   }
 
-  final controller = SettingsDialogController(initial);
+  final controller =
+      SettingsDialogController(initial, connectionsSection: connectionsSection);
   final router = GoRouter.of(context);
   _open = controller;
   try {
