@@ -611,7 +611,6 @@
   "sourcesJellyfinWrongCredentials": "Usuário ou senha incorretos.",
   "sourcesJellyfinBadUserId": "O Jellyfin enviou um identificador de usuário que o app não consegue usar.",
   "sourcesSaveServerFailed": "Não foi possível salvar este servidor neste dispositivo.",
-  "sourcesNoServers": "Nenhum servidor ainda.",
   "sourcesLoadFailed": "Não foi possível ler os servidores salvos.",
   "sourcesIncludeInAll": "Incluir em Todos os servidores",
   "sourcesRemoveAccountFailed": "Não foi possível remover esta conta.",
@@ -991,7 +990,6 @@
   "pairedDevicesCancelOfferButton": "Cancelar",
   "pairedDevicesActiveOfferInstructions": "Digite este código no seu outro dispositivo ou escaneie o código QR:",
   "pairedDevicesCodeInputLabel": "Código de pareamento",
-  "pairedDevicesCodeInputHint": "ABC-123",
   "pairedDevicesSubmitCodeButton": "Parear dispositivo",
   "pairedDevicesScanQrButton": "Escanear código QR",
   "pairedDevicesSyncNowButton": "Sincronizar agora",
@@ -1000,8 +998,6 @@
   "pairedDevicesLeaveGroupConfirmBody": "Este dispositivo deixará de sincronizar o progresso e itens fixados com outros dispositivos pareados.",
   "pairedDevicesRemovePeerButton": "Remover",
   "pairedDevicesConnectedToast": "Pareado com {deviceName}",
-  "pairedDevicesOrDivider": "ou",
   "pairedDevicesPairingFailed": "Falha no pareamento",
-  "pairedDevicesListSection": "Dispositivos pareados",
-  "pairedDevicesPairNewSection": "Parear outro dispositivo"
+  "pairedDevicesListSection": "Dispositivos pareados"
 }

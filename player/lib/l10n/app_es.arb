@@ -611,7 +611,6 @@
   "sourcesJellyfinWrongCredentials": "Usuario o contraseña incorrectos.",
   "sourcesJellyfinBadUserId": "Jellyfin envió un identificador de usuario que la aplicación no puede usar.",
   "sourcesSaveServerFailed": "No se pudo guardar este servidor en este dispositivo.",
-  "sourcesNoServers": "Aún no hay servidores.",
   "sourcesLoadFailed": "No se pudieron leer los servidores guardados.",
   "sourcesIncludeInAll": "Incluir en Todos los servidores",
   "sourcesRemoveAccountFailed": "No se pudo quitar esta cuenta.",
@@ -991,7 +990,6 @@
   "pairedDevicesCancelOfferButton": "Cancelar",
   "pairedDevicesActiveOfferInstructions": "Introduce este código en tu otro dispositivo o escanea el código QR:",
   "pairedDevicesCodeInputLabel": "Código de vinculación",
-  "pairedDevicesCodeInputHint": "ABC-123",
   "pairedDevicesSubmitCodeButton": "Vincular dispositivo",
   "pairedDevicesScanQrButton": "Escanear código QR",
   "pairedDevicesSyncNowButton": "Sincronizar ahora",
@@ -1000,8 +998,6 @@
   "pairedDevicesLeaveGroupConfirmBody": "Este dispositivo dejará de sincronizar el estado de reproducción y los elementos fijados con otros dispositivos vinculados.",
   "pairedDevicesRemovePeerButton": "Eliminar",
   "pairedDevicesConnectedToast": "Vinculado con {deviceName}",
-  "pairedDevicesOrDivider": "o",
   "pairedDevicesPairingFailed": "Error de vinculación",
-  "pairedDevicesListSection": "Dispositivos vinculados",
-  "pairedDevicesPairNewSection": "Vincular otro dispositivo"
+  "pairedDevicesListSection": "Dispositivos vinculados"
 }

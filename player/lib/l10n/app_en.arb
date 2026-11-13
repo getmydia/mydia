@@ -1560,10 +1560,8 @@
   "@sourcesJellyfinBadUserId": {"description": "Error on the Jellyfin sign-in screen when the signed-in user's id cannot be stored."},
   "sourcesSaveServerFailed": "Could not save this server on this device.",
   "@sourcesSaveServerFailed": {"description": "Error on a Jellyfin or Stash connect screen when the server answered but the app could not store it."},
-  "sourcesNoServers": "No servers yet.",
-  "@sourcesNoServers": {"description": "Empty state on the server management screen."},
   "sourcesLoadFailed": "Could not read the saved servers.",
-  "@sourcesLoadFailed": {"description": "Error on the server management screen when the saved servers cannot be read from this device."},
+  "@sourcesLoadFailed": {"description": "Shown in the Servers section of the Servers & devices screen when the saved servers cannot be read from this device."},
   "sourcesIncludeInAll": "Include in All servers",
   "@sourcesIncludeInAll": {"description": "Switch under a server on the management screen. All servers is the combined view of every server."},
   "sourcesRemoveAccountFailed": "Could not remove this account.",
@@ -2480,10 +2478,6 @@
   "@pairedDevicesCodeInputLabel": {
     "description": "Label for the pairing code input field."
   },
-  "pairedDevicesCodeInputHint": "ABC-123",
-  "@pairedDevicesCodeInputHint": {
-    "description": "Hint for pairing code input field."
-  },
   "pairedDevicesSubmitCodeButton": "Pair device",
   "@pairedDevicesSubmitCodeButton": {
     "description": "Button to submit a pairing code."
@@ -2525,10 +2519,6 @@
   "@pairedDevicesPairedToast": {
     "description": "Toast on the joining device when pairing succeeds before the other device's name is known."
   },
-  "pairedDevicesOrDivider": "or",
-  "@pairedDevicesOrDivider": {
-    "description": "Divider text between show code and enter code sections."
-  },
   "pairedDevicesPairingFailed": "Pairing failed",
   "@pairedDevicesPairingFailed": {
     "description": "Error message when pairing with a code or QR fails."
@@ -2544,10 +2534,6 @@
   "pairedDevicesListSection": "Paired devices",
   "@pairedDevicesListSection": {
     "description": "Section header for the list of paired devices."
-  },
-  "pairedDevicesPairNewSection": "Pair another device",
-  "@pairedDevicesPairNewSection": {
-    "description": "Section header for pairing an additional device."
   },
   "connectionsEyebrow": "Your setup",
   "@connectionsEyebrow": {
