@@ -224,8 +224,8 @@ ConnectionServer _serverOf(SourceAccountRecord r, Map<SourceId, bool> choices) {
   final ConnectionStatus status;
   if (r.account.needsReauth) {
     status = ConnectionStatus.needsSignIn;
-  } else if (r.servers.isNotEmpty &&
-      r.servers.every((s) => s.gone || !s.presence)) {
+  } else if (r.servers.every((s) => s.gone || !s.presence)) {
+    // Also an account with no servers at all: nothing there to reach.
     status = ConnectionStatus.offline;
   } else {
     status = ConnectionStatus.online;

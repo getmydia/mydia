@@ -141,6 +141,20 @@ void main() {
     expect(o.localPlatform, 'linux');
   });
 
+  test('an account with no servers reads offline', () async {
+    final empty = _rec('e');
+    final o = await _read(_container(accounts: [
+      SourceAccountRecord(
+        account: empty.account,
+        profiles: empty.profiles,
+        servers: const [],
+        addedAtMs: 0,
+      ),
+    ]));
+    expect(o.servers.single.status, ConnectionStatus.offline);
+    expect(o.onlineCount, 0);
+  });
+
   test('hidden accounts are excluded while locked', () async {
     final accounts = [
       _rec('a'),
