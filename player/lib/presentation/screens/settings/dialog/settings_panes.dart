@@ -11,10 +11,9 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
 import '../../connections/account_detail_page.dart';
-import '../../sources/manage_sources_screen.dart';
+import '../../connections/connections_hub.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
-import '../paired_devices_screen.dart';
 import '../settings_controller.dart';
 import '../settings_nav.dart';
 import '../widgets/settings_sections.dart';
@@ -23,11 +22,8 @@ import 'settings_dialog.dart';
 const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
+      SettingsCategory.connections => const _ConnectionsPage(),
       SettingsCategory.playback => const _PlaybackPage(),
-      SettingsCategory.servers => const _CategoryPane(
-          category: SettingsCategory.servers,
-          child: ManageSourcesBody(padding: _bodyPadding),
-        ),
       SettingsCategory.diagnostics => const _CategoryPane(
           category: SettingsCategory.diagnostics,
           child: DiagnosticsBody(padding: _bodyPadding),
@@ -77,14 +73,34 @@ class _PlaybackPage extends ConsumerWidget {
   }
 }
 
-class _PairedDevicesPage extends StatelessWidget {
-  const _PairedDevicesPage();
+/// The hub under its wide constellation, which already names the page, so
+/// the pane header holds only the close button.
+class _ConnectionsPage extends StatelessWidget {
+  const _ConnectionsPage();
 
   @override
-  Widget build(BuildContext context) => SettingsPane(
-        title: context.l10n.settingsPairedDevicesTitle,
-        child: const PairedDevicesBody(padding: _bodyPadding),
-      );
+  Widget build(BuildContext context) {
+    final section = SettingsDialogScope.of(context).connectionsSection;
+    return SettingsPane(
+      title: null,
+      child: ValueListenableBuilder<String?>(
+        valueListenable: section,
+        builder: (context, value, _) {
+          // Handed over once: clearing it lets the next request for the same
+          // section reach the hub as a change.
+          if (value != null) {
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => section.value = null);
+          }
+          return ConnectionsHubBody(
+            padding: _bodyPadding,
+            initialSection: value,
+            wideHeader: true,
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _MydiaInstancePage extends ConsumerWidget {
@@ -133,36 +149,39 @@ class DialogSettingsNav implements SettingsNav {
   final SettingsDialogScope scope;
   final GoRouter router;
 
-  NavigatorState get _servers => scope.paneNavigator(SettingsCategory.servers);
-  NavigatorState get _playback =>
-      scope.paneNavigator(SettingsCategory.playback);
+  NavigatorState get _connections =>
+      scope.paneNavigator(SettingsCategory.connections);
 
   @override
-  void openInstance(SourceId id) => _servers.push(MaterialPageRoute<void>(
+  void openInstance(SourceId id) => _connections.push(MaterialPageRoute<void>(
         builder: (_) => _MydiaInstancePage(sourceId: id),
       ));
 
   @override
   void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
 
+  /// Paired devices are a section of the hub: back to its root, then scroll.
   @override
-  void openPairedDevices() => _playback.push(MaterialPageRoute<void>(
-        builder: (_) => const _PairedDevicesPage(),
-      ));
+  void openPairedDevices() {
+    _connections.popUntil((route) => route.isFirst);
+    scope.select(SettingsCategory.connections);
+    scope.connectionsSection.value = 'devices';
+  }
 
   @override
-  void openConnections() => scope.select(SettingsCategory.servers);
+  void openConnections() => scope.select(SettingsCategory.connections);
 
   @override
-  void openAccount(String accountId) => _servers.push(MaterialPageRoute<void>(
+  void openAccount(String accountId) =>
+      _connections.push(MaterialPageRoute<void>(
         builder: (_) => _AccountDetailPage(accountId: accountId),
       ));
 
   @override
-  void accountRemoved() => _servers.popUntil((route) => route.isFirst);
+  void accountRemoved() => _connections.popUntil((route) => route.isFirst);
 
   @override
-  void instanceRemoved() => _servers.popUntil((route) => route.isFirst);
+  void instanceRemoved() => _connections.popUntil((route) => route.isFirst);
 
   @override
   void addServer() => _closeThen(() => router.push('/sources/add'));

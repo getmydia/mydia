@@ -12,8 +12,8 @@ import '../../../../l10n/l10n.dart';
 import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
+  connections(Icons.hub_outlined),
   playback(Icons.play_circle_outline),
-  servers(Icons.dns_rounded),
   diagnostics(Icons.lan_outlined),
   about(Icons.info_outline);
 
@@ -23,8 +23,8 @@ enum SettingsCategory {
 
   /// The sidebar label, which is also the category's root page title.
   String label(AppLocalizations l10n) => switch (this) {
+        connections => l10n.connectionsTitle,
         playback => l10n.settingsPlayback,
-        servers => l10n.settingsServers,
         diagnostics => l10n.settingsDiagnostics,
         about => l10n.settingsAbout,
       };
@@ -60,6 +60,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _navigators = {
     for (final c in SettingsCategory.values) c: GlobalKey<NavigatorState>(),
   };
+  final _connectionsSection = ValueNotifier<String?>(null);
 
   @override
   void initState() {
@@ -70,6 +71,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    _connectionsSection.dispose();
     super.dispose();
   }
 
@@ -104,6 +106,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       close: _close,
       select: (c) => widget.controller.value = c,
       paneNavigator: (c) => _navigators[c]!.currentState!,
+      connectionsSection: _connectionsSection,
       child: Dialog(
         insetPadding: EdgeInsets.all(inset),
         backgroundColor: palette.background,
@@ -170,12 +173,18 @@ class SettingsDialogScope extends InheritedWidget {
     required this.close,
     required this.select,
     required this.paneNavigator,
+    required this.connectionsSection,
     required super.child,
   });
 
   final VoidCallback close;
   final ValueChanged<SettingsCategory> select;
   final NavigatorState Function(SettingsCategory category) paneNavigator;
+
+  /// A section the connections pane should scroll to (`'devices'`). The pane
+  /// stays mounted, so a request arrives here rather than as a new route;
+  /// the pane clears it once handed to the hub.
+  final ValueNotifier<String?> connectionsSection;
 
   static SettingsDialogScope of(BuildContext context) {
     final scope =
@@ -197,7 +206,9 @@ class SettingsPane extends StatelessWidget {
     required this.child,
   });
 
-  final String title;
+  /// Null when the content opens with its own title, so the header row
+  /// carries only the controls.
+  final String? title;
   final List<Widget> actions;
   final Widget child;
 
@@ -224,11 +235,14 @@ class SettingsPane extends StatelessWidget {
                 else
                   const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: switch (title) {
+                    final title? => Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    null => const SizedBox.shrink(),
+                  },
                 ),
                 ...actions,
                 IconButton(

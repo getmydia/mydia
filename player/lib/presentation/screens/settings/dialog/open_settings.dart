@@ -76,10 +76,14 @@ void routeMenuNavigation(
 bool openSettingsFromShortcut() =>
     !isSettingsDialogOpen && openSettingsFromHost('/settings');
 
+/// Servers & devices leads the dialog, so the plain settings route (Ctrl+,
+/// and the Settings nav entry) opens on it.
 SettingsCategory? _categoryFor(String route) => switch (route) {
-      '/settings' => SettingsCategory.playback,
+      '/settings' ||
+      '/sources/manage' ||
+      '/settings/paired-devices' =>
+        SettingsCategory.connections,
       '/settings/diagnostics' => SettingsCategory.diagnostics,
-      '/sources/manage' => SettingsCategory.servers,
       _ => null,
     };
 
@@ -109,7 +113,7 @@ Future<void> openSettings(
         router.go('/settings');
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
-      case SettingsCategory.servers:
+      case SettingsCategory.connections:
         unawaited(router.push<void>('/sources/manage'));
     }
     return;
