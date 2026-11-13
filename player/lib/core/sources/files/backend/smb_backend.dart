@@ -6,7 +6,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../files_account.dart';
-import '../smb_addresses.dart' show normalizeSmbHost;
+import '../smb_addresses.dart'
+    show isIpLiteral, kSmbMaxConnections, normalizeSmbHost;
 import '../smb_discovery.dart';
 import '../smb_native.dart';
 import 'file_system_backend.dart';
@@ -53,22 +54,28 @@ class SmbBackend implements FileSystemBackend {
 /// browses mDNS for that name for at most [browseTimeout] and tries the
 /// addresses found, unless every stored target refused the login (the
 /// password is wrong everywhere). A target other than the first one reaching
-/// the share is handed to [onReachedVia] with what the browse found.
+/// the share moves to the front of [targets], with what the browse found
+/// added at the end, so the next build starts there; it is also handed to
+/// [onReachedVia] to be saved.
 class LazySmbBackend implements FileSystemBackend {
   LazySmbBackend({
     required this.native,
     required this.accountId,
-    required this.targets,
+    required List<SmbTarget> targets,
     required this.credentials,
     this.serviceName,
     this.discovery,
     this.onReachedVia,
     this.browseTimeout = const Duration(seconds: 5),
-  }) : assert(targets.isNotEmpty, 'an SMB share has at least one address');
+  })  : assert(targets.isNotEmpty, 'an SMB share has at least one address'),
+        _targets = [...targets];
 
   final SmbNative native;
   final String accountId;
-  final List<SmbTarget> targets;
+
+  /// The addresses in the order the next build probes them.
+  List<SmbTarget> get targets => List.unmodifiable(_targets);
+  final List<SmbTarget> _targets;
   final Future<String?> Function() credentials;
   final String? serviceName;
   final SmbDiscovery? discovery;
@@ -78,25 +85,37 @@ class LazySmbBackend implements FileSystemBackend {
   Future<SmbBackend>? _backend;
 
   Future<T> _call<T>(Future<T> Function(SmbBackend b) run) async {
-    final b = await _resolve();
+    final f = _resolve();
+    final b = await f;
     try {
       return await run(b);
     } on BackendUnauthorized {
-      _backend = null;
+      _drop(f);
       rethrow;
     } on BackendUnreachable {
-      _backend = null;
+      _drop(f);
       rethrow;
     }
   }
 
-  Future<SmbBackend> _resolve() => _backend ??= _build().then(
-        (b) => b,
-        onError: (Object e, StackTrace st) {
-          _backend = null;
-          Error.throwWithStackTrace(e, st);
-        },
-      );
+  /// Forgets [f] unless a newer build has already replaced it.
+  void _drop(Future<SmbBackend> f) {
+    if (identical(_backend, f)) _backend = null;
+  }
+
+  Future<SmbBackend> _resolve() {
+    final current = _backend;
+    if (current != null) return current;
+    late final Future<SmbBackend> f;
+    f = _build().then(
+      (b) => b,
+      onError: (Object e, StackTrace st) {
+        _drop(f);
+        Error.throwWithStackTrace(e, st);
+      },
+    );
+    return _backend = f;
+  }
 
   Future<SmbBackend> _build() async {
     final stored = await credentials();
@@ -110,11 +129,10 @@ class LazySmbBackend implements FileSystemBackend {
     }
 
     final failures = <BackendFailure>[];
-    final answered = await _firstAnswering(targets, c, failures);
+    final order = [..._targets];
+    final answered = await _firstAnswering(order, c, failures);
     if (answered != null) {
-      if (!identical(answered, targets.first)) {
-        _reportReached(answered, const []);
-      }
+      if (!identical(answered, order.first)) _reached(answered, const []);
       return _backendOn(answered, c);
     }
 
@@ -126,7 +144,7 @@ class LazySmbBackend implements FileSystemBackend {
         !storedFailures.every((f) => f is BackendUnauthorized)) {
       final server = await _browseFor(browser, name);
       if (server != null) {
-        final tried = {for (final t in targets) _key(t)};
+        final tried = {for (final t in order) _key(t)};
         final found = _targetsOf(server);
         final fresh = [
           for (final t in found)
@@ -134,7 +152,7 @@ class LazySmbBackend implements FileSystemBackend {
         ];
         final reached = await _firstAnswering(fresh, c, failures);
         if (reached != null) {
-          _reportReached(reached, fresh);
+          _reached(reached, fresh);
           return _backendOn(reached, c);
         }
       }
@@ -188,7 +206,7 @@ class LazySmbBackend implements FileSystemBackend {
 
   /// [server]'s addresses then its hostname, on its port, for this share.
   List<SmbTarget> _targetsOf(DiscoveredSmbServer server) {
-    final share = targets.first.share;
+    final share = _targets.first.share;
     final hostname = server.hostname;
     final hosts = [
       ...server.addresses,
@@ -212,6 +230,26 @@ class LazySmbBackend implements FileSystemBackend {
       if (f is! BackendUnreachable || f.message == kSmb1OnlyReason) return f;
     }
     return failures.last;
+  }
+
+  /// Moves [reached] to the front of [targets] and adds the [discovered]
+  /// ones not already there, capped like the stored list (IP literals go
+  /// from the end first), then reports it.
+  void _reached(SmbTarget reached, List<SmbTarget> discovered) {
+    final key = _key(reached);
+    final next = [reached, ..._targets.where((t) => _key(t) != key)];
+    for (final d in discovered) {
+      if (!next.any((t) => _key(t) == _key(d))) next.add(d);
+    }
+    for (var i = next.length - 1;
+        i > 0 && next.length > kSmbMaxConnections;
+        i--) {
+      if (isIpLiteral(normalizeSmbHost(next[i].host))) next.removeAt(i);
+    }
+    _targets
+      ..clear()
+      ..addAll(next);
+    _reportReached(reached, discovered);
   }
 
   void _reportReached(SmbTarget reached, List<SmbTarget> discovered) {
