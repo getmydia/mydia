@@ -15,7 +15,8 @@ import '../../../core/sources/files/backend/smb_backend.dart';
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
-import '../../../core/sources/files/smb_addresses.dart' show parseSmbAddress;
+import '../../../core/sources/files/smb_addresses.dart'
+    show listSharesAtFirstReachable, parseSmbAddress;
 import '../../../core/sources/files/smb_discovery.dart';
 import '../../../core/sources/files/smb_native.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -279,8 +280,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         _pickShare(share);
         return;
       }
-      final (shares, reached) =
-          await _listSharesAt(_candidates(host), port, credentials);
+      final (shares, reached) = await listSharesAtFirstReachable(
+          _native, _candidates(host), port, credentials);
       if (!mounted) return;
       if (shares.isEmpty) {
         setState(() => _problem = _Problem.noShares);
@@ -318,22 +319,6 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       if (hostname != null) hostname,
       ...server.addresses.where((a) => a != _hostName),
     ];
-  }
-
-  /// Lists the shares at the first of [hosts] that can be reached, and
-  /// returns them with that host. Only an unreachable address moves on: a
-  /// refused login or an SMB1-only server would answer the same anywhere.
-  Future<(List<String>, String)> _listSharesAt(
-      List<String> hosts, int port, SmbCredentials credentials) async {
-    for (var i = 0;; i++) {
-      final host = hosts[i];
-      try {
-        return (await _native.listShares(host, port, credentials), host);
-      } on BackendUnreachable catch (e) {
-        if (i == hosts.length - 1 || e.message == kSmb1OnlyReason) rethrow;
-        debugPrint('[AddSmb] $host unreachable, trying the next address: $e');
-      }
-    }
   }
 
   /// Re-login: the share the screen was opened for keeps its account, so

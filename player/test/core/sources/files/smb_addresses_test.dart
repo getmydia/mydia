@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/smb_addresses.dart';
 import 'package:player/core/sources/files/smb_native.dart';
 import 'package:player/core/sources/source.dart';
+
+import 'fake_smb_native.dart';
 
 List<String> _uris(List<ServerConnection> c) =>
     c.map((e) => e.uri.toString()).toList();
@@ -136,4 +139,55 @@ void main() {
       expect(parseSmbAddress('nas/share', ''), isNull);
     });
   });
+
+  group('listSharesAtFirstReachable', () {
+    const creds = SmbCredentials(user: 'viewer', password: 'pw');
+    late _ListingNative native;
+
+    setUp(() => native = _ListingNative()..addDir('media', '/Films'));
+
+    test('moves_past_an_unreachable_address', () async {
+      native.hostFailures['172.17.0.1'] = const BackendUnreachable();
+      final (shares, host) = await listSharesAtFirstReachable(
+          native, ['172.17.0.1', '192.168.1.5', 'nas.local'], 445, creds);
+      expect(shares, ['media']);
+      expect(host, '192.168.1.5');
+      expect(native.listed, ['172.17.0.1', '192.168.1.5']);
+    });
+
+    test('stops_at_a_refused_login_or_smb1', () async {
+      native.hostFailures['172.17.0.1'] = const BackendUnauthorized();
+      await expectLater(
+          listSharesAtFirstReachable(
+              native, ['172.17.0.1', '192.168.1.5'], 445, creds),
+          throwsA(isA<BackendUnauthorized>()));
+      native.hostFailures['172.17.0.1'] =
+          const BackendUnreachable(kSmb1OnlyReason);
+      await expectLater(
+          listSharesAtFirstReachable(
+              native, ['172.17.0.1', '192.168.1.5'], 445, creds),
+          throwsA(isA<BackendUnreachable>()));
+      expect(native.listed, ['172.17.0.1', '172.17.0.1']);
+    });
+
+    test('the_last_unreachable_address_is_rethrown', () async {
+      native.hostFailures['a'] = const BackendUnreachable('a');
+      native.hostFailures['b'] = const BackendUnreachable('b');
+      await expectLater(
+          listSharesAtFirstReachable(native, ['a', 'b'], 445, creds),
+          throwsA(isA<BackendUnreachable>()
+              .having((e) => e.message, 'message', 'b')));
+    });
+  });
+}
+
+/// Records the host of every share listing.
+class _ListingNative extends FakeSmbNative {
+  final listed = <String>[];
+
+  @override
+  Future<List<String>> listShares(String host, int port, SmbCredentials c) {
+    listed.add(host);
+    return super.listShares(host, port, c);
+  }
 }

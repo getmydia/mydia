@@ -2,10 +2,14 @@
 /// IP literals it has been reached at, in preference order.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../connection/source_connection.dart' show isPrivateHost;
 import '../source.dart' show ServerConnection;
-import 'files_account.dart' show kSmbDefaultPort, normalizeSmbUrl, smbTargetOf;
-import 'smb_native.dart' show SmbTarget;
+import 'backend/file_system_backend.dart' show BackendUnreachable;
+import 'files_account.dart'
+    show SmbCredentials, kSmbDefaultPort, normalizeSmbUrl, smbTargetOf;
+import 'smb_native.dart' show SmbNative, SmbTarget, kSmb1OnlyReason;
 
 /// At most this many stored connections per SMB server.
 const kSmbMaxConnections = 6;
@@ -102,6 +106,27 @@ bool _validPort(int? port) => port != null && port >= 1 && port <= 65535;
   final p = inlinePort ?? fieldPort;
   if (!_validPort(p)) return null;
   return (host: h, port: p!);
+}
+
+/// Lists the shares at the first of [hosts] that can be reached, and
+/// returns them with that host. Only an unreachable address moves on: a
+/// refused login or an SMB1-only server would answer the same anywhere. The
+/// last address's failure is rethrown.
+Future<(List<String> shares, String host)> listSharesAtFirstReachable(
+    SmbNative native,
+    List<String> hosts,
+    int port,
+    SmbCredentials credentials) async {
+  assert(hosts.isNotEmpty, 'at least one address to try');
+  for (var i = 0;; i++) {
+    final host = hosts[i];
+    try {
+      return (await native.listShares(host, port, credentials), host);
+    } on BackendUnreachable catch (e) {
+      if (i == hosts.length - 1 || e.message == kSmb1OnlyReason) rethrow;
+      debugPrint('[Smb] $host unreachable, trying the next address: $e');
+    }
+  }
 }
 
 List<SmbTarget> smbTargetsOf(List<ServerConnection> connections) =>

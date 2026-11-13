@@ -241,6 +241,32 @@ void main() {
     expect(h.discovery.cancelCount, h.discovery.listenCount);
   });
 
+  testWidgets('a_picked_server_is_saved_at_the_address_that_answered',
+      (tester) async {
+    final h = await _pump(tester);
+    h.native.hostFailures['172.17.0.1'] = const BackendUnreachable();
+    h.discovery.emit(const [
+      DiscoveredSmbServer(
+        name: 'NAS',
+        host: '172.17.0.1',
+        port: 445,
+        alternatives: ['192.168.1.30'],
+        hostname: 'nas.local',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    final row = find.byKey(const Key('smb-address-server-NAS'));
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    await _save(tester);
+
+    expect(find.byKey(const Key('smb-address-error')), findsNothing);
+    final record = await h.record();
+    expect(_hosts(record), ['192.168.1.30', 'nas.local', '172.17.0.1']);
+    expect(record.servers.single.serviceName, 'NAS');
+  });
+
   testWidgets('editing_the_host_after_a_pick_saves_it_as_typed',
       (tester) async {
     final h = await _pump(tester);

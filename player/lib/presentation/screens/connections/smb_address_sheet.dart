@@ -10,7 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/files/backend/file_system_backend.dart';
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
-import '../../../core/sources/files/smb_addresses.dart' show parseSmbAddress;
+import '../../../core/sources/files/smb_addresses.dart'
+    show listSharesAtFirstReachable, parseSmbAddress;
 import '../../../core/sources/files/smb_discovery.dart';
 import '../../../core/sources/files/smb_native.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -166,14 +167,22 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
         }
         return;
       }
-      final shares =
-          await native.listShares(address.host, address.port, credentials);
+      // A picked server is tried at each address it advertised, then at its
+      // hostname; a typed one only where it was typed.
+      final hosts = server == null
+          ? [address.host]
+          : [
+              ...server.addresses,
+              if (server.hostname case final hostname?) hostname,
+            ];
+      final (shares, reached) = await listSharesAtFirstReachable(
+          native, hosts, address.port, credentials);
       final share = current.share.toLowerCase();
       if (!shares.any((s) => s.toLowerCase() == share)) {
         if (mounted) setState(() => _problem = _ShareMissing(current.share));
         return;
       }
-      if (!await _store(accounts, address, server)) {
+      if (!await _store(accounts, reached, address.port, server)) {
         if (mounted) setState(() => _problem = const _Simple(_Kind.save));
         return;
       }
@@ -186,20 +195,22 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
     }
   }
 
-  /// Saves the address; false when that failed. A share removed while the
-  /// sheet was open counts as done, so the sheet closes quietly.
-  Future<bool> _store(FilesAccounts accounts, ({String host, int port}) address,
+  /// Saves [host], the address that answered, with a picked [server]'s
+  /// hostname and other addresses as alternatives; false when that failed.
+  /// A share removed while the sheet was open counts as done, so the sheet
+  /// closes quietly.
+  Future<bool> _store(FilesAccounts accounts, String host, int port,
       DiscoveredSmbServer? server) async {
     try {
       await accounts.setSmbAddress(
         widget.record.account.id,
-        host: address.host,
-        port: address.port,
+        host: host,
+        port: port,
         alternatives: server == null
             ? const []
             : [
                 if (server.hostname case final hostname?) hostname,
-                ...server.alternatives,
+                ...server.addresses.where((a) => a != host),
               ],
         serviceName: server?.name,
       );

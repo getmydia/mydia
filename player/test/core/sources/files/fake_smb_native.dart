@@ -12,8 +12,8 @@ class FakeSmbNative implements SmbNative {
   /// Thrown by every call while set.
   BackendFailure? failure;
 
-  /// Thrown by [probe], [list], [stat] and [open] on a target whose host is
-  /// a key, after [failure].
+  /// Thrown by [probe], [list], [stat], [open] and [listShares] on a host
+  /// that is a key, after [failure].
   final Map<String, BackendFailure> hostFailures = {};
 
   /// Every [open] as (accountId, path).
@@ -100,6 +100,8 @@ class FakeSmbNative implements SmbNative {
   Future<List<String>> listShares(
       String host, int port, SmbCredentials c) async {
     _check();
+    final h = hostFailures[host];
+    if (h != null) throw h;
     return _shares.keys.toList();
   }
 
