@@ -18,10 +18,15 @@ class DiscoveredSmbServer {
     required this.host,
     required this.port,
     this.alternatives = const [],
+    this.hostname,
   });
 
   /// The advertised instance name, for display.
   final String name;
+
+  /// The advertised mDNS hostname, lowercased with no trailing dot, whether
+  /// or not addresses were also advertised. Null when none was advertised.
+  final String? hostname;
 
   /// The resolved host, without a trailing dot: the preferred address.
   final String host;
@@ -41,11 +46,12 @@ class DiscoveredSmbServer {
       other.name == name &&
       other.host == host &&
       other.port == port &&
+      other.hostname == hostname &&
       listEquals(other.alternatives, alternatives);
 
   @override
   int get hashCode =>
-      Object.hash(name, host, port, Object.hashAll(alternatives));
+      Object.hash(name, host, port, hostname, Object.hashAll(alternatives));
 
   @override
   String toString() => 'DiscoveredSmbServer($name, $host:$port)';
@@ -203,7 +209,15 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
       host: hosts.first,
       port: service.port,
       alternatives: hosts.sublist(1),
+      hostname: _normalizedHostname(service.hostname),
     );
+  }
+
+  static String? _normalizedHostname(String? raw) {
+    if (raw == null) return null;
+    var host = raw.trim().toLowerCase();
+    if (host.endsWith('.')) host = host.substring(0, host.length - 1);
+    return host.isEmpty ? null : host;
   }
 
   /// The addresses to connect to, best first. mDNS `.local` names do not
