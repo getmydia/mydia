@@ -180,6 +180,20 @@ void main() {
     expect(find.byKey(const Key('manage-settings-home')), findsOneWidget);
   });
 
+  testWidgets('this device and device cards word their meta as one phrase',
+      (tester) async {
+    _phone(tester, height: 1400);
+    await _pump(tester,
+        hubOverview(devices: [hubDevice('n1', 'Pixel phone', 'android')]));
+    // No servers: the synced half stands alone and starts the sentence.
+    expect(find.text('Synced 5 minutes ago'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('connections-device-n1')),
+            matching: find.textContaining(' · synced 5 minutes ago')),
+        findsOneWidget);
+  });
+
   testWidgets('chips reflect status', (tester) async {
     _phone(tester, height: 1400);
     await _pump(

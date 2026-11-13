@@ -222,12 +222,15 @@ class _ThisDeviceCard extends StatelessWidget {
         .whereType<DateTime>()
         .fold<DateTime?>(null,
             (latest, t) => latest == null || t.isAfter(latest) ? t : latest);
-    final status = [
-      if (showServers && !overview.serversLoading && total > 0)
-        l10n.connectionsReaching(overview.onlineCount, total),
-      if (lastSync != null)
-        l10n.connectionsSyncedAgo(l10n.relativeTime(lastSync)),
-    ].join(' · ');
+    final reach = showServers && !overview.serversLoading && total > 0;
+    final ago = lastSync == null ? null : l10n.relativeTime(lastSync);
+    final status = switch ((reach, ago)) {
+      (true, final String ago) =>
+        l10n.connectionsThisDeviceStatus(overview.onlineCount, total, ago),
+      (true, null) => l10n.connectionsReaching(overview.onlineCount, total),
+      (false, final String ago) => l10n.connectionsThisDeviceSynced(ago),
+      (false, null) => '',
+    };
 
     return HubCardSurface(
       key: const Key('connections-this-device'),

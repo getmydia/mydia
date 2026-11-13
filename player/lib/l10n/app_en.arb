@@ -2636,10 +2636,49 @@
       }
     }
   },
-  "connectionsSyncedAgo": "synced {ago}",
-  "@connectionsSyncedAgo": {
-    "description": "When watch progress last synced with another device, after the reach count on the This device card, or after the platform on a device card. The placeholder is a relative time such as '5 minutes ago'.",
+  "connectionsThisDeviceStatus": "Reaching {online} of {total} servers · synced {ago}",
+  "@connectionsThisDeviceStatus": {
+    "description": "On the This device card of the Servers & devices screen: how many saved servers this device can reach right now, and when watch progress last synced with another device. The ago placeholder is a relative time such as '5 minutes ago'.",
     "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsThisDeviceSynced": "Synced {ago}",
+  "@connectionsThisDeviceSynced": {
+    "description": "On the This device card of the Servers & devices screen when no server count is shown: when watch progress last synced with another device. The placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsServerMeta": "{kind} · {detail}",
+  "@connectionsServerMeta": {
+    "description": "Second line of a server card on the Servers & devices screen. The kind is the server type (Mydia, Plex, Jellyfin, Stash, Files); the detail is the server's address or how many servers the account has.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsDeviceMeta": "{platform} · synced {ago}",
+  "@connectionsDeviceMeta": {
+    "description": "Second line of a paired device card on the Servers & devices screen: the device's platform (Android, iOS, macOS...) and when watch progress last synced with it. The ago placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
       "ago": {
         "type": "String"
       }

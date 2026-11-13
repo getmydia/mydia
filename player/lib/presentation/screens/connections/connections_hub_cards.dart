@@ -130,7 +130,7 @@ class HubServerCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$kind · $detail',
+                  l10n.connectionsServerMeta(kind, detail),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
@@ -329,8 +329,8 @@ class HubDeviceCard extends StatelessWidget {
             child: Text(
               synced == null
                   ? platform
-                  : '$platform · '
-                      '${l10n.connectionsSyncedAgo(l10n.relativeTime(synced))}',
+                  : l10n.connectionsDeviceMeta(
+                      platform, l10n.relativeTime(synced)),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: palette.textSecondary),
