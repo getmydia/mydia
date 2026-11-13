@@ -214,11 +214,14 @@
 
                 <!-- Error message -->
                 <%= if event.metadata["error_message"] do %>
-                  <div class="p-3 bg-error/10 rounded-lg border border-error/20">
-                    <div class="text-sm font-medium text-error mb-1">{gettext("Error")}</div>
-                    <code class="text-sm break-all whitespace-pre-wrap">
-                      {event.metadata["error_message"]}
-                    </code>
+                  <div role="alert" class="alert alert-error alert-soft items-start">
+                    <.icon name="hero-x-circle" class="w-5 h-5 flex-shrink-0" />
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium mb-1">{gettext("Error")}</div>
+                      <code class="text-sm text-base-content break-all whitespace-pre-wrap">
+                        {event.metadata["error_message"]}
+                      </code>
+                    </div>
                   </div>
                 <% end %>
 
@@ -393,13 +396,13 @@
 
                 <!-- Selected release -->
                 <%= if event.metadata["selected_release"] do %>
-                  <div class="flex items-start gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
-                    <.icon name="hero-check-circle" class="w-5 h-5 text-success flex-shrink-0" />
-                    <div>
-                      <div class="text-sm font-medium text-success">
+                  <div class="alert alert-success alert-soft items-start">
+                    <.icon name="hero-check-circle" class="w-5 h-5 flex-shrink-0" />
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium">
                         {gettext("Selected Release")}
                       </div>
-                      <div class="text-sm break-all mt-0.5">
+                      <div class="text-sm text-base-content break-all mt-0.5">
                         {event.metadata["selected_release"]}
                       </div>
                     </div>

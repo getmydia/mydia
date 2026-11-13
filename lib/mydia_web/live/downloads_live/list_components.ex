@@ -247,7 +247,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         {label}
         <button
           type="button"
-          class="cursor-pointer opacity-60 hover:opacity-100"
+          class="btn btn-ghost btn-circle btn-xs size-4 -me-1 opacity-60 hover:opacity-100"
           phx-click="remove_filter"
           phx-value-key={key}
           aria-label={gettext("Remove filter %{filter}", filter: label)}

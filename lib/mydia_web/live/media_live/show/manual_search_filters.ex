@@ -142,7 +142,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         {label}
         <button
           type="button"
-          class="cursor-pointer opacity-70 hover:opacity-100"
+          class="btn btn-ghost btn-circle btn-xs size-4 -me-1 opacity-70 hover:opacity-100"
           phx-click="remove_search_filter"
           phx-value-dimension={dimension}
           aria-label={gettext("Remove filter: %{filter}", filter: title || label)}

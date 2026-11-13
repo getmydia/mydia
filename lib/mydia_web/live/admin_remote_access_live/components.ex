@@ -133,7 +133,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             <%!-- Node ID (subtle) --%>
             <%= if @p2p_status && @p2p_status.node_id do %>
               <button
-                class="hidden lg:flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
+                type="button"
+                class="link link-hover hidden lg:flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60"
                 phx-click="copy_peer_id"
                 data-node-id={@p2p_status.node_id}
                 onclick="navigator.clipboard?.writeText(this.dataset.nodeId)"

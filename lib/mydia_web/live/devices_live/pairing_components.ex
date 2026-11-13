@@ -182,10 +182,11 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                 <% @claim_code_rendezvous_status == :unregistered -> %>
                   <div
                     id="pairing-relay-warning"
-                    class="inline-flex flex-col items-center gap-2 bg-warning/10 border border-warning/30 rounded-box px-6 py-4 max-w-sm"
+                    role="alert"
+                    class="alert alert-warning alert-soft alert-vertical gap-2 max-w-sm"
                   >
                     <div class="flex items-center gap-2">
-                      <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
+                      <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
                       <span class="text-sm font-medium">{gettext("Typed code unavailable")}</span>
                     </div>
                     <p class="text-xs text-base-content/70 text-center">

@@ -12,6 +12,8 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
   """
   use MydiaWeb, :html
 
+  alias MydiaWeb.MediaLive.Show.HeroRow
+
   alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Metadata.LanguageCode
 
@@ -21,11 +23,9 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
     assigns = assign(assigns, :summary, summary(assigns.media_item))
 
     ~H"""
-    <button
+    <HeroRow.row_button
       id="download-audio-row"
-      type="button"
       phx-click="show_download_audio_modal"
-      class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
       title={gettext("Click to change which audio search prefers")}
     >
       <div class="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
@@ -39,7 +39,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
         name="hero-chevron-right"
         class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
       />
-    </button>
+    </HeroRow.row_button>
     """
   end
 

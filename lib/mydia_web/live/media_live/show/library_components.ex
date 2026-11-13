@@ -9,6 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
   use MydiaWeb, :html
 
   alias Mydia.Settings.LibraryPath
+  alias MydiaWeb.MediaLive.Show.HeroRow
 
   @doc """
   Renders the resolved target library.
@@ -35,11 +36,9 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
   def target_library_row(assigns) do
     ~H"""
     <%= if length(@libraries) > 1 do %>
-      <button
-        type="button"
+      <HeroRow.row_button
         phx-click="show_target_library_modal"
         data-test="target-library"
-        class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg w-full group transition-colors cursor-pointer hover:bg-base-300/50"
         title={gettext("Click to change the download library")}
       >
         <.target_library_row_content
@@ -47,7 +46,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
           target_reason={@target_reason}
           interactive?={true}
         />
-      </button>
+      </HeroRow.row_button>
     <% else %>
       <div
         data-test="target-library"
