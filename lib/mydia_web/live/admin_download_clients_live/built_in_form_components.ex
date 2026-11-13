@@ -42,24 +42,30 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         phx-submit="save_built_in"
         class="space-y-5"
       >
-        <.segmented_control
+        <div
           id="built-in-sections"
-          value={@section}
-          event="built_in_section"
-          param="section"
-          label={gettext("Settings section")}
-          class="w-full [&>.btn]:flex-1"
+          role="tablist"
+          aria-label={gettext("Settings section")}
+          class="tabs tabs-border w-full [&>.tab]:flex-1"
         >
-          <:option
-            id="built-in-tab-torrent"
-            value={:torrent}
+          <.section_tab
+            section={:torrent}
+            current={@section}
             label={gettext("Torrent")}
             icon="hero-arrow-down-tray"
           />
-          <:option id="built-in-tab-vpn" value={:vpn} label={gettext("VPN")} icon="hero-shield-check" />
-        </.segmented_control>
+          <.section_tab
+            section={:vpn}
+            current={@section}
+            label={gettext("VPN")}
+            icon="hero-shield-check"
+          />
+        </div>
 
-        <p :for={msg <- base_errors(@form)} class="text-sm text-error">{msg}</p>
+        <div :for={msg <- base_errors(@form)} role="alert" class="alert alert-error alert-soft">
+          <.icon name="hero-exclamation-circle" class="size-5 shrink-0" />
+          <span class="text-sm">{msg}</span>
+        </div>
 
         <.torrent_section form={@form} sources={@sources} hidden?={@section != :torrent} />
         <.vpn_section
@@ -100,13 +106,42 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
 
   ## Sections
 
+  attr :section, :atom, required: true
+  attr :current, :atom, required: true
+  attr :label, :string, required: true
+  attr :icon, :string, required: true
+
+  defp section_tab(assigns) do
+    assigns = assign(assigns, :active?, assigns.section == assigns.current)
+
+    ~H"""
+    <button
+      id={"built-in-tab-#{@section}"}
+      type="button"
+      role="tab"
+      aria-selected={to_string(@active?)}
+      aria-controls={"built-in-section-#{@section}"}
+      class={["tab gap-1.5", @active? && "tab-active"]}
+      phx-click="built_in_section"
+      phx-value-section={@section}
+    >
+      <.icon name={@icon} class="size-4" /> {@label}
+    </button>
+    """
+  end
+
   attr :form, Phoenix.HTML.Form, required: true
   attr :sources, :map, required: true
   attr :hidden?, :boolean, required: true
 
   defp torrent_section(assigns) do
     ~H"""
-    <section id="built-in-section-torrent" class={["space-y-4", @hidden? && "hidden"]}>
+    <section
+      id="built-in-section-torrent"
+      role="tabpanel"
+      aria-labelledby="built-in-tab-torrent"
+      class={["space-y-4", @hidden? && "hidden"]}
+    >
       <.field_row field={:enabled} label={gettext("Run the built-in client")} sources={@sources}>
         <.choice
           form={@form}
@@ -198,7 +233,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
       )
 
     ~H"""
-    <section id="built-in-section-vpn" class={["space-y-4", @hidden? && "hidden"]}>
+    <section
+      id="built-in-section-vpn"
+      role="tabpanel"
+      aria-labelledby="built-in-tab-vpn"
+      class={["space-y-4", @hidden? && "hidden"]}
+    >
       <BuiltInComponents.vpn_setup_card
         :if={@preflight_map && Enum.any?(@preflight_map, fn {_k, v} -> v == :missing end)}
         preflight={@preflight_map}
@@ -213,6 +253,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           field={@form[:vpn_enabled]}
           id="built-in-field-vpn_enabled"
           type="checkbox"
+          container_class=""
           class="toggle toggle-primary"
           label={gettext("Use the VPN")}
           disabled={locked?(@sources, :vpn_enabled) or (@blocked? and not @vpn_on?)}
@@ -224,6 +265,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           field={@form[:vpn_provider]}
           id="built-in-field-vpn_provider"
           type="select"
+          container_class=""
           prompt={gettext("Choose a provider")}
           options={Enum.map(VpnProviders.all(), &{&1.label, &1.name})}
           value={if(@provider, do: @provider.name, else: @form[:vpn_provider].value)}
@@ -280,35 +322,41 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         </p>
       <% end %>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <.text_field
-          form={@form}
-          field={:vpn_server_countries}
-          sources={@sources}
-          label={gettext("Server countries")}
-        />
-        <.text_field
-          form={@form}
-          field={:vpn_server_regions}
-          sources={@sources}
-          label={gettext("Server regions")}
-        />
-        <.text_field
-          form={@form}
-          field={:vpn_server_cities}
-          sources={@sources}
-          label={gettext("Server cities")}
-        />
-        <.text_field
-          form={@form}
-          field={:vpn_server_hostnames}
-          sources={@sources}
-          label={gettext("Server hostnames")}
-        />
-      </div>
-      <p class="text-xs text-base-content/60 -mt-2">
-        {gettext("Comma-separated. Leave blank to let the provider choose.")}
-      </p>
+      <fieldset
+        id="built-in-server-location"
+        class="fieldset bg-base-200 border border-base-300 rounded-box p-4"
+      >
+        <legend class="fieldset-legend">{gettext("Server location")}</legend>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+          <.text_field
+            form={@form}
+            field={:vpn_server_countries}
+            sources={@sources}
+            label={gettext("Server countries")}
+          />
+          <.text_field
+            form={@form}
+            field={:vpn_server_regions}
+            sources={@sources}
+            label={gettext("Server regions")}
+          />
+          <.text_field
+            form={@form}
+            field={:vpn_server_cities}
+            sources={@sources}
+            label={gettext("Server cities")}
+          />
+          <.text_field
+            form={@form}
+            field={:vpn_server_hostnames}
+            sources={@sources}
+            label={gettext("Server hostnames")}
+          />
+        </div>
+        <p class="label">
+          {gettext("Comma-separated. Leave blank to let the provider choose.")}
+        </p>
+      </fieldset>
 
       <.field_row
         :if={@provider && @provider.port_forwarding?}
@@ -320,6 +368,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           field={@form[:vpn_port_forwarding]}
           id="built-in-field-vpn_port_forwarding"
           type="checkbox"
+          container_class=""
           class="toggle toggle-primary"
           label={gettext("Ask the provider for a forwarded port")}
           disabled={locked?(@sources, :vpn_port_forwarding)}
@@ -334,14 +383,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         value="false"
       />
 
-      <div :if={@env_vpn_names != []} class="rounded-box border border-base-300 p-3 space-y-2">
-        <p class="text-sm font-medium">{gettext("Also set from environment")}</p>
+      <fieldset
+        :if={@env_vpn_names != []}
+        class="fieldset bg-base-200 border border-base-300 rounded-box p-4"
+      >
+        <legend class="fieldset-legend">{gettext("Also set from environment")}</legend>
         <ul id="built-in-env-vpn-names" class="flex flex-wrap gap-2">
           <li :for={name <- @env_vpn_names}>
             <code class="badge badge-sm badge-outline font-mono">{name}</code>
           </li>
         </ul>
-      </div>
+      </fieldset>
     </section>
     """
   end

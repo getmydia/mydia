@@ -59,6 +59,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     assert render(element(view, "#built-in-vpn-state")) =~ "203.0.113.9"
     assert render(element(view, "#built-in-port-state")) =~ "40123"
     assert render(element(view, "#built-in-engine-state")) =~ "Running"
+    assert render(element(view, "#built-in-state-badge")) =~ "Running"
   end
 
   test "restart is offered only for a crashed engine", %{conn: conn} do

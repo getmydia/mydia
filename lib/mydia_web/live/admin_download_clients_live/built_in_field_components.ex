@@ -24,9 +24,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
       |> assign(:env_var, env_var(assigns.field))
 
     ~H"""
-    <div class="space-y-1">
-      <div class="flex flex-wrap items-center gap-2">
-        <label for={@for} class="text-sm font-medium text-base-content/80">{@label}</label>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend flex-wrap gap-2">
+        <label for={@for}>{@label}</label>
         <span
           id={"built-in-source-#{@field}"}
           title={
@@ -40,19 +40,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
         >
           <.config_source_badge source={@source} size="xs" />
         </span>
-        <span :if={@source == :env} class="text-xs text-base-content/60 font-mono break-all">
+        <span :if={@source == :env} class="text-xs font-normal opacity-60 font-mono break-all">
           {@env_var}
         </span>
-      </div>
+      </legend>
       {render_slot(@inner_block)}
-      <p
-        :if={@hint != []}
-        id={"built-in-hint-#{@field}"}
-        class="text-xs text-base-content/60"
-      >
+      <p :if={@hint != []} id={"built-in-hint-#{@field}"} class="label whitespace-normal">
         {render_slot(@hint)}
       </p>
-    </div>
+    </fieldset>
     """
   end
 
@@ -73,6 +69,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
         field={@form[@field]}
         id={@id}
         type={@type}
+        container_class=""
         disabled={locked?(@sources, @field)}
         {@rest}
       />
@@ -176,11 +173,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
               name={@form[@field].name}
               value=""
               autocomplete="new-password"
-              class="w-full input bg-base-200/50 transition-colors duration-150 focus:bg-base-100"
+              class={[
+                "w-full input bg-base-200/50 transition-colors duration-150 focus:bg-base-100",
+                @errors != [] && "input-error"
+              ]}
             />
           </div>
-          <p :for={msg <- @errors} class="mt-1.5 flex gap-2 items-center text-sm text-error">
-            <.icon name="hero-exclamation-circle" class="size-5" /> {msg}
+          <p :for={msg <- @errors} class="label text-error">
+            <.icon name="hero-exclamation-circle" class="size-4" /> {msg}
           </p>
       <% end %>
     </.field_row>
