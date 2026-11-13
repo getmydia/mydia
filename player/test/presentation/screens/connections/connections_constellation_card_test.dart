@@ -117,7 +117,7 @@ void main() {
   testWidgets('empty state shows ghost labels', (tester) async {
     await _pump(tester, _overview());
     expect(find.text('Add a server'), findsOneWidget);
-    expect(find.text('Pair a device'), findsOneWidget);
+    expect(find.text('Sync a device'), findsOneWidget);
     expect(find.text('Add your other servers and sync progress across devices'),
         findsOneWidget);
   });
@@ -176,7 +176,7 @@ void main() {
           devices: [_device('p', 'Pixel phone', 'android')],
         ));
     expect(find.text('Add a server'), findsNothing);
-    expect(find.text('Pair a device'), findsNothing);
+    expect(find.text('Sync a device'), findsNothing);
     expect(find.text('Add your other servers and sync progress across devices'),
         findsNothing);
     expect(find.textContaining('servers online'), findsNothing);
@@ -188,7 +188,7 @@ void main() {
   testWidgets('loading with no devices shows only this device', (tester) async {
     await _pump(tester, _overview(serversLoading: true));
     expect(find.text('Add a server'), findsNothing);
-    expect(find.text('Pair a device'), findsNothing);
+    expect(find.text('Sync a device'), findsNothing);
     expect(find.text('Add your other servers and sync progress across devices'),
         findsNothing);
     expect(find.text('Living room TV'), findsOneWidget);

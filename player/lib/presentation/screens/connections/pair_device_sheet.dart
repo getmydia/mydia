@@ -278,6 +278,23 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Says what kind of device this is for and which button the
+            // other side needs, since "pair" alone reads as casting or
+            // adding a server.
+            Text(
+              l10n.connectionsPairCta,
+              key: const Key('pair-sheet-title'),
+              style: theme.textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.mode == PairSheetMode.show
+                  ? l10n.pairedDevicesShowSteps
+                  : l10n.pairedDevicesEnterSteps,
+              key: const Key('pair-sheet-steps'),
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
             if (_failure != null) ...[
               Container(
                 key: const Key('pair-failure-banner'),
