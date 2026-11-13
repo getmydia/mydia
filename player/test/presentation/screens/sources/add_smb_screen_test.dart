@@ -545,6 +545,45 @@ void main() {
         record.account.id, smbAccountId(Uri.parse('smb://192.168.1.20/media')));
   });
 
+  testWidgets('picked_server_saves_hostname_and_alternatives', (tester) async {
+    final h = await _pump(tester);
+    h.discovery.emit([
+      const DiscoveredSmbServer(
+          name: 'NAS',
+          host: '192.168.1.5',
+          port: 445,
+          alternatives: ['10.0.0.5'],
+          hostname: 'nas.local'),
+    ]);
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-server-NAS');
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-save-button');
+
+    final server = (await h.store.load()).accounts.single.servers.single;
+    expect(server.connections.map((c) => c.uri.host).toList(),
+        ['192.168.1.5', 'nas.local', '10.0.0.5']);
+    expect(server.serviceName, 'NAS');
+  });
+
+  testWidgets('typed_host_saves_no_service_name', (tester) async {
+    final h = await _pump(tester);
+    await _tap(tester, 'smb-manual');
+    await _enter(tester, 'smb-host-field', '10.0.0.9');
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-save-button');
+
+    final server = (await h.store.load()).accounts.single.servers.single;
+    expect(server.connections.map((c) => c.uri.host).toList(), ['10.0.0.9']);
+    expect(server.serviceName, isNull);
+  });
+
   testWidgets('signing in again to a missing account cannot connect',
       (tester) async {
     final h = await _pump(tester, reauthAccountId: 'sdeadbeefdeadbeef');

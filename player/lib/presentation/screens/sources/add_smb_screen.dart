@@ -73,12 +73,12 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   /// address is not editable.
   bool _addressFixed = false;
 
-  /// The discovered server's own name, when that is how it was picked.
-  String? _discoveredName;
-
-  /// Every address the discovered server advertised, best first; the first
-  /// one that answers is the one saved.
-  List<String> _discoveredAddresses = const [];
+  /// The discovered server, when that is how it was picked. Its addresses
+  /// are tried best first; the first that answers is the one saved, and the
+  /// hostname and the rest are kept as alternatives. The host field is
+  /// read-only for a picked server, so the saved host is always one of its
+  /// own.
+  DiscoveredSmbServer? _discovered;
 
   /// Re-login mode only: whether the saved share needs signing in again.
   /// When it does not, the viewer came to add folders, so a sign-in goes on
@@ -208,8 +208,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       _host.text = server.host;
       _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
       _addressFixed = true;
-      _discoveredName = server.name;
-      _discoveredAddresses = server.addresses;
+      _discovered = server;
       _problem = null;
       _step = _Step.login;
     });
@@ -219,8 +218,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     _stopBrowsing();
     setState(() {
       _addressFixed = false;
-      _discoveredName = null;
-      _discoveredAddresses = const [];
+      _discovered = null;
       _problem = null;
       _step = _Step.login;
     });
@@ -330,8 +328,22 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
 
   /// The addresses to try for [host]: every one the discovered server
   /// advertised when [host] is its first, else [host] alone.
-  List<String> _candidates(String host) =>
-      _discoveredAddresses.firstOrNull == host ? _discoveredAddresses : [host];
+  List<String> _candidates(String host) {
+    final addresses = _discovered?.addresses ?? const <String>[];
+    return addresses.firstOrNull == host ? addresses : [host];
+  }
+
+  /// Further hosts to save with the one that answered: the discovered
+  /// server's hostname, then its other addresses. None for a typed host.
+  List<String> get _alternatives {
+    final server = _discovered;
+    if (server == null) return const [];
+    final hostname = server.hostname;
+    return [
+      if (hostname != null) hostname,
+      ...server.addresses.where((a) => a != _hostName),
+    ];
+  }
 
   /// Lists the shares at the first of [hosts] that can be reached, and
   /// returns them with that host. Only an unreachable address moves on: a
@@ -358,7 +370,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       await accounts.addSmbAccount(
           url: _urlOf(host, port, share),
           credentials: credentials,
-          signInAgain: true);
+          signInAgain: true,
+          alternatives: _alternatives,
+          serviceName: _discovered?.name);
     } catch (e) {
       debugPrint('[AddSmb] Save failed: $e');
       if (mounted) setState(() => _problem = _Problem.save);
@@ -412,11 +426,13 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     final accounts = ref.read(filesAccountsProvider);
     final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
-      final discovered = _discoveredName;
+      final discovered = _discovered?.name;
       final id = await accounts.addSmbAccount(
         url: _urlOf(_hostName, _portNumber, share),
         credentials: credentials,
         displayName: discovered == null ? null : '$discovered / $share',
+        alternatives: _alternatives,
+        serviceName: discovered,
       );
       // Saved: its playback tokens now belong to the source, not this screen.
       _saved = true;
