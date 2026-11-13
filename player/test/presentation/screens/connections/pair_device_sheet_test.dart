@@ -88,6 +88,9 @@ void main() {
       (tester) async {
     final (service, _) = await _open(tester, PairSheetMode.show);
 
+    // The sheet scrolls once its header is in: bring the button up first.
+    await tester
+        .ensureVisible(find.byKey(const Key('pair-cancel-offer-button')));
     await tester.tap(find.byKey(const Key('pair-cancel-offer-button')));
     await tester.pumpAndSettle();
 
@@ -167,6 +170,31 @@ void main() {
     expect(service.cancelOfferCount, 0);
   });
 
+  testWidgets('each mode names the sheet and tells the other side what to do',
+      (tester) async {
+    await _open(tester, PairSheetMode.show);
+    expect(find.byKey(const Key('pair-sheet-title')), findsOneWidget);
+    expect(find.text('Sync another Mydia Player'), findsOneWidget);
+    expect(
+      find.text('Open Mydia Player on your other device, go to Servers & '
+          'devices, and choose Enter code from other device.'),
+      findsOneWidget,
+    );
+
+    await tester
+        .ensureVisible(find.byKey(const Key('pair-cancel-offer-button')));
+    await tester.tap(find.byKey(const Key('pair-cancel-offer-button')));
+    await tester.pumpAndSettle();
+
+    await _open(tester, PairSheetMode.enter);
+    expect(find.text('Sync another Mydia Player'), findsOneWidget);
+    expect(
+      find.text('On your other device, open Servers & devices and choose '
+          'Show code on this device. Then enter that code here.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('hides the scan button where the scanner is unsupported',
       (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
@@ -199,7 +227,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.pairWithCodeCalls, ['ABC123']);
-    expect(find.text('Paired with Living Room TV'), findsOneWidget);
+    expect(find.text('Synced with Living Room TV'), findsOneWidget);
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
@@ -215,7 +243,7 @@ void main() {
     await tester.tap(find.byKey(const Key('pair-submit-code-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Device paired'), findsOneWidget);
+    expect(find.text('Device synced'), findsOneWidget);
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
@@ -239,7 +267,7 @@ void main() {
     await tester.tap(find.byKey(const Key('pair-submit-code-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Paired with Living Room TV'), findsOneWidget);
+    expect(find.text('Synced with Living Room TV'), findsOneWidget);
     expect(shown, hasLength(1));
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
@@ -256,7 +284,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Paired with Bedroom TV'), findsOneWidget);
+    expect(find.text('Synced with Bedroom TV'), findsOneWidget);
     expect(find.byType(PairDeviceSheet), findsNothing);
     expect(store.member('peer-device-qr'), isNotNull);
   });

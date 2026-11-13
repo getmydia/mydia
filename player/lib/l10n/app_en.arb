@@ -2478,9 +2478,17 @@
   "@pairedDevicesCodeInputLabel": {
     "description": "Label for the pairing code input field."
   },
-  "pairedDevicesSubmitCodeButton": "Pair device",
+  "pairedDevicesSubmitCodeButton": "Sync",
   "@pairedDevicesSubmitCodeButton": {
-    "description": "Button to submit a pairing code."
+    "description": "Button beside the code field that submits the code and joins this device to the other device's sync group."
+  },
+  "pairedDevicesShowSteps": "Open Mydia Player on your other device, go to Servers & devices, and choose Enter code from other device.",
+  "@pairedDevicesShowSteps": {
+    "description": "Instruction at the top of the sheet that shows this device's code. 'Servers & devices' is the screen title (connectionsTitle) and 'Enter code from other device' is the button label (connectionsEnterCode); use the same words as those translations."
+  },
+  "pairedDevicesEnterSteps": "On your other device, open Servers & devices and choose Show code on this device. Then enter that code here.",
+  "@pairedDevicesEnterSteps": {
+    "description": "Instruction at the top of the sheet where the viewer types or scans another device's code. 'Servers & devices' is the screen title (connectionsTitle) and 'Show code on this device' is the button label (connectionsShowCode); use the same words as those translations."
   },
   "pairedDevicesScanQrButton": "Scan QR code",
   "@pairedDevicesScanQrButton": {
@@ -2506,16 +2514,16 @@
   "@pairedDevicesRemovePeerButton": {
     "description": "Tooltip or label for removing a paired peer device."
   },
-  "pairedDevicesConnectedToast": "Paired with {deviceName}",
+  "pairedDevicesConnectedToast": "Synced with {deviceName}",
   "@pairedDevicesConnectedToast": {
-    "description": "Toast notification when a peer device successfully pairs.",
+    "description": "Toast when another Mydia Player joins this device's sync group, or this device joins another's.",
     "placeholders": {
       "deviceName": {
         "type": "String"
       }
     }
   },
-  "pairedDevicesPairedToast": "Device paired",
+  "pairedDevicesPairedToast": "Device synced",
   "@pairedDevicesPairedToast": {
     "description": "Toast on the joining device when pairing succeeds before the other device's name is known."
   },
@@ -2568,11 +2576,11 @@
   "@connectionsNotPaired": {
     "description": "Footer of the Servers & devices card when this device is not paired with any other device."
   },
-  "connectionsShowCode": "Show pairing code",
+  "connectionsShowCode": "Show code on this device",
   "@connectionsShowCode": {
     "description": "Button that opens the pair device sheet in show mode, to display this device's pairing code and QR code."
   },
-  "connectionsEnterCode": "Enter or scan code",
+  "connectionsEnterCode": "Enter code from other device",
   "@connectionsEnterCode": {
     "description": "Button that opens the pair device sheet in enter mode, to type or scan the code another device shows."
   },
@@ -2584,7 +2592,7 @@
   "@connectionsAddServerGhost": {
     "description": "Label under the dashed placeholder node in the Servers & devices diagram when no server is saved."
   },
-  "connectionsPairDeviceGhost": "Pair a device",
+  "connectionsPairDeviceGhost": "Sync a device",
   "@connectionsPairDeviceGhost": {
     "description": "Label under the dashed placeholder node in the Servers & devices diagram when no device is paired."
   },
@@ -2674,13 +2682,13 @@
   "@connectionsDevicesHint": {
     "description": "Hint beside the Paired devices header on the Servers & devices screen."
   },
-  "connectionsPairCta": "Pair another device",
+  "connectionsPairCta": "Sync another Mydia Player",
   "@connectionsPairCta": {
-    "description": "Title of the card on the Servers & devices screen that invites the viewer to pair another device."
+    "description": "Title of the card on the Servers & devices screen that invites the viewer to link Mydia Player on another phone, TV or computer, so watch progress and pins sync between them. Also the title of the sheet those buttons open. Not casting, and not adding a server."
   },
-  "connectionsPairCtaBody": "Show a code here, or scan one from another screen",
+  "connectionsPairCtaBody": "Keep watch progress and pins in step across your phone, TV and computer.",
   "@connectionsPairCtaBody": {
-    "description": "Body of the Pair another device card, above its two buttons (show a pairing code, or enter or scan one)."
+    "description": "Body of the Sync another Mydia Player card, above its two buttons (show a code on this device, or enter the code another device shows)."
   },
   "connectionsChipDirect": "Direct connection",
   "@connectionsChipDirect": {
