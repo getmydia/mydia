@@ -240,6 +240,7 @@ class FilesAccounts {
           share: target.share,
           hosts: [target.host, ...alternatives],
           serviceName: serviceName,
+          port: target.port,
         ) ??
         smbAccountId(url);
     final name = displayName ?? '${base.host}/$typedShare';
@@ -300,11 +301,13 @@ class FilesAccounts {
   }
 
   /// The id of a stored SMB account for [share] (case-insensitive) that has
-  /// [serviceName] (non-null) or shares at least one of [hosts].
+  /// [serviceName] (non-null) or shares at least one of [hosts], on [port]
+  /// (the port of its first connection).
   Future<String?> findSmbAccount({
     required String share,
     required List<String> hosts,
     String? serviceName,
+    int port = kSmbDefaultPort,
   }) async {
     final wanted = {for (final h in hosts) normalizeSmbHost(h)};
     final snapshot = await _ref.read(sourceRecordsProvider.future);
@@ -314,6 +317,7 @@ class FilesAccounts {
         if (server.connections.isEmpty) continue;
         final stored = smbTargetsOf(server.connections);
         if (stored.first.share.toLowerCase() != share.toLowerCase()) continue;
+        if (stored.first.port != port) continue;
         final sameService =
             serviceName != null && server.serviceName == serviceName;
         if (sameService ||
@@ -329,26 +333,22 @@ class FilesAccounts {
   /// [discovered] ones. Does not rebuild the source: the backend that calls
   /// this is already connected. A no-op when the account is gone.
   Future<void> promoteSmbAddress(String accountId, SmbTarget reached,
-      {List<SmbTarget> discovered = const []}) async {
-    final existing = await _stored(accountId);
-    if (existing == null) return;
-    final record = existing.copyWith(servers: [
-      for (final server in existing.servers)
-        server.copyWith(
-          connections: promoteSmbConnection(
-            server.connections,
-            smbConnectionOf(reached),
-            discovered: [for (final t in discovered) smbConnectionOf(t)],
-          ),
-        ),
-    ]);
-    try {
-      await _ref
-          .read(sourceRecordsProvider.notifier)
-          .putAccount(record, replaceOnly: true);
-    } on StateError {
-      // Removed meanwhile.
-    }
+      {List<SmbTarget> discovered = const []}) {
+    // The read-modify-write runs inside the records queue, so a concurrent
+    // `needsReauth` or lock change is never overwritten with stale data.
+    return _ref.read(sourceRecordsProvider.notifier).updateServers(
+          accountId,
+          (servers) => [
+            for (final server in servers)
+              server.copyWith(
+                connections: promoteSmbConnection(
+                  server.connections,
+                  smbConnectionOf(reached),
+                  discovered: [for (final t in discovered) smbConnectionOf(t)],
+                ),
+              ),
+          ],
+        );
   }
 
   /// Replaces [accountId]'s addresses with [host], [port] and

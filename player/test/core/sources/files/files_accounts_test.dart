@@ -442,5 +442,60 @@ void main() {
           c.read(filesIndexProvider(accountId)).roots().single.path, '/Films');
       expect(smb.closedAccounts, contains(accountId));
     });
+
+    test('promote_keeps_a_needs_reauth_flag_set_before_it', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'), credentials: creds);
+      final accountId = id.value.split(':').first;
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
+
+      await accounts.promoteSmbAddress(accountId,
+          const SmbTarget(host: 'nas.local', port: 445, share: 'movies'));
+
+      final record = (await store.load()).accounts.single;
+      expect(record.account.needsReauth, isTrue);
+      expect(hostsOf(record).first, 'nas.local');
+    });
+
+    test('readd_matches_on_port_too', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final first = await accounts.addSmbAccount(
+          url: Uri.parse('smb://nas.local/movies'), credentials: creds);
+      final second = await accounts.addSmbAccount(
+          url: Uri.parse('smb://nas.local:4445/movies'), credentials: creds);
+      expect(second, isNot(first));
+      expect((await store.load()).accounts, hasLength(2));
+    });
+
+    test('sign_in_again_after_set_address_uses_the_same_account', () async {
+      final c = await container(smb: FakeSmbNative());
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'), credentials: creds);
+      final accountId = id.value.split(':').first;
+      await accounts.setSmbAddress(accountId, host: '10.0.0.7', port: 445);
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
+      final url = Uri.parse('smb://10.0.0.7/movies');
+      expect(smbAccountId(url), isNot(accountId));
+
+      final again = await accounts.addSmbAccount(
+          url: url,
+          credentials: const SmbCredentials(user: 'viewer', password: 'new'),
+          signInAgain: true);
+
+      expect(again, id);
+      final record = (await store.load()).accounts.single;
+      expect(record.account.needsReauth, isFalse);
+      final secret = await storage
+          .read('${record.account.storageNamespace}/account_token');
+      expect(SmbCredentials.fromJson(secret!).password, 'new');
+    });
   });
 }
