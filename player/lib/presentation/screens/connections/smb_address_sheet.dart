@@ -182,6 +182,12 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
         if (mounted) setState(() => _problem = _ShareMissing(current.share));
         return;
       }
+      // Listing the shares does not prove these credentials can open this
+      // one there; a failure here leaves the saved address alone.
+      await native.probe(
+          SmbTarget(host: reached, port: address.port, share: current.share),
+          credentials,
+          '/');
       if (!await _store(accounts, reached, address.port, server)) {
         if (mounted) setState(() => _problem = const _Simple(_Kind.save));
         return;

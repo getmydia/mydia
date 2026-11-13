@@ -32,9 +32,18 @@ int _boxes = 0;
 final _url = Uri.parse('smb://192.168.1.5/movies');
 final _accountId = smbAccountId(_url);
 
-/// Lists [shares] when set, instead of every share the fake holds.
+/// Lists [shares] when set, instead of every share the fake holds; throws
+/// [probeFailure] from [probe] alone while set.
 class _Native extends FakeSmbNative {
   List<String>? shares;
+  BackendFailure? probeFailure;
+
+  @override
+  Future<void> probe(SmbTarget t, SmbCredentials c, String root) async {
+    await super.probe(t, c, root);
+    final f = probeFailure;
+    if (f != null) throw f;
+  }
 
   @override
   Future<List<String>> listShares(
@@ -206,6 +215,29 @@ void main() {
     h.native.failure = null;
 
     expect(find.text("This account can't open that folder."), findsOneWidget);
+  });
+
+  testWidgets('a_listed_share_that_will_not_open_keeps_the_address',
+      (tester) async {
+    final h = await _pump(tester);
+    await h.container
+        .read(sourceRecordsProvider.notifier)
+        .markNeedsReauth(_accountId, true);
+    await tester.pumpAndSettle();
+    final before = await h.record();
+    h.native.probeFailure = const BackendPermissionLost('denied');
+    await tester.enterText(
+        find.byKey(const Key('smb-address-host')), '10.0.0.7');
+    await _save(tester);
+
+    final (target, _) = h.native.probeLogins.last;
+    expect(
+        (target.host, target.port, target.share), ('10.0.0.7', 445, 'movies'));
+    expect(find.text("This account can't open that folder."), findsOneWidget);
+    expect(find.byKey(const Key('smb-address-host')), findsOneWidget);
+    final after = await h.record();
+    expect(after.servers.single.connections, before.servers.single.connections);
+    expect(after.account.needsReauth, isTrue);
   });
 
   testWidgets('picking_discovered_server_fills_host', (tester) async {

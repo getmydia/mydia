@@ -666,7 +666,9 @@ typed host and port or a discovered server. It lists the shares with the
 saved credentials, at the typed host, or at each address a picked server
 advertised and then its hostname, moving past unreachable ones the way the
 add screen does (`listSharesAtFirstReachable`). This share must be among
-them. It then replaces the connections with the address that answered
+them, and must then open at the address that answered (a probe of its
+root), since listing shares does not prove the credentials can open this
+one; either failure leaves the record as it was. It then replaces the connections with the address that answered
 first and the rest as alternatives, sets `serviceName` (cleared for a typed
 host) with `setSmbAddress`, and clears the sign-in-again flag, since the
 saved credentials have just worked there. The id, roots and watch state are
