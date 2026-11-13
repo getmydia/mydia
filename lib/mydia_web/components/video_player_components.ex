@@ -235,10 +235,13 @@ defmodule MydiaWeb.VideoPlayerComponents do
               @click.outside="closeSettings"
               class="absolute bottom-full right-0 mb-2"
             >
-              <%!-- The submenus sit beside the main menu rather than inside its
-                   `<li>`s: daisyUI indents and rules a nested menu, and they
-                   must not be clipped by the main menu's rounded box. --%>
-              <ul class="menu menu-sm w-48 bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl">
+              <%!-- A submenu replaces the main menu in the same slot rather
+                   than opening beside it: side by side they need about 330px
+                   left of this button, which a 320px-wide player clips. --%>
+              <ul
+                x-show="!speedMenuOpen && !qualityMenuOpen"
+                class="menu menu-sm w-48 bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
+              >
                 <li>
                   <button type="button" @click="toggleSpeedMenu" class="justify-between">
                     <span>{gettext("Speed")}</span>
@@ -263,10 +266,10 @@ defmodule MydiaWeb.VideoPlayerComponents do
               <%!-- Speed options submenu --%>
               <ul
                 x-show="speedMenuOpen"
-                x-transition
                 x-cloak
-                class="menu menu-sm absolute bottom-0 right-full mr-1 w-32 bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
+                class="menu menu-sm w-48 max-h-60 flex-nowrap overflow-y-auto bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
               >
+                <.settings_back_row label={gettext("Speed")} toggle="toggleSpeedMenu" />
                 <li :for={speed <- [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]}>
                   <button type="button" @click={"setSpeed(#{speed})"} class="justify-between">
                     <span>{if speed == 1.0, do: gettext("Normal"), else: "#{speed}x"}</span>
@@ -282,10 +285,10 @@ defmodule MydiaWeb.VideoPlayerComponents do
               <%!-- Quality options submenu --%>
               <ul
                 x-show="qualityMenuOpen"
-                x-transition
                 x-cloak
-                class="menu menu-sm absolute bottom-0 right-full mr-1 w-32 bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
+                class="menu menu-sm w-48 max-h-60 flex-nowrap overflow-y-auto bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
               >
+                <.settings_back_row label={gettext("Quality")} toggle="toggleQualityMenu" />
                 <li>
                   <button type="button" @click="setQuality(-1)" class="justify-between">
                     <span>{gettext("Auto")}</span>
@@ -479,6 +482,21 @@ defmodule MydiaWeb.VideoPlayerComponents do
         </div>
       </div>
     </div>
+    """
+  end
+
+  # The first row of a settings submenu: returns to the main settings menu.
+  attr :label, :string, required: true
+  attr :toggle, :string, required: true, doc: "the Alpine method that closes this submenu"
+
+  defp settings_back_row(assigns) do
+    ~H"""
+    <li class="border-b border-neutral-content/10 mb-1">
+      <button type="button" @click={@toggle} class="font-medium">
+        <.icon name="hero-chevron-left" class="w-4 h-4" />
+        {@label}
+      </button>
+    </li>
     """
   end
 end

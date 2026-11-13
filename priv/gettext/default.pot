@@ -97,7 +97,7 @@ msgstr ""
 msgid "%{duration} left"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:467
+#: lib/mydia_web/components/video_player_components.ex:470
 #: lib/mydia_web/live/admin_system_live/index.ex:155
 #, elixir-autogen, elixir-format
 msgid "%{seconds}s"
@@ -149,8 +149,8 @@ msgstr ""
 msgid "Anime"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:256
-#: lib/mydia_web/components/video_player_components.ex:291
+#: lib/mydia_web/components/video_player_components.ex:259
+#: lib/mydia_web/components/video_player_components.ex:294
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:228
 #: lib/mydia_web/live/media_live/show/components.ex:141
 #: lib/mydia_web/live/media_live/show/season_components.ex:631
@@ -173,7 +173,7 @@ msgstr ""
 #: lib/mydia_web/components/add_media_components.ex:246
 #: lib/mydia_web/components/feedback_components.ex:96
 #: lib/mydia_web/components/library_components.ex:309
-#: lib/mydia_web/components/video_player_components.ex:457
+#: lib/mydia_web/components/video_player_components.ex:460
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:128
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:219
 #: lib/mydia_web/live/admin_custom_formats_live/components.ex:176
@@ -339,7 +339,7 @@ msgstr ""
 msgid "Downloads"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:358
+#: lib/mydia_web/components/video_player_components.ex:361
 #, elixir-autogen, elixir-format
 msgid "Error loading video"
 msgstr ""
@@ -404,7 +404,7 @@ msgstr ""
 msgid "Light theme"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:343
+#: lib/mydia_web/components/video_player_components.ex:346
 #, elixir-autogen, elixir-format
 msgid "Loading..."
 msgstr ""
@@ -493,8 +493,8 @@ msgstr ""
 msgid "No profile"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:246
-#: lib/mydia_web/components/video_player_components.ex:272
+#: lib/mydia_web/components/video_player_components.ex:249
+#: lib/mydia_web/components/video_player_components.ex:275
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:86
 #, elixir-autogen, elixir-format
 msgid "Normal"
@@ -505,7 +505,7 @@ msgstr ""
 msgid "Open Player"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:450
+#: lib/mydia_web/components/video_player_components.ex:453
 #, elixir-autogen, elixir-format
 msgid "Play Now"
 msgstr ""
@@ -521,7 +521,7 @@ msgstr ""
 msgid "Player"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:465
+#: lib/mydia_web/components/video_player_components.ex:468
 #, elixir-autogen, elixir-format
 msgid "Playing in"
 msgstr ""
@@ -534,7 +534,8 @@ msgstr ""
 #: lib/mydia_web/admin_nav.ex:68
 #: lib/mydia_web/components/grid_density_components.ex:74
 #: lib/mydia_web/components/library_components.ex:97
-#: lib/mydia_web/components/video_player_components.ex:254
+#: lib/mydia_web/components/video_player_components.ex:257
+#: lib/mydia_web/components/video_player_components.ex:291
 #: lib/mydia_web/live/activity_live/index.ex:473
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:146
 #: lib/mydia_web/live/media_live/index.html.heex:455
@@ -577,12 +578,12 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:408
+#: lib/mydia_web/components/video_player_components.ex:411
 #, elixir-autogen, elixir-format
 msgid "Skip Credits"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:387
+#: lib/mydia_web/components/video_player_components.ex:390
 #, elixir-autogen, elixir-format
 msgid "Skip Intro"
 msgstr ""
@@ -597,7 +598,8 @@ msgstr ""
 msgid "Skip forward 10 seconds"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:244
+#: lib/mydia_web/components/video_player_components.ex:247
+#: lib/mydia_web/components/video_player_components.ex:272
 #, elixir-autogen, elixir-format
 msgid "Speed"
 msgstr ""
@@ -645,13 +647,13 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:320
+#: lib/mydia_web/components/video_player_components.ex:323
 #, elixir-autogen, elixir-format
 msgid "Toggle Fullscreen"
 msgstr ""
 
 #: lib/mydia_web/components/error_boundary.ex:86
-#: lib/mydia_web/components/video_player_components.ex:365
+#: lib/mydia_web/components/video_player_components.ex:368
 #, elixir-autogen, elixir-format
 msgid "Try Again"
 msgstr ""
@@ -692,7 +694,7 @@ msgstr ""
 msgid "Unknown"
 msgstr ""
 
-#: lib/mydia_web/components/video_player_components.ex:432
+#: lib/mydia_web/components/video_player_components.ex:435
 #, elixir-autogen, elixir-format
 msgid "Up Next"
 msgstr ""
