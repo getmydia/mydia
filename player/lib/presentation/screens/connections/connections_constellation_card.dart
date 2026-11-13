@@ -36,10 +36,18 @@ const double _labelLineHeight = _labelFontSize * 1.2;
 /// When the saved servers fail to load it degrades to a plain navigation row,
 /// so the hub stays reachable even when there is nothing to draw.
 class ConnectionsConstellationCard extends ConsumerWidget {
-  const ConnectionsConstellationCard({super.key, this.wide = false});
+  const ConnectionsConstellationCard({
+    super.key,
+    this.wide = false,
+    this.interactive = true,
+  });
 
   /// The desktop dialog's wider design box (640x300 rather than 320x250).
   final bool wide;
+
+  /// False on the hub itself, where opening the hub would go nowhere: no tap,
+  /// no focus stop, no chevron.
+  final bool interactive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,6 +56,9 @@ class ConnectionsConstellationCard extends ConsumerWidget {
     void open() => SettingsNavScope.of(context).openConnections();
 
     if (overview.serversFailed) {
+      // The fallback is only a way to the hub, and the hub draws its own
+      // sections below.
+      if (!interactive) return const SizedBox.shrink();
       return SettingsCard(children: [
         SettingsRow.navigation(
           key: const Key('connections-card-fallback'),
@@ -66,57 +77,73 @@ class ConnectionsConstellationCard extends ConsumerWidget {
     final footer = _Footer.of(context, overview, showServers: showServers);
     final palette = context.palette;
     final radius = BorderRadius.circular(_cardRadius);
+    final content = Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Header(chevron: interactive),
+          const SizedBox(height: 4),
+          _Diagram(
+            overview: overview,
+            showServers: showServers,
+            ghosts: !loading,
+            design: wide ? const Size(640, 300) : const Size(320, 250),
+          ),
+          const SizedBox(height: 6),
+          footer,
+        ],
+      ),
+    );
+    Widget surface(Widget child) => GlassSurface.faux(
+          borderRadius: radius,
+          fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
+          child: child,
+        );
+    final label = l10n.connectionsCardSemantics(footer.summary);
+
+    if (!interactive) {
+      return Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: label,
+        child: surface(KeyedSubtree(
+          key: const Key('connections-card'),
+          child: content,
+        )),
+      );
+    }
 
     return Semantics(
       container: true,
       button: true,
       excludeSemantics: true,
       focusable: true,
-      label: l10n.connectionsCardSemantics(footer.summary),
+      label: label,
       onTap: open,
       child: FocusHighlight(
         onActivate: open,
         borderRadius: radius,
-        child: GlassSurface.faux(
-          borderRadius: radius,
-          fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              key: const Key('connections-card'),
-              canRequestFocus: false,
-              borderRadius: radius,
-              onTap: open,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const _Header(),
-                    const SizedBox(height: 4),
-                    _Diagram(
-                      overview: overview,
-                      showServers: showServers,
-                      ghosts: !loading,
-                      design:
-                          wide ? const Size(640, 300) : const Size(320, 250),
-                    ),
-                    const SizedBox(height: 6),
-                    footer,
-                  ],
-                ),
-              ),
-            ),
+        child: surface(Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            key: const Key('connections-card'),
+            canRequestFocus: false,
+            borderRadius: radius,
+            onTap: open,
+            child: content,
           ),
-        ),
+        )),
       ),
     );
   }
 }
 
 class _Header extends StatelessWidget {
-  const _Header();
+  const _Header({required this.chevron});
+
+  final bool chevron;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +177,8 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
-        Icon(Icons.chevron_right, size: 20, color: palette.textDisabled),
+        if (chevron)
+          Icon(Icons.chevron_right, size: 20, color: palette.textDisabled),
       ],
     );
   }

@@ -17,6 +17,7 @@ import 'account_detail_page.dart' show AddServerButton;
 import 'connections_constellation_card.dart';
 import 'connections_hub_cards.dart';
 import 'connections_overview.dart';
+import 'connections_route_scaffold.dart';
 import 'pair_device_sheet.dart';
 
 /// Past this the cards stop stretching and the column centres.
@@ -50,20 +51,43 @@ class ConnectionsHubBody extends ConsumerStatefulWidget {
 class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
   final _devicesKey = GlobalKey();
 
+  /// A devices scroll asked for while the servers were still loading: their
+  /// cards arrive later and push the devices back down, so it runs again
+  /// once they have.
+  bool _rescrollWhenLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    if (widget.initialSection == 'devices') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final target = _devicesKey.currentContext;
-        if (!mounted || target == null) return;
-        Scrollable.ensureVisible(
-          target,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-      });
+    _requestSection(widget.initialSection);
+  }
+
+  /// The desktop dialog keeps the hub mounted and asks for a section again
+  /// each time Paired devices is opened.
+  @override
+  void didUpdateWidget(ConnectionsHubBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSection != oldWidget.initialSection) {
+      _requestSection(widget.initialSection);
     }
+  }
+
+  void _requestSection(String? section) {
+    if (section != 'devices') return;
+    _rescrollWhenLoaded = ref.read(connectionsOverviewProvider).serversLoading;
+    _scrollToDevicesAfterFrame();
+  }
+
+  void _scrollToDevicesAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _devicesKey.currentContext;
+      if (!mounted || target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   Future<void> _confirmLeaveGroup() async {
@@ -101,6 +125,15 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      connectionsOverviewProvider.select((o) => o.serversLoading),
+      (was, loading) {
+        if (was == true && !loading && _rescrollWhenLoaded) {
+          _rescrollWhenLoaded = false;
+          _scrollToDevicesAfterFrame();
+        }
+      },
+    );
     final overview = ref.watch(connectionsOverviewProvider);
     final nav = SettingsNavScope.of(context);
     final showServers = !kIsWeb;
@@ -114,7 +147,9 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.wideHeader)
-                const ConnectionsConstellationCard(wide: true)
+                // Already on the hub: the card only draws, it opens nothing.
+                const ConnectionsConstellationCard(
+                    wide: true, interactive: false)
               else
                 _ThisDeviceCard(overview: overview, showServers: showServers),
               if (showServers) ...[
@@ -167,8 +202,8 @@ class ConnectionsHubScreen extends StatelessWidget {
   final String? initialSection;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(context.l10n.connectionsTitle)),
+  Widget build(BuildContext context) => ConnectionsRouteScaffold(
+        title: context.l10n.connectionsTitle,
         body: ConnectionsHubBody(initialSection: initialSection),
       );
 }
@@ -341,9 +376,11 @@ class _ServersSection extends ConsumerWidget {
             HubServerCard(
               key: Key('connections-server-${server.account.id}'),
               server: server,
+              // Any profile of the account may be the one reached directly,
+              // not only the owner's.
               direct: server.kind == SourceKind.mydia &&
                   direct != null &&
-                  direct == mydiaSourceIdOf(server.record),
+                  server.record.sources.any((s) => s.id == direct),
               onTap: () => onOpen(server),
             ),
           ],

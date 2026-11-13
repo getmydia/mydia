@@ -29,6 +29,7 @@ import '../sources/confirm_remove_account.dart';
 import '../sources/files_library_kind_picker.dart' show filesLibraryKindLabel;
 import '../sources/plex_home_sheet.dart';
 import '../sources/source_lock_sheet.dart';
+import 'connections_route_scaffold.dart';
 
 /// A Mydia reached over p2p stops being watched. Unreadable credentials
 /// must not block the removal.
@@ -97,17 +98,15 @@ class AccountDetailBody extends ConsumerWidget {
   }
 }
 
-/// A `Scaffold` titled with the account's display name.
+/// The full-window route, titled with the account's display name.
 class AccountDetailPage extends ConsumerWidget {
   const AccountDetailPage({super.key, required this.accountId});
 
   final String accountId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-        appBar: AppBar(
-          title: Text(_recordFor(ref, accountId)?.account.displayName ?? ''),
-        ),
+  Widget build(BuildContext context, WidgetRef ref) => ConnectionsRouteScaffold(
+        title: _recordFor(ref, accountId)?.account.displayName ?? '',
         body: AccountDetailBody(accountId: accountId),
       );
 }

@@ -14,6 +14,7 @@ import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/connections/account_detail_page.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord;
@@ -410,6 +411,38 @@ void main() {
     expect(find.byType(SizedBox), findsWidgets);
     expect(find.byType(ListView), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the page has a window title bar named after the account',
+      (tester) async {
+    final record = plexRecord();
+    final store = InMemorySourceStore();
+    await store.putAccount(record);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: SettingsNavScope(
+          nav: _RemovalNav(),
+          child: AccountDetailPage(accountId: record.account.id),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppBar), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byType(WindowTitleBar),
+            matching: find.text(record.account.displayName)),
+        findsOneWidget);
   });
 
   testWidgets('router opens account detail', (tester) async {

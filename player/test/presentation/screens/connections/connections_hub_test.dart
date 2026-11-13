@@ -10,117 +10,27 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/connections/connections_hub.dart';
 import 'package:player/presentation/screens/connections/connections_overview.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../test_utils/toast_harness.dart';
+import 'connections_hub_fixtures.dart';
 import 'fake_peer_sync_service.dart';
 
-class _RecordingNav implements SettingsNav {
-  final calls = <String>[];
-  @override
-  void openInstance(SourceId id) => calls.add('instance ${id.value}');
-  @override
-  void openDiagnostics() => calls.add('diagnostics');
-  @override
-  void openPairedDevices() => calls.add('paired-devices');
-  @override
-  void openConnections() => calls.add('connections');
-  @override
-  void openAccount(String accountId) => calls.add('account $accountId');
-  @override
-  void accountRemoved() => calls.add('account-removed');
-  @override
-  void instanceRemoved() => calls.add('removed');
-  @override
-  void addServer() => calls.add('add');
-  @override
-  void reauth(SourceKind kind, String accountId) =>
-      calls.add('reauth ${kind.name} $accountId');
-  @override
-  void switchedTo(SourceId id) => calls.add('switched ${id.value}');
-}
-
-SourceAccountRecord _record(String id, String name, SourceKind kind) =>
-    SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: kind,
-        displayName: name,
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
-      ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'o', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-          id: 'srv',
-          accountId: id,
-          profileId: 'owner',
-          name: name,
-          presence: true,
-        ),
-      ],
-      addedAtMs: 0,
-    );
-
-ConnectionServer _server(
-  String id,
-  String name, {
-  SourceKind kind = SourceKind.mydia,
-  ConnectionStatus status = ConnectionStatus.online,
-  String? host,
-  bool locked = false,
-  bool inAllServers = false,
-}) =>
-    ConnectionServer(
-      record: _record(id, name, kind),
-      kind: kind,
-      name: name,
-      host: host,
-      serverCount: 1,
-      status: status,
-      locked: locked,
-      inAllServers: inAllServers,
-    );
-
-ConnectionDevice _device(String id, String name, String platform) =>
-    ConnectionDevice(
-      nodeId: id,
-      name: name,
-      platform: platform,
-      lastSyncedAt: DateTime.now().subtract(const Duration(minutes: 5)),
-    );
-
-ConnectionsOverview _overview({
-  List<ConnectionServer> servers = const [],
-  List<ConnectionDevice> devices = const [],
-  bool? isPaired,
-  bool serversLoading = false,
-}) =>
-    ConnectionsOverview(
-      localName: 'Living room TV',
-      localPlatform: 'linux',
-      servers: servers,
-      devices: devices,
-      isPaired: isPaired ?? devices.isNotEmpty,
-      serversFailed: false,
-      serversLoading: serversLoading,
-    );
-
-final _populated = _overview(
+final _populated = hubOverview(
   servers: [
-    _server('home', 'Home Mydia', host: 'home.example.net', inAllServers: true),
-    _server('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+    hubServer('home', 'Home Mydia',
+        host: 'home.example.net', inAllServers: true),
+    hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
   ],
   devices: [
-    _device('n1', 'Pixel phone', 'android'),
-    _device('n2', 'NAS', 'linux'),
+    hubDevice('n1', 'Pixel phone', 'android'),
+    hubDevice('n2', 'NAS', 'linux'),
   ],
 );
 
 class _Harness {
   _Harness(this.nav, this.service);
-  final _RecordingNav nav;
+  final RecordingNav nav;
   final FakePeerSyncService service;
 }
 
@@ -131,7 +41,7 @@ Future<_Harness> _pump(
   SourceId? direct,
   bool settle = true,
 }) async {
-  final nav = _RecordingNav();
+  final nav = RecordingNav();
   final store = InMemoryPeerSyncStore();
   final service =
       FakePeerSyncService(store: store, isPaired: overview.isPaired);
@@ -219,13 +129,13 @@ void main() {
     _phone(tester, height: 1400);
     await _pump(
       tester,
-      _overview(servers: [
-        _server('a', 'Home Mydia', inAllServers: true),
-        _server('b', 'Basement Plex',
+      hubOverview(servers: [
+        hubServer('a', 'Home Mydia', inAllServers: true),
+        hubServer('b', 'Basement Plex',
             kind: SourceKind.plex, status: ConnectionStatus.offline),
-        _server('c', 'NAS',
+        hubServer('c', 'NAS',
             kind: SourceKind.jellyfin, status: ConnectionStatus.needsSignIn),
-        _server('d', 'Stash box', kind: SourceKind.stash, locked: true),
+        hubServer('d', 'Stash box', kind: SourceKind.stash, locked: true),
       ]),
     );
 
@@ -244,14 +154,37 @@ void main() {
   testWidgets('direct p2p replaces online on the reached Mydia',
       (tester) async {
     _phone(tester, height: 1400);
-    final server = _server('a', 'Home Mydia');
+    final server = hubServer('a', 'Home Mydia');
     await _pump(
       tester,
-      _overview(servers: [server]),
+      hubOverview(servers: [server]),
       direct: mydiaSourceIdOf(server.record),
     );
     expect(find.text('Direct connection'), findsOneWidget);
     expect(find.text('Online'), findsNothing);
+  });
+
+  testWidgets('direct p2p shows on a Mydia reached through a non-owner profile',
+      (tester) async {
+    _phone(tester, height: 1400);
+    final server = hubServer('a', 'Home Mydia', kidProfile: true);
+    final kid = server.record.sources.singleWhere((s) => !s.profile.isOwner);
+    await _pump(tester, hubOverview(servers: [server]), direct: kid.id);
+    expect(find.text('Direct connection'), findsOneWidget);
+    expect(find.text('Online'), findsNothing);
+  });
+
+  testWidgets('the route has a window title bar with a back button',
+      (tester) async {
+    _phone(tester, height: 1400);
+    await _pump(tester, _populated);
+    expect(find.byType(WindowTitleBar), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(WindowTitleBar),
+            matching: find.text('Servers & devices')),
+        findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
   });
 
   testWidgets('pair buttons open the sheet in the right mode', (tester) async {
@@ -296,7 +229,7 @@ void main() {
 
   testWidgets('no sync footer when not paired', (tester) async {
     _phone(tester, height: 1400);
-    await _pump(tester, _overview(servers: [_server('a', 'Home Mydia')]));
+    await _pump(tester, hubOverview(servers: [hubServer('a', 'Home Mydia')]));
     expect(find.byKey(const Key('paired-sync-now-button')), findsNothing);
     expect(find.byKey(const Key('paired-leave-group-button')), findsNothing);
   });
@@ -317,11 +250,11 @@ void main() {
     _phone(tester);
     await _pump(
       tester,
-      _overview(
+      hubOverview(
         servers: [
-          for (var i = 0; i < 6; i++) _server('s$i', 'Home Mydia $i'),
+          for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
         ],
-        devices: [_device('n1', 'Pixel phone', 'android')],
+        devices: [hubDevice('n1', 'Pixel phone', 'android')],
       ),
       initialSection: 'devices',
     );
@@ -336,7 +269,7 @@ void main() {
       'empty hub shows the add-server ghost and the pair call to action',
       (tester) async {
     _phone(tester, height: 1400);
-    final h = await _pump(tester, _overview());
+    final h = await _pump(tester, hubOverview());
 
     expect(
         find.byKey(const Key('connections-add-server-ghost')), findsOneWidget);
@@ -353,7 +286,7 @@ void main() {
   testWidgets('loading servers shows a progress indicator, not the ghost',
       (tester) async {
     _phone(tester, height: 1400);
-    await _pump(tester, _overview(serversLoading: true), settle: false);
+    await _pump(tester, hubOverview(serversLoading: true), settle: false);
     expect(
         find.byKey(const Key('connections-servers-loading')), findsOneWidget);
     expect(find.text('Add a server'), findsNothing);
