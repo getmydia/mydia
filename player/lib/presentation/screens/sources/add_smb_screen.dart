@@ -351,7 +351,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       _chosen.clear();
       _backend = SmbBackend(
         native: _native,
-        accountId: smbAccountId(url),
+        accountId: widget.reauthAccountId ?? smbAccountId(url),
         target: smbTargetOf(Uri.parse(normalizeSmbUrl(url))),
         credentials: credentials,
       );
@@ -388,12 +388,16 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
       final discovered = _discovered?.name;
+      // Add folders: the share the screen was opened for, never one found
+      // by address, and only while it is still saved.
       final id = await accounts.addSmbAccount(
         url: _urlOf(_hostName, _portNumber, share),
         credentials: credentials,
         displayName: discovered == null ? null : '$discovered / $share',
         alternatives: _alternatives,
         serviceName: discovered,
+        accountId: widget.reauthAccountId,
+        signInAgain: _reauth,
       );
       // Saved: its playback tokens now belong to the source, not this screen.
       _saved = true;

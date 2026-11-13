@@ -247,7 +247,7 @@ class FilesAccounts {
           serviceName: serviceName,
           port: target.port,
         ) ??
-        smbAccountId(url);
+        await _unusedSmbAccountId(url);
     final name = displayName ?? '${base.host}/$typedShare';
     final existing = await _stored(id);
     if (signInAgain && existing == null) {
@@ -302,6 +302,16 @@ class FilesAccounts {
       // and the ones just written must go too.
       await _ref.read(sourceSecretsProvider).deleteAccountToken(account);
       rethrow;
+    }
+  }
+
+  /// [smbAccountId] of [url], or the next attempt while that id is stored.
+  /// An account keeps the id minted from its first address after it moves,
+  /// so a different server answering there later must not take it over.
+  Future<String> _unusedSmbAccountId(Uri url) async {
+    for (var attempt = 0;; attempt++) {
+      final id = smbAccountId(url, attempt);
+      if (await _stored(id) == null) return id;
     }
   }
 

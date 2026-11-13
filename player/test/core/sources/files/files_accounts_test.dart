@@ -530,6 +530,48 @@ void main() {
       expect(hostsOf(byService['Alpha']!).first, '192.168.1.5');
     });
 
+    test('a_new_share_at_a_moved_accounts_first_address_gets_its_own_id',
+        () async {
+      final c = await container(smb: FakeSmbNative());
+      final accounts = c.read(filesAccountsProvider);
+      final alpha = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/media'),
+          credentials: const SmbCredentials(user: 'a', password: 'alpha'),
+          alternatives: ['alpha.local'],
+          serviceName: 'Alpha');
+      final alphaId = alpha.value.split(':').first;
+      await accounts.setSmbAddress(alphaId,
+          host: '192.168.1.9',
+          port: 445,
+          alternatives: ['alpha.local'],
+          serviceName: 'Alpha');
+      final alphaBefore = (await store.load()).accounts.single;
+
+      // Another server now answers at Alpha's first address, so its id
+      // derived from that address is already taken.
+      final beta = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/media'),
+          credentials: const SmbCredentials(user: 'b', password: 'beta'),
+          alternatives: ['beta.local'],
+          serviceName: 'Beta');
+      final betaId = beta.value.split(':').first;
+
+      expect(betaId, isNot(alphaId));
+      expect(isSmbAccountId(betaId), isTrue);
+      final records = {
+        for (final r in (await store.load()).accounts) r.account.id: r,
+      };
+      expect(records, hasLength(2));
+      final alphaAfter = records[alphaId]!;
+      expect(await passwordOf(alphaAfter), 'alpha');
+      expect(alphaAfter.servers.single.serviceName, 'Alpha');
+      expect(alphaAfter.servers.single.connections,
+          alphaBefore.servers.single.connections);
+      expect(await passwordOf(records[betaId]!), 'beta');
+      expect(records[betaId]!.servers.single.serviceName, 'Beta');
+      expect(hostsOf(records[betaId]!), ['192.168.1.5', 'beta.local']);
+    });
+
     test('an_ip_alternative_alone_never_matches_a_record_without_a_name',
         () async {
       final c = await container();

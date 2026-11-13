@@ -646,7 +646,10 @@ first one that was not a plain unreachable (refused login, SMB1 only), else
 the last unreachable, so offline handling is unchanged.
 
 The account id is minted once from the first address and never recomputed.
-Adding a share looks for a stored SMB account with the same share
+Since an account keeps that id after it moves, a new account whose
+address-derived id is already stored gets the next free one
+(`smbAccountId(url, attempt)`), so a different server answering at an old
+address never overwrites the moved account. Adding a share looks for a stored SMB account with the same share
 (case-insensitive), a connection on the same port, and the same server, and
 signs that one in again, so watch state, the index, pins and downloads stay
 attached after the server gets a new IP. The same server means the same
@@ -654,8 +657,9 @@ attached after the server gets a new IP. The same server means the same
 otherwise a host in common, counting only the answering address and the
 hostnames on each side. An IP literal among the alternatives never matches:
 two NASes can both advertise the same container bridge address. Sign in
-again does not search at all: it updates the account the screen was opened
-for.
+again and Add folders do not search at all: they update the account the
+screen was opened for, and only while it is still saved (a removal during
+the operation stays a removal, reported as a failed save).
 
 "Change address" on the account page (`smb_address_sheet.dart`) takes a
 typed host and port or a discovered server. It lists the shares with the

@@ -469,12 +469,11 @@ void main() {
       expect(find.text('home'), findsOneWidget);
     });
 
-    testWidgets('signing in again updates the share it was opened for',
-        (tester) async {
-      final first = await reopen(tester, needsReauth: false);
-      // A second share at the same address, which an address lookup would
-      // resolve to the first one.
-      const twinId = 's0000000000000001';
+    const twinId = 's0000000000000001';
+
+    /// A second share at the same address as [first]'s, which an address
+    /// lookup would resolve to the first one.
+    Future<void> addTwin(_Harness first, {required bool needsReauth}) async {
       final connections =
           (await first.store.load()).accounts.single.servers.single.connections;
       await first.store.putAccount(SourceAccountRecord(
@@ -484,7 +483,7 @@ void main() {
           displayName: 'Twin',
           storageNamespace: SourceSecrets.newStorageNamespace(twinId),
           activeProfileId: kOwnerProfileId,
-          needsReauth: true,
+          needsReauth: needsReauth,
         ),
         profiles: const [
           SourceProfile(
@@ -505,6 +504,18 @@ void main() {
         // Listed after the first share, so a lookup by address finds that.
         addedAtMs: DateTime(2100).millisecondsSinceEpoch,
       ));
+    }
+
+    Future<String> passwordOf(_Harness h, SourceAccountRecord r) async {
+      final secret =
+          await h.storage.read('${r.account.storageNamespace}/account_token');
+      return SmbCredentials.fromJson(secret!).password;
+    }
+
+    testWidgets('signing in again updates the share it was opened for',
+        (tester) async {
+      final first = await reopen(tester, needsReauth: false);
+      await addTwin(first, needsReauth: true);
       await tester.pumpWidget(const SizedBox());
       final h = await _pump(tester, reauthAccountId: twinId, reuse: first);
       await signIn(tester, 'new');
@@ -514,13 +525,37 @@ void main() {
       };
       final twin = records[twinId]!;
       expect(twin.account.needsReauth, isFalse);
-      final secret = await h.storage
-          .read('${twin.account.storageNamespace}/account_token');
-      expect(SmbCredentials.fromJson(secret!).password, 'new');
-      final attic = records[accountId]!;
-      final atticSecret = await h.storage
-          .read('${attic.account.storageNamespace}/account_token');
-      expect(SmbCredentials.fromJson(atticSecret!).password, 'old');
+      expect(await passwordOf(h, twin), 'new');
+      expect(await passwordOf(h, records[accountId]!), 'old');
+    });
+
+    testWidgets('adding folders updates the share it was opened for',
+        (tester) async {
+      final first = await reopen(tester, needsReauth: false);
+      await addTwin(first, needsReauth: false);
+      await tester.pumpWidget(const SizedBox());
+      final h = await _pump(tester, reauthAccountId: twinId, reuse: first);
+      await signIn(tester, 'new');
+      expect(find.byKey(const Key('smb-folders')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('smb-tick-/Shows')));
+      await tester.pumpAndSettle();
+      await _tap(tester, 'smb-save-button');
+
+      final records = {
+        for (final r in (await h.store.load()).accounts) r.account.id: r,
+      };
+      expect(records, hasLength(2));
+      expect(await passwordOf(h, records[twinId]!), 'new');
+      expect(await passwordOf(h, records[accountId]!), 'old');
+      expect(
+          FileLibraryIndex(h.box, accountId: twinId).roots().map((r) => r.path),
+          ['/Shows']);
+      expect(
+          FileLibraryIndex(h.box, accountId: accountId)
+              .roots()
+              .map((r) => r.path),
+          ['/Films']);
+      expect(find.text('opened $twinId:owner:$twinId'), findsOneWidget);
     });
 
     testWidgets('a refused sign-in keeps the old credentials', (tester) async {
