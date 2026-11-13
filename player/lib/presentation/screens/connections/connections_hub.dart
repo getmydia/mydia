@@ -92,6 +92,9 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
 
   Future<void> _confirmLeaveGroup() async {
     final l10n = context.l10n;
+    // Taken before the dialog: the hub can unmount while it is open, and a
+    // confirmed leave must still reach the service.
+    final service = ref.read(peerSyncServiceProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => GlassDialog(
@@ -111,7 +114,7 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(peerSyncServiceProvider).leaveGroup();
+      await service.leaveGroup();
     }
   }
 

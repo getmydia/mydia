@@ -50,10 +50,15 @@ Future<void> unwatchMydiaPeer(
 /// Removes a Mydia instance from this device: stops watching its peer, then
 /// drops the account and everything stored for it. Nothing changes on the
 /// server.
+///
+/// Everything is read from [ref] before the first await: the page that asked
+/// can unmount meanwhile, and a confirmed removal must still complete.
 Future<void> removeMydiaInstance(WidgetRef ref, ProviderAccount account) async {
-  await unwatchMydiaPeer(
-      ref.read(sourceSecretsProvider), ref.read(p2pServiceProvider), account);
-  await ref.read(sourceRecordsProvider.notifier).removeAccount(account.id);
+  final secrets = ref.read(sourceSecretsProvider);
+  final p2p = ref.read(p2pServiceProvider);
+  final records = ref.read(sourceRecordsProvider.notifier);
+  await unwatchMydiaPeer(secrets, p2p, account);
+  await records.removeAccount(account.id);
 }
 
 /// The `manage-add` button, at the end of the hub's Servers header.
