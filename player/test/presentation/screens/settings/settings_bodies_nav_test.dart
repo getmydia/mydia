@@ -30,6 +30,8 @@ class _RecordingNav implements SettingsNav {
   @override
   void openPairedDevices() => calls.add('paired-devices');
   @override
+  void openConnections() => calls.add('connections');
+  @override
   void instanceRemoved() => calls.add('removed');
   @override
   void addServer() => calls.add('add');

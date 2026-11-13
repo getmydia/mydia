@@ -129,6 +129,9 @@ class DialogSettingsNav implements SettingsNav {
       ));
 
   @override
+  void openConnections() => scope.select(SettingsCategory.servers);
+
+  @override
   void instanceRemoved() => _servers.popUntil((route) => route.isFirst);
 
   @override

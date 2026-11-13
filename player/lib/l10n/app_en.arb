@@ -2583,5 +2583,72 @@
   "pairedDevicesPairNewSection": "Pair another device",
   "@pairedDevicesPairNewSection": {
     "description": "Section header for pairing an additional device."
+  },
+  "connectionsEyebrow": "Your setup",
+  "@connectionsEyebrow": {
+    "description": "Small eyebrow label above the title of the Settings card that shows this device's servers and paired devices."
+  },
+  "connectionsTitle": "Servers & devices",
+  "@connectionsTitle": {
+    "description": "Title of the Settings card, and of the screen it opens, listing saved servers and paired devices."
+  },
+  "connectionsServersOnline": "{online} of {total} servers online",
+  "@connectionsServersOnline": {
+    "description": "Footer of the Servers & devices card: how many of the saved servers are reachable.",
+    "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsSyncedWith": "{count, plural, one{Synced with 1 device} other{Synced with {count} devices}}",
+  "@connectionsSyncedWith": {
+    "description": "Footer of the Servers & devices card: how many other devices this one syncs watch progress with.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsNotPaired": "Not paired",
+  "@connectionsNotPaired": {
+    "description": "Footer of the Servers & devices card when this device is not paired with any other device."
+  },
+  "connectionsEmptyFooter": "Add your other servers and sync progress across devices",
+  "@connectionsEmptyFooter": {
+    "description": "Footer of the Servers & devices card when there are no servers and no paired devices."
+  },
+  "connectionsAddServerGhost": "Add a server",
+  "@connectionsAddServerGhost": {
+    "description": "Label under the dashed placeholder node in the Servers & devices diagram when no server is saved."
+  },
+  "connectionsPairDeviceGhost": "Pair a device",
+  "@connectionsPairDeviceGhost": {
+    "description": "Label under the dashed placeholder node in the Servers & devices diagram when no device is paired."
+  },
+  "connectionsMoreNodes": "+{count}",
+  "@connectionsMoreNodes": {
+    "description": "Node in the Servers & devices diagram standing for servers and devices that did not fit.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsThisDevice": "This device",
+  "@connectionsThisDevice": {
+    "description": "Label under the centre node of the Servers & devices diagram, standing for the device the app runs on, when it has no name."
+  },
+  "connectionsCardSemantics": "Servers and devices. {summary}",
+  "@connectionsCardSemantics": {
+    "description": "Screen reader label of the Servers & devices card. The summary is the card's footer text, for example '2 of 3 servers online. Synced with 2 devices.'",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
   }
 }
