@@ -15,14 +15,16 @@ fail=0
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
 
 expect() {
-  local label="$1" want="$2" input="$3" got
-  got="$("$SCRIPT" "$input" 2>&1)" || got="(failed) $got"
+  local label="$1" want="$2" got
+  shift 2
+  got="$("$SCRIPT" "$@" 2>&1)" || got="(failed) $got"
   [ "$want" = "$got" ] || note_failure "$label: got '$got', wanted '$want'"
 }
 
 expect_failure() {
-  local label="$1" input="$2"
-  if "$SCRIPT" "$input" >/dev/null 2>&1; then
+  local label="$1"
+  shift
+  if "$SCRIPT" "$@" >/dev/null 2>&1; then
     note_failure "$label: should have failed"
   fi
 }
@@ -50,6 +52,23 @@ expect_below "highest upload sorts below the branch build" 17000042 "$branch"
 expect_below "branch build sorts below master's next build" "$branch" 17000043
 expect_below "a tenth branch build still sorts above the ninth" 17000042.9 17000042.10
 expect_below "and still below master's next build" 17000042.10 17000043
+
+# A master build passes its version-derived number as <preferred>.
+expect "preferred clears the highest" 17000043 17000042 17000043
+expect "preferred clears a branch build" 17000043 17000042.3 17000043
+expect "preferred leading zeros are not octal" 17000043 17000042 017000043
+# A draft release (0.19.0-beta.1) is uploaded before its tag exists, so
+# master's dev build (0.19.0-dev.15) derives a number below it.
+expect "preferred behind a draft release" 19031000.1 19031000 19000015
+expect "preferred equal to the highest" 17000042.1 17000042 17000042
+expect "preferred equal to a branch build's base" 17000042.4 17000042.3 17000042
+expect_failure "preferred not an integer" 17000042 17000043.1
+expect_failure "preferred not a number" 17000042 abc
+
+# Once the release is published, master's builds anchor on its tag and clear
+# every number taken while it was a draft.
+expect_below "behind-draft build sorts below the release's first dev build" \
+  "$("$SCRIPT" 19031000 19000015)" 19031001
 
 if [ "$fail" -eq 0 ]; then
   echo "scripts/branch-build-number.sh: all cases passed"
