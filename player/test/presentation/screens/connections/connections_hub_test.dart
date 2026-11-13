@@ -284,7 +284,7 @@ void main() {
   });
 
   testWidgets('sync now and leave group only when paired', (tester) async {
-    _phone(tester, height: 1400);
+    _phone(tester, height: 1800);
     final h = await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('paired-sync-now-button')));
@@ -344,15 +344,116 @@ void main() {
     final h = await _pump(tester, hubOverview());
 
     expect(
-        find.byKey(const Key('connections-add-server-ghost')), findsOneWidget);
-    expect(find.text('Add a server'), findsOneWidget);
+        find.byKey(const Key('connections-add-mydia-ghost')), findsOneWidget);
+    expect(find.text('Add a Mydia server'), findsOneWidget);
+    expect(find.byKey(const Key('connections-other-servers-section')),
+        findsNothing);
     expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
     expect(find.text('Sync another Mydia Player'), findsOneWidget);
     expect(find.byKey(const Key('connections-devices-section')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('connections-add-server-ghost')));
+    await tester.tap(find.byKey(const Key('connections-add-mydia-ghost')));
     await tester.pump();
-    expect(h.nav.calls, ['add']);
+    expect(h.nav.calls, ['add mydia']);
+
+    // The kind picker stays one tap away, on the Mydia header.
+    expect(
+        find.descendant(
+          of: find.byKey(const Key('connections-mydia-servers-section')),
+          matching: find.byKey(const Key('manage-add')),
+        ),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('manage-add')));
+    await tester.pump();
+    expect(h.nav.calls.last, 'add');
+  });
+
+  testWidgets('Mydia servers lead, above every other kind', (tester) async {
+    _phone(tester, height: 1400);
+    // Saved Plex first: the hub still puts Mydia on top.
+    await _pump(
+      tester,
+      hubOverview(servers: [
+        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+        hubServer('home', 'Home Mydia', host: 'home.example.net'),
+      ]),
+    );
+
+    final mydiaSection =
+        find.byKey(const Key('connections-mydia-servers-section'));
+    final otherSection =
+        find.byKey(const Key('connections-other-servers-section'));
+    expect(find.text('Mydia servers'), findsOneWidget);
+    expect(
+        find.text(
+            'Recommended. Your progress follows you to every device you sign in on.'),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: mydiaSection,
+            matching: find.byKey(const Key('connections-server-home'))),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: otherSection,
+            matching: find.byKey(const Key('connections-server-plex-acc'))),
+        findsOneWidget);
+    expect(tester.getTopLeft(mydiaSection).dy,
+        lessThan(tester.getTopLeft(otherSection).dy));
+    // One Add button, on Other servers.
+    expect(find.byKey(const Key('manage-add')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: otherSection, matching: find.byKey(const Key('manage-add'))),
+        findsOneWidget);
+    expect(find.byKey(const Key('connections-add-mydia-ghost')), findsNothing);
+  });
+
+  testWidgets('only Mydia servers: no Other servers section', (tester) async {
+    _phone(tester, height: 1400);
+    await _pump(
+      tester,
+      hubOverview(servers: [hubServer('home', 'Home Mydia')]),
+    );
+    expect(find.byKey(const Key('connections-other-servers-section')),
+        findsNothing);
+    expect(
+        find.descendant(
+          of: find.byKey(const Key('connections-mydia-servers-section')),
+          matching: find.byKey(const Key('manage-add')),
+        ),
+        findsOneWidget);
+  });
+
+  testWidgets('only other servers: the Mydia section invites an add',
+      (tester) async {
+    _phone(tester, height: 1400);
+    final h = await _pump(
+      tester,
+      hubOverview(servers: [
+        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+      ]),
+    );
+    expect(
+        find.byKey(const Key('connections-add-mydia-ghost')), findsOneWidget);
+    expect(find.byKey(const Key('connections-other-servers-section')),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('connections-add-mydia-ghost')));
+    await tester.pump();
+    expect(h.nav.calls, ['add mydia']);
+  });
+
+  testWidgets('the pair card says Mydia servers need no pairing',
+      (tester) async {
+    _phone(tester, height: 1400);
+    await _pump(tester, hubOverview());
+    expect(
+        find.descendant(
+          of: find.byKey(const Key('connections-pair-cta')),
+          matching: find.textContaining('Not needed for Mydia servers'),
+        ),
+        findsOneWidget);
   });
 
   testWidgets('loading servers shows a progress indicator, not the ghost',
@@ -370,7 +471,9 @@ void main() {
     await _pump(tester, hubOverview(serversFailed: true));
     expect(find.byKey(const Key('connections-servers-failed')), findsOneWidget);
     expect(find.text('Could not read the saved servers.'), findsOneWidget);
-    expect(find.byKey(const Key('connections-add-server-ghost')), findsNothing);
+    expect(find.byKey(const Key('connections-add-mydia-ghost')), findsNothing);
+    expect(find.byKey(const Key('connections-mydia-servers-section')),
+        findsNothing);
     expect(
         find.descendant(
           of: find.byKey(const Key('connections-servers-section')),

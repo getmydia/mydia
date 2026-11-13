@@ -24,7 +24,8 @@ class RecordingNav implements SettingsNav {
   @override
   void instanceRemoved() => calls.add('removed');
   @override
-  void addServer() => calls.add('add');
+  void addServer({SourceKind? kind}) =>
+      calls.add(kind == null ? 'add' : 'add ${kind.name}');
   @override
   void reauth(SourceKind kind, String accountId) =>
       calls.add('reauth ${kind.name} $accountId');

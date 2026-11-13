@@ -2686,9 +2686,25 @@
   "@connectionsPairCta": {
     "description": "Title of the card on the Servers & devices screen that invites the viewer to link Mydia Player on another phone, TV or computer, so watch progress and pins sync between them. Also the title of the sheet those buttons open. Not casting, and not adding a server."
   },
-  "connectionsPairCtaBody": "Keep watch progress and pins in step across your phone, TV and computer.",
+  "connectionsPairCtaBody": "Keeps watch progress and pins in step across your phone, TV and computer for Plex, Jellyfin, Stash and Files. Not needed for Mydia servers: they do this on their own.",
   "@connectionsPairCtaBody": {
-    "description": "Body of the Sync another Mydia Player card, above its two buttons (show a code on this device, or enter the code another device shows)."
+    "description": "Body of the Sync another Mydia Player card, above its two buttons (show a code on this device, or enter the code another device shows). Says pairing is only for servers other than Mydia, because a Mydia server already keeps progress in step across devices."
+  },
+  "connectionsMydiaServers": "Mydia servers",
+  "@connectionsMydiaServers": {
+    "description": "Header of the first section on the Servers & devices screen, listing the saved Mydia servers. Mydia is a product name and stays untranslated."
+  },
+  "connectionsMydiaServersHint": "Recommended. Your progress follows you to every device you sign in on.",
+  "@connectionsMydiaServersHint": {
+    "description": "Hint under the Mydia servers header on the Servers & devices screen: a Mydia server is the preferred way to use the player, because it keeps watch progress in step across devices without pairing."
+  },
+  "connectionsOtherServers": "Other servers",
+  "@connectionsOtherServers": {
+    "description": "Header of the section on the Servers & devices screen listing saved servers that are not Mydia (Plex, Jellyfin, Stash, Files)."
+  },
+  "connectionsAddMydiaServerGhost": "Add a Mydia server",
+  "@connectionsAddMydiaServerGhost": {
+    "description": "Placeholder card in the Mydia servers section of the Servers & devices screen when no Mydia server is saved. Tapping it opens the Mydia sign-in form."
   },
   "connectionsChipDirect": "Direct connection",
   "@connectionsChipDirect": {
