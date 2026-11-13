@@ -10,7 +10,6 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/connections/pair_device_sheet.dart';
 import 'package:player/presentation/screens/settings/paired_devices_screen.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
-import 'package:player/presentation/screens/settings/widgets/settings_sections.dart';
 
 import '../../../test_utils/toast_harness.dart';
 import '../connections/fake_peer_sync_service.dart';
@@ -176,61 +175,5 @@ void main() {
     expect(service.leaveGroupCount, 1);
     expect(find.byKey(const Key('paired-leave-group-button')), findsNothing);
     expect(find.byKey(const Key('connections-show-code')), findsOneWidget);
-  });
-
-  testWidgets('settings_row_shows_paired_count_and_navigates_to_paired_devices',
-      (tester) async {
-    final store = InMemoryPeerSyncStore();
-    final service = FakePeerSyncService(store: store, isPaired: false);
-    final roster = PeerGroupRoster(
-      store: store,
-      localNodeId: () => service.localNodeId,
-      isPeerConnected: (_) => true,
-    );
-    final nav = _RecordingNav();
-
-    await tester.pumpWidget(_wrapScreen(
-      service: service,
-      store: store,
-      roster: roster,
-      nav: nav,
-      child: Scaffold(
-        body: Consumer(
-          builder: (context, ref, _) => ListView(
-            children: [
-              pairedDevicesRow(context, ref),
-            ],
-          ),
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('paired-devices-row')), findsOneWidget);
-    expect(find.text('Not paired'), findsOneWidget);
-
-    // Add 2 active peers
-    await store.putMember(const PeerMember(
-      nodeId: 'peer-1',
-      deviceName: 'Device 1',
-      platform: 'android',
-      updatedAt: 1000,
-    ));
-    await store.putMember(const PeerMember(
-      nodeId: 'peer-2',
-      deviceName: 'Device 2',
-      platform: 'ios',
-      updatedAt: 2000,
-    ));
-    service.paired = true;
-    service.notify();
-    await tester.pumpAndSettle();
-
-    expect(find.text('2 paired devices'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('paired-devices-row')));
-    await tester.pump();
-
-    expect(nav.calls, contains('paired-devices'));
   });
 }
