@@ -608,10 +608,10 @@ streams through them. Connections idle for 60 seconds are closed. Access
 denied after connect is `BackendPermissionLost`; at session setup or tree
 connect it is `BackendUnauthorized`. Discovered servers are connected by
 their IPv4 addresses, then global IPv6 addresses, then the hostname, since
-`.local` names do not resolve on Android or Linux without nss-mdns. A new SMB account
-is named `<host>/<share>`, or `<discovered name> / <share>` when the server was
-found on the network, so two shares on one server are told apart; signing in
-again keeps the saved name.
+`.local` names do not resolve on Android or Linux without nss-mdns. A new SMB
+account is named `<host>/<share>`, or `<discovered name> / <share>` when the
+server was found on the network, so two shares on one server are told apart;
+signing in again keeps the saved name.
 
 #### SMB addresses
 
@@ -619,19 +619,23 @@ An SMB record stores every way to reach the share in `connections`, one
 `smb://host[:port]/share` each, plus `serviceName`, the mDNS instance name
 when the server was found on the network (absent on older records, which
 have one connection and work as before). Hostnames are lowercased with no
-trailing dot. The list is capped at 6; trimming keeps the hostname and drops
-IP literals from the end first (`files/smb_addresses.dart`).
+trailing dot. The list is capped at 6: past that, IP literals are dropped
+from the end, and hostnames are always kept (`files/smb_addresses.dart`).
 
 `LazySmbBackend` probes the share root at each address in stored order and
-uses the first that answers. When that is not the first stored address, the
-record is rewritten (in the records write queue) with it first, so the next
-connect starts there. Every failure moves on to the next address, a refused
+uses the first that answers. When that is not the first address, the backend
+moves it to the front of its own list and the record is rewritten (in the
+records write queue) the same way. The source is not rebuilt for that, so
+the backend's own list is what makes the next connect, after a dropped
+connection, start there. Every failure moves on to the next address, a refused
 login included: after a move, the old IP can belong to another SMB host that
 refuses these credentials, and stopping there would flag the share as needing
 a sign-in instead of reconnecting it. When every address fails and
 `serviceName` is set, it browses `_smb._tcp` for at most 5 seconds, takes the
 service with that name and tries the addresses it reports that were not
-already tried; the one that answers is saved with the rest appended. The
+already tried; the one that answers goes first, in the backend and the
+record, with the rest appended, so a later connect neither re-probes the dead
+addresses first nor browses again. The
 browse is skipped when every address refused the login, since the password is
 wrong everywhere. With no service name or no match, the error thrown is the
 first one that was not a plain unreachable (refused login, SMB1 only), else
@@ -639,16 +643,27 @@ the last unreachable, so offline handling is unchanged.
 
 The account id is minted once from the first address and never recomputed.
 Adding a share looks for a stored SMB account with the same share
-(case-insensitive) and port and either the same `serviceName` or a host in
-common with the new address list, and signs that one in again, so watch
-state, the index, pins and downloads stay attached after the server gets a
-new IP. "Change address" on the account page (`smb_address_sheet.dart`)
-takes a typed host and port or a discovered server, lists the shares there
-with the saved credentials and requires this share to be among them, then
-replaces the connections and `serviceName` (cleared for a typed host) with
-`setSmbAddress`. The id, roots and watch state are untouched; open
-connections and playback URLs for the account are dropped and the backend
-rebuilt.
+(case-insensitive), a connection on the same port, and the same server, and
+signs that one in again, so watch state, the index, pins and downloads stay
+attached after the server gets a new IP. The same server means the same
+`serviceName` when both sides have one (two different names never match);
+otherwise a host in common, counting only the answering address and the
+hostnames on each side. An IP literal among the alternatives never matches:
+two NASes can both advertise the same container bridge address. Sign in
+again does not search at all: it updates the account the screen was opened
+for.
+
+"Change address" on the account page (`smb_address_sheet.dart`) takes a
+typed host and port or a discovered server. It lists the shares with the
+saved credentials, at the typed host, or at each address a picked server
+advertised and then its hostname, moving past unreachable ones the way the
+add screen does (`listSharesAtFirstReachable`). This share must be among
+them. It then replaces the connections with the address that answered
+first and the rest as alternatives, sets `serviceName` (cleared for a typed
+host) with `setSmbAddress`, and clears the sign-in-again flag, since the
+saved credentials have just worked there. The id, roots and watch state are
+untouched; open connections and playback URLs for the account are dropped
+and the backend rebuilt.
 
 The Rust tests run against a real Samba. It needs passwordless sudo and
 `smbd` on PATH:
