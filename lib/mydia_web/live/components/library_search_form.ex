@@ -37,11 +37,11 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
         />
       </form>
       <%= if @search_results != [] do %>
-        <div class="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-          <%= for item <- @search_results do %>
+        <ul class="menu menu-sm absolute z-10 w-full mt-1 flex-nowrap bg-base-100 border border-base-300 rounded-box shadow-lg max-h-48 overflow-y-auto">
+          <li :for={item <- @search_results}>
             <button
               type="button"
-              class="w-full text-left px-3 py-2 hover:bg-base-200 border-b border-base-300 last:border-b-0 flex gap-3 items-center"
+              class="flex gap-3 items-center text-left"
               phx-click={@on_select}
               phx-value-download_id={@download_id}
               phx-value-media_item_id={item.id}
@@ -74,8 +74,8 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
                 </div>
               </div>
             </button>
-          <% end %>
-        </div>
+          </li>
+        </ul>
       <% end %>
     </div>
     """

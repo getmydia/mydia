@@ -103,7 +103,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
           <button
             type="button"
             @click="togglePlay"
-            class="p-2 text-white/90 hover:text-white transition-colors"
+            class="btn btn-ghost btn-circle text-white/90 hover:text-white hover:bg-white/10"
             aria-label={gettext("Play/Pause")}
           >
             <.icon x-show="!playing" name="hero-play-solid" class="w-7 h-7" />
@@ -114,7 +114,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
           <button
             type="button"
             @click="skipBackward(10)"
-            class="p-2 text-white/80 hover:text-white transition-colors"
+            class="btn btn-ghost btn-circle text-white/80 hover:text-white hover:bg-white/10"
             aria-label={gettext("Skip backward 10 seconds")}
           >
             <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -136,7 +136,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
           <button
             type="button"
             @click="skipForward(10)"
-            class="p-2 text-white/80 hover:text-white transition-colors"
+            class="btn btn-ghost btn-circle text-white/80 hover:text-white hover:bg-white/10"
             aria-label={gettext("Skip forward 10 seconds")}
           >
             <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -159,7 +159,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
             <button
               type="button"
               @click="toggleMute"
-              class="p-2 text-white/80 hover:text-white transition-colors"
+              class="btn btn-ghost btn-circle text-white/80 hover:text-white hover:bg-white/10"
               aria-label={gettext("Mute/Unmute")}
             >
               <.icon x-show="!muted && volume > 50" name="hero-speaker-wave" class="w-5 h-5" />
@@ -202,10 +202,10 @@ defmodule MydiaWeb.VideoPlayerComponents do
             <span
               x-text="streamingModeDisplay"
               x-bind:class="{
-                'bg-green-500/20 text-green-400 border-green-500/30': streamingMode !== 'transcode',
-                'bg-orange-500/20 text-orange-400 border-orange-500/30': streamingMode === 'transcode'
+                'badge-success': streamingMode !== 'transcode',
+                'badge-warning': streamingMode === 'transcode'
               }"
-              class="px-2 py-0.5 text-xs font-medium rounded border"
+              class="badge badge-sm badge-soft font-medium"
             ></span>
           </div>
 
@@ -216,7 +216,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
             <button
               type="button"
               @click="toggleSettings"
-              class="p-2 text-white/80 hover:text-white transition-colors"
+              class="btn btn-ghost btn-circle text-white/80 hover:text-white hover:bg-white/10"
               aria-label={gettext("Settings")}
             >
               <.icon name="hero-cog-6-tooth" class="w-5 h-5" />
@@ -233,37 +233,45 @@ defmodule MydiaWeb.VideoPlayerComponents do
               x-transition:leave-end="opacity-0 scale-95"
               x-cloak
               @click.outside="closeSettings"
-              class="absolute bottom-full right-0 mb-2 bg-neutral/95 backdrop-blur-sm rounded-lg shadow-xl min-w-[180px] overflow-hidden"
+              class="absolute bottom-full right-0 mb-2"
             >
-              <%!-- Playback Speed submenu --%>
-              <div class="speed-menu-container">
-                <button
-                  type="button"
-                  @click="toggleSpeedMenu"
-                  class="w-full px-4 py-2.5 text-left hover:bg-white/10 flex items-center justify-between text-white transition-colors"
-                >
-                  <span class="text-sm">{gettext("Speed")}</span>
-                  <div class="flex items-center gap-2">
-                    <span x-text="speedDisplay" class="text-sm text-white/60">
-                      {gettext("Normal")}
+              <%!-- A submenu replaces the main menu in the same slot rather
+                   than opening beside it: side by side they need about 330px
+                   left of this button, which a 320px-wide player clips. --%>
+              <ul
+                x-show="!speedMenuOpen && !qualityMenuOpen"
+                class="menu menu-sm w-48 bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
+              >
+                <li>
+                  <button type="button" @click="toggleSpeedMenu" class="justify-between">
+                    <span>{gettext("Speed")}</span>
+                    <span class="flex items-center gap-2 text-neutral-content/60">
+                      <span x-text="speedDisplay">{gettext("Normal")}</span>
+                      <.icon name="hero-chevron-right" class="w-4 h-4" />
                     </span>
-                    <.icon name="hero-chevron-right" class="w-4 h-4 text-white/40" />
-                  </div>
-                </button>
+                  </button>
+                </li>
+                <%!-- Quality (shown when HLS is active) --%>
+                <li x-show="hlsLevels.length > 0">
+                  <button type="button" @click="toggleQualityMenu" class="justify-between">
+                    <span>{gettext("Quality")}</span>
+                    <span class="flex items-center gap-2 text-neutral-content/60">
+                      <span x-text="qualityDisplay">{gettext("Auto")}</span>
+                      <.icon name="hero-chevron-right" class="w-4 h-4" />
+                    </span>
+                  </button>
+                </li>
+              </ul>
 
-                <%!-- Speed options submenu --%>
-                <div
-                  x-show="speedMenuOpen"
-                  x-transition
-                  x-cloak
-                  class="absolute bottom-0 right-full mr-1 bg-neutral/95 backdrop-blur-sm rounded-lg shadow-xl min-w-[120px] overflow-hidden"
-                >
-                  <button
-                    :for={speed <- [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]}
-                    type="button"
-                    @click={"setSpeed(#{speed})"}
-                    class="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center justify-between text-white transition-colors text-sm"
-                  >
+              <%!-- Speed options submenu --%>
+              <ul
+                x-show="speedMenuOpen"
+                x-cloak
+                class="menu menu-sm w-48 max-h-60 flex-nowrap overflow-y-auto bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
+              >
+                <.settings_back_row label={gettext("Speed")} toggle="toggleSpeedMenu" />
+                <li :for={speed <- [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]}>
+                  <button type="button" @click={"setSpeed(#{speed})"} class="justify-between">
                     <span>{if speed == 1.0, do: gettext("Normal"), else: "#{speed}x"}</span>
                     <.icon
                       x-show={"Math.abs(playbackRate - #{speed}) < 0.01"}
@@ -271,40 +279,18 @@ defmodule MydiaWeb.VideoPlayerComponents do
                       class="w-4 h-4 text-primary"
                     />
                   </button>
-                </div>
-              </div>
+                </li>
+              </ul>
 
-              <%!-- Quality submenu (shown when HLS is active) --%>
-              <div
-                x-show="hlsLevels.length > 0"
-                class="quality-menu-container border-t border-white/10"
+              <%!-- Quality options submenu --%>
+              <ul
+                x-show="qualityMenuOpen"
+                x-cloak
+                class="menu menu-sm w-48 max-h-60 flex-nowrap overflow-y-auto bg-neutral/95 text-neutral-content backdrop-blur-sm rounded-box shadow-xl"
               >
-                <button
-                  type="button"
-                  @click="toggleQualityMenu"
-                  class="w-full px-4 py-2.5 text-left hover:bg-white/10 flex items-center justify-between text-white transition-colors"
-                >
-                  <span class="text-sm">{gettext("Quality")}</span>
-                  <div class="flex items-center gap-2">
-                    <span x-text="qualityDisplay" class="text-sm text-white/60">
-                      {gettext("Auto")}
-                    </span>
-                    <.icon name="hero-chevron-right" class="w-4 h-4 text-white/40" />
-                  </div>
-                </button>
-
-                <%!-- Quality options submenu --%>
-                <div
-                  x-show="qualityMenuOpen"
-                  x-transition
-                  x-cloak
-                  class="absolute bottom-0 right-full mr-1 bg-neutral/95 backdrop-blur-sm rounded-lg shadow-xl min-w-[120px] overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    @click="setQuality(-1)"
-                    class="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center justify-between text-white transition-colors text-sm"
-                  >
+                <.settings_back_row label={gettext("Quality")} toggle="toggleQualityMenu" />
+                <li>
+                  <button type="button" @click="setQuality(-1)" class="justify-between">
                     <span>{gettext("Auto")}</span>
                     <.icon
                       x-show="currentHlsLevel === -1"
@@ -312,12 +298,10 @@ defmodule MydiaWeb.VideoPlayerComponents do
                       class="w-4 h-4 text-primary"
                     />
                   </button>
-                  <template x-for="(level, index) in hlsLevels">
-                    <button
-                      type="button"
-                      @click="setQuality(index)"
-                      class="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center justify-between text-white transition-colors text-sm"
-                    >
+                </li>
+                <template x-for="(level, index) in hlsLevels">
+                  <li>
+                    <button type="button" @click="setQuality(index)" class="justify-between">
                       <span x-text="level.height + 'p'"></span>
                       <.icon
                         x-show="currentHlsLevel === index"
@@ -325,9 +309,9 @@ defmodule MydiaWeb.VideoPlayerComponents do
                         class="w-4 h-4 text-primary"
                       />
                     </button>
-                  </template>
-                </div>
-              </div>
+                  </li>
+                </template>
+              </ul>
             </div>
           </div>
 
@@ -335,7 +319,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
           <button
             type="button"
             @click="toggleFullscreen"
-            class="p-2 text-white/80 hover:text-white transition-colors"
+            class="btn btn-ghost btn-circle text-white/80 hover:text-white hover:bg-white/10"
             aria-label={gettext("Toggle Fullscreen")}
           >
             <.icon x-show="!isFullscreen" name="hero-arrows-pointing-out" class="w-5 h-5" />
@@ -378,7 +362,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
           </p>
           <button
             type="button"
-            class="px-4 py-2 text-sm text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+            class="btn btn-sm"
             onclick="window.location.reload()"
           >
             {gettext("Try Again")}
@@ -401,7 +385,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
         <button
           type="button"
           @click="skipIntro"
-          class="px-4 py-2 text-sm font-medium text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg border border-white/20 transition-all"
+          class="btn btn-sm btn-ghost text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/20"
         >
           {gettext("Skip Intro")}
         </button>
@@ -422,7 +406,7 @@ defmodule MydiaWeb.VideoPlayerComponents do
         <button
           type="button"
           @click="skipCredits"
-          class="px-4 py-2 text-sm font-medium text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg border border-white/20 transition-all"
+          class="btn btn-sm btn-ghost text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/20"
         >
           {gettext("Skip Credits")}
         </button>
@@ -498,6 +482,21 @@ defmodule MydiaWeb.VideoPlayerComponents do
         </div>
       </div>
     </div>
+    """
+  end
+
+  # The first row of a settings submenu: returns to the main settings menu.
+  attr :label, :string, required: true
+  attr :toggle, :string, required: true, doc: "the Alpine method that closes this submenu"
+
+  defp settings_back_row(assigns) do
+    ~H"""
+    <li class="border-b border-neutral-content/10 mb-1">
+      <button type="button" @click={@toggle} class="font-medium">
+        <.icon name="hero-chevron-left" class="w-4 h-4" />
+        {@label}
+      </button>
+    </li>
     """
   end
 end

@@ -51,7 +51,7 @@ defmodule MydiaWeb.MediaLive.Show.TranscodeComponents do
           type="button"
           phx-click="cancel_transcode"
           phx-value-job-id={@job.id}
-          class="ml-1 hover:text-error"
+          class="btn btn-ghost btn-circle btn-xs size-4 -me-1 hover:text-error"
           title={gettext("Cancel transcode")}
         >
           <.icon name="hero-x-mark-mini" class="w-3 h-3" />

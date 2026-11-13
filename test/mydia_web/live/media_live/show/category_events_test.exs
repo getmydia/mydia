@@ -18,7 +18,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEventsTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-    view |> element("button[phx-click='show_category_modal'].w-full") |> render_click()
+    view |> element("#hero-category-row") |> render_click()
     assert has_element?(view, "#category-override-form")
 
     view
@@ -37,7 +37,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEventsTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-    view |> element("button[phx-click='show_category_modal'].w-full") |> render_click()
+    view |> element("#hero-category-row") |> render_click()
 
     view
     |> form("#category-override-form", %{
@@ -61,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEventsTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{locked.id}")
 
-    view |> element("button[phx-click='show_category_modal'].w-full") |> render_click()
+    view |> element("#hero-category-row") |> render_click()
     assert has_element?(view, "button", "Reset to Auto")
 
     view |> element("button", "Reset to Auto") |> render_click()

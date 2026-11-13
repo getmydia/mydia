@@ -45,7 +45,7 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
               id={"enable-preset-#{preset.id}"}
               phx-click="enable_preset"
               phx-value-preset-id={preset.id}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-base-200 border border-base-300 hover:border-primary hover:bg-primary/5 text-sm transition-colors"
+              class="btn btn-sm btn-outline rounded-full gap-1.5 border-base-300 font-normal hover:border-primary hover:bg-primary/5 hover:text-base-content"
               title={preset.description}
             >
               <.icon

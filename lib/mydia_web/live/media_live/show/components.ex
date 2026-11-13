@@ -11,6 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.MediaLive.Show.TranscodeComponents,
     only: [transcode_controls: 1, transcode_badge: 1, available_transcode_resolutions: 2]
 
+  alias MydiaWeb.MediaLive.Show.HeroRow
   alias MydiaWeb.MediaLive.Show.LibraryComponents
   alias MydiaWeb.MediaLive.Show.MonitoringMenu
   alias MydiaWeb.MediaLive.Show.SegmentComponents
@@ -222,10 +223,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 remaining headroom, which a real quality-profile list (a
                 handful of profiles) reliably does. Measured, not assumed:
                 see the UI polish fix wave report. --%>
-          <button
-            type="button"
+          <HeroRow.row_button
             phx-click="show_quality_profile_modal"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
             title={gettext("Click to change quality profile")}
           >
             <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -245,7 +244,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               name="hero-chevron-right"
               class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
             />
-          </button>
+          </HeroRow.row_button>
 
           <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_row media_item={@media_item} />
 
@@ -257,10 +256,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           />
 
           <%!-- Category --%>
-          <button
-            type="button"
+          <HeroRow.row_button
+            id="hero-category-row"
             phx-click="show_category_modal"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
             title={gettext("Click to change category")}
           >
             <div class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
@@ -287,7 +285,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               name="hero-chevron-right"
               class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
             />
-          </button>
+          </HeroRow.row_button>
 
           <%!-- Path --%>
           <%= if path = get_media_path(@media_item) do %>

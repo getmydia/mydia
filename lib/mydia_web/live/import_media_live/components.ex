@@ -395,7 +395,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           {gettext("Returned")}
         </span>
         <span :if={@group.queued?} class="badge badge-sm badge-info gap-1 shrink-0">
-          <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> {pgettext(
+          <span class="loading loading-spinner loading-xs"></span> {pgettext(
             "import band",
             "Queued"
           )}
@@ -517,7 +517,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 id={"member-deleting-#{candidate.id}"}
                 class="badge badge-xs badge-error badge-outline gap-1 shrink-0 self-end sm:self-center"
               >
-                <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> {gettext("Deleting…")}
+                <span class="loading loading-spinner loading-xs"></span> {gettext("Deleting…")}
               </span>
             <% else %>
               <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">

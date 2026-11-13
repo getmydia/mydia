@@ -80,7 +80,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
               <button
                 type="button"
                 id={"season-#{@season_number}-chunk-#{label}-toggle"}
-                class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-base-200 rounded-lg"
+                class="btn btn-ghost btn-block justify-start gap-2 px-3 font-normal"
                 phx-click="toggle_episode_chunk"
                 phx-value-season-number={@season_number}
                 phx-value-chunk-label={label}
