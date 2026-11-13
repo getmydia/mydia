@@ -771,7 +771,9 @@ class PeerSyncService {
             lastSyncedAt: nowMs,
           ),
         );
-        if (rosterChanged.isNotEmpty) _notifyStateChanged();
+        // Always, not only on a roster change: the new watermark moves the
+        // "synced X ago" the UI shows. A local notification only.
+        _notifyStateChanged();
         if (changes.changedWatchKeys.isNotEmpty ||
             changes.changedPinKeys.isNotEmpty) {
           await _onRemoteChangesApplied?.call(
