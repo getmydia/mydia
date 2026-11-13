@@ -183,11 +183,12 @@ class DialogSettingsNav implements SettingsNav {
   final SettingsDialogScope scope;
   final GoRouter router;
 
-  NavigatorState get _connections =>
+  /// Null once the dialog has closed; every use then does nothing.
+  NavigatorState? get _connections =>
       scope.paneNavigator(SettingsCategory.connections);
 
   @override
-  void openInstance(SourceId id) => _connections.push(MaterialPageRoute<void>(
+  void openInstance(SourceId id) => _connections?.push(MaterialPageRoute<void>(
         builder: (_) => _MydiaInstancePage(sourceId: id),
       ));
 
@@ -204,15 +205,17 @@ class DialogSettingsNav implements SettingsNav {
 
   @override
   void openAccount(String accountId) =>
-      _connections.push(MaterialPageRoute<void>(
+      _connections?.push(MaterialPageRoute<void>(
         builder: (_) => _AccountDetailPage(accountId: accountId),
       ));
 
+  /// Called after the removal's awaits, by which time the dialog may have
+  /// closed; then there is nothing to pop.
   @override
-  void accountRemoved() => _connections.popUntil((route) => route.isFirst);
+  void accountRemoved() => _connections?.popUntil((route) => route.isFirst);
 
   @override
-  void instanceRemoved() => _connections.popUntil((route) => route.isFirst);
+  void instanceRemoved() => _connections?.popUntil((route) => route.isFirst);
 
   @override
   void addServer() => _closeThen(() => router.push('/sources/add'));

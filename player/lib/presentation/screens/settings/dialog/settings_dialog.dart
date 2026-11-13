@@ -128,7 +128,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return SettingsDialogScope(
       close: _close,
       select: (c) => widget.controller.value = c,
-      paneNavigator: (c) => _navigators[c]!.currentState!,
+      paneNavigator: (c) => _navigators[c]?.currentState,
       connectionsSection: widget.controller.connectionsSection,
       child: Dialog(
         insetPadding: EdgeInsets.all(inset),
@@ -202,7 +202,10 @@ class SettingsDialogScope extends InheritedWidget {
 
   final VoidCallback close;
   final ValueChanged<SettingsCategory> select;
-  final NavigatorState Function(SettingsCategory category) paneNavigator;
+
+  /// The pane's navigator, or null once the dialog is gone: a flow that
+  /// awaited (a removal, say) can call back after the dialog closed.
+  final NavigatorState? Function(SettingsCategory category) paneNavigator;
 
   /// A section the connections pane should scroll to (`'devices'`). The pane
   /// stays mounted, so a request arrives here rather than as a new route;

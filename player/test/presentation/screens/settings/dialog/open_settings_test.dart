@@ -272,9 +272,25 @@ void main() {
         SettingsDialogScope.of(
                 tester.element(find.byKey(const Key('settings-dialog'))))
             .paneNavigator(SettingsCategory.connections)
-            .canPop(),
+            ?.canPop(),
         isFalse);
     expectDevicesInPane(tester);
+  });
+
+  testWidgets('a removal that lands after the dialog closed does not throw',
+      (tester) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
+    await open(tester);
+    final nav = dialogNav(tester);
+    nav.openAccount(recordA.account.id);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('settings-dialog-close')).first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+
+    expect(nav.accountRemoved, returnsNormally);
+    expect(nav.instanceRemoved, returnsNormally);
   });
 
   testWidgets('a second open retargets instead of stacking', (tester) async {
@@ -351,7 +367,7 @@ void main() {
         SettingsDialogScope.of(
                 tester.element(find.byKey(const Key('settings-dialog'))))
             .paneNavigator(SettingsCategory.playback)
-            .canPop(),
+            ?.canPop(),
         isFalse);
   });
 
