@@ -61,6 +61,7 @@ ConnectionsOverview _overview({
   List<ConnectionServer> servers = const [],
   List<ConnectionDevice> devices = const [],
   bool serversFailed = false,
+  bool serversLoading = false,
 }) =>
     ConnectionsOverview(
       localName: 'Living room TV',
@@ -69,6 +70,7 @@ ConnectionsOverview _overview({
       devices: devices,
       isPaired: devices.isNotEmpty,
       serversFailed: serversFailed,
+      serversLoading: serversLoading,
     );
 
 final _populated = _overview(
@@ -133,6 +135,7 @@ void main() {
         label: 'Servers and devices. 2 of 3 servers online. '
             'Synced with 2 devices.',
         isButton: true,
+        isFocusable: true,
         hasTapAction: true,
       ),
     );
@@ -144,6 +147,33 @@ void main() {
     await tester.tap(find.byKey(const Key('connections-card')));
     await tester.pump();
     expect(nav.calls, ['connections']);
+  });
+
+  testWidgets('loading records show no ghosts and no empty footer',
+      (tester) async {
+    await _pump(
+        tester,
+        _overview(
+          serversLoading: true,
+          devices: [_device('p', 'Pixel phone', 'android')],
+        ));
+    expect(find.text('Add a server'), findsNothing);
+    expect(find.text('Pair a device'), findsNothing);
+    expect(find.text('Add your other servers and sync progress across devices'),
+        findsNothing);
+    expect(find.textContaining('servers online'), findsNothing);
+    expect(find.text('Living room TV'), findsOneWidget);
+    expect(find.text('Pixel phone'), findsOneWidget);
+    expect(find.text('Synced with 1 device'), findsOneWidget);
+  });
+
+  testWidgets('loading with no devices shows only this device', (tester) async {
+    await _pump(tester, _overview(serversLoading: true));
+    expect(find.text('Add a server'), findsNothing);
+    expect(find.text('Pair a device'), findsNothing);
+    expect(find.text('Add your other servers and sync progress across devices'),
+        findsNothing);
+    expect(find.text('Living room TV'), findsOneWidget);
   });
 
   testWidgets('records error shows fallback row', (tester) async {

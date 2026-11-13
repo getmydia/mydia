@@ -20,6 +20,9 @@ class _Records extends SourceRecordsNotifier {
   Future<SourceSnapshot> build() async {
     final v = _value;
     if (v is AsyncError<SourceSnapshot>) throw Exception('boom');
+    if (v is AsyncLoading<SourceSnapshot>) {
+      return Completer<SourceSnapshot>().future;
+    }
     return v.requireValue;
   }
 }
@@ -212,6 +215,19 @@ void main() {
     expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId),
         ['peer-1', 'peer-2']);
     expect(seen.last, ['peer-1', 'peer-2']);
+  });
+
+  test('records still loading sets serversLoading, not serversFailed', () {
+    final c = _container(records: const AsyncLoading<SourceSnapshot>());
+    final o = c.read(connectionsOverviewProvider);
+    expect(o.servers, isEmpty);
+    expect(o.serversLoading, isTrue);
+    expect(o.serversFailed, isFalse);
+  });
+
+  test('loaded records clear serversLoading', () async {
+    final o = await _read(_container(accounts: [_rec('a')]));
+    expect(o.serversLoading, isFalse);
   });
 
   test('records error sets serversFailed', () async {

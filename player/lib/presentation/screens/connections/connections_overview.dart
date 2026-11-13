@@ -98,6 +98,7 @@ class ConnectionsOverview {
     required this.devices,
     required this.isPaired,
     required this.serversFailed,
+    this.serversLoading = false,
   });
 
   final String localName;
@@ -106,6 +107,10 @@ class ConnectionsOverview {
   final List<ConnectionDevice> devices;
   final bool isPaired;
   final bool serversFailed;
+
+  /// The saved servers have not been read yet. [servers] is empty then
+  /// because nothing is known, not because nothing is saved.
+  final bool serversLoading;
 
   int get onlineCount =>
       servers.where((s) => s.status == ConnectionStatus.online).length;
@@ -118,7 +123,8 @@ class ConnectionsOverview {
       listEquals(other.servers, servers) &&
       listEquals(other.devices, devices) &&
       other.isPaired == isPaired &&
-      other.serversFailed == serversFailed;
+      other.serversFailed == serversFailed &&
+      other.serversLoading == serversLoading;
 
   @override
   int get hashCode => Object.hash(
@@ -127,7 +133,8 @@ class ConnectionsOverview {
       Object.hashAll(servers),
       Object.hashAll(devices),
       isPaired,
-      serversFailed);
+      serversFailed,
+      serversLoading);
 }
 
 IconData connectionPlatformIcon(String platform) {
@@ -179,6 +186,7 @@ final connectionsOverviewProvider = Provider<ConnectionsOverview>((ref) {
     default:
       break;
   }
+  final loading = records is AsyncLoading && !records.hasValue;
 
   final local = (roster.localNodeId() ?? '').toLowerCase();
   final devices = [
@@ -202,6 +210,7 @@ final connectionsOverviewProvider = Provider<ConnectionsOverview>((ref) {
     devices: devices,
     isPaired: service.isPaired || devices.isNotEmpty,
     serversFailed: failed,
+    serversLoading: loading,
   );
 });
 
