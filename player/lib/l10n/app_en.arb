@@ -2617,6 +2617,14 @@
   "@connectionsNotPaired": {
     "description": "Footer of the Servers & devices card when this device is not paired with any other device."
   },
+  "connectionsShowCode": "Show pairing code",
+  "@connectionsShowCode": {
+    "description": "Button that opens the pair device sheet in show mode, to display this device's pairing code and QR code."
+  },
+  "connectionsEnterCode": "Enter or scan code",
+  "@connectionsEnterCode": {
+    "description": "Button that opens the pair device sheet in enter mode, to type or scan the code another device shows."
+  },
   "connectionsEmptyFooter": "Add your other servers and sync progress across devices",
   "@connectionsEmptyFooter": {
     "description": "Footer of the Servers & devices card when there are no servers and no paired devices."
