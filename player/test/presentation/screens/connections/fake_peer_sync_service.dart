@@ -63,19 +63,33 @@ class FakePeerSyncService implements PeerSyncService {
   @override
   Future<ActivePairingOffer> startPairingOffer() async {
     startOfferCount++;
+    // Taken at the call, so a later caller can start an offer ungated.
+    final gate = offerGate;
+    if (gate != null) await gate.future;
     if (failOffer) throw StateError('offer failed');
-    _activeOffer = ActivePairingOffer(
-      code: 'ABC123',
-      qrJson: jsonEncode({
-        'node_addr': '{"id":"$localNodeId"}',
-        'claim_code': 'ABC123',
-      }),
-      lookupKey: 'lookup-123',
-      expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-    );
+    final offer = _offer('ABC123');
+    _activeOffer = offer;
+    if (supersedeOffer) _activeOffer = _offer('XYZ789');
     notify();
-    return _activeOffer!;
+    return offer;
   }
+
+  /// Holds [startPairingOffer] pending until completed.
+  Completer<void>? offerGate;
+
+  /// A newer offer replaces this call's before it returns, as when another
+  /// sheet started one meanwhile.
+  bool supersedeOffer = false;
+
+  ActivePairingOffer _offer(String code) => ActivePairingOffer(
+        code: code,
+        qrJson: jsonEncode({
+          'node_addr': '{"id":"$localNodeId"}',
+          'claim_code': code,
+        }),
+        lookupKey: 'lookup-$code',
+        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+      );
 
   @override
   Future<void> cancelPairingOffer() async {

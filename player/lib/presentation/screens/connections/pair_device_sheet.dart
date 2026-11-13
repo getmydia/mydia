@@ -177,7 +177,12 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
       _failure = null;
     });
     try {
-      await _service.startPairingOffer();
+      final offer = await _service.startPairingOffer();
+      // Closed while the offer was pending: `dispose` saw no offer to
+      // cancel, so withdraw this one, unless a newer one has replaced it.
+      if (!mounted && identical(_service.activeOffer, offer)) {
+        unawaited(_service.cancelPairingOffer());
+      }
     } catch (e) {
       debugPrint('[PairDeviceSheet] Could not start an offer: $e');
       if (mounted) setState(() => _failure = _PairingFailure.offer);

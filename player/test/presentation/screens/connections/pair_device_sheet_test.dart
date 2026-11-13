@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
@@ -103,6 +104,49 @@ void main() {
 
     expect(find.byType(PairDeviceSheet), findsNothing);
     expect(service.cancelOfferCount, 1);
+  });
+
+  /// Opens the show sheet with its offer still pending, then closes it.
+  Future<(FakePeerSyncService, Completer<void>)> openPendingThenClose(
+      WidgetTester tester) async {
+    final store = InMemoryPeerSyncStore();
+    final service = FakePeerSyncService(store: store);
+    final gate = Completer<void>();
+    service.offerGate = gate;
+    await tester.pumpWidget(_wrap(service, store, PairSheetMode.show));
+    await tester.tap(find.byKey(const Key('open-sheet')));
+    // The pending offer's spinner never settles.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(service.startOfferCount, 1);
+    expect(service.activeOffer, isNull);
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(PairDeviceSheet), findsNothing);
+    return (service, gate);
+  }
+
+  testWidgets('an offer that arrives after the sheet closed is cancelled',
+      (tester) async {
+    final (service, gate) = await openPendingThenClose(tester);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(service.cancelOfferCount, 1);
+    expect(service.activeOffer, isNull);
+  });
+
+  testWidgets('a late offer never cancels a newer one', (tester) async {
+    final (service, gate) = await openPendingThenClose(tester);
+
+    service.supersedeOffer = true;
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(service.cancelOfferCount, 0);
+    expect(service.activeOffer?.code, 'XYZ789');
   });
 
   testWidgets('enter mode shows a focused code input and no offer',
