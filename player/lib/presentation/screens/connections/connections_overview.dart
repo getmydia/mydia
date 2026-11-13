@@ -147,9 +147,13 @@ IconData connectionPlatformIcon(String platform) {
   }
 }
 
-/// Re-reads the overview whenever the peer sync state changes.
-final _peerSyncTickProvider = StreamProvider<void>(
-    (ref) => ref.watch(peerSyncServiceProvider).onStateChanged);
+/// Re-reads the overview whenever the peer sync state changes. A counter
+/// rather than `void`: `AsyncData(null) == AsyncData(null)`, so a void tick
+/// would notify only once.
+final _peerSyncTickProvider = StreamProvider<int>((ref) {
+  var tick = 0;
+  return ref.watch(peerSyncServiceProvider).onStateChanged.map((_) => ++tick);
+});
 
 final connectionsOverviewProvider = Provider<ConnectionsOverview>((ref) {
   final records = ref.watch(sourceRecordsProvider);

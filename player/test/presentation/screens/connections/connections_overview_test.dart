@@ -89,6 +89,7 @@ ProviderContainer _container({
   PeerSyncStore? store,
   String? localNodeId,
   List<SourceAccountRecord> accounts = const [],
+  _Service? service,
 }) {
   final st = store ?? InMemoryPeerSyncStore();
   final c = ProviderContainer(overrides: [
@@ -100,7 +101,7 @@ ProviderContainer _container({
         store: st,
         localNodeId: () => localNodeId,
         isPeerConnected: (_) => false)),
-    peerSyncServiceProvider.overrideWithValue(_Service()),
+    peerSyncServiceProvider.overrideWithValue(service ?? _Service()),
   ]);
   addTearDown(c.dispose);
   return c;
@@ -186,6 +187,31 @@ void main() {
     expect(byId['peer-1']!.lastSyncedAt,
         DateTime.fromMillisecondsSinceEpoch(1700000000000));
     expect(byId['peer-2']!.lastSyncedAt, isNull);
+  });
+
+  test('every peer sync change re-reads the devices', () async {
+    final store = InMemoryPeerSyncStore();
+    final service = _Service();
+    final c = _container(store: store, localNodeId: 'x', service: service);
+    final seen = <List<String>>[];
+    c.listen<ConnectionsOverview>(connectionsOverviewProvider,
+        (_, next) => seen.add([for (final d in next.devices) d.nodeId]),
+        fireImmediately: true);
+    await c.read(sourceRecordsProvider.future);
+    await Future<void>.delayed(Duration.zero);
+
+    await store.putMember(_member('peer-1'));
+    service._c.add(null);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId),
+        ['peer-1']);
+
+    await store.putMember(_member('peer-2'));
+    service._c.add(null);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId),
+        ['peer-1', 'peer-2']);
+    expect(seen.last, ['peer-1', 'peer-2']);
   });
 
   test('records error sets serversFailed', () async {
