@@ -109,8 +109,11 @@ desktop dialog pane, following the `*Body` pattern already used by
      name, and the kind plus host (or "N servers")
    - chips: status (online/offline/"Sign in again"), "Locked" when any
      server is locked or hidden, and "In All servers" when included
-   - a tap on a Mydia card calls `SettingsNav.openInstance` (unchanged). Any
-     other kind opens `AccountDetailPage`.
+   - a tap on any card, Mydia included, opens `AccountDetailPage`. Lock,
+     "Include in All servers" and sign-in-again live only there, so sending
+     Mydia straight to its instance settings would strand a hidden Mydia
+     server. The Mydia instance settings stay one tap away, behind the
+     account page's settings button.
 3. **Paired devices:** a section header with the hint "Watch progress syncs
    between these". Then a two-column grid of device cards: the platform
    icon, the name, and the platform plus the last sync time. Long-press or a
@@ -128,7 +131,7 @@ devices.
 
 ### `AccountDetailPage`
 
-A page per non-Mydia account that holds, unchanged, what `_AccountCard`
+A page per account that holds, unchanged, what `_AccountCard`
 renders today: the per-server rows with the lock button and the "Include in
 All servers" switch, `_FilesRoots` for files accounts, "Switch user" for Plex
 Home, the reauth button with its kind-specific label, and Remove (after which
@@ -146,13 +149,17 @@ The offer, QR code, code entry, scanner and failure banner from
 `_PairingFailure` value and the same `pair-*` keys. It is a modal bottom sheet
 on phone and a `GlassDialog` in the desktop dialog and on TV. It opens on the
 "show code" or "enter code" half according to the button pressed. It closes
-itself on `onPeerPaired`, after the existing toast.
+itself after the existing toast: on `onPeerPaired` on the device that
+showed the code, and when `pairWithCode`/`pairWithQr` returns on the device
+that joined (the service emits `onPeerPaired` on the host side only).
 
 ## Navigation
 
 - `SettingsCategory`: `servers` is renamed `connections` and moved to the
   first position, with the label "Servers & devices" and an icon from the
-  `hub`/`devices` family. `openSettings` defaults to it. The
+  `hub`/`devices` family. The dialog opens on it from Ctrl+, and the
+  Settings entry (`'/settings'` maps to it); a bare `openSettings` call
+  with the dialog disabled still goes to `/settings`. The
   `'/sources/manage'` mapping in `open_settings.dart` points to it, and
   `'/settings/paired-devices'` maps to it too.
 - `DialogSettingsNav.openPairedDevices` selects `connections` and scrolls
@@ -196,7 +203,7 @@ keys that the moved widgets still use are kept.
   the mixed state, overflow ("+N"), the footer text, the semantics label,
   tap → `SettingsNav` hub, and the fallback row on a records error.
 - `connections_hub_test.dart`: sections render; a Mydia tap →
-  `openInstance`, other kinds → `openAccount`; the `section=devices` scroll;
+  `openAccount` for every kind; the `section=devices` scroll;
   Sync now and Leave group appear only when paired.
 - `account_detail_page_test.dart`: the moved manage-sources tests, keyed as
   before.
