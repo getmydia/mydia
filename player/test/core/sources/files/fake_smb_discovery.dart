@@ -9,6 +9,9 @@ class FakeSmbDiscovery implements SmbDiscovery {
   /// How many times [browse] has been listened to.
   int listenCount = 0;
 
+  /// How many [browse] streams have been cancelled.
+  int cancelCount = 0;
+
   void emit(List<DiscoveredSmbServer> servers) => _controller.add(servers);
 
   /// Matches the real behaviour on a browsing error: an empty list.
@@ -24,7 +27,10 @@ class FakeSmbDiscovery implements SmbDiscovery {
         listenCount++;
         sub = _controller.stream.listen(out.add);
       },
-      onCancel: () => sub?.cancel(),
+      onCancel: () {
+        cancelCount++;
+        return sub?.cancel();
+      },
     );
     return out.stream;
   }

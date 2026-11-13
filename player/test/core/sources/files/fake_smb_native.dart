@@ -12,6 +12,10 @@ class FakeSmbNative implements SmbNative {
   /// Thrown by every call while set.
   BackendFailure? failure;
 
+  /// Thrown by [probe], [list], [stat] and [open] on a target whose host is
+  /// a key, after [failure].
+  final Map<String, BackendFailure> hostFailures = {};
+
   /// Every [open] as (accountId, path).
   final List<(String, String)> opens = [];
   final List<String> closedAccounts = [];
@@ -57,15 +61,17 @@ class FakeSmbNative implements SmbNative {
 
   void emitHeal(ProxyHeal heal) => _heals.add(heal);
 
-  void _check() {
+  void _check([SmbTarget? t]) {
     final f = failure;
     if (f != null) throw f;
+    final h = t == null ? null : hostFailures[t.host];
+    if (h != null) throw h;
   }
 
   @override
   Future<List<FileEntry>> list(
       SmbTarget t, SmbCredentials c, String dir) async {
-    _check();
+    _check(t);
     final tree = _shares[t.share] ?? {};
     if (dir != '/' && tree[dir]?.isDir != true) {
       throw BackendNotFound(dir);
@@ -78,7 +84,7 @@ class FakeSmbNative implements SmbNative {
 
   @override
   Future<FileEntry?> stat(SmbTarget t, SmbCredentials c, String path) async {
-    _check();
+    _check(t);
     return _shares[t.share]?[path];
   }
 
@@ -86,7 +92,7 @@ class FakeSmbNative implements SmbNative {
   Future<void> probe(SmbTarget t, SmbCredentials c, String root) async {
     probes.add(root);
     probeLogins.add((t, c));
-    _check();
+    _check(t);
     await list(t, c, root);
   }
 
@@ -104,7 +110,7 @@ class FakeSmbNative implements SmbNative {
     SmbCredentials c,
     String path,
   ) async {
-    _check();
+    _check(t);
     opens.add((accountId, path));
     return 'http://127.0.0.1:1/smb/${opens.length - 1}';
   }
