@@ -62,13 +62,16 @@ and the oldest IP literals go first.
 `onReachedVia(SmbTarget)` callback.
 
 `LazySmbBackend._build` tries the targets in order with
-`SmbNative.probe` of the share root. Only `BackendUnreachable` moves on;
-`BackendUnauthorized`, and `BackendUnreachable` carrying
-`kSmb1OnlyReason`, stop at once, since every address would answer the same.
-This is the rule `_listSharesAt` already applies on the add screen; it moves
-into one shared helper both use.
+`SmbNative.probe` of the share root. Every failure moves on, a refused login
+included: once the NAS has moved, its old IP may belong to another SMB host,
+which refuses the login, and stopping there would flag the share
+`needsReauth` instead of reconnecting it. When every target fails, the first
+failure that was not `BackendUnreachable` is thrown, else the last
+unreachable one. The add screen's `_listSharesAt` keeps its stop-on-refusal
+rule, since it works from a fresh discovery.
 
-When every stored target fails and `serviceName` is set, it browses
+When every stored target fails, `serviceName` is set, and not every target
+refused the login (then the password is wrong everywhere), it browses
 `_smb._tcp` for at most 5 seconds, takes the service with that name, and
 tries the addresses it reports (hostname included) that were not already
 tried. Without a service name, or when the browse finds nothing, the
