@@ -1560,8 +1560,6 @@
   "@sourcesJellyfinBadUserId": {"description": "Error on the Jellyfin sign-in screen when the signed-in user's id cannot be stored."},
   "sourcesSaveServerFailed": "Could not save this server on this device.",
   "@sourcesSaveServerFailed": {"description": "Error on a Jellyfin or Stash connect screen when the server answered but the app could not store it."},
-  "sourcesOtherServers": "Other servers",
-  "@sourcesOtherServers": {"description": "Title of the screen and settings section that manage the Plex, Jellyfin and Stash servers added besides Mydia."},
   "sourcesNoServers": "No servers yet.",
   "@sourcesNoServers": {"description": "Empty state on the server management screen."},
   "sourcesLoadFailed": "Could not read the saved servers.",
@@ -1736,10 +1734,6 @@
   "@sourcesReauthJellyfin": {"description": "Button on a saved Jellyfin user that reopens the connect screen."},
   "sourcesReauthKey": "Change address or key",
   "@sourcesReauthKey": {"description": "Button on a saved Stash or Mydia server that reopens the connect screen. The key is an API key."},
-  "sourcesSettingsRowTitle": "Plex, Jellyfin and Stash",
-  "@sourcesSettingsRowTitle": {"description": "Title of the settings row that opens the other servers screen. Plex, Jellyfin and Stash are product names."},
-  "sourcesSettingsRowSubtitle": "Add or remove servers",
-  "@sourcesSettingsRowSubtitle": {"description": "Subtitle of the settings row that opens the other servers screen."},
   "sourcesPinInvalid": "Enter 4 to 6 digits.",
   "@sourcesPinInvalid": {"description": "Error under the PIN dots when the PIN has too few digits."},
   "sourcesPinSetupTitle": "Choose a PIN",
@@ -2470,31 +2464,6 @@
     "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
     "placeholders": {"time": {"type": "String"}}
   },
-  "settingsPairedDevicesTitle": "Paired devices",
-  "@settingsPairedDevicesTitle": {
-    "description": "Title of the paired devices settings screen and navigation row."
-  },
-  "settingsPairedDevicesNotPaired": "Not paired",
-  "@settingsPairedDevicesNotPaired": {
-    "description": "Subtitle of the paired devices settings row when no devices are paired."
-  },
-  "settingsPairedDevicesCount": "{count, plural, =1{1 paired device} other{{count} paired devices}}",
-  "@settingsPairedDevicesCount": {
-    "description": "Subtitle of the paired devices settings row showing the number of paired devices.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "pairedDevicesIntroTitle": "Sync between devices",
-  "@pairedDevicesIntroTitle": {
-    "description": "Heading explaining watch-state & pin syncing."
-  },
-  "pairedDevicesIntroBody": "Sync watch progress and pinned media directly between your devices over P2P.",
-  "@pairedDevicesIntroBody": {
-    "description": "Introductory text explaining watch-state & pin syncing between devices."
-  },
   "pairedDevicesShowCodeButton": "Show pairing code",
   "@pairedDevicesShowCodeButton": {
     "description": "Button to generate and display a pairing code."
@@ -2542,14 +2511,6 @@
   "pairedDevicesRemovePeerButton": "Remove",
   "@pairedDevicesRemovePeerButton": {
     "description": "Tooltip or label for removing a paired peer device."
-  },
-  "pairedDevicesStatusActive": "Active",
-  "@pairedDevicesStatusActive": {
-    "description": "Status subtitle for an active paired peer."
-  },
-  "pairedDevicesStatusRevoked": "Revoked",
-  "@pairedDevicesStatusRevoked": {
-    "description": "Status subtitle for a revoked paired peer."
   },
   "pairedDevicesConnectedToast": "Paired with {deviceName}",
   "@pairedDevicesConnectedToast": {
