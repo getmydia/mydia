@@ -75,32 +75,56 @@ class _PlaybackPage extends ConsumerWidget {
 
 /// The hub under its wide constellation, which already names the page, so
 /// the pane header holds only the close button.
-class _ConnectionsPage extends StatelessWidget {
+class _ConnectionsPage extends StatefulWidget {
   const _ConnectionsPage();
 
   @override
-  Widget build(BuildContext context) {
-    final section = SettingsDialogScope.of(context).connectionsSection;
-    return SettingsPane(
-      title: null,
-      child: ValueListenableBuilder<String?>(
-        valueListenable: section,
-        builder: (context, value, _) {
-          // Handed over once: clearing it lets the next request for the same
-          // section reach the hub as a change.
-          if (value != null) {
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => section.value = null);
-          }
-          return ConnectionsHubBody(
-            padding: _bodyPadding,
-            initialSection: value,
-            wideHeader: true,
-          );
-        },
-      ),
-    );
+  State<_ConnectionsPage> createState() => _ConnectionsPageState();
+}
+
+class _ConnectionsPageState extends State<_ConnectionsPage> {
+  ValueNotifier<String?>? _requests;
+
+  /// The section handed to the hub for one frame. Dropping it afterwards
+  /// lets the next request for the same section reach the hub as a change.
+  String? _section;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final requests = SettingsDialogScope.of(context).connectionsSection;
+    if (identical(requests, _requests)) return;
+    _requests?.removeListener(_take);
+    // Every pane mounts with the dialog, before anything in it can ask.
+    _requests = requests..addListener(_take);
   }
+
+  @override
+  void dispose() {
+    _requests?.removeListener(_take);
+    super.dispose();
+  }
+
+  void _take() {
+    final requests = _requests;
+    final section = requests?.value;
+    if (requests == null || section == null) return;
+    requests.value = null;
+    setState(() => _section = section);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _section = null);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SettingsPane(
+        title: null,
+        child: ConnectionsHubBody(
+          padding: _bodyPadding,
+          initialSection: _section,
+          wideHeader: true,
+        ),
+      );
 }
 
 class _MydiaInstancePage extends ConsumerWidget {

@@ -103,6 +103,7 @@ ConnectionsOverview hubOverview({
   List<ConnectionDevice> devices = const [],
   bool? isPaired,
   bool serversLoading = false,
+  bool serversFailed = false,
 }) =>
     ConnectionsOverview(
       localName: 'Living room TV',
@@ -110,6 +111,6 @@ ConnectionsOverview hubOverview({
       servers: servers,
       devices: devices,
       isPaired: isPaired ?? devices.isNotEmpty,
-      serversFailed: false,
+      serversFailed: serversFailed,
       serversLoading: serversLoading,
     );

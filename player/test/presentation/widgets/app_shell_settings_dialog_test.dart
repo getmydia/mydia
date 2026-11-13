@@ -259,9 +259,9 @@ void main() {
     await pumpShell(tester, dialog: true);
     expect(openSettingsFromHost('/sources/manage'), isTrue);
     await tester.pumpAndSettle();
-    // As a lock control in the pane does: push from inside the dialog.
-    unawaited(GoRouter.of(tester.element(find.byKey(const Key('manage-add'))))
-        .push<void>('/unlock'));
+    await tester.ensureVisible(find.byKey(const Key('show-hidden-sources')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('show-hidden-sources')));
     await tester.pumpAndSettle();
     expect(find.text('at /unlock'), findsOneWidget);
     expect(find.text('at /unlock').hitTestable(), findsOneWidget);

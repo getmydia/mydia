@@ -291,4 +291,22 @@ void main() {
         find.byKey(const Key('connections-servers-loading')), findsOneWidget);
     expect(find.text('Add a server'), findsNothing);
   });
+
+  for (final (name, overview) in [
+    ('empty', hubOverview()),
+    ('loading', hubOverview(serversLoading: true)),
+    ('populated', _populated),
+  ]) {
+    testWidgets('the servers section ends with show hidden servers ($name)',
+        (tester) async {
+      _phone(tester, height: 1400);
+      await _pump(tester, overview, settle: false);
+      final row = find.descendant(
+        of: find.byKey(const Key('connections-servers-section')),
+        matching: find.byKey(const Key('show-hidden-sources')),
+      );
+      expect(row, findsOneWidget);
+      expect(find.text('Show hidden servers'), findsOneWidget);
+    });
+  }
 }

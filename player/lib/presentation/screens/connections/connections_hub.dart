@@ -13,6 +13,7 @@ import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../settings/settings_nav.dart';
+import '../sources/source_lock_sheet.dart' show ShowHiddenSourcesRow;
 import 'account_detail_page.dart' show AddServerButton;
 import 'connections_constellation_card.dart';
 import 'connections_hub_cards.dart';
@@ -146,7 +147,9 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.wideHeader)
+              // A failed read leaves the wide card with nothing to draw, so the
+              // pane keeps a heading through the This device card.
+              if (widget.wideHeader && !overview.serversFailed)
                 // Already on the hub: the card only draws, it opens nothing.
                 const ConnectionsConstellationCard(
                     wide: true, interactive: false)
@@ -396,6 +399,10 @@ class _ServersSection extends ConsumerWidget {
           action: AddServerButton(onPressed: onAdd),
         ),
         body,
+        // "Show hidden servers" while locked, "Lock now" while open, in every
+        // state, so it says nothing about whether anything is hidden.
+        const SizedBox(height: 4),
+        const ShowHiddenSourcesRow(),
       ],
     );
   }

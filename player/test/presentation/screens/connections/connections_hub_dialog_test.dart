@@ -156,6 +156,17 @@ void main() {
     expect(_devicesTop(tester), inInclusiveRange(0, 600));
   });
 
+  testWidgets('a failed read falls back to the This device card as heading',
+      (tester) async {
+    await _pump(
+      tester,
+      hubOverview(serversFailed: true, devices: _devices),
+      wideHeader: true,
+    );
+    expect(find.byType(ConnectionsConstellationCard), findsNothing);
+    expect(find.byKey(const Key('connections-this-device')), findsOneWidget);
+  });
+
   testWidgets('the wide header is neither tappable nor focusable',
       (tester) async {
     tester.view.physicalSize = const Size(900, 1400);

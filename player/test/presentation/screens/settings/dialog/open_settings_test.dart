@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -337,8 +335,9 @@ void main() {
       (tester) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
-    unawaited(GoRouter.of(tester.element(find.byKey(const Key('manage-add'))))
-        .push<void>('/unlock'));
+    await tester.ensureVisible(find.byKey(const Key('show-hidden-sources')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('show-hidden-sources')));
     await tester.pumpAndSettle();
     expect(find.text('at /unlock'), findsOneWidget);
 
