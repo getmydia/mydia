@@ -347,7 +347,7 @@ void main() {
         find.byKey(const Key('connections-add-server-ghost')), findsOneWidget);
     expect(find.text('Add a server'), findsOneWidget);
     expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
-    expect(find.text('Pair another device'), findsOneWidget);
+    expect(find.text('Sync another Mydia Player'), findsOneWidget);
     expect(find.byKey(const Key('connections-devices-section')), findsNothing);
 
     await tester.tap(find.byKey(const Key('connections-add-server-ghost')));

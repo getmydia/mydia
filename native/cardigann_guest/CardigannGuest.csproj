@@ -44,7 +44,7 @@
     <PackageReference Include="AngleSharp" Version="1.5.2" />
     <PackageReference Include="AngleSharp.Xml" Version="1.0.0" />
     <PackageReference Include="FluentValidation" Version="9.5.4" />
-    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.27" />
+    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.34" />
     <PackageReference Include="MonoTorrent" Version="3.0.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NLog" Version="5.5.1" />

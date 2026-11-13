@@ -131,6 +131,15 @@ void main() {
   Future<void> settle() =>
       Future<void>.delayed(const Duration(milliseconds: 40));
 
+  /// Waits for a save that must happen. A fixed [settle] is wall-clock time,
+  /// and a loaded CI runner has let it pass before the debounced save landed,
+  /// so poll for the write and give up after about two seconds.
+  Future<void> settleUntilSaved(InMemoryWindowGeometryStore store) async {
+    for (var i = 0; i < 50 && store.get() == null; i++) {
+      await settle();
+    }
+  }
+
   group('tracking', () {
     test('coalesces a burst of resize events into one save', () async {
       final window = FakeWindowController(
@@ -249,8 +258,9 @@ void main() {
       addTearDown(controller.dispose);
 
       controller.onWindowMaximize();
-      await settle();
+      await settleUntilSaved(store);
 
+      expect(store.get(), isNotNull, reason: 'the maximize was never saved');
       expect(store.get()!.maximized, isTrue);
       expect(
         store.get()!.bounds,
