@@ -150,9 +150,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert has_element?(view, "#built-in-section-torrent")
       assert has_element?(view, "#built-in-section-vpn.hidden")
 
+      assert has_element?(view, "#built-in-sections[role=tablist]")
+      assert has_element?(view, "#built-in-tab-torrent.tab-active[aria-selected=true]")
+      assert has_element?(view, "#built-in-tab-vpn[aria-selected=false]")
+
       render_click(element(view, "#built-in-tab-vpn"))
       assert has_element?(view, "#built-in-section-torrent.hidden")
       refute has_element?(view, "#built-in-section-vpn.hidden")
+      assert has_element?(view, "#built-in-tab-vpn.tab-active[aria-selected=true]")
+      assert has_element?(view, "#built-in-section-vpn[role=tabpanel]")
 
       render_click(element(view, "#built-in-settings-modal-close"))
       refute has_element?(view, "#built-in-settings-modal")
