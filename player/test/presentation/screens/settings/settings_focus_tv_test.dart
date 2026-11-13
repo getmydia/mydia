@@ -158,6 +158,28 @@ void main() {
       expectOnRow(tester, 0);
     });
 
+    testWidgets('card is the first focus target after the update card',
+        (tester) async {
+      await pumpSettings(tester);
+      // The update card has nothing focusable unless a release is on offer,
+      // so the card is the first stop below the cast button.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      // The card's ring is the first row, and it wraps the card.
+      expectOnRow(tester, 0);
+      expect(
+        rows(tester)[0].rect.contains(
+            tester.getCenter(find.byKey(const Key('connections-card')))),
+        isTrue,
+      );
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expectFocusIn(const Key('default-quality-row'));
+      expect(find.byKey(const Key('paired-devices-row')), findsNothing);
+      expect(find.byKey(const Key('manage-sources-row')), findsNothing);
+    });
+
     testWidgets('the list is re-entered on the row that left it',
         (tester) async {
       await pumpSettings(tester);

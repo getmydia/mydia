@@ -76,10 +76,14 @@ void routeMenuNavigation(
 bool openSettingsFromShortcut() =>
     !isSettingsDialogOpen && openSettingsFromHost('/settings');
 
+/// Servers & devices leads the dialog, so the plain settings route (Ctrl+,
+/// and the Settings nav entry) opens on it.
 SettingsCategory? _categoryFor(String route) => switch (route) {
-      '/settings' => SettingsCategory.playback,
+      '/settings' ||
+      '/sources/manage' ||
+      '/settings/paired-devices' =>
+        SettingsCategory.connections,
       '/settings/diagnostics' => SettingsCategory.diagnostics,
-      '/sources/manage' => SettingsCategory.servers,
       _ => null,
     };
 
@@ -92,13 +96,21 @@ bool openSettingsForRoute(BuildContext context, String route) {
       .read(settingsDialogEnabledProvider)) {
     return false;
   }
-  openSettings(context, initial: category);
+  openSettings(
+    context,
+    initial: category,
+    // As the router's redirect does: paired devices are the hub's devices.
+    connectionsSection: route == '/settings/paired-devices' ? 'devices' : null,
+  );
   return true;
 }
 
+/// Opens settings on [initial]. A [connectionsSection] (`'devices'`) also
+/// scrolls the connections hub to it.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory initial = SettingsCategory.playback,
+  String? connectionsSection,
 }) async {
   final enabled = ProviderScope.containerOf(context, listen: false)
       .read(settingsDialogEnabledProvider);
@@ -109,8 +121,10 @@ Future<void> openSettings(
         router.go('/settings');
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
-      case SettingsCategory.servers:
-        unawaited(router.push<void>('/sources/manage'));
+      case SettingsCategory.connections:
+        unawaited(router.push<void>(connectionsSection == null
+            ? '/sources/manage'
+            : '/sources/manage?section=$connectionsSection'));
     }
     return;
   }
@@ -118,10 +132,14 @@ Future<void> openSettings(
   final open = _open;
   if (open != null) {
     open.value = initial;
+    if (connectionsSection != null) {
+      open.connectionsSection.value = connectionsSection;
+    }
     return;
   }
 
-  final controller = SettingsDialogController(initial);
+  final controller =
+      SettingsDialogController(initial, connectionsSection: connectionsSection);
   final router = GoRouter.of(context);
   _open = controller;
   try {

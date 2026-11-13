@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/build_channel.dart';
-import '../../../../core/p2p/peer_sync_service.dart';
 import '../../../../core/remote/node_registration_providers.dart';
 import '../../../../core/remote/registration_status.dart';
 import '../../../../core/remote/remote_control_settings.dart';
@@ -25,7 +24,6 @@ import '../../../../l10n/l10n.dart';
 import '../../../widgets/hls_quality_selector.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
-import '../settings_nav.dart';
 import 'glass_material_row.dart';
 import 'language_row.dart';
 import 'settings_row.dart';
@@ -104,10 +102,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
             );
           },
         ),
-        if (includeRemoteControl) ...[
-          ...remoteControlRows(context, ref),
-          pairedDevicesRow(context, ref),
-        ],
+        if (includeRemoteControl) ...remoteControlRows(context, ref),
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
@@ -176,39 +171,6 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
         onTap: () => ref.read(nodeRegistrationsProvider.notifier).retryAll(),
       ),
   ];
-}
-
-Widget pairedDevicesRow(BuildContext context, WidgetRef ref) {
-  final syncService = ref.watch(peerSyncServiceProvider);
-  final store = ref.watch(peerSyncStoreProvider);
-  final roster = ref.watch(peerGroupRosterProvider);
-  return StreamBuilder<void>(
-    stream: syncService.onStateChanged,
-    builder: (context, _) {
-      final l10n = context.l10n;
-      final localNodeId = roster.localNodeId() ?? '';
-      final activePeers = store
-          .members()
-          .values
-          .where(
-            (m) =>
-                !m.revoked &&
-                m.nodeId.toLowerCase() != localNodeId.toLowerCase(),
-          )
-          .length;
-      final subtitle = !syncService.isPaired || activePeers == 0
-          ? l10n.settingsPairedDevicesNotPaired
-          : l10n.settingsPairedDevicesCount(activePeers);
-
-      return SettingsRow.navigation(
-        key: const Key('paired-devices-row'),
-        icon: Icons.devices,
-        title: l10n.settingsPairedDevicesTitle,
-        subtitle: subtitle,
-        onTap: () => SettingsNavScope.of(context).openPairedDevices(),
-      );
-    },
-  );
 }
 
 /// Persists the opt-in/opt-out and invalidates [remoteControlEnabledProvider]

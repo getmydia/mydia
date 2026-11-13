@@ -320,12 +320,12 @@ void main() {
     await pumpShell(tester, dialog: true);
     expect(openSettingsFromHost('/settings'), isTrue);
     await tester.pumpAndSettle();
-    expect(selectedCategory(tester), SettingsCategory.playback);
+    expect(selectedCategory(tester), SettingsCategory.connections);
 
-    expect(openSettingsFromHost('/sources/manage'), isTrue);
+    expect(openSettingsFromHost('/settings/diagnostics'), isTrue);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
-    expect(selectedCategory(tester), SettingsCategory.servers);
+    expect(selectedCategory(tester), SettingsCategory.diagnostics);
   });
 
   testWidgets('Ctrl+, leaves an open dialog where the user is', (tester) async {
@@ -334,10 +334,10 @@ void main() {
       await pumpShell(tester, dialog: true);
       expect(openSettingsFromHost('/sources/manage'), isTrue);
       await tester.pumpAndSettle();
-      expect(selectedCategory(tester), SettingsCategory.servers);
+      expect(selectedCategory(tester), SettingsCategory.connections);
 
       await pressCtrlComma(tester);
-      expect(selectedCategory(tester), SettingsCategory.servers);
+      expect(selectedCategory(tester), SettingsCategory.connections);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

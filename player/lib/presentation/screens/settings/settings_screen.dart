@@ -12,7 +12,7 @@ import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
-import '../sources/manage_sources_screen.dart';
+import '../connections/connections_constellation_card.dart';
 import 'settings_controller.dart';
 import 'settings_nav.dart';
 import '../../../core/sources/mydia/source_link.dart';
@@ -137,6 +137,17 @@ class SettingsScreen extends ConsumerWidget {
                           )
                         else
                           updateCard,
+                        // Between the update card (item 0) and the first
+                        // section (item 100) in the television's focus order.
+                        if (directional)
+                          const FocusMemoryItem(
+                            id: 'connections-card',
+                            index: 1,
+                            child: ConnectionsConstellationCard(),
+                          )
+                        else
+                          const ConnectionsConstellationCard(),
+                        const SizedBox(height: 18),
                         section(
                           1,
                           PlaybackSettingsSection(
@@ -148,8 +159,6 @@ class SettingsScreen extends ConsumerWidget {
                         section(2, const AppearanceSettingsSection()),
                         const SizedBox(height: 18),
                         section(3, _ManageSection(connection: summary)),
-                        const SizedBox(height: 18),
-                        section(4, const SourcesSettingsSection()),
                         VersionFooter(version: currentVersion),
                       ],
                     ),
@@ -230,7 +239,6 @@ class _ManageSection extends ConsumerWidget {
           onTap: () => SettingsNavScope.of(context).openDiagnostics(),
         ),
         ...remoteControlRows(context, ref),
-        pairedDevicesRow(context, ref),
         ...updateRows(context, ref),
       ],
     );

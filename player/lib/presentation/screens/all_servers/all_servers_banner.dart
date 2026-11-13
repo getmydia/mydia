@@ -71,7 +71,7 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
               signIn.length, signIn.map((s) => s.displayName).join(', '))),
           trailing: TextButton(
               onPressed: () =>
-                  openSettings(context, initial: SettingsCategory.servers),
+                  openSettings(context, initial: SettingsCategory.connections),
               child: Text(context.l10n.navManageServers)),
         ),
     ]);

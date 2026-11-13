@@ -1560,12 +1560,8 @@
   "@sourcesJellyfinBadUserId": {"description": "Error on the Jellyfin sign-in screen when the signed-in user's id cannot be stored."},
   "sourcesSaveServerFailed": "Could not save this server on this device.",
   "@sourcesSaveServerFailed": {"description": "Error on a Jellyfin or Stash connect screen when the server answered but the app could not store it."},
-  "sourcesOtherServers": "Other servers",
-  "@sourcesOtherServers": {"description": "Title of the screen and settings section that manage the Plex, Jellyfin and Stash servers added besides Mydia."},
-  "sourcesNoServers": "No servers yet.",
-  "@sourcesNoServers": {"description": "Empty state on the server management screen."},
   "sourcesLoadFailed": "Could not read the saved servers.",
-  "@sourcesLoadFailed": {"description": "Error on the server management screen when the saved servers cannot be read from this device."},
+  "@sourcesLoadFailed": {"description": "Shown in the Servers section of the Servers & devices screen when the saved servers cannot be read from this device."},
   "sourcesIncludeInAll": "Include in All servers",
   "@sourcesIncludeInAll": {"description": "Switch under a server on the management screen. All servers is the combined view of every server."},
   "sourcesRemoveAccountFailed": "Could not remove this account.",
@@ -1736,10 +1732,6 @@
   "@sourcesReauthJellyfin": {"description": "Button on a saved Jellyfin user that reopens the connect screen."},
   "sourcesReauthKey": "Change address or key",
   "@sourcesReauthKey": {"description": "Button on a saved Stash or Mydia server that reopens the connect screen. The key is an API key."},
-  "sourcesSettingsRowTitle": "Plex, Jellyfin and Stash",
-  "@sourcesSettingsRowTitle": {"description": "Title of the settings row that opens the other servers screen. Plex, Jellyfin and Stash are product names."},
-  "sourcesSettingsRowSubtitle": "Add or remove servers",
-  "@sourcesSettingsRowSubtitle": {"description": "Subtitle of the settings row that opens the other servers screen."},
   "sourcesPinInvalid": "Enter 4 to 6 digits.",
   "@sourcesPinInvalid": {"description": "Error under the PIN dots when the PIN has too few digits."},
   "sourcesPinSetupTitle": "Choose a PIN",
@@ -2470,31 +2462,6 @@
     "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
     "placeholders": {"time": {"type": "String"}}
   },
-  "settingsPairedDevicesTitle": "Paired devices",
-  "@settingsPairedDevicesTitle": {
-    "description": "Title of the paired devices settings screen and navigation row."
-  },
-  "settingsPairedDevicesNotPaired": "Not paired",
-  "@settingsPairedDevicesNotPaired": {
-    "description": "Subtitle of the paired devices settings row when no devices are paired."
-  },
-  "settingsPairedDevicesCount": "{count, plural, =1{1 paired device} other{{count} paired devices}}",
-  "@settingsPairedDevicesCount": {
-    "description": "Subtitle of the paired devices settings row showing the number of paired devices.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "pairedDevicesIntroTitle": "Sync between devices",
-  "@pairedDevicesIntroTitle": {
-    "description": "Heading explaining watch-state & pin syncing."
-  },
-  "pairedDevicesIntroBody": "Sync watch progress and pinned media directly between your devices over P2P.",
-  "@pairedDevicesIntroBody": {
-    "description": "Introductory text explaining watch-state & pin syncing between devices."
-  },
   "pairedDevicesShowCodeButton": "Show pairing code",
   "@pairedDevicesShowCodeButton": {
     "description": "Button to generate and display a pairing code."
@@ -2510,10 +2477,6 @@
   "pairedDevicesCodeInputLabel": "Pairing code",
   "@pairedDevicesCodeInputLabel": {
     "description": "Label for the pairing code input field."
-  },
-  "pairedDevicesCodeInputHint": "ABC-123",
-  "@pairedDevicesCodeInputHint": {
-    "description": "Hint for pairing code input field."
   },
   "pairedDevicesSubmitCodeButton": "Pair device",
   "@pairedDevicesSubmitCodeButton": {
@@ -2543,14 +2506,6 @@
   "@pairedDevicesRemovePeerButton": {
     "description": "Tooltip or label for removing a paired peer device."
   },
-  "pairedDevicesStatusActive": "Active",
-  "@pairedDevicesStatusActive": {
-    "description": "Status subtitle for an active paired peer."
-  },
-  "pairedDevicesStatusRevoked": "Revoked",
-  "@pairedDevicesStatusRevoked": {
-    "description": "Status subtitle for a revoked paired peer."
-  },
   "pairedDevicesConnectedToast": "Paired with {deviceName}",
   "@pairedDevicesConnectedToast": {
     "description": "Toast notification when a peer device successfully pairs.",
@@ -2560,9 +2515,9 @@
       }
     }
   },
-  "pairedDevicesOrDivider": "or",
-  "@pairedDevicesOrDivider": {
-    "description": "Divider text between show code and enter code sections."
+  "pairedDevicesPairedToast": "Device paired",
+  "@pairedDevicesPairedToast": {
+    "description": "Toast on the joining device when pairing succeeds before the other device's name is known."
   },
   "pairedDevicesPairingFailed": "Pairing failed",
   "@pairedDevicesPairingFailed": {
@@ -2580,8 +2535,180 @@
   "@pairedDevicesListSection": {
     "description": "Section header for the list of paired devices."
   },
-  "pairedDevicesPairNewSection": "Pair another device",
-  "@pairedDevicesPairNewSection": {
-    "description": "Section header for pairing an additional device."
+  "connectionsEyebrow": "Your setup",
+  "@connectionsEyebrow": {
+    "description": "Small eyebrow label above the title of the Settings card that shows this device's servers and paired devices."
+  },
+  "connectionsTitle": "Servers & devices",
+  "@connectionsTitle": {
+    "description": "Title of the Settings card, and of the screen it opens, listing saved servers and paired devices."
+  },
+  "connectionsServersOnline": "{online} of {total} servers online",
+  "@connectionsServersOnline": {
+    "description": "Footer of the Servers & devices card: how many of the saved servers are reachable.",
+    "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsSyncedWith": "{count, plural, one{Synced with {count} device} other{Synced with {count} devices}}",
+  "@connectionsSyncedWith": {
+    "description": "Footer of the Servers & devices card: how many other devices this one syncs watch progress with.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsNotPaired": "Not paired",
+  "@connectionsNotPaired": {
+    "description": "Footer of the Servers & devices card when this device is not paired with any other device."
+  },
+  "connectionsShowCode": "Show pairing code",
+  "@connectionsShowCode": {
+    "description": "Button that opens the pair device sheet in show mode, to display this device's pairing code and QR code."
+  },
+  "connectionsEnterCode": "Enter or scan code",
+  "@connectionsEnterCode": {
+    "description": "Button that opens the pair device sheet in enter mode, to type or scan the code another device shows."
+  },
+  "connectionsEmptyFooter": "Add your other servers and sync progress across devices",
+  "@connectionsEmptyFooter": {
+    "description": "Footer of the Servers & devices card when there are no servers and no paired devices."
+  },
+  "connectionsAddServerGhost": "Add a server",
+  "@connectionsAddServerGhost": {
+    "description": "Label under the dashed placeholder node in the Servers & devices diagram when no server is saved."
+  },
+  "connectionsPairDeviceGhost": "Pair a device",
+  "@connectionsPairDeviceGhost": {
+    "description": "Label under the dashed placeholder node in the Servers & devices diagram when no device is paired."
+  },
+  "connectionsMoreNodes": "+{count}",
+  "@connectionsMoreNodes": {
+    "description": "Node in the Servers & devices diagram standing for servers and devices that did not fit.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsThisDevice": "This device",
+  "@connectionsThisDevice": {
+    "description": "Label under the centre node of the Servers & devices diagram, standing for the device the app runs on, when it has no name."
+  },
+  "connectionsCardSemantics": "Servers and devices. {summary}",
+  "@connectionsCardSemantics": {
+    "description": "Screen reader label of the Servers & devices card. The summary is the card's footer text, for example '2 of 3 servers online. Synced with 2 devices.'",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsReaching": "Reaching {online} of {total} servers",
+  "@connectionsReaching": {
+    "description": "On the This device card of the Servers & devices screen: how many saved servers this device can reach right now.",
+    "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsThisDeviceStatus": "Reaching {online} of {total} servers · synced {ago}",
+  "@connectionsThisDeviceStatus": {
+    "description": "On the This device card of the Servers & devices screen: how many saved servers this device can reach right now, and when watch progress last synced with another device. The ago placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsThisDeviceSynced": "Synced {ago}",
+  "@connectionsThisDeviceSynced": {
+    "description": "On the This device card of the Servers & devices screen when no server count is shown: when watch progress last synced with another device. The placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsServerMeta": "{kind} · {detail}",
+  "@connectionsServerMeta": {
+    "description": "Second line of a server card on the Servers & devices screen. The kind is the server type (Mydia, Plex, Jellyfin, Stash, Files); the detail is the server's address or how many servers the account has.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsDeviceMeta": "{platform} · synced {ago}",
+  "@connectionsDeviceMeta": {
+    "description": "Second line of a paired device card on the Servers & devices screen: the device's platform (Android, iOS, macOS...) and when watch progress last synced with it. The ago placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsDevicesHint": "Watch progress syncs between these",
+  "@connectionsDevicesHint": {
+    "description": "Hint beside the Paired devices header on the Servers & devices screen."
+  },
+  "connectionsPairCta": "Pair another device",
+  "@connectionsPairCta": {
+    "description": "Title of the card on the Servers & devices screen that invites the viewer to pair another device."
+  },
+  "connectionsPairCtaBody": "Show a code here, or scan one from another screen",
+  "@connectionsPairCtaBody": {
+    "description": "Body of the Pair another device card, above its two buttons (show a pairing code, or enter or scan one)."
+  },
+  "connectionsChipDirect": "Direct connection",
+  "@connectionsChipDirect": {
+    "description": "Status chip on a Mydia server card when this device reaches it over a direct peer-to-peer path."
+  },
+  "connectionsChipOnline": "Online",
+  "@connectionsChipOnline": {
+    "description": "Status chip on a server card when the server is reachable."
+  },
+  "connectionsChipLocked": "Locked",
+  "@connectionsChipLocked": {
+    "description": "Chip on a server card when any of the account's servers is locked or hidden."
+  },
+  "connectionsChipInAll": "In All servers",
+  "@connectionsChipInAll": {
+    "description": "Chip on a server card when the account's library is included in the combined All servers view."
+  },
+  "connectionsServerCount": "{count, plural, one{{count} server} other{{count} servers}}",
+  "@connectionsServerCount": {
+    "description": "On a server card, after the kind, when no address is shown: how many servers the account has.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsLeaveGroup": "Leave sync group",
+  "@connectionsLeaveGroup": {
+    "description": "Footer link on the Servers & devices screen that stops syncing watch progress with the paired devices, after a confirmation."
   }
 }

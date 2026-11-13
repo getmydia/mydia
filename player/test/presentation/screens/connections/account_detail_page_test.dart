@@ -12,7 +12,9 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
-import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
+import 'package:player/presentation/screens/connections/account_detail_page.dart';
+import 'package:player/presentation/screens/settings/settings_nav.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord;
@@ -29,6 +31,19 @@ class _RecordingP2p extends P2pService {
   @override
   void unwatchPeer(String peer) => unwatched.add(peer);
 }
+
+class _RemovalNav implements SettingsNav {
+  int removed = 0;
+  @override
+  void accountRemoved() => removed++;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+Widget _hosted(String accountId, [SettingsNav? nav]) => SettingsNavScope(
+      nav: nav ?? _RemovalNav(),
+      child: Scaffold(body: AccountDetailBody(accountId: accountId)),
+    );
 
 class _UnreadableStorage extends MockAuthStorage {
   @override
@@ -71,11 +86,11 @@ Future<InMemorySourceStore> _removeGuest(
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       p2pServiceProvider.overrideWithValue(p2p),
     ],
-    child: const MaterialApp(
+    child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
-        home: ManageSourcesScreen()),
+        home: _hosted('mguest')),
   ));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('manage-remove-mguest')));
@@ -106,7 +121,8 @@ Future<void> _pumpRouted(
         routes: [
           GoRoute(
               path: '/sources/manage',
-              builder: (_, __) => const ManageSourcesScreen(),
+              builder: (_, __) => Scaffold(
+                  body: AccountDetailBody(accountId: record.account.id)),
               routes: [
                 GoRoute(
                     path: ':sourceId',
@@ -150,11 +166,11 @@ void main() {
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: _hosted('acc1')),
     ));
     await tester.pumpAndSettle();
     expect(find.text('quill'), findsOneWidget);
@@ -185,11 +201,11 @@ void main() {
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: _hosted('acc1')),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manage-switch-user-acc1')), findsOneWidget);
@@ -205,58 +221,16 @@ void main() {
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: _hosted('jf1')),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Jellyfin user'), findsOneWidget);
     expect(find.text('Stash server'), findsNothing);
     expect(find.text('Change address or sign in'), findsOneWidget);
-    expect(find.text('Other servers'), findsOneWidget);
-  });
-
-  testWidgets('hides a hidden server while locked and offers Show hidden',
-      (tester) async {
-    final store = InMemorySourceStore();
-    await store.putAccount(plexRecord()
-        .copyWith(serverLocks: const {'abc123': SourceLock.hidden}));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-      ],
-      child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('Attic'), findsNothing);
-    expect(find.text('quill'), findsNothing);
-    expect(find.byKey(const Key('show-hidden-sources')), findsOneWidget);
-  });
-
-  testWidgets('Show hidden is there with nothing hidden', (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-      ],
-      child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('show-hidden-sources')), findsOneWidget);
   });
 
   testWidgets('first lock asks for a PIN, then stores the lock',
@@ -272,11 +246,11 @@ void main() {
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         pinStoreProvider.overrideWithValue(pins),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: _hosted('acc1')),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('manage-lock-abc123')));
@@ -335,7 +309,11 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: Scaffold(
+              body: Column(children: [
+            Expanded(child: AccountDetailBody(accountId: 'acc1')),
+            Expanded(child: AccountDetailBody(accountId: 'st1')),
+          ]))),
     ));
     await tester.pumpAndSettle();
     final plexSwitch = find.byKey(ValueKey('manage-all-servers-$plexId'));
@@ -361,11 +339,11 @@ void main() {
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: toastLayerBuilder,
-          home: ManageSourcesScreen()),
+          home: _hosted('macct')),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manage-remove-macct')), findsOneWidget);
@@ -382,5 +360,104 @@ void main() {
     final store = await _removeGuest(tester, _UnreadableStorage(), p2p);
     expect(p2p.unwatched, isEmpty);
     expect((await store.load()).accounts, isEmpty);
+  });
+
+  testWidgets('removing the account pops to the hub', (tester) async {
+    final store = InMemorySourceStore();
+    await store.putAccount(plexRecord());
+    final nav = _RemovalNav();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: SettingsNavScope(
+              nav: nav,
+              child:
+                  const Scaffold(body: AccountDetailBody(accountId: 'acc1')))),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manage-remove-acc1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manage-remove-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(nav.removed, 1);
+    expect((await store.load()).accounts, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unknown account renders nothing', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: _hosted('missing')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(SizedBox), findsWidgets);
+    expect(find.byType(ListView), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the page has a window title bar named after the account',
+      (tester) async {
+    final record = plexRecord();
+    final store = InMemorySourceStore();
+    await store.putAccount(record);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: SettingsNavScope(
+          nav: _RemovalNav(),
+          child: AccountDetailPage(accountId: record.account.id),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppBar), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byType(WindowTitleBar),
+            matching: find.text(record.account.displayName)),
+        findsOneWidget);
+  });
+
+  testWidgets('router opens account detail', (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, __) => const Text('home')),
+      GoRoute(
+          path: '/sources/manage/account/:accountId',
+          builder: (_, state) => Text('at ${state.uri}')),
+    ]);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    RouterSettingsNav(router).openAccount('acc1');
+    await tester.pumpAndSettle();
+
+    expect(find.text('at /sources/manage/account/acc1'), findsOneWidget);
   });
 }

@@ -12,7 +12,6 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
-import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 
 import '../../../core/sources/mydia/mydia_account_harness.dart'
@@ -29,6 +28,12 @@ class _RecordingNav implements SettingsNav {
   void openDiagnostics() => calls.add('diagnostics');
   @override
   void openPairedDevices() => calls.add('paired-devices');
+  @override
+  void openConnections() => calls.add('connections');
+  @override
+  void openAccount(String accountId) => calls.add('account $accountId');
+  @override
+  void accountRemoved() => calls.add('account-removed');
   @override
   void instanceRemoved() => calls.add('removed');
   @override
@@ -88,23 +93,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
   }
-
-  testWidgets('the servers body asks the nav for every destination',
-      (tester) async {
-    final nav = _RecordingNav();
-    await pumpBody(tester, nav, const ManageSourcesBody());
-
-    await tester.tap(find.byKey(const Key('manage-add')));
-    await tester.tap(find.byKey(Key('manage-settings-${recordA.account.id}')));
-    await tester.tap(find.byKey(Key('manage-reauth-${recordA.account.id}')));
-    await tester.pump();
-
-    expect(nav.calls, [
-      'add',
-      'instance ${idA.value}',
-      'reauth mydia ${recordA.account.id}',
-    ]);
-  });
 
   testWidgets('the instance body tells the nav when it removed the server',
       (tester) async {

@@ -12,8 +12,8 @@ import '../../../../l10n/l10n.dart';
 import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
+  connections(Icons.hub_outlined),
   playback(Icons.play_circle_outline),
-  servers(Icons.dns_rounded),
   diagnostics(Icons.lan_outlined),
   about(Icons.info_outline);
 
@@ -23,15 +23,27 @@ enum SettingsCategory {
 
   /// The sidebar label, which is also the category's root page title.
   String label(AppLocalizations l10n) => switch (this) {
+        connections => l10n.connectionsTitle,
         playback => l10n.settingsPlayback,
-        servers => l10n.settingsServers,
         diagnostics => l10n.settingsDiagnostics,
         about => l10n.settingsAbout,
       };
 }
 
 class SettingsDialogController extends ValueNotifier<SettingsCategory> {
-  SettingsDialogController(super.initial);
+  SettingsDialogController(super.initial, {String? connectionsSection})
+      : connectionsSection = ValueNotifier<String?>(connectionsSection);
+
+  /// A section the connections pane should scroll to (`'devices'`). Set
+  /// before the dialog opens, the pane takes it as it mounts; set while it
+  /// is open, the dialog returns the pane to the hub and selects it.
+  final ValueNotifier<String?> connectionsSection;
+
+  @override
+  void dispose() {
+    connectionsSection.dispose();
+    super.dispose();
+  }
 }
 
 /// Below this the dialog takes the whole window and the sidebar drops its
@@ -65,15 +77,28 @@ class _SettingsDialogState extends State<SettingsDialog> {
   void initState() {
     super.initState();
     widget.controller.addListener(_changed);
+    // Added before any pane mounts, so this runs ahead of the connections
+    // pane taking (and clearing) the request.
+    widget.controller.connectionsSection.addListener(_sectionRequested);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    widget.controller.connectionsSection.removeListener(_sectionRequested);
     super.dispose();
   }
 
   void _changed() => setState(() {});
+
+  /// A section lives on the hub: back to its root, then show the pane.
+  void _sectionRequested() {
+    if (widget.controller.connectionsSection.value == null) return;
+    _navigators[SettingsCategory.connections]!
+        .currentState
+        ?.popUntil((route) => route.isFirst);
+    widget.controller.value = SettingsCategory.connections;
+  }
 
   void _close() => Navigator.of(context).pop();
 
@@ -103,7 +128,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return SettingsDialogScope(
       close: _close,
       select: (c) => widget.controller.value = c,
-      paneNavigator: (c) => _navigators[c]!.currentState!,
+      paneNavigator: (c) => _navigators[c]?.currentState,
+      connectionsSection: widget.controller.connectionsSection,
       child: Dialog(
         insetPadding: EdgeInsets.all(inset),
         backgroundColor: palette.background,
@@ -170,12 +196,21 @@ class SettingsDialogScope extends InheritedWidget {
     required this.close,
     required this.select,
     required this.paneNavigator,
+    required this.connectionsSection,
     required super.child,
   });
 
   final VoidCallback close;
   final ValueChanged<SettingsCategory> select;
-  final NavigatorState Function(SettingsCategory category) paneNavigator;
+
+  /// The pane's navigator, or null once the dialog is gone: a flow that
+  /// awaited (a removal, say) can call back after the dialog closed.
+  final NavigatorState? Function(SettingsCategory category) paneNavigator;
+
+  /// A section the connections pane should scroll to (`'devices'`). The pane
+  /// stays mounted, so a request arrives here rather than as a new route;
+  /// the pane clears it once handed to the hub.
+  final ValueNotifier<String?> connectionsSection;
 
   static SettingsDialogScope of(BuildContext context) {
     final scope =
@@ -197,7 +232,9 @@ class SettingsPane extends StatelessWidget {
     required this.child,
   });
 
-  final String title;
+  /// Null when the content opens with its own title, so the header row
+  /// carries only the controls.
+  final String? title;
   final List<Widget> actions;
   final Widget child;
 
@@ -224,11 +261,14 @@ class SettingsPane extends StatelessWidget {
                 else
                   const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: switch (title) {
+                    final title? => Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    null => const SizedBox.shrink(),
+                  },
                 ),
                 ...actions,
                 IconButton(

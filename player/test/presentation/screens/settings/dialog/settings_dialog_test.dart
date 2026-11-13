@@ -62,17 +62,35 @@ void main() {
     expect(find.text('root about'), findsOneWidget);
   });
 
+  testWidgets('connections is the first sidebar category', (tester) async {
+    await _open(tester);
+    expect(SettingsCategory.values.first, SettingsCategory.connections);
+    final tiles = tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .map((t) => t.key)
+        .whereType<ValueKey<String>>()
+        .map((k) => k.value)
+        .where((k) => k.startsWith('settings-category-'))
+        .toList();
+    expect(tiles.first, 'settings-category-connections');
+    expect(find.text('Servers & devices'), findsWidgets);
+    final icon = find.descendant(
+        of: find.byKey(const Key('settings-category-connections')),
+        matching: find.byIcon(Icons.hub_outlined));
+    expect(icon, findsOneWidget);
+  });
+
   testWidgets('each category keeps its own stack', (tester) async {
-    await _open(tester, initial: SettingsCategory.servers);
-    await tester.tap(find.byKey(const Key('push-servers')));
+    await _open(tester, initial: SettingsCategory.connections);
+    await tester.tap(find.byKey(const Key('push-connections')));
     await tester.pumpAndSettle();
-    expect(find.text('Servers detail'), findsOneWidget);
+    expect(find.text('Servers & devices detail'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('settings-category-diagnostics')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings-category-servers')));
+    await tester.tap(find.byKey(const Key('settings-category-connections')));
     await tester.pumpAndSettle();
-    expect(find.text('Servers detail'), findsOneWidget);
+    expect(find.text('Servers & devices detail'), findsOneWidget);
   });
 
   testWidgets('Esc pops the pane first, then closes', (tester) async {

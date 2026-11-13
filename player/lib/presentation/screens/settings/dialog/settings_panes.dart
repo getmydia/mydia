@@ -10,10 +10,10 @@ import '../../../../core/sources/source.dart';
 import '../../../../core/sources/sources_providers.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
-import '../../sources/manage_sources_screen.dart';
+import '../../connections/account_detail_page.dart';
+import '../../connections/connections_hub.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
-import '../paired_devices_screen.dart';
 import '../settings_controller.dart';
 import '../settings_nav.dart';
 import '../widgets/settings_sections.dart';
@@ -22,11 +22,8 @@ import 'settings_dialog.dart';
 const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
+      SettingsCategory.connections => const _ConnectionsPage(),
       SettingsCategory.playback => const _PlaybackPage(),
-      SettingsCategory.servers => const _CategoryPane(
-          category: SettingsCategory.servers,
-          child: ManageSourcesBody(padding: _bodyPadding),
-        ),
       SettingsCategory.diagnostics => const _CategoryPane(
           category: SettingsCategory.diagnostics,
           child: DiagnosticsBody(padding: _bodyPadding),
@@ -76,13 +73,67 @@ class _PlaybackPage extends ConsumerWidget {
   }
 }
 
-class _PairedDevicesPage extends StatelessWidget {
-  const _PairedDevicesPage();
+/// The hub under its wide constellation, which already names the page, so
+/// the pane header holds only the close button.
+class _ConnectionsPage extends StatefulWidget {
+  const _ConnectionsPage();
+
+  @override
+  State<_ConnectionsPage> createState() => _ConnectionsPageState();
+}
+
+class _ConnectionsPageState extends State<_ConnectionsPage> {
+  ValueNotifier<String?>? _requests;
+
+  /// The section handed to the hub for one frame. Dropping it afterwards
+  /// lets the next request for the same section reach the hub as a change.
+  String? _section;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final requests = SettingsDialogScope.of(context).connectionsSection;
+    if (identical(requests, _requests)) return;
+    _requests?.removeListener(_take);
+    _requests = requests..addListener(_take);
+    // A dialog opened on a section (`/settings/paired-devices`) asked
+    // before this pane mounted.
+    final pending = requests.value;
+    if (pending != null) {
+      requests.value = null;
+      _show(pending);
+    }
+  }
+
+  @override
+  void dispose() {
+    _requests?.removeListener(_take);
+    super.dispose();
+  }
+
+  void _take() {
+    final requests = _requests;
+    final section = requests?.value;
+    if (requests == null || section == null) return;
+    requests.value = null;
+    setState(() => _show(section));
+  }
+
+  void _show(String section) {
+    _section = section;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _section = null);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => SettingsPane(
-        title: context.l10n.settingsPairedDevicesTitle,
-        child: const PairedDevicesBody(padding: _bodyPadding),
+        title: null,
+        child: ConnectionsHubBody(
+          padding: _bodyPadding,
+          initialSection: _section,
+          wideHeader: true,
+        ),
       );
 }
 
@@ -102,6 +153,27 @@ class _MydiaInstancePage extends ConsumerWidget {
   }
 }
 
+class _AccountDetailPage extends ConsumerWidget {
+  const _AccountDetailPage({required this.accountId});
+
+  final String accountId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref
+        .watch(sourceRecordsProvider)
+        .value
+        ?.accounts
+        .where((r) => r.account.id == accountId)
+        .firstOrNull
+        ?.account;
+    return SettingsPane(
+      title: account?.displayName ?? context.l10n.commonServer,
+      child: AccountDetailBody(accountId: accountId, padding: _bodyPadding),
+    );
+  }
+}
+
 /// Settings navigation inside the dialog. Destinations that need the whole
 /// window close the dialog before the router takes over, so the dialog never
 /// sits over an add-a-server flow or a different source's home.
@@ -111,25 +183,39 @@ class DialogSettingsNav implements SettingsNav {
   final SettingsDialogScope scope;
   final GoRouter router;
 
-  NavigatorState get _servers => scope.paneNavigator(SettingsCategory.servers);
-  NavigatorState get _playback =>
-      scope.paneNavigator(SettingsCategory.playback);
+  /// Null once the dialog has closed; every use then does nothing.
+  NavigatorState? get _connections =>
+      scope.paneNavigator(SettingsCategory.connections);
 
   @override
-  void openInstance(SourceId id) => _servers.push(MaterialPageRoute<void>(
+  void openInstance(SourceId id) => _connections?.push(MaterialPageRoute<void>(
         builder: (_) => _MydiaInstancePage(sourceId: id),
       ));
 
   @override
   void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
 
+  /// Paired devices are a section of the hub; the dialog returns the pane to
+  /// its root and selects it.
   @override
-  void openPairedDevices() => _playback.push(MaterialPageRoute<void>(
-        builder: (_) => const _PairedDevicesPage(),
-      ));
+  void openPairedDevices() => scope.connectionsSection.value = 'devices';
 
   @override
-  void instanceRemoved() => _servers.popUntil((route) => route.isFirst);
+  void openConnections() => scope.select(SettingsCategory.connections);
+
+  @override
+  void openAccount(String accountId) =>
+      _connections?.push(MaterialPageRoute<void>(
+        builder: (_) => _AccountDetailPage(accountId: accountId),
+      ));
+
+  /// Called after the removal's awaits, by which time the dialog may have
+  /// closed; then there is nothing to pop.
+  @override
+  void accountRemoved() => _connections?.popUntil((route) => route.isFirst);
+
+  @override
+  void instanceRemoved() => _connections?.popUntil((route) => route.isFirst);
 
   @override
   void addServer() => _closeThen(() => router.push('/sources/add'));

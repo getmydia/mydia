@@ -145,6 +145,7 @@ class PeerSyncService {
   final RelayApiClient _relayClient;
   String _deviceName;
   String get deviceName => _deviceName;
+  String get platform => _platform;
   final String _platform;
   final Future<String> Function()? _resolveDeviceName;
   final Future<void> Function(
@@ -770,7 +771,9 @@ class PeerSyncService {
             lastSyncedAt: nowMs,
           ),
         );
-        if (rosterChanged.isNotEmpty) _notifyStateChanged();
+        // Always, not only on a roster change: the new watermark moves the
+        // "synced X ago" the UI shows. A local notification only.
+        _notifyStateChanged();
         if (changes.changedWatchKeys.isNotEmpty ||
             changes.changedPinKeys.isNotEmpty) {
           await _onRemoteChangesApplied?.call(

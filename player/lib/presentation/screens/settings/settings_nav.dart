@@ -21,6 +21,15 @@ abstract interface class SettingsNav {
 
   void openPairedDevices();
 
+  /// The Servers & devices hub.
+  void openConnections();
+
+  /// One account's detail page.
+  void openAccount(String accountId);
+
+  /// The account on screen was just removed from this device.
+  void accountRemoved();
+
   /// The instance on screen was just removed from this device.
   void instanceRemoved();
 
@@ -46,15 +55,38 @@ class RouterSettingsNav implements SettingsNav {
   void openDiagnostics() => _router.push('/settings/diagnostics');
 
   @override
-  void openPairedDevices() => _router.push('/settings/paired-devices');
+  void openPairedDevices() => _router.push('/sources/manage?section=devices');
+
+  @override
+  void openConnections() => _router.push('/sources/manage');
+
+  @override
+  void openAccount(String accountId) =>
+      _router.push('/sources/manage/account/$accountId');
+
+  /// Steps back to the hub, and only while the router is still on the
+  /// account detail page: removal may already have sent it elsewhere. A
+  /// page loaded directly has nothing to pop, so it goes to the hub.
+  @override
+  void accountRemoved() {
+    if (!_topPath.startsWith('/sources/manage/account/')) return;
+    if (_router.canPop()) {
+      _router.pop();
+    } else {
+      _router.go('/sources/manage');
+    }
+  }
 
   /// Removing the last or current source can already have sent the router
   /// elsewhere (add-a-server); only step back if still on the instance.
   @override
   void instanceRemoved() {
-    final path = _router.routerDelegate.currentConfiguration.uri.path;
-    if (path.startsWith('/sources/manage/')) _router.go('/sources/manage');
+    if (_topPath.startsWith('/sources/manage/')) _router.go('/sources/manage');
   }
+
+  /// The top page's path. `currentConfiguration.uri` stays on the base
+  /// location under a pushed page, so it never shows a pushed account.
+  String get _topPath => _router.state.uri.path;
 
   @override
   void addServer() => _router.push('/sources/add');

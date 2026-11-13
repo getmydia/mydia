@@ -933,6 +933,23 @@ void main() {
     expect(changes, greaterThan(0));
   });
 
+  test('a_sync_with_nothing_new_still_notifies_its_new_watermark', () async {
+    final offer = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offer.code);
+    await nodeA.service.syncAll(ignoreCooldown: true);
+    await pumpEventQueue();
+
+    // Nothing changes but the time: "synced X ago" must still move.
+    clock.setMs(5000);
+    var changes = 0;
+    nodeA.service.onStateChanged.listen((_) => changes++);
+    await nodeA.service.syncAll(ignoreCooldown: true);
+    await pumpEventQueue();
+
+    expect(nodeA.store.watermark('node-b')?.lastSyncedAt, 5000);
+    expect(changes, greaterThan(0));
+  });
+
   test('resolves_device_name_asynchronously_and_updates_local_member',
       () async {
     final standaloneStore = InMemoryPeerSyncStore();

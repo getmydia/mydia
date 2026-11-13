@@ -316,6 +316,20 @@ void main() {
     expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
   });
 
+  testWidgets('connections card sits above playback', (tester) async {
+    await _pump(tester);
+
+    final card = find.byKey(const Key('connections-card'));
+    expect(card, findsOneWidget);
+    expect(
+      tester.getTopLeft(card).dy,
+      lessThan(
+          tester.getTopLeft(find.byKey(const Key('default-quality-row'))).dy),
+    );
+    expect(find.byKey(const Key('paired-devices-row')), findsNothing);
+    expect(find.byKey(const Key('manage-sources-row')), findsNothing);
+  });
+
   testWidgets('sign out lives on each server, not here', (tester) async {
     await _pump(tester);
 

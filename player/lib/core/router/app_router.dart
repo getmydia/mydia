@@ -36,14 +36,14 @@ import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
     show isSmbAccountId, kFilesLocalAccountId;
-import '../../presentation/screens/sources/manage_sources_screen.dart';
+import '../../presentation/screens/connections/account_detail_page.dart';
+import '../../presentation/screens/connections/connections_hub.dart';
 import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
 import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
-import '../../presentation/screens/settings/paired_devices_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../l10n/l10n.dart';
@@ -424,7 +424,19 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/manage',
         name: 'manage_sources',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const ManageSourcesScreen(),
+        builder: (context, state) => ConnectionsHubScreen(
+          initialSection: state.uri.queryParameters['section'],
+        ),
+      ),
+      // One account's controls. Before `:sourceId` so `account` is not read
+      // as a source id.
+      GoRoute(
+        path: '/sources/manage/account/:accountId',
+        name: 'manage_account',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => AccountDetailPage(
+          accountId: state.pathParameters['accountId']!,
+        ),
       ),
       // One Mydia instance's settings; also where `/settings/devices` lands.
       GoRoute(
@@ -660,11 +672,13 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DiagnosticsScreen(),
       ),
+      // Paired devices now live in the Servers & devices hub; old deep links
+      // land on its devices section.
       GoRoute(
         path: '/settings/paired-devices',
         name: 'paired_devices',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const PairedDevicesScreen(),
+        redirect: (_, __) => '/sources/manage?section=devices',
       ),
       GoRoute(
         path: '/collection/:id',
