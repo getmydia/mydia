@@ -228,12 +228,13 @@ void main() {
     expect(selected(tester), SettingsCategory.connections);
   });
 
-  final scrollingOverview = hubOverview(
-    servers: [
-      for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
-    ],
-    devices: [hubDevice('n1', 'Pixel phone', 'android')],
-  );
+  // Built per test: [hubDevice] stamps its sync time from the wall clock.
+  ConnectionsOverview scrollingOverview() => hubOverview(
+        servers: [
+          for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
+        ],
+        devices: [hubDevice('n1', 'Pixel phone', 'android')],
+      );
 
   void expectDevicesInPane(WidgetTester tester) {
     final dialog = tester.getRect(find.byKey(const Key('settings-dialog')));
@@ -246,7 +247,7 @@ void main() {
 
   testWidgets('/settings/paired-devices opens the dialog on the devices',
       (tester) async {
-    await pumpApp(tester, dialog: true, overview: scrollingOverview);
+    await pumpApp(tester, dialog: true, overview: scrollingOverview());
     final context = tester.element(find.text('open'));
     expect(openSettingsForRoute(context, '/settings/paired-devices'), isTrue);
     await tester.pumpAndSettle();
@@ -256,7 +257,7 @@ void main() {
 
   testWidgets('/settings/paired-devices on an open dialog returns to the hub',
       (tester) async {
-    await pumpApp(tester, dialog: true, overview: scrollingOverview);
+    await pumpApp(tester, dialog: true, overview: scrollingOverview());
     await open(tester);
     dialogNav(tester).openAccount('s0');
     await tester.pumpAndSettle();

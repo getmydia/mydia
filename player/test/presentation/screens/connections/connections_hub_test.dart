@@ -22,17 +22,20 @@ import '../../../test_utils/toast_harness.dart';
 import 'connections_hub_fixtures.dart';
 import 'fake_peer_sync_service.dart';
 
-final _populated = hubOverview(
-  servers: [
-    hubServer('home', 'Home Mydia',
-        host: 'home.example.net', inAllServers: true),
-    hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
-  ],
-  devices: [
-    hubDevice('n1', 'Pixel phone', 'android'),
-    hubDevice('n2', 'NAS', 'linux'),
-  ],
-);
+/// Built per test, never cached: [hubDevice] stamps its sync time from the
+/// wall clock, and CI runs the whole suite in one isolate, where a value
+/// first read while tests are declared is minutes old once this one runs.
+ConnectionsOverview _populated() => hubOverview(
+      servers: [
+        hubServer('home', 'Home Mydia',
+            host: 'home.example.net', inAllServers: true),
+        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+      ],
+      devices: [
+        hubDevice('n1', 'Pixel phone', 'android'),
+        hubDevice('n2', 'NAS', 'linux'),
+      ],
+    );
 
 /// Opens the real account detail page, as the router and the dialog do.
 class _PushingNav extends RecordingNav {
@@ -103,7 +106,7 @@ void _phone(WidgetTester tester, {double height = 600}) {
 void main() {
   testWidgets('renders sections', (tester) async {
     _phone(tester, height: 1400);
-    await _pump(tester, _populated);
+    await _pump(tester, _populated());
 
     expect(find.byKey(const Key('connections-this-device')), findsOneWidget);
     expect(find.text('Living room TV'), findsOneWidget);
@@ -128,7 +131,7 @@ void main() {
   testWidgets('every server tap, Mydia included, opens its account',
       (tester) async {
     _phone(tester, height: 1400);
-    final h = await _pump(tester, _populated);
+    final h = await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('connections-server-home')));
     await tester.pump();
@@ -246,7 +249,7 @@ void main() {
   testWidgets('the route has a window title bar with a back button',
       (tester) async {
     _phone(tester, height: 1400);
-    await _pump(tester, _populated);
+    await _pump(tester, _populated());
     expect(find.byType(WindowTitleBar), findsOneWidget);
     expect(
         find.descendant(
@@ -258,7 +261,7 @@ void main() {
 
   testWidgets('pair buttons open the sheet in the right mode', (tester) async {
     _phone(tester, height: 1400);
-    await _pump(tester, _populated);
+    await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('connections-enter-code')));
     await tester.pumpAndSettle();
@@ -272,7 +275,7 @@ void main() {
 
   testWidgets('show code opens the sheet with an offer', (tester) async {
     _phone(tester, height: 1400);
-    final h = await _pump(tester, _populated);
+    final h = await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('connections-show-code')));
     await tester.pumpAndSettle();
@@ -282,7 +285,7 @@ void main() {
 
   testWidgets('sync now and leave group only when paired', (tester) async {
     _phone(tester, height: 1400);
-    final h = await _pump(tester, _populated);
+    final h = await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('paired-sync-now-button')));
     await tester.pump();
@@ -305,7 +308,7 @@ void main() {
 
   testWidgets('remove device revokes the peer', (tester) async {
     _phone(tester, height: 1400);
-    final h = await _pump(tester, _populated);
+    final h = await _pump(tester, _populated());
 
     await tester.tap(find.byKey(const Key('connections-device-menu-n1')));
     await tester.pumpAndSettle();
@@ -376,16 +379,17 @@ void main() {
         findsOneWidget);
   });
 
-  for (final (name, overview) in [
-    ('empty', hubOverview()),
-    ('loading', hubOverview(serversLoading: true)),
-    ('failed', hubOverview(serversFailed: true)),
+  // Builders, not overviews: this list is evaluated while tests are declared.
+  for (final (name, overview) in <(String, ConnectionsOverview Function())>[
+    ('empty', hubOverview),
+    ('loading', () => hubOverview(serversLoading: true)),
+    ('failed', () => hubOverview(serversFailed: true)),
     ('populated', _populated),
   ]) {
     testWidgets('the servers section ends with show hidden servers ($name)',
         (tester) async {
       _phone(tester, height: 1400);
-      await _pump(tester, overview, settle: false);
+      await _pump(tester, overview(), settle: false);
       final row = find.descendant(
         of: find.byKey(const Key('connections-servers-section')),
         matching: find.byKey(const Key('show-hidden-sources')),

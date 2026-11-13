@@ -90,6 +90,11 @@ ConnectionServer hubServer(
       inAllServers: inAllServers,
     );
 
+/// A device that synced five minutes before this call, by the wall clock the
+/// hub's "synced X ago" also reads. Call it inside the test body: a device
+/// built while tests are declared (a top-level `final`, a `main()` local, a
+/// parameter list) is minutes old by the time CI's single shared isolate
+/// runs the test, and its line no longer reads "5 minutes ago".
 ConnectionDevice hubDevice(String id, String name, String platform) =>
     ConnectionDevice(
       nodeId: id,

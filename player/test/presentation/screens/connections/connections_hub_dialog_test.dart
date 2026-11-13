@@ -44,7 +44,9 @@ class _Harness {
 final _manyServers = [
   for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
 ];
-final _devices = [hubDevice('n1', 'Pixel phone', 'android')];
+// A getter, so each test stamps its own sync time (see [hubDevice]).
+List<ConnectionDevice> get _devices =>
+    [hubDevice('n1', 'Pixel phone', 'android')];
 
 Future<_Harness> _pump(
   WidgetTester tester,
