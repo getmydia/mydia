@@ -19,7 +19,7 @@
 - No real movie or TV titles anywhere. Fixture names: "Home Mydia", "Basement Plex", "NAS", "Living room TV", "Pixel phone".
 - Keep the existing keys: `manage-add`, `manage-server-*`, `manage-lock-*`, `manage-all-servers-*`, `manage-reauth-*`, `manage-remove-*`, `manage-switch-user-*`, `manage-settings-*`, `manage-root-*`, `manage-remove-root-*`, `manage-rescan-*`, `pair-*`, `paired-sync-now-button`, `paired-leave-group-button`, `remove-peer-*`.
 - **Web (this resolves the spec's open point):** today the paired-devices row shows on web and the servers row does not. Keep that split: on `kIsWeb` the card and the hub show the devices half only.
-- Run tests from the repo root with `./dev flutter test <path>`. Commit with `direnv exec . git commit -m "<msg>"` from the worktree root, then `git show --stat HEAD` to confirm everything staged landed.
+- Run tests from the repo root with `./dev flutter test --concurrency=1 <path>` (without it, files can be silently dropped; see `player/docs/workflow.md`). Commit with `direnv exec . git commit -m "<msg>"` from the worktree root, then `git show --stat HEAD` to confirm everything staged landed.
 - No em dashes in code comments or strings.
 
 ## Review Focus
@@ -57,9 +57,9 @@
   - `lastSyncedAt comes from the peer watermark`: `store.watermark(nodeId).lastSyncedAt == 1700000000000` → `DateTime.fromMillisecondsSinceEpoch(1700000000000)`; no watermark → null.
   - `records error sets serversFailed`: `AsyncError` → `servers` empty, `serversFailed` true.
   - The model does not look at `kIsWeb`; the card and the hub apply the web split.
-- [ ] **Step 2: Run** `./dev flutter test test/presentation/screens/connections/connections_overview_test.dart`. Expected: FAIL (file missing).
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/presentation/screens/connections/connections_overview_test.dart`. Expected: FAIL (file missing).
 - [ ] **Step 3: Implement.** The provider `ref.watch`es the five providers and rebuilds on `PeerSyncService.onStateChanged`: a `StreamProvider<void>` (`_peerSyncTickProvider`) wrapping `service.onStateChanged`, which the overview watches. The visibility rule is copied from `ManageSourcesBody.build`'s `visible`. `inAllServers` uses `includedInAllServers(source, ref.watch(allServersChoicesProvider))`. `localName`/`localPlatform` come from `service.deviceName`/`service.platform`. `isPaired` is `service.isPaired || devices.isNotEmpty`.
-- [ ] **Step 4: Run** the same test. Expected: PASS. Also run `./dev flutter test test/presentation/screens/settings/paired_devices_screen_test.dart`. Expected: PASS (the fake compiles).
+- [ ] **Step 4: Run** the same test. Expected: PASS. Also run `./dev flutter test --concurrency=1 test/presentation/screens/settings/paired_devices_screen_test.dart`. Expected: PASS (the fake compiles).
 - [ ] **Step 5: Commit** `feat(player): add the servers and devices overview model`.
 
 ### Task 2: Constellation card
@@ -262,6 +262,6 @@
 
 - [ ] **Step 1:** For each candidate key (`sourcesOtherServers`, `sourcesSettingsRowTitle`, `sourcesSettingsRowSubtitle`, `settingsPairedDevicesTitle`, `settingsPairedDevicesNotPaired`, `settingsPairedDevicesCount`, `pairedDevicesIntroTitle`, `pairedDevicesIntroBody`, `pairedDevicesListSection`, `pairedDevicesStatusActive`, `pairedDevicesStatusRevoked`, `settingsServers`), run `grep -rn "<key>" lib` and remove it from all three ARBs only when nothing references it.
 - [ ] **Step 2: Run** `./dev flutter analyze`. Expected: no issues.
-- [ ] **Step 3: Run** `./dev flutter test test/l10n test/presentation/screens/connections test/presentation/screens/settings test/presentation/screens/sources`. Expected: PASS.
-- [ ] **Step 4: Run** the full suite `./dev flutter test`. Expected: PASS, apart from the flakes listed in `.github/ci-flakes.md`.
+- [ ] **Step 3: Run** `./dev flutter test --concurrency=1 test/l10n test/presentation/screens/connections test/presentation/screens/settings test/presentation/screens/sources`. Expected: PASS.
+- [ ] **Step 4: Run** the full suite `./dev flutter test --concurrency=1`. Expected: PASS, apart from the flakes listed in `.github/ci-flakes.md`.
 - [ ] **Step 5: Commit** `chore(player): drop the old servers and paired devices screens`.
