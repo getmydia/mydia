@@ -84,35 +84,54 @@ class FakePeerSyncService implements PeerSyncService {
     notify();
   }
 
-  @override
-  Future<void> pairWithCode(String code) async {
-    pairWithCodeCalls.add(code);
-    if (failPairing) throw StateError('pairing failed');
+  /// Leave the joined peer out of the roster, as when the handshake
+  /// completes before its member record arrives.
+  bool skipJoinedMember = false;
+
+  /// Also fire [onPeerPaired] on the joining side, which the real service
+  /// never does, to prove the sheet toasts once whichever signal arrives.
+  bool emitPairedOnJoin = false;
+
+  /// The joining side, like the real service: the roster changes and state
+  /// is notified, but [onPeerPaired] fires only on the host.
+  Future<void> _join(PeerMember peer) async {
     _isPaired = true;
-    final peer = PeerMember(
-      nodeId: 'peer-device-1',
-      deviceName: 'Living Room TV',
-      platform: 'android',
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
+    if (!skipJoinedMember) await store.putMember(peer);
+    if (emitPairedOnJoin) _peerPairedController.add(peer);
+    notify();
+  }
+
+  /// The host side: another device claimed this device's offer.
+  Future<void> hostPaired(PeerMember peer) async {
+    _isPaired = true;
+    _activeOffer = null;
     await store.putMember(peer);
     _peerPairedController.add(peer);
     notify();
   }
 
   @override
+  Future<void> pairWithCode(String code) async {
+    pairWithCodeCalls.add(code);
+    if (failPairing) throw StateError('pairing failed');
+    await _join(PeerMember(
+      nodeId: 'peer-device-1',
+      deviceName: 'Living Room TV',
+      platform: 'android',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  @override
   Future<void> pairWithQr(String qrJson) async {
     pairWithQrCalls.add(qrJson);
-    _isPaired = true;
-    final peer = PeerMember(
+    if (failPairing) throw StateError('pairing failed');
+    await _join(PeerMember(
       nodeId: 'peer-device-qr',
       deviceName: 'Bedroom TV',
       platform: 'ios',
       updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    await store.putMember(peer);
-    _peerPairedController.add(peer);
-    notify();
+    ));
   }
 
   @override

@@ -101,21 +101,17 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
   bool _isLoading = false;
   _PairingFailure? _failure;
 
+  /// Set once the pairing is announced, so a host-side [onPeerPaired] and
+  /// a joiner's own success cannot both toast.
+  bool _announced = false;
+
   @override
   void initState() {
     super.initState();
     _service = ref.read(peerSyncServiceProvider);
-    _pairedSub = _service.onPeerPaired.listen((peer) {
-      if (!mounted) return;
-      showToast(
-        context,
-        context.l10n.pairedDevicesConnectedToast(peer.deviceName),
-      );
-      // The scanner sheet may be on top; only close this sheet's own route.
-      if (ModalRoute.of(context)?.isCurrent == true) {
-        Navigator.of(context).maybePop();
-      }
-    });
+    // Fires only on the side that showed the code.
+    _pairedSub = _service.onPeerPaired
+        .listen((peer) => _announcePaired(peer.deviceName));
     _stateSub = _service.onStateChanged.listen((_) {
       if (mounted) setState(() {});
     });
@@ -133,6 +129,38 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
       unawaited(_service.cancelPairingOffer());
     }
     super.dispose();
+  }
+
+  /// Toasts the pairing and closes the sheet. [deviceName] is null when the
+  /// other device is not in the roster yet.
+  void _announcePaired(String? deviceName) {
+    if (!mounted || _announced) return;
+    _announced = true;
+    final l10n = context.l10n;
+    showToast(
+      context,
+      deviceName == null || deviceName.isEmpty
+          ? l10n.pairedDevicesPairedToast
+          : l10n.pairedDevicesConnectedToast(deviceName),
+    );
+    // The scanner sheet may be on top; only close this sheet's own route.
+    if (ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  /// The joining side hears no [onPeerPaired]: name the newest other member
+  /// of the group it just joined.
+  void _announceJoined() {
+    if (!mounted) return;
+    final newest = ref
+        .read(peerGroupRosterProvider)
+        .activeMembers()
+        .fold<PeerMember?>(
+            null,
+            (latest, m) =>
+                latest == null || m.updatedAt > latest.updatedAt ? m : latest);
+    _announcePaired(newest?.deviceName);
   }
 
   String _formatCode(String raw) {
@@ -174,6 +202,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
       // The viewer may have left while pairing was pending; a disposed
       // controller must not be notified.
       if (mounted) _codeController.clear();
+      _announceJoined();
     } catch (e) {
       if (mounted) setState(() => _failure = _PairingFailure.pairing);
     } finally {
@@ -218,6 +247,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
     });
     try {
       await _service.pairWithQr(qrJson);
+      _announceJoined();
     } catch (e) {
       if (mounted) setState(() => _failure = _PairingFailure.pairing);
     } finally {

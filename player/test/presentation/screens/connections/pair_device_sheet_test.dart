@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_group_roster.dart';
+import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/connections/pair_device_sheet.dart';
+import 'package:player/presentation/widgets/toast/toaster.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../test_utils/toast_harness.dart';
@@ -157,11 +159,57 @@ void main() {
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
-  testWidgets('sheet closes on onPeerPaired', (tester) async {
+  testWidgets('a joined code with no member yet toasts a plain success',
+      (tester) async {
+    final store = InMemoryPeerSyncStore();
+    final service = FakePeerSyncService(store: store)..skipJoinedMember = true;
+    await tester.pumpWidget(_wrap(service, store, PairSheetMode.enter));
+    await tester.tap(find.byKey(const Key('open-sheet')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('pair-code-input')), 'ABC123');
+    await tester.tap(find.byKey(const Key('pair-submit-code-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device paired'), findsOneWidget);
+    expect(find.byType(PairDeviceSheet), findsNothing);
+  });
+
+  testWidgets('a join that also fires onPeerPaired toasts once',
+      (tester) async {
+    final store = InMemoryPeerSyncStore();
+    final service = FakePeerSyncService(store: store)..emitPairedOnJoin = true;
+    await tester.pumpWidget(_wrap(service, store, PairSheetMode.enter));
+    await tester.tap(find.byKey(const Key('open-sheet')));
+    await tester.pumpAndSettle();
+    // A second toast replaces the first, so count what was shown.
+    final toasts = Toaster.maybeControllerOf(
+        tester.element(find.byType(PairDeviceSheet)))!;
+    final shown = <int>{};
+    toasts.addListener(() {
+      final id = toasts.current?.id;
+      if (id != null) shown.add(id);
+    });
+
+    await tester.enterText(find.byKey(const Key('pair-code-input')), 'ABC123');
+    await tester.tap(find.byKey(const Key('pair-submit-code-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paired with Living Room TV'), findsOneWidget);
+    expect(shown, hasLength(1));
+    expect(find.byType(PairDeviceSheet), findsNothing);
+  });
+
+  testWidgets('the host sheet closes on onPeerPaired', (tester) async {
     final (service, store) = await _open(tester, PairSheetMode.show);
     expect(find.byType(PairDeviceSheet), findsOneWidget);
 
-    await service.pairWithQr('{}');
+    await service.hostPaired(PeerMember(
+      nodeId: 'peer-device-qr',
+      deviceName: 'Bedroom TV',
+      platform: 'ios',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Paired with Bedroom TV'), findsOneWidget);

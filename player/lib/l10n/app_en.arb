@@ -2521,6 +2521,10 @@
       }
     }
   },
+  "pairedDevicesPairedToast": "Device paired",
+  "@pairedDevicesPairedToast": {
+    "description": "Toast on the joining device when pairing succeeds before the other device's name is known."
+  },
   "pairedDevicesOrDivider": "or",
   "@pairedDevicesOrDivider": {
     "description": "Divider text between show code and enter code sections."
