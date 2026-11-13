@@ -2555,7 +2555,7 @@
       }
     }
   },
-  "connectionsSyncedWith": "{count, plural, one{Synced with 1 device} other{Synced with {count} devices}}",
+  "connectionsSyncedWith": "{count, plural, one{Synced with {count} device} other{Synced with {count} devices}}",
   "@connectionsSyncedWith": {
     "description": "Footer of the Servers & devices card: how many other devices this one syncs watch progress with.",
     "placeholders": {
@@ -2698,7 +2698,7 @@
   "@connectionsChipInAll": {
     "description": "Chip on a server card when the account's library is included in the combined All servers view."
   },
-  "connectionsServerCount": "{count, plural, one{1 server} other{{count} servers}}",
+  "connectionsServerCount": "{count, plural, one{{count} server} other{{count} servers}}",
   "@connectionsServerCount": {
     "description": "On a server card, after the kind, when no address is shown: how many servers the account has.",
     "placeholders": {
