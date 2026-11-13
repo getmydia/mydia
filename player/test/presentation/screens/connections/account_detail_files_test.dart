@@ -8,6 +8,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/router/app_router.dart' show filesReauthLocation;
 import 'package:player/core/sources/files/files_account.dart';
+import 'package:player/core/sources/files/files_accounts.dart';
 import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/files_scan_controller.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
@@ -38,7 +39,8 @@ class _FixedScan extends FilesScanController {
 
 Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
     WidgetTester tester,
-    {ScanState? scan}) async {
+    {ScanState? scan,
+    String? accountId}) async {
   final box = (await tester.runAsync(() => Hive.openBox<Map<dynamic, dynamic>>(
       'manage_files_${_boxes++}',
       bytes: Uint8List(0))))!;
@@ -86,7 +88,7 @@ Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
               path: '/sources/manage',
               builder: (_, __) => Scaffold(
                   body: AccountDetailBody(
-                      accountId: filesLocalRecord.account.id))),
+                      accountId: accountId ?? filesLocalRecord.account.id))),
           GoRoute(
               path: '/sources/add/files',
               redirect: (_, s) =>
@@ -109,7 +111,49 @@ Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
   return (store, box);
 }
 
+/// Pumps the detail page for [url]'s account, saved through the app.
+Future<void> _pumpShare(WidgetTester tester, Uri url) async {
+  final smb = url.scheme == 'smb';
+  final id = smb ? smbAccountId(url) : webDavAccountId(url);
+  await _pump(tester, accountId: id);
+  final accounts =
+      ProviderScope.containerOf(tester.element(find.byType(AccountDetailBody)))
+          .read(filesAccountsProvider);
+  if (smb) {
+    await accounts.addSmbAccount(
+        url: url,
+        credentials: const SmbCredentials(user: 'viewer', password: 'pw'));
+  } else {
+    await accounts.addWebDavAccount(url: url, user: 'viewer', password: 'pw');
+  }
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('smb_account_shows_change_address', (tester) async {
+    final smbUrl = Uri.parse('smb://192.168.1.5/movies');
+    await _pumpShare(tester, smbUrl);
+    final smbId = smbAccountId(smbUrl);
+    expect(find.byKey(Key('manage-remove-$smbId')), findsOneWidget);
+    expect(find.byKey(Key('manage-change-address-$smbId')), findsOneWidget);
+  });
+
+  testWidgets('a webdav account has no change address', (tester) async {
+    final davUrl = Uri.parse('https://dav.example.test/media');
+    await _pumpShare(tester, davUrl);
+    final davId = webDavAccountId(davUrl);
+    expect(find.byKey(Key('manage-remove-$davId')), findsOneWidget);
+    expect(find.byKey(Key('manage-change-address-$davId')), findsNothing);
+  });
+
+  testWidgets('the device account has no change address', (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('manage-remove-$kFilesLocalAccountId')),
+        findsOneWidget);
+    expect(find.byKey(const Key('manage-change-address-$kFilesLocalAccountId')),
+        findsNothing);
+  });
+
   testWidgets('lists the folders and removes one', (tester) async {
     final (_, box) = await _pump(tester);
     expect(find.byKey(const ValueKey('manage-root-rfilms')), findsOneWidget);
