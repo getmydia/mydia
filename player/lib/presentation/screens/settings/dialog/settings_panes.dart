@@ -10,6 +10,7 @@ import '../../../../core/sources/source.dart';
 import '../../../../core/sources/sources_providers.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
+import '../../connections/account_detail_page.dart';
 import '../../sources/manage_sources_screen.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
@@ -102,6 +103,27 @@ class _MydiaInstancePage extends ConsumerWidget {
   }
 }
 
+class _AccountDetailPage extends ConsumerWidget {
+  const _AccountDetailPage({required this.accountId});
+
+  final String accountId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref
+        .watch(sourceRecordsProvider)
+        .value
+        ?.accounts
+        .where((r) => r.account.id == accountId)
+        .firstOrNull
+        ?.account;
+    return SettingsPane(
+      title: account?.displayName ?? context.l10n.commonServer,
+      child: AccountDetailBody(accountId: accountId, padding: _bodyPadding),
+    );
+  }
+}
+
 /// Settings navigation inside the dialog. Destinations that need the whole
 /// window close the dialog before the router takes over, so the dialog never
 /// sits over an add-a-server flow or a different source's home.
@@ -130,6 +152,14 @@ class DialogSettingsNav implements SettingsNav {
 
   @override
   void openConnections() => scope.select(SettingsCategory.servers);
+
+  @override
+  void openAccount(String accountId) => _servers.push(MaterialPageRoute<void>(
+        builder: (_) => _AccountDetailPage(accountId: accountId),
+      ));
+
+  @override
+  void accountRemoved() => _servers.popUntil((route) => route.isFirst);
 
   @override
   void instanceRemoved() => _servers.popUntil((route) => route.isFirst);

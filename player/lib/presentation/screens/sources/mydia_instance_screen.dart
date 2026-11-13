@@ -24,7 +24,7 @@ import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'confirm_remove_account.dart';
-import 'manage_sources_screen.dart';
+import '../connections/account_detail_page.dart' show removeMydiaInstance;
 
 /// What one server says about itself: its version and whether this player and
 /// it can work together.

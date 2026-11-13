@@ -36,6 +36,7 @@ import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
     show isSmbAccountId, kFilesLocalAccountId;
+import '../../presentation/screens/connections/account_detail_page.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -425,6 +426,16 @@ GoRouter appRouter(Ref ref) {
         name: 'manage_sources',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const ManageSourcesScreen(),
+      ),
+      // One account's controls. Before `:sourceId` so `account` is not read
+      // as a source id.
+      GoRoute(
+        path: '/sources/manage/account/:accountId',
+        name: 'manage_account',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => AccountDetailPage(
+          accountId: state.pathParameters['accountId']!,
+        ),
       ),
       // One Mydia instance's settings; also where `/settings/devices` lands.
       GoRoute(

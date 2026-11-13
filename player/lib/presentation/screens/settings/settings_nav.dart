@@ -24,6 +24,12 @@ abstract interface class SettingsNav {
   /// The Servers & devices hub.
   void openConnections();
 
+  /// One account's detail page.
+  void openAccount(String accountId);
+
+  /// The account on screen was just removed from this device.
+  void accountRemoved();
+
   /// The instance on screen was just removed from this device.
   void instanceRemoved();
 
@@ -53,6 +59,20 @@ class RouterSettingsNav implements SettingsNav {
 
   @override
   void openConnections() => _router.push('/sources/manage');
+
+  @override
+  void openAccount(String accountId) =>
+      _router.push('/sources/manage/account/$accountId');
+
+  /// Only steps back from the detail page; the interim list hosts the same
+  /// controls and must stay put.
+  @override
+  void accountRemoved() {
+    final path = _router.routerDelegate.currentConfiguration.uri.path;
+    if (path.startsWith('/sources/manage/account/') && _router.canPop()) {
+      _router.pop();
+    }
+  }
 
   /// Removing the last or current source can already have sent the router
   /// elsewhere (add-a-server); only step back if still on the instance.

@@ -16,7 +16,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
-import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
+import 'package:player/presentation/screens/connections/account_detail_page.dart';
 
 import '../../../core/sources/files/fake_backend.dart';
 import '../../../core/sources/files/fake_media_names.dart';
@@ -84,7 +84,9 @@ Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
         routes: [
           GoRoute(
               path: '/sources/manage',
-              builder: (_, __) => const ManageSourcesScreen()),
+              builder: (_, __) => Scaffold(
+                  body: AccountDetailBody(
+                      accountId: filesLocalRecord.account.id))),
           GoRoute(
               path: '/sources/add/files',
               redirect: (_, s) =>

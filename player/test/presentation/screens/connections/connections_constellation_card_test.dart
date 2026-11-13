@@ -19,6 +19,10 @@ class _RecordingNav implements SettingsNav {
   @override
   void openConnections() => calls.add('connections');
   @override
+  void openAccount(String accountId) => calls.add('account $accountId');
+  @override
+  void accountRemoved() => calls.add('account-removed');
+  @override
   void instanceRemoved() => calls.add('removed');
   @override
   void addServer() => calls.add('add');
