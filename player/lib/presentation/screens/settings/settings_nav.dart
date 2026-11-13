@@ -64,8 +64,8 @@ class RouterSettingsNav implements SettingsNav {
   void openAccount(String accountId) =>
       _router.push('/sources/manage/account/$accountId');
 
-  /// Only steps back from the detail page; the interim list hosts the same
-  /// controls and must stay put.
+  /// Steps back to the hub, and only while the router is still on the
+  /// account detail page: removal may already have sent it elsewhere.
   @override
   void accountRemoved() {
     final path = _router.routerDelegate.currentConfiguration.uri.path;

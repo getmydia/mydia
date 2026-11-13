@@ -1,5 +1,5 @@
-/// One account's detail page: the per-account controls that used to sit on
-/// cards in the Other servers list.
+/// One account's detail page, opened from its server card on the hub: the
+/// per-account controls.
 library;
 
 import 'dart:async';
@@ -56,8 +56,7 @@ Future<void> removeMydiaInstance(WidgetRef ref, ProviderAccount account) async {
   await ref.read(sourceRecordsProvider.notifier).removeAccount(account.id);
 }
 
-/// The `manage-add` button, in the mobile app bar or at the top of the
-/// dialog's Servers pane.
+/// The `manage-add` button, at the end of the hub's Servers header.
 class AddServerButton extends StatelessWidget {
   const AddServerButton({super.key, required this.onPressed});
 
@@ -217,8 +216,8 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
 }
 
 /// One account's controls: its servers (lock, All servers), folders, and the
-/// reauth and remove actions. The account detail page and the interim
-/// Other servers list both host it.
+/// reauth and remove actions, plus the gear to a Mydia instance's settings.
+/// The account detail page hosts it, on mobile and in the dialog.
 class AccountControls extends ConsumerWidget {
   const AccountControls(
       {super.key, required this.record, required this.unlocked});
