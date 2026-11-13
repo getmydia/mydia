@@ -219,6 +219,9 @@ class FilesAccounts {
   /// [signInAgain] only replaces the credentials of a stored account: one
   /// removed while the sign-in was in flight throws [StateError] and its
   /// credentials are not left behind, so a removal (or "Forgot PIN") sticks.
+  /// [accountId], when given, is that account, used as is instead of being
+  /// looked up by address: sign-in again targets the share it was opened
+  /// for.
   Future<SourceId> addSmbAccount({
     required Uri url,
     required SmbCredentials credentials,
@@ -226,6 +229,7 @@ class FilesAccounts {
     bool signInAgain = false,
     List<String> alternatives = const [],
     String? serviceName,
+    String? accountId,
   }) async {
     final base = Uri.parse(normalizeSmbUrl(url));
     final typedShare =
@@ -236,7 +240,8 @@ class FilesAccounts {
       port: target.port,
       hosts: [target.host, ...alternatives],
     );
-    final id = await findSmbAccount(
+    final id = accountId ??
+        await findSmbAccount(
           share: target.share,
           hosts: [target.host, ...alternatives],
           serviceName: serviceName,
@@ -300,16 +305,22 @@ class FilesAccounts {
     }
   }
 
-  /// The id of a stored SMB account for [share] (case-insensitive) that has
-  /// [serviceName] (non-null) or shares at least one of [hosts], on [port]
-  /// (the port of its first connection).
+  /// The id of a stored SMB account for [share] (case-insensitive) with a
+  /// connection on [port], that has [serviceName] or shares a host with
+  /// [hosts].
+  ///
+  /// Two different service names never match. Hosts are compared only where
+  /// they identify one server: [hosts]' first (the address that answered)
+  /// and its hostnames against the stored record's first host and its
+  /// hostnames. An IP literal among the alternatives on either side is left
+  /// out, since two servers can advertise the same container bridge address.
   Future<String?> findSmbAccount({
     required String share,
     required List<String> hosts,
     String? serviceName,
     int port = kSmbDefaultPort,
   }) async {
-    final wanted = {for (final h in hosts) normalizeSmbHost(h)};
+    final wanted = _identifyingHosts(hosts);
     final snapshot = await _ref.read(sourceRecordsProvider.future);
     for (final record in snapshot.accounts) {
       if (!isSmbAccountId(record.account.id)) continue;
@@ -317,17 +328,24 @@ class FilesAccounts {
         if (server.connections.isEmpty) continue;
         final stored = smbTargetsOf(server.connections);
         if (stored.first.share.toLowerCase() != share.toLowerCase()) continue;
-        if (stored.first.port != port) continue;
-        final sameService =
-            serviceName != null && server.serviceName == serviceName;
-        if (sameService ||
-            stored.any((t) => wanted.contains(normalizeSmbHost(t.host)))) {
-          return record.account.id;
+        if (!stored.any((t) => t.port == port)) continue;
+        final storedName = server.serviceName;
+        if (serviceName != null && storedName != null) {
+          if (serviceName == storedName) return record.account.id;
+          continue;
         }
+        final known = _identifyingHosts([for (final t in stored) t.host]);
+        if (known.any(wanted.contains)) return record.account.id;
       }
     }
     return null;
   }
+
+  /// [hosts]' first, then the hostnames among the rest, normalized.
+  static Set<String> _identifyingHosts(List<String> hosts) => {
+        for (final (i, h) in hosts.indexed)
+          if (i == 0 || !isIpLiteral(normalizeSmbHost(h))) normalizeSmbHost(h),
+      }..remove('');
 
   /// Moves [reached] to the front of [accountId]'s addresses and adds the
   /// [discovered] ones. Does not rebuild the source: the backend that calls
@@ -353,8 +371,10 @@ class FilesAccounts {
 
   /// Replaces [accountId]'s addresses with [host], [port] and
   /// [alternatives], keeping the share, the id and the roots, and sets
-  /// [serviceName] (cleared when null). Rebuilds the source and drops the
-  /// native session. Throws [StateError] when the account is gone.
+  /// [serviceName] (cleared when null). The caller has just signed in at
+  /// [host] with the stored credentials, so `needsReauth` clears. Rebuilds
+  /// the source and drops the native session. Throws [StateError] when the
+  /// account is gone.
   Future<void> setSmbAddress(
     String accountId, {
     required String host,
@@ -366,18 +386,20 @@ class FilesAccounts {
     if (existing == null) {
       throw StateError('SMB account $accountId was removed');
     }
-    final record = existing.copyWith(servers: [
-      for (final server in existing.servers)
-        server.copyWith(
-          connections: smbConnections(
-            share: smbTargetOf(server.connections.first.uri).share,
-            port: port,
-            hosts: [host, ...alternatives],
-          ),
-          serviceName: serviceName,
-          clearServiceName: serviceName == null,
-        ),
-    ]);
+    final record = existing.copyWith(
+        account: existing.account.copyWith(needsReauth: false),
+        servers: [
+          for (final server in existing.servers)
+            server.copyWith(
+              connections: smbConnections(
+                share: smbTargetOf(server.connections.first.uri).share,
+                port: port,
+                hosts: [host, ...alternatives],
+              ),
+              serviceName: serviceName,
+              clearServiceName: serviceName == null,
+            ),
+        ]);
     await _save(record, replaceOnly: true);
     await _ref.read(smbNativeProvider).closeAccount(accountId);
   }

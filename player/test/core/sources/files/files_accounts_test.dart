@@ -497,5 +497,145 @@ void main() {
           .read('${record.account.storageNamespace}/account_token');
       expect(SmbCredentials.fromJson(secret!).password, 'new');
     });
+
+    Future<String?> passwordOf(SourceAccountRecord r) async {
+      final secret =
+          await storage.read('${r.account.storageNamespace}/account_token');
+      return secret == null ? null : SmbCredentials.fromJson(secret).password;
+    }
+
+    test('two_servers_sharing_a_bridge_address_stay_two_accounts', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      // Both NASes advertise the same container bridge address.
+      final alpha = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/media'),
+          credentials: const SmbCredentials(user: 'a', password: 'alpha'),
+          alternatives: ['alpha.local', '172.17.0.1'],
+          serviceName: 'Alpha');
+      final beta = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.6/media'),
+          credentials: const SmbCredentials(user: 'b', password: 'beta'),
+          alternatives: ['beta.local', '172.17.0.1'],
+          serviceName: 'Beta');
+
+      expect(beta, isNot(alpha));
+      final records = (await store.load()).accounts;
+      expect(records, hasLength(2));
+      final byService = {
+        for (final r in records) r.servers.single.serviceName: r,
+      };
+      expect(await passwordOf(byService['Alpha']!), 'alpha');
+      expect(await passwordOf(byService['Beta']!), 'beta');
+      expect(hostsOf(byService['Alpha']!).first, '192.168.1.5');
+    });
+
+    test('an_ip_alternative_alone_never_matches_a_record_without_a_name',
+        () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      // Saved before service names were kept.
+      await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/media'),
+          credentials: creds,
+          alternatives: ['alpha.local', '172.17.0.1']);
+      await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.6/media'),
+          credentials: creds,
+          alternatives: ['beta.local', '172.17.0.1'],
+          serviceName: 'Beta');
+      expect((await store.load()).accounts, hasLength(2));
+    });
+
+    test('readd_matches_the_port_of_any_stored_address', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          alternatives: ['nas.local']);
+      final accountId = id.value.split(':').first;
+      // A browse found the share on another port.
+      await accounts.promoteSmbAddress(accountId,
+          const SmbTarget(host: '10.0.0.9', port: 4455, share: 'movies'));
+
+      final again = await accounts.addSmbAccount(
+          url: Uri.parse('smb://nas.local/movies'), credentials: creds);
+
+      expect(again, id);
+      expect((await store.load()).accounts, hasLength(1));
+    });
+
+    test('sign_in_again_updates_the_account_it_was_opened_for', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final first = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: const SmbCredentials(user: 'v', password: 'first'));
+      final second = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.6/movies'),
+          credentials: const SmbCredentials(user: 'v', password: 'second'));
+      final secondId = second.value.split(':').first;
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(secondId, true);
+      // By address this is the first account.
+      final url = Uri.parse('smb://192.168.1.5/movies');
+      expect(
+          await accounts
+              .findSmbAccount(share: 'movies', hosts: ['192.168.1.5']),
+          first.value.split(':').first);
+
+      final again = await accounts.addSmbAccount(
+          url: url,
+          credentials: const SmbCredentials(user: 'v', password: 'new'),
+          signInAgain: true,
+          accountId: secondId);
+
+      expect(again, second);
+      final records = {
+        for (final r in (await store.load()).accounts) r.account.id: r,
+      };
+      expect(records[secondId]!.account.needsReauth, isFalse);
+      expect(await passwordOf(records[secondId]!), 'new');
+      expect(await passwordOf(records[first.value.split(':').first]!), 'first');
+    });
+
+    test('sign_in_again_by_id_never_brings_back_a_removed_share', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final url = Uri.parse('smb://192.168.1.5/movies');
+      final id = await accounts.addSmbAccount(url: url, credentials: creds);
+      final accountId = id.value.split(':').first;
+      final namespace =
+          (await store.load()).accounts.single.account.storageNamespace;
+
+      final signIn = accounts.addSmbAccount(
+          url: url,
+          credentials: const SmbCredentials(user: 'v', password: 'new'),
+          signInAgain: true,
+          accountId: accountId);
+      final removal = accounts.removeFilesAccount(accountId);
+      await expectLater(signIn, throwsStateError);
+      await removal;
+
+      expect((await store.load()).accounts, isEmpty);
+      expect(await storage.read('$namespace/account_token'), isNull);
+    });
+
+    test('set_address_clears_needs_reauth', () async {
+      final c = await container(smb: FakeSmbNative());
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'), credentials: creds);
+      final accountId = id.value.split(':').first;
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
+
+      await accounts.setSmbAddress(accountId, host: '10.0.0.7', port: 445);
+
+      expect((await store.load()).accounts.single.account.needsReauth, isFalse);
+    });
   });
 }

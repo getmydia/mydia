@@ -336,9 +336,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     }
   }
 
-  /// Re-login: the same URL is the same account, so only the credentials
-  /// change and `needsReauth` clears. A share removed while the probe ran
-  /// stays removed.
+  /// Re-login: the share the screen was opened for keeps its account, so
+  /// only the credentials change and `needsReauth` clears. A share removed
+  /// while the probe ran stays removed.
   Future<void> _saveCredentials(FilesAccounts accounts, String host, int port,
       String share, SmbCredentials credentials) async {
     try {
@@ -346,6 +346,7 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           url: _urlOf(host, port, share),
           credentials: credentials,
           signInAgain: true,
+          accountId: widget.reauthAccountId,
           alternatives: _alternatives,
           serviceName: _discovered?.name);
     } catch (e) {

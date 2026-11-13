@@ -14,7 +14,9 @@ import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/files/smb_discovery.dart';
 import 'package:player/core/sources/files/smb_native.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -467,6 +469,60 @@ void main() {
       expect(find.text('home'), findsOneWidget);
     });
 
+    testWidgets('signing in again updates the share it was opened for',
+        (tester) async {
+      final first = await reopen(tester, needsReauth: false);
+      // A second share at the same address, which an address lookup would
+      // resolve to the first one.
+      const twinId = 's0000000000000001';
+      final connections =
+          (await first.store.load()).accounts.single.servers.single.connections;
+      await first.store.putAccount(SourceAccountRecord(
+        account: ProviderAccount(
+          id: twinId,
+          kind: SourceKind.files,
+          displayName: 'Twin',
+          storageNamespace: SourceSecrets.newStorageNamespace(twinId),
+          activeProfileId: kOwnerProfileId,
+          needsReauth: true,
+        ),
+        profiles: const [
+          SourceProfile(
+              id: kOwnerProfileId,
+              accountId: twinId,
+              name: 'Owner',
+              isOwner: true),
+        ],
+        servers: [
+          SourceServer(
+            id: twinId,
+            accountId: twinId,
+            profileId: kOwnerProfileId,
+            name: 'Twin',
+            connections: connections,
+          ),
+        ],
+        // Listed after the first share, so a lookup by address finds that.
+        addedAtMs: DateTime(2100).millisecondsSinceEpoch,
+      ));
+      await tester.pumpWidget(const SizedBox());
+      final h = await _pump(tester, reauthAccountId: twinId, reuse: first);
+      await signIn(tester, 'new');
+
+      final records = {
+        for (final r in (await h.store.load()).accounts) r.account.id: r,
+      };
+      final twin = records[twinId]!;
+      expect(twin.account.needsReauth, isFalse);
+      final secret = await h.storage
+          .read('${twin.account.storageNamespace}/account_token');
+      expect(SmbCredentials.fromJson(secret!).password, 'new');
+      final attic = records[accountId]!;
+      final atticSecret = await h.storage
+          .read('${attic.account.storageNamespace}/account_token');
+      expect(SmbCredentials.fromJson(atticSecret!).password, 'old');
+    });
+
     testWidgets('a refused sign-in keeps the old credentials', (tester) async {
       final h = await reopen(tester, needsReauth: true);
       h.native.failure = const BackendUnauthorized();
@@ -543,6 +599,31 @@ void main() {
     final record = (await h.store.load()).accounts.single;
     expect(
         record.account.id, smbAccountId(Uri.parse('smb://192.168.1.20/media')));
+  });
+
+  testWidgets('a_later_address_answered_saves_the_first_as_an_alternative',
+      (tester) async {
+    final h = await _pump(tester);
+    h.native.unreachableHosts.add('172.17.0.1');
+    h.discovery.emit([
+      const DiscoveredSmbServer(
+          name: 'Attic NAS',
+          host: '172.17.0.1',
+          port: 445,
+          alternatives: ['192.168.1.20'],
+          hostname: 'attic.local'),
+    ]);
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-server-Attic NAS');
+    await _tap(tester, 'smb-guest');
+    await _tap(tester, 'smb-share-media');
+    await tester.tap(find.byKey(const Key('smb-tick-/Films')));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'smb-save-button');
+
+    final server = (await h.store.load()).accounts.single.servers.single;
+    expect(server.connections.map((c) => c.uri.host).toList(),
+        ['192.168.1.20', 'attic.local', '172.17.0.1']);
   });
 
   testWidgets('picked_server_saves_hostname_and_alternatives', (tester) async {

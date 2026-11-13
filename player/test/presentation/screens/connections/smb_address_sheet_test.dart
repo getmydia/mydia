@@ -155,6 +155,20 @@ void main() {
     expect(find.byKey(const Key('smb-address-host')), findsNothing);
   });
 
+  testWidgets('a_new_address_clears_the_sign_in_again_flag', (tester) async {
+    final h = await _pump(tester);
+    await h.container
+        .read(sourceRecordsProvider.notifier)
+        .markNeedsReauth(_accountId, true);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('smb-address-host')), '10.0.0.7');
+    await _save(tester);
+
+    expect((await h.record()).account.needsReauth, isFalse);
+  });
+
   testWidgets('share_missing_shows_error_and_keeps_address', (tester) async {
     final h = await _pump(tester);
     final before = await h.record();
