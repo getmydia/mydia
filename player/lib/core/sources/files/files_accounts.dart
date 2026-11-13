@@ -25,6 +25,8 @@ import 'files_providers.dart';
 import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'media_names.dart';
+import 'smb_addresses.dart';
+import 'smb_native.dart' show SmbTarget, smbNativeProvider;
 
 /// `r` + the first 12 hex characters of SHA-256 over [path].
 String filesRootId(String path) =>
@@ -209,6 +211,11 @@ class FilesAccounts {
   /// A new account is named [displayName], or `<host>/<share>` with the share
   /// as typed, so two shares on one server are told apart.
   ///
+  /// [url]'s host is the address that answered; [alternatives] are further
+  /// hosts (the hostname, other addresses) in preference order. A share
+  /// already saved under the same [serviceName], or at any of these hosts,
+  /// is reused (see [findSmbAccount]) and its address list is updated.
+  ///
   /// [signInAgain] only replaces the credentials of a stored account: one
   /// removed while the sign-in was in flight throws [StateError] and its
   /// credentials are not left behind, so a removal (or "Forgot PIN") sticks.
@@ -217,11 +224,24 @@ class FilesAccounts {
     required SmbCredentials credentials,
     String? displayName,
     bool signInAgain = false,
+    List<String> alternatives = const [],
+    String? serviceName,
   }) async {
-    final id = smbAccountId(url);
     final base = Uri.parse(normalizeSmbUrl(url));
     final typedShare =
         url.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '';
+    final target = smbTargetOf(base);
+    final connections = smbConnections(
+      share: target.share,
+      port: target.port,
+      hosts: [target.host, ...alternatives],
+    );
+    final id = await findSmbAccount(
+          share: target.share,
+          hosts: [target.host, ...alternatives],
+          serviceName: serviceName,
+        ) ??
+        smbAccountId(url);
     final name = displayName ?? '${base.host}/$typedShare';
     final existing = await _stored(id);
     if (signInAgain && existing == null) {
@@ -238,23 +258,36 @@ class FilesAccounts {
     await _ref
         .read(sourceSecretsProvider)
         .writeAccountToken(account, credentials.toJson());
-    final record = existing?.copyWith(account: account) ??
-        SourceAccountRecord(
-          account: account,
-          profiles: [_owner(id)],
-          servers: [
-            SourceServer(
-              id: id,
-              accountId: id,
-              profileId: kOwnerProfileId,
-              name: name,
-              connections: [
-                ServerConnection(uri: base, local: isPrivateHost(base.host)),
-              ],
-            ),
-          ],
-          addedAtMs: DateTime.now().millisecondsSinceEpoch,
-        );
+    final record = existing == null
+        ? SourceAccountRecord(
+            account: account,
+            profiles: [_owner(id)],
+            servers: [
+              SourceServer(
+                id: id,
+                accountId: id,
+                profileId: kOwnerProfileId,
+                name: name,
+                connections: connections,
+                serviceName: serviceName,
+              ),
+            ],
+            addedAtMs: DateTime.now().millisecondsSinceEpoch,
+          )
+        : existing.copyWith(
+            account: account,
+            servers: [
+              for (final server in existing.servers)
+                server.copyWith(
+                  connections: promoteSmbConnection(
+                    server.connections,
+                    connections.first,
+                    discovered: connections.skip(1).toList(),
+                  ),
+                  serviceName: serviceName,
+                ),
+            ],
+          );
     if (!signInAgain) return _save(record);
     try {
       return await _save(record, replaceOnly: true);
@@ -264,6 +297,89 @@ class FilesAccounts {
       await _ref.read(sourceSecretsProvider).deleteAccountToken(account);
       rethrow;
     }
+  }
+
+  /// The id of a stored SMB account for [share] (case-insensitive) that has
+  /// [serviceName] (non-null) or shares at least one of [hosts].
+  Future<String?> findSmbAccount({
+    required String share,
+    required List<String> hosts,
+    String? serviceName,
+  }) async {
+    final wanted = {for (final h in hosts) normalizeSmbHost(h)};
+    final snapshot = await _ref.read(sourceRecordsProvider.future);
+    for (final record in snapshot.accounts) {
+      if (!isSmbAccountId(record.account.id)) continue;
+      for (final server in record.servers) {
+        if (server.connections.isEmpty) continue;
+        final stored = smbTargetsOf(server.connections);
+        if (stored.first.share.toLowerCase() != share.toLowerCase()) continue;
+        final sameService =
+            serviceName != null && server.serviceName == serviceName;
+        if (sameService ||
+            stored.any((t) => wanted.contains(normalizeSmbHost(t.host)))) {
+          return record.account.id;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Moves [reached] to the front of [accountId]'s addresses and adds the
+  /// [discovered] ones. Does not rebuild the source: the backend that calls
+  /// this is already connected. A no-op when the account is gone.
+  Future<void> promoteSmbAddress(String accountId, SmbTarget reached,
+      {List<SmbTarget> discovered = const []}) async {
+    final existing = await _stored(accountId);
+    if (existing == null) return;
+    final record = existing.copyWith(servers: [
+      for (final server in existing.servers)
+        server.copyWith(
+          connections: promoteSmbConnection(
+            server.connections,
+            smbConnectionOf(reached),
+            discovered: [for (final t in discovered) smbConnectionOf(t)],
+          ),
+        ),
+    ]);
+    try {
+      await _ref
+          .read(sourceRecordsProvider.notifier)
+          .putAccount(record, replaceOnly: true);
+    } on StateError {
+      // Removed meanwhile.
+    }
+  }
+
+  /// Replaces [accountId]'s addresses with [host], [port] and
+  /// [alternatives], keeping the share, the id and the roots, and sets
+  /// [serviceName] (cleared when null). Rebuilds the source and drops the
+  /// native session. Throws [StateError] when the account is gone.
+  Future<void> setSmbAddress(
+    String accountId, {
+    required String host,
+    required int port,
+    List<String> alternatives = const [],
+    String? serviceName,
+  }) async {
+    final existing = await _stored(accountId);
+    if (existing == null) {
+      throw StateError('SMB account $accountId was removed');
+    }
+    final record = existing.copyWith(servers: [
+      for (final server in existing.servers)
+        server.copyWith(
+          connections: smbConnections(
+            share: smbTargetOf(server.connections.first.uri).share,
+            port: port,
+            hosts: [host, ...alternatives],
+          ),
+          serviceName: serviceName,
+          clearServiceName: serviceName == null,
+        ),
+    ]);
+    await _save(record, replaceOnly: true);
+    await _ref.read(smbNativeProvider).closeAccount(accountId);
   }
 
   /// Adds [path], a path on the share, as a root of [id].

@@ -10,6 +10,7 @@ import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/files/smb_native.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
@@ -318,5 +319,128 @@ void main() {
     await _settle();
     await accounts.removeRoot(id, filesRootId('/media/films'));
     expect(c.read(filesIndexProvider(kFilesLocalAccountId)).roots(), isEmpty);
+  });
+
+  group('smb addresses', () {
+    const creds = SmbCredentials(user: 'viewer', password: 'pw');
+
+    List<String> hostsOf(SourceAccountRecord r) =>
+        r.servers.single.connections.map((c) => c.uri.host).toList();
+
+    test('add_stores_hostname_and_alternatives', () async {
+      final c = await container();
+      await c.read(filesAccountsProvider).addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          alternatives: ['nas.local', '10.0.0.5'],
+          serviceName: 'NAS');
+      final record = (await store.load()).accounts.single;
+      expect(hostsOf(record), ['192.168.1.5', 'nas.local', '10.0.0.5']);
+      expect(record.servers.single.serviceName, 'NAS');
+    });
+
+    test('readd_by_new_ip_reuses_the_account', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final first = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          serviceName: 'NAS');
+      final second = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.9/movies'),
+          credentials: creds,
+          serviceName: 'NAS');
+      expect(second, first);
+      final record = (await store.load()).accounts.single;
+      expect(hostsOf(record).first, '192.168.1.9');
+      expect(record.servers.single.serviceName, 'NAS');
+    });
+
+    test('readd_by_hostname_reuses_the_account', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final first = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          alternatives: ['nas.local']);
+      final second = await accounts.addSmbAccount(
+          url: Uri.parse('smb://NAS.local/movies'), credentials: creds);
+      expect(second, first);
+      final record = (await store.load()).accounts.single;
+      expect(hostsOf(record).first, 'nas.local');
+      expect(hostsOf(record), contains('192.168.1.5'));
+    });
+
+    test('readd_matches_on_share_name_too', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      await accounts.addSmbAccount(
+          url: Uri.parse('smb://nas.local/movies'), credentials: creds);
+      await accounts.addSmbAccount(
+          url: Uri.parse('smb://nas.local/tv'), credentials: creds);
+      expect((await store.load()).accounts, hasLength(2));
+    });
+
+    test('promote_moves_reached_first_without_rebuilding', () async {
+      final smb = FakeSmbNative()..addDir('movies', '/Films');
+      final c = await container(smb: smb);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          alternatives: ['nas.local']);
+      final source = c.read(mediaSourceProvider(id));
+      final accountId = id.value.split(':').first;
+
+      await accounts.promoteSmbAddress(accountId,
+          const SmbTarget(host: 'nas.local', port: 445, share: 'movies'),
+          discovered: const [
+            SmbTarget(host: '192.168.1.9', port: 445, share: 'movies'),
+          ]);
+
+      final record = (await store.load()).accounts.single;
+      expect(hostsOf(record), ['nas.local', '192.168.1.5', '192.168.1.9']);
+      expect(identical(c.read(mediaSourceProvider(id)), source), isTrue);
+      expect(smb.closedAccounts, isEmpty);
+    });
+
+    test('promote_after_removal_is_a_noop', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'), credentials: creds);
+      final accountId = id.value.split(':').first;
+      await accounts.removeFilesAccount(accountId);
+
+      await accounts.promoteSmbAddress(accountId,
+          const SmbTarget(host: 'nas.local', port: 445, share: 'movies'));
+
+      expect((await store.load()).accounts, isEmpty);
+    });
+
+    test('set_address_keeps_id_and_roots', () async {
+      final smb = FakeSmbNative()..addDir('movies', '/Films');
+      final c = await container(smb: smb);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: creds,
+          serviceName: 'NAS');
+      await accounts.addSmbRoot(id,
+          path: '/Films', kind: FilesLibraryKind.movies);
+      await _settle();
+      final accountId = id.value.split(':').first;
+
+      await accounts.setSmbAddress(accountId, host: '10.0.0.7', port: 445);
+
+      final record = (await store.load()).accounts.single;
+      expect(record.account.id, accountId);
+      expect(record.servers.single.connections.first.uri,
+          Uri.parse('smb://10.0.0.7/movies'));
+      expect(record.servers.single.serviceName, isNull);
+      expect(
+          c.read(filesIndexProvider(accountId)).roots().single.path, '/Films');
+      expect(smb.closedAccounts, contains(accountId));
+    });
   });
 }
