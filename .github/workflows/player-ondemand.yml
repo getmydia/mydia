@@ -181,8 +181,10 @@ jobs:
       distribute_external: false
       dry_run: ${{ inputs.dry_run || !inputs.upload_to_stores }}
       # A branch build takes a TestFlight number just above the highest upload
-      # (17000042.1), which master's next integer build still clears.
-      build_number_mode: ${{ needs.prepare.outputs.branch_mode == 'true' && 'after_latest' || 'fixed' }}
+      # (17000042.1), which master's next integer build still clears. A
+      # master build keeps its version_code unless a draft release, uploaded
+      # before its tag exists, already holds a higher one.
+      build_number_mode: ${{ needs.prepare.outputs.branch_mode == 'true' && 'after_latest' || 'fixed_or_after_latest' }}
     secrets:
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
