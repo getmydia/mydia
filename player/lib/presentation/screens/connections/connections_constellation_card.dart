@@ -238,7 +238,7 @@ class _Diagram extends StatelessWidget {
           key: const ValueKey('centre'),
           center: centre,
           size: _centreSize,
-          node: _CentreNode(platform: overview.localPlatform),
+          node: ThisDeviceNode(platform: overview.localPlatform),
           label: overview.localName.isEmpty
               ? l10n.connectionsThisDevice
               : overview.localName,
@@ -258,8 +258,8 @@ class _Diagram extends StatelessWidget {
         ServerNode(:final server) => _ServerNode(server: server),
         DeviceNode(:final device) => _DeviceNode(device: device),
         MoreNode(:final count) => _MoreNode(count: count),
-        GhostServerNode() => const _GhostNode(circle: false),
-        GhostDeviceNode() => const _GhostNode(circle: true),
+        GhostServerNode() => const GhostNode(circle: false),
+        GhostDeviceNode() => const GhostNode(circle: true),
       };
 
   static String? _labelOf(ConstellationNode node, AppLocalizations l10n) =>

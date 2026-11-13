@@ -55,7 +55,7 @@ class RouterSettingsNav implements SettingsNav {
   void openDiagnostics() => _router.push('/settings/diagnostics');
 
   @override
-  void openPairedDevices() => _router.push('/settings/paired-devices');
+  void openPairedDevices() => _router.push('/sources/manage?section=devices');
 
   @override
   void openConnections() => _router.push('/sources/manage');

@@ -3,8 +3,8 @@ part of 'connections_constellation_card.dart';
 // The diagram's node widgets and line painters.
 
 /// This device: the platform glyph in a primary ring with a soft halo.
-class _CentreNode extends StatelessWidget {
-  const _CentreNode({required this.platform});
+class ThisDeviceNode extends StatelessWidget {
+  const ThisDeviceNode({super.key, required this.platform});
 
   final String platform;
 
@@ -43,56 +43,72 @@ class _ServerNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final mydia = server.kind == SourceKind.mydia;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(child: ServerMonogram(kind: server.kind)),
+        Positioned(
+          right: -3,
+          top: -3,
+          child:
+              _StatusDot(color: connectionStatusColor(server.status, palette)),
+        ),
+      ],
+    );
+  }
+}
+
+/// A server kind's monogram on a rounded square: primary fill for Mydia,
+/// neutral for the others, a folder for files. Fills its parent; the hub's
+/// server cards and the diagram's nodes both draw it.
+class ServerMonogram extends StatelessWidget {
+  const ServerMonogram({super.key, required this.kind});
+
+  final SourceKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final mydia = kind == SourceKind.mydia;
     final ink = mydia ? palette.onPrimary : palette.textPrimary;
-    final monogram = switch (server.kind) {
+    final monogram = switch (kind) {
       SourceKind.mydia => 'M',
       SourceKind.plex => 'P',
       SourceKind.jellyfin => 'J',
       SourceKind.stash => 'S',
       SourceKind.files => null,
     };
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: mydia ? palette.primary : palette.surfaceHigh,
-              borderRadius: BorderRadius.circular(13),
-              border: mydia ? null : Border.all(color: palette.border),
-            ),
-            child: Center(
-              child: monogram == null
-                  ? Icon(Icons.folder_rounded, size: 20, color: ink)
-                  : Text(
-                      monogram,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        height: 1,
-                        color: ink,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-        Positioned(
-          right: -3,
-          top: -3,
-          child: _StatusDot(color: _statusColor(server.status, palette)),
-        ),
-      ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: mydia ? palette.primary : palette.surfaceHigh,
+        borderRadius: BorderRadius.circular(13),
+        border: mydia ? null : Border.all(color: palette.border),
+      ),
+      child: Center(
+        child: monogram == null
+            ? Icon(Icons.folder_rounded, size: 20, color: ink)
+            : Text(
+                monogram,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                  color: ink,
+                ),
+              ),
+      ),
     );
   }
-
-  static Color _statusColor(ConnectionStatus s, MydiaPalette palette) =>
-      switch (s) {
-        ConnectionStatus.online => AppColors.success,
-        ConnectionStatus.needsSignIn => AppColors.warning,
-        ConnectionStatus.offline => palette.textDisabled,
-      };
 }
+
+/// The colour that stands for a server's status, on the diagram's dot and
+/// the hub's status chip.
+Color connectionStatusColor(ConnectionStatus s, MydiaPalette palette) =>
+    switch (s) {
+      ConnectionStatus.online => AppColors.success,
+      ConnectionStatus.needsSignIn => AppColors.warning,
+      ConnectionStatus.offline => palette.textDisabled,
+    };
 
 class _StatusDot extends StatelessWidget {
   const _StatusDot({required this.color});
@@ -170,8 +186,8 @@ class _MoreNode extends StatelessWidget {
 }
 
 /// A dashed outline with a plus: something that could be here.
-class _GhostNode extends StatelessWidget {
-  const _GhostNode({required this.circle});
+class GhostNode extends StatelessWidget {
+  const GhostNode({super.key, required this.circle});
 
   final bool circle;
 

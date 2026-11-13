@@ -6,9 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/p2p/p2p_service.dart';
 import '../../../core/p2p/peer_sync_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
+import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
@@ -251,3 +253,14 @@ ConnectionServer _serverOf(SourceAccountRecord r, Map<SourceId, bool> choices) {
     inAllServers: r.sources.any((s) => includedInAllServers(s, choices)),
   );
 }
+
+/// The Mydia source this device is reaching right now over a direct p2p
+/// path, or null. The same inputs Settings gives `ConnectionSummary`: the
+/// active source, whether it is reached over p2p, and the path type.
+final connectionsDirectSourceProvider = Provider<SourceId?>((ref) {
+  final id = ref.watch(activeSourceIdProvider);
+  if (id == null) return null;
+  if (!(ref.watch(sourceViaP2pProvider(id)).value ?? false)) return null;
+  final type = ref.watch(p2pStatusNotifierProvider).peerConnectionType;
+  return type == P2pConnectionType.direct ? id : null;
+});

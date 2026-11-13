@@ -2658,5 +2658,67 @@
         "type": "String"
       }
     }
+  },
+  "connectionsReaching": "Reaching {online} of {total} servers",
+  "@connectionsReaching": {
+    "description": "On the This device card of the Servers & devices screen: how many saved servers this device can reach right now.",
+    "placeholders": {
+      "online": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsSyncedAgo": "synced {ago}",
+  "@connectionsSyncedAgo": {
+    "description": "When watch progress last synced with another device, after the reach count on the This device card, or after the platform on a device card. The placeholder is a relative time such as '5 minutes ago'.",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsDevicesHint": "Watch progress syncs between these",
+  "@connectionsDevicesHint": {
+    "description": "Hint beside the Paired devices header on the Servers & devices screen."
+  },
+  "connectionsPairCta": "Pair another device",
+  "@connectionsPairCta": {
+    "description": "Title of the card on the Servers & devices screen that invites the viewer to pair another device."
+  },
+  "connectionsPairCtaBody": "Show a code here, or scan one from another screen",
+  "@connectionsPairCtaBody": {
+    "description": "Body of the Pair another device card, above its two buttons (show a pairing code, or enter or scan one)."
+  },
+  "connectionsChipDirect": "Direct connection",
+  "@connectionsChipDirect": {
+    "description": "Status chip on a Mydia server card when this device reaches it over a direct peer-to-peer path."
+  },
+  "connectionsChipOnline": "Online",
+  "@connectionsChipOnline": {
+    "description": "Status chip on a server card when the server is reachable."
+  },
+  "connectionsChipLocked": "Locked",
+  "@connectionsChipLocked": {
+    "description": "Chip on a server card when any of the account's servers is locked or hidden."
+  },
+  "connectionsChipInAll": "In All servers",
+  "@connectionsChipInAll": {
+    "description": "Chip on a server card when the account's library is included in the combined All servers view."
+  },
+  "connectionsServerCount": "{count, plural, one{1 server} other{{count} servers}}",
+  "@connectionsServerCount": {
+    "description": "On a server card, after the kind, when no address is shown: how many servers the account has.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsLeaveGroup": "Leave sync group",
+  "@connectionsLeaveGroup": {
+    "description": "Footer link on the Servers & devices screen that stops syncing watch progress with the paired devices, after a confirmation."
   }
 }
