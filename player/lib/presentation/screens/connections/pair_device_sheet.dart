@@ -33,7 +33,7 @@ Future<void> showPairDeviceSheet(
   required PairSheetMode mode,
 }) {
   if (MediaQuery.sizeOf(context).width < _compactWidth) {
-    return showModalBottomSheet<void>(
+    return showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => PairDeviceSheet(mode: mode),
@@ -111,7 +111,10 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
         context,
         context.l10n.pairedDevicesConnectedToast(peer.deviceName),
       );
-      Navigator.of(context).maybePop();
+      // The scanner sheet may be on top; only close this sheet's own route.
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.of(context).maybePop();
+      }
     });
     _stateSub = _service.onStateChanged.listen((_) {
       if (mounted) setState(() {});
@@ -208,6 +211,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
   }
 
   Future<void> _pairWithQr(String qrJson) async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _failure = null;
