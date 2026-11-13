@@ -15,6 +15,7 @@ import '../../../core/sources/files/backend/smb_backend.dart';
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
+import '../../../core/sources/files/smb_addresses.dart' show parseSmbAddress;
 import '../../../core/sources/files/smb_discovery.dart';
 import '../../../core/sources/files/smb_native.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -232,34 +233,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         _ => _Problem.unreachable,
       };
 
-  static bool _validPort(int? port) =>
-      port != null && port >= 1 && port <= 65535;
-
-  /// The typed host and port, or null when they cannot be used. An IPv6
-  /// literal loses its brackets. Text with exactly one colon and no brackets
-  /// is `host:port` (`nas.local:4455`); more colons are an IPv6 literal. A
-  /// port given that way wins over the port field.
-  ({String host, int port})? _typedAddress() {
-    var host = _host.text.trim();
-    int? inlinePort;
-    if (host.startsWith('[') && host.endsWith(']')) {
-      host = host.substring(1, host.length - 1);
-    } else if (':'.allMatches(host).length == 1) {
-      final colon = host.indexOf(':');
-      inlinePort = int.tryParse(host.substring(colon + 1));
-      if (!_validPort(inlinePort)) return null;
-      host = host.substring(0, colon);
-    }
-    if (host.isEmpty || host.contains(RegExp(r'[\s/]'))) return null;
-    final text = _port.text.trim();
-    final fieldPort = text.isEmpty ? kSmbDefaultPort : int.tryParse(text);
-    final port = inlinePort ?? fieldPort;
-    if (!_validPort(port)) return null;
-    return (host: host, port: port!);
-  }
-
   Future<void> _connect({required bool guest}) async {
-    final address = _typedAddress();
+    final address = parseSmbAddress(_host.text, _port.text);
     if (address == null) {
       setState(() => _problem = _Problem.address);
       return;

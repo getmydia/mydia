@@ -1726,7 +1726,7 @@
   "@filesChangeAddressSave": {"description": "Button in the Change address sheet that checks the new SMB server address and saves it."},
   "filesChangeAddressShareMissing": "This server has no share named {share}",
   "@filesChangeAddressShareMissing": {
-    "description": "Error in the Change address sheet when the SMB server at the new address does not have the saved share. {share} is the share's name, as the server reports it.",
+    "description": "Error in the Change address sheet when the SMB server at the new address does not have the saved share. {share} is the name of the share as it is saved on this device.",
     "placeholders": {"share": {"type": "String"}}
   },
   "filesChooseFolderAgain": "Choose the folder again",

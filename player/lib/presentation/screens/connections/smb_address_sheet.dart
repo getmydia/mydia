@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/files/backend/file_system_backend.dart';
 import '../../../core/sources/files/files_account.dart';
 import '../../../core/sources/files/files_accounts.dart';
+import '../../../core/sources/files/smb_addresses.dart' show parseSmbAddress;
 import '../../../core/sources/files/smb_discovery.dart';
 import '../../../core/sources/files/smb_native.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -58,7 +59,7 @@ class _ShareMissing extends _Problem {
   final String share;
 }
 
-enum _Kind { address, unauthorized, unreachable, smb1Only, save }
+enum _Kind { address, unauthorized, accessDenied, unreachable, smb1Only, save }
 
 class SmbAddressSheet extends ConsumerStatefulWidget {
   const SmbAddressSheet({super.key, required this.record});
@@ -76,8 +77,8 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   StreamSubscription<List<DiscoveredSmbServer>>? _browse;
   List<DiscoveredSmbServer> _servers = const [];
 
-  /// The discovered server the host field was filled from. Cleared once the
-  /// viewer edits the host, which makes it a typed address.
+  /// The discovered server the fields were filled from. Cleared once the
+  /// viewer edits the host or the port, which makes it a typed address.
   DiscoveredSmbServer? _discovered;
 
   _Problem? _problem;
@@ -118,31 +119,6 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
         _problem = null;
       });
 
-  static bool _validPort(int? port) =>
-      port != null && port >= 1 && port <= 65535;
-
-  /// The typed host and port, or null when they cannot be used. Same rules
-  /// as the add screen: an IPv6 literal loses its brackets, and exactly one
-  /// colon is `host:port`, whose port wins over the port field.
-  ({String host, int port})? _typedAddress() {
-    var host = _host.text.trim();
-    int? inlinePort;
-    if (host.startsWith('[') && host.endsWith(']')) {
-      host = host.substring(1, host.length - 1);
-    } else if (':'.allMatches(host).length == 1) {
-      final colon = host.indexOf(':');
-      inlinePort = int.tryParse(host.substring(colon + 1));
-      if (!_validPort(inlinePort)) return null;
-      host = host.substring(0, colon);
-    }
-    if (host.isEmpty || host.contains(RegExp(r'[\s/]'))) return null;
-    final text = _port.text.trim();
-    final port =
-        inlinePort ?? (text.isEmpty ? kSmbDefaultPort : int.tryParse(text));
-    if (!_validPort(port)) return null;
-    return (host: host, port: port!);
-  }
-
   /// The stored sign-in, or null when it is missing or unreadable.
   Future<SmbCredentials?> _credentials() async {
     try {
@@ -158,6 +134,7 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
 
   static _Problem _problemOf(Object e) => switch (e) {
         BackendUnauthorized() => const _Simple(_Kind.unauthorized),
+        BackendPermissionLost() => const _Simple(_Kind.accessDenied),
         BackendUnreachable(message: kSmb1OnlyReason) =>
           const _Simple(_Kind.smb1Only),
         _ => const _Simple(_Kind.unreachable),
@@ -165,7 +142,7 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
 
   Future<void> _save() async {
     final current = _current;
-    final address = _typedAddress();
+    final address = parseSmbAddress(_host.text, _port.text);
     if (current == null || address == null) {
       setState(() =>
           _problem = _Simple(current == null ? _Kind.save : _Kind.address));
@@ -240,6 +217,7 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
           l10n.filesChangeAddressShareMissing(share),
         _Simple(kind: _Kind.address) => l10n.filesSmbAddressInvalid,
         _Simple(kind: _Kind.unauthorized) => l10n.filesSmbUnauthorized,
+        _Simple(kind: _Kind.accessDenied) => l10n.filesSmbAccessDenied,
         _Simple(kind: _Kind.unreachable) => l10n.filesSmbUnreachable,
         _Simple(kind: _Kind.smb1Only) => l10n.filesSmbSmb1Only,
         _Simple(kind: _Kind.save) => l10n.filesSmbSaveFailed,
@@ -284,6 +262,7 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                   labelText: l10n.filesSmbPortLabel, hintText: '445'),
+              onChanged: (_) => _discovered = null,
               onSubmitted: (_) => _busy ? null : _save(),
             ),
             if (_servers.isNotEmpty) ...[

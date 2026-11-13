@@ -78,5 +78,31 @@ List<ServerConnection> promoteSmbConnection(
   return capSmbConnections(out);
 }
 
+bool _validPort(int? port) => port != null && port >= 1 && port <= 65535;
+
+/// A typed server address and port field, or null when they cannot be used.
+/// An empty [port] means [kSmbDefaultPort]. An IPv6 literal loses its
+/// brackets. [host] text with exactly one colon and no brackets is
+/// `host:port` (`nas.local:4455`), whose port wins over [port]; more colons
+/// are an IPv6 literal.
+({String host, int port})? parseSmbAddress(String host, String port) {
+  var h = host.trim();
+  int? inlinePort;
+  if (h.startsWith('[') && h.endsWith(']')) {
+    h = h.substring(1, h.length - 1);
+  } else if (':'.allMatches(h).length == 1) {
+    final colon = h.indexOf(':');
+    inlinePort = int.tryParse(h.substring(colon + 1));
+    if (!_validPort(inlinePort)) return null;
+    h = h.substring(0, colon);
+  }
+  if (h.isEmpty || h.contains(RegExp(r'[\s/]'))) return null;
+  final text = port.trim();
+  final fieldPort = text.isEmpty ? kSmbDefaultPort : int.tryParse(text);
+  final p = inlinePort ?? fieldPort;
+  if (!_validPort(p)) return null;
+  return (host: h, port: p!);
+}
+
 List<SmbTarget> smbTargetsOf(List<ServerConnection> connections) =>
     [for (final c in connections) smbTargetOf(c.uri)];

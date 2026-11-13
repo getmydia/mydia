@@ -183,6 +183,17 @@ void main() {
         before.servers.single.connections);
   });
 
+  testWidgets('permission_lost_shows_access_denied', (tester) async {
+    final h = await _pump(tester);
+    h.native.failure = const BackendPermissionLost('denied');
+    await tester.enterText(
+        find.byKey(const Key('smb-address-host')), '10.0.0.7');
+    await _save(tester);
+    h.native.failure = null;
+
+    expect(find.text("This account can't open that folder."), findsOneWidget);
+  });
+
   testWidgets('picking_discovered_server_fills_host', (tester) async {
     final h = await _pump(tester);
     h.discovery.emit(const [
@@ -232,6 +243,29 @@ void main() {
 
     final record = await h.record();
     expect(_hosts(record), ['10.0.0.8']);
+    expect(record.servers.single.serviceName, isNull);
+  });
+
+  testWidgets('editing_the_port_after_a_pick_saves_it_as_typed',
+      (tester) async {
+    final h = await _pump(tester);
+    h.discovery.emit(const [
+      DiscoveredSmbServer(
+          name: 'NAS',
+          host: '192.168.1.30',
+          port: 445,
+          alternatives: ['10.0.0.30'],
+          hostname: 'nas.local'),
+    ]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('smb-address-server-NAS')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('smb-address-port')), '4455');
+    await _save(tester);
+
+    final record = await h.record();
+    expect(_hosts(record), ['192.168.1.30']);
+    expect(record.servers.single.connections.single.uri.port, 4455);
     expect(record.servers.single.serviceName, isNull);
   });
 

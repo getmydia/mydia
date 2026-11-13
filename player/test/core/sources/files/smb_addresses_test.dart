@@ -95,4 +95,45 @@ void main() {
     expect(isIpLiteral('fd00::5'), isTrue);
     expect(isIpLiteral('nas.local'), isFalse);
   });
+
+  group('parseSmbAddress', () {
+    test('ipv4_with_an_empty_port_is_445', () {
+      expect(parseSmbAddress('192.168.1.5', ''),
+          (host: '192.168.1.5', port: kSmbDefaultPort));
+    });
+
+    test('hostname_and_port_field_trimmed', () {
+      expect(parseSmbAddress('  nas.example.test ', ' 4445 '),
+          (host: 'nas.example.test', port: 4445));
+    });
+
+    test('bracketed_ipv6_loses_its_brackets', () {
+      expect(parseSmbAddress('[fd00::5]', ''), (host: 'fd00::5', port: 445));
+    });
+
+    test('bare_ipv6_is_a_host', () {
+      expect(parseSmbAddress('2001:db8::1', '4455'),
+          (host: '2001:db8::1', port: 4455));
+    });
+
+    test('host_colon_port_wins_over_the_port_field', () {
+      expect(parseSmbAddress('nas.local:4455', '139'),
+          (host: 'nas.local', port: 4455));
+    });
+
+    test('bad_ports_are_rejected', () {
+      expect(parseSmbAddress('nas.local:0', ''), isNull);
+      expect(parseSmbAddress('nas.local:x', ''), isNull);
+      expect(parseSmbAddress('nas.local', '65536'), isNull);
+      expect(parseSmbAddress('nas.local', 'abc'), isNull);
+    });
+
+    test('empty_or_malformed_hosts_are_rejected', () {
+      expect(parseSmbAddress('', ''), isNull);
+      expect(parseSmbAddress('   ', ''), isNull);
+      expect(parseSmbAddress('[]', ''), isNull);
+      expect(parseSmbAddress('nas local', ''), isNull);
+      expect(parseSmbAddress('nas/share', ''), isNull);
+    });
+  });
 }
