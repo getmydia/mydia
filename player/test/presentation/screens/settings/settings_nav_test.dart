@@ -29,6 +29,7 @@ GoRouter _router(String initial) => GoRouter(
           '/settings/diagnostics',
           '/sources/manage',
           '/sources/manage/:id',
+          '/sources/manage/account/:accountId',
           '/sources/add',
           '/sources/add/:kind',
           '/s/:sourceId',
@@ -174,6 +175,48 @@ void main() {
     RouterSettingsNav(router).instanceRemoved();
     await tester.pumpAndSettle();
     expect(find.text('at /'), findsOneWidget);
+  });
+
+  testWidgets('accountRemoved pops back to the hub that pushed the account',
+      (tester) async {
+    final router = await _pump(tester, '/sources/manage');
+    final nav = RouterSettingsNav(router)..openAccount('a1');
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/manage/account/a1'), findsOneWidget);
+
+    nav.accountRemoved();
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/manage'), findsOneWidget);
+  });
+
+  testWidgets('accountRemoved on a directly loaded account goes to the hub',
+      (tester) async {
+    final router = await _pump(tester, '/sources/manage/account/a1');
+    expect(router.canPop(), isFalse);
+
+    RouterSettingsNav(router).accountRemoved();
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/manage'), findsOneWidget);
+  });
+
+  testWidgets('instanceRemoved also leaves an instance pushed from the hub',
+      (tester) async {
+    final router = await _pump(tester, '/sources/manage');
+    final nav = RouterSettingsNav(router)..openInstance(const SourceId('m1'));
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/manage/m1'), findsOneWidget);
+
+    nav.instanceRemoved();
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/manage'), findsOneWidget);
+  });
+
+  testWidgets('accountRemoved stays put once the router has moved on',
+      (tester) async {
+    final router = await _pump(tester, '/sources/add');
+    RouterSettingsNav(router).accountRemoved();
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/add'), findsOneWidget);
   });
 
   testWidgets('of() falls back to the router without a scope', (tester) async {
