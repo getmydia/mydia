@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/files/files_account.dart'
-    show kFilesLocalAccountId;
+    show isSmbAccountId, kFilesLocalAccountId;
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/files_providers.dart'
     show filesIndexProvider;
@@ -30,6 +30,7 @@ import '../sources/files_library_kind_picker.dart' show filesLibraryKindLabel;
 import '../sources/plex_home_sheet.dart';
 import '../sources/source_lock_sheet.dart';
 import 'connections_route_scaffold.dart';
+import 'smb_address_sheet.dart';
 
 /// A Mydia reached over p2p stops being watched. Unreadable credentials
 /// must not block the removal.
@@ -344,6 +345,12 @@ class AccountControls extends ConsumerWidget {
                   context.l10n.sourcesReauthKey,
               }),
             ),
+            if (isSmbAccountId(account.id))
+              OutlinedButton(
+                key: Key('manage-change-address-${account.id}'),
+                onPressed: () => showSmbAddressSheet(context, record: record),
+                child: Text(context.l10n.filesChangeAddress),
+              ),
             TextButton(
               key: Key('manage-remove-${account.id}'),
               onPressed: () => _remove(context, ref),

@@ -1718,6 +1718,17 @@
   "@filesManageAddFolder": {"description": "Button on the server management screen that adds another folder on this device."},
   "filesManageEditShare": "Add folders",
   "@filesManageEditShare": {"description": "Button on the server management screen that reopens a WebDAV share to add folders or change its password."},
+  "filesChangeAddress": "Change address",
+  "@filesChangeAddress": {"description": "Button on a saved SMB share's management screen, and the title of the sheet it opens, that points the share at a different server address (for example after the server's IP address changed). The share's folders and watch history are kept."},
+  "filesChangeAddressHost": "Server address",
+  "@filesChangeAddressHost": {"description": "Label of the text field in the Change address sheet where the viewer types the SMB server's hostname or IP address."},
+  "filesChangeAddressSave": "Save",
+  "@filesChangeAddressSave": {"description": "Button in the Change address sheet that checks the new SMB server address and saves it."},
+  "filesChangeAddressShareMissing": "This server has no share named {share}",
+  "@filesChangeAddressShareMissing": {
+    "description": "Error in the Change address sheet when the SMB server at the new address does not have the saved share. {share} is the name of the share as it is saved on this device.",
+    "placeholders": {"share": {"type": "String"}}
+  },
   "filesChooseFolderAgain": "Choose the folder again",
   "@filesChooseFolderAgain": {"description": "Button shown when a folder on this device can no longer be read and has to be picked again."},
   "sourcesServerGone": "No longer on this account",

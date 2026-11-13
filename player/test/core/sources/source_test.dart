@@ -38,4 +38,32 @@ void main() {
       expect(source.displayName, 'Basement');
     });
   });
+
+  group('SourceServer.serviceName', () {
+    const base = SourceServer(
+      id: 'srv',
+      accountId: 'acc',
+      profileId: 'p',
+      name: 'Nas',
+    );
+
+    test('server_json_round_trips_service_name', () {
+      final server = SourceServer.fromJson(
+        base.copyWith(serviceName: 'NAS').toJson(),
+      );
+      expect(server.serviceName, 'NAS');
+    });
+
+    test('server_json_omits_null_service_name', () {
+      expect(base.toJson().containsKey('serviceName'), isFalse);
+      expect(SourceServer.fromJson(base.toJson()).serviceName, isNull);
+    });
+
+    test('copy_with_can_clear_service_name', () {
+      final named = base.copyWith(serviceName: 'NAS');
+      expect(named.copyWith().serviceName, 'NAS');
+      expect(named.copyWith(clearServiceName: true).serviceName, isNull);
+      expect(named == base, isFalse);
+    });
+  });
 }

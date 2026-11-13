@@ -57,7 +57,12 @@ void main() {
     events.add(_resolved('Nas A', hostname: 'nas.local.'));
     await pumpEventQueue();
     expect(seen.last, [
-      const DiscoveredSmbServer(name: 'Nas A', host: 'nas.local', port: 445),
+      const DiscoveredSmbServer(
+        name: 'Nas A',
+        host: 'nas.local',
+        port: 445,
+        hostname: 'nas.local',
+      ),
     ]);
     await sub.cancel();
   });
@@ -102,6 +107,19 @@ void main() {
       await hostFor(hostname: 'nas.local.', addresses: ['fe80::abcd']),
       'nas.local',
     );
+  });
+
+  test('resolved_service_exposes_hostname_alongside_addresses', () async {
+    final seen = <List<DiscoveredSmbServer>>[];
+    final sub = discovery.browse().listen(seen.add);
+    await pumpEventQueue();
+    events.add(
+        _resolved('Nas', hostname: 'NAS.local.', addresses: ['192.168.1.5']));
+    await pumpEventQueue();
+    await sub.cancel();
+    final server = seen.last.single;
+    expect(server.host, '192.168.1.5');
+    expect(server.hostname, 'nas.local');
   });
 
   test('a global IPv6-only service uses that address', () async {

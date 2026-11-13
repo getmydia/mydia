@@ -46,8 +46,13 @@ String normalizeSmbUrl(Uri url) {
 }
 
 /// `s` + the first 16 hex characters of SHA-256 over [normalizeSmbUrl].
-String smbAccountId(Uri url) =>
-    's${sha256.convert(utf8.encode(normalizeSmbUrl(url))).toString().substring(0, 16)}';
+/// A non-zero [attempt] hashes `<url>#<attempt>` instead, for when the id
+/// of [url] already belongs to another account (one minted at this address
+/// before it moved).
+String smbAccountId(Uri url, [int attempt = 0]) {
+  final key = normalizeSmbUrl(url) + (attempt == 0 ? '' : '#$attempt');
+  return 's${sha256.convert(utf8.encode(key)).toString().substring(0, 16)}';
+}
 
 final _smbAccountId = RegExp(r'^s[0-9a-f]{16}$');
 

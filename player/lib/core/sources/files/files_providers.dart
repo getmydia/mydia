@@ -27,6 +27,9 @@ import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
+import 'files_accounts.dart' show filesAccountsProvider;
+import 'smb_addresses.dart' show smbTargetsOf;
+import 'smb_discovery.dart' show smbDiscoveryProvider;
 import 'smb_native.dart' show smbNativeProvider;
 
 /// Opens the boxes a files source reads synchronously while it builds: its
@@ -115,8 +118,13 @@ FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
     return LazySmbBackend(
       native: ref.read(smbNativeProvider),
       accountId: source.account.id,
-      target: smbTargetOf(source.server.connections.first.uri),
+      targets: smbTargetsOf(source.server.connections),
       credentials: () => secrets.accountToken(source.account),
+      serviceName: source.server.serviceName,
+      discovery: ref.read(smbDiscoveryProvider),
+      onReachedVia: (t, d) => ref
+          .read(filesAccountsProvider)
+          .promoteSmbAddress(source.account.id, t, discovered: d),
     );
   }
   return LazyWebDavBackend(

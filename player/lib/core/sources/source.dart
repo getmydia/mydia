@@ -225,6 +225,7 @@ class SourceServer {
     this.gone = false,
     this.httpsRequired = false,
     this.connections = const [],
+    this.serviceName,
   });
 
   factory SourceServer.fromJson(Map<String, dynamic> json) => SourceServer(
@@ -241,12 +242,18 @@ class SourceServer {
           for (final c in (json['connections'] as List? ?? const []))
             ServerConnection.fromJson((c as Map).cast<String, dynamic>()),
         ],
+        serviceName: json['serviceName'] as String?,
       );
 
   final String id;
   final String accountId;
   final String profileId;
   final String name;
+
+  /// The mDNS instance name an SMB share was found under, used to look the
+  /// server up again by name when its address changes. Null for records
+  /// written before this field existed and for servers not found by mDNS.
+  final String? serviceName;
 
   /// Plex's id for the server, which `/identity` must echo back.
   final String? machineIdentifier;
@@ -275,6 +282,7 @@ class SourceServer {
         'gone': gone,
         'httpsRequired': httpsRequired,
         'connections': [for (final c in connections) c.toJson()],
+        if (serviceName != null) 'serviceName': serviceName,
       };
 
   SourceServer copyWith({
@@ -282,6 +290,8 @@ class SourceServer {
     bool? presence,
     bool? gone,
     List<ServerConnection>? connections,
+    String? serviceName,
+    bool clearServiceName = false,
   }) =>
       SourceServer(
         id: id,
@@ -294,6 +304,7 @@ class SourceServer {
         gone: gone ?? this.gone,
         httpsRequired: httpsRequired,
         connections: connections ?? this.connections,
+        serviceName: clearServiceName ? null : serviceName ?? this.serviceName,
       );
 
   @override
@@ -308,6 +319,7 @@ class SourceServer {
       other.presence == presence &&
       other.gone == gone &&
       other.httpsRequired == httpsRequired &&
+      other.serviceName == serviceName &&
       listEquals(other.connections, connections);
 
   @override
@@ -321,6 +333,7 @@ class SourceServer {
       presence,
       gone,
       httpsRequired,
+      serviceName,
       Object.hashAll(connections));
 }
 
