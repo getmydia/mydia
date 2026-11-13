@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/p2p/peer_sync_service.dart';
 import '../../../core/sources/source.dart';
-import '../../../core/sources/store/source_records.dart';
 import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
@@ -116,14 +115,6 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
     }
   }
 
-  void _openServer(SettingsNav nav, ConnectionServer server) {
-    if (server.kind == SourceKind.mydia) {
-      nav.openInstance(mydiaSourceIdOf(server.record));
-    } else {
-      nav.openAccount(server.account.id);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.listen(
@@ -160,7 +151,10 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
                 _ServersSection(
                   overview: overview,
                   onAdd: nav.addServer,
-                  onOpen: (s) => _openServer(nav, s),
+                  // Every kind, Mydia included: the account page holds the
+                  // lock, All servers and reauth controls, and its gear
+                  // reaches a Mydia instance's own settings.
+                  onOpen: (s) => nav.openAccount(s.account.id),
                 ),
               ],
               const SizedBox(height: _sectionGap),
@@ -363,6 +357,17 @@ class _ServersSection extends ConsumerWidget {
             dimension: 22,
             child: CircularProgressIndicator(strokeWidth: 2.4),
           ),
+        ),
+      );
+    } else if (overview.serversFailed) {
+      // The read failed, not the user's setup: an add invitation here would
+      // suggest their servers are gone.
+      body = Padding(
+        key: const Key('connections-servers-failed'),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+        child: Text(
+          context.l10n.sourcesLoadFailed,
+          style: TextStyle(fontSize: 13, color: context.palette.textSecondary),
         ),
       );
     } else if (overview.servers.isEmpty) {

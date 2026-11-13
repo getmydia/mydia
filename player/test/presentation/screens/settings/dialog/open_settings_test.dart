@@ -306,16 +306,27 @@ void main() {
         isFalse);
   });
 
+  /// A Mydia server opens its account, whose gear opens the instance.
+  Future<void> openInstanceFromHub(WidgetTester tester) async {
+    await tester
+        .tap(find.byKey(Key('connections-server-${recordA.account.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('manage-lock-${recordA.servers.single.id}')),
+        findsOneWidget);
+    await tester.tap(find.byKey(Key('manage-settings-${recordA.account.id}')));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('Servers opens an instance in the pane and back returns',
       (tester) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
-    await tester
-        .tap(find.byKey(Key('connections-server-${recordA.account.id}')));
-    await tester.pumpAndSettle();
+    await openInstanceFromHub(tester);
     expect(find.byKey(const Key('mydia-instance-server')), findsOneWidget);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('settings-dialog-back')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings-dialog-back')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
@@ -350,9 +361,7 @@ void main() {
       (tester) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
-    await tester
-        .tap(find.byKey(Key('connections-server-${recordA.account.id}')));
-    await tester.pumpAndSettle();
+    await openInstanceFromHub(tester);
     await tester.ensureVisible(find.byKey(const Key('mydia-instance-remove')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('mydia-instance-remove')));

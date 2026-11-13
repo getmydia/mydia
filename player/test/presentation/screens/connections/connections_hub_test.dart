@@ -5,13 +5,19 @@ import 'package:player/core/p2p/peer_group_roster.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
+import 'package:player/core/sources/store/source_secrets.dart';
+import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/presentation/screens/connections/account_detail_page.dart';
 import 'package:player/presentation/screens/connections/connections_hub.dart';
 import 'package:player/presentation/screens/connections/connections_overview.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
+import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'connections_hub_fixtures.dart';
 import 'fake_peer_sync_service.dart';
@@ -27,6 +33,18 @@ final _populated = hubOverview(
     hubDevice('n2', 'NAS', 'linux'),
   ],
 );
+
+/// Opens the real account detail page, as the router and the dialog do.
+class _PushingNav extends RecordingNav {
+  _PushingNav(this.navigatorKey);
+  final GlobalKey<NavigatorState> navigatorKey;
+  @override
+  void openAccount(String accountId) {
+    super.openAccount(accountId);
+    navigatorKey.currentState?.push(MaterialPageRoute<void>(
+        builder: (_) => AccountDetailPage(accountId: accountId)));
+  }
+}
 
 class _Harness {
   _Harness(this.nav, this.service);
@@ -107,14 +125,14 @@ void main() {
     expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
   });
 
-  testWidgets('mydia tap opens instance, others open account', (tester) async {
+  testWidgets('every server tap, Mydia included, opens its account',
+      (tester) async {
     _phone(tester, height: 1400);
     final h = await _pump(tester, _populated);
 
     await tester.tap(find.byKey(const Key('connections-server-home')));
     await tester.pump();
-    final mydia = _populated.servers.first.record;
-    expect(h.nav.calls, ['instance ${mydiaSourceIdOf(mydia).value}']);
+    expect(h.nav.calls, ['account home']);
 
     await tester.tap(find.byKey(const Key('connections-server-plex-acc')));
     await tester.pump();
@@ -123,6 +141,43 @@ void main() {
     await tester.tap(find.byKey(const Key('manage-add')));
     await tester.pump();
     expect(h.nav.calls.last, 'add');
+  });
+
+  testWidgets('a Mydia account\'s lock control is reachable from the hub',
+      (tester) async {
+    _phone(tester, height: 1400);
+    final server = hubServer('home', 'Home Mydia');
+    final sources = InMemorySourceStore();
+    await sources.putAccount(server.record);
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final nav = _PushingNav(navigatorKey);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => sources),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+        connectionsOverviewProvider
+            .overrideWithValue(hubOverview(servers: [server])),
+        connectionsDirectSourceProvider.overrideWithValue(null),
+      ],
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => SettingsNavScope(
+            nav: nav, child: toastLayerBuilder(context, child)),
+        home: const ConnectionsHubScreen(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('connections-server-home')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AccountDetailPage), findsOneWidget);
+    expect(find.byKey(const Key('manage-lock-srv')), findsOneWidget);
+    expect(find.byKey(const Key('manage-settings-home')), findsOneWidget);
   });
 
   testWidgets('chips reflect status', (tester) async {
@@ -292,9 +347,25 @@ void main() {
     expect(find.text('Add a server'), findsNothing);
   });
 
+  testWidgets('a failed server read says so instead of inviting an add',
+      (tester) async {
+    _phone(tester, height: 1400);
+    await _pump(tester, hubOverview(serversFailed: true));
+    expect(find.byKey(const Key('connections-servers-failed')), findsOneWidget);
+    expect(find.text('Could not read the saved servers.'), findsOneWidget);
+    expect(find.byKey(const Key('connections-add-server-ghost')), findsNothing);
+    expect(
+        find.descendant(
+          of: find.byKey(const Key('connections-servers-section')),
+          matching: find.byKey(const Key('show-hidden-sources')),
+        ),
+        findsOneWidget);
+  });
+
   for (final (name, overview) in [
     ('empty', hubOverview()),
     ('loading', hubOverview(serversLoading: true)),
+    ('failed', hubOverview(serversFailed: true)),
     ('populated', _populated),
   ]) {
     testWidgets('the servers section ends with show hidden servers ($name)',
