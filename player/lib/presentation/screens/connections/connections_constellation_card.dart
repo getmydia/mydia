@@ -437,7 +437,8 @@ class _Footer extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
-              Text(serversText, style: style),
+              // Wraps, like the devices half, on a narrow phone at large text.
+              Flexible(child: Text(serversText, style: style)),
             ],
           ),
         Row(

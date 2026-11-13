@@ -130,6 +130,20 @@ void main() {
     expect(find.text('Pixel phone'), findsOneWidget);
   });
 
+  testWidgets('the footer wraps on a narrow phone at large text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await _pump(tester, _populated);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('2 of 3 servers online'), findsOneWidget);
+  });
+
   testWidgets('semantics label summarises footer', (tester) async {
     final handle = tester.ensureSemantics();
     await _pump(tester, _populated);
