@@ -620,7 +620,11 @@ An SMB record stores every way to reach the share in `connections`, one
 when the server was found on the network (absent on older records, which
 have one connection and work as before). Hostnames are lowercased with no
 trailing dot. The list is capped at 6: past that, IP literals are dropped
-from the end, and hostnames are always kept (`files/smb_addresses.dart`).
+from the end, then hostnames from the end if it is still too long, and the
+first entry (the address that last answered) is always kept
+(`capSmbAddresses` in `files/smb_addresses.dart`, which the backend's own
+list uses too). A typed address takes `host:port` or `[ipv6]:port` in the
+host field, whose port wins over the port field.
 
 `LazySmbBackend` probes the share root at each address in stored order and
 uses the first that answers. When that is not the first address, the backend

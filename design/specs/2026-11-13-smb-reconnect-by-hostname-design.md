@@ -52,8 +52,9 @@ connection host or the same `serviceName`, and re-signs that one in (the
 existing `signInAgain` path, credentials replaced, `needsReauth` cleared)
 instead of creating a second account.
 
-The list is capped at 6 entries. When trimming, the hostname entry is kept
-and the oldest IP literals go first.
+The list is capped at 6 entries. When trimming, the first entry (the
+address that last answered) is always kept, the oldest IP literals go
+first, and hostnames from the end only if that is not enough.
 
 ### 2. Reconnecting
 

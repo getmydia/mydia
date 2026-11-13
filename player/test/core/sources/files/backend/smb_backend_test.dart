@@ -315,6 +315,33 @@ void main() {
       expect(discovery.listenCount, 1);
     });
 
+    test('a_reached_address_over_the_cap_drops_a_hostname_not_itself',
+        () async {
+      final hosts = [for (var i = 1; i <= 6; i++) 'nas$i.local'];
+      for (final h in hosts) {
+        native.hostFailures[h] = const BackendUnreachable();
+      }
+      final backend = lazy(
+        targets: [
+          for (final h in hosts) SmbTarget(host: h, port: 445, share: 'media'),
+        ],
+        browseTimeout: const Duration(milliseconds: 200),
+      );
+      final call = backend.list('/');
+      await pumpEventQueue();
+      discovery.emit(const [
+        DiscoveredSmbServer(name: 'NAS', host: '10.0.0.9', port: 445),
+      ]);
+      await call;
+
+      native.hostFailures['10.0.0.9'] = const BackendUnreachable();
+      await expectLater(backend.list('/'), throwsA(isA<BackendUnreachable>()));
+      native.probeLogins.clear();
+      await expectLater(backend.list('/'), throwsA(isA<BackendUnreachable>()));
+
+      expect(probedHosts(), ['10.0.0.9', ...hosts.take(5)]);
+    });
+
     test('stale_ip_refuses_hostname_unreachable_browse_finds_the_nas',
         () async {
       native.hostFailures['192.168.1.5'] = const BackendUnauthorized();

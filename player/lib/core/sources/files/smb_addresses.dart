@@ -59,11 +59,20 @@ List<ServerConnection> smbConnections({
 }
 
 /// At most [kSmbMaxConnections]; over that, drops IP literals from the end
-/// first. A hostname is never dropped.
-List<ServerConnection> capSmbConnections(List<ServerConnection> all) {
+/// first, then hostnames from the end. The first entry (the address that
+/// last answered) is never dropped.
+List<ServerConnection> capSmbConnections(List<ServerConnection> all) =>
+    capSmbAddresses(all, (c) => c.uri.host);
+
+/// The rule behind [capSmbConnections], for any list whose entries have a
+/// host, so the stored list and an in-memory one are capped the same way.
+List<T> capSmbAddresses<T>(List<T> all, String Function(T) hostOf) {
   final out = [...all];
-  for (var i = out.length - 1; i >= 0 && out.length > kSmbMaxConnections; i--) {
-    if (isIpLiteral(out[i].uri.host)) out.removeAt(i);
+  for (var i = out.length - 1; i > 0 && out.length > kSmbMaxConnections; i--) {
+    if (isIpLiteral(normalizeSmbHost(hostOf(out[i])))) out.removeAt(i);
+  }
+  if (out.length > kSmbMaxConnections) {
+    out.removeRange(kSmbMaxConnections, out.length);
   }
   return out;
 }
@@ -87,13 +96,22 @@ bool _validPort(int? port) => port != null && port >= 1 && port <= 65535;
 /// A typed server address and port field, or null when they cannot be used.
 /// An empty [port] means [kSmbDefaultPort]. An IPv6 literal loses its
 /// brackets. [host] text with exactly one colon and no brackets is
-/// `host:port` (`nas.local:4455`), whose port wins over [port]; more colons
-/// are an IPv6 literal.
+/// `host:port` (`nas.local:4455`), and `[fd00::5]:4455` is the same for an
+/// IPv6 literal; either inline port wins over [port]. More colons without
+/// brackets are an IPv6 literal.
 ({String host, int port})? parseSmbAddress(String host, String port) {
   var h = host.trim();
   int? inlinePort;
-  if (h.startsWith('[') && h.endsWith(']')) {
-    h = h.substring(1, h.length - 1);
+  if (h.startsWith('[')) {
+    final close = h.indexOf(']');
+    if (close < 0) return null;
+    final rest = h.substring(close + 1);
+    if (rest.isNotEmpty) {
+      if (!rest.startsWith(':')) return null;
+      inlinePort = int.tryParse(rest.substring(1));
+      if (!_validPort(inlinePort)) return null;
+    }
+    h = h.substring(1, close);
   } else if (':'.allMatches(h).length == 1) {
     final colon = h.indexOf(':');
     inlinePort = int.tryParse(h.substring(colon + 1));

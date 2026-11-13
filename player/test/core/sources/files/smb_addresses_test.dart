@@ -46,6 +46,36 @@ void main() {
     ]);
   });
 
+  test('cap_never_drops_the_first_entry', () {
+    ServerConnection at(String host) =>
+        smbConnectionOf(SmbTarget(host: host, port: 445, share: 'media'));
+    final c = capSmbConnections([
+      at('10.0.0.9'),
+      for (var i = 1; i <= 6; i++) at('nas$i.local'),
+    ]);
+    expect(c, hasLength(kSmbMaxConnections));
+    expect(_uris(c), [
+      'smb://10.0.0.9/media',
+      for (var i = 1; i <= 5; i++) 'smb://nas$i.local/media',
+    ]);
+  });
+
+  test('cap_drops_ip_literals_before_hostnames_and_keeps_the_first', () {
+    ServerConnection at(String host) =>
+        smbConnectionOf(SmbTarget(host: host, port: 445, share: 'media'));
+    final c = capSmbConnections([
+      at('10.0.0.9'),
+      at('nas1.local'),
+      at('10.0.0.1'),
+      for (var i = 2; i <= 6; i++) at('nas$i.local'),
+    ]);
+    expect(c, hasLength(kSmbMaxConnections));
+    expect(_uris(c), [
+      'smb://10.0.0.9/media',
+      for (var i = 1; i <= 5; i++) 'smb://nas$i.local/media',
+    ]);
+  });
+
   test('promote_moves_reached_first_and_appends_discovered', () {
     final a = smbConnections(
         share: 'media',
@@ -112,6 +142,22 @@ void main() {
 
     test('bracketed_ipv6_loses_its_brackets', () {
       expect(parseSmbAddress('[fd00::5]', ''), (host: 'fd00::5', port: 445));
+    });
+
+    test('bracketed_ipv6_with_an_inline_port', () {
+      expect(
+          parseSmbAddress('[fd00::5]:1445', ''), (host: 'fd00::5', port: 1445));
+      expect(parseSmbAddress(' [fd00::5]:1445 ', '139'),
+          (host: 'fd00::5', port: 1445));
+      expect(
+          parseSmbAddress('[fd00::5]', '1445'), (host: 'fd00::5', port: 1445));
+    });
+
+    test('bracketed_ipv6_with_a_bad_inline_port_is_rejected', () {
+      expect(parseSmbAddress('[fd00::5]:0', ''), isNull);
+      expect(parseSmbAddress('[fd00::5]:x', ''), isNull);
+      expect(parseSmbAddress('[fd00::5]:', ''), isNull);
+      expect(parseSmbAddress('[fd00::5]x', ''), isNull);
     });
 
     test('bare_ipv6_is_a_host', () {

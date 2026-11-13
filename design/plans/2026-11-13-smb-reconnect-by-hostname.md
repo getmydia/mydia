@@ -19,7 +19,7 @@
 - mDNS fallback browse: at most 5 seconds.
 - Hostnames are stored lowercased with no trailing dot.
 - Every user-visible string is an ARB message in all four locale files (`app_en`, `app_es`, `app_pt`, `app_pt_BR`), per `player/docs/l10n.md`.
-- Run all commands from `player/`. Tests: `../dev flutter test <path>`. Commit from the worktree with direnv loaded (`direnv exec .. git commit ...`), staging every file first, then `git show --stat HEAD`.
+- Run all commands from `player/`. Tests: `../dev flutter test --concurrency=1 <path>`; every "Run" step below means that command on the task's test files (without `--concurrency=1` the suite silently drops test files, per `player/docs/workflow.md`). Commit from the worktree with direnv loaded (`direnv exec .. git commit ...`), staging every file first, then `git show --stat HEAD`.
 
 ## Decision beyond the spec
 
@@ -59,7 +59,7 @@ keeps its own stop-on-refusal rule, since it works from a fresh discovery.
   - `server_json_omits_null_service_name`: `toJson()` of a server without one has no `serviceName` key; `fromJson` of a map without the key gives `null`.
   - `copy_with_can_clear_service_name`: `copyWith(clearServiceName: true).serviceName == null`.
   - In `smb_discovery_test.dart`, `resolved_service_exposes_hostname_alongside_addresses`: a resolved service with addresses `['192.168.1.5']` and hostname `'NAS.local.'` yields `host == '192.168.1.5'`, `hostname == 'nas.local'`. Follow the existing test's way of feeding a `BonsoirService`.
-- [ ] **Step 2: Run, expect failures** — `../dev flutter test test/core/sources/source_test.dart test/core/sources/files/smb_discovery_test.dart`
+- [ ] **Step 2: Run, expect failures** — `../dev flutter test --concurrency=1 test/core/sources/source_test.dart test/core/sources/files/smb_discovery_test.dart`
 - [ ] **Step 3: Implement** the fields. `_serverFrom` sets `hostname` from `service.hostname` regardless of whether addresses exist; `_connectHosts` is unchanged.
 - [ ] **Step 4: Run, expect PASS**, plus `../dev flutter analyze lib/core/sources`.
 - [ ] **Step 5: Commit** `feat(player): carry the SMB service name and hostname`
@@ -192,5 +192,5 @@ keeps its own stop-on-refusal rule, since it works from a fresh discovery.
 - Modify: `lib/core/sources/README.md` (a short "SMB addresses" paragraph under Connections: stored list, order, mDNS fallback, the stable id, Change address)
 
 - [ ] **Step 1:** Write the paragraph.
-- [ ] **Step 2:** `../dev flutter analyze` clean; `../dev flutter test test/core/sources test/presentation/screens/sources test/presentation/screens/connections` passes.
+- [ ] **Step 2:** `../dev flutter analyze` clean; `../dev flutter test --concurrency=1 test/core/sources test/presentation/screens/sources test/presentation/screens/connections` passes.
 - [ ] **Step 3: Commit** `docs(player): describe how SMB shares are reached`

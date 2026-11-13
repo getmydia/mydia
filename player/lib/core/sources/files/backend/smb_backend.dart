@@ -6,8 +6,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../files_account.dart';
-import '../smb_addresses.dart'
-    show isIpLiteral, kSmbMaxConnections, normalizeSmbHost;
+import '../smb_addresses.dart' show capSmbAddresses, normalizeSmbHost;
 import '../smb_discovery.dart';
 import '../smb_native.dart';
 import 'file_system_backend.dart';
@@ -233,22 +232,17 @@ class LazySmbBackend implements FileSystemBackend {
   }
 
   /// Moves [reached] to the front of [targets] and adds the [discovered]
-  /// ones not already there, capped like the stored list (IP literals go
-  /// from the end first), then reports it.
+  /// ones not already there, capped by the same [capSmbAddresses] rule as
+  /// the stored list, then reports it.
   void _reached(SmbTarget reached, List<SmbTarget> discovered) {
     final key = _key(reached);
     final next = [reached, ..._targets.where((t) => _key(t) != key)];
     for (final d in discovered) {
       if (!next.any((t) => _key(t) == _key(d))) next.add(d);
     }
-    for (var i = next.length - 1;
-        i > 0 && next.length > kSmbMaxConnections;
-        i--) {
-      if (isIpLiteral(normalizeSmbHost(next[i].host))) next.removeAt(i);
-    }
     _targets
       ..clear()
-      ..addAll(next);
+      ..addAll(capSmbAddresses(next, (t) => t.host));
     _reportReached(reached, discovered);
   }
 
