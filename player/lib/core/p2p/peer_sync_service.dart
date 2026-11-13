@@ -145,6 +145,7 @@ class PeerSyncService {
   final RelayApiClient _relayClient;
   String _deviceName;
   String get deviceName => _deviceName;
+  String get platform => _platform;
   final String _platform;
   final Future<String> Function()? _resolveDeviceName;
   final Future<void> Function(

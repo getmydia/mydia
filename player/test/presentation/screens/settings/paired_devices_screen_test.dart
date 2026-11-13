@@ -44,6 +44,9 @@ class FakePeerSyncService implements PeerSyncService {
   String get deviceName => 'Test Device';
 
   @override
+  String get platform => 'linux';
+
+  @override
   bool get isPaired => _isPaired;
 
   @override
