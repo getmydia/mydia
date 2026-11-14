@@ -46,6 +46,19 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert cs.action == :validate
     end
 
+    test "rejects a negative ratio and an unknown action" do
+      cs = changeset(%{"seed_ratio" => "-0.5", "seed_goal_action" => "delete"})
+      assert Keyword.has_key?(cs.errors, :seed_ratio)
+      assert Keyword.has_key?(cs.errors, :seed_goal_action)
+    end
+
+    test "rejects negative seed time and limits" do
+      cs = changeset(%{"seed_time" => "-1", "download_limit" => "-2", "upload_limit" => "-3"})
+
+      for f <- [:seed_time, :download_limit, :upload_limit],
+          do: assert(Keyword.has_key?(cs.errors, f))
+    end
+
     test "rejects a type the provider lacks" do
       cs =
         changeset(
@@ -208,6 +221,45 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
 
       assert {:ok, [:built_in_torrent, :listen_port], 6881} =
                Mydia.Config.Schema.Paths.cast_overlay("built_in_torrent.listen_port", "6881")
+    end
+
+    test "saves and casts back seeding fields" do
+      assert :ok =
+               save(%{
+                 "seed_ratio" => "2.0",
+                 "seed_time" => "60",
+                 "seed_goal_action" => "remove",
+                 "upload_limit" => "256"
+               })
+
+      assert row("seed_ratio").value == "2.0"
+      assert row("seed_time").value == "60"
+      assert row("seed_goal_action").value == "remove"
+      assert row("upload_limit").value == "256"
+
+      alias Mydia.Config.Schema.Paths
+
+      assert {:ok, [:built_in_torrent, :seed_ratio], 2.0} =
+               Paths.cast_overlay("built_in_torrent.seed_ratio", "2.0")
+
+      assert {:ok, [:built_in_torrent, :seed_time], 60} =
+               Paths.cast_overlay("built_in_torrent.seed_time", "60")
+    end
+
+    test "a fractional ratio round-trips" do
+      assert :ok = save(%{"seed_ratio" => "1.25"})
+      assert row("seed_ratio").value == "1.25"
+    end
+
+    test "env-set seeding fields are read-only" do
+      getenv = fn
+        "MYDIA_TORRENT_SEED_RATIO" -> "3.0"
+        _ -> nil
+      end
+
+      assert :ok = save(%{"seed_ratio" => "1.0", "seed_time" => "30"}, getenv: getenv)
+      assert row("seed_ratio") == nil
+      assert row("seed_time").value == "30"
     end
 
     test "records updated_by_id" do

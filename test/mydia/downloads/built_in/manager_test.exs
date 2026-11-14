@@ -176,6 +176,25 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert BuiltIn.runtime() == runtime
     end
 
+    test "a seeding-only reload refreshes the runtime without restarting the engine", ctx do
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+      %BuiltIn.Runtime{api_port: api_port, credentials: creds} = BuiltIn.runtime()
+
+      set(ctx, seed_ratio: 1.5, seed_time: 30, seed_goal_action: "remove", upload_limit: 99)
+      reload(manager)
+
+      assert [^pid] = instance_pids(ctx)
+      runtime = BuiltIn.runtime()
+      assert runtime.api_port == api_port
+      assert runtime.credentials == creds
+      assert runtime.config.seed_ratio == 1.5
+      assert runtime.config.seed_goal_action == :remove
+      assert runtime.config.upload_limit == 99
+      assert %{action: :remove} = BuiltIn.seeding_target()
+      assert %Config{seed_ratio: 1.5} = Manager.await_applied(manager)
+    end
+
     test "a VPN field edited while the VPN is off leaves the instance alone", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)
@@ -185,7 +204,9 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       reload(manager)
 
       assert [^pid] = instance_pids(ctx)
-      assert BuiltIn.runtime() == runtime
+      # The runtime entry now carries the reloaded config, with the same engine address.
+      assert %{api_port: api_port, credentials: credentials} = BuiltIn.runtime()
+      assert {api_port, credentials} == {runtime.api_port, runtime.credentials}
       assert File.read!(settings_file(ctx)) == "VPN_ENABLED=false\n"
     end
 

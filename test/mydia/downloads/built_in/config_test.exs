@@ -221,6 +221,24 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
   end
 
   describe "restart_key/1" do
+    test "seeding and limit fields do not change it, with the VPN off or on" do
+      new = [seed_ratio: 2.0, seed_time: 60, seed_goal_action: "remove"]
+      new = new ++ [download_limit: 100, upload_limit: 50]
+
+      for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]] do
+        base = load(vpn, [])
+        changed = load(vpn ++ new, [])
+        assert Config.restart_key(base) == Config.restart_key(changed)
+        assert changed.seed_goal_action == :remove
+        assert changed.seed_ratio == 2.0
+        assert changed.seed_time == 60
+        assert changed.download_limit == 100
+        assert changed.upload_limit == 50
+      end
+
+      assert load([], []).seed_goal_action == :pause
+    end
+
     test "ignores warnings and nothing else" do
       a = load([], [], env: %{"MYDIA_TORRENT_PORT" => "nope"})
       b = load([], [])
