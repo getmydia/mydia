@@ -1351,10 +1351,14 @@ void main() {
     /// Connects [harness] to [lanternDevice] and pumps the bar over a stream
     /// that replays the adopted session and then follows the manager's own
     /// updates, including the null that `detach()` and `stopCast()` publish.
+    ///
+    /// With [targets], the banner comes from the real `ambientPlayingProvider`
+    /// over them rather than a canned list.
     Future<ProviderContainer> pumpLantern(
       WidgetTester tester,
-      _ManagerHarness harness,
-    ) async {
+      _ManagerHarness harness, {
+      AmbientTargets? targets,
+    }) async {
       await harness.manager.connectTo(lanternDevice);
 
       final sessionController = StreamController<CastSession?>();
@@ -1369,8 +1373,11 @@ void main() {
         harness: harness,
         sessionStream: sessionController.stream,
         extraOverrides: [
-          ambientPlayingProvider.overrideWith((ref) =>
-              Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+          if (targets != null)
+            ambientTargetsProvider.overrideWithValue(targets)
+          else
+            ambientPlayingProvider.overrideWith((ref) =>
+                Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
         ],
       );
       container.read(castTargetProvider.notifier).set(lanternDevice);
@@ -1433,6 +1440,40 @@ void main() {
               'to the Playing on banner it was opened from');
       expect(find.byKey(const Key('cast-bar-transport')), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'the banner comes back through the real ambient provider, with no '
+        'app resume', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      addTearDown(harness.manager.dispose);
+      final targets = AmbientTargets(
+        rosterSource: () async => const ['node-tv'],
+        // A real probe is a network round trip. An instant one answers
+        // before `ambientPlayingProvider` has subscribed to the updates.
+        probe: (nodeId) async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return _snapshot(title: 'The Lantern Keepers');
+        },
+      );
+
+      final container = await pumpLantern(tester, harness, targets: targets);
+      expect(find.byKey(const Key('cast-bar-transport')), findsOneWidget);
+
+      // The session held the bar, so nothing listened to the ambient
+      // provider and it was disposed. That must not leave the targets
+      // unable to sweep for the listener the detach brings back.
+      await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget,
+          reason: 'the other device is still playing; the banner must not '
+              'wait for the app to be backgrounded and resumed');
+
+      // Its poll and resweep timers go with the tree, inside the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await targets.dispose();
     });
 
     testWidgets('the Mydia transport stop button confirms, then stops',
