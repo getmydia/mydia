@@ -218,33 +218,118 @@ defmodule Mydia.Downloads.SeedingGoalTest do
       assert SeedingGoal.effective_terms(tracker, nil) == tracker
       assert SeedingGoal.effective_terms(nil, nil) == nil
     end
-
-    test "ratio 0.0 is a real target" do
-      terms = SeedingGoal.effective_terms(nil, %{ratio: 0.0, seed_time: nil})
-      assert SeedingGoal.met?(terms, 0.0, 0)
-    end
-
-    test "private tracker with unknown terms stays unmet under an operator target" do
-      terms =
-        SeedingGoal.effective_terms(%TrackerTerms{private?: true}, %{ratio: nil, seed_time: nil})
-
-      refute SeedingGoal.met?(terms, 50.0, 10_000_000)
-    end
   end
 
-  describe "goal_terms/2" do
+  describe "goal_applies?/2" do
     @target %{ratio: 1.0, seed_time: nil}
 
     test "applies the target only to the built-in client" do
       built_in = %{metadata: %{}, download_client: Mydia.Downloads.BuiltIn.name()}
       other = %{metadata: %{}, download_client: "qBit"}
 
-      assert %TrackerTerms{minimum_ratio: 1.0} = SeedingGoal.goal_terms(built_in, target: @target)
-      assert SeedingGoal.goal_terms(other, target: @target) == SeedingGoal.terms(other)
+      assert SeedingGoal.goal_applies?(built_in, target: @target)
+      refute SeedingGoal.goal_applies?(other, target: @target)
+      refute SeedingGoal.goal_applies?(built_in, target: nil)
+      refute SeedingGoal.goal_applies?(built_in, target: %{ratio: nil, seed_time: nil})
+    end
+
+    test "tracker terms apply on any client" do
+      private = %{metadata: %{"tracker_terms" => %{"private" => true}}, download_client: "qBit"}
+      assert SeedingGoal.goal_applies?(private, target: nil)
+    end
+  end
+
+  describe "goal_met?/4" do
+    @built_in Mydia.Downloads.BuiltIn.name()
+
+    defp built_in_row(tracker_terms) do
+      metadata = if tracker_terms, do: %{"tracker_terms" => tracker_terms}, else: %{}
+      %{metadata: metadata, download_client: @built_in}
+    end
+
+    test "ratio 0.0 is a real target" do
+      row = built_in_row(nil)
+      assert SeedingGoal.goal_met?(row, 0.0, 0, target: %{ratio: 0.0, seed_time: nil})
+      refute SeedingGoal.goal_met?(row, nil, nil, target: %{ratio: 0.0, seed_time: nil})
+    end
+
+    test "a private tracker with unknown terms is never met, whatever the target" do
+      row = built_in_row(%{"private" => true})
+
+      for target <- [%{ratio: 0.0, seed_time: nil}, %{ratio: nil, seed_time: 0}, nil] do
+        refute SeedingGoal.goal_met?(row, 50.0, 10_000_000, target: target)
+      end
+    end
+
+    test "a tracker minimum never lowers the operator target" do
+      row = built_in_row(%{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600})
+      target = %{ratio: 2.0, seed_time: nil}
+
+      # The tracker is satisfied (80h), the operator target (ratio 2.0) is not.
+      refute SeedingGoal.goal_met?(row, 1.1, 80 * 3600, target: target)
+      assert SeedingGoal.goal_met?(row, 2.0, 80 * 3600, target: target)
+      assert SeedingGoal.goal_met?(row, 2.0, 0, target: target)
+    end
+
+    test "an operator target never lowers the tracker minimum" do
+      row = built_in_row(%{"minimum_ratio" => 3.0})
+      target = %{ratio: 1.0, seed_time: 3600}
+
+      refute SeedingGoal.goal_met?(row, 1.5, 7200, target: target)
+      assert SeedingGoal.goal_met?(row, 3.0, 0, target: target)
+    end
+
+    test "either dimension of the operator target meets it" do
+      row = built_in_row(nil)
+      target = %{ratio: 2.0, seed_time: 3600}
+
+      refute SeedingGoal.goal_met?(row, 1.0, 60, target: target)
+      assert SeedingGoal.goal_met?(row, 1.0, 3600, target: target)
+      assert SeedingGoal.goal_met?(row, 2.0, 60, target: target)
+    end
+
+    test "other clients ignore the operator target" do
+      row = %{metadata: %{}, download_client: "qBit"}
+      assert SeedingGoal.goal_met?(row, 0.0, 0, target: %{ratio: 5.0, seed_time: nil})
     end
   end
 
   describe "for_download/2 with the operator target" do
+    test "a private row with unknown terms is never met under a target" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"private" => true}},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 5.0,
+        seeding_time: 10_000_000,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{required_ratio: +0.0, met?: false} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 0.0, seed_time: nil})
+    end
+
+    test "the tracker and the target must both be met" do
+      row = %{
+        metadata: %{
+          "tracker_terms" => %{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600}
+        },
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 1.1,
+        seeding_time: 80 * 3600,
+        in_client?: true
+      }
+
+      target = %{ratio: 2.0, seed_time: nil}
+
+      assert %SeedingGoal{required_ratio: 2.0, met?: false} =
+               SeedingGoal.for_download(row, now: @now, target: target)
+
+      assert %SeedingGoal{met?: true} =
+               SeedingGoal.for_download(%{row | ratio: 2.0}, now: @now, target: target)
+    end
+
     test "a built-in row with no tracker terms carries the target" do
       row = %{
         metadata: %{},

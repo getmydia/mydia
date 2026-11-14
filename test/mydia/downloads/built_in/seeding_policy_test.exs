@@ -134,6 +134,20 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicyTest do
     assert :paused = SeedingPolicy.apply(row(), now())
   end
 
+  test "never pauses a private row whose tracker terms are unknown" do
+    put_target(seed_ratio: 0.0)
+    row = row(%{ratio: 50.0, metadata: %{"tracker_terms" => %{"private" => true}}})
+    assert :noop = SeedingPolicy.apply(row, now())
+    assert StubAdapter.pauses() == []
+    refute stamp(row)
+  end
+
+  test "waits for the tracker minimum when it is longer than the target" do
+    row = row(%{ratio: 1.2, metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}}})
+    assert :noop = SeedingPolicy.apply(row, now())
+    assert :paused = SeedingPolicy.apply(%{row | ratio: 3.0}, now())
+  end
+
   test "no target means no action" do
     BuiltIn.clear_runtime()
     row = row(%{metadata: %{"tracker_terms" => %{"minimum_ratio" => 0.5}}})

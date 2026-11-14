@@ -12,8 +12,8 @@ An operator using the built-in torrent client (rqbit) can:
    selection from the Downloads page until the download is imported.
 2. Set a seeding target: a ratio, a seed time, or both. A torrent seeds until
    whichever target it reaches first, then Mydia pauses it or removes it from
-   the client, as the operator chooses. A tracker's own minimum raises the
-   target and never lowers it.
+   the client, as the operator chooses. A tracker's own minimum must be met
+   as well, so it can hold a torrent longer but never release it sooner.
 3. Cap the client's total download and upload speed.
 
 All three are configured in the built-in client's settings and layered like
@@ -77,17 +77,31 @@ never restarts the engine.
 
 ### Effective goal
 
-`SeedingGoal` gains a function that merges the operator target into the
-tracker terms:
+The goal of a built-in download is a conjunction of two goals, each judged
+on its own:
 
-    effective_terms(tracker_terms | nil, %{ratio: r | nil, seed_time: s | nil})
-      :: TrackerTerms.t() | nil
+- the tracker terms, under the existing `met?/3`: met by whichever dimension
+  comes first, met when the terms ask for nothing, and never met for a
+  private tracker with no known ratio or seed time;
+- the operator target: met when either its ratio or its seed time is
+  reached. `seed_time` is converted from minutes to seconds.
 
-Per dimension, the result is the larger of the operator value and the tracker
-minimum, ignoring nils. `seed_time` is converted from minutes to seconds.
-`private?` is carried from the tracker terms. The existing `met?/3` then
-applies unchanged: met by whichever dimension comes first, and never met for
-a private tracker with no known ratio or seed time.
+`SeedingGoal` gains two functions for the decision:
+
+    goal_applies?(download, opts) :: boolean()
+    goal_met?(download, ratio, seeding_time, opts) :: boolean()
+
+The goal applies when the tracker terms apply or an operator target is set.
+It is met only when both halves are. Merging the two per dimension and
+taking the first dimension met would be wrong both ways: a tracker's 72 hour
+minimum would release a torrent the operator wants seeded to ratio 2.0, and
+a private tracker with unknown rules, whose terms carry no minimums, would
+be released by the operator's numbers alone (a ratio of 0 releases it at
+completion).
+
+A third function, `effective_terms/2`, still merges the two per dimension
+(the larger requirement wins, nils ignored, `private?` carried), but only
+for the numbers the Downloads page shows.
 
 The operator target applies only to downloads on the built-in client. A
 helper, `BuiltIn.seeding_target/0`, reads it from the running `Runtime`'s
@@ -120,17 +134,19 @@ Remove After Import paths (`ClientRemoval.maybe_remove_after_import/1` and
 `finish_pending_removal/2`) then do the removal, deleting the torrent's data
 as they do today. The import already holds its own copy.
 
-`ClientRemoval` reads the effective goal instead of the tracker terms alone:
-`terms_met?/2` and the `guarded?` check in `remove_when_ready/3` use
-`SeedingGoal.effective_terms/2` with the operator target for the built-in
-client, and the tracker terms alone for every other client. One rule serves
+`ClientRemoval` reads the whole goal instead of the tracker terms alone:
+`terms_met?/2` uses `SeedingGoal.goal_met?/4` and the `guarded?` check in
+`remove_when_ready/3` uses `SeedingGoal.goal_applies?/2`. Both include the
+operator target for the built-in client only, so every other client is held
+to the tracker terms alone. One rule serves
 both the post-import and the deferred path, and there is no second removal
 loop.
 
 ### Display
 
 The Downloads page's seeding-goal display (`MydiaWeb.SeedingComponents`, fed
-by `SeedingGoal.for_download/2`) shows the effective goal for built-in rows.
+by `SeedingGoal.for_download/2`) shows the merged numbers of
+`effective_terms/2` for built-in rows, and its `met?` is `goal_met?/4`.
 `for_download/2` takes the operator target as an option. The manual-removal
 hit-and-run warning follows the effective goal too.
 
@@ -230,14 +246,19 @@ without this feature.
 - `FileSelection`: season pack, sample folder, trailer, subtitles kept,
   `.nfo`/`.exe` skipped, all-junk fallback keeps everything.
 - `SeedingGoal.effective_terms/2`: operator only, tracker only, max per
-  dimension, private with unknown terms stays unmet, minutes to seconds.
+  dimension, minutes to seconds.
+- `SeedingGoal.goal_met?/4`: a private tracker with unknown terms is never
+  met under any target (ratio 0 included); a tracker minimum met first does
+  not release a torrent short of the operator target, nor the reverse.
 - `SeedingPolicy`: pauses once at the goal; no re-pause after a manual
   resume; remove mode leaves imported rows to removal and pauses unimported
-  ones; a failed pause leaves no stamp.
+  ones; a failed pause leaves no stamp; a private row with unknown terms is
+  never paused.
 - `FileSelectionPolicy`: waits for the file list, stamps once, never
   overrides a manual stamp, gives up after three failures.
-- `ClientRemoval`: the operator target guards built-in removal; other clients
-  are unchanged.
+- `ClientRemoval`: the operator target guards built-in removal; a private
+  built-in row with unknown terms is never removed in remove mode; other
+  clients are unchanged.
 - `BuiltIn.Settings`: the new fields validate, cast and stay read-only under
   env.
 - `BuiltIn.Manager`: limits pushed on engine start and on a limits-only

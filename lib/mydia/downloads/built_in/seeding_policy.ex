@@ -1,6 +1,9 @@
 defmodule Mydia.Downloads.BuiltIn.SeedingPolicy do
   @moduledoc """
-  Acts on a built-in torrent that reached the operator's seeding target.
+  Acts on a built-in torrent that reached the operator's seeding target and
+  met its tracker's terms (`Mydia.Downloads.SeedingGoal.goal_met?/4`, through
+  `SeedingGoal.for_download/2`). A private torrent whose tracker rules are
+  unknown never meets them, so it is never paused here.
 
   Pausing is a one-shot action: the row is stamped with
   `"seeding_goal_reached_at"` so a torrent the operator resumes is not paused

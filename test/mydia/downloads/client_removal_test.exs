@@ -339,6 +339,74 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
     end
 
+    test "the operator target never removes a private built-in download with unknown terms" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 0.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download = download!(%{name: BuiltIn.name()}, imported: true, terms: %{"private" => true})
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 50.0,
+          seeding_time: 400 * 86_400
+      })
+
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+      assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+    end
+
+    test "a built-in download waits for both the tracker minimum and the operator target" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 2.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download =
+        download!(%{name: BuiltIn.name()},
+          imported: true,
+          terms: %{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600}
+        )
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 1.1,
+          seeding_time: 80 * 3600
+      })
+
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 2.0,
+          seeding_time: 80 * 3600
+      })
+
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+    end
+
     test "a guarded download stays pending on a seed-aware client even when paused" do
       client = client!(type: :qbittorrent, remove_completed: true)
       download = download!(client, terms: @private_ratio)

@@ -83,9 +83,10 @@ applies to new grabs; torrents already running finish where they started.
   client pauses the torrent, or removes it from the client once it has been
   imported if you chose "Remove from client". A torrent that has not been
   imported yet is paused instead. If you resume a paused torrent yourself,
-  Mydia leaves it running. A private tracker's own minimum ratio or seed time
-  still applies when it is higher than your target, so the target never
-  shortens it. Leave both fields blank for no target.
+  Mydia leaves it running. A tracker's own minimum ratio or seed time has to
+  be met as well, so the target never shortens it, and a torrent from a
+  private tracker whose rules Mydia does not know is never paused or removed
+  automatically. Leave both fields blank for no target.
 - **File selection.** When a torrent's file list is known, Mydia skips the
   files it would not import (samples, trailers, extras and anything that is not a video or subtitle)
   and keeps the videos and subtitles. If a torrent has no importable video,

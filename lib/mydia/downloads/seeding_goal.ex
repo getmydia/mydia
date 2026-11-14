@@ -14,8 +14,17 @@ defmodule Mydia.Downloads.SeedingGoal do
   - Private with no known ratio or seed time: never met. Keeping a file is
     the safe wrong answer; the operator can still remove it by hand.
 
+  Built-in client downloads are also held to the operator's seeding target
+  (`Mydia.Downloads.BuiltIn.seeding_target/0`). The goal is a conjunction:
+  the tracker terms above must be met and, separately, the target (by either
+  its ratio or its seed time). Neither can lower the other, and a target can
+  never release a private torrent whose rules are unknown. `goal_applies?/2`
+  and `goal_met?/4` are the decision; `effective_terms/2` only merges the
+  numbers for display.
+
   `Mydia.Downloads.ClientRemoval.terms_met?/2` applies this before automatic
-  removal, and the Downloads page shows `for_download/2`.
+  removal, `Mydia.Downloads.BuiltIn.SeedingPolicy` before pausing, and the
+  Downloads page shows `for_download/2`.
   """
 
   alias Mydia.Downloads.{BuiltIn, ObservedSeedTime}
@@ -54,9 +63,12 @@ defmodule Mydia.Downloads.SeedingGoal do
   @doc """
   The tracker terms merged with the operator's seeding target (the built-in
   client's setting), per dimension: the larger requirement wins, and the
-  tracker's `private?` is carried. `seed_time` is in seconds. The target's
-  `:action` is not part of the goal. Nil only when neither side asks for
-  anything.
+  tracker's `private?` is carried. `seed_time` is in seconds. Nil only when
+  neither side asks for anything.
+
+  For display only (the numbers `for_download/2` shows). Whether the goal is
+  met is decided by `goal_met?/4`, which holds the download to the tracker
+  terms and the target separately.
   """
   @spec effective_terms(
           TrackerTerms.t() | nil,
@@ -84,20 +96,48 @@ defmodule Mydia.Downloads.SeedingGoal do
   defp larger(a, b), do: max(a, b)
 
   @doc """
-  The terms a download is held to: its frozen tracker terms merged with the
-  operator's seeding target, for built-in client downloads only. The target
-  is `opts[:target]` when given, else the client's own; other downloads have none.
+  True when the download has a seeding goal: its frozen tracker terms ask it
+  to keep seeding (`applies?/1`), or it belongs to the built-in client and
+  the operator set a seeding target. The target is `opts[:target]` when
+  given, else the client's own.
   """
-  @spec goal_terms(map(), keyword()) :: TrackerTerms.t() | nil
-  def goal_terms(download, opts \\ []) do
-    effective_terms(terms(download), target(download, opts))
+  @spec goal_applies?(map(), keyword()) :: boolean()
+  def goal_applies?(download, opts \\ []) do
+    applies?(terms(download)) or not is_nil(target(download, opts))
   end
+
+  @doc """
+  Whether `ratio` and `seeding_time` (seconds) meet the download's goal. Both
+  halves must hold:
+
+  - the tracker terms, under `met?/3` (met when they ask for nothing, never
+    when the tracker is private with no known minimum), and
+  - the operator's seeding target, for built-in client downloads that have
+    one: met when either its ratio or its seed time is reached.
+
+  So a tracker minimum never lowers the operator target, and the operator
+  target never lowers a tracker minimum. Options as in `goal_applies?/2`.
+  """
+  @spec goal_met?(map(), number() | nil, non_neg_integer() | nil, keyword()) :: boolean()
+  def goal_met?(download, ratio, seeding_time, opts \\ []) do
+    met?(terms(download), ratio, seeding_time) and
+      target_met?(target(download, opts), ratio, seeding_time)
+  end
+
+  defp target_met?(nil, _ratio, _seeding_time), do: true
+
+  defp target_met?(%{ratio: required_ratio, seed_time: required_time}, ratio, seeding_time),
+    do: reached?(ratio, required_ratio) or reached?(seeding_time, required_time)
 
   # Only the built-in client's downloads are held to the operator target;
   # `opts[:target]` replaces the runtime lookup (callers that already read it).
+  # A target asking for nothing is no target.
   defp target(download, opts) do
     if Map.get(download, :download_client) == BuiltIn.name() do
-      Keyword.get_lazy(opts, :target, &BuiltIn.seeding_target/0)
+      case Keyword.get_lazy(opts, :target, &BuiltIn.seeding_target/0) do
+        %{ratio: nil, seed_time: nil} -> nil
+        target -> target
+      end
     end
   end
 
@@ -168,7 +208,8 @@ defmodule Mydia.Downloads.SeedingGoal do
   `:client_completed_at`, `:db_completed_at` and `:in_client?`), read the same
   way as `Mydia.Downloads.ClientRemoval.terms_met?/2`. Nil when no goal applies.
   The second argument is a `DateTime` (now) or options `:now` and `:target`.
-  The goal is `goal_terms/2`, so a built-in row carries the operator's target.
+  `met?` is `goal_met?/4`; the required numbers shown are `effective_terms/2`,
+  so a built-in row carries the operator's target.
   """
   @spec for_download(map(), DateTime.t() | keyword()) :: t() | nil
   def for_download(download, opts \\ [])
@@ -177,9 +218,11 @@ defmodule Mydia.Downloads.SeedingGoal do
 
   def for_download(download, opts) do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
-    terms = goal_terms(download, Keyword.take(opts, [:target]))
+    goal_opts = Keyword.take(opts, [:target])
 
-    if applies?(terms) do
+    if goal_applies?(download, goal_opts) do
+      terms = effective_terms(terms(download), target(download, goal_opts))
+
       seeding_time =
         seeding_time(
           Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download),
@@ -198,7 +241,7 @@ defmodule Mydia.Downloads.SeedingGoal do
         required_seed_time: terms.minimum_seed_time,
         ratio: ratio,
         seeding_time: seeding_time,
-        met?: met?(terms, ratio, seeding_time)
+        met?: goal_met?(download, ratio, seeding_time, goal_opts)
       }
     end
   end

@@ -109,7 +109,7 @@ defmodule Mydia.Downloads.ObservedSeedTime do
   end
 
   defp tracked?(row) do
-    is_nil(Map.get(row, :seeding_time)) and SeedingGoal.applies?(SeedingGoal.goal_terms(row)) and
+    is_nil(Map.get(row, :seeding_time)) and SeedingGoal.goal_applies?(row) and
       (SeedingGoal.currently_seeding?(row) or Map.has_key?(row.metadata, @key))
   end
 

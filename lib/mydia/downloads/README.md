@@ -86,20 +86,24 @@ logged and the guard still applies.
 
 **Operator target (built-in client only).** The built-in client's `seed_ratio`
 and `seed_time` settings (minutes; the target holds seconds) are a seeding goal
-of the operator's own, with `seed_goal_action` (`pause` or `remove`).
-`SeedingGoal.effective_terms/2` merges it with the frozen tracker terms per
-dimension, the larger requirement winning, and carries the tracker's
-`private?`. `SeedingGoal.goal_terms/2` is what `for_download/2` and the guard
-read: the merged terms for a download whose `download_client` is
-`BuiltIn.name()`, the plain tracker terms for every other client. A ratio of 0
-is a target. A tracker minimum above the target therefore holds the torrent
-longer; the target never lowers it. `BuiltIn.seeding_target/0` reads the
-running client's config and returns nil without a runtime or with neither
-field set.
+of the operator's own, with `seed_goal_action` (`pause` or `remove`). For a
+download whose `download_client` is `BuiltIn.name()`, the goal is a
+conjunction: the tracker terms must be met under the rules above, and the
+target must be met by either its ratio or its seed time.
+`SeedingGoal.goal_applies?/2` and `SeedingGoal.goal_met?/4` are the decision,
+read by the guard, `ObservedSeedTime`, `SeedingPolicy` and the `met?` of
+`for_download/2`; every other client is held to the tracker terms alone.
+Neither half lowers the other: a tracker's 72 hour minimum does not release a
+torrent short of a ratio 2.0 target, and a private tracker with unknown rules
+is never met, so no target (a ratio of 0 included, which is a target) pauses or
+removes it. `SeedingGoal.effective_terms/2` merges the two per dimension, the
+larger requirement winning, for the numbers the Downloads page shows only.
+`BuiltIn.seeding_target/0` reads the running client's config and returns nil
+without a runtime or with neither field set.
 
 `BuiltIn.Policies`, called from `DownloadMonitor` each poll for the rows of
-the built-in client, runs `BuiltIn.SeedingPolicy` on each. Once the merged goal
-is met while the torrent is seeding: with `pause`, the torrent is paused through
+the built-in client, runs `BuiltIn.SeedingPolicy` on each. Once the goal is
+met while the torrent is seeding: with `pause`, the torrent is paused through
 the adapter and the row is stamped `metadata["seeding_goal_reached_at"]`; the
 stamp makes the pause one-shot, so a torrent the operator resumes by hand is
 not paused again. With `remove`, an imported row is left to `ClientRemoval`
