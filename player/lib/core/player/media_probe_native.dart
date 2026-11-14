@@ -16,6 +16,9 @@ MediaProbe createPlatformMediaProbe() => MpvMediaProbe();
 /// returns mpv's JSON rendering, the same route `decoder-list` is read by in
 /// `device_profile_native.dart`.
 class MpvMediaProbe implements MediaProbe {
+  /// How long to wait for the first decoded frame's colour fields.
+  static const _videoParamsCap = Duration(seconds: 3);
+
   @override
   Future<ProbeResult?> probe(
     PlayableFile playable, {
@@ -31,10 +34,16 @@ class MpvMediaProbe implements MediaProbe {
       await platform.setProperty('vo', 'null');
       await platform.setProperty('ao', 'null');
       await platform.setProperty('pause', 'yes');
+      await platform.setProperty('mute', 'yes');
+      await platform.setProperty('volume', '0');
 
       // One deadline for everything below, measured from the start of probe.
       Duration remaining() => timeout - stopwatch.elapsed;
 
+      // A file mpv cannot open ends the load with an error; stop polling then
+      // instead of waiting out the deadline.
+      Object? loadError;
+      final errorSub = player.stream.error.listen((e) => loadError = e);
       await player
           .open(
             Media(playable.url, httpHeaders: playable.headers),
@@ -46,7 +55,7 @@ class MpvMediaProbe implements MediaProbe {
       // so its stream cannot say when the file has loaded. Poll mpv's own
       // track-list until it holds a real track.
       List<Object?>? tracks;
-      while (remaining() > Duration.zero) {
+      while (remaining() > Duration.zero && loadError == null) {
         final json = await platform.getProperty('track-list');
         final decoded = json.isEmpty ? null : jsonDecode(json);
         if (hasRealTracks(decoded)) {
@@ -56,18 +65,31 @@ class MpvMediaProbe implements MediaProbe {
         await Future<void>.delayed(const Duration(milliseconds: 150));
       }
       if (tracks == null) {
-        debugPrint('[MediaProbe] no tracks before the deadline');
+        debugPrint(
+          '[MediaProbe] no tracks (${loadError ?? 'deadline'}) after '
+          '${stopwatch.elapsedMilliseconds}ms',
+        );
         return null;
       }
 
-      // Video params arrive a little after the track list.
+      // A paused player never decodes a frame, so video-params stays empty.
+      // Let it run silently (vo/ao null, muted) until the first frame, within
+      // a short cap and the overall deadline.
       final hasVideo = tracks.any((t) => t is Map && t['type'] == 'video');
       if (hasVideo) {
+        // media_kit starts with vid=no (no video decoding) until a
+        // VideoController attaches, so ask for the video track explicitly.
+        await platform.setProperty('vid', 'auto');
+        await platform.setProperty('pause', 'no');
+        final cap = stopwatch.elapsed + _videoParamsCap;
         while (remaining() > Duration.zero &&
+            stopwatch.elapsed < cap &&
             (await platform.getProperty('video-params/w')).isEmpty) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
       }
+
+      await errorSub.cancel();
 
       // Re-read: codec details can fill in after the first non-empty list.
       final trackJson = await platform.getProperty('track-list');
