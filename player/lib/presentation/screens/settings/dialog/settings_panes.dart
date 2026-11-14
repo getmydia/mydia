@@ -218,7 +218,8 @@ class DialogSettingsNav implements SettingsNav {
   void instanceRemoved() => _connections?.popUntil((route) => route.isFirst);
 
   @override
-  void addServer() => _closeThen(() => router.push('/sources/add'));
+  void addServer({SourceKind? kind}) =>
+      _closeThen(() => router.push(addServerLocation(kind)));
 
   @override
   void reauth(SourceKind kind, String accountId) => _closeThen(

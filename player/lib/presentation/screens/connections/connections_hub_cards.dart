@@ -219,9 +219,12 @@ class HubChip extends StatelessWidget {
 
 /// "Add a server", drawn where the server cards would be when none is saved.
 class HubAddServerGhost extends StatelessWidget {
-  const HubAddServerGhost({super.key, required this.onTap});
+  const HubAddServerGhost({super.key, required this.onTap, this.label});
 
   final VoidCallback onTap;
+
+  /// Defaults to "Add a server".
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -237,7 +240,7 @@ class HubAddServerGhost extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              context.l10n.connectionsAddServerGhost,
+              label ?? context.l10n.connectionsAddServerGhost,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,

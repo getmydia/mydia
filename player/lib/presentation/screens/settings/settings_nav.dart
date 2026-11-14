@@ -33,7 +33,9 @@ abstract interface class SettingsNav {
   /// The instance on screen was just removed from this device.
   void instanceRemoved();
 
-  void addServer();
+  /// Add a server: straight to [kind]'s form when given, otherwise the
+  /// kind picker.
+  void addServer({SourceKind? kind});
 
   /// Sign in again, or change a connection's address or servers.
   void reauth(SourceKind kind, String accountId);
@@ -41,6 +43,10 @@ abstract interface class SettingsNav {
   /// A Plex Home user switch landed on [id].
   void switchedTo(SourceId id);
 }
+
+/// Where adding a server of [kind] starts; the kind picker when null.
+String addServerLocation(SourceKind? kind) =>
+    kind == null ? '/sources/add' : '/sources/add/${kind.name}';
 
 /// The routes the screens used before the dialog existed.
 class RouterSettingsNav implements SettingsNav {
@@ -89,7 +95,7 @@ class RouterSettingsNav implements SettingsNav {
   String get _topPath => _router.state.uri.path;
 
   @override
-  void addServer() => _router.push('/sources/add');
+  void addServer({SourceKind? kind}) => _router.push(addServerLocation(kind));
 
   @override
   void reauth(SourceKind kind, String accountId) =>

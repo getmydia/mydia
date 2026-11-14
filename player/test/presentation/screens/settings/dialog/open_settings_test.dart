@@ -373,8 +373,10 @@ void main() {
 
   /// A Mydia server opens its account, whose gear opens the instance.
   Future<void> openInstanceFromHub(WidgetTester tester) async {
-    await tester
-        .tap(find.byKey(Key('connections-server-${recordA.account.id}')));
+    final card = find.byKey(Key('connections-server-${recordA.account.id}'));
+    await tester.ensureVisible(card);
+    await tester.pumpAndSettle();
+    await tester.tap(card);
     await tester.pumpAndSettle();
     expect(find.byKey(Key('manage-lock-${recordA.servers.single.id}')),
         findsOneWidget);

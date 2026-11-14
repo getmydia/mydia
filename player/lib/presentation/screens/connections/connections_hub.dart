@@ -153,7 +153,8 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
                 const SizedBox(height: _sectionGap),
                 _ServersSection(
                   overview: overview,
-                  onAdd: nav.addServer,
+                  onAdd: () => nav.addServer(),
+                  onAddMydia: () => nav.addServer(kind: SourceKind.mydia),
                   // Every kind, Mydia included: the account page holds the
                   // lock, All servers and reauth controls, and its gear
                   // reaches a Mydia instance's own settings.
@@ -337,25 +338,118 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+/// Mydia servers first, as the recommended way to use the player, then every
+/// other kind. While loading or after a failed read there is nothing to
+/// split, so one Servers header carries the spinner or the error.
 class _ServersSection extends ConsumerWidget {
   const _ServersSection({
     required this.overview,
     required this.onAdd,
+    required this.onAddMydia,
     required this.onOpen,
   });
 
   final ConnectionsOverview overview;
   final VoidCallback onAdd;
+  final VoidCallback onAddMydia;
   final ValueChanged<ConnectionServer> onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final direct = ref.watch(connectionsDirectSourceProvider);
-    final Widget body;
+
+    Widget cards(Iterable<ConnectionServer> servers) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, server) in servers.indexed) ...[
+              if (i > 0) const SizedBox(height: _cardGap),
+              HubServerCard(
+                key: Key('connections-server-${server.account.id}'),
+                server: server,
+                // Any profile of the account may be the one reached
+                // directly, not only the owner's.
+                direct: server.kind == SourceKind.mydia &&
+                    direct != null &&
+                    server.record.sources.any((s) => s.id == direct),
+                onTap: () => onOpen(server),
+              ),
+            ],
+          ],
+        );
+
+    final List<Widget> sections;
+    if (overview.serversLoading || overview.serversFailed) {
+      sections = [
+        _SectionHeader(
+          title: l10n.settingsServers,
+          action: AddServerButton(onPressed: onAdd),
+        ),
+        _unknownBody(context),
+      ];
+    } else {
+      final mydia =
+          overview.servers.where((s) => s.kind == SourceKind.mydia).toList();
+      final others =
+          overview.servers.where((s) => s.kind != SourceKind.mydia).toList();
+      // One Add button: on Other servers when that section shows, otherwise
+      // on the Mydia header so a Plex or Jellyfin add stays reachable.
+      final addButton = AddServerButton(onPressed: onAdd);
+      sections = [
+        Column(
+          key: const Key('connections-mydia-servers-section'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionHeader(
+              title: l10n.connectionsMydiaServers,
+              hint: l10n.connectionsMydiaServersHint,
+              action: others.isEmpty ? addButton : null,
+            ),
+            if (mydia.isEmpty)
+              HubAddServerGhost(
+                key: const Key('connections-add-mydia-ghost'),
+                label: l10n.connectionsAddMydiaServerGhost,
+                onTap: onAddMydia,
+              )
+            else
+              cards(mydia),
+          ],
+        ),
+        if (others.isNotEmpty) ...[
+          const SizedBox(height: _sectionGap),
+          Column(
+            key: const Key('connections-other-servers-section'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SectionHeader(
+                title: l10n.connectionsOtherServers,
+                action: addButton,
+              ),
+              cards(others),
+            ],
+          ),
+        ],
+      ];
+    }
+    return Column(
+      key: const Key('connections-servers-section'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...sections,
+        // "Show hidden servers" while locked, "Lock now" while open, in every
+        // state, so it says nothing about whether anything is hidden.
+        const SizedBox(height: 4),
+        const ShowHiddenSourcesRow(),
+      ],
+    );
+  }
+
+  /// The servers are not known yet, or could not be read.
+  Widget _unknownBody(BuildContext context) {
     if (overview.serversLoading) {
       // Nothing is known yet: no ghost inviting a returning user to add the
       // servers they already have.
-      body = const Padding(
+      return const Padding(
         key: Key('connections-servers-loading'),
         padding: EdgeInsets.symmetric(vertical: 20),
         child: Center(
@@ -365,56 +459,16 @@ class _ServersSection extends ConsumerWidget {
           ),
         ),
       );
-    } else if (overview.serversFailed) {
-      // The read failed, not the user's setup: an add invitation here would
-      // suggest their servers are gone.
-      body = Padding(
-        key: const Key('connections-servers-failed'),
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
-        child: Text(
-          context.l10n.sourcesLoadFailed,
-          style: TextStyle(fontSize: 13, color: context.palette.textSecondary),
-        ),
-      );
-    } else if (overview.servers.isEmpty) {
-      body = HubAddServerGhost(
-        key: const Key('connections-add-server-ghost'),
-        onTap: onAdd,
-      );
-    } else {
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (i, server) in overview.servers.indexed) ...[
-            if (i > 0) const SizedBox(height: _cardGap),
-            HubServerCard(
-              key: Key('connections-server-${server.account.id}'),
-              server: server,
-              // Any profile of the account may be the one reached directly,
-              // not only the owner's.
-              direct: server.kind == SourceKind.mydia &&
-                  direct != null &&
-                  server.record.sources.any((s) => s.id == direct),
-              onTap: () => onOpen(server),
-            ),
-          ],
-        ],
-      );
     }
-    return Column(
-      key: const Key('connections-servers-section'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SectionHeader(
-          title: context.l10n.settingsServers,
-          action: AddServerButton(onPressed: onAdd),
-        ),
-        body,
-        // "Show hidden servers" while locked, "Lock now" while open, in every
-        // state, so it says nothing about whether anything is hidden.
-        const SizedBox(height: 4),
-        const ShowHiddenSourcesRow(),
-      ],
+    // The read failed, not the user's setup: an add invitation here would
+    // suggest their servers are gone.
+    return Padding(
+      key: const Key('connections-servers-failed'),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+      child: Text(
+        context.l10n.sourcesLoadFailed,
+        style: TextStyle(fontSize: 13, color: context.palette.textSecondary),
+      ),
     );
   }
 }
