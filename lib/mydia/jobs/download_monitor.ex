@@ -53,6 +53,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.AutoRejectCap
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.EarlyImport
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.ClientRemoval
@@ -222,6 +223,14 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     {stalled_count, stall_update_failures} =
       check_progress(active_for_stall_check, grace_map, now)
+
+    # Import finished files of multi-file downloads that are still running.
+    # Best effort: a failure here must not break the monitor run.
+    try do
+      EarlyImport.run(active_for_stall_check)
+    rescue
+      error -> Logger.warning("Early import pass failed: #{Exception.message(error)}")
+    end
 
     # Find and match untracked torrents (manually added to clients)
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()

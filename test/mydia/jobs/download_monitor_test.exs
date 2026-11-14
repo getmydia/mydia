@@ -2632,6 +2632,106 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     }
   end
 
+  describe "early import" do
+    @describetag :tmp_dir
+
+    defmodule EarlyStubAdapter do
+      @behaviour Mydia.Downloads.Client
+
+      alias Mydia.Downloads.Structs.DownloadStatus
+
+      def put(list_progress, get_progress),
+        do: :persistent_term.put({__MODULE__, :progress}, {list_progress, get_progress})
+
+      defp status(progress) do
+        DownloadStatus.new(%{
+          id: "rq-early-1",
+          name: "Pack",
+          state: :downloading,
+          progress: 50.0,
+          download_speed: 10,
+          upload_speed: 0,
+          downloaded: 50,
+          uploaded: 0,
+          size: 100,
+          eta: nil,
+          ratio: 0.0,
+          save_path: "/tmp",
+          files: [],
+          file_progress: progress,
+          added_at: nil,
+          completed_at: nil
+        })
+      end
+
+      @impl true
+      def get_status(_config, _id), do: {:ok, status(elem(progress(), 1))}
+      @impl true
+      def list_torrents(_config, _opts), do: {:ok, [status(elem(progress(), 0))]}
+      defp progress, do: :persistent_term.get({__MODULE__, :progress})
+
+      @impl true
+      def test_connection(_config), do: {:error, :not_implemented}
+      @impl true
+      def add_torrent(_config, _torrent, _opts), do: {:error, :not_implemented}
+      @impl true
+      def remove_torrent(_config, _id, _opts), do: :ok
+      @impl true
+      def pause_torrent(_config, _id), do: :ok
+      @impl true
+      def resume_torrent(_config, _id), do: :ok
+      @impl true
+      def supported_protocols, do: [:torrent]
+    end
+
+    test "a downloading rqbit pack with one finished episode enqueues one partial job",
+         %{tmp_dir: tmp} do
+      previous = Mydia.Downloads.Client.Registry.lookup(:rqbit)
+      Mydia.Downloads.Client.Registry.register(:rqbit, EarlyStubAdapter)
+
+      on_exit(fn ->
+        :persistent_term.erase({EarlyStubAdapter, :progress})
+        if previous, do: Mydia.Downloads.Client.Registry.register(:rqbit, previous)
+      end)
+
+      setup_runtime_config([
+        build_test_client_config(%{name: "RqEarly", type: :rqbit, port: 3030})
+      ])
+
+      done = Path.join(tmp, "e01.mkv")
+      File.write!(done, "x")
+
+      EarlyStubAdapter.put(nil, [
+        %{index: 0, path: done, length: 100, have: 100},
+        %{index: 1, path: Path.join(tmp, "e02.mkv"), length: 100, have: 10}
+      ])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "downloading",
+          download_client: "RqEarly",
+          download_client_id: "rq-early-1",
+          metadata: %{"file_episodes" => %{"0" => "ep-a", "1" => "ep-b"}}
+        })
+
+      # One poll. Uniqueness across polls is Oban's job (Partial.enqueue/2's
+      # unique opts) and Oban is not running in tests, where enqueue falls
+      # back to a plain insert.
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      jobs =
+        Repo.all(from(j in Oban.Job, where: j.worker == "Mydia.Jobs.MediaImport"))
+        |> Enum.filter(&(&1.args["partial"] == true))
+
+      assert [job] = jobs
+      assert job.args["download_id"] == download.id
+      assert job.args["target_files"] == [%{"path" => done, "episode_id" => "ep-a"}]
+    end
+  end
+
   defp setup_runtime_config(download_clients) do
     # Start from the full defaults. A struct literal naming only the sections
     # this file uses left the rest nil, :streaming included, and any test
