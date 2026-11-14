@@ -83,10 +83,10 @@
 **Interfaces:**
 - Consumes: Task 1 schemas and `Store`.
 - Produces (all in `MetadataRelay.Backup`):
-  - `create_vault(%{signer: b, slot_id: s, envelope: e, recovery_signer: b, recovery_slot_id: s, recovery_envelope: e, lookup_hash: hex}) :: {:ok, vault_id} | {:error, :lookup_taken | :invalid}`. The recovery signer is stored as a member too (so it can sign) with its own slot id; it never writes a slot.
+  - `create_vault(%{signer: b, box_pub: b, slot_id: s, envelope: e, recovery_signer: b, recovery_box_pub: b, recovery_slot_id: s, recovery_envelope: e, lookup_hash: hex}) :: {:ok, vault_id} | {:error, :lookup_taken | :invalid}`. The recovery signer is stored as a member too (so it can sign) with its own slot id; it never writes a slot.
   - `lookup(handle :: binary) :: {:ok, vault_id} | {:error, :not_found}` (hashes the handle with SHA-256, hex).
   - `member?(vault_id, signer) :: boolean`.
-  - `manifest(vault_id, signer) :: {:ok, %{epoch, members: [%{signer, slot_id}], envelope, recovery_signer, slots: [%{slot_id, seq, epoch, size, updated_at}]}, etag :: String.t()} | {:error, :not_found}`. `envelope` is the requester's own. ETag is `"\"#{epoch}-#{max slot seq sum}-#{member count}-#{updated_at max}\""` or any value that changes with every write; tests only assert it changes.
+  - `manifest(vault_id, signer) :: {:ok, %{epoch, members: [%{signer, box_pub, slot_id, recovery?}], envelope, recovery_signer, slots: [%{slot_id, seq, epoch, size, updated_at}]}, etag :: String.t()} | {:error, :not_found}`. `envelope` is the requester's own. ETag is `"\"#{epoch}-#{max slot seq sum}-#{member count}-#{updated_at max}\""` or any value that changes with every write; tests only assert it changes.
   - `put_slot(vault_id, signer, slot_id, body, if_match :: integer | nil, epoch :: integer) :: {:ok, seq} | {:error, :not_owner | :precondition_failed | :too_large | :stale_epoch | :rate_limited}`. Owner means the member row's `slot_id` equals the path slot and signer matches. `if_match` nil only when no slot row exists. New seq is old + 1 (first is 1). `epoch` (sent as header `x-backup-epoch`) must equal the vault epoch. Charges `RateLimiter.check_rate_limit("backup:vault:#{id}", limit: 120, window_ms: 3_600_000)`. Updates `last_write_at`. Deletes the previous seq's file after the row update.
   - `get_slot(vault_id, slot_id) :: {:ok, body, seq} | {:error, :not_found}`.
   - `delete_vault(vault_id) :: :ok`.
@@ -104,7 +104,7 @@
 - Test: `metadata-relay/test/metadata_relay/backup/members_test.exs`
 
 **Interfaces:**
-- Produces: `update_members(vault_id, signer, %{expected_epoch: integer, new_epoch: integer, add: [%{signer, slot_id}], remove: [signer], envelopes: %{signer => envelope}, recovery: nil | %{signer, slot_id, envelope, lookup_hash}}) :: {:ok, epoch} | {:error, :conflict | :too_many_members | :invalid}`.
+- Produces: `update_members(vault_id, signer, %{expected_epoch: integer, new_epoch: integer, add: [%{signer, box_pub, slot_id}], remove: [signer], envelopes: %{signer => envelope}, recovery: nil | %{signer, box_pub, slot_id, envelope, lookup_hash}}) :: {:ok, epoch} | {:error, :conflict | :too_many_members | :invalid}`.
   - `expected_epoch` must equal the vault epoch, else `:conflict` (HTTP 409).
   - `new_epoch` is `expected_epoch` (add with an envelope under the current key, no rotation) or `expected_epoch + 1` (rotation). On rotation `envelopes` must hold exactly one entry per remaining member including recovery, else `:invalid`.
   - Removing a member deletes its slot row and file. A signer cannot remove the recovery signer except via `recovery` replacement.

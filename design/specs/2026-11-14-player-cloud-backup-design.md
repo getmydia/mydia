@@ -116,7 +116,9 @@ VK is sealed once per member and once for recovery: an ephemeral X25519 key
 agreement with the recipient's box public key, HKDF-SHA256 with info
 `"mydia/backup/envelope/v1|" + vaultId + "|" + epoch`, then XChaCha20-Poly1305.
 Any member can seal a new VK to the recovery public key without knowing the
-recovery key.
+recovery key. The relay stores every member's box public key, the recovery
+one included, and lists them in the manifest, so whichever device rotates
+can seal to all the others.
 
 ### Recovery key
 
