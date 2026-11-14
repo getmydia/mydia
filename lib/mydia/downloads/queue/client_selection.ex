@@ -9,7 +9,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.BuiltIn.DiskSpace
   alias Mydia.Downloads.Client
-  alias Mydia.Downloads.FileSelection
+  alias Mydia.Downloads.WantedFiles
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
@@ -126,12 +126,12 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
 
   # Selects appropriate client and adds the download, with smart fallback if type is detected.
   # For a torrent whose adapter can list files, only the wanted files are added
-  # (see Mydia.Downloads.FileSelection); the selection, or nil, is returned last
+  # (see Mydia.Downloads.WantedFiles); the selection, or nil, is returned last
   # so callers can record it on the download.
   @doc false
   # Public so Mydia.Downloads.Grabber can reuse the fetch/select/add pipeline.
   @spec select_and_add_to_client(SearchResult.t(), keyword()) ::
-          {:ok, map(), String.t(), atom() | nil, FileSelection.t() | nil} | {:error, term()}
+          {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil} | {:error, term()}
   def select_and_add_to_client(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
@@ -234,8 +234,8 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
 
   defp safe_select(search_result, files, opts) do
     search_result
-    |> FileSelection.context_for(opts)
-    |> FileSelection.select(files)
+    |> WantedFiles.context_for(opts)
+    |> WantedFiles.select(files)
   rescue
     error ->
       Logger.warning("File selection failed; adding every file",
@@ -275,7 +275,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     end
   end
 
-  defp space_needed(%FileSelection{selected_bytes: bytes}, _search_result), do: bytes
+  defp space_needed(%WantedFiles{selected_bytes: bytes}, _search_result), do: bytes
 
   defp space_needed(nil, %SearchResult{size: size}) when is_integer(size) and size > 0, do: size
   defp space_needed(_selection, _search_result), do: nil
@@ -503,7 +503,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     metadata =
       search_result
       |> build_download_metadata()
-      |> Map.merge(FileSelection.to_metadata(Keyword.get(opts, :file_selection)))
+      |> Map.merge(WantedFiles.to_metadata(Keyword.get(opts, :wanted_files)))
 
     attrs = %{
       indexer: search_result.indexer,

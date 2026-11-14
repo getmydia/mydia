@@ -4,7 +4,7 @@
 
 **Goal:** rqbit downloads only the files Mydia will import, imports each one as it completes, and never starts or continues a download the disk cannot hold.
 
-**Architecture:** `Queue.ClientSelection` lists a torrent's files through a new optional adapter callback, asks a pure-ish `FileSelection` which to keep, checks free space for the built-in client, then adds with `only_files`. `DownloadMonitor` turns rqbit's per-file progress into partial `MediaImport` jobs. A `SpaceGuard` process under the built-in supervisor pauses and resumes torrents around a free-space reserve.
+**Architecture:** `Queue.ClientSelection` lists a torrent's files through a new optional adapter callback, asks a pure-ish `WantedFiles` which to keep, checks free space for the built-in client, then adds with `only_files`. `DownloadMonitor` turns rqbit's per-file progress into partial `MediaImport` jobs. A `SpaceGuard` process under the built-in supervisor pauses and resumes torrents around a free-space reserve.
 
 **Tech Stack:** Elixir/Phoenix, Oban, Req + Bypass, rqbit 9.0.1 HTTP API, busybox `df`.
 
@@ -113,11 +113,11 @@ Paths in `files` are relative (`components` joined with `/`), because the torren
 - [ ] **Step 4: Run** `./dev mix test test/mydia/downloads/client/` (PASS).
 - [ ] **Step 5: Commit** `feat(downloads): list a torrent's files before adding it to rqbit`.
 
-### Task 3: `FileSelection`
+### Task 3: `WantedFiles`
 
 **Files:**
-- Create: `lib/mydia/downloads/file_selection.ex`
-- Test: `test/mydia/downloads/file_selection_test.exs` (`Mydia.DataCase`)
+- Create: `lib/mydia/downloads/wanted_files.ex`
+- Test: `test/mydia/downloads/wanted_files_test.exs` (`Mydia.DataCase`)
 
 **Interfaces:**
 - Consumes: file maps from Task 2.
@@ -162,11 +162,11 @@ defstruct only_files: nil,            # [index] | nil (nil = keep everything)
 - Modify: `lib/mydia/downloads/queue/lifecycle.ex:75` and `ClientSelection.create_download_record/4` (merge metadata)
 - Modify: `lib/mydia/downloads/grabber.ex` (`attach_to_client/3`, `store_client_assignment/3` merges metadata)
 - Modify tests matching the 4-tuple: `test/mydia/downloads/queue_test.exs`, `queue_cookie_scope_test.exs`, `cardigann_download_grab_test.exs`, `seeding_limits_test.exs`
-- Test: `test/mydia/downloads/queue/file_selection_grab_test.exs` (Bypass rqbit as a runtime client)
+- Test: `test/mydia/downloads/queue/wanted_files_grab_test.exs` (Bypass rqbit as a runtime client)
 
 **Interfaces:**
-- Consumes: `Client.list_torrent_files/3`, `FileSelection.select/2`, `context_for/2`, `to_metadata/1`.
-- Produces: `select_and_add_to_client(search_result, opts) :: {:ok, client_config, client_id, detected_type, FileSelection.t() | nil} | {:error, term()}`.
+- Consumes: `Client.list_torrent_files/3`, `WantedFiles.select/2`, `context_for/2`, `to_metadata/1`.
+- Produces: `select_and_add_to_client(search_result, opts) :: {:ok, client_config, client_id, detected_type, WantedFiles.t() | nil} | {:error, term()}`.
 - Produces: private hook `check_space(client_config, selection, search_result) :: :ok | {:error, Error.t()}`, returning `:ok` in this PR; Task 11 fills it in.
 
 - [ ] **Step 1: Write failing tests:**
@@ -182,12 +182,12 @@ end
 test "Grabber.run_grab records the selection on the existing row"
 test "falls back to adding every file when list_only errors" # second POST has no only_files
 test "falls back when list_only times out" # Bypass sleeps past options.timeout
-test "falls back when FileSelection raises" # media_item_id of a deleted item
+test "falls back when WantedFiles raises" # media_item_id of a deleted item
 test "an adapter without list_torrent_files adds as before and returns nil selection"
 ```
 
 - [ ] **Step 2: Run, see failures.**
-- [ ] **Step 3: Implement.** In the `with` after `get_adapter_for_client/1`: list, select inside `try/rescue` (log `Logger.warning("File selection failed; adding every file", ...)`), `check_space/3`, then add with `only_files`/`initial_peers` put into `torrent_opts`. Callers merge `FileSelection.to_metadata(selection)` into the metadata map they write. Update the existing tests' patterns to `{:ok, _, _, _, _}`.
+- [ ] **Step 3: Implement.** In the `with` after `get_adapter_for_client/1`: list, select inside `try/rescue` (log `Logger.warning("File selection failed; adding every file", ...)`), `check_space/3`, then add with `only_files`/`initial_peers` put into `torrent_opts`. Callers merge `WantedFiles.to_metadata(selection)` into the metadata map they write. Update the existing tests' patterns to `{:ok, _, _, _, _}`.
 - [ ] **Step 4: Run** `./dev mix test test/mydia/downloads test/mydia/jobs/movie_search_test.exs test/mydia/jobs/tv_show_search_test.exs` (PASS).
 - [ ] **Step 5: Commit** `feat(downloads): download only the wanted files of a torrent`.
 

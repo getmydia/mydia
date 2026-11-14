@@ -33,9 +33,9 @@ defmodule Mydia.Downloads.Grabber do
   import Ecto.Query, warn: false
 
   alias Mydia.Downloads.Download
-  alias Mydia.Downloads.FileSelection
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Queue
+  alias Mydia.Downloads.WantedFiles
   alias Mydia.Events
   alias Mydia.Indexers.SearchResult
   alias Mydia.Repo
@@ -186,7 +186,7 @@ defmodule Mydia.Downloads.Grabber do
   defp put_selection_metadata(attrs, _download, nil), do: attrs
 
   defp put_selection_metadata(attrs, download, selection) do
-    metadata = Map.merge(download.metadata || %{}, FileSelection.to_metadata(selection))
+    metadata = Map.merge(download.metadata || %{}, WantedFiles.to_metadata(selection))
     Map.put(attrs, :metadata, metadata)
   end
 

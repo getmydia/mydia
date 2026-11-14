@@ -1,4 +1,4 @@
-defmodule Mydia.Downloads.FileSelection do
+defmodule Mydia.Downloads.WantedFiles do
   @moduledoc """
   Decides which files of a multi-file torrent Mydia will download.
 

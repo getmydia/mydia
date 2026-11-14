@@ -1,4 +1,4 @@
-defmodule Mydia.Downloads.Queue.FileSelectionGrabTest do
+defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
   @moduledoc """
   The grab path lists a torrent's files, keeps the wanted ones and records the
   selection on the download. rqbit runs behind Bypass as a runtime client.
@@ -11,7 +11,7 @@ defmodule Mydia.Downloads.Queue.FileSelectionGrabTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
-  alias Mydia.Downloads.{Download, FileSelection, Grabber, History, Queue}
+  alias Mydia.Downloads.{Download, WantedFiles, Grabber, History, Queue}
   alias Mydia.Downloads.Client.{Error, Registry}
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
@@ -142,7 +142,7 @@ defmodule Mydia.Downloads.Queue.FileSelectionGrabTest do
       assert_receive :slow_listing_done, 2_000
     end
 
-    test "falls back when FileSelection raises", ctx do
+    test "falls back when WantedFiles raises", ctx do
       expect_rqbit(ctx.bypass, listing: :ok)
 
       # An integer is not a valid binary id, so the context lookup raises.
@@ -165,7 +165,7 @@ defmodule Mydia.Downloads.Queue.FileSelectionGrabTest do
     test "a keep-everything selection is returned and recorded without only_files", ctx do
       expect_rqbit(ctx.bypass, listing: :ok)
 
-      assert {:ok, _config, @hash, :torrent, %FileSelection{only_files: nil} = sel} =
+      assert {:ok, _config, @hash, :torrent, %WantedFiles{only_files: nil} = sel} =
                Queue.select_and_add_to_client(pack_result(ctx.eps),
                  episode_id: Enum.at(ctx.eps, 0).id,
                  download_type: :torrent

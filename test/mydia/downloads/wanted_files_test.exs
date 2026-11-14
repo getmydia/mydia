@@ -1,9 +1,9 @@
-defmodule Mydia.Downloads.FileSelectionTest do
+defmodule Mydia.Downloads.WantedFilesTest do
   use Mydia.DataCase, async: true
 
   import Mydia.MediaFixtures
 
-  alias Mydia.Downloads.FileSelection
+  alias Mydia.Downloads.WantedFiles
   alias Mydia.Indexers.Structs.SearchResultMetadata
 
   @pack "The.Lantern.Keepers.S02"
@@ -33,7 +33,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
   defp ctx(show, ids), do: %{media_item: show, season_number: 2, targeted_episode_ids: ids}
 
   test "owned episodes are skipped", %{show: show, ids: ids} do
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), pack_files())
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), pack_files())
     assert sel.only_files == [4, 5, 6, 7, 8, 9]
     assert sel.skipped_owned_episode_ids |> Enum.sort() == Enum.take(ids, 4) |> Enum.sort()
     assert sel.file_episodes == Map.new(4..9, &{&1, Enum.at(ids, &1)})
@@ -41,7 +41,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
   end
 
   test "targeted but owned episode is kept", %{show: show, ids: ids} do
-    sel = FileSelection.select(ctx(show, [Enum.at(ids, 2) | Enum.drop(ids, 4)]), pack_files())
+    sel = WantedFiles.select(ctx(show, [Enum.at(ids, 2) | Enum.drop(ids, 4)]), pack_files())
     assert sel.only_files == [2, 4, 5, 6, 7, 8, 9]
   end
 
@@ -52,7 +52,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
       ep_file(2, 5)
     ]
 
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), files)
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), files)
     assert sel.only_files == [1, 2]
     assert sel.file_episodes == %{2 => Enum.at(ids, 4)}
   end
@@ -64,11 +64,11 @@ defmodule Mydia.Downloads.FileSelectionTest do
     ctx = %{ctx(show, [Enum.at(ids, 4)]) | targeted_episode_ids: [Enum.at(ids, 4)]}
     ctx = Map.put(ctx, :single_episode?, true)
 
-    sel = FileSelection.select(ctx, [ep_file(0, 5), ep_file(1, 1)])
+    sel = WantedFiles.select(ctx, [ep_file(0, 5), ep_file(1, 1)])
     assert sel.only_files == nil
     assert sel.skipped_owned_episode_ids == []
 
-    sel = FileSelection.select(ctx, [ep_file(0, 5), ep_file(1, 1), file("Sample/s02e05.mkv", 2)])
+    sel = WantedFiles.select(ctx, [ep_file(0, 5), ep_file(1, 1), file("Sample/s02e05.mkv", 2)])
     assert sel.only_files == [0, 1]
   end
 
@@ -81,34 +81,34 @@ defmodule Mydia.Downloads.FileSelectionTest do
       file("#{@pack}/cover.jpg", 4)
     ]
 
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), files)
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), files)
     assert sel.only_files == [0]
   end
 
   test "unmatched files are kept", %{show: show, ids: ids} do
     files = [ep_file(0, 1), ep_file(1, 5), file("#{@pack}/bonus_unlabeled.mkv", 2)]
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), files)
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), files)
     assert sel.only_files == [1, 2]
     assert sel.file_episodes == %{1 => Enum.at(ids, 4)}
   end
 
   test "multi-episode files are kept and unmapped", %{show: show, ids: ids} do
     files = [ep_file(0, 1), file("#{@pack}/#{@pack}E05E06.mkv", 1)]
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), files)
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), files)
     assert sel.only_files == [1]
     assert sel.file_episodes == %{}
   end
 
   test "keeps everything when every video would be dropped", %{show: show} do
     files = Enum.map(1..4, &ep_file(&1 - 1, &1))
-    sel = FileSelection.select(ctx(show, []), files)
+    sel = WantedFiles.select(ctx(show, []), files)
     assert sel.only_files == nil
     assert sel.selected_bytes == 400
   end
 
   test "keeps everything when nothing is dropped", %{show: show, ids: ids} do
     files = Enum.map(5..10, &ep_file(&1 - 5, &1))
-    sel = FileSelection.select(ctx(show, ids), files)
+    sel = WantedFiles.select(ctx(show, ids), files)
     assert sel.only_files == nil
     assert sel.selected_bytes == 600
     assert map_size(sel.file_episodes) == 6
@@ -124,7 +124,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
     ]
 
     sel =
-      FileSelection.select(
+      WantedFiles.select(
         %{media_item: movie, season_number: nil, targeted_episode_ids: []},
         files
       )
@@ -135,7 +135,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
 
   test "nil media item behaves like a movie" do
     sel =
-      FileSelection.select(
+      WantedFiles.select(
         %{media_item: nil, season_number: nil, targeted_episode_ids: []},
         [file("a.mkv", 0), file("a.nfo", 1)]
       )
@@ -144,39 +144,39 @@ defmodule Mydia.Downloads.FileSelectionTest do
   end
 
   test "to_metadata/1", %{show: show, ids: ids} do
-    sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), pack_files())
-    meta = FileSelection.to_metadata(sel)
+    sel = WantedFiles.select(ctx(show, Enum.drop(ids, 4)), pack_files())
+    meta = WantedFiles.to_metadata(sel)
     assert meta["selected_files"] == [4, 5, 6, 7, 8, 9]
     assert meta["file_episodes"]["4"] == Enum.at(ids, 4)
     assert length(meta["skipped_owned_episode_ids"]) == 4
-    assert FileSelection.to_metadata(nil) == %{}
+    assert WantedFiles.to_metadata(nil) == %{}
   end
 
   describe "context_for/2" do
     test "reads season and episode ids from metadata", %{show: show, ids: ids} do
       result = %{metadata: %SearchResultMetadata{season_number: 2, episode_ids: ids}}
-      ctx = FileSelection.context_for(result, media_item_id: show.id)
+      ctx = WantedFiles.context_for(result, media_item_id: show.id)
       assert ctx.media_item.id == show.id
       assert ctx.season_number == 2
       assert ctx.targeted_episode_ids == ids
     end
 
     test "accepts plain-map and nil metadata", %{show: show} do
-      ctx = FileSelection.context_for(%{metadata: %{season_number: 2}}, media_item_id: show.id)
+      ctx = WantedFiles.context_for(%{metadata: %{season_number: 2}}, media_item_id: show.id)
       assert ctx.season_number == 2 and ctx.targeted_episode_ids == []
-      ctx = FileSelection.context_for(%{metadata: nil}, media_item_id: show.id)
+      ctx = WantedFiles.context_for(%{metadata: nil}, media_item_id: show.id)
       assert ctx.season_number == nil
     end
 
     test "single episode grab includes episode id", %{show: show, eps: [ep | _]} do
-      ctx = FileSelection.context_for(%{metadata: nil}, media_item_id: show.id, episode_id: ep.id)
+      ctx = WantedFiles.context_for(%{metadata: nil}, media_item_id: show.id, episode_id: ep.id)
       assert ctx.targeted_episode_ids == [ep.id]
       assert ctx.single_episode?
       assert ctx.season_number == 2
     end
 
     test "no media item" do
-      ctx = FileSelection.context_for(%{metadata: nil}, [])
+      ctx = WantedFiles.context_for(%{metadata: nil}, [])
       assert ctx.media_item == nil
     end
   end

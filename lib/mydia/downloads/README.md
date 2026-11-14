@@ -226,7 +226,7 @@ leave the tunnel from the port the peer contacted. See
 ## Wanted files and early import (rqbit)
 
 `Client.Rqbit` lists a torrent's files before adding it, and
-`Queue.ClientSelection` decides which to keep (`FileSelection.select/2`) and
+`Queue.ClientSelection` decides which to keep (`WantedFiles.select/2`) and
 adds with `only_files`. Clients without `list_torrent_files/2` add everything.
 The selection is recorded in the download's metadata:
 

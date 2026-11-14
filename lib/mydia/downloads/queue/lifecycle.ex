@@ -78,7 +78,7 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
              search_result,
              client_config,
              client_id,
-             Keyword.put(opts, :file_selection, selection)
+             Keyword.put(opts, :wanted_files, selection)
            ) do
       # Use detected type as fallback if protocol wasn't set
       final_type = download_type || detected_type

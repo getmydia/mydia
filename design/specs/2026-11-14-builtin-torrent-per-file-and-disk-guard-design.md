@@ -82,8 +82,8 @@ reason the user can read.
 
 ### Selection rule
 
-`Mydia.Downloads.FileSelection.select(context, files)` returns a
-`%FileSelection{}`. `context` carries the media item, the release's season
+`Mydia.Downloads.WantedFiles.select(context, files)` returns a
+`%WantedFiles{}`. `context` carries the media item, the release's season
 number and the episode ids the search targeted (`metadata.episode_ids`).
 `files` is `[%{index, path, length}]` from `list_torrent_files/2`.
 
@@ -126,16 +126,16 @@ other adapters ignore.
 
 1. If the adapter exports `list_torrent_files/2`, list. On error, warn and
    add with no selection.
-2. `FileSelection.select/2`. If it raises, warn and add with no selection.
+2. `WantedFiles.select/2`. If it raises, warn and add with no selection.
 3. Disk guard check (see below); a refusal returns
    `{:error, {:client_error, Error.insufficient_space(...)}}` and adds
    nothing.
 4. Add with `only_files` (omitted when everything is kept) and
    `initial_peers`.
 
-`select_and_add_to_client/2` returns the `%FileSelection{}` (or nil) as a
+`select_and_add_to_client/2` returns the `%WantedFiles{}` (or nil) as a
 fifth tuple element, and both callers (`Queue.Lifecycle.initiate_download/2`
-and `Grabber.run_grab/3`) merge `FileSelection.to_metadata/1` into the
+and `Grabber.run_grab/3`) merge `WantedFiles.to_metadata/1` into the
 download's metadata: `"selected_files"` (indices), `"file_episodes"` (file
 index, as a string, to the one episode id a kept video parsed to) and
 `"skipped_owned_episode_ids"`.
@@ -252,14 +252,14 @@ clients page and the downloads page show a warning banner while it holds.
 | Situation | Behaviour |
 | --- | --- |
 | `list_only` fails or times out | Warn, add with all files |
-| `FileSelection.select/2` raises | Warn, add with all files |
+| `WantedFiles.select/2` raises | Warn, add with all files |
 | Second add fails | Same error as a failed add today |
 | `df` fails | Warn once per hour, guard allows |
 | Partial import fails | Logged; full import retries the file |
 
 ## Testing
 
-- `FileSelection`: table-driven unit tests over fictional pack layouts
+- `WantedFiles`: table-driven unit tests over fictional pack layouts
   (`The Lantern Keepers S02` with owned and missing episodes, samples,
   extras, subtitles, unparseable names, targeted-but-owned episodes, movies).
 - `Client.Rqbit`: Bypass tests for `list_torrent_files/2` and for add with
@@ -282,7 +282,7 @@ clients page and the downloads page show a warning banner while it holds.
 
 Two PRs off one spec:
 
-1. Wanted files and early import (adapter, `FileSelection`, monitor,
+1. Wanted files and early import (adapter, `WantedFiles`, monitor,
    `MediaImport` partial mode).
 2. Disk-space guard (setting, `DiskSpace`, grab check, `SpaceGuard`, banner).
 
