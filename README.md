@@ -56,8 +56,9 @@ settings, and most households only wanted one app.
 | Watching remotely | Mydia Player connects peer-to-peer, no port forwarding or VPN | Not their job; run a media server |
 
 Configuration deserves a sentence of its own. You can declare download clients,
-indexers and libraries in a Compose file so they exist on first boot, and still
-change them later in the browser. The *arr apps keep everything in their own
+indexers and libraries in a Compose file so they exist on first boot, and keep
+settings you want to tweak in the browser. The UI marks which values come from
+the file and keeps those read-only. The *arr apps keep everything in their own
 database, so a fresh instance always starts with clicking.
 
 ### What it does
@@ -89,7 +90,8 @@ openssl rand -base64 48  # SECRET_KEY_BASE
 openssl rand -base64 48  # GUARDIAN_SECRET_KEY
 ```
 
-Create `docker-compose.yml`:
+Create `docker-compose.yml`, pasting the two values in place of the
+placeholders:
 
 ```yaml
 services:
