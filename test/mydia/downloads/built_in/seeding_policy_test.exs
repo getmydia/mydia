@@ -202,6 +202,26 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicyTest do
     assert :paused = SeedingPolicy.apply(seen, now)
   end
 
+  test "a seed-time target is not met on time since completion when nothing was observed" do
+    put_target(seed_time: 60)
+    now = now()
+
+    # As if the first observation failed to write: no observed entry at all.
+    row =
+      row(%{
+        ratio: 0.1,
+        seeding_time: nil,
+        client_completed_at: DateTime.add(now, -3 * 86_400, :second)
+      })
+
+    assert :noop = SeedingPolicy.apply(row, now)
+    assert StubAdapter.pauses() == []
+    refute stamp(row)
+
+    observed = %{row | metadata: %{"observed_seeding" => %{"seconds" => 3600}}}
+    assert :paused = SeedingPolicy.apply(observed, now)
+  end
+
   test "Policies.run skips other clients and survives a raising row" do
     other = %{row() | download_client: "Other"}
     broken = %{row() | download_client_id: nil, metadata: :boom}

@@ -263,9 +263,28 @@ defmodule Mydia.Downloads.SeedingGoalTest do
       row = built_in_row(nil)
       target = %{ratio: 2.0, seed_time: 3600}
 
-      refute SeedingGoal.goal_met?(row, 1.0, 60, target: target)
-      assert SeedingGoal.goal_met?(row, 1.0, 3600, target: target)
-      assert SeedingGoal.goal_met?(row, 2.0, 60, target: target)
+      refute SeedingGoal.goal_met?(row, 1.0, 60, target: target, counted_seed_time: 60)
+      assert SeedingGoal.goal_met?(row, 1.0, 3600, target: target, counted_seed_time: 3600)
+      assert SeedingGoal.goal_met?(row, 2.0, 60, target: target, counted_seed_time: 60)
+    end
+
+    test "the target's seed time never counts the wall-clock fallback" do
+      row = built_in_row(nil)
+      target = %{ratio: nil, seed_time: 3600}
+
+      # Three days of wall-clock time, but nothing reported or observed.
+      refute SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target)
+      refute SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target, counted_seed_time: nil)
+      assert SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target, counted_seed_time: 3600)
+
+      # Without the option, the download's observed seconds count.
+      observed = %{row | metadata: %{"observed_seeding" => %{"seconds" => 3600}}}
+      assert SeedingGoal.goal_met?(observed, 0.1, 3 * @day, target: target)
+    end
+
+    test "a tracker seed-time minimum still accepts the wall-clock fallback" do
+      row = built_in_row(%{"minimum_seed_time" => 3600})
+      assert SeedingGoal.goal_met?(row, 0.0, 3 * @day, target: nil)
     end
 
     test "other clients ignore the operator target" do
@@ -322,6 +341,37 @@ defmodule Mydia.Downloads.SeedingGoalTest do
 
       assert %SeedingGoal{met?: true, target_met?: true} =
                SeedingGoal.for_download(%{row | ratio: 2.0}, now: @now, target: target)
+    end
+
+    test "a seed-time target is unmet with no reported or observed time" do
+      completed = DateTime.add(@now, -3 * @day, :second)
+
+      row = %{
+        metadata: %{},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 0.1,
+        seeding_time: nil,
+        client_completed_at: completed,
+        in_client?: true
+      }
+
+      target = %{ratio: nil, seed_time: 3600}
+
+      # The displayed seed time keeps the fallback; the target does not use it.
+      assert %SeedingGoal{
+               seeding_time: seeding_time,
+               target_seeding_time: nil,
+               target_met?: false,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: target)
+
+      assert seeding_time == 3 * @day
+
+      observed = %{row | metadata: %{"observed_seeding" => %{"seconds" => 3600}}}
+
+      assert %SeedingGoal{target_seeding_time: 3600, target_met?: true, met?: true} =
+               SeedingGoal.for_download(observed, now: @now, target: target)
     end
 
     test "target_met? reports the operator target apart from the tracker terms" do

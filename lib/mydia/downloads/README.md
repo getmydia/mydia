@@ -93,7 +93,12 @@ and `seed_time` settings (minutes; the target holds seconds) are a seeding goal
 of the operator's own, with `seed_goal_action` (`pause` or `remove`). For a
 download whose `download_client` is `BuiltIn.name()`, the goal is a
 conjunction: the tracker terms must be met under the rules above, and the
-target must be met by either its ratio or its seed time.
+target must be met by either its ratio or its seed time. The target's seed time
+counts only time the client reported or `ObservedSeedTime` observed
+(`SeedingGoal.counted_seed_time/1`, passed as `:counted_seed_time`), never the
+wall-clock fallback above, which stays for the tracker terms alone. With
+neither known, as when the first observation failed to write, the target's
+seed time is unreached, so an old torrent is never paused or removed at once.
 `SeedingGoal.goal_applies?/2` and `SeedingGoal.goal_met?/4` are the decision,
 read by the guard, `ObservedSeedTime`, `SeedingPolicy` and the `met?` of
 `for_download/2`; every other client is held to the tracker terms alone.

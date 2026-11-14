@@ -407,6 +407,43 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       assert :removed = ClientRemoval.finish_pending_removal(download)
     end
 
+    test "a seed-time target never removes on time since completion alone" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_time: 60, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download = download!(%{name: BuiltIn.name()}, imported: true)
+
+      # Seeding, finished three days ago, no reported or observed seed time
+      # (the first observation failed to write).
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 0.1,
+          completed_at: DateTime.add(DateTime.utc_now(), -3 * 86_400, :second)
+      })
+
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+
+      :ok =
+        Mydia.Downloads.MetadataKey.put(download.id, "observed_seeding", %{
+          "seconds" => 3600,
+          "last_seen_at" => nil
+        })
+
+      assert :removed = ClientRemoval.finish_pending_removal(Downloads.get_download!(download.id))
+    end
+
     test "a guarded download stays pending on a seed-aware client even when paused" do
       client = client!(type: :qbittorrent, remove_completed: true)
       download = download!(client, terms: @private_ratio)

@@ -121,16 +121,18 @@ defmodule Mydia.Downloads.ClientRemoval do
   def terms_met?(%Download{} = download, status) do
     case status do
       %DownloadStatus{} ->
+        counted = status.seeding_time || ObservedSeedTime.seconds(download)
+
         seeding_time =
           SeedingGoal.seeding_time(
-            status.seeding_time || ObservedSeedTime.seconds(download),
+            counted,
             status.state == :seeding,
             status.completed_at,
             download.completed_at,
             DateTime.utc_now()
           )
 
-        SeedingGoal.goal_met?(download, status.ratio, seeding_time)
+        SeedingGoal.goal_met?(download, status.ratio, seeding_time, counted_seed_time: counted)
 
       nil ->
         SeedingGoal.goal_met?(download, nil, nil)

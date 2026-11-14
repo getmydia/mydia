@@ -40,6 +40,7 @@ defmodule Mydia.Downloads.SeedingGoal do
           target_seed_time: non_neg_integer() | nil,
           ratio: float() | nil,
           seeding_time: non_neg_integer() | nil,
+          target_seeding_time: non_neg_integer() | nil,
           target_met?: boolean(),
           met?: boolean()
         }
@@ -53,6 +54,7 @@ defmodule Mydia.Downloads.SeedingGoal do
     :target_seed_time,
     :ratio,
     :seeding_time,
+    :target_seeding_time,
     target_met?: true,
     met?: false
   ]
@@ -88,13 +90,33 @@ defmodule Mydia.Downloads.SeedingGoal do
     one: met when either its ratio or its seed time is reached.
 
   So a tracker minimum never lowers the operator target, and the operator
-  target never lowers a tracker minimum. Options as in `goal_applies?/2`.
+  target never lowers a tracker minimum. Options as in `goal_applies?/2`,
+  plus `:counted_seed_time`.
+
+  `seeding_time` may include the wall-clock fallback of `seeding_time/5`,
+  and the tracker terms accept it. The target's seed time does not: it is
+  judged on `opts[:counted_seed_time]`, seed time the client reported or
+  Mydia observed (`counted_seed_time/1` of the download when not given).
+  With neither known, the target's seed time is unreached, so a torrent that
+  finished long ago never meets a new target at once (for example after the
+  first observation failed to write).
   """
   @spec goal_met?(map(), number() | nil, non_neg_integer() | nil, keyword()) :: boolean()
   def goal_met?(download, ratio, seeding_time, opts \\ []) do
+    counted = Keyword.get_lazy(opts, :counted_seed_time, fn -> counted_seed_time(download) end)
+
     met?(terms(download), ratio, seeding_time) and
-      target_met?(target(download, opts), ratio, seeding_time)
+      target_met?(target(download, opts), ratio, counted)
   end
+
+  @doc """
+  Seed time the client reported (`:seeding_time` on a polled row) or Mydia
+  observed (`Mydia.Downloads.ObservedSeedTime`), never a wall-clock estimate.
+  Nil when neither is known.
+  """
+  @spec counted_seed_time(map()) :: non_neg_integer() | nil
+  def counted_seed_time(download),
+    do: Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download)
 
   defp target_met?(nil, _ratio, _seeding_time), do: true
 
@@ -185,7 +207,10 @@ defmodule Mydia.Downloads.SeedingGoal do
   unknown rules); `target_ratio` and `target_seed_time` are the operator's
   target for a built-in row (nil when there is none). They are never merged.
   `target_met?` is the operator target alone (true when there is none), so a
-  pending tracker minimum never reads as an unmet target.
+  pending tracker minimum never reads as an unmet target. `seeding_time`
+  includes the wall-clock fallback the tracker terms accept;
+  `target_seeding_time` is `counted_seed_time/1`, the seed time the target
+  is judged on.
   """
   @spec for_download(map(), DateTime.t() | keyword()) :: t() | nil
   def for_download(download, opts \\ [])
@@ -196,14 +221,15 @@ defmodule Mydia.Downloads.SeedingGoal do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     # Resolved once; every check below reuses it.
     target = target(download, Keyword.take(opts, [:target]))
-    goal_opts = [target: target]
 
-    if goal_applies?(download, goal_opts) do
+    if goal_applies?(download, target: target) do
       terms = terms(download) || %TrackerTerms{}
+      counted = counted_seed_time(download)
+      goal_opts = [target: target, counted_seed_time: counted]
 
       seeding_time =
         seeding_time(
-          Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download),
+          counted,
           currently_seeding?(download),
           Map.get(download, :client_completed_at),
           Map.get(download, :db_completed_at),
@@ -221,7 +247,8 @@ defmodule Mydia.Downloads.SeedingGoal do
         target_seed_time: target && target.seed_time,
         ratio: ratio,
         seeding_time: seeding_time,
-        target_met?: target_met?(target, ratio, seeding_time),
+        target_seeding_time: counted,
+        target_met?: target_met?(target, ratio, counted),
         met?: goal_met?(download, ratio, seeding_time, goal_opts)
       }
     end

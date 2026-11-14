@@ -104,22 +104,25 @@ defmodule MydiaWeb.SeedingComponents do
   defp tracker_chip(%SeedingGoal{required_ratio: nil, required_seed_time: nil} = goal),
     do: if(goal.private? == true, do: gettext("Private, kept seeding"))
 
-  defp tracker_chip(goal), do: progress(goal, goal.required_ratio, goal.required_seed_time)
+  defp tracker_chip(goal),
+    do: progress(goal, goal.seeding_time, goal.required_ratio, goal.required_seed_time)
 
   defp target_chip(%SeedingGoal{target_ratio: nil, target_seed_time: nil}), do: nil
 
+  # The target counts only reported or observed seed time.
   defp target_chip(goal),
     do:
       gettext("target %{progress}",
-        progress: progress(goal, goal.target_ratio, goal.target_seed_time)
+        progress:
+          progress(goal, goal.target_seeding_time, goal.target_ratio, goal.target_seed_time)
       )
 
-  defp progress(goal, required_ratio, required_seed_time) do
+  defp progress(goal, seeding_time, required_ratio, required_seed_time) do
     [
       required_ratio &&
         "#{format_ratio(goal.ratio)} / #{format_required_ratio(required_ratio)}",
       required_seed_time &&
-        "#{format_time(goal.seeding_time)} / #{format_time(required_seed_time)}"
+        "#{format_time(seeding_time)} / #{format_time(required_seed_time)}"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" · ")
