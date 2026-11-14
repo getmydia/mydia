@@ -2044,6 +2044,7 @@ dependencies = [
  "mydia_smb",
  "reqwest",
  "rustls",
+ "rustls-platform-verifier",
  "serde_json",
  "tempfile",
  "tokio",

@@ -287,24 +287,54 @@ async fn reply_status<S: ByteSink>(sink: &S, status: u16, content_range: Option<
     }
 }
 
+type WantsVerifier = rustls::ConfigBuilder<rustls::ClientConfig, rustls::WantsVerifier>;
+type WantsClientCert = rustls::ConfigBuilder<rustls::ClientConfig, rustls::client::WantsClientCert>;
+
+/// The system's trust, as the lender's own Dart HTTP client has, so a share
+/// whose certificate chains to a CA installed there plays for peers too.
+/// Mozilla's roots when the system store cannot be read.
+#[cfg(not(target_os = "android"))]
+fn with_server_trust(builder: WantsVerifier) -> WantsClientCert {
+    let provider = builder.crypto_provider().clone();
+    match rustls_platform_verifier::Verifier::new(provider) {
+        Ok(verifier) => builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(verifier)),
+        Err(e) => {
+            tracing::warn!("peer files: no system trust store, using Mozilla's roots: {e}");
+            with_mozilla_roots(builder)
+        }
+    }
+}
+
+/// Mozilla's roots. The platform verifier needs a JNI handle on Android
+/// that this app never gives it, so a share behind a CA only the device
+/// trusts answers 502 to peers there.
+#[cfg(target_os = "android")]
+fn with_server_trust(builder: WantsVerifier) -> WantsClientCert {
+    with_mozilla_roots(builder)
+}
+
+fn with_mozilla_roots(builder: WantsVerifier) -> WantsClientCert {
+    builder.with_root_certificates(rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    })
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// A client for `http(s)` grants with the ring provider iroh already uses and
-/// Mozilla's roots. `None` only if rustls rejects its own default protocol
-/// versions, in which case `http(s)` grants answer 502.
+/// A client for `http(s)` grants with the ring provider iroh already uses.
+/// `None` only if rustls rejects its own default protocol versions, in which
+/// case `http(s)` grants answer 502.
 fn http_client() -> Option<reqwest::Client> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let roots = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
+    let builder = rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .inspect_err(|e| tracing::warn!("peer files: no TLS config: {e}"))
-        .ok()?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+        .ok()?;
+    let tls = with_server_trust(builder).with_no_client_auth();
     reqwest::Client::builder()
         .tls_backend_preconfigured(tls)
         .connect_timeout(Duration::from_secs(10))

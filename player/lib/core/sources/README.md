@@ -617,9 +617,10 @@ described in `native/README.md`.
 
 The host answers 404 only for a path it does not lend or a file its backend
 says is gone, and 502 when the share behind a lent path fails, or its grant
-times out. A WebDAV share over HTTPS whose certificate chains to a private or
-user-installed CA plays on the host but answers 502 to every peer: the host's
-Rust reader trusts Mozilla's roots, not the system store.
+times out. The host's Rust reader trusts the system store, except on Android,
+where it trusts Mozilla's roots: a WebDAV share over HTTPS whose certificate
+chains to a private or user-installed CA plays on an Android host but answers
+502 to every peer.
 
 Status comes from the probe: a peer backend is reachable only while its host
 is connected, so an unconnected host reads `unreachable` and the library still

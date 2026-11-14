@@ -166,11 +166,14 @@ security boundary:
 A share the host cannot reach answers 502 and drops that account's grants;
 the viewer words it differently from a host that never answered.
 
-TLS on the host's `http(s)` reads uses Mozilla's roots (`webpki-roots`), not
-the operating system's store. A WebDAV share served over HTTPS with a private
-CA, or a certificate the user installed on the host device, plays on the host
-(Dart's client trusts the system store) but answers 502 to every paired
-player. Plain HTTP and publicly trusted certificates are unaffected.
+TLS on the host's `http(s)` reads trusts the operating system's store
+(`rustls-platform-verifier`), as Dart's client on the host does, so a WebDAV
+share behind a private CA installed there plays for paired players too. It
+falls back to Mozilla's roots (`webpki-roots`) when the store cannot be read.
+Android always uses Mozilla's roots: the platform verifier needs a JNI handle
+there that the app never gives it, so on an Android host such a share plays
+locally but answers 502 to every paired player. Plain HTTP and publicly
+trusted certificates are unaffected.
 
 `PeerFilesResponse::Revoked` (appended after `NotAuthorized`) answers a
 manifest or page request from a node the host's roster marks revoked. A

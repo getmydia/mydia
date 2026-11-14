@@ -63,6 +63,13 @@ mydia_p2p_core = { path = "../../../native/mydia_p2p_core", default-features = f
 # console by then.
 tracing = { version = "0.1", features = ["log"] }
 
+# The peer file host's https grants trust what the lender's own WebDAV client
+# trusts: the system store, so a private CA installed there works for peers
+# too. Already linked through reqwest; Android is left out because there the
+# verifier needs a JNI handle this app never gives it (it keeps webpki-roots).
+[target.'cfg(not(any(target_arch = "wasm32", target_os = "android")))'.dependencies]
+rustls-platform-verifier = "0.7"
+
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 tracing-android = "0.2"

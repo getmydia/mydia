@@ -250,9 +250,9 @@ the manifest, when its host is revoked, or when this device leaves the group.
   manifest fetch.
 - **502** shows "Living Room TV can't reach its share right now". The host has
   already dropped that account's grants. A WebDAV share over HTTPS whose
-  certificate chains to a private or user-installed CA plays on the host but
-  answers 502 to peers: the host's Rust reader trusts Mozilla's roots, not
-  the system store.
+  certificate chains to a private or user-installed CA plays on an Android
+  host but answers 502 to peers: there the host's Rust reader trusts
+  Mozilla's roots, not the system store. Other hosts use the system store.
 - **416** answers the one-byte probe of an empty file, which plays.
 - **403** triggers a manifest fetch. A host that revoked this device answers
   it `Revoked`, and every peer source from that host is torn down.
