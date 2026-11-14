@@ -129,6 +129,14 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicyTest do
     refute stamp(row)
   end
 
+  test "remove mode pauses an imported row with unresolved files, which removal skips" do
+    put_target(seed_ratio: 1.0, seed_goal_action: :remove)
+    row = row(%{imported_at: DateTime.utc_now(), match_status: "unresolved_files"})
+    assert :paused = SeedingPolicy.apply(row, now())
+    assert StubAdapter.pauses() == [row.download_client_id]
+    assert stamp(row)
+  end
+
   test "remove mode pauses an unimported row" do
     put_target(seed_ratio: 1.0, seed_goal_action: :remove)
     assert :paused = SeedingPolicy.apply(row(), now())

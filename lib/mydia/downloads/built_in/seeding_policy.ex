@@ -9,7 +9,8 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicy do
   `"seeding_goal_reached_at"` so a torrent the operator resumes is not paused
   again. With the `:remove` action, an imported row is left to
   `Mydia.Downloads.ClientRemoval`; an unimported one is paused, since removal
-  waits for the import.
+  waits for the import, and so is one with unresolved files, which removal
+  skips.
   """
 
   alias Mydia.Downloads.{BuiltIn, Client, MetadataKey, Queue, SeedingGoal}
@@ -24,13 +25,18 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicy do
          true <- SeedingGoal.currently_seeding?(row),
          nil <- Map.get(row.metadata || %{}, @stamp),
          %SeedingGoal{met?: true} <- SeedingGoal.for_download(row, now: now) do
-      if action == :remove and not is_nil(row.imported_at),
+      if action == :remove and removable?(row),
         do: :left_to_removal,
         else: pause(row, now)
     else
       _ -> :noop
     end
   end
+
+  # What `ClientRemoval` will pick up: imported, and not held back by files
+  # it could not match (those it skips, so they would seed on forever).
+  defp removable?(row),
+    do: not is_nil(row.imported_at) and row.match_status != "unresolved_files"
 
   defp pause(row, now) do
     with {:ok, adapter, config} <- Queue.resolve_adapter(row.download_client),
