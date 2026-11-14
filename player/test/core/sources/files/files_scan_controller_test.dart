@@ -4,7 +4,11 @@ import 'dart:io';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/p2p/peer_files_host.dart'
+    show peerFilesRevisionsProvider;
 import 'package:player/core/sources/connection/app_foreground.dart';
+import 'package:player/core/sources/files/files_account.dart'
+    show kFilesLocalAccountId;
 import 'package:player/core/sources/connection/connection_refresh_bus.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_media_source.dart';
@@ -95,6 +99,23 @@ void main() {
     expect(backend.listed, ['/media/films']);
     expect(index.lastScanAt(), now);
     expect(index.files(), hasLength(2));
+  });
+
+  test('a finished scan bumps the peer files revision; a failed one does not',
+      () async {
+    await f.index.setLastScanAt(now);
+    final c = await container();
+    final revisions = c.read(peerFilesRevisionsProvider);
+    final scan = c.read(filesScanProvider(filesLocalSource.id).notifier);
+    const account = kFilesLocalAccountId;
+
+    await scan.rescan();
+    final bumped = revisions.revision(account);
+    expect(bumped, greaterThan(0));
+
+    backend.failures['/media/films'] = const BackendUnreachable('unplugged');
+    await scan.rescan();
+    expect(revisions.revision(account), bumped);
   });
 
   test('a_never_scanned_library_scans_on_open', () async {

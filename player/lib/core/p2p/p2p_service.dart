@@ -264,6 +264,12 @@ class P2pService {
   // stall the unbounded generic channel `_eventSubscription` reads from.
   StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
   StreamSubscription<FlutterInboundPeerSyncRequest>? _peerSyncSubscription;
+  // Cancelled in `_detachNativeSubscriptions`.
+  // ignore: cancel_subscriptions
+  StreamSubscription<FlutterInboundPeerFilesRequest>? _peerFilesSubscription;
+  // Cancelled in `_detachNativeSubscriptions`.
+  // ignore: cancel_subscriptions
+  StreamSubscription<FlutterPeerFileGrantRequest>? _peerFileGrantSubscription;
 
   // Stream of P2P status updates
   /// Set by [dispose]. Checked after every await in [_initialize], which can
@@ -343,6 +349,119 @@ class P2pService {
     final host = _host;
     if (host == null) throw Exception('P2P host not initialized');
     return host.sendPeerSync(peer: peer, req: request);
+  }
+
+  // Stream of inbound peer files requests from another player.
+  final _peerFilesRequestController =
+      StreamController<FlutterInboundPeerFilesRequest>.broadcast();
+
+  /// Peer files requests arriving from another player.
+  Stream<FlutterInboundPeerFilesRequest> get onPeerFilesRequest =>
+      _peerFilesRequestController.stream;
+
+  /// Answer an inbound peer files request carried on [onPeerFilesRequest].
+  ///
+  /// A no-op host (never initialized, or torn down since the request arrived)
+  /// silently drops the response rather than throwing.
+  Future<void> respondToPeerFiles(
+    String requestId,
+    FlutterPeerFilesResponse response,
+  ) async {
+    final host = _host;
+    if (host == null) return;
+    await host.respondToPeerFiles(requestId: requestId, res: response);
+  }
+
+  /// Send a peer files request to a peer and await its answer.
+  Future<FlutterPeerFilesResponse> sendPeerFiles(
+    String peer,
+    FlutterPeerFilesRequest request,
+  ) async {
+    final host = _host;
+    if (host == null) throw Exception('P2P host not initialized');
+    return host.sendPeerFiles(peer: peer, req: request);
+  }
+
+  // Stream of grant questions from the host: what may a paired player's read
+  // of a path open.
+  final _peerFileGrantRequestController =
+      StreamController<FlutterPeerFileGrantRequest>.broadcast();
+
+  /// Grant questions from the host, answered with [respondPeerFileGrant].
+  Stream<FlutterPeerFileGrantRequest> get onPeerFileGrantRequest =>
+      _peerFileGrantRequestController.stream;
+
+  /// Answer a grant question from [onPeerFileGrantRequest]: granted, not
+  /// shared (the read gets 404) or failed (502).
+  ///
+  /// A no-op without a host, like [respondToPeerFiles].
+  Future<void> respondPeerFileGrant(
+    String requestId,
+    FlutterPeerFileGrantAnswer answer,
+  ) async {
+    final host = _host;
+    if (host == null) return;
+    await host.respondPeerFileGrant(requestId: requestId, answer: answer);
+  }
+
+  /// Tell the host which node ids may read this player's shared files.
+  ///
+  /// Remembered, and pushed again to every host built later: the list is
+  /// usually set before [initialize] has built one, and a host built anew
+  /// (a reset, a relay change) starts with none.
+  Future<void> setPeerFilesMembers(List<String> nodeIds) async {
+    _peerFilesMembers = List.unmodifiable(nodeIds);
+    final host = _host;
+    if (host == null) return;
+    await host.setPeerFilesMembers(nodeIds: nodeIds);
+  }
+
+  List<String>? _peerFilesMembers;
+
+  void _replayPeerFilesMembers(P2PHost host) {
+    final members = _peerFilesMembers;
+    if (members == null) return;
+    unawaited(host.setPeerFilesMembers(nodeIds: members).catchError(
+        (Object e) =>
+            debugPrint('[P2P] Restoring the peer files members failed: $e')));
+  }
+
+  /// Drop the host's cached grants for [accountId].
+  Future<void> invalidatePeerFileGrants(String accountId) async {
+    final host = _host;
+    if (host == null) return;
+    await host.invalidatePeerFileGrants(accountId: accountId);
+  }
+
+  StreamSubscription<FlutterPeerFileGrantRequest> _listenPeerFileGrants(
+    P2PHost host,
+  ) {
+    return host.peerFileGrantStream().listen((request) {
+      if (_peerFileGrantRequestController.isClosed) return;
+      _peerFileGrantRequestController.add(request);
+    });
+  }
+
+  StreamSubscription<FlutterInboundPeerFilesRequest> _listenPeerFiles(
+    P2PHost host,
+  ) {
+    return host.peerFilesStream().listen((request) {
+      debugPrint(
+          '[P2P] Peer files request: ${request.requestId} from ${request.peer}');
+      if (_peerFilesRequestController.isClosed) return;
+      _peerFilesRequestController.add(request);
+    });
+  }
+
+  /// Install [host] as the live host without initializing iroh, wiring its
+  /// peer files stream the way [_initialize] does. Tests only.
+  @visibleForTesting
+  void debugSetHost(P2PHost host) {
+    _host = host;
+    _isInitialized = true;
+    _peerFilesSubscription = _listenPeerFiles(host);
+    _peerFileGrantSubscription = _listenPeerFileGrants(host);
+    _replayPeerFilesMembers(host);
   }
 
   /// Returns true if the P2P host is initialized
@@ -666,6 +785,11 @@ class P2pService {
         if (_peerSyncRequestController.isClosed) return;
         _peerSyncRequestController.add(request);
       });
+
+      // Start Peer-Files Stream.
+      _peerFilesSubscription = _listenPeerFiles(_host!);
+      _peerFileGrantSubscription = _listenPeerFileGrants(_host!);
+      _replayPeerFilesMembers(_host!);
 
       _isInitialized = true;
       _emitStatus();
@@ -1118,6 +1242,18 @@ class P2pService {
       debugPrint(
           '[P2P] Error cancelling peer sync subscription on $reason: $e');
     }));
+    final peerFilesSubscription = _peerFilesSubscription;
+    _peerFilesSubscription = null;
+    unawaited(peerFilesSubscription?.cancel().catchError((Object e) {
+      debugPrint(
+          '[P2P] Error cancelling peer files subscription on $reason: $e');
+    }));
+    final peerFileGrantSubscription = _peerFileGrantSubscription;
+    _peerFileGrantSubscription = null;
+    unawaited(peerFileGrantSubscription?.cancel().catchError((Object e) {
+      debugPrint(
+          '[P2P] Error cancelling peer file grant subscription on $reason: $e');
+    }));
   }
 
   Future<void> dispose() async {
@@ -1135,6 +1271,8 @@ class P2pService {
     await _peerConnectedController.close();
     await _controlRequestController.close();
     await _peerSyncRequestController.close();
+    await _peerFilesRequestController.close();
+    await _peerFileGrantRequestController.close();
   }
 }
 

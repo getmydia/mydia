@@ -58,6 +58,12 @@ import 'presentation/screens/settings/dialog/open_settings.dart'
     show routeMenuNavigation, settingsDialogEnabledProvider;
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/p2p/peer_files_client.dart'
+    show peerFilesClientProvider;
+import 'package:player/core/p2p/peer_files_host.dart'
+    show peerFilesHostProvider;
+import 'package:player/core/p2p/peer_files_store.dart' show PeerFilesStore;
+import 'package:hive_ce/hive.dart' show Hive;
 import 'package:player/core/p2p/peer_sync_service.dart'
     show peerSyncServiceProvider;
 import 'package:player/native/lib.dart';
@@ -302,8 +308,26 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       fireImmediately: true,
     );
 
-    // Initialize P2P peer sync service alongside node registrations.
-    unawaited(ref.read(peerSyncServiceProvider).start());
+    // Initialize P2P peer sync service alongside node registrations. The
+    // files host starts once sync has read the group secret, so its first
+    // allowlist push already names the members. The client starts only once
+    // sync started cleanly: before that it would see no members, and it
+    // fetches nothing without the group secret. The web player neither lends
+    // nor borrows files.
+    final peerSync = ref.read(peerSyncServiceProvider).start();
+    unawaited(peerSync);
+    if (!kIsWeb) {
+      final peerFiles = ref.read(peerFilesHostProvider);
+      // A failed sync start reports itself above; the host starts anyway.
+      unawaited(peerSync.catchError((_) {}).then((_) => peerFiles.start()));
+      // The copies live in a box opened with the files library boxes; when
+      // those failed to open there is nowhere to keep them.
+      if (Hive.isBoxOpen(PeerFilesStore.boxName)) {
+        final peerFilesClient = ref.read(peerFilesClientProvider);
+        unawaited(peerSync.then<void>((_) => peerFilesClient.start(),
+            onError: (Object _) {}));
+      }
+    }
 
     // Fire and forget: the source starts on its fallback layout, so the
     // chrome renders correctly before this completes and simply re-renders

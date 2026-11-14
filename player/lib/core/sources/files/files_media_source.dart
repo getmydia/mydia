@@ -30,6 +30,7 @@ import 'files_queries.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
+import 'peer_files_sources.dart' show isPeerFilesSource;
 
 typedef FilesInvalidate = Future<void> Function(
     Iterable<InvalidationTarget> targets);
@@ -68,7 +69,13 @@ class FilesMediaSource extends MediaSource
     FilesInvalidate? invalidate,
     AppLocalizations Function()? l10n,
     void Function()? onDispose,
-  })  : _progress = progress,
+    String? syncAccountId,
+    String Function()? peerDeviceName,
+    void Function(String nodeId)? onPeerFilesChanged,
+  })  : _peerDeviceName = peerDeviceName,
+        _onPeerFilesChanged = onPeerFilesChanged,
+        syncAccountId = syncAccountId ?? source.account.id,
+        _progress = progress,
         _tmdb = tmdb,
         _syncStore = syncStore,
         _onSyncMutation = onSyncMutation,
@@ -100,11 +107,23 @@ class FilesMediaSource extends MediaSource
   final void Function()? _onReauthNeeded;
   final FilesInvalidate? _invalidate;
 
+  /// The lending device's name, for a library a paired player lends.
+  final String Function()? _peerDeviceName;
+
+  /// Asks for the lending host's manifest again, for a library a paired
+  /// player lends.
+  final void Function(String nodeId)? _onPeerFilesChanged;
+
+  /// The account id sync keys carry. A library lent by a paired player
+  /// keys on the host's id for it, so watch state lands on the host's
+  /// records; every other library on its own.
+  final String syncAccountId;
+
   PeerSyncStore? get syncStore => _syncStore;
   void Function()? get onSyncMutation => _onSyncMutation;
 
   String? syncKeyFor(ItemRef ref) => syncKeyForFilesItem(
-        accountId: source.account.id,
+        accountId: syncAccountId,
         externalId: ref.externalId,
         isEpisode: ref.kind == ItemKind.episode,
       );
@@ -153,6 +172,12 @@ class FilesMediaSource extends MediaSource
 
   bool get _isNetworkShare => source.account.id != kFilesLocalAccountId;
 
+  /// A library a paired player lends: its index is the host's copy, so
+  /// nothing here may write to it, and its files are not downloaded.
+  bool get _isPeer => isPeerFilesSource(source);
+
+  bool get _downloadable => _isNetworkShare && !_isPeer;
+
   @override
   Set<SourceCapability> get capabilities => {
         SourceCapability.progressReporting,
@@ -164,7 +189,7 @@ class FilesMediaSource extends MediaSource
         SourceCapability.unwatchedListing,
         SourceCapability.matchEditing,
         SourceCapability.castable,
-        if (_isNetworkShare) SourceCapability.downloadable,
+        if (_downloadable) SourceCapability.downloadable,
       };
 
   @override
@@ -175,7 +200,7 @@ class FilesMediaSource extends MediaSource
 
   @override
   T? as<T extends Object>() {
-    if (T == Downloadable && !_isNetworkShare) return null;
+    if (T == Downloadable && !_downloadable) return null;
     return this is T ? this as T : null;
   }
 
@@ -216,7 +241,7 @@ class FilesMediaSource extends MediaSource
         progress: _progress,
         l10n: _l10n(),
         syncStore: _syncStore,
-        accountId: source.account.id,
+        accountId: syncAccountId,
       );
 
   IndexedFile? indexedFile(String fileKey) => index.files()[fileKey];
@@ -233,7 +258,44 @@ class FilesMediaSource extends MediaSource
         'Playable file not found',
       );
     }
-    return backend.playable(filesBackendPath(root, indexed.path));
+    final path = filesBackendPath(root, indexed.path);
+    if (!_isPeer) return backend.playable(path);
+    try {
+      return await backend.playable(path);
+    } on BackendFailure catch (e) {
+      throw _peerPlayFailure(e);
+    }
+  }
+
+  /// What a failed play from a lent library tells the viewer, worded with
+  /// the lending device's name. A missing file or a refused read also asks
+  /// the client for that host's manifest, which is where a withdrawn file
+  /// or a revoked grant becomes visible; the revocation itself comes from
+  /// the roster, not from here.
+  SourceException _peerPlayFailure(BackendFailure e) {
+    final device = _peerDeviceName?.call() ?? '';
+    final nodeId = source.server.machineIdentifier;
+    void refresh() {
+      if (nodeId != null) _onPeerFilesChanged?.call(nodeId);
+    }
+
+    switch (e) {
+      case BackendNotFound():
+        refresh();
+        return SourceException.fault(SourceFault.peerFilesFileGone,
+            detail: device);
+      case BackendUnauthorized() || BackendPermissionLost():
+        refresh();
+        return const SourceException.unauthorized();
+      case BackendUnreachable(status: 502):
+        // The host answered, so it is connected: the status stays as is.
+        return SourceException.fault(SourceFault.peerFilesShareDown,
+            detail: device);
+      case BackendUnreachable():
+        reportReachability(e);
+        return SourceException.fault(SourceFault.peerFilesHostUnreachable,
+            detail: device);
+    }
   }
 
   @override
@@ -376,7 +438,7 @@ class FilesMediaSource extends MediaSource
       final parsed = parseFilesId(i);
       final isEp = parsed?.season != null && parsed?.episode != null;
       final syncKey = syncKeyForFilesItem(
-        accountId: source.account.id,
+        accountId: syncAccountId,
         externalId: i,
         isEpisode: isEp,
       );
@@ -387,7 +449,9 @@ class FilesMediaSource extends MediaSource
         }
       }
       if (_syncStore == null || syncKey == null) {
-        await index.setWatched(i, watched);
+        // A lent index is replaced by the host's next copy, so a flag
+        // written here would vanish with it.
+        if (!_isPeer) await index.setWatched(i, watched);
         await _progress.delete(progressKey(catalog.ref(ItemKind.movie, i)));
       } else {
         await _progress.delete(progressKey(catalog.ref(ItemKind.movie, i)));
@@ -473,7 +537,7 @@ class FilesMediaSource extends MediaSource
         }
       } else if (rec.key.startsWith('file:')) {
         final parts = rec.key.split(':');
-        if (parts.length == 3 && parts[1] == source.account.id) {
+        if (parts.length == 3 && parts[1] == syncAccountId) {
           final fileKey = parts[2];
           if (catalog.unmatched.containsKey(fileKey)) {
             final mediaId = unmatchedFileId(fileKey);
@@ -565,6 +629,9 @@ class FilesMediaSource extends MediaSource
 
   @override
   bool canEditMatch(ItemRef ref) {
+    // A match pin is written into the index, which for a lent library is
+    // the host's; the host fixes its own matches.
+    if (_isPeer) return false;
     if (ref.kind != ItemKind.movie &&
         ref.kind != ItemKind.show &&
         ref.kind != ItemKind.video) {
@@ -597,6 +664,7 @@ class FilesMediaSource extends MediaSource
 
   @override
   Future<void> setMatch(ItemRef ref, TmdbCandidate? choice) async {
+    if (_isPeer) throw const SourceException.unsupported();
     final (groups, isShow) = _groupsOf(ref, _catalog());
     try {
       for (final g in groups) {

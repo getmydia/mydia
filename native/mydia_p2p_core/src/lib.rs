@@ -59,12 +59,14 @@ fn duration_nanos(d: std::time::Duration) -> u64 {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
 pub mod pairing_seal;
+pub mod peer_files;
 pub mod peer_sync;
 pub mod remote_control;
 pub mod runtime;
 #[cfg(not(target_arch = "wasm32"))]
 mod trace_file;
 
+pub use peer_files::*;
 pub use peer_sync::*;
 pub use remote_control::{
     LoadContentRequest, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
@@ -85,6 +87,7 @@ pub enum MydiaRequest {
     Custom(Vec<u8>),
     RemoteControl(RemoteControlRequest),
     PeerSync(PeerSyncRequest),
+    PeerFiles(PeerFilesRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -152,6 +155,7 @@ pub enum MydiaResponse {
     Error(String),
     RemoteControl(RemoteControlResponse),
     PeerSync(PeerSyncResponse),
+    PeerFiles(PeerFilesResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1039,6 +1043,119 @@ impl Host {
     pub fn hls_requester(&self) -> HlsRequester {
         HlsRequester {
             cmd_tx: self.cmd_tx.clone(),
+        }
+    }
+}
+
+/// Clone-able handle for answering HLS streams from spawned tasks.
+///
+/// Wraps a cloned `cmd_tx` so a responder can write a stream's header, chunks
+/// and end without holding the `Host`. Each method sends the same command the
+/// `Host` method of the same purpose sends.
+///
+/// The sender is weak. A responder lives inside the player's event
+/// dispatcher, which runs until the event channel closes, and the event
+/// channel closes only when the loop ends, which needs every strong command
+/// sender gone. A strong clone here would keep a dropped host's loop and iroh
+/// endpoint alive for the life of the process. Once the `Host` is dropped
+/// every call answers `send_failed`, as a call on a dropped host does.
+#[cfg(feature = "host")]
+#[derive(Clone)]
+pub struct HlsResponder {
+    cmd_tx: mpsc::WeakSender<Command>,
+}
+
+#[cfg(feature = "host")]
+impl HlsResponder {
+    /// A strong sender for one call, or `send_failed` once the host is gone.
+    fn sender(&self) -> Result<mpsc::Sender<Command>, String> {
+        self.cmd_tx
+            .upgrade()
+            .ok_or_else(|| "send_failed".to_string())
+    }
+
+    pub async fn send_header(
+        &self,
+        stream_id: String,
+        header: HlsResponseHeader,
+    ) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.sender()?
+            .send(Command::SendHlsHeader {
+                stream_id,
+                header,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
+    pub async fn send_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.sender()?
+            .send(Command::SendHlsChunk {
+                stream_id,
+                data,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
+    pub async fn finish(&self, stream_id: String) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.sender()?
+            .send(Command::FinishHlsStream {
+                stream_id,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
+    pub async fn abort(&self, stream_id: String) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.sender()?
+            .send(Command::AbortHlsStream {
+                stream_id,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
+    pub async fn stream_file_range(
+        &self,
+        stream_id: String,
+        file_path: String,
+        offset: u64,
+        length: u64,
+    ) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.sender()?
+            .send(Command::StreamFileRange {
+                stream_id,
+                file_path,
+                offset,
+                length,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+}
+
+#[cfg(feature = "host")]
+impl Host {
+    /// Create a clone-able HLS responder handle for spawned tasks.
+    pub fn hls_responder(&self) -> HlsResponder {
+        HlsResponder {
+            cmd_tx: self.cmd_tx.downgrade(),
         }
     }
 }

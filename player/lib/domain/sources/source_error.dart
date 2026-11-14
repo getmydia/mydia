@@ -67,7 +67,14 @@ enum SourceFault {
   stashReportedError('Stash reported an error.'), // l10n-ignore log text
   stashStatus('Stash reports status {detail}.'), // l10n-ignore log text
   stashNotConfirmed(
-      'Stash did not confirm the saved progress.'); // l10n-ignore log text
+      'Stash did not confirm the saved progress.'), // l10n-ignore log text
+  // The three below name the lending device in `{detail}`.
+  peerFilesHostUnreachable(
+      "{detail} isn't reachable. It needs to be on with Mydia Player open."), // l10n-ignore log text
+  peerFilesFileGone(
+      'This file is no longer on {detail}.'), // l10n-ignore log text
+  peerFilesShareDown(
+      "{detail} can't reach its share right now."); // l10n-ignore log text
 
   const SourceFault(this.logText);
 

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../p2p/peer_files_host.dart' show peerFilesHostProvider;
 import '../connection/source_connection.dart' show isPrivateHost;
 import '../source.dart';
 import '../sources_providers.dart';
@@ -99,8 +100,16 @@ class FilesAccounts {
     for (final source in record.sources) {
       _ref.invalidate(mediaSourceProvider(source.id));
     }
+    // New credentials or addresses: a paired player's cached grants carry
+    // the old ones.
+    await _bumpPeerFiles(record.account.id);
     return record.sources.first.id;
   }
+
+  /// Tells paired players browsing [accountId] that its pages changed, and
+  /// drops the grants their reads hold.
+  Future<void> _bumpPeerFiles(String accountId) =>
+      _ref.read(peerFilesHostProvider).bumpRevision(accountId);
 
   Future<void> _addRoot(SourceId id, String accountId,
       {required String path, required FilesLibraryKind kind}) async {
@@ -111,6 +120,7 @@ class FilesAccounts {
           kind: kind,
           title: filesRootTitle(p),
         ));
+    await _bumpPeerFiles(accountId);
     await _ref
         .read(invalidatorProvider)
         .invalidate(FilesMediaSource.groupLandedTargets(id));
@@ -434,12 +444,15 @@ class FilesAccounts {
         _ref.read(sourcesProvider).where((s) => s.id == id).firstOrNull;
     if (source == null) return;
     await _ref.read(filesIndexProvider(source.account.id)).removeRoot(rootId);
+    await _bumpPeerFiles(source.account.id);
     await _ref
         .read(invalidatorProvider)
         .invalidate(FilesMediaSource.groupLandedTargets(id));
   }
 
   /// Removes the account: its credentials and record, then its index.
+  /// Removing the record takes it off the peer files manifest and bumps its
+  /// revision (`SourceRecordsNotifier.removeAccount`).
   Future<void> removeFilesAccount(String accountId) async {
     await _ref.read(sourceRecordsProvider.notifier).removeAccount(accountId);
     await _ref.read(filesIndexProvider(accountId)).clear();

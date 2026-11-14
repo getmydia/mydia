@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cache/query_key.dart';
 import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/files/peer_files_sources.dart'
+    show refreshPeerFilesSources;
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/sources/item.dart';
@@ -53,6 +55,11 @@ List<QueryKey> homeQueryKeys(Iterable<SourceId> ids) => [
 /// Refetches every feed Home reads for [ids]. Completes when the libraries
 /// have answered, so the pull-to-refresh indicator stops then.
 Future<void> refreshHome(WidgetRef ref, Iterable<SourceId> ids) async {
+  // Libraries paired players lend refetch the host's index first, so the
+  // feeds below read the new copy.
+  await refreshPeerFilesSources(ref.read, ids);
+  // Home may have gone while the hosts answered, taking its ref with it.
+  if (!ref.context.mounted) return;
   for (final id in ids) {
     ref.invalidate(sourceContinueWatchingProvider(id));
     ref.invalidate(sourceRecentlyAddedProvider(id));

@@ -13,8 +13,9 @@
 )]
 
 use mydia_p2p_core::{
-    MydiaRequest, MydiaResponse, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
-    RemoteControlResponse, TargetCapabilities,
+    MydiaRequest, MydiaResponse, PeerFilesRequest, PeerFilesResponse, PeerSyncResponse,
+    PlaybackSnapshot, PlaybackState, RemoteControlRequest, RemoteControlResponse,
+    TargetCapabilities, WireIndexPage,
 };
 
 fn hex(bytes: &[u8]) -> String {
@@ -176,4 +177,112 @@ fn a_response_survives_a_round_trip_through_the_outer_enum() {
     let bytes = serde_cbor::to_vec(&response).unwrap();
     let decoded: MydiaResponse = serde_cbor::from_slice(&bytes).unwrap();
     assert_eq!(decoded, response);
+}
+
+#[test]
+fn peer_files_is_the_last_request_variant() {
+    // PeerFiles was appended after PeerSync. The names are what is frozen
+    // (serde_cbor keys enums on them), and the earlier variants must keep
+    // encoding exactly as before.
+    let request = serde_cbor::to_vec(&MydiaRequest::PeerFiles(PeerFilesRequest::Manifest {
+        auth_proof: "p".into(),
+    }))
+    .unwrap();
+    let as_text = String::from_utf8_lossy(&request);
+    assert!(as_text.contains("PeerFiles"), "outer renamed: {as_text}");
+    assert!(as_text.contains("Manifest"), "inner renamed: {as_text}");
+
+    let response =
+        serde_cbor::to_vec(&MydiaResponse::PeerFiles(PeerFilesResponse::StaleRevision)).unwrap();
+    let as_text = String::from_utf8_lossy(&response);
+    assert!(as_text.contains("PeerFiles"), "outer renamed: {as_text}");
+    assert!(
+        as_text.contains("StaleRevision"),
+        "inner renamed: {as_text}"
+    );
+
+    assert_eq!(
+        hex(&serde_cbor::to_vec(&MydiaRequest::Ping).unwrap()),
+        "6450696e67"
+    );
+    assert_eq!(
+        hex(&serde_cbor::to_vec(&MydiaResponse::Pong).unwrap()),
+        "64506f6e67"
+    );
+    // Revoked was appended to PeerFilesResponse after NotAuthorized. Unit
+    // variants encode as their name, so the earlier ones are unchanged.
+    let revoked =
+        serde_cbor::to_vec(&MydiaResponse::PeerFiles(PeerFilesResponse::Revoked)).unwrap();
+    assert!(
+        String::from_utf8_lossy(&revoked).contains("Revoked"),
+        "inner renamed"
+    );
+    assert_eq!(
+        serde_cbor::from_slice::<MydiaResponse>(&revoked).unwrap(),
+        MydiaResponse::PeerFiles(PeerFilesResponse::Revoked)
+    );
+    assert_eq!(
+        hex(&serde_cbor::to_vec(&PeerFilesResponse::NotAuthorized).unwrap()),
+        "6d4e6f74417574686f72697a6564"
+    );
+
+    let peer_sync =
+        serde_cbor::to_vec(&MydiaResponse::PeerSync(PeerSyncResponse::NotAuthorized)).unwrap();
+    let decoded: MydiaResponse = serde_cbor::from_slice(&peer_sync).unwrap();
+    assert_eq!(
+        decoded,
+        MydiaResponse::PeerSync(PeerSyncResponse::NotAuthorized)
+    );
+}
+
+/// Index records are CBOR byte strings: a major type 2 header and then the
+/// record's bytes verbatim. The integer-array form serde gives `Vec<u8>` by
+/// default spends two bytes on most JSON characters, which doubles a page
+/// past the budget the Dart pager assumes.
+#[test]
+fn index_page_records_encode_as_byte_strings() {
+    let record = br#"{"id":"r1"}"#.to_vec();
+    let page = WireIndexPage {
+        roots: vec![record.clone()],
+        ..WireIndexPage::default()
+    };
+
+    let encoded = serde_cbor::to_vec(&page).unwrap();
+
+    // 0x4b: byte string of length 11, then the record itself.
+    let framed = format!("4b{}", hex(&record));
+    assert!(
+        hex(&encoded).contains(&framed),
+        "record not framed as a byte string: {}",
+        hex(&encoded)
+    );
+    assert_eq!(
+        serde_cbor::from_slice::<WireIndexPage>(&encoded).unwrap(),
+        page
+    );
+}
+
+/// A page whose records arrive as integer arrays still decodes.
+#[test]
+fn index_page_records_decode_from_integer_arrays() {
+    #[derive(serde::Serialize)]
+    struct ArrayPage {
+        roots: Vec<Vec<u8>>,
+        files: Vec<Vec<u8>>,
+        groups: Vec<Vec<u8>>,
+        movies: Vec<Vec<u8>>,
+        shows: Vec<Vec<u8>>,
+    }
+    let encoded = serde_cbor::to_vec(&ArrayPage {
+        roots: vec![b"{}".to_vec()],
+        files: vec![],
+        groups: vec![],
+        movies: vec![],
+        shows: vec![],
+    })
+    .unwrap();
+
+    let decoded: WireIndexPage = serde_cbor::from_slice(&encoded).unwrap();
+
+    assert_eq!(decoded.roots, vec![b"{}".to_vec()]);
 }

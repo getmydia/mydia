@@ -58,7 +58,13 @@ sealed class BackendFailure implements Exception {
 
 /// The host or folder could not be reached (offline, DNS, timeout, bad status).
 final class BackendUnreachable extends BackendFailure {
-  const BackendUnreachable([super.message]);
+  const BackendUnreachable([super.message, this.status]);
+
+  /// The HTTP status a remote answered with, when one did. A paired
+  /// player's 502 means it is up but cannot reach its own share, which
+  /// reads differently from a host that never answered (null).
+  final int? status;
+
   @override
   String get _label => 'BackendUnreachable';
 }

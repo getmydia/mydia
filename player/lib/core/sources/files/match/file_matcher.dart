@@ -28,8 +28,10 @@ class FileMatcher {
     PeerSyncStore? syncStore,
     void Function()? onSyncMutation,
     Future<void> Function()? onGroupLanded,
+    void Function()? onPinned,
     int concurrency = 4,
     DateTime Function()? now,
+    this.readOnly = false,
   })  : _tmdb = tmdb,
         _names = names,
         _index = index,
@@ -38,6 +40,7 @@ class FileMatcher {
         _syncStore = syncStore,
         _onSyncMutation = onSyncMutation,
         _onGroupLanded = onGroupLanded,
+        _onPinned = onPinned,
         _slots = _Semaphore(concurrency),
         _now = now ?? DateTime.now;
 
@@ -49,13 +52,24 @@ class FileMatcher {
   final PeerSyncStore? _syncStore;
   final void Function()? _onSyncMutation;
   final Future<void> Function()? _onGroupLanded;
+
+  /// Called after a pin or unpin (a Fix match here, or one applied from
+  /// peer sync) is written. Automatic matches do not call it: the scan that runs them
+  /// reports its own end.
+  final void Function()? _onPinned;
   final _Semaphore _slots;
   final DateTime Function() _now;
+
+  /// Writes nothing: matching, pinning and unpinning all do nothing. For a
+  /// library a paired player lends, whose index is the host's copy and is
+  /// replaced by its next one; the host matches and pins its own files.
+  final bool readOnly;
 
   /// Matches every group with no [GroupMatch], or whose files are newer than
   /// it. A group the relay cannot answer for stays provisional (no
   /// [GroupMatch]); the others carry on.
   Future<void> matchPending() async {
+    if (readOnly) return;
     final groups = _groups();
     final pending = [
       for (final g in groups.values)
@@ -95,16 +109,18 @@ class FileMatcher {
     int? tmdbId,
     bool recordSync = true,
     int? pinRevision,
-  }) =>
-      _serialized(
-          groupKey,
-          () => _pin(
-                groupKey,
-                isShow: isShow,
-                tmdbId: tmdbId,
-                recordSync: recordSync,
-                pinRevision: pinRevision,
-              ));
+  }) async {
+    if (readOnly) return;
+    return _serialized(
+        groupKey,
+        () => _pin(
+              groupKey,
+              isShow: isShow,
+              tmdbId: tmdbId,
+              recordSync: recordSync,
+              pinRevision: pinRevision,
+            ));
+  }
 
   /// Applies a pin received from remote peer sync. Performs matching,
   /// indexing, and migrations without re-recording in [PeerSyncStore] or
@@ -124,6 +140,28 @@ class FileMatcher {
         recordSync: false,
         pinRevision: pinRevision,
       );
+
+  /// Applies an unpin received from remote peer sync: a pinned group is
+  /// released, recording [pinRevision], and is matched automatically on the
+  /// next scan. Returns whether it wrote anything.
+  ///
+  /// The revision is compared here, inside the serialized section, as
+  /// [_unpinPending] does: a pin queued ahead of this unpin may land first
+  /// with a newer revision, and it stands.
+  Future<bool> applyRemoteUnpin(String groupKey, {required int pinRevision}) =>
+      _serialized(groupKey, () async {
+        if (readOnly) return false;
+        final current = _index.group(groupKey);
+        if (current == null || !current.pinned) return false;
+        if (current.pinRevision case final applied?
+            when applied >= pinRevision) {
+          return false;
+        }
+        await _index.putGroup(
+            current.copyWith(pinned: false, pinRevision: pinRevision));
+        _onPinned?.call();
+        return true;
+      });
 
   Future<void> _pin(
     String groupKey, {
@@ -171,6 +209,7 @@ class FileMatcher {
         pinRevision: revision,
       ));
     }
+    _onPinned?.call();
     await _onGroupLanded?.call();
   }
 

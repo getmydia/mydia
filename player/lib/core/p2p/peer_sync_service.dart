@@ -15,6 +15,7 @@ import '../sources/cache/source_rules.dart';
 import '../sources/connection/connection_refresh_bus.dart';
 import '../sources/files/files_media_source.dart';
 import '../sources/files/files_providers.dart';
+import '../sources/files/peer_files_sources.dart' show isPeerFilesSource;
 import 'p2p_service.dart';
 import 'peer_group_roster.dart';
 import 'peer_group_secret.dart';
@@ -157,6 +158,7 @@ class PeerSyncService {
 
   final _stateChangedController = StreamController<void>.broadcast();
   final _peerPairedController = StreamController<PeerMember>.broadcast();
+  final _leftGroupController = StreamController<void>.broadcast();
   StreamSubscription<FlutterInboundPeerSyncRequest>? _inboundSub;
   StreamSubscription<String>? _peerConnectedSub;
 
@@ -194,6 +196,10 @@ class PeerSyncService {
 
   Stream<void> get onStateChanged => _stateChangedController.stream;
   Stream<PeerMember> get onPeerPaired => _peerPairedController.stream;
+
+  /// Fires when [leaveGroup] completes: the group secret and roster are
+  /// gone, so whatever the members lent this device goes too.
+  Stream<void> get onLeftGroup => _leftGroupController.stream;
 
   Future<void> start() async {
     final stored = await _authStorage.read(PeerGroupSecret.storageKey);
@@ -563,26 +569,12 @@ class PeerSyncService {
     FlutterPeerSyncRequest_Sync req,
   ) async {
     final generation = _generation;
-    final secret = _secret;
     Future<void> reject() => _transport.respondToPeerSync(
           request.requestId,
           const FlutterPeerSyncResponse.notAuthorized(),
         );
 
-    if (secret == null || _leaving) return reject();
-    final valid = secret.verifyAuthProof(
-      senderNodeId: request.peer,
-      proof: req.authProof,
-    );
-    if (!valid) return reject();
-
-    // The group secret proves a device once belonged, not that it still
-    // does: a revoked device keeps it. Only a node the roster already holds
-    // may sync, so a revoked device cannot enroll a fresh node id. A device
-    // that just paired reaches the other members through the one it paired
-    // with (see [_handlePairRequest]).
-    final senderMember = _knownMember(request.peer);
-    if (senderMember == null || senderMember.revoked) return reject();
+    if (!authorizes(request.peer, req.authProof)) return reject();
 
     final nowMs = _clock().millisecondsSinceEpoch;
     final rosterChanged = await _store.mergeRoster(
@@ -643,7 +635,10 @@ class PeerSyncService {
       ),
     );
 
-    if (rosterChanged.isNotEmpty) _notifyStateChanged();
+    // Always, as the sender does on every ack: a sync round is also how a
+    // member says it has something new to fetch (a files library it lends
+    // was rescanned, say), and the listeners of this refetch it.
+    _notifyStateChanged();
     if (changes.changedWatchKeys.isNotEmpty ||
         changes.changedPinKeys.isNotEmpty) {
       await _onRemoteChangesApplied?.call(
@@ -657,6 +652,48 @@ class PeerSyncService {
       unawaited(syncAll(exceptPeer: request.peer));
     }
   }
+
+  /// Whether [peer] may act as a member of this group: [proof] is its HMAC
+  /// of the group secret, and the roster holds it, not revoked. The secret
+  /// proves a device once belonged, not that it still does: a revoked
+  /// device keeps it. Only a node the roster already holds passes, so a
+  /// revoked device cannot enroll a fresh node id. A device that just
+  /// paired reaches the other members through the one it paired with (see
+  /// [_handlePairRequest]). False while the device is in no group or is
+  /// leaving it.
+  bool authorizes(String peer, String proof) {
+    final secret = _secret;
+    if (secret == null || _leaving) return false;
+    if (!secret.verifyAuthProof(senderNodeId: peer, proof: proof)) {
+      return false;
+    }
+    final member = _knownMember(peer);
+    return member != null && !member.revoked;
+  }
+
+  /// The node ids of the group's active members other than this device,
+  /// sorted; empty while the device is in no group or is leaving it.
+  List<String> activeMemberIds() {
+    if (_secret == null || _leaving) return const [];
+    final local = _transport.nodeId?.toLowerCase();
+    return [
+      for (final m in _store.members().values)
+        if (!m.revoked && m.nodeId.toLowerCase() != local) m.nodeId,
+    ]..sort();
+  }
+
+  /// The proof this device sends with a request to another member, the one
+  /// [authorizes] checks on the other end. Null while the device is in no
+  /// group or is leaving it.
+  String? authProofForSelf() {
+    final secret = _secret;
+    if (secret == null || _leaving) return null;
+    return secret.authProof(_transport.nodeId ?? '');
+  }
+
+  /// The roster entry for [nodeId], matched without regard to case: its
+  /// device name, and whether it was revoked.
+  PeerMember? member(String nodeId) => _knownMember(nodeId);
 
   /// The roster entry for [nodeId], matched without regard to case.
   PeerMember? _knownMember(String nodeId) {
@@ -870,6 +907,9 @@ class PeerSyncService {
     } finally {
       _leaving = false;
     }
+    // Only once the secret and roster are gone: a leave that failed part
+    // way leaves this device in the group.
+    if (!_leftGroupController.isClosed) _leftGroupController.add(null);
     _notifyStateChanged();
   }
 
@@ -880,6 +920,7 @@ class PeerSyncService {
     _throttleTimer?.cancel();
     _stateChangedController.close();
     _peerPairedController.close();
+    _leftGroupController.close();
   }
 }
 
@@ -892,6 +933,56 @@ final peerGroupRosterProvider = Provider<PeerGroupRoster>((ref) {
     isPeerConnected: (nodeId) => p2p.isConnectedToPeer(nodeId),
   );
 });
+
+/// Brings the open files [sources] up to date with what a sync round
+/// applied: pins and unpins land on each source holding the group, and
+/// every source refreshes its watched state.
+///
+/// A library a paired player lends is left out of the pins. Its index is
+/// the host's copy, which the next fetch replaces; the host applies the
+/// pin to its own index and lends the result.
+Future<void> applyRemoteFilesChanges({
+  required PeerSyncStore store,
+  required List<FilesMediaSource> sources,
+  required Set<String> changedWatchKeys,
+  required Set<String> changedPinKeys,
+}) async {
+  if (changedPinKeys.isNotEmpty) {
+    for (final source in sources) {
+      if (isPeerFilesSource(source.source)) continue;
+      for (final key in changedPinKeys) {
+        final pinRecord = store.allPinRecords()[key];
+        if (pinRecord == null) continue;
+        if (!source.matcher.hasFilesForGroup(pinRecord.groupKey)) continue;
+        if (pinRecord.pinned) {
+          await source.matcher.applyRemotePin(
+            pinRecord.groupKey,
+            isShow: pinRecord.isShow,
+            tmdbId: pinRecord.tmdbId,
+            pinRevision: pinRecord.updatedAt,
+          );
+        } else {
+          final released = await source.matcher.applyRemoteUnpin(
+            pinRecord.groupKey,
+            pinRevision: pinRecord.updatedAt,
+          );
+          if (released) {
+            await source.invalidateTargets(
+              FilesMediaSource.groupLandedTargets(source.source.id),
+            );
+          }
+        }
+      }
+    }
+  }
+  if (changedWatchKeys.isNotEmpty) {
+    for (final source in sources) {
+      await source.invalidateTargets(
+        SourceRules.watchedChanged(source.source.id),
+      );
+    }
+  }
+}
 
 final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
   final store = ref.watch(peerSyncStoreProvider);
@@ -907,45 +998,13 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
     relayClient: relay,
     deviceName: 'Mydia Player',
     platform: DeviceInfoService().getPlatform(),
-    onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) async {
-      final activeSources = FilesMediaSource.activeSources.toList();
-      if (changedPinKeys.isNotEmpty) {
-        for (final source in activeSources) {
-          for (final key in changedPinKeys) {
-            final pinRecord = store.allPinRecords()[key];
-            if (pinRecord == null) continue;
-            if (source.matcher.hasFilesForGroup(pinRecord.groupKey)) {
-              if (pinRecord.pinned) {
-                await source.matcher.applyRemotePin(
-                  pinRecord.groupKey,
-                  isShow: pinRecord.isShow,
-                  tmdbId: pinRecord.tmdbId,
-                  pinRevision: pinRecord.updatedAt,
-                );
-              } else {
-                final current = source.index.group(pinRecord.groupKey);
-                if (current != null && current.pinned) {
-                  await source.index.putGroup(current.copyWith(
-                    pinned: false,
-                    pinRevision: pinRecord.updatedAt,
-                  ));
-                  await source.invalidateTargets(
-                    FilesMediaSource.groupLandedTargets(source.source.id),
-                  );
-                }
-              }
-            }
-          }
-        }
-      }
-      if (changedWatchKeys.isNotEmpty) {
-        for (final source in activeSources) {
-          await source.invalidateTargets(
-            SourceRules.watchedChanged(source.source.id),
-          );
-        }
-      }
-    },
+    onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) =>
+        applyRemoteFilesChanges(
+      store: store,
+      sources: FilesMediaSource.activeSources.toList(),
+      changedWatchKeys: changedWatchKeys,
+      changedPinKeys: changedPinKeys,
+    ),
   );
 
   final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((_) {

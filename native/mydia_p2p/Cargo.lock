@@ -1684,6 +1684,7 @@ dependencies = [
  "iroh-relay",
  "n0-future",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "serde_json",
  "sha2",

@@ -13,8 +13,11 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
+import '../p2p/peer_files_host.dart'
+    show hasHiddenServer, peerFilesHostProvider;
 import 'files/files_providers.dart'
     show closeRemovedFilesAccount, filesIndexProvider;
+import 'files/peer_files_sources.dart' show peerFilesSourcesProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -160,6 +163,18 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
+  /// Tells paired players that a removed files account's pages are gone and
+  /// drops the grants their reads hold, so no cached grant keeps serving
+  /// its files. The record is already gone, so the account has left the
+  /// manifest. Best effort, like [_dropCache].
+  Future<void> _forgetPeerFiles(String accountId) async {
+    try {
+      await ref.read(peerFilesHostProvider).bumpRevision(accountId);
+    } catch (e) {
+      debugPrint('[Sources] Could not withdraw $accountId from peers: $e');
+    }
+  }
+
   /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
   /// like [_dropCache]: leftovers are inert without the account.
   Future<void> _dropCollectionSync(Set<String> sourceIds,
@@ -205,6 +220,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      if (record?.account.kind == SourceKind.files) {
+        await _forgetPeerFiles(accountId);
+      }
       await closeRemovedFilesAccount(ref, accountId);
       // Legacy bare-id entries record no owner and read as the legacy
       // instance's, so they go with the account the legacy rule picked.
@@ -269,8 +287,16 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         if (record == null) return;
         final locks = {...record.serverLocks}..remove(serverId);
         if (lock != SourceLock.none) locks[serverId] = lock;
-        await _write(
-            (store) => store.putAccount(record.copyWith(serverLocks: locks)));
+        final updated = record.copyWith(serverLocks: locks);
+        await _write((store) => store.putAccount(updated));
+        // A hidden files account is not lent (see `lentFilesAccounts`).
+        // Hiding one drops the grants paired players' reads hold and
+        // nudges them to fetch the manifest, which no longer lists it, so
+        // the copies they keep go; unhiding brings it back the same way.
+        if (record.account.kind == SourceKind.files &&
+            hasHiddenServer(record) != hasHiddenServer(updated)) {
+          await _forgetPeerFiles(accountId);
+        }
       });
 
   Future<void> setIncludedInAllServers(SourceId id, bool included) =>
@@ -302,6 +328,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         await _dropCache(id);
         if (record.account.kind == SourceKind.files) {
           await _dropFilesIndex(id);
+          await _forgetPeerFiles(id);
           await closeRemovedFilesAccount(ref, id);
         }
         ids.add(id);
@@ -466,9 +493,13 @@ final accountProfilesProvider =
 });
 
 /// Every source: the stored accounts, minus hidden ones while the app is
-/// locked.
-final sourcesProvider =
-    Provider<List<Source>>((ref) => ref.watch(thirdPartySourcesProvider));
+/// locked, then the files libraries paired players lend this one. Compares
+/// element-wise like [thirdPartySourcesProvider], so a new copy of a lent
+/// index that renames nothing does not notify.
+final sourcesProvider = Provider<List<Source>>((ref) => _SourceList([
+      ...ref.watch(thirdPartySourcesProvider),
+      ...ref.watch(peerFilesSourcesProvider),
+    ]));
 
 /// Whether any Mydia account is stored.
 final hasMydiaProvider = Provider<bool>((ref) {

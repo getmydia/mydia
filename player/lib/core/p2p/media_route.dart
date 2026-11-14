@@ -10,6 +10,8 @@
 // Deliberately free of `dart:io` and `dart:js_interop`: this file is imported
 // by both.
 
+import 'dart:convert';
+
 /// How a matched route's bytes are fetched over p2p.
 enum MediaRouteKind {
   /// A manifest or a segment: one bounded response, requested whole.
@@ -63,6 +65,7 @@ abstract final class MediaRoutes {
   /// Session id prefixes of the byte-stream routes.
   static const directSessionPrefix = 'direct:';
   static const downloadSessionPrefix = 'download:';
+  static const peerFileSessionPrefix = 'peerfile:';
 
   /// URL of a session's HLS manifest.
   static String hls(String base, String sessionId) =>
@@ -85,9 +88,21 @@ abstract final class MediaRoutes {
   static String download(String base, String jobId) =>
       '$base/download/$jobId/file';
 
+  /// How a paired player's file path travels in a URL and to its host:
+  /// base64url of its UTF-8, without padding. A path holds spaces, `#`, `?`,
+  /// backslashes and non-ASCII letters, none of which survive a URL segment
+  /// as they are, and the host matches the decoded string exactly.
+  static String peerFileToken(String path) =>
+      base64Url.encode(utf8.encode(path)).replaceAll('=', '');
+
+  /// URL that streams the file at [path] lent by a paired player, read from
+  /// its account [accountId] (the host's own id for it).
+  static String peerFile(String base, String accountId, String path) =>
+      '$base/peerfile/$accountId/${peerFileToken(path)}/stream';
+
   /// Match [path] against the table. [path] is the request path with any
-  /// platform prefix already removed, so it starts at `/hls/`, `/direct/` or
-  /// `/download/`.
+  /// platform prefix already removed, so it starts at `/hls/`, `/direct/`,
+  /// `/download/` or `/peerfile/`.
   static MediaRoute resolve(String path) {
     if (path.startsWith('/hls/')) {
       final parts = path.substring('/hls/'.length).split('/');
@@ -136,21 +151,35 @@ abstract final class MediaRoutes {
       );
     }
 
+    if (path.startsWith('/peerfile/')) {
+      return _byteStream(
+        path,
+        prefix: '/peerfile/',
+        shape: '/peerfile/{account_id}/{path_token}/stream',
+        idLabel: 'Account ID',
+        sessionPrefix: peerFileSessionPrefix,
+        remotePath: null,
+      );
+    }
+
     return const MediaRouteFailure(_notFound, 'Not Found');
   }
 
-  /// The `/direct/` and `/download/` routes differ only in their wording and
-  /// their session prefix, so they share one parser.
+  /// The byte-stream routes differ only in their wording, their session
+  /// prefix and the path asked of the remote, so they share one parser. A
+  /// null [remotePath] means the remote path is the segment after the id,
+  /// as for a peer file, whose path token is what the host reads.
   static MediaRoute _byteStream(
     String path, {
     required String prefix,
     required String shape,
     required String idLabel,
     required String sessionPrefix,
-    required String remotePath,
+    required String? remotePath,
   }) {
     final parts = path.substring(prefix.length).split('/');
-    if (parts.length < 2) {
+    final tokenPath = remotePath == null;
+    if (parts.length < (tokenPath ? 3 : 2) || (tokenPath && parts[1].isEmpty)) {
       final kind = prefix.replaceAll('/', '');
       return MediaRouteFailure(
         _badRequest,
@@ -165,7 +194,7 @@ abstract final class MediaRoutes {
 
     return MediaRouteMatch(
       sessionId: '$sessionPrefix$id',
-      path: remotePath,
+      path: remotePath ?? parts[1],
       kind: MediaRouteKind.byteStream,
     );
   }

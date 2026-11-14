@@ -58,6 +58,21 @@ class FakePeerSyncService implements PeerSyncService {
   }
 
   @override
+  bool authorizes(String peer, String proof) => false;
+
+  @override
+  List<String> activeMemberIds() => const [];
+
+  @override
+  String? authProofForSelf() => null;
+
+  @override
+  Stream<void> get onLeftGroup => const Stream.empty();
+
+  @override
+  PeerMember? member(String nodeId) => store.member(nodeId);
+
+  @override
   Future<void> start() async {}
 
   @override

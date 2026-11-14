@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `collect_hls_body`, `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Space on the volume holding `path`, for sizing the playback spool.
 /// Always an error in a browser, which has no filesystem to ask.
@@ -69,11 +69,21 @@ abstract class P2PHost implements RustOpaqueInterface {
       RustLib.instance.api
           .crateP2PHostInit(relayUrls: relayUrls, keypairBytes: keypairBytes);
 
+  /// Forget every grant of `account_id`, for when its index changed.
+  Future<void> invalidatePeerFileGrants({required String accountId});
+
   /// Open an HLS request to a specific peer and return a handle Dart pulls
   /// the body from. Fails if the stream cannot be opened or the server
   /// answers with an error.
   Future<HlsStreamHandle> openHlsStream(
       {required String peer, required FlutterHlsRequest req});
+
+  /// Stream the host's grant requests to Dart. Each must be answered with
+  /// `respond_peer_file_grant` within 10 seconds or the read gets 502.
+  Stream<FlutterPeerFileGrantRequest> peerFileGrantStream();
+
+  /// Stream inbound peer files requests to Flutter.
+  Stream<FlutterInboundPeerFilesRequest> peerFilesStream();
 
   /// Stream inbound peer sync requests to Flutter.
   Stream<FlutterInboundPeerSyncRequest> peerSyncStream();
@@ -90,6 +100,15 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// calling `event_stream()`, is a fully supported way to act as a
   /// control target.
   Stream<FlutterInboundControlRequest> remoteControlStream();
+
+  /// Answer a grant request: granted, not shared (the read gets 404), or
+  /// failed (the read gets 502).
+  Future<void> respondPeerFileGrant(
+      {required String requestId, required FlutterPeerFileGrantAnswer answer});
+
+  /// Answer an inbound peer files request.
+  Future<void> respondToPeerFiles(
+      {required String requestId, required FlutterPeerFilesResponse res});
 
   /// Answer an inbound peer sync request.
   Future<void> respondToPeerSync(
@@ -120,6 +139,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   Future<FlutterPairingResponse> sendPairingRequest(
       {required String peer, required FlutterPairingRequest req});
 
+  /// Send a peer files request to a peer and await its answer.
+  Future<FlutterPeerFilesResponse> sendPeerFiles(
+      {required String peer, required FlutterPeerFilesRequest req});
+
   /// Send a peer sync request to a peer and await its answer.
   Future<FlutterPeerSyncResponse> sendPeerSync(
       {required String peer, required FlutterPeerSyncRequest req});
@@ -127,6 +150,11 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Send a control command to a peer and await its answer.
   Future<FlutterRemoteControlResponse> sendRemoteControlRequest(
       {required String peer, required FlutterRemoteControlRequest req});
+
+  /// Set which peers may read this player's shared files: the node ids of
+  /// the sync group's active members. Replaces the previous list, which
+  /// starts empty. A browser never serves files, so this is a no-op there.
+  Future<void> setPeerFilesMembers({required List<String> nodeIds});
 }
 
 /// The decrypted contents of a sealed pairing claim.
@@ -374,6 +402,30 @@ class FlutterInboundControlRequest {
           request == other.request;
 }
 
+class FlutterInboundPeerFilesRequest {
+  final String peer;
+  final String requestId;
+  final FlutterPeerFilesRequest request;
+
+  const FlutterInboundPeerFilesRequest({
+    required this.peer,
+    required this.requestId,
+    required this.request,
+  });
+
+  @override
+  int get hashCode => peer.hashCode ^ requestId.hashCode ^ request.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterInboundPeerFilesRequest &&
+          runtimeType == other.runtimeType &&
+          peer == other.peer &&
+          requestId == other.requestId &&
+          request == other.request;
+}
+
 class FlutterInboundPeerSyncRequest {
   final String peer;
   final String requestId;
@@ -545,6 +597,109 @@ class FlutterPairingResponse {
           deviceToken == other.deviceToken &&
           error == other.error &&
           directUrls == other.directUrls;
+}
+
+/// Dart's grant for a read: a local path or `file://` URL, or an `http(s)`
+/// URL and the headers to send with it.
+class FlutterPeerFileGrant {
+  final String url;
+  final List<(String, String)> headers;
+
+  const FlutterPeerFileGrant({
+    required this.url,
+    required this.headers,
+  });
+
+  @override
+  int get hashCode => url.hashCode ^ headers.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterPeerFileGrant &&
+          runtimeType == other.runtimeType &&
+          url == other.url &&
+          headers == other.headers;
+}
+
+@freezed
+sealed class FlutterPeerFileGrantAnswer with _$FlutterPeerFileGrantAnswer {
+  const FlutterPeerFileGrantAnswer._();
+
+  const factory FlutterPeerFileGrantAnswer.granted({
+    required FlutterPeerFileGrant grant,
+  }) = FlutterPeerFileGrantAnswer_Granted;
+
+  /// The path is not one this player shares: the read gets 404.
+  const factory FlutterPeerFileGrantAnswer.notShared() =
+      FlutterPeerFileGrantAnswer_NotShared;
+
+  /// The path is shared but its backend could not be opened: the read
+  /// gets 502, and the next read asks again.
+  const factory FlutterPeerFileGrantAnswer.failed() =
+      FlutterPeerFileGrantAnswer_Failed;
+}
+
+/// Rust asking Dart what a paired player's read of `path` in `account_id`
+/// may open. Answered with `respond_peer_file_grant` under `request_id`.
+class FlutterPeerFileGrantRequest {
+  final String requestId;
+  final String accountId;
+  final String path;
+
+  const FlutterPeerFileGrantRequest({
+    required this.requestId,
+    required this.accountId,
+    required this.path,
+  });
+
+  @override
+  int get hashCode => requestId.hashCode ^ accountId.hashCode ^ path.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterPeerFileGrantRequest &&
+          runtimeType == other.runtimeType &&
+          requestId == other.requestId &&
+          accountId == other.accountId &&
+          path == other.path;
+}
+
+@freezed
+sealed class FlutterPeerFilesRequest with _$FlutterPeerFilesRequest {
+  const FlutterPeerFilesRequest._();
+
+  const factory FlutterPeerFilesRequest.manifest({
+    required String authProof,
+  }) = FlutterPeerFilesRequest_Manifest;
+  const factory FlutterPeerFilesRequest.indexPage({
+    required String authProof,
+    required String accountId,
+    required BigInt revision,
+    String? cursor,
+  }) = FlutterPeerFilesRequest_IndexPage;
+}
+
+@freezed
+sealed class FlutterPeerFilesResponse with _$FlutterPeerFilesResponse {
+  const FlutterPeerFilesResponse._();
+
+  const factory FlutterPeerFilesResponse.manifest({
+    required List<FlutterWireSharedAccount> accounts,
+  }) = FlutterPeerFilesResponse_Manifest;
+  const factory FlutterPeerFilesResponse.indexPage({
+    required FlutterWireIndexPage page,
+    String? nextCursor,
+  }) = FlutterPeerFilesResponse_IndexPage;
+  const factory FlutterPeerFilesResponse.staleRevision() =
+      FlutterPeerFilesResponse_StaleRevision;
+  const factory FlutterPeerFilesResponse.notAuthorized() =
+      FlutterPeerFilesResponse_NotAuthorized;
+
+  /// The host's roster marks the requester revoked.
+  const factory FlutterPeerFilesResponse.revoked() =
+      FlutterPeerFilesResponse_Revoked;
 }
 
 @freezed
@@ -815,6 +970,46 @@ class FlutterTrackInfo {
           language == other.language;
 }
 
+/// Each record is the UTF-8 JSON of the record's `toMap()`, exactly as Dart
+/// encodes it, so the bridge never mirrors the Dart record shapes.
+class FlutterWireIndexPage {
+  final List<Uint8List> roots;
+  final List<Uint8List> files;
+  final List<Uint8List> groups;
+  final List<Uint8List> movies;
+  final List<Uint8List> shows;
+
+  const FlutterWireIndexPage({
+    required this.roots,
+    required this.files,
+    required this.groups,
+    required this.movies,
+    required this.shows,
+  });
+
+  static Future<FlutterWireIndexPage> default_() =>
+      RustLib.instance.api.crateFlutterWireIndexPageDefault();
+
+  @override
+  int get hashCode =>
+      roots.hashCode ^
+      files.hashCode ^
+      groups.hashCode ^
+      movies.hashCode ^
+      shows.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterWireIndexPage &&
+          runtimeType == other.runtimeType &&
+          roots == other.roots &&
+          files == other.files &&
+          groups == other.groups &&
+          movies == other.movies &&
+          shows == other.shows;
+}
+
 class FlutterWirePeerMember {
   final String nodeId;
   final String deviceName;
@@ -891,6 +1086,41 @@ class FlutterWirePinRecord {
           tmdbId == other.tmdbId &&
           pinned == other.pinned &&
           updatedAtMs == other.updatedAtMs;
+}
+
+class FlutterWireSharedAccount {
+  final String accountId;
+  final String kind;
+  final String name;
+  final String? dedupeKey;
+  final BigInt revision;
+
+  const FlutterWireSharedAccount({
+    required this.accountId,
+    required this.kind,
+    required this.name,
+    this.dedupeKey,
+    required this.revision,
+  });
+
+  @override
+  int get hashCode =>
+      accountId.hashCode ^
+      kind.hashCode ^
+      name.hashCode ^
+      dedupeKey.hashCode ^
+      revision.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterWireSharedAccount &&
+          runtimeType == other.runtimeType &&
+          accountId == other.accountId &&
+          kind == other.kind &&
+          name == other.name &&
+          dedupeKey == other.dedupeKey &&
+          revision == other.revision;
 }
 
 class FlutterWireWatchRecord {

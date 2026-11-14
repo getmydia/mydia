@@ -487,6 +487,58 @@ void main() {
     expect(nodeB.store.watchRecord(movieKey), isNull);
   });
 
+  test('authorizes_and_active_member_ids_follow_proof_roster_and_group',
+      () async {
+    expect(nodeB.service.activeMemberIds(), isEmpty);
+    expect(nodeB.service.authorizes('node-a', 'anything'), isFalse);
+
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+    final offerB = await nodeB.service.startPairingOffer();
+    await nodeC.service.pairWithCode(offerB.code);
+
+    final secret = PeerGroupSecret.fromBase64Url(
+      (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
+    );
+    expect(nodeB.service.activeMemberIds(), ['node-a', 'node-c']);
+    expect(
+        nodeB.service.authorizes('node-a', secret.authProof('node-a')), isTrue);
+    // A proof is bound to its sender.
+    expect(nodeB.service.authorizes('node-a', secret.authProof('node-c')),
+        isFalse);
+    // The secret alone does not admit a node the roster never held.
+    expect(nodeB.service.authorizes('node-x', secret.authProof('node-x')),
+        isFalse);
+
+    clock.setMs(2000);
+    await nodeB.service.revokePeer('node-a');
+    expect(nodeB.service.authorizes('node-a', secret.authProof('node-a')),
+        isFalse);
+    expect(nodeB.service.activeMemberIds(), ['node-c']);
+
+    await nodeB.service.leaveGroup();
+    expect(nodeB.service.activeMemberIds(), isEmpty);
+    expect(nodeB.service.authorizes('node-c', secret.authProof('node-c')),
+        isFalse);
+  });
+
+  test('auth_proof_for_self_is_the_proof_members_accept', () async {
+    expect(nodeB.service.authProofForSelf(), isNull);
+
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+
+    final proof = nodeB.service.authProofForSelf();
+    expect(proof, isNotNull);
+    expect(nodeA.service.authorizes('node-b', proof!), isTrue);
+    expect(nodeB.service.member('node-a')?.nodeId, 'node-a');
+    expect(nodeB.service.member('NODE-A')?.nodeId, 'node-a');
+    expect(nodeB.service.member('node-x'), isNull);
+
+    await nodeB.service.leaveGroup();
+    expect(nodeB.service.authProofForSelf(), isNull);
+  });
+
   test('unreachable_peer_enters_60s_cooldown_until_cleared', () async {
     // Pair A <-> B
     final offer = await nodeA.service.startPairingOffer();
