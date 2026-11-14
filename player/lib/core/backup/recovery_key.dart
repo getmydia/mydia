@@ -48,7 +48,7 @@ class RecoveryKey {
     for (final c in chars.split('')) {
       final v = _alphabet.indexOf(c);
       if (v < 0) {
-        throw FormatException('invalid recovery key character: $c');
+        throw const FormatException('invalid recovery key character');
       }
       acc = (acc << 5) | v;
       bits += 5;

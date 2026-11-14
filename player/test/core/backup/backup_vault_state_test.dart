@@ -41,6 +41,26 @@ void main() {
     expect(s.manifestEtag, isNull);
   });
 
+  test('a pending recovery key round-trips and clears', () async {
+    final store = BackupVaultStateStore(MockAuthStorage());
+    await store.save(_state().copyWith(pendingRecoveryKeyText: () => 'WXYZ'));
+    expect((await store.load())!.pendingRecoveryKeyText, 'WXYZ');
+    await store.save(
+        (await store.load())!.copyWith(pendingRecoveryKeyText: () => null));
+    expect((await store.load())!.pendingRecoveryKeyText, isNull);
+  });
+
+  test('unparseable stored JSON does not echo it in the error', () async {
+    final auth = MockAuthStorage();
+    await auth.write(
+        BackupVaultStateStore.storageKey, '{"recoveryKey": "SECRET"');
+    await expectLater(
+      BackupVaultStateStore(auth).load(),
+      throwsA(isA<FormatException>()
+          .having((e) => e.toString(), 'text', isNot(contains('SECRET')))),
+    );
+  });
+
   test('keeps only the two newest epochs', () async {
     final store = BackupVaultStateStore(MockAuthStorage());
     await store.save(_state(

@@ -53,7 +53,7 @@ Future<void> openBackupMetaBox() async {
   try {
     await Hive.openBox<String>(BackupMetaStore.boxName);
   } catch (e) {
-    debugPrint('[Backup] Meta box did not open: $e');
+    debugPrint('[Backup] Meta box did not open: ${e.runtimeType}');
   }
 }
 
@@ -157,7 +157,7 @@ class BackupMetaStore {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       return (fp: json['fp'] as String, at: (json['at'] as num).toInt());
     } catch (e) {
-      debugPrint('[Backup] Unreadable stamp for $key: $e');
+      debugPrint('[Backup] Unreadable stamp for $key: ${e.runtimeType}');
       return null;
     }
   }
@@ -170,7 +170,7 @@ class BackupMetaStore {
         offers.add(PendingAccountOffer.fromJson(
             jsonDecode(_storage.get(k)!) as Map<String, dynamic>));
       } catch (e) {
-        debugPrint('[Backup] Unreadable pending offer $k: $e');
+        debugPrint('[Backup] Unreadable pending offer $k: ${e.runtimeType}');
       }
     }
     return offers..sort((a, b) => a.accountId.compareTo(b.accountId));

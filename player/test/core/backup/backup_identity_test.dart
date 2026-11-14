@@ -47,4 +47,17 @@ void main() {
     );
     expect(storage.contents['backup/identity'], 'not json');
   });
+
+  test('the error for an unreadable identity does not quote the seeds',
+      () async {
+    final storage = MockAuthStorage()
+      ..seedData({
+        'backup/identity': '{"v": 1, "signerSeed": "SECRETSEED", "boxSeed": 3}'
+      });
+    await expectLater(
+      BackupIdentity.loadOrCreate(storage),
+      throwsA(isA<StateError>()
+          .having((e) => e.toString(), 'text', isNot(contains('SECRETSEED')))),
+    );
+  });
 }

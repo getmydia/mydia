@@ -254,6 +254,59 @@ void main() {
       expect(await a.state(), isNull);
     });
 
+    test('enabling after an Unavailable uploads and polls', () async {
+      rig.relay.available = false;
+      final a = rig.device('Living Room TV');
+      await a.service.start();
+      await expectLater(
+          a.service.confirmEnable(await a.service.prepareEnable()),
+          _throwsRelay(BackupRelayError.unavailable));
+
+      rig.relay.available = true;
+      await a.watch('tmdb:movie:14');
+      final key = await a.service.prepareEnable();
+      await a.service.confirmEnable(key);
+      expect(a.service.status.value, isA<BackupIdle>());
+      expect(rig.relay.slotWrites[await a.slotId()], 1);
+
+      final b = await rig.joined('Laptop', key);
+      await b.watch('tmdb:movie:15');
+      b.service.markDirty();
+      await b.service.flush();
+      await a.service.poll();
+      expect(a.watched('tmdb:movie:15'), isTrue);
+    });
+
+    test('a vault id the relay did not echo is refused', () async {
+      rig.relay.override = (r) =>
+          r.method == 'POST' && r.url.path.endsWith('/vaults')
+              ? http.Response(
+                  '{"vault_id":"ffffffffffffffffffffffffffffffff"}', 201)
+              : null;
+      final a = rig.device('Living Room TV');
+      await a.service.start();
+      await expectLater(
+          a.service.confirmEnable(await a.service.prepareEnable()),
+          _throwsRelay(BackupRelayError.invalid));
+      expect(await a.state(), isNull);
+    });
+
+    test('a previewRestore refused by another vault does not remove this one',
+        () async {
+      final (a, _) = await rig.enabled('Living Room TV');
+      final (_, otherKey) = await rig.enabled('Night Harbor Laptop');
+      final ownVault = (await a.state())!.vaultId;
+      rig.relay.override = (r) => r.method == 'GET' &&
+              r.url.path.startsWith('/backup/v1/vaults/') &&
+              !r.url.path.contains(ownVault)
+          ? http.Response('{"error":"not_member"}', 403)
+          : null;
+      await expectLater(a.service.previewRestore(otherKey.display),
+          _throwsRelay(BackupRelayError.notMember));
+      expect(await a.state(), isNotNull);
+      expect(a.service.status.value, isNot(isA<BackupRemoved>()));
+    });
+
     test('restore adds the accounts and accepts offers on a live device',
         () async {
       final a = rig.device('Living Room TV');
@@ -347,6 +400,25 @@ void main() {
       expect(a.watched('tmdb:movie:20'), isFalse);
       expect(a.service.unreadableSlots.value, {await b.slotId()});
       expect(a.service.status.value, isA<BackupIdle>());
+
+      // The failed seq is not downloaded again, and stays reported...
+      final bSlotGet = 'GET /backup/v1/vaults/${rig.relay.onlyVault.id}'
+          '/slots/${await b.slotId()}';
+      int bGets() => rig.relay.requests.where((r) => r == bSlotGet).length;
+      final gets = bGets();
+      await a.service.poll();
+      expect(bGets(), gets);
+      expect(a.service.unreadableSlots.value, {await b.slotId()});
+
+      // ...until B writes a new one.
+      now = now.add(const Duration(minutes: 1));
+      await b.watch('tmdb:movie:21');
+      b.service.markDirty();
+      await b.service.flush();
+      await a.service.poll();
+      expect(bGets(), gets + 1);
+      expect(a.watched('tmdb:movie:21'), isTrue);
+      expect(a.service.unreadableSlots.value, isEmpty);
     });
 
     test('a 412 on upload rereads the seq and writes again', () async {
@@ -473,6 +545,60 @@ void main() {
       await b.service
           .commitRestore(await b.service.previewRestore(fresh.display));
       expect(b.service.status.value, isA<BackupIdle>());
+      expect((await a.state())!.pendingRecoveryKeyText, isNull);
+      expect(a.service.recoveryKeyMismatch.value, isFalse);
+    });
+
+    test('a new recovery key the relay took survives a lost reply', () async {
+      final (a, oldKey) = await rig.enabled('Living Room TV');
+      rig.relay.dropNextMembersResponse = true;
+      await expectLater(a.service.regenerateRecoveryKey(),
+          _throwsRelay(BackupRelayError.network));
+      final stored = (await a.state())!;
+      expect(stored.recoveryKeyText, oldKey.display);
+      final pending = stored.pendingRecoveryKeyText!;
+
+      // A crash here: the next start settles it from the manifest.
+      a.service.dispose();
+      a.build();
+      await a.service.start();
+      await a.service.poll();
+      final settled = (await a.state())!;
+      expect(settled.recoveryKeyText, pending);
+      expect(settled.pendingRecoveryKeyText, isNull);
+      expect(settled.epoch, 2);
+      expect(a.service.recoveryKeyMismatch.value, isFalse);
+
+      final b = rig.device('Laptop');
+      await b.service.start();
+      await b.service.commitRestore(await b.service.previewRestore(pending));
+      expect(b.service.status.value, isA<BackupIdle>());
+    });
+
+    test('a new recovery key the relay refused is dropped', () async {
+      final (a, oldKey) = await rig.enabled('Living Room TV');
+      rig.relay.onRequest = (r) {
+        if (r.url.path.endsWith('/members')) {
+          throw http.ClientException('offline');
+        }
+      };
+      await expectLater(a.service.regenerateRecoveryKey(),
+          _throwsRelay(BackupRelayError.network));
+      rig.relay.onRequest = null;
+      await a.service.poll();
+      final state = (await a.state())!;
+      expect(state.recoveryKeyText, oldKey.display);
+      expect(state.pendingRecoveryKeyText, isNull);
+      expect(a.service.recoveryKeyMismatch.value, isFalse);
+    });
+
+    test('a stored recovery key that is not the vault\'s is flagged', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Laptop', key);
+      await b.service.regenerateRecoveryKey();
+      await a.service.poll();
+      expect(a.service.recoveryKeyMismatch.value, isTrue);
+      expect((await a.state())!.recoveryKeyText, key.display);
     });
 
     test('disable leaves the vault; the others keep it', () async {

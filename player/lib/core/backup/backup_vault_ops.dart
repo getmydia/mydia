@@ -95,7 +95,7 @@ class BackupVaultOps {
     for (var attempt = 0;; attempt++) {
       final vaultId = randomVaultId();
       try {
-        return await _relay.createVault(CreateVaultRequest(
+        final created = await _relay.createVault(CreateVaultRequest(
           vaultId: vaultId,
           signer: signerPub,
           boxPub: boxPub,
@@ -107,6 +107,11 @@ class BackupVaultOps {
           recoveryEnvelope: await seal(vaultKey, recovery.boxPub, vaultId, 1),
           lookupHash: await recovery.lookupHash(),
         ));
+        // The envelopes bind the id sent; any other would not open.
+        if (created != vaultId) {
+          throw const BackupRelayException(BackupRelayError.invalid);
+        }
+        return created;
       } on BackupRelayException catch (e) {
         if (e.kind != BackupRelayError.conflict || attempt > 0) rethrow;
       }

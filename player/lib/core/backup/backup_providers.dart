@@ -85,7 +85,8 @@ Future<void> _putRoots(
         .read(filesScanProvider(source.id).notifier)
         .rescan()
         .catchError((Object e) {
-      debugPrint('[Backup] Scan after restoring a folder failed: $e');
+      debugPrint(
+          '[Backup] Scan after restoring a folder failed: ${e.runtimeType}');
     }));
   }
 }

@@ -61,7 +61,8 @@ class BackupIdentity {
       signerSeed = _decodeSeed(json['signerSeed']);
       boxSeed = _decodeSeed(json['boxSeed']);
     } on Object catch (e) {
-      throw StateError('stored backup identity is unreadable: $e');
+      throw StateError(
+          'stored backup identity is unreadable (${e.runtimeType})');
     }
     return _build(signerSeed, boxSeed);
   }

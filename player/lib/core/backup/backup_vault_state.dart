@@ -13,6 +13,7 @@ class BackupVaultState {
     required this.ownSeq,
     this.lastSuccessMs,
     this.manifestEtag,
+    this.pendingRecoveryKeyText,
   }) : keysByEpoch = Map.unmodifiable({
           for (final e in keysByEpoch.entries)
             e.key: Uint8List.fromList(e.value),
@@ -26,6 +27,11 @@ class BackupVaultState {
   final int? lastSuccessMs;
   final String? manifestEtag;
 
+  /// A recovery key being swapped in: saved before the relay call so a
+  /// crash after the relay accepted it cannot lose it. Promoted to
+  /// [recoveryKeyText] once the manifest shows its signer, else dropped.
+  final String? pendingRecoveryKeyText;
+
   /// Nullable fields take a closure so they can be set to null explicitly.
   BackupVaultState copyWith({
     String? vaultId,
@@ -35,6 +41,7 @@ class BackupVaultState {
     int? ownSeq,
     int? Function()? lastSuccessMs,
     String? Function()? manifestEtag,
+    String? Function()? pendingRecoveryKeyText,
   }) =>
       BackupVaultState(
         vaultId: vaultId ?? this.vaultId,
@@ -45,6 +52,9 @@ class BackupVaultState {
         lastSuccessMs:
             lastSuccessMs != null ? lastSuccessMs() : this.lastSuccessMs,
         manifestEtag: manifestEtag != null ? manifestEtag() : this.manifestEtag,
+        pendingRecoveryKeyText: pendingRecoveryKeyText != null
+            ? pendingRecoveryKeyText()
+            : this.pendingRecoveryKeyText,
       );
 
   /// Keeps only the two highest epochs of [keysByEpoch].
@@ -66,12 +76,14 @@ class BackupVaultState {
         'ownSeq': ownSeq,
         'lastSuccessMs': lastSuccessMs,
         'manifestEtag': manifestEtag,
+        if (pendingRecoveryKeyText != null)
+          'pendingRecoveryKey': pendingRecoveryKeyText,
       };
 
   /// Throws [FormatException] on a wrong version or missing/mistyped fields.
   factory BackupVaultState.fromJson(Map<String, dynamic> json) {
     if (json['v'] != 1) {
-      throw FormatException('unsupported backup vault state: ${json['v']}');
+      throw const FormatException('unsupported backup vault state version');
     }
     final vaultId = json['vaultId'];
     final epoch = json['epoch'];
@@ -80,13 +92,15 @@ class BackupVaultState {
     final ownSeq = json['ownSeq'];
     final lastSuccess = json['lastSuccessMs'];
     final etag = json['manifestEtag'];
+    final pending = json['pendingRecoveryKey'];
     if (vaultId is! String ||
         epoch is! int ||
         keys is! Map ||
         recovery is! String ||
         ownSeq is! int ||
         (lastSuccess != null && lastSuccess is! int) ||
-        (etag != null && etag is! String)) {
+        (etag != null && etag is! String) ||
+        (pending != null && pending is! String)) {
       throw const FormatException('malformed backup vault state');
     }
     final decoded = <int, Uint8List>{};
@@ -114,6 +128,7 @@ class BackupVaultState {
       ownSeq: ownSeq,
       lastSuccessMs: lastSuccess as int?,
       manifestEtag: etag as String?,
+      pendingRecoveryKeyText: pending as String?,
     );
   }
 }
@@ -131,7 +146,13 @@ class BackupVaultStateStore {
   Future<BackupVaultState?> load() async {
     final raw = await _storage.read(storageKey);
     if (raw == null) return null;
-    final decoded = jsonDecode(raw);
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      // Its message quotes the stored JSON, keys included.
+      throw const FormatException('malformed backup vault state');
+    }
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('malformed backup vault state');
     }

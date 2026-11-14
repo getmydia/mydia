@@ -63,11 +63,25 @@ class BackupSyncService {
 
   final _status = ValueNotifier<BackupStatus>(const BackupOff());
   final _unreadable = ValueNotifier<Set<String>>(const {});
+  final _recoveryMismatch = ValueNotifier<bool>(false);
 
   ValueListenable<BackupStatus> get status => _status;
 
   /// Slot ids whose last download could not be opened or decoded.
   ValueListenable<Set<String>> get unreadableSlots => _unreadable;
+
+  /// True when the recovery key this device keeps is not the vault's (it
+  /// was replaced from another device, or a replacement here was lost): the
+  /// key shown would not restore the backup.
+  ValueListenable<bool> get recoveryKeyMismatch => _recoveryMismatch;
+
+  /// Slots that could not be read, by the seq that failed: not downloaded
+  /// again until their seq changes.
+  final _failedSlots = <String, int>{};
+
+  /// Recovery signer public keys by key text, so a poll does not derive
+  /// them every time.
+  final _recoverySigners = <String, Uint8List?>{};
 
   /// Device names from the slots read so far, by slot id.
   Map<String, String> get slotDeviceNames => Map.unmodifiable(_slotNames);
@@ -107,28 +121,32 @@ class BackupSyncService {
 
   /// Loads the vault state and, when in a vault, polls and schedules the
   /// periodic poll. Clears an earlier [BackupUnavailable].
-  Future<void> start() async {
-    _halted = false;
-    try {
-      _state = await _store.load();
-      if (_state == null) return _set(const BackupOff());
-      _identity = await BackupIdentity.loadOrCreate(_auth);
-    } catch (e) {
-      debugPrint('[Backup] Could not load the backup state: $e');
-      return _set(BackupError(BackupRelayError.server, _state?.lastSuccessMs));
-    }
-    _set(BackupIdle(_state!.lastSuccessMs));
-    _startPolling();
-    // A change made just before the app was killed may never have gone up.
-    markDirty();
-    unawaited(poll());
-  }
+  Future<void> start() => _serialise(() async {
+        _halted = false;
+        try {
+          _state = await _store.load();
+          if (_state == null) return _set(const BackupOff());
+          _identity = await BackupIdentity.loadOrCreate(_auth);
+        } catch (e) {
+          debugPrint(
+              '[Backup] Could not load the backup state: ${e.runtimeType}');
+          return _set(
+              BackupError(BackupRelayError.server, _state?.lastSuccessMs));
+        }
+        _set(BackupIdle(_state!.lastSuccessMs));
+        _startPolling();
+        // A change made just before the app was killed may never have gone
+        // up.
+        markDirty();
+        unawaited(poll());
+      });
 
   void dispose() {
     _disposed = true;
     _cancelTimers();
     _status.dispose();
     _unreadable.dispose();
+    _recoveryMismatch.dispose();
   }
 
   // Triggers
@@ -209,10 +227,13 @@ class BackupSyncService {
 
   /// Finds [keyText]'s vault and reads every slot, as its recovery member.
   /// Changes nothing on the device or the relay.
-  Future<RestorePreview> previewRestore(String keyText) => _userOp(() async {
-        final recovery = await RecoveryMember.of(RecoveryKey.parse(keyText));
-        return _ops.preview(recovery);
-      });
+  Future<RestorePreview> previewRestore(String keyText) => _userOp(
+        () async {
+          final recovery = await RecoveryMember.of(RecoveryKey.parse(keyText));
+          return _ops.preview(recovery);
+        },
+        ownVault: false,
+      );
 
   /// Joins [preview]'s vault (added by the recovery member, no rotation),
   /// applies its records in restore mode, and uploads this device's slot.
@@ -297,6 +318,14 @@ class BackupSyncService {
   /// Replaces the recovery key (and rotates). The old key stops working.
   Future<RecoveryKey> regenerateRecoveryKey() => _userOp(() async {
         final key = RecoveryKey.generate();
+        final (state, _) = _require();
+        // Kept before the relay call: if the relay takes the new key and
+        // the reply is lost, the next poll promotes it (see
+        // _reconcileRecovery) instead of leaving the dead old key shown.
+        await _save(state.copyWith(
+          pendingRecoveryKeyText: () => key.display,
+          manifestEtag: () => null,
+        ));
         await _rotate(newRecovery: await RecoveryMember.of(key));
         await _attempt(() => _upload(force: true));
         return key;
@@ -414,6 +443,7 @@ class BackupSyncService {
     final m = await _relay.manifest(state.vaultId, identity.signer,
         etag: full ? null : state.manifestEtag);
     if (m == null) return _idle();
+    state = await _reconcileRecovery(state, m);
     state = await _adoptEpoch(m);
 
     final own = m.slots.where((s) => s.slotId == identity.slotId).firstOrNull;
@@ -425,12 +455,18 @@ class BackupSyncService {
     for (final s in m.slots) {
       if (s.slotId == identity.slotId) continue;
       if (!full && s.seq <= _meta.mergedSeq(s.slotId)) continue;
+      if (_failedSlots[s.slotId] == s.seq) {
+        unreadable.add(s.slotId);
+        continue;
+      }
       final p =
           await _readSlot(state.vaultId, identity.signer, s, state.keysByEpoch);
       if (p == null) {
         unreadable.add(s.slotId);
+        _failedSlots[s.slotId] = s.seq;
       } else {
         payloads[s.slotId] = p;
+        _failedSlots.remove(s.slotId);
       }
     }
     await _apply(payloads, BackupApplyMode.live);
@@ -440,8 +476,9 @@ class BackupSyncService {
       }
     }
     if (!_disposed) _unreadable.value = unreadable;
-    // An unreadable slot keeps the ETag unset, so the next poll tries it
-    // again rather than getting a 304.
+    // An unreadable slot keeps the ETag unset, so the next poll reads the
+    // manifest again (the slot itself only once its seq moves) and the
+    // unreadable list stays current.
     final etag = unreadable.isEmpty ? m.etag : null;
     if (etag != state.manifestEtag || state.ownSeq != _state!.ownSeq) {
       state = state.copyWith(manifestEtag: () => etag);
@@ -467,6 +504,46 @@ class BackupSyncService {
       }
     }
     return applyByOrigin(_snapshot, payloads, mode: mode, nowMs: _nowMs);
+  }
+
+  // Recovery key
+
+  /// Settles a recovery key replacement whose outcome was not seen: the
+  /// pending key wins when the manifest names its signer, else it is
+  /// dropped. Then flags a stored key that is not the vault's.
+  Future<BackupVaultState> _reconcileRecovery(
+      BackupVaultState state, BackupManifest m) async {
+    final pending = state.pendingRecoveryKeyText;
+    if (pending != null) {
+      final took = await _isRecoverySigner(pending, m.recoverySigner);
+      state = state.copyWith(
+        recoveryKeyText: took ? pending : null,
+        pendingRecoveryKeyText: () => null,
+      );
+      await _save(state);
+    }
+    _setMismatch(
+        !await _isRecoverySigner(state.recoveryKeyText, m.recoverySigner));
+    return state;
+  }
+
+  Future<bool> _isRecoverySigner(String keyText, List<int> signer) async {
+    if (!_recoverySigners.containsKey(keyText)) {
+      Uint8List? pub;
+      try {
+        final kp = await RecoveryKey.parse(keyText).signer();
+        pub = Uint8List.fromList((await kp.extractPublicKey()).bytes);
+      } on FormatException {
+        pub = null;
+      }
+      _recoverySigners[keyText] = pub;
+    }
+    final pub = _recoverySigners[keyText];
+    return pub != null && listEquals(pub, signer);
+  }
+
+  void _setMismatch(bool value) {
+    if (!_disposed) _recoveryMismatch.value = value;
   }
 
   // Epochs and rotation
@@ -516,8 +593,10 @@ class BackupSyncService {
       epoch: rotation.epoch,
       keysByEpoch: {..._state!.keysByEpoch, rotation.epoch: rotation.vaultKey},
       recoveryKeyText: newRecovery?.key.display,
+      pendingRecoveryKeyText: newRecovery == null ? null : () => null,
       manifestEtag: () => null,
     ));
+    if (newRecovery != null) _setMismatch(false);
     return rotation;
   }
 
@@ -549,6 +628,7 @@ class BackupSyncService {
   }
 
   Future<void> _join(BackupVaultState state, BackupIdentity identity) async {
+    _halted = false;
     _state = state;
     _identity = identity;
     _uploadedHash = null;
@@ -564,6 +644,8 @@ class BackupSyncService {
     _dirty = false;
     _uploadedHash = null;
     _tooLarge = false;
+    _failedSlots.clear();
+    _setMismatch(false);
     _accountRecords.clear();
     _slotNames.clear();
     await _store.clear();
@@ -596,15 +678,36 @@ class BackupSyncService {
 
   /// An operation the viewer asked for: errors are rethrown to the caller
   /// after the status reflects a removal or a missing relay feature.
-  Future<T> _userOp<T>(Future<T> Function() op) => _serialise(() async {
+  ///
+  /// The viewer acting is a retry: an earlier [BackupUnavailable] is lifted
+  /// for the op, and stays lifted when it succeeds. A vault that is gone
+  /// means this device was removed only when the op addressed this
+  /// device's own vault ([ownVault]), not, say, a preview of another one.
+  Future<T> _userOp<T>(Future<T> Function() op, {bool ownVault = true}) =>
+      _serialise(() async {
+        final vaultId = _state?.vaultId;
+        final wasHalted = _halted;
+        _halted = false;
         try {
-          return await op();
+          final result = await op();
+          if (wasHalted && _state != null && _pollTimer == null) {
+            _startPolling();
+          }
+          return result;
         } on BackupRelayException catch (e) {
-          if (_gone(e) && _state != null) {
+          if (ownVault &&
+              vaultId != null &&
+              _gone(e) &&
+              _state?.vaultId == vaultId) {
             await _leave(const BackupRemoved());
           } else if (e.kind == BackupRelayError.unavailable) {
             _halt();
+          } else if (wasHalted) {
+            _halted = true;
           }
+          rethrow;
+        } catch (_) {
+          if (wasHalted) _halted = true;
           rethrow;
         }
       });
@@ -626,7 +729,7 @@ class BackupSyncService {
       await _failed(e.kind, e);
     } on Object catch (e) {
       // Malformed 2xx bodies and storage failures are server-side errors.
-      debugPrint('[Backup] Sync failed: $e');
+      debugPrint('[Backup] Sync failed: ${e.runtimeType}');
       await _failed(BackupRelayError.server, null);
     }
   }

@@ -77,6 +77,15 @@ class FakeBackupRelay {
   /// Called before each request is handled; may throw to fail it.
   void Function(http.Request request)? onRequest;
 
+  /// When it returns a response, that is sent instead of handling the
+  /// request.
+  http.Response? Function(http.Request request)? override;
+
+  /// When set, the next member change is applied and then its response is
+  /// lost (the client sees a network error), as in a crash right after the
+  /// relay accepted it.
+  bool dropNextMembersResponse = false;
+
   late final http.Client client = MockClient(_handle);
 
   BackupRelayClient relayClient() =>
@@ -97,6 +106,8 @@ class FakeBackupRelay {
   Future<http.Response> _handle(http.Request r) async {
     requests.add('${r.method} ${r.url.path}');
     onRequest?.call(r);
+    final replaced = override?.call(r);
+    if (replaced != null) return replaced;
     if (!available) return http.Response('Not found', 404);
     final path = r.url.path;
     if (!path.startsWith('/backup/v1/')) return http.Response('Not found', 404);
@@ -126,7 +137,12 @@ class FakeBackupRelay {
     }
     if (parts.length == 3 && parts[2] == 'members' && r.method == 'POST') {
       await _holdMembers();
-      return _members(r, vault, signer);
+      final response = _members(r, vault, signer);
+      if (dropNextMembersResponse) {
+        dropNextMembersResponse = false;
+        throw http.ClientException('connection lost');
+      }
+      return response;
     }
     if (parts.length == 4 && parts[2] == 'slots') {
       if (r.method == 'PUT') return _putSlot(r, vault, signer, parts[3]);
