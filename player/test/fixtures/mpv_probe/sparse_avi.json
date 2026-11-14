@@ -1,0 +1,10 @@
+{
+  "file-format": "avi",
+  "duration": 5600.0,
+  "file-size": 700000000,
+  "track-list": [
+    {"id": 1, "type": "video", "src-id": 0, "default": true, "codec": "mpeg4", "demux-w": 720, "demux-h": 304, "demux-fps": 25.0},
+    {"id": 1, "type": "audio", "src-id": 1, "default": true, "codec": "mp3", "demux-channel-count": 2, "demux-samplerate": 44100}
+  ],
+  "video-params": null
+}

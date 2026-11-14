@@ -1,0 +1,15 @@
+{
+  "file-format": "matroska,webm",
+  "duration": 7384.512,
+  "file-size": 48211345408,
+  "track-list": [
+    {"id": 1, "type": "video", "src-id": 0, "title": "Harbor Lights", "default": true, "forced": false, "external": false, "albumart": false, "image": false, "codec": "hevc", "decoder-desc": "HEVC (High Efficiency Video Coding)", "codec-profile": "Main 10", "demux-w": 3840, "demux-h": 2160, "demux-fps": 23.976024, "demux-bitrate": 52000000, "dolby-vision-profile": 8},
+    {"id": 1, "type": "audio", "src-id": 1, "lang": "eng", "title": "Surround", "default": true, "forced": false, "external": false, "codec": "truehd", "decoder-desc": "TrueHD", "demux-channel-count": 8, "demux-channels": "7.1", "demux-samplerate": 48000, "demux-bitrate": 4200000},
+    {"id": 2, "type": "audio", "src-id": 2, "lang": "eng", "title": "Director Commentary", "default": false, "forced": false, "external": false, "codec": "ac3", "decoder-desc": "ATSC A/52A (AC-3)", "demux-channel-count": "2", "demux-channels": "stereo", "demux-samplerate": "48000", "demux-bitrate": 192000},
+    {"id": 1, "type": "sub", "src-id": 3, "lang": "eng", "title": "Full", "default": true, "forced": false, "hearing-impaired": false, "external": false, "codec": "subrip"},
+    {"id": 2, "type": "sub", "src-id": 4, "lang": "eng", "title": "Signs", "default": false, "forced": true, "hearing-impaired": false, "external": false, "codec": "hdmv_pgs_subtitle"},
+    {"id": 3, "type": "sub", "src-id": 5, "lang": "eng", "title": "SDH", "default": false, "forced": false, "hearing-impaired": true, "external": false, "codec": "subrip"},
+    {"id": 4, "type": "sub", "lang": "fra", "default": false, "forced": false, "external": true, "codec": "subrip"}
+  ],
+  "video-params": {"pixelformat": "yuv420p10", "colormatrix": "bt.2020-ncl", "gamma": "pq", "primaries": "bt.2020", "w": 3840, "h": 2160}
+}
