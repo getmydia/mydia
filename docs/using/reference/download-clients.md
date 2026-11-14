@@ -86,15 +86,18 @@ applies to new grabs; torrents already running finish where they started.
 
 ### Only the files Mydia needs
 
+These features apply to rqbit only, not to the other clients. This section and
+the next one cover both the built-in client and a rqbit instance you run
+yourself.
+
 When the built-in client (or a rqbit instance you run yourself) adds a torrent,
 Mydia first reads its file list and downloads only the files it will import.
 For a season pack, episodes your library already has are skipped, unless your
 search asked for that episode specifically. Samples, trailers, extras, and
-files like `.nfo` or `.txt` are left out. Subtitles that go with a kept video
-are kept. A video Mydia cannot match to the show is kept too, so an oddly named
+files like `.nfo` or `.txt` are left out. Subtitles are kept, except those
+for episodes that are skipped. A video Mydia cannot match to the show is kept too, so an oddly named
 release still gets imported rather than silently dropped. If Mydia cannot read
-the file list, it adds the whole torrent as before. These features apply to
-rqbit only, not to the other clients.
+the file list, or cannot choose from it, it downloads everything, as before.
 
 Because only part of the torrent is downloaded, it also seeds only the pieces
 it holds. On a private tracker, a partial pack contributes less to the swarm
@@ -110,6 +113,19 @@ finishes, Mydia imports whatever is left and then handles the torrent as it
 normally would. If an early import fails for a file, that file is retried at
 the end. Files whose episode cannot be told from the name, and multi-episode
 files, wait for the full import.
+
+### Disk space
+
+The built-in client keeps some space free on the volume it downloads to, 5 GB
+by default. When you grab a release, Mydia checks that the files it will
+download fit while leaving that reserve, and refuses the grab with a message
+saying how much it needs and how much is free. While downloads run, the client
+pauses when free space drops below the reserve, and an alert on the Downloads
+page and the Download Clients page says so. It resumes once space frees up.
+
+Set the reserve in gigabytes under Configure in the built-in client's panel, or
+with `MYDIA_TORRENT_MIN_FREE_SPACE_GB`. `0` turns the check off. It applies to
+the built-in client only, not to other download clients.
 
 ### Set it up with environment variables
 
