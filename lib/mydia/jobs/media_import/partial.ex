@@ -21,8 +21,7 @@ defmodule Mydia.Jobs.MediaImport.Partial do
 
   require Logger
 
-  alias Mydia.Downloads
-  alias Mydia.Downloads.Download
+  alias Mydia.Downloads.{Download, MetadataKey}
   alias Mydia.Jobs.MediaImport
   alias Mydia.Jobs.MediaImport.{Args, Paths}
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
@@ -126,36 +125,29 @@ defmodule Mydia.Jobs.MediaImport.Partial do
     exception -> {:error, {:import_exception, Exception.message(exception)}}
   end
 
-  # Read-modify-write on a fresh read: the monitor and other jobs write this
-  # row's metadata while the download runs. Failed paths are recorded so the
-  # monitor stops offering them on every poll; the full import still tries.
+  # Read-merge-write under `MetadataKey`'s lock: the monitor, the built-in
+  # policies and the operator's file selection write this row's metadata
+  # while the download runs, and an unlocked read-modify-write here could
+  # drop one of their keys. A row deleted meanwhile is skipped. Failed paths
+  # are recorded so the monitor stops offering them on every poll; the full
+  # import still tries.
   defp record_early_imports(download_id, placed_targets, failed_paths) do
     paths = Enum.map(placed_targets, & &1["path"])
     episode_ids = placed_targets |> Enum.map(& &1["episode_id"]) |> Enum.reject(&is_nil/1)
 
-    case Downloads.get_download(download_id) do
-      nil ->
-        Logger.info("Skipping early import record: download row no longer exists",
-          download_id: download_id
-        )
+    result =
+      MetadataKey.modify(download_id, fn metadata ->
+        metadata
+        |> append_uniq("early_imported_paths", paths)
+        |> append_uniq("early_imported_episode_ids", episode_ids)
+        |> append_uniq("early_import_failed_paths", failed_paths)
+      end)
 
-      current ->
-        metadata =
-          (current.metadata || %{})
-          |> append_uniq("early_imported_paths", paths)
-          |> append_uniq("early_imported_episode_ids", episode_ids)
-          |> append_uniq("early_import_failed_paths", failed_paths)
-
-        case Downloads.update_download(current, %{metadata: metadata}) do
-          {:ok, _} ->
-            :ok
-
-          {:error, changeset} ->
-            Logger.warning("Failed to record early imports",
-              download_id: download_id,
-              errors: inspect(changeset.errors)
-            )
-        end
+    with {:error, reason} <- result do
+      Logger.warning("Failed to record early imports",
+        download_id: download_id,
+        reason: inspect(reason)
+      )
     end
   end
 

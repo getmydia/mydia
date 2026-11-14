@@ -19,4 +19,21 @@ defmodule Mydia.Downloads.MetadataKeyTest do
   test "put/3 is :ok for a missing row" do
     assert :ok = MetadataKey.put(Ecto.UUID.generate(), "k", "v")
   end
+
+  test "modify/2 applies the function to the stored metadata" do
+    download = download_fixture(%{metadata: %{"file_selection" => %{"source" => "manual"}}})
+
+    assert :ok =
+             MetadataKey.modify(download.id, fn metadata ->
+               Map.update(metadata, "early_imported_paths", ["a.mkv"], &(&1 ++ ["a.mkv"]))
+             end)
+
+    metadata = Downloads.get_download!(download.id).metadata
+    assert metadata["file_selection"] == %{"source" => "manual"}
+    assert metadata["early_imported_paths"] == ["a.mkv"]
+  end
+
+  test "modify/2 is :ok for a missing row" do
+    assert :ok = MetadataKey.modify(Ecto.UUID.generate(), &Map.put(&1, "k", "v"))
+  end
 end
