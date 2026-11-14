@@ -68,32 +68,58 @@ defmodule MydiaWeb.SeedingComponents do
   removing now risks a hit-and-run. Nil when no goal applies or it is met.
   """
   @spec removal_warning_text(map()) :: String.t() | nil
-  def removal_warning_text(download) do
-    case SeedingGoal.for_download(download) do
-      %SeedingGoal{met?: false} = goal ->
-        Enum.join(
-          [requirement(goal), standing(goal), gettext("Removing it now risks a hit-and-run.")],
-          " "
-        )
+  def removal_warning_text(download), do: goal_warning_text(SeedingGoal.for_download(download))
 
-      _none_or_met ->
-        nil
-    end
+  @doc "The removal warning for an already computed goal. Nil when none or met."
+  @spec goal_warning_text(SeedingGoal.t() | nil) :: String.t() | nil
+  def goal_warning_text(%SeedingGoal{met?: false} = goal) do
+    [
+      requirement(goal),
+      target_requirement(goal),
+      standing(goal),
+      gettext("Removing it now risks a hit-and-run.")
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
   end
 
-  @doc ~s(The chip's text, such as "0.42 / 1.0 · 1d / 3d" or "Seeding goal met".)
+  def goal_warning_text(_none_or_met), do: nil
+
+  @doc """
+  The chip's text, such as "0.42 / 1.0 · 1d / 3d" or "Seeding goal met". The
+  tracker's requirement and the operator's target are separate parts, the
+  latter marked "target", e.g. "0.42 / 1.0 · target 0.42 / 2.0".
+  """
   @spec chip_text(SeedingGoal.t()) :: String.t()
   def chip_text(%SeedingGoal{met?: true}), do: gettext("Seeding goal met")
 
-  def chip_text(%SeedingGoal{required_ratio: nil, required_seed_time: nil}),
-    do: gettext("Private, kept seeding")
-
   def chip_text(%SeedingGoal{} = goal) do
+    case Enum.reject([tracker_chip(goal), target_chip(goal)], &is_nil/1) do
+      [] -> gettext("Private, kept seeding")
+      parts -> Enum.join(parts, " · ")
+    end
+  end
+
+  # Private with no known minimum: nothing to count toward, but not nothing.
+  defp tracker_chip(%SeedingGoal{required_ratio: nil, required_seed_time: nil} = goal),
+    do: if(goal.private? == true, do: gettext("Private, kept seeding"))
+
+  defp tracker_chip(goal), do: progress(goal, goal.required_ratio, goal.required_seed_time)
+
+  defp target_chip(%SeedingGoal{target_ratio: nil, target_seed_time: nil}), do: nil
+
+  defp target_chip(goal),
+    do:
+      gettext("target %{progress}",
+        progress: progress(goal, goal.target_ratio, goal.target_seed_time)
+      )
+
+  defp progress(goal, required_ratio, required_seed_time) do
     [
-      goal.required_ratio &&
-        "#{format_ratio(goal.ratio)} / #{format_required_ratio(goal.required_ratio)}",
-      goal.required_seed_time &&
-        "#{format_time(goal.seeding_time)} / #{format_time(goal.required_seed_time)}"
+      required_ratio &&
+        "#{format_ratio(goal.ratio)} / #{format_required_ratio(required_ratio)}",
+      required_seed_time &&
+        "#{format_time(goal.seeding_time)} / #{format_time(required_seed_time)}"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" · ")
@@ -108,11 +134,14 @@ defmodule MydiaWeb.SeedingComponents do
         tracker: tracker(goal)
       )
 
-  defp requirement(%SeedingGoal{required_ratio: nil, required_seed_time: nil} = goal),
-    do:
+  # A target with no tracker terms at all has no tracker sentence.
+  defp requirement(%SeedingGoal{required_ratio: nil, required_seed_time: nil} = goal) do
+    if goal.private? == true or (is_nil(goal.target_ratio) and is_nil(goal.target_seed_time)) do
       gettext("%{tracker} is a private tracker and its seeding rules are unknown.",
         tracker: tracker(goal)
       )
+    end
+  end
 
   defp requirement(%SeedingGoal{required_seed_time: nil} = goal),
     do:
@@ -134,6 +163,28 @@ defmodule MydiaWeb.SeedingComponents do
         tracker: tracker(goal),
         ratio: format_required_ratio(goal.required_ratio),
         time: format_time(goal.required_seed_time)
+      )
+
+  defp target_requirement(%SeedingGoal{target_ratio: nil, target_seed_time: nil}), do: nil
+
+  defp target_requirement(%SeedingGoal{target_seed_time: nil} = goal),
+    do:
+      gettext("The seeding target of a ratio of %{ratio} is not yet reached.",
+        ratio: format_required_ratio(goal.target_ratio)
+      )
+
+  defp target_requirement(%SeedingGoal{target_ratio: nil} = goal),
+    do:
+      gettext("The seeding target of %{time} of seeding is not yet reached.",
+        time: format_time(goal.target_seed_time)
+      )
+
+  defp target_requirement(goal),
+    do:
+      gettext(
+        "The seeding target of a ratio of %{ratio} or %{time} of seeding is not yet reached.",
+        ratio: format_required_ratio(goal.target_ratio),
+        time: format_time(goal.target_seed_time)
       )
 
   defp standing(%SeedingGoal{ratio: nil, seeding_time: nil}),

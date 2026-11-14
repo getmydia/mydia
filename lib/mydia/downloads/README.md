@@ -96,8 +96,8 @@ read by the guard, `ObservedSeedTime`, `SeedingPolicy` and the `met?` of
 Neither half lowers the other: a tracker's 72 hour minimum does not release a
 torrent short of a ratio 2.0 target, and a private tracker with unknown rules
 is never met, so no target (a ratio of 0 included, which is a target) pauses or
-removes it. `SeedingGoal.effective_terms/2` merges the two per dimension, the
-larger requirement winning, for the numbers the Downloads page shows only.
+removes it. The Downloads page shows the tracker requirement and the target
+separately (`required_*` and `target_*` on `for_download/2`'s struct).
 `BuiltIn.seeding_target/0` reads the running client's config and returns nil
 without a runtime or with neither field set.
 

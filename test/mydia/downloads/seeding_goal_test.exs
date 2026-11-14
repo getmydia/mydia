@@ -200,26 +200,6 @@ defmodule Mydia.Downloads.SeedingGoalTest do
     end
   end
 
-  describe "effective_terms/2" do
-    test "operator target alone" do
-      assert %TrackerTerms{minimum_ratio: 1.0, minimum_seed_time: 3600} =
-               SeedingGoal.effective_terms(nil, %{ratio: 1.0, seed_time: 3600})
-    end
-
-    test "max per dimension, private carried" do
-      tracker = %TrackerTerms{private?: true, minimum_ratio: 2.0, minimum_seed_time: 600}
-
-      assert %TrackerTerms{private?: true, minimum_ratio: 2.0, minimum_seed_time: 3600} =
-               SeedingGoal.effective_terms(tracker, %{ratio: 1.0, seed_time: 3600})
-    end
-
-    test "a nil target returns the tracker terms unchanged" do
-      tracker = %TrackerTerms{private?: true, minimum_ratio: 2.0}
-      assert SeedingGoal.effective_terms(tracker, nil) == tracker
-      assert SeedingGoal.effective_terms(nil, nil) == nil
-    end
-  end
-
   describe "goal_applies?/2" do
     @target %{ratio: 1.0, seed_time: nil}
 
@@ -305,7 +285,14 @@ defmodule Mydia.Downloads.SeedingGoalTest do
         in_client?: true
       }
 
-      assert %SeedingGoal{required_ratio: +0.0, met?: false} =
+      assert %SeedingGoal{
+               private?: true,
+               required_ratio: nil,
+               required_seed_time: nil,
+               target_ratio: +0.0,
+               target_seed_time: nil,
+               met?: false
+             } =
                SeedingGoal.for_download(row, now: @now, target: %{ratio: 0.0, seed_time: nil})
     end
 
@@ -323,8 +310,15 @@ defmodule Mydia.Downloads.SeedingGoalTest do
 
       target = %{ratio: 2.0, seed_time: nil}
 
-      assert %SeedingGoal{required_ratio: 2.0, met?: false} =
-               SeedingGoal.for_download(row, now: @now, target: target)
+      assert %SeedingGoal{
+               required_ratio: 1.0,
+               required_seed_time: required_time,
+               target_ratio: 2.0,
+               target_seed_time: nil,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: target)
+
+      assert required_time == 72 * 3600
 
       assert %SeedingGoal{met?: true} =
                SeedingGoal.for_download(%{row | ratio: 2.0}, now: @now, target: target)
@@ -340,8 +334,13 @@ defmodule Mydia.Downloads.SeedingGoalTest do
         in_client?: true
       }
 
-      assert %SeedingGoal{required_ratio: 1.0, met?: false} =
-               SeedingGoal.for_download(row, now: @now, target: @target)
+      assert %SeedingGoal{
+               required_ratio: nil,
+               required_seed_time: nil,
+               target_ratio: 1.0,
+               target_seed_time: nil,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: @target)
 
       assert %SeedingGoal{met?: true} =
                SeedingGoal.for_download(%{row | ratio: 1.1}, now: @now, target: @target)

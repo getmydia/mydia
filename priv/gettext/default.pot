@@ -2095,7 +2095,7 @@ msgid_plural "%{count} upcoming"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/seeding_components.ex:180
+#: lib/mydia_web/components/seeding_components.ex:231
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:202
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:264
 #: lib/mydia_web/live/downloads_live/format.ex:40
@@ -2110,7 +2110,7 @@ msgstr ""
 msgid "%{count}d ago"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:181
+#: lib/mydia_web/components/seeding_components.ex:232
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:201
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:267
 #: lib/mydia_web/live/downloads_live/format.ex:39
@@ -2125,7 +2125,7 @@ msgstr ""
 msgid "%{count}h ago"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:182
+#: lib/mydia_web/components/seeding_components.ex:233
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:200
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:269
 #: lib/mydia_web/live/downloads_live/format.ex:38
@@ -2145,8 +2145,8 @@ msgstr ""
 msgid "%{count}mo"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:176
-#: lib/mydia_web/components/seeding_components.ex:183
+#: lib/mydia_web/components/seeding_components.ex:227
+#: lib/mydia_web/components/seeding_components.ex:234
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:261
 #: lib/mydia_web/live/downloads_live/format.ex:37
 #, elixir-autogen, elixir-format
@@ -21481,72 +21481,73 @@ msgstr ""
 msgid "daily grab limit reached (%{count}/%{limit})"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:113
+#: lib/mydia_web/components/seeding_components.ex:140
 #, elixir-autogen, elixir-format
 msgid "%{tracker} is a private tracker and its seeding rules are unknown."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:126
+#: lib/mydia_web/components/seeding_components.ex:155
 #, elixir-autogen, elixir-format
 msgid "%{tracker} requires %{time} of seeding."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:133
+#: lib/mydia_web/components/seeding_components.ex:162
 #, elixir-autogen, elixir-format
 msgid "%{tracker} requires a ratio of %{ratio} or %{time} of seeding."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:119
+#: lib/mydia_web/components/seeding_components.ex:148
 #, elixir-autogen, elixir-format
 msgid "%{tracker} requires a ratio of %{ratio}."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:103
+#: lib/mydia_web/components/seeding_components.ex:129
 #, elixir-autogen, elixir-format
 msgid "%{tracker}'s seeding goal is met"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:107
+#: lib/mydia_web/components/seeding_components.ex:133
 #, elixir-autogen, elixir-format
 msgid "Kept in the download client until %{tracker}'s seeding goal is met"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:140
+#: lib/mydia_web/components/seeding_components.ex:191
 #, elixir-autogen, elixir-format
 msgid "Mydia cannot read this download's ratio or seed time right now."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:89
+#: lib/mydia_web/components/seeding_components.ex:98
+#: lib/mydia_web/components/seeding_components.ex:105
 #, elixir-autogen, elixir-format
 msgid "Private, kept seeding"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:75
+#: lib/mydia_web/components/seeding_components.ex:80
 #, elixir-autogen, elixir-format
 msgid "Removing it now risks a hit-and-run."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:86
+#: lib/mydia_web/components/seeding_components.ex:94
 #, elixir-autogen, elixir-format
 msgid "Seeding goal met"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:161
+#: lib/mydia_web/components/seeding_components.ex:212
 #, elixir-autogen, elixir-format
 msgid "The tracker"
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:144
+#: lib/mydia_web/components/seeding_components.ex:195
 #, elixir-autogen, elixir-format
 msgid "This download has seeded for %{time}; its ratio is unknown."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:153
+#: lib/mydia_web/components/seeding_components.ex:204
 #, elixir-autogen, elixir-format
 msgid "This download is at a ratio of %{ratio} after %{time} of seeding."
 msgstr ""
 
-#: lib/mydia_web/components/seeding_components.ex:149
+#: lib/mydia_web/components/seeding_components.ex:200
 #, elixir-autogen, elixir-format
 msgid "This download is at a ratio of %{ratio}."
 msgstr ""
@@ -22185,4 +22186,24 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:53
 #, elixir-autogen, elixir-format
 msgid "Remove also applies to imported torrents already in the client, including ones you resumed by hand: those past the target are removed with their files on the next check."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:178
+#, elixir-autogen, elixir-format
+msgid "The seeding target of %{time} of seeding is not yet reached."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:172
+#, elixir-autogen, elixir-format
+msgid "The seeding target of a ratio of %{ratio} is not yet reached."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:184
+#, elixir-autogen, elixir-format
+msgid "The seeding target of a ratio of %{ratio} or %{time} of seeding is not yet reached."
+msgstr ""
+
+#: lib/mydia_web/components/seeding_components.ex:113
+#, elixir-autogen, elixir-format
+msgid "target %{progress}"
 msgstr ""

@@ -145,10 +145,15 @@ loop.
 ### Display
 
 The Downloads page's seeding-goal display (`MydiaWeb.SeedingComponents`, fed
-by `SeedingGoal.for_download/2`) shows the merged numbers of
-`effective_terms/2` for built-in rows, and its `met?` is `goal_met?/4`.
-`for_download/2` takes the operator target as an option. The manual-removal
-hit-and-run warning follows the effective goal too.
+by `SeedingGoal.for_download/2`) shows the tracker requirement and the
+operator target separately, never merged: `required_*` are the tracker's
+minimums (nil when it states none, so a private tracker with unknown rules
+still reads "Private, kept seeding") and `target_*` are the operator's target
+(nil when there is none). The chip adds a "target" part to the tracker part,
+and the manual-removal hit-and-run warning states the tracker's requirement
+as before, then a separate sentence that the seeding target is not yet
+reached. `met?` is `goal_met?/4`. `for_download/2` takes the operator target
+as an option and resolves it once per call.
 
 ## Selective files
 
