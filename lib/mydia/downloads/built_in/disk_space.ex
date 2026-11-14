@@ -4,7 +4,8 @@ defmodule Mydia.Downloads.BuiltIn.DiskSpace do
 
   Shells out to `df -Pk`, which both GNU coreutils (dev, CI) and busybox
   (Alpine, production) support. `-P` keeps each filesystem on one line, so
-  the data row is always the last line and "Available" the fourth column.
+  the data row is always the last line; "Available" is the number just before
+  the Capacity percentage.
   """
 
   @type cmd :: (String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()})
@@ -37,11 +38,16 @@ defmodule Mydia.Downloads.BuiltIn.DiskSpace do
     "#{:erlang.float_to_binary(bytes / 1_000_000_000, decimals: 1)} GB"
   end
 
+  # The filesystem source and the mount point can both contain spaces (an SMB
+  # share such as `//nas/Media Files`), so the numbers are found by the
+  # Capacity column that ends them rather than by position. GNU df reports a
+  # negative Available on a volume past its reserved blocks; that is no room.
+  @data_row ~r/(?:^|\s)(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(?:-?\d+|-)%(?:\s|$)/
+
   defp parse(output) do
     with line when is_binary(line) <- last_line(output),
-         [_fs, _blocks, _used, available | _] <- String.split(line),
-         {kb, ""} when kb >= 0 <- Integer.parse(available) do
-      {:ok, kb * 1024}
+         [_blocks, _used, available] <- Regex.run(@data_row, line, capture: :all_but_first) do
+      {:ok, max(String.to_integer(available), 0) * 1024}
     else
       _ -> {:error, {:unparseable, output}}
     end

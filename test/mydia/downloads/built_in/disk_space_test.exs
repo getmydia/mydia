@@ -27,6 +27,34 @@ defmodule Mydia.Downloads.BuiltIn.DiskSpaceTest do
       assert {:ok, 197_258_020 * 1024} == DiskSpace.free_bytes("/tmp", cmd_returning(@gnu))
     end
 
+    test "parses a filesystem source containing spaces" do
+      out = """
+      Filesystem        1024-blocks    Used Available Capacity Mounted on
+      //nas/Media Files    10000000 9900000    100000      99% /data/downloads
+      """
+
+      assert {:ok, 100_000 * 1024} == DiskSpace.free_bytes("/data/downloads", cmd_returning(out))
+    end
+
+    test "parses a mount point containing spaces" do
+      out = """
+      Filesystem     1024-blocks    Used Available Capacity Mounted on
+      /dev/sdb1         20000000 5000000  15000000      25% /mnt/Fictional Archive 2
+      """
+
+      assert {:ok, 15_000_000 * 1024} ==
+               DiskSpace.free_bytes("/mnt/Fictional Archive 2", cmd_returning(out))
+    end
+
+    test "clamps a negative Available to zero" do
+      out = """
+      Filesystem     1024-blocks     Used Available Capacity Mounted on
+      /dev/sda1         10000000 10001024     -1024     101% /downloads
+      """
+
+      assert {:ok, 0} == DiskSpace.free_bytes("/downloads", cmd_returning(out))
+    end
+
     test "passes -Pk, the path and stderr_to_stdout to df" do
       cmd = fn program, args, opts ->
         send(self(), {:called, program, args, opts})
