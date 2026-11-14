@@ -165,6 +165,24 @@ void main() {
     expect(await b.source.nextUp(show), isNull);
   });
 
+  // The episode rail reads an episode's still from `backdrop`, as Plex,
+  // Jellyfin and Mydia send it. With the still in `poster`, every card fell
+  // back to the show's backdrop and all episodes looked alike.
+  test('an_episode_still_is_its_backdrop_and_the_show_poster_its_poster',
+      () async {
+    final b = await _build();
+    final f = b.fixture;
+    final seasons = await b.source.children(f.ref(ItemKind.show, _show));
+    final eps = await b.source.children(seasons.items.first.ref);
+    expect(eps.items.map((e) => e.backdrop?.path),
+        ['/seedlings.jpg', '/orchard-back.jpg', '/orchard-back.jpg']);
+    expect(eps.items.map((e) => e.poster?.path),
+        ['/orchard.jpg', '/orchard.jpg', '/orchard.jpg']);
+
+    final detail = await b.source.item(eps.items.first.ref);
+    expect(detail.summary.backdrop?.path, '/seedlings.jpg');
+  });
+
   test('watched_by_flag_or_ninety_percent', () async {
     final b = await _build();
     final f = b.fixture;

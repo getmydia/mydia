@@ -453,8 +453,11 @@ class FilesCatalog {
       title: meta?.title ?? _l10n.filesEpisodeTitle(episode),
       subtitle: episodeSubtitle(season, episode),
       showTitle: showTitle,
-      poster: _art(meta?.stillPath) ?? _art(s.meta?.posterPath),
-      backdrop: _art(s.meta?.backdropPath),
+      // As Plex, Jellyfin and Mydia send an episode: the show's poster for a
+      // poster frame, and the landscape still as the backdrop the episode
+      // rail reads.
+      poster: _art(s.meta?.posterPath),
+      backdrop: _art(meta?.stillPath) ?? _art(s.meta?.backdropPath),
       durationSeconds: _seconds(meta?.runtimeMinutes),
       userState: _leafState(id),
       index: episode,
