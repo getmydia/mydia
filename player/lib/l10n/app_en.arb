@@ -1584,6 +1584,8 @@
   "@filesScanProgress": {"description": "Banner above a files library while it scans its folders: how many files are handled out of the total, both already formatted with digit grouping, such as 312 and 2,040.", "placeholders": {"done": {"type": "String"}, "total": {"type": "String"}}},
   "filesScanReadingFolders": "Reading folders: {count}",
   "@filesScanReadingFolders": {"description": "Banner above a files library, and the Rescan button on the server management screen, while a scan is still listing the library's folders and does not know how many files there are yet: how many folders it has read so far, already formatted with digit grouping, such as 1,204.", "placeholders": {"count": {"type": "String"}}},
+  "filesProbeProgress": "Reading file details {done} of {total}",
+  "@filesProbeProgress": {"description": "Quieter line above a files library on desktop after a scan, while the app reads each new or changed file's details (codecs, audio and subtitle tracks) in the background: how many files are read out of the total, both already formatted with digit grouping, such as 3 and 1,240. The library can be used meanwhile.", "placeholders": {"done": {"type": "String"}, "total": {"type": "String"}}},
   "filesScanSkippedItems": "{count, plural, one{{count} item skipped: it could not be read} other{{count} items skipped: they could not be read}}",
   "@filesScanSkippedItems": {"description": "Banner above a files library after a scan that had to leave out folders or files it was not allowed to read (or that vanished). What the library already held for them stays as it was.", "placeholders": {"count": {"type": "int"}}},
   "filesFixMatch": "Fix match",

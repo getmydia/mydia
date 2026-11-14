@@ -2,6 +2,8 @@
 /// scan banner reads.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,6 +15,7 @@ import '../sources_providers.dart' show mediaSourceProvider;
 import 'backend/file_system_backend.dart';
 import 'files_media_source.dart';
 import 'files_providers.dart';
+import 'media_info/files_probe_queue.dart';
 import 'media_names.dart';
 import 'peer_files_sources.dart' show isPeerFilesSource;
 import 'scan/file_scanner.dart';
@@ -177,6 +180,7 @@ class FilesScanController extends Notifier<ScanState> {
         await ref
             .read(peerFilesHostProvider)
             .bumpRevision(media.source.account.id);
+        await _refreshMediaInfo(media);
       }
       await invalidator
           .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
@@ -201,6 +205,22 @@ class FilesScanController extends Notifier<ScanState> {
           foldersRead: folders,
         );
       }
+    }
+  }
+
+  /// Drops file details kept for files the scan no longer found, and on
+  /// desktop starts reading the new and changed ones in the background. The
+  /// reading is not awaited: the scan ends while it goes on. A failure here
+  /// is logged and leaves the scan's result alone.
+  Future<void> _refreshMediaInfo(FilesMediaSource media) async {
+    try {
+      await ref
+          .read(filesMediaInfoCacheProvider)
+          ?.sweep(media.source.account.id, media.index.files().keys.toSet());
+      unawaited(
+          ref.read(filesProbeQueueProvider(sourceId).notifier).enqueueStale());
+    } catch (e) {
+      debugPrint('[FilesScan] $sourceId: file details not refreshed: $e');
     }
   }
 }

@@ -3,6 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:player/core/player/media_probe.dart' show mediaProbeProvider;
+import 'package:player/core/player/mpv_probe_mapping.dart';
+import 'package:player/core/sources/files/media_info/files_probe_queue.dart';
+import 'package:player/domain/models/media_stream.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_files_host.dart'
     show peerFilesRevisionsProvider;
@@ -27,6 +32,11 @@ import 'fake_backend.dart';
 import 'fake_media_names.dart';
 import 'files_fixture.dart';
 
+const _probed = ProbeResult(
+  container: 'matroska',
+  streams: [MediaStream(type: MediaStreamType.video, codec: 'hevc')],
+);
+
 Future<void> _settle() async {
   for (var i = 0; i < 50; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -43,6 +53,7 @@ void main() {
     MediaNames? names,
     bool realBackend = false,
     AppForeground? foreground,
+    List<Override> extra = const [],
   }) async {
     final store = InMemorySourceStore();
     await store.putAccount(filesLocalRecord);
@@ -58,6 +69,7 @@ void main() {
       filesClockProvider.overrideWithValue(() => clock),
       if (foreground != null)
         appForegroundProvider.overrideWithValue(foreground),
+      ...extra,
     ]);
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
@@ -116,6 +128,50 @@ void main() {
     backend.failures['/media/films'] = const BackendUnreachable('unplugged');
     await scan.rescan();
     expect(revisions.revision(account), bumped);
+  });
+
+  test(
+      'a finished scan drops details of removed files and reads the rest '
+      'in the background on desktop', () async {
+    await f.index.setLastScanAt(now);
+    final cache = await f.mediaInfoCache();
+    const account = kFilesLocalAccountId;
+    // Details kept for a file the folder no longer has.
+    final gone = IndexedFile(
+      key: fileKeyFor('rm', 'Vanished Pier (2001).mkv'),
+      rootId: 'rm',
+      path: 'Vanished Pier (2001).mkv',
+      size: 5,
+      modified: now,
+      firstSeen: now,
+    );
+    await cache.put(account, gone, _probed);
+    final probe = FakeMediaProbe(_probed)..gate = Completer<void>();
+    final c = await container(extra: [
+      mediaProbeProvider.overrideWithValue(probe),
+      filesMediaInfoCacheProvider.overrideWithValue(cache),
+      filesProbeDesktopProvider.overrideWithValue(true),
+      filesProbeIdlePollProvider.overrideWithValue(Duration.zero),
+    ]);
+    final id = filesLocalSource.id;
+    c.read(mediaSourceProvider(id));
+
+    await c.read(filesScanProvider(id).notifier).rescan();
+    expect(cache.get(account, gone), isNull);
+    // The scan is over while the first file is still being read.
+    expect(c.read(filesScanProvider(id)).running, isFalse);
+    await _settle();
+    expect(probe.probed, hasLength(1));
+    expect(c.read(filesProbeQueueProvider(id)).running, isTrue);
+
+    probe.gate?.complete();
+    await _settle();
+    final index = c.read(filesIndexProvider(account));
+    expect(probe.probed, hasLength(2));
+    expect(
+        index.files().values.every((file) => cache.get(account, file) != null),
+        isTrue);
+    expect(c.read(filesProbeQueueProvider(id)).running, isFalse);
   });
 
   test('a_never_scanned_library_scans_on_open', () async {

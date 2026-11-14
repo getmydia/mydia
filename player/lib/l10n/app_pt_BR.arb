@@ -618,6 +618,7 @@
   "sourcesAccountStash": "Servidor Stash",
   "sourcesAccountJellyfin": "Usuário do Jellyfin",
   "sourcesAccountMydia": "Conta do Mydia",
+  "filesProbeProgress": "Lendo os detalhes dos arquivos: {done} de {total}",
   "sourcesServerGone": "Não está mais nesta conta",
   "sourcesLockTooltip": "Bloquear",
   "sourcesSwitchUser": "Trocar de usuário",
