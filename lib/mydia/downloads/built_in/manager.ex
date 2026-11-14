@@ -31,7 +31,7 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
   alias Mydia.Config.Broadcast
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.{Config, Runtime, Status, VpnSettings}
+  alias Mydia.Downloads.BuiltIn.{Config, Limits, Runtime, Status, VpnSettings}
 
   @instances Mydia.Downloads.BuiltIn.Instances
   # Stopping a tree waits for rqbit to exit (up to 15s), and a call may queue
@@ -158,13 +158,15 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
 
   # A reload that needs no restart still carries new seeding targets and speed
   # limits: publish them on the running entry, keeping its API port and
-  # credentials.
-  # Task 7 pushes changed speed limits to the engine here.
+  # credentials. Changed speed limits are pushed to the running engine, which
+  # applies them without a restart.
   defp refresh_live_settings(state, config) do
     case BuiltIn.runtime() do
       nil -> :ok
       runtime -> BuiltIn.put_runtime(%{runtime | config: config})
     end
+
+    if limits_changed?(state.current, config), do: Limits.push(config)
 
     %{state | current: config}
   end
@@ -197,6 +199,13 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
         []
     end
   end
+
+  defp limits_changed?(%Config{} = previous, %Config{} = config),
+    do:
+      {previous.download_limit, previous.upload_limit} !=
+        {config.download_limit, config.upload_limit}
+
+  defp limits_changed?(_previous, _config), do: true
 
   defp unchanged?(%{current: nil}, _config), do: false
 

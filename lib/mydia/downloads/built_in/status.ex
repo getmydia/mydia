@@ -149,6 +149,9 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "The built-in torrent client failed to start (#{start_failure(reason)}). Mydia retries automatically; saving its settings again retries at once."
 
+  def describe({:limits_failed, message}),
+    do: "Could not apply the speed limits: #{message}"
+
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
 
   # Peels the supervisor's wrapping off down to the child that failed.

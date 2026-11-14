@@ -195,6 +195,38 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert %Config{seed_ratio: 1.5} = Manager.await_applied(manager)
     end
 
+    test "a limits-only reload pushes without restarting the instance", ctx do
+      # Limits finds the engine through the client list, which reads the database.
+      owner = Ecto.Adapters.SQL.Sandbox.start_owner!(Mydia.Repo, shared: true)
+      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(owner) end)
+
+      bypass = Bypass.open(port: 39_031)
+      test_pid = self()
+
+      Bypass.stub(bypass, "POST", "/torrents/limits", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:limits_body, Jason.decode!(body)})
+        Plug.Conn.resp(conn, 200, "{}")
+      end)
+
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+      # The fake rqbit never serves the API, so declare the engine running.
+      Status.put(Status, :engine, :running)
+      assert_receive {:limits_body, %{"download_bps" => nil, "upload_bps" => nil}}
+
+      set(ctx, download_limit: 100)
+      reload(manager)
+
+      assert_receive {:limits_body, %{"download_bps" => 102_400, "upload_bps" => nil}}
+      assert [^pid] = instance_pids(ctx)
+
+      # A reload that leaves the limits alone sends nothing.
+      set(ctx, seed_ratio: 2.0)
+      reload(manager)
+      refute_receive {:limits_body, _}, 100
+    end
+
     test "a VPN field edited while the VPN is off leaves the instance alone", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)
