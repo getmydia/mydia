@@ -30,6 +30,14 @@ void main() {
     expect(a.slotId, isNot(b.slotId));
   });
 
+  test('create throws when the write is not durable', () async {
+    final storage = MockAuthStorage()..degradedValue = true;
+    await expectLater(
+      BackupIdentity.loadOrCreate(storage),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('unreadable stored identity throws and is not replaced', () async {
     final storage = MockAuthStorage()
       ..seedData({'backup/identity': 'not json'});

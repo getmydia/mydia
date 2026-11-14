@@ -5,15 +5,18 @@ import '../auth/auth_storage.dart';
 
 /// Persisted state of the vault this device belongs to.
 class BackupVaultState {
-  const BackupVaultState({
+  BackupVaultState({
     required this.vaultId,
     required this.epoch,
-    required this.keysByEpoch,
+    required Map<int, Uint8List> keysByEpoch,
     required this.recoveryKeyText,
     required this.ownSeq,
     this.lastSuccessMs,
     this.manifestEtag,
-  });
+  }) : keysByEpoch = Map.unmodifiable({
+          for (final e in keysByEpoch.entries)
+            e.key: Uint8List.fromList(e.value),
+        });
 
   final String vaultId;
   final int epoch;
@@ -86,15 +89,27 @@ class BackupVaultState {
         (etag != null && etag is! String)) {
       throw const FormatException('malformed backup vault state');
     }
+    final decoded = <int, Uint8List>{};
+    for (final e in keys.entries) {
+      final k = e.key;
+      final v = e.value;
+      final epochKey = k is String ? int.tryParse(k) : null;
+      if (epochKey == null || v is! String) {
+        throw const FormatException('malformed backup vault keys');
+      }
+      final bytes = base64Url.decode(base64.normalize(v));
+      if (bytes.length != 32) {
+        throw const FormatException('vault key must be 32 bytes');
+      }
+      decoded[epochKey] = Uint8List.fromList(bytes);
+    }
+    if (!decoded.containsKey(epoch)) {
+      throw const FormatException('vault keys lack the current epoch');
+    }
     return BackupVaultState(
       vaultId: vaultId,
       epoch: epoch,
-      keysByEpoch: {
-        for (final e in keys.entries)
-          int.parse(e.key as String): Uint8List.fromList(
-            base64Url.decode(base64.normalize(e.value as String)),
-          ),
-      },
+      keysByEpoch: decoded,
       recoveryKeyText: recovery,
       ownSeq: ownSeq,
       lastSuccessMs: lastSuccess as int?,

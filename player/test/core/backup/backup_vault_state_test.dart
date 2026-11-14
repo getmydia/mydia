@@ -71,6 +71,38 @@ void main() {
         throwsA(isA<FormatException>()));
   });
 
+  Map<String, dynamic> json({Object? keys, int epoch = 1}) => {
+        'v': 1,
+        'vaultId': 'v',
+        'epoch': epoch,
+        'keys': keys,
+        'recoveryKey': 'r',
+        'ownSeq': 0,
+        'lastSuccessMs': null,
+        'manifestEtag': null,
+      };
+
+  test('fromJson rejects non-string key values', () {
+    expect(() => BackupVaultState.fromJson(json(keys: {'1': 5})),
+        throwsA(isA<FormatException>()));
+  });
+
+  test('fromJson rejects keys that are not 32 bytes', () {
+    expect(() => BackupVaultState.fromJson(json(keys: {'1': 'AAAA'})),
+        throwsA(isA<FormatException>()));
+  });
+
+  test('fromJson rejects keys lacking the current epoch', () {
+    final good = _state().toJson()['keys'];
+    expect(() => BackupVaultState.fromJson(json(keys: good, epoch: 2)),
+        throwsA(isA<FormatException>()));
+  });
+
+  test('keysByEpoch is unmodifiable', () {
+    final s = _state();
+    expect(() => s.keysByEpoch[9] = _key(9), throwsUnsupportedError);
+  });
+
   test('save throws when storage is degraded', () async {
     final storage = MockAuthStorage()..degradedValue = true;
     await expectLater(

@@ -48,6 +48,9 @@ class BackupIdentity {
           'boxSeed': _b64(boxSeed),
         }),
       );
+      if (storage.degraded) {
+        throw StateError('backup identity not durable');
+      }
       return _build(signerSeed, boxSeed);
     }
     final Uint8List signerSeed;
