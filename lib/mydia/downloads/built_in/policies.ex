@@ -8,7 +8,7 @@ defmodule Mydia.Downloads.BuiltIn.Policies do
   require Logger
 
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.SeedingPolicy
+  alias Mydia.Downloads.BuiltIn.{FileSelectionPolicy, SeedingPolicy}
 
   @spec run([struct()], DateTime.t()) :: :ok
   def run(rows, now) do
@@ -19,17 +19,14 @@ defmodule Mydia.Downloads.BuiltIn.Policies do
     |> Enum.each(&run_row(&1, now))
   end
 
-  defp run_row(row, now) do
-    case SeedingPolicy.apply(row, now) do
-      {:error, reason} ->
-        Logger.warning("Built-in seeding policy failed",
-          download_id: row.id,
-          reason: inspect(reason)
-        )
+  @selectable_statuses ~w(downloading paused checking queued)
 
-      _outcome ->
-        :ok
+  defp run_row(row, now) do
+    if row.in_client? == true and row.status in @selectable_statuses do
+      log_failure("file selection", FileSelectionPolicy.apply(row), row)
     end
+
+    log_failure("seeding", SeedingPolicy.apply(row, now), row)
   rescue
     exception ->
       Logger.error("Built-in policies failed; the poll continues",
@@ -37,4 +34,13 @@ defmodule Mydia.Downloads.BuiltIn.Policies do
         error: Exception.message(exception)
       )
   end
+
+  defp log_failure(policy, {:error, reason}, row) do
+    Logger.warning("Built-in #{policy} policy failed",
+      download_id: row.id,
+      reason: inspect(reason)
+    )
+  end
+
+  defp log_failure(_policy, _outcome, _row), do: :ok
 end
