@@ -64,6 +64,14 @@ List<List<Map<String, dynamic> Function()>> _sections(FileLibraryIndex index) {
 /// bytes, and the start of the next page, null after the last. A page
 /// always holds at least one record, so a record larger than the budget
 /// still goes out on a page of its own.
+///
+/// A lone record only fails to deliver past the 8 MiB response cap, and the
+/// largest record is a show carrying every season and episode. At a few
+/// hundred bytes per episode that takes tens of thousands of episodes in one
+/// show, far beyond any real series, so there is no truncation path.
+/// `near_budget_page_fits_the_transport_response` in `mydia_p2p_core` covers
+/// the budget side: the 9 bytes charged per record exceed the real 1 to 5
+/// byte header.
 ({FlutterWireIndexPage page, int? next}) indexPageFrom(
   FileLibraryIndex index,
   int start, {

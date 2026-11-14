@@ -167,4 +167,73 @@ mod tests {
             assert_eq!(decoded, response);
         }
     }
+
+    /// A near-budget page, encoded as the whole transport response exactly as
+    /// the core sends it, must stay near `PEER_FILES_PAGE_BUDGET` and well
+    /// under the response cap the requester reads with.
+    #[test]
+    fn near_budget_page_fits_the_transport_response() {
+        const RECORD_OVERHEAD: usize = 9;
+        const FRAMING_SLACK: usize = 1024;
+        // The Dart pager charges each record its byte length plus 9 (the
+        // widest CBOR byte string header). Fill the five lists round-robin
+        // with realistic JSON-sized records, a few large ones among them,
+        // until the same accounting reaches the budget.
+        let mut page = WireIndexPage::default();
+        let mut charged = 0usize;
+        let mut n = 0usize;
+        loop {
+            let len = match n % 50 {
+                0 => 70_000,
+                1 => 20_000,
+                m => 200 + (m * 37) % 600,
+            };
+            if charged + len + RECORD_OVERHEAD > PEER_FILES_PAGE_BUDGET {
+                break;
+            }
+            charged += len + RECORD_OVERHEAD;
+            let record = vec![b'a'; len];
+            match n % 5 {
+                0 => page.roots.push(record),
+                1 => page.files.push(record),
+                2 => page.groups.push(record),
+                3 => page.movies.push(record),
+                _ => page.shows.push(record),
+            }
+            n += 1;
+        }
+        assert!(
+            PEER_FILES_PAGE_BUDGET - charged < 70_000 + RECORD_OVERHEAD,
+            "page should be filled to within one record of the budget"
+        );
+
+        let response = crate::MydiaResponse::PeerFiles(PeerFilesResponse::IndexPage {
+            page,
+            next_cursor: Some("files:123456".into()),
+        });
+        let encoded = serde_cbor::to_vec(&response).expect("serialize response");
+
+        // Framing outside the records: the MydiaResponse and PeerFilesResponse
+        // variant keys, the page and next_cursor keys, five list names and
+        // headers, and the cursor, all under 200 bytes. Real byte string
+        // headers are 1 to 5 bytes for records under 4 GiB, so they come in
+        // under the 9 charged per record. 1 KiB of slack is generous.
+        println!(
+            "encoded page: {} bytes, budget {}",
+            encoded.len(),
+            PEER_FILES_PAGE_BUDGET
+        );
+        assert!(
+            encoded.len() <= PEER_FILES_PAGE_BUDGET + FRAMING_SLACK,
+            "encoded {} bytes exceeds budget plus slack",
+            encoded.len()
+        );
+        assert!(encoded.len() < crate::MAX_RESPONSE_BYTES);
+        let decoded: crate::MydiaResponse =
+            serde_cbor::from_slice(&encoded).expect("deserialize response");
+        assert!(matches!(
+            decoded,
+            crate::MydiaResponse::PeerFiles(PeerFilesResponse::IndexPage { .. })
+        ));
+    }
 }
