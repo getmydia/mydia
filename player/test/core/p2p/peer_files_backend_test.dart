@@ -98,16 +98,23 @@ void main() {
     expect(transport.calls, ['open $_node']);
   });
 
-  test('a failed dial still probes, and no address skips the dial', () async {
+  test('a failed dial still probes', () async {
     final failing = answering(206)..dialFailure = Exception('no route');
     await backend(failing, connected: false, addressOf: (_) => '{"id":"x"}')
         .playable(path);
     expect(failing.calls, ['dial {"id":"x"}', 'open $_node']);
+  });
 
+  test('a host with no roster address is dialed by node ID before the probe',
+      () async {
     final unknown = answering(206);
     await backend(unknown, connected: false, addressOf: (_) => null)
         .playable(path);
-    expect(unknown.calls, ['open $_node']);
+    expect(unknown.calls, ['dial {"id":"$_node","addrs":[]}', 'open $_node']);
+
+    final noLookup = answering(206);
+    await backend(noLookup, connected: false).playable(path);
+    expect(noLookup.calls, ['dial {"id":"$_node","addrs":[]}', 'open $_node']);
   });
 
   test('an empty file answers the probe 416 and still plays', () async {

@@ -1,6 +1,8 @@
 /// The files of a library a paired player lends, read through it.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../sources/files/backend/file_system_backend.dart';
@@ -125,11 +127,14 @@ class PeerFilesBackend implements FileSystemBackend {
     );
   }
 
-  /// Dials the host with its roster address. Never throws: a dial that
-  /// fails leaves the probe after it to fail, as unreachable.
+  /// Dials the host with its roster address, or by node ID alone when the
+  /// roster holds none (a member can join without one), which discovery
+  /// resolves. Skipping the dial would leave the probe waiting on a
+  /// connection nothing started. Never throws: a dial that fails leaves the
+  /// probe after it to fail, as unreachable.
   Future<void> _dial() async {
-    final address = _addressOf?.call(nodeId);
-    if (address == null) return;
+    final address = _addressOf?.call(nodeId) ??
+        jsonEncode({'id': nodeId, 'addrs': <Object>[]});
     try {
       await _transport.dial(address);
     } catch (e) {
