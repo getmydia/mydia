@@ -28,6 +28,7 @@ defmodule Mydia.Jobs.MediaImport.Partial do
   alias Mydia.Repo
 
   @worker "Mydia.Jobs.MediaImport"
+  @queue :early_import
 
   @doc """
   Enqueues a partial import of `target_files` (`[%{"path", "episode_id"}]`)
@@ -43,6 +44,10 @@ defmodule Mydia.Jobs.MediaImport.Partial do
           "partial" => true,
           "use_hardlinks" => true
         },
+        # One slot, so two partial jobs never copy at once: a copy can outlast
+        # the unique period, and a second job's atomic copy of the same file
+        # would remove the first one's temp file.
+        queue: @queue,
         unique: [
           period: 600,
           keys: [:download_id, :partial],

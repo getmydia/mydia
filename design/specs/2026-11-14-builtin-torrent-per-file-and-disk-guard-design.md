@@ -179,7 +179,9 @@ wait for the full import, which handles them as it does today.
 Partial jobs are unique on `[:download_id, :partial]`, so a queued partial
 job never swallows the full import enqueued at completion, and a second
 partial job for the same download is dropped until the first finishes (the
-next poll picks up what it left). A partial job that starts after the
+next poll picks up what it left). Partial jobs run on a single-slot
+`:early_import` queue, so two never copy at once even when a copy outlasts
+the unique period. A partial job that starts after the
 download is marked complete does nothing. A full import that starts while a
 partial job for the download is executing snoozes 30 seconds.
 

@@ -340,8 +340,11 @@ recorded episode and a path that exists on this host are imported early.
 
 A partial `MediaImport` job (`"partial" => true`) is unique on
 `[:download_id, :partial]`, so it never swallows the full import enqueued at
-completion, and a second partial job is dropped until the first finishes. A
-full import that starts while a partial job for the download is executing
+completion, and a second partial job is dropped until the first finishes.
+Partial jobs run on the single-slot `:early_import` queue, so two of them never
+copy at once even when a copy outlasts the 600-second unique period (the
+second one's atomic copy would remove the first one's temp file); full imports
+stay on `:default`. A full import that starts while a partial job for the download is executing
 snoozes 30 seconds (a snooze does not use an attempt). No Oban Lifeline runs,
 so an executing row is orphaned only by a crash or restart: a partial row
 attempted before this node booted (`Mydia.Application.booted_at/0`) is

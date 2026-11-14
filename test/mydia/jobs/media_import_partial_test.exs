@@ -507,6 +507,20 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
 
   # These go through a real Oban engine: with `engine: false` `Oban.insert/1`
   # raises and the callers fall back to `Repo.insert`, which skips uniqueness.
+  describe "enqueue/2" do
+    # One slot: two partial jobs for a download never copy at once, even when
+    # a copy outlasts the unique period.
+    test "routes partial jobs to the single-slot early_import queue, full imports stay put" do
+      download_id = Ecto.UUID.generate()
+
+      assert {:ok, %Oban.Job{queue: "early_import"}} =
+               Partial.enqueue(download_id, [%{"path" => "/x/a.mkv", "episode_id" => nil}])
+
+      full = MediaImport.new(%{"download_id" => download_id})
+      assert Ecto.Changeset.get_field(full, :queue) == "default"
+    end
+  end
+
   describe "uniqueness against a real Oban engine" do
     setup do
       engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
