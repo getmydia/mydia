@@ -80,6 +80,21 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
       assert reloaded.metadata["selected_files"] == [4, 5, 6, 7, 8, 9]
       assert reloaded.metadata["season_pack"] == true
       assert reloaded.metadata["indexer"] == "Velvet Lantern"
+      # FileSelectionPolicy reads this as decided and leaves the torrent alone.
+      assert reloaded.metadata["file_selection"] == %{"source" => "auto", "skipped" => 4}
+    end
+
+    test "a failed listing records no file_selection, leaving it to the policy", ctx do
+      expect_rqbit(ctx.bypass, listing: :error)
+
+      capture_log(fn ->
+        assert {:ok, download} =
+                 Queue.initiate_download(pack_result(ctx.eps), media_item_id: ctx.show.id)
+
+        reloaded = Repo.get!(Download, download.id)
+        refute Map.has_key?(reloaded.metadata, "file_selection")
+        refute Map.has_key?(reloaded.metadata, "selected_files")
+      end)
     end
 
     test "Grabber.run_grab records the selection on the existing row", ctx do
@@ -101,6 +116,7 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
       assert reloaded.download_client_id == @hash
       assert reloaded.metadata["selected_files"] == [4, 5, 6, 7, 8, 9]
       assert reloaded.metadata["file_episodes"]["5"] == Enum.at(ctx.eps, 5).id
+      assert reloaded.metadata["file_selection"] == %{"source" => "auto", "skipped" => 4}
       assert reloaded.metadata["season_pack"] == true
       assert reloaded.metadata["indexer"] == "Velvet Lantern"
     end

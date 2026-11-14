@@ -173,7 +173,17 @@ defmodule Mydia.Downloads.WantedFilesTest do
     assert meta["selected_files"] == [4, 5, 6, 7, 8, 9]
     assert meta["file_episodes"]["4"] == Enum.at(ids, 4)
     assert length(meta["skipped_owned_episode_ids"]) == 4
+    assert meta["file_selection"] == %{"source" => "auto", "skipped" => 4}
     assert WantedFiles.to_metadata(nil) == %{}
+  end
+
+  test "to_metadata/1 of a keep-everything selection records zero skipped", %{
+    show: show,
+    ids: ids
+  } do
+    sel = WantedFiles.select(ctx(show, ids), Enum.map(5..10, &ep_file(&1 - 5, &1)))
+    assert sel.only_files == nil
+    assert WantedFiles.to_metadata(sel)["file_selection"] == %{"source" => "auto", "skipped" => 0}
   end
 
   describe "context_for/2" do

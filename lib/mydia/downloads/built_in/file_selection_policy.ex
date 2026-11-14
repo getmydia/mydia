@@ -10,7 +10,10 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
     * `%{"source" => "auto_failed", "attempts" => 3}` after the third failure
 
   `auto`, `manual` and `auto_failed` entries are final; the policy never
-  overrides an operator's choice. The stored entry is read again before the
+  overrides an operator's choice. A torrent whose files
+  `Mydia.Downloads.WantedFiles` chose before the add already carries an
+  `auto` entry (`auto_entry/1`), so the policy never re-selects what that
+  selection skipped. The stored entry is read again before the
   policy acts, under `Mydia.Downloads.TorrentFiles.with_selection_lock/2`
   (which the operator's save also holds), so a selection saved after the
   poll's snapshot still wins and a save never lands between the check and the
@@ -24,6 +27,19 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
   @key "file_selection"
   @final_sources ~w(auto manual auto_failed)
   @max_attempts 3
+
+  @doc "The metadata key this policy reads and writes."
+  @spec metadata_key() :: String.t()
+  def metadata_key, do: @key
+
+  @doc """
+  The final entry for a torrent whose files were chosen automatically, with
+  `skipped` files left out. `Mydia.Downloads.WantedFiles` records it at grab
+  when it already chose the files, so this policy leaves the torrent alone.
+  """
+  @spec auto_entry(non_neg_integer()) :: map()
+  def auto_entry(skipped) when is_integer(skipped) and skipped >= 0,
+    do: %{"source" => "auto", "skipped" => skipped}
 
   @spec apply(EnrichedDownload.t()) ::
           :applied | :nothing_to_skip | :waiting | :done | {:error, term()}
@@ -69,10 +85,10 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
     skipped = length(files) - length(keep)
 
     if skipped == 0 do
-      stamp(row, %{"source" => "auto", "skipped" => 0}, :nothing_to_skip)
+      stamp(row, auto_entry(0), :nothing_to_skip)
     else
       case Client.set_file_selection(adapter, config, row.download_client_id, keep) do
-        :ok -> stamp(row, %{"source" => "auto", "skipped" => skipped}, :applied)
+        :ok -> stamp(row, auto_entry(skipped), :applied)
         {:error, reason} -> {:client_error, reason}
       end
     end

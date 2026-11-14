@@ -17,6 +17,7 @@ defmodule Mydia.Downloads.WantedFiles do
 
   import Ecto.Query, warn: false
 
+  alias Mydia.Downloads.BuiltIn.FileSelectionPolicy
   alias Mydia.Downloads.FileSelection
   alias Mydia.Downloads.Queue.Duplicates
   alias Mydia.Library.{MediaFile, ReleaseParser}
@@ -26,7 +27,8 @@ defmodule Mydia.Downloads.WantedFiles do
   defstruct only_files: nil,
             selected_bytes: 0,
             file_episodes: %{},
-            skipped_owned_episode_ids: []
+            skipped_owned_episode_ids: [],
+            skipped_files: 0
 
   @type file_map :: %{index: non_neg_integer(), path: String.t(), length: non_neg_integer()}
   @type context :: %{
@@ -39,7 +41,8 @@ defmodule Mydia.Downloads.WantedFiles do
           only_files: [non_neg_integer()] | nil,
           selected_bytes: non_neg_integer(),
           file_episodes: %{non_neg_integer() => binary()},
-          skipped_owned_episode_ids: [binary()]
+          skipped_owned_episode_ids: [binary()],
+          skipped_files: non_neg_integer()
         }
 
   @doc """
@@ -87,7 +90,15 @@ defmodule Mydia.Downloads.WantedFiles do
     end
   end
 
-  @doc "Serialises a selection for download metadata (string keys)."
+  @doc """
+  Serialises a selection for download metadata (string keys).
+
+  A selection also records `BuiltIn.FileSelectionPolicy`'s final `"auto"`
+  entry, so the policy treats the torrent as decided and never re-selects
+  files this selection skipped. No selection (`nil`: the listing failed or
+  the adapter cannot list) records nothing, and the policy deselects junk
+  after the add as usual.
+  """
   @spec to_metadata(t() | nil) :: map()
   def to_metadata(nil), do: %{}
 
@@ -95,7 +106,8 @@ defmodule Mydia.Downloads.WantedFiles do
     %{
       "selected_files" => sel.only_files,
       "file_episodes" => Map.new(sel.file_episodes, fn {i, id} -> {to_string(i), id} end),
-      "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids
+      "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids,
+      FileSelectionPolicy.metadata_key() => FileSelectionPolicy.auto_entry(sel.skipped_files)
     }
   end
 
@@ -221,7 +233,8 @@ defmodule Mydia.Downloads.WantedFiles do
         only_files: kept_files |> Enum.map(& &1.index) |> Enum.sort(),
         selected_bytes: kept_files |> Enum.map(& &1.length) |> Enum.sum(),
         file_episodes: file_episodes,
-        skipped_owned_episode_ids: Enum.uniq(dropped_episode_ids)
+        skipped_owned_episode_ids: Enum.uniq(dropped_episode_ids),
+        skipped_files: length(files) - length(kept_files)
       }
     end
   end
