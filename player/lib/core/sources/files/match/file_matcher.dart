@@ -144,11 +144,19 @@ class FileMatcher {
   /// Applies an unpin received from remote peer sync: a pinned group is
   /// released, recording [pinRevision], and is matched automatically on the
   /// next scan. Returns whether it wrote anything.
+  ///
+  /// The revision is compared here, inside the serialized section, as
+  /// [_unpinPending] does: a pin queued ahead of this unpin may land first
+  /// with a newer revision, and it stands.
   Future<bool> applyRemoteUnpin(String groupKey, {required int pinRevision}) =>
       _serialized(groupKey, () async {
         if (readOnly) return false;
         final current = _index.group(groupKey);
         if (current == null || !current.pinned) return false;
+        if (current.pinRevision case final applied?
+            when applied >= pinRevision) {
+          return false;
+        }
         await _index.putGroup(
             current.copyWith(pinned: false, pinRevision: pinRevision));
         _onPinned?.call();

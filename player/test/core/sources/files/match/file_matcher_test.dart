@@ -298,6 +298,28 @@ void main() {
     expect(pinned, 3);
   });
 
+  test('a remote unpin older than the applied pin leaves it pinned', () async {
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['Copper Valley (2018).mkv']);
+    await matcher.matchPending();
+    // A newer pin queued ahead of an older unpin lands first.
+    final pin = matcher.applyRemotePin('coppervalley|2018',
+        isShow: false, tmdbId: 7, pinRevision: 200);
+    final unpin =
+        matcher.applyRemoteUnpin('coppervalley|2018', pinRevision: 150);
+    await pin;
+
+    expect(await unpin, isFalse);
+    final g = index.group('coppervalley|2018')!;
+    expect((g.pinned, g.pinRevision), (true, 200));
+
+    // A newer unpin still releases it.
+    expect(
+        await matcher.applyRemoteUnpin('coppervalley|2018', pinRevision: 300),
+        isTrue);
+    expect(index.group('coppervalley|2018')!.pinned, isFalse);
+  });
+
   test('unmatch_pin_moves_files_to_folders', () async {
     relay.ids['Copper Valley'] = 7;
     await addFiles(['Copper Valley (2018).mkv']);
