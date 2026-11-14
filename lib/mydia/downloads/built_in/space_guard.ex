@@ -19,7 +19,10 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
   dropped from the record and left alone until the next low crossing.
 
   The record file survives a restart, so torrents paused for space resume once
-  there is room after a reboot. A reserve of 0 disables the guard; anything
+  there is room after a reboot. A failed write of it is retried at the start
+  of every check until one lands, whatever that check then finds; otherwise a
+  torrent paused just before a restart would stay paused for good. A reserve
+  of 0 disables the guard; anything
   still recorded is resumed. Low disk space is not a blocking reason: imports,
   removals and seeding carry on.
 
@@ -50,7 +53,8 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
   (`{adapter, config_map}`; nil resolves the built-in client on each check),
   `:interval_ms` (default 60_000), `:runtime` (default `&BuiltIn.runtime/0`;
   its config's reserve wins over `:config`'s, so a changed reserve applies
-  without a restart) and `:name`.
+  without a restart), `:write_record` (`(path, ids) -> :ok | {:error, _}`,
+  default `write_record_file/2`) and `:name`.
   """
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
@@ -73,7 +77,10 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
       client: Keyword.get(opts, :client),
       interval_ms: Keyword.get(opts, :interval_ms, 60_000),
       runtime: Keyword.get(opts, :runtime, &BuiltIn.runtime/0),
+      write_record: Keyword.get(opts, :write_record, &write_record_file/2),
       recorded: read_record(config),
+      # The record on disk lags `recorded` after a failed write.
+      dirty: false,
       exempt: MapSet.new(),
       disk: initial_disk(status),
       last_warned: nil
@@ -95,7 +102,10 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
 
   defp schedule(state), do: Process.send_after(self(), :check, state.interval_ms)
 
-  defp check(state), do: check(state, reserve(state))
+  defp check(state) do
+    state = if state.dirty, do: write_record(state), else: state
+    check(state, reserve(state))
+  end
 
   defp check(state, 0), do: recover(state)
 
@@ -253,31 +263,39 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
     end
   end
 
-  # Written to a temporary file and renamed, so a crash never leaves half a
-  # record. An empty record removes the file.
   defp write_record(state) do
     path = record_path(state.config)
 
-    result =
-      if MapSet.size(state.recorded) == 0 do
-        case File.rm(path) do
-          {:error, :enoent} -> :ok
-          other -> other
-        end
-      else
-        tmp = path <> ".tmp"
-        contents = state.recorded |> Enum.sort() |> Enum.join("\n")
+    case state.write_record.(path, state.recorded) do
+      :ok ->
+        %{state | dirty: false}
 
-        with :ok <- File.mkdir_p(Path.dirname(path)),
-             :ok <- File.write(tmp, contents <> "\n") do
-          File.rename(tmp, path)
-        end
-      end
-
-    with {:error, reason} <- result do
-      Logger.warning("Space guard could not update #{path}: #{inspect(reason)}")
+      {:error, reason} ->
+        Logger.warning("Space guard could not update #{path}: #{inspect(reason)}")
+        %{state | dirty: true}
     end
+  end
 
-    state
+  @doc """
+  Writes the recorded info hashes to `path`: to a temporary file, then
+  renamed, so a crash never leaves half a record. An empty set removes the
+  file.
+  """
+  @spec write_record_file(Path.t(), MapSet.t(String.t())) :: :ok | {:error, term()}
+  def write_record_file(path, ids) do
+    if MapSet.size(ids) == 0 do
+      case File.rm(path) do
+        {:error, :enoent} -> :ok
+        other -> other
+      end
+    else
+      tmp = path <> ".tmp"
+      contents = ids |> Enum.sort() |> Enum.join("\n")
+
+      with :ok <- File.mkdir_p(Path.dirname(path)),
+           :ok <- File.write(tmp, contents <> "\n") do
+        File.rename(tmp, path)
+      end
+    end
   end
 end

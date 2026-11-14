@@ -319,6 +319,48 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuardTest do
     assert Status.get(ctx.status).disk == :ok
   end
 
+  test "a record write that fails is retried on every later check until it lands", ctx do
+    torrents(ctx, [{"aaa", :downloading}])
+    free(ctx, {:ok, 1})
+    {:ok, fail?} = Agent.start_link(fn -> true end)
+    test = self()
+
+    write = fn path, ids ->
+      send(test, {:write, ids})
+
+      if Agent.get(fail?, & &1),
+        do: {:error, :eacces},
+        else: SpaceGuard.write_record_file(path, ids)
+    end
+
+    guard = start_guard(ctx, write_record: write)
+
+    log = capture_log(fn -> SpaceGuard.check_now(guard) end)
+    assert_received {:pause, "aaa"}
+    assert log =~ "eacces"
+    refute File.exists?(record_path(ctx))
+
+    # The torrent is paused now, so this check has nothing downloading, and
+    # free space cannot even be measured. The pending write still lands.
+    Agent.update(fail?, fn _ -> false end)
+    free(ctx, {:error, :df_unavailable})
+    capture_log(fn -> SpaceGuard.check_now(guard) end)
+    assert recorded(ctx) == ["aaa"]
+
+    # Once written, a quiet check writes nothing more.
+    flush_writes()
+    SpaceGuard.check_now(guard)
+    refute_received {:write, _}
+  end
+
+  defp flush_writes do
+    receive do
+      {:write, _} -> flush_writes()
+    after
+      0 -> :ok
+    end
+  end
+
   test "a reserve of 0 never measures free space", ctx do
     torrents(ctx, [{"aaa", :downloading}])
     guard = start_guard(ctx, config: %{ctx.config | min_free_space_bytes: 0})
