@@ -48,7 +48,9 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
   Options: `:config` (required), `:status` (the `Status` server, default
   `Status`), `:free_bytes` (default `&DiskSpace.free_bytes/1`), `:client`
   (`{adapter, config_map}`; nil resolves the built-in client on each check),
-  `:interval_ms` (default 60_000) and `:name`.
+  `:interval_ms` (default 60_000), `:runtime` (default `&BuiltIn.runtime/0`;
+  its config's reserve wins over `:config`'s, so a changed reserve applies
+  without a restart) and `:name`.
   """
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
@@ -62,16 +64,18 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
   @impl true
   def init(opts) do
     config = Keyword.fetch!(opts, :config)
+    status = Keyword.get(opts, :status, Status)
 
     state = %{
       config: config,
-      status: Keyword.get(opts, :status, Status),
+      status: status,
       free_bytes: Keyword.get(opts, :free_bytes, &DiskSpace.free_bytes/1),
       client: Keyword.get(opts, :client),
       interval_ms: Keyword.get(opts, :interval_ms, 60_000),
+      runtime: Keyword.get(opts, :runtime, &BuiltIn.runtime/0),
       recorded: read_record(config),
       exempt: MapSet.new(),
-      disk: :ok,
+      disk: initial_disk(status),
       last_warned: nil
     }
 
@@ -91,22 +95,37 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
 
   defp schedule(state), do: Process.send_after(self(), :check, state.interval_ms)
 
-  defp check(%{config: %Config{min_free_space_bytes: 0}} = state), do: recover(state)
+  defp check(state), do: check(state, reserve(state))
 
-  defp check(%{config: config} = state) do
-    reserve = config.min_free_space_bytes
+  defp check(state, 0), do: recover(state)
 
-    case state.free_bytes.(config.download_path) do
-      {:ok, free} when free < reserve -> low(state, free)
+  defp check(state, reserve) do
+    case state.free_bytes.(state.config.download_path) do
+      {:ok, free} when free < reserve -> low(state, free, reserve)
       {:ok, free} when free > reserve + @gib -> recover(state)
       {:ok, _between} -> state
       {:error, reason} -> warn_unmeasurable(state, reason)
     end
   end
 
-  defp low(state, free) do
-    reserve = state.config.min_free_space_bytes
+  # The Manager refreshes the runtime entry when only the reserve changes,
+  # without restarting this process.
+  defp reserve(state) do
+    case state.runtime.() do
+      %{config: %Config{min_free_space_bytes: reserve}} -> reserve
+      _ -> state.config.min_free_space_bytes
+    end
+  end
 
+  # A guard restarted on its own (a crash under the tree) finds the banner
+  # its previous run set, and must be able to clear it.
+  defp initial_disk(status) do
+    Status.get(status).disk
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp low(state, free, reserve) do
     state =
       put_disk(
         state,

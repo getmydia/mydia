@@ -38,7 +38,7 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuardTest do
   @moduletag :tmp_dir
 
   @gib 1024 ** 3
-  @reserve 5 * @gib
+  @reserve 5_000_000_000
 
   setup %{tmp_dir: dir} do
     status = :"status_#{System.unique_integer([:positive])}"
@@ -71,7 +71,10 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuardTest do
           send(test, {:free_bytes, path})
           Agent.get(ctx.free, & &1)
         end,
-        interval_ms: :timer.hours(1)
+        interval_ms: :timer.hours(1),
+        # The real runtime entry is a global persistent_term; async tests
+        # must not read it.
+        runtime: fn -> nil end
       ]
       |> Keyword.merge(overrides)
 
@@ -281,6 +284,39 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuardTest do
 
     refute_received {:resume, _}
     refute File.exists?(record_path(ctx))
+  end
+
+  test "a reserve changed on the runtime entry is honoured on the next check", ctx do
+    alias Mydia.Downloads.BuiltIn.Runtime
+
+    torrents(ctx, [{"aaa", :downloading}])
+    free(ctx, {:ok, @reserve + 3 * @gib})
+    {:ok, runtime} = Agent.start_link(fn -> nil end)
+    guard = start_guard(ctx, runtime: fn -> Agent.get(runtime, & &1) end)
+
+    SpaceGuard.check_now(guard)
+    refute_received {:pause, _}
+
+    Agent.update(runtime, fn _ ->
+      %Runtime{
+        api_port: 1,
+        credentials: {"mydia", "x"},
+        config: %{ctx.config | min_free_space_bytes: 20_000_000_000}
+      }
+    end)
+
+    SpaceGuard.check_now(guard)
+    assert_received {:pause, "aaa"}
+    assert {:low, %{reserve: "20 GB"}} = Status.get(ctx.status).disk
+  end
+
+  test "a restarted guard clears a low banner a previous guard left", ctx do
+    Status.put(ctx.status, :disk, {:low, %{free: "1 GB", reserve: "5 GB"}})
+    guard = start_guard(ctx)
+
+    SpaceGuard.check_now(guard)
+
+    assert Status.get(ctx.status).disk == :ok
   end
 
   test "a reserve of 0 never measures free space", ctx do

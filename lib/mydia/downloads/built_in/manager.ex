@@ -151,8 +151,26 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
     config = %{config | warnings: config.warnings ++ write_settings(config, env)}
     :persistent_term.put({__MODULE__, state.name}, config)
 
-    if unchanged?(state, config), do: state, else: restart(state, config, expected_hash)
+    if unchanged?(state, config),
+      do: refresh(state, config),
+      else: restart(state, config, expected_hash)
   end
+
+  # Settings outside the restart key (the disk reserve) still reach the
+  # running client: the runtime entry gets the new config and keeps the API
+  # port and credentials the engine runs with.
+  defp refresh(state, %Config{enabled?: true} = config) do
+    case BuiltIn.runtime() do
+      %Runtime{} = runtime ->
+        BuiltIn.put_runtime(%{runtime | config: config})
+        %{state | current: config}
+
+      nil ->
+        state
+    end
+  end
+
+  defp refresh(state, _config), do: state
 
   defp build_config(state, env) do
     {types, name_taken?} =
