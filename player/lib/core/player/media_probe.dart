@@ -31,9 +31,16 @@ bool hasRealTracks(Object? decodedTrackList) {
 
 /// Runs probes one at a time, process wide, and turns every failure into null.
 class SerializedMediaProbe implements MediaProbe {
-  SerializedMediaProbe(this._inner);
+  SerializedMediaProbe(
+    this._inner, {
+    this.grace = const Duration(seconds: 5),
+  });
 
   final MediaProbe _inner;
+
+  /// How long past its own timeout an inner probe may take before it is
+  /// abandoned.
+  final Duration grace;
   Future<void> _tail = Future<void>.value();
 
   @override
@@ -43,7 +50,13 @@ class SerializedMediaProbe implements MediaProbe {
   }) {
     final result = _tail.then<ProbeResult?>((_) async {
       try {
-        return await _inner.probe(playable, timeout: timeout);
+        // A probe that ignores its own deadline must not hold the lock.
+        return await _inner
+            .probe(playable, timeout: timeout)
+            .timeout(timeout + grace);
+      } on TimeoutException {
+        debugPrint('[MediaProbe] probe stalled past its deadline');
+        return null;
       } catch (error) {
         debugPrint('[MediaProbe] probe failed: $error');
         return null;

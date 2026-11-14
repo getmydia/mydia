@@ -78,6 +78,22 @@ void main() {
     expect(await second, isNull);
   });
 
+  test('a stalled inner probe returns null and the next probe still runs',
+      () async {
+    final inner = _FakeProbe();
+    final serialized =
+        SerializedMediaProbe(inner, grace: const Duration(milliseconds: 20));
+    const timeout = Duration(milliseconds: 20);
+
+    final first = serialized.probe(a, timeout: timeout);
+    final second = serialized.probe(b, timeout: timeout);
+    expect(await first, isNull);
+    await pumpEventQueue();
+    expect(inner.started, [a, b]);
+    inner.completers[1].complete(const ProbeResult(container: 'mkv'));
+    expect((await second)?.container, 'mkv');
+  });
+
   test('a throwing inner probe releases the lock and returns null', () async {
     final inner = _ThrowingProbe();
     final serialized = SerializedMediaProbe(inner);

@@ -55,7 +55,11 @@ class _Built {
   final FilesMediaInfoCache cache;
 }
 
-Future<_Built> _build({ProbeResult? result, bool throwingCache = false}) async {
+Future<_Built> _build({
+  ProbeResult? result,
+  bool throwingCache = false,
+  FakeBackend? backend,
+}) async {
   final f = await FilesFixture.create();
   final relay = FakeFilesRelay();
   final probe = FakeMediaProbe(result);
@@ -65,7 +69,7 @@ Future<_Built> _build({ProbeResult? result, bool throwingCache = false}) async {
       : await f.mediaInfoCache();
   final source = FilesMediaSource(
     source: filesLocalSource,
-    backend: FakeBackend(const {}),
+    backend: backend ?? FakeBackend(const {}),
     index: f.index,
     progress: f.progress,
     matcher: FileMatcher(
@@ -232,6 +236,54 @@ void main() {
       throwsA(isA<SourceException>().having(
           (e) => e.fault, 'fault', SourceFault.peerFilesHostUnreachable)),
     );
+  });
+
+  test('a file replaced while it is read is not cached under the new record',
+      () async {
+    final b = await _build(result: _probed);
+    final gate = Completer<void>();
+    b.probe.gate = gate;
+
+    final running = b.source.probeFileKey(_hdKey);
+    await _settle();
+    final old = b.fixture.index.files()[_hdKey];
+    expect(old, isNotNull);
+    if (old == null) return;
+    // A scan lands while the probe runs and records a different file.
+    await b.fixture.index.putFiles([
+      IndexedFile(
+        key: old.key,
+        rootId: old.rootId,
+        path: old.path,
+        size: old.size + 1,
+        modified: old.modified,
+        firstSeen: old.firstSeen,
+        parsed: old.parsed,
+        sidecars: old.sidecars,
+        parsedAs: old.parsedAs,
+      ),
+    ]);
+    gate.complete();
+    await running;
+
+    final now = b.fixture.index.files()[_hdKey];
+    expect(now, isNotNull);
+    if (now == null) return;
+    expect(b.cache.get(b.source.source.account.id, now), isNull);
+  });
+
+  test('a local backend failure becomes a SourceException and is reported',
+      () async {
+    final backend = _FailingPlayBackend(const BackendUnreachable('gone'));
+    final b = await _build(result: _probed, backend: backend);
+    final ref = b.fixture.ref(ItemKind.movie, '101');
+
+    await expectLater(
+      b.source.mediaInfo(ref),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+    );
+    expect(b.source.connection, SourceConnectionStatus.unreachable);
   });
 
   test('external subtitles come from sidecars', () async {

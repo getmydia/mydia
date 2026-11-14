@@ -239,6 +239,48 @@ void main() {
     expect(r.progress.running, isFalse);
   });
 
+  test('a source removed during the playback wait ends the run', () async {
+    final r = await _rig();
+    final playing = r.c.read(playingSourceProvider);
+    final owner = Object();
+    playing.claim(owner, r.id);
+
+    final run = r.queue.enqueueStale();
+    await _settle();
+    expect(r.progress.running, isTrue);
+
+    r.media.dispose();
+    await run;
+
+    // Playback never ended.
+    expect(playing.current, isNotNull);
+    expect(r.probe.probed, isEmpty);
+    expect(r.progress.running, isFalse);
+    playing.release(owner);
+  });
+
+  test('an enqueue with nothing stale keeps the numbers of the run', () async {
+    final r = await _rig();
+    final gate = Completer<void>();
+    r.probe.gate = gate;
+    final total = r.f.index.files().length;
+
+    final run = r.queue.enqueueStale();
+    await _settle();
+    for (final file in r.f.index.files().values) {
+      await r.cache.put(r.account, file, _probed);
+    }
+
+    final again = r.queue.enqueueStale();
+    expect(r.progress.running, isTrue);
+    expect(r.progress.total, total);
+    expect(r.progress.total, isNot(0));
+
+    gate.complete();
+    await Future.wait([run, again]);
+    expect(r.progress.running, isFalse);
+  });
+
   test('progress counts done of total and clears running at the end', () async {
     final r = await _rig();
     final total = r.f.index.files().length;

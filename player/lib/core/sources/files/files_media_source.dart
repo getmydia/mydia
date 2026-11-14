@@ -782,15 +782,17 @@ class FilesMediaSource extends MediaSource
       );
     } on BackendFailure catch (e) {
       reportReachability(e);
-      throw switch (e) {
+      throw _backendException(e);
+    }
+  }
+
+  SourceException _backendException(BackendFailure e) => switch (e) {
         BackendUnauthorized() ||
         BackendPermissionLost() =>
           const SourceException.unauthorized(),
         BackendNotFound() => const SourceException.notFound(),
         BackendUnreachable() => const SourceException.unreachable(),
       };
-    }
-  }
 
   // MediaInfo
 
@@ -827,11 +829,28 @@ class FilesMediaSource extends MediaSource
   Future<ProbeResult?> _probeOnce(String fileKey) async {
     final probe = _probe;
     if (probe == null) return null;
-    final playable = await playableForFileKey(fileKey);
+    // The fingerprint the bytes are read under: taken before the read, so a
+    // scan that replaces the file meanwhile cannot file old streams under
+    // the new size and time.
+    final before = indexedFile(fileKey);
+    final PlayableFile playable;
+    try {
+      playable = await playableForFileKey(fileKey);
+    } on BackendFailure catch (e) {
+      // A lent library's failures arrive already mapped, so this is a
+      // local or network share.
+      reportReachability(e);
+      throw _backendException(e);
+    }
     final result = await probe.probe(playable);
     final file = indexedFile(fileKey);
     final cache = _mediaInfoCache;
-    if (result != null && file != null && cache != null) {
+    if (result != null &&
+        before != null &&
+        file != null &&
+        file.size == before.size &&
+        file.modified == before.modified &&
+        cache != null) {
       try {
         await cache.put(source.account.id, file, result);
       } catch (e) {

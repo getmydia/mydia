@@ -74,12 +74,20 @@ class FilesProbeQueue extends Notifier<ProbeProgress> {
       return Future.value();
     }
     final account = media.source.account.id;
+    final stale = [
+      for (final file in media.index.files().values)
+        if (cache.get(account, file) == null) file.key,
+    ];
+    if (_looping && stale.isEmpty) {
+      // Nothing new to count: keep the numbers until the read in flight
+      // reports, instead of showing a run of 0 of 0.
+      _pending.clear();
+      _report();
+      return _running ?? Future.value();
+    }
     _pending
       ..clear()
-      ..addAll([
-        for (final file in media.index.files().values)
-          if (cache.get(account, file) == null) file.key,
-      ]);
+      ..addAll(stale);
     _list++;
     _done = 0;
     _total = _pending.length;
@@ -122,6 +130,13 @@ class FilesProbeQueue extends Notifier<ProbeProgress> {
     try {
       while (_pending.isNotEmpty) {
         while (ref.mounted && ref.read(playingSourceProvider).current != null) {
+          // A source removed during playback ends the run now, not after it.
+          if (_activeMedia() == null) {
+            debugPrint('[FilesProbeQueue] $sourceId: source gone while '
+                'waiting, ${_pending.length} files left unread');
+            _pending.clear();
+            return;
+          }
           await Future<void>.delayed(ref.read(filesProbeIdlePollProvider));
         }
         if (!ref.mounted) return;

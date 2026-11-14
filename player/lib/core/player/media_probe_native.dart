@@ -121,7 +121,13 @@ class MpvMediaProbe implements MediaProbe {
       );
       return null;
     } finally {
-      await player?.dispose();
+      try {
+        await player?.dispose().timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        debugPrint('[MediaProbe] player dispose timed out');
+      } catch (error) {
+        debugPrint('[MediaProbe] player dispose failed: $error');
+      }
     }
   }
 
