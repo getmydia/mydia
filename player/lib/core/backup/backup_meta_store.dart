@@ -208,6 +208,15 @@ class BackupMetaStore {
   Future<void> setMergedSeq(String slotId, int seq) =>
       _storage.put('$_seqPrefix$slotId', '$seq');
 
+  /// Forgets every merged seq, when this device leaves a vault: slot ids
+  /// derive from signers, so a later vault holding the same devices starts
+  /// their seqs at 1 again.
+  Future<void> clearMergedSeqs() async {
+    for (final k in _storage.keys.toList()) {
+      if (k.startsWith(_seqPrefix)) await _storage.delete(k);
+    }
+  }
+
   Map<String, String> nodeToSlot() => {
         for (final k in _storage.keys)
           if (k.startsWith(_nodePrefix))
