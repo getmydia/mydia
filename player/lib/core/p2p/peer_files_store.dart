@@ -2,7 +2,8 @@
 /// the `peer_files_index` box.
 library;
 
-import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/foundation.dart'
+    show ChangeNotifier, Listenable, mapEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
@@ -37,6 +38,14 @@ class PeerFilesStore {
   /// Built once per generation: an index reads every key of the box when
   /// it is constructed, and sources ask for it often.
   final _indexes = <String, FileLibraryIndex>{};
+
+  final _changes = _Changes();
+
+  /// Notifies whenever a live copy may have changed: one replaced, one
+  /// removed, or leftovers swept. Readers holding an [index] read it again.
+  /// The client publishes an account's new manifest entry before its fetch
+  /// lands, so its account list alone does not say when a copy is ready.
+  Listenable get changes => _changes;
 
   static String _metaKey(String id) => 'meta/$id';
   static String _accountKey(String id) => 'account/$id';
@@ -102,6 +111,7 @@ class PeerFilesStore {
     });
     _indexes[_generation(localAccountId, next)] = staging;
     _indexes.remove(_generation(localAccountId, live));
+    _changes.ping();
     await _box.deleteAll(_recordKeys(localAccountId, keep: next));
   }
 
@@ -126,6 +136,7 @@ class PeerFilesStore {
     if (orphans.isEmpty) return;
     await _box.deleteAll(orphans);
     _indexes.clear();
+    _changes.ping();
   }
 
   /// Remembers that [nodeId] lends [wire] as [localAccountId]. Writes
@@ -185,7 +196,12 @@ class PeerFilesStore {
       _accountKey(localAccountId),
     ]);
     _indexes.removeWhere((k, _) => k.startsWith('$localAccountId@'));
+    _changes.ping();
   }
+}
+
+class _Changes extends ChangeNotifier {
+  void ping() => notifyListeners();
 }
 
 /// The store over its box, opened with the files library boxes at startup.

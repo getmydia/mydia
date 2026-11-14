@@ -1,7 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/p2p/peer_files_backend.dart';
+import 'package:player/core/p2p/peer_files_host.dart'
+    show peerFilesRevisionsProvider;
 import 'package:player/core/p2p/peer_files_wire.dart';
 import 'package:player/core/p2p/peer_sync_records.dart';
+import 'package:player/core/p2p/peer_sync_service.dart'
+    show applyRemoteFilesChanges;
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_ids.dart';
@@ -15,6 +22,8 @@ import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/sources/item.dart';
 
 import '../../../test_utils/no_downloads.dart';
+import '../../p2p/fake_peer_files.dart';
+import 'fake_backend.dart';
 import 'files_fixture.dart';
 import 'peer_files_harness.dart';
 
@@ -130,20 +139,155 @@ void main() {
     expect(h.store.index(peerLocalId).roots().map((r) => r.id), ['rhost']);
   });
 
-  test('a new copy of the host index rebuilds the source on it', () async {
+  test('a copy that lands after its manifest entry rebuilds the source on it',
+      () async {
     h.client.list.value = [lentFlocal()];
     final c = await container();
     final peerId = c.read(sourcesProvider).last.id;
     final first = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
     expect(first.index.files(), hasLength(2));
 
+    // The client publishes the new revision while its pages are still
+    // being fetched, then the fetch lands with no further publish.
+    h.client.list.value = [lentFlocal(revision: 2)];
+    expect(c.read(mediaSourceProvider(peerId)), same(first));
     await h.host.removeFiles([fileKeyFor('rhost', 'clips/beach day.mkv')]);
     await h.store.replace(peerLocalId, 2, pageIndex(h.host));
-    h.client.list.value = [lentFlocal(revision: 2)];
 
     final second = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
     expect(identical(first, second), isFalse);
+    expect(second.index, same(h.store.index(peerLocalId)));
     expect(second.index.files(), hasLength(1));
+  });
+
+  test('a play spanning a new copy still reports on the host account',
+      () async {
+    h.client.list.value = [lentFlocal()];
+    final c = await container();
+    final peerId = c.read(sourcesProvider).last.id;
+    final playing = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
+    final key = fileKeyFor('rhost', 'clips/beach day.mkv');
+    final ref = ItemRef(
+        sourceId: peerId,
+        kind: ItemKind.video,
+        externalId: unmatchedFileId(key));
+
+    // The new copy drops the file being played, and the old generation's
+    // records are deleted from the box.
+    await h.host.removeFiles([key]);
+    await h.store.replace(peerLocalId, 2, pageIndex(h.host));
+    expect(c.read(mediaSourceProvider(peerId)), isNot(same(playing)));
+
+    // What the playback reporter calls on the source it started with.
+    expect(playing.currentRef(ref, key), ref);
+    expect(playing.syncKeyFor(ref),
+        unmatchedFileSyncKey(kFilesLocalAccountId, key));
+    await playing.invalidateWatchedFor(ref);
+    await playing.setWatched(ref, true);
+    expect(
+        h.syncStore
+            .watchRecord(unmatchedFileSyncKey(kFilesLocalAccountId, key))
+            ?.watched,
+        isTrue);
+  });
+
+  test('remote pins and unpins never touch a lent index', () async {
+    h.client.list.value = [lentFlocal()];
+    final c = await container();
+    final peerId = c.read(sourcesProvider).last.id;
+    final peer = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
+    final group = h.host
+        .files()
+        .values
+        .firstWhere((f) => f.parsed != null)
+        .parsed!
+        .groupKey;
+    final before = peer.index.group(group);
+    final revisions = c.read(peerFilesRevisionsProvider);
+
+    // A pin to "no match" needs no relay, so a writable matcher would
+    // write it at once.
+    final pin = await h.syncStore.setPin(
+        groupKey: group, isShow: false, tmdbId: null, pinned: true, nowMs: 5);
+    await applyRemoteFilesChanges(
+      store: h.syncStore,
+      sources: FilesMediaSource.activeSources.toList(),
+      changedWatchKeys: const {},
+      changedPinKeys: {pin.key},
+    );
+    await peer.matcher.applyRemotePin(group, isShow: false, pinRevision: 5);
+    expect(peer.index.group(group), same(before));
+
+    // An unpin on a copy where the host had pinned the group.
+    await h.host.putGroup(before!.copyWith(pinned: true));
+    await h.store.replace(peerLocalId, 2, pageIndex(h.host));
+    final next = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
+    final pinned = next.index.group(group);
+    expect(pinned?.pinned, isTrue);
+    final unpin = await h.syncStore.setPin(
+        groupKey: group, isShow: false, tmdbId: null, pinned: false, nowMs: 6);
+    await applyRemoteFilesChanges(
+      store: h.syncStore,
+      sources: FilesMediaSource.activeSources.toList(),
+      changedWatchKeys: const {},
+      changedPinKeys: {unpin.key},
+    );
+    expect(await next.matcher.applyRemoteUnpin(group, pinRevision: 6), isFalse);
+    expect(next.index.group(group), same(pinned));
+
+    expect(h.syncStore.allWatchRecords(), isEmpty);
+    expect(revisions.revision(peerLocalId), 0);
+    expect(revisions.revision(kFilesLocalAccountId), 0);
+  });
+
+  test('a host that lends nothing more lets its proxy target go', () async {
+    h.client.list.value = [
+      lentFlocal(),
+      lentFlocal(accountId: 'w0123456789abcdef', name: 'Share'),
+    ];
+    final c = await container();
+    expect(c.read(sourcesProvider), hasLength(3));
+    final target = PeerFilesBackend.targetFor(hostNode);
+    addTearDown(() => PeerFilesBackend.releaseHost(hostNode, () => h.proxy));
+    await PeerFilesBackend(
+      nodeId: hostNode,
+      hostAccountId: kFilesLocalAccountId,
+      proxy: h.proxy,
+      transport: FakePeerRangeTransport(fakeStatusStream(206)),
+      isConnected: (_) => true,
+    ).playable('/srv/films/Quiet Meridian (2027).mkv');
+    expect(h.proxy.holders[target], hasLength(1));
+
+    // One account withdrawn: the host still lends, so playback keeps it.
+    h.client.list.value = [lentFlocal()];
+    await _settle();
+    expect(h.proxy.stops, isEmpty);
+
+    h.client.list.value = const [];
+    await _settle();
+    expect(h.proxy.stops, [target]);
+    expect(h.proxy.holders[target], isEmpty);
+  });
+
+  test('a peer source probes again when its host connects', () async {
+    final backend = FakeBackend({},
+        probeFailure: const BackendUnreachable('peer not connected'));
+    h.backends[peerFilesSource(lentFlocal())] = backend;
+    h.client.list.value = [lentFlocal()];
+    final c = await container();
+    final peerId = c.read(sourcesProvider).last.id;
+    final peer = c.read(mediaSourceProvider(peerId))! as FilesMediaSource;
+    await _settle();
+    expect(peer.connection, SourceConnectionStatus.unreachable);
+
+    backend.probeFailure = null;
+    h.connected.add('some other node');
+    await _settle();
+    expect(peer.connection, SourceConnectionStatus.unreachable);
+
+    h.connected.add(hostNode);
+    await _settle();
+    expect(peer.connection, SourceConnectionStatus.local);
   });
 
   test('revoked_host_removes_sources', () async {

@@ -5,9 +5,14 @@
 /// rescanned or removed here, and it goes when its host stops lending it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
+import '../../p2p/p2p_service.dart' show p2pServiceProvider;
+import '../../p2p/peer_files_backend.dart';
 import '../../p2p/peer_files_client.dart';
 import '../../p2p/peer_files_store.dart';
 import '../source.dart';
@@ -50,7 +55,19 @@ class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
       return const [];
     }
     final accounts = ref.watch(peerFilesClientProvider).accounts;
-    void changed() => state = accounts.value;
+    void changed() {
+      final next = accounts.value;
+      final gone = {for (final a in state) a.nodeId}
+          .difference({for (final a in next) a.nodeId});
+      state = next;
+      // A host that lends nothing any more needs no proxy target. One still
+      // lending keeps its target, and with it any playback in progress.
+      for (final nodeId in gone) {
+        unawaited(PeerFilesBackend.releaseHost(
+            nodeId, () => ref.read(mediaProxyProvider)));
+      }
+    }
+
     accounts.addListener(changed);
     ref.onDispose(() {
       // The client may already have disposed its notifier.
@@ -61,6 +78,11 @@ class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
     return accounts.value;
   }
 }
+
+/// The node id of each paired player as it connects. A seam so tests can
+/// connect a host.
+final peerConnectedProvider = Provider<Stream<String>>(
+    (ref) => ref.watch(p2pServiceProvider).onPeerConnected);
 
 /// One source per lent account, labelled with the lending device's name
 /// and the account's, as "Living Room TV · Movies".
@@ -97,12 +119,15 @@ Source peerFilesSource(PeerSharedAccount shared) {
   );
 }
 
-/// The live copy of the lent account [localAccountId]'s index. A fetch
-/// that lands a new copy replaces the instance, so whatever reads this is
-/// rebuilt on it; an unchanged copy is the same instance and rebuilds
-/// nothing.
+/// The live copy of the lent account [localAccountId]'s index. Read again
+/// on every change to the store, so a fetch that lands a new copy rebuilds
+/// whatever reads this on it; an unchanged copy is the same instance and
+/// rebuilds nothing.
 final peerFilesIndexProvider =
     Provider.family<FileLibraryIndex, String>((ref, localAccountId) {
-  ref.watch(peerFilesAccountsProvider);
-  return ref.watch(peerFilesStoreProvider).index(localAccountId);
+  final store = ref.watch(peerFilesStoreProvider);
+  void changed() => ref.invalidateSelf();
+  store.changes.addListener(changed);
+  ref.onDispose(() => store.changes.removeListener(changed));
+  return store.index(localAccountId);
 });

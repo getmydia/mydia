@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/p2p/peer_files_client.dart';
 import 'package:player/core/p2p/peer_files_store.dart';
 import 'package:player/core/p2p/peer_files_wire.dart';
@@ -11,12 +14,14 @@ import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_providers.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
+import 'package:player/core/sources/files/peer_files_sources.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/native/lib.dart';
 
 import '../../../test_utils/no_downloads.dart';
+import '../../p2p/fake_peer_files.dart';
 import 'fake_backend.dart';
 import 'fake_media_names.dart';
 import 'files_fixture.dart';
@@ -43,12 +48,16 @@ class QuietPeerSync implements PeerSyncService {
   dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
 }
 
-PeerSharedAccount lentFlocal({int revision = 1, String name = 'Folders'}) =>
+PeerSharedAccount lentFlocal({
+  int revision = 1,
+  String name = 'Folders',
+  String accountId = kFilesLocalAccountId,
+}) =>
     PeerSharedAccount(
       nodeId: hostNode,
       deviceName: 'Den Desktop',
       wire: FlutterWireSharedAccount(
-        accountId: kFilesLocalAccountId,
+        accountId: accountId,
         kind: 'local',
         name: name,
         revision: BigInt.from(revision),
@@ -114,6 +123,12 @@ class PeerHarness {
   /// The backend each source was built with; none of them is real.
   final backends = <Source, FakeBackend>{};
   final syncStore = InMemoryPeerSyncStore();
+  final proxy = FakePeerProxy();
+
+  /// Node ids of paired players as they connect. Never closed: it lives
+  /// as long as the test's container.
+  // ignore: close_sinks
+  final connected = StreamController<String>.broadcast();
   late PeerFilesStore store;
   late FileLibraryIndex host;
 
@@ -139,6 +154,8 @@ class PeerHarness {
         peerFilesClientProvider.overrideWithValue(client),
         peerSyncStoreProvider.overrideWithValue(syncStore),
         peerSyncServiceProvider.overrideWithValue(QuietPeerSync()),
+        peerConnectedProvider.overrideWithValue(connected.stream),
+        mediaProxyProvider.overrideWithValue(proxy),
       ];
 
   /// A container that also holds this device's own `flocal` account.

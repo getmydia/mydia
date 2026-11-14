@@ -35,7 +35,11 @@ import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
 import 'peer_files_sources.dart'
-    show isPeerFilesSource, peerFilesHostAccountId, peerFilesIndexProvider;
+    show
+        isPeerFilesSource,
+        peerConnectedProvider,
+        peerFilesHostAccountId,
+        peerFilesIndexProvider;
 import 'files_accounts.dart' show filesAccountsProvider;
 import 'smb_addresses.dart' show smbTargetsOf;
 import 'smb_discovery.dart' show smbDiscoveryProvider;
@@ -202,16 +206,27 @@ FilesMediaSource buildFilesSource(
     onSyncMutation: syncMutation,
     onGroupLanded: () =>
         invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
-    // Paired players browsing this library refetch it.
-    onPinned: () => unawaited(
-        container.read(peerFilesHostProvider).bumpRevision(source.account.id)),
+    // Paired players browsing this library refetch it. A lent library is
+    // not this device's to lend, and its matcher writes nothing.
+    onPinned: peer
+        ? null
+        : () => unawaited(container
+            .read(peerFilesHostProvider)
+            .bumpRevision(source.account.id)),
+    readOnly: peer,
   );
   late final FilesMediaSource media;
   // A resume or a network change probes again, and scans when the app sat
   // in the background past the rescan interval: the source is not rebuilt
-  // then, so the check on open alone would not see it.
-  final events = peer
-      ? null
+  // then, so the check on open alone would not see it. A lent library is
+  // probed again when its host connects instead, since reachable means
+  // connected for it.
+  final hostNode = source.server.machineIdentifier;
+  final StreamSubscription<Object?> events = peer
+      ? ref
+          .read(peerConnectedProvider)
+          .where((n) => n == hostNode)
+          .listen((_) => unawaited(media.probe()))
       : ref.read(connectionRefreshBusProvider).events.listen((_) {
           unawaited(media.probe());
           _scanIfDue(ref, source, index);
@@ -234,7 +249,7 @@ FilesMediaSource buildFilesSource(
     // streams through them. They go with the account
     // ([closeRemovedFilesAccount]), or after 12 hours unused.
     onDispose: () {
-      if (events != null) unawaited(events.cancel());
+      unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
     },
   );

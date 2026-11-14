@@ -35,20 +35,41 @@ class PeerFilesBackend implements FileSystemBackend {
   final PeerFilesTransport _transport;
   final bool Function(String nodeId) _isConnected;
 
-  /// The proxy target for this host, shared by all of its accounts.
-  String get target =>
+  /// The proxy target for [nodeId], shared by all of its accounts.
+  static String targetFor(String nodeId) =>
       'peer_${nodeId.substring(0, nodeId.length < 12 ? nodeId.length : 12)}';
+
+  String get target => targetFor(nodeId);
 
   String get _sessionId => '${MediaRoutes.peerFileSessionPrefix}$hostAccountId';
 
-  /// One owner per proxy target for the life of the process. A playback
-  /// keeps its URL after the source that handed it out is rebuilt (each new
-  /// copy of the host's index rebuilds it), so no source may let the target
-  /// go; holding it under a fixed owner keeps it served and held once.
+  /// One owner per host's proxy target, held while the host lends this
+  /// device anything. A playback keeps its URL after the source that handed
+  /// it out is rebuilt (each new copy of the host's index rebuilds it), so
+  /// no source may let the target go; [releaseHost] does, once the host no
+  /// longer lends.
   static final _owners = <String, Object>{};
+
+  /// Lets go of [nodeId]'s proxy target, when one is held. Called once the
+  /// host lends this device nothing (revoked, left, or its last account
+  /// withdrawn), so targets do not pile up for the life of the process.
+  /// [proxy] is read only when there is something to release.
+  static Future<void> releaseHost(
+      String nodeId, MediaProxy Function() proxy) async {
+    final target = targetFor(nodeId);
+    final owner = _owners.remove(target);
+    if (owner == null) return;
+    try {
+      await proxy().stop(owner, target: target);
+    } catch (e) {
+      debugPrint('[PeerFilesBackend] Releasing $target failed: $e');
+    }
+  }
 
   @override
   Future<PlayableFile> playable(String path) async {
+    // A source built from a record that names no host has nowhere to read.
+    if (nodeId.isEmpty) throw const BackendUnreachable('no peer node id');
     final token = MediaRoutes.peerFileToken(path);
     // One byte first, so a host that is gone or a file that is gone fails
     // here, where it can be named, rather than inside the video pipeline.
@@ -105,7 +126,7 @@ class PeerFilesBackend implements FileSystemBackend {
   /// answer a play, which dials it.
   @override
   Future<void> probe() async {
-    if (!_isConnected(nodeId)) {
+    if (nodeId.isEmpty || !_isConnected(nodeId)) {
       throw const BackendUnreachable('peer not connected');
     }
   }

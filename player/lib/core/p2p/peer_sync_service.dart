@@ -15,6 +15,7 @@ import '../sources/cache/source_rules.dart';
 import '../sources/connection/connection_refresh_bus.dart';
 import '../sources/files/files_media_source.dart';
 import '../sources/files/files_providers.dart';
+import '../sources/files/peer_files_sources.dart' show isPeerFilesSource;
 import 'p2p_service.dart';
 import 'peer_group_roster.dart';
 import 'peer_group_secret.dart';
@@ -930,6 +931,56 @@ final peerGroupRosterProvider = Provider<PeerGroupRoster>((ref) {
   );
 });
 
+/// Brings the open files [sources] up to date with what a sync round
+/// applied: pins and unpins land on each source holding the group, and
+/// every source refreshes its watched state.
+///
+/// A library a paired player lends is left out of the pins. Its index is
+/// the host's copy, which the next fetch replaces; the host applies the
+/// pin to its own index and lends the result.
+Future<void> applyRemoteFilesChanges({
+  required PeerSyncStore store,
+  required List<FilesMediaSource> sources,
+  required Set<String> changedWatchKeys,
+  required Set<String> changedPinKeys,
+}) async {
+  if (changedPinKeys.isNotEmpty) {
+    for (final source in sources) {
+      if (isPeerFilesSource(source.source)) continue;
+      for (final key in changedPinKeys) {
+        final pinRecord = store.allPinRecords()[key];
+        if (pinRecord == null) continue;
+        if (!source.matcher.hasFilesForGroup(pinRecord.groupKey)) continue;
+        if (pinRecord.pinned) {
+          await source.matcher.applyRemotePin(
+            pinRecord.groupKey,
+            isShow: pinRecord.isShow,
+            tmdbId: pinRecord.tmdbId,
+            pinRevision: pinRecord.updatedAt,
+          );
+        } else {
+          final released = await source.matcher.applyRemoteUnpin(
+            pinRecord.groupKey,
+            pinRevision: pinRecord.updatedAt,
+          );
+          if (released) {
+            await source.invalidateTargets(
+              FilesMediaSource.groupLandedTargets(source.source.id),
+            );
+          }
+        }
+      }
+    }
+  }
+  if (changedWatchKeys.isNotEmpty) {
+    for (final source in sources) {
+      await source.invalidateTargets(
+        SourceRules.watchedChanged(source.source.id),
+      );
+    }
+  }
+}
+
 final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
   final store = ref.watch(peerSyncStoreProvider);
   final authStorage = getAuthStorage();
@@ -944,44 +995,13 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
     relayClient: relay,
     deviceName: 'Mydia Player',
     platform: DeviceInfoService().getPlatform(),
-    onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) async {
-      final activeSources = FilesMediaSource.activeSources.toList();
-      if (changedPinKeys.isNotEmpty) {
-        for (final source in activeSources) {
-          for (final key in changedPinKeys) {
-            final pinRecord = store.allPinRecords()[key];
-            if (pinRecord == null) continue;
-            if (source.matcher.hasFilesForGroup(pinRecord.groupKey)) {
-              if (pinRecord.pinned) {
-                await source.matcher.applyRemotePin(
-                  pinRecord.groupKey,
-                  isShow: pinRecord.isShow,
-                  tmdbId: pinRecord.tmdbId,
-                  pinRevision: pinRecord.updatedAt,
-                );
-              } else {
-                final released = await source.matcher.applyRemoteUnpin(
-                  pinRecord.groupKey,
-                  pinRevision: pinRecord.updatedAt,
-                );
-                if (released) {
-                  await source.invalidateTargets(
-                    FilesMediaSource.groupLandedTargets(source.source.id),
-                  );
-                }
-              }
-            }
-          }
-        }
-      }
-      if (changedWatchKeys.isNotEmpty) {
-        for (final source in activeSources) {
-          await source.invalidateTargets(
-            SourceRules.watchedChanged(source.source.id),
-          );
-        }
-      }
-    },
+    onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) =>
+        applyRemoteFilesChanges(
+      store: store,
+      sources: FilesMediaSource.activeSources.toList(),
+      changedWatchKeys: changedWatchKeys,
+      changedPinKeys: changedPinKeys,
+    ),
   );
 
   final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((_) {

@@ -31,6 +31,7 @@ class FileMatcher {
     void Function()? onPinned,
     int concurrency = 4,
     DateTime Function()? now,
+    this.readOnly = false,
   })  : _tmdb = tmdb,
         _names = names,
         _index = index,
@@ -59,10 +60,16 @@ class FileMatcher {
   final _Semaphore _slots;
   final DateTime Function() _now;
 
+  /// Writes nothing: matching, pinning and unpinning all do nothing. For a
+  /// library a paired player lends, whose index is the host's copy and is
+  /// replaced by its next one; the host matches and pins its own files.
+  final bool readOnly;
+
   /// Matches every group with no [GroupMatch], or whose files are newer than
   /// it. A group the relay cannot answer for stays provisional (no
   /// [GroupMatch]); the others carry on.
   Future<void> matchPending() async {
+    if (readOnly) return;
     final groups = _groups();
     final pending = [
       for (final g in groups.values)
@@ -102,16 +109,18 @@ class FileMatcher {
     int? tmdbId,
     bool recordSync = true,
     int? pinRevision,
-  }) =>
-      _serialized(
-          groupKey,
-          () => _pin(
-                groupKey,
-                isShow: isShow,
-                tmdbId: tmdbId,
-                recordSync: recordSync,
-                pinRevision: pinRevision,
-              ));
+  }) async {
+    if (readOnly) return;
+    return _serialized(
+        groupKey,
+        () => _pin(
+              groupKey,
+              isShow: isShow,
+              tmdbId: tmdbId,
+              recordSync: recordSync,
+              pinRevision: pinRevision,
+            ));
+  }
 
   /// Applies a pin received from remote peer sync. Performs matching,
   /// indexing, and migrations without re-recording in [PeerSyncStore] or
@@ -137,6 +146,7 @@ class FileMatcher {
   /// next scan. Returns whether it wrote anything.
   Future<bool> applyRemoteUnpin(String groupKey, {required int pinRevision}) =>
       _serialized(groupKey, () async {
+        if (readOnly) return false;
         final current = _index.group(groupKey);
         if (current == null || !current.pinned) return false;
         await _index.putGroup(
