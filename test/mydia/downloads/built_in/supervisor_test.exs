@@ -39,7 +39,8 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
     children =
       BuiltInSupervisor.children(%Config{enabled?: true, vpn?: true}, credentials: {"u", "p"})
 
-    assert ids(children) == [Status, Engine, Limits, Vpn]
+    # Limits last: under rest_for_one, a Limits crash must not restart the gate.
+    assert ids(children) == [Status, Engine, Vpn, Limits]
     assert engine_opts(children)[:autostart] == false
   end
 

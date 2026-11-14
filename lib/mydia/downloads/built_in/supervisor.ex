@@ -1,7 +1,7 @@
 defmodule Mydia.Downloads.BuiltIn.Supervisor do
   @moduledoc """
   One running instance of the built-in torrent client: `Status`, `Engine`,
-  `Limits` and, with the VPN on, the `Vpn` gate.
+  with the VPN on the `Vpn` gate, and `Limits`.
 
   `Mydia.Downloads.BuiltIn.Manager` decides what runs and starts this tree
   under a `DynamicSupervisor`, replacing the whole tree whenever the effective
@@ -9,7 +9,9 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
   given; it reads no environment and stores nothing globally.
 
   `rest_for_one`: if `Status` restarts, the engine and the VPN gate restart
-  with it, so nothing reports into a fresh, empty status.
+  with it, so nothing reports into a fresh, empty status. `Limits` comes last,
+  so a crash there restarts nothing else, least of all the VPN gate; it
+  catches up on a status it missed when it starts.
 
   Options: `:config` (a `Config`, required), `:credentials` (required),
   `:api_port` (default `config.api_port`), `:expected_hash` (the settings file
@@ -45,10 +47,11 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
         shutdown: @engine_shutdown_ms
       )
 
-    base = [{Status, warnings: config.warnings}, engine, {Limits, config: config}]
+    vpn =
+      if config.vpn?,
+        do: [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
+        else: []
 
-    if config.vpn?,
-      do: base ++ [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
-      else: base
+    [{Status, warnings: config.warnings}, engine] ++ vpn ++ [{Limits, config: config}]
   end
 end
