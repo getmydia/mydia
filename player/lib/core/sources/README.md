@@ -560,9 +560,27 @@ A paired player can lend its files libraries to the others in its sync group.
 Each lent account is a files `Source` that `peerFilesSourcesProvider`
 (`files/peer_files_sources.dart`) derives from `PeerFilesClient.accounts`. None
 is stored: it cannot be renamed, rescanned or removed here, and it goes when
-its host stops lending it (the host is revoked, this device left the group, or
-the host's manifest no longer lists the account). The label is
+its host stops lending it (the host is revoked, this device left the group,
+the host's manifest no longer lists the account, or the host answers
+`Revoked` because its roster revoked this device). The label is
 `<device> · <account>`, such as "Living Room TV · Movies".
+
+A host lends its own files accounts minus any with a hidden server
+(`lentFilesAccounts`), whether or not the app is unlocked: hidden means no
+trace, and a paired device has no app lock of the host's to respect. Hiding
+or unhiding one bumps its revision, so paired players drop or fetch it.
+
+New files reach an open viewer two ways. Each revision bump (a scan, a pin, a
+root or address change) sends a throttled sync round, and every member that
+receives one notifies its sync state, which refreshes its `PeerFilesClient`.
+Pull to refresh on Home and on a library also asks the lending host
+(`refreshPeerFilesSources`), waiting up to `peerFilesPullWait`.
+
+Revisions start from the clock: a bump moves the counter to one more, or to
+the current time in milliseconds when that is larger
+(`nextPeerFilesRevision`). The in-memory fallback starts over each launch and
+the box after a reinstall, and a viewer keeps the revision it fetched at, so a
+reset counter must never hand out a number already used for another index.
 
 The account id is `p<12 hex>_<host account id>`: the first 12 hex characters
 of the host's node id, then the host's own id for the account
@@ -586,13 +604,22 @@ unsupported, and files are not downloadable. Watch state is the exception: it
 syncs on the host's account id (`syncAccountId`), so it lands on the host's
 records.
 
-Read path: `PeerFilesBackend.playable` opens one byte of the file as an
-`HlsStream` request to the host with session id `peerfile:<host account id>`
-and the host's full backend path as base64url without padding
-(`MediaRoutes.peerFileToken`). A 404, 403 or 502 there fails the play before
-the video pipeline sees it. Then it starts a local proxy target for the host
-and returns `/peerfile/<host account id>/<token>/stream` on it. The host's side
-is described in `native/README.md`.
+Read path: `PeerFilesBackend.playable` first dials the host when it is not
+connected, once, with the EndpointAddr JSON from its peer sync roster entry: a
+read only waits for a connection and never makes one. Then it opens one byte
+of the file as an `HlsStream` request to the host with session id
+`peerfile:<host account id>` and the host's full backend path as base64url
+without padding (`MediaRoutes.peerFileToken`). A 404, 403 or 502 there fails
+the play before the video pipeline sees it; a 416 is an empty file and plays.
+Then it starts a local proxy target for the host and returns
+`/peerfile/<host account id>/<token>/stream` on it. The host's side is
+described in `native/README.md`.
+
+The host answers 404 only for a path it does not lend or a file its backend
+says is gone, and 502 when the share behind a lent path fails, or its grant
+times out. A WebDAV share over HTTPS whose certificate chains to a private or
+user-installed CA plays on the host but answers 502 to every peer: the host's
+Rust reader trusts Mozilla's roots, not the system store.
 
 Status comes from the probe: a peer backend is reachable only while its host
 is connected, so an unconnected host reads `unreachable` and the library still
@@ -602,8 +629,10 @@ browses from the local copy. The source probes again when its host connects
 Errors are worded with the device name (`SourceFault.peerFiles*`): an
 unconnected or silent host is "isn't reachable", a 502 from a host that is up
 is "can't reach its share", and a 404 is "no longer on" the device and asks the
-client to refresh that host's manifest. A 403 also refreshes it; revocation
-itself arrives from the roster, so a refused read never tears sources down.
+client to refresh that host's manifest. A 403 also refreshes it, and a host
+that revoked this device answers that manifest `Revoked`, which tears its
+sources down. The refused read itself never does: a 403 alone could be a
+host whose allowlist has not caught up.
 
 ### Peer-to-peer watch-state and match-pin sync
 

@@ -23,9 +23,11 @@ class PeerFilesBackend implements FileSystemBackend {
     required MediaProxy proxy,
     required PeerFilesTransport transport,
     required bool Function(String nodeId) isConnected,
+    String? Function(String nodeId)? addressOf,
   })  : _proxy = proxy,
         _transport = transport,
-        _isConnected = isConnected;
+        _isConnected = isConnected,
+        _addressOf = addressOf;
 
   final String nodeId;
 
@@ -34,6 +36,10 @@ class PeerFilesBackend implements FileSystemBackend {
   final MediaProxy _proxy;
   final PeerFilesTransport _transport;
   final bool Function(String nodeId) _isConnected;
+
+  /// The host's EndpointAddr JSON from the sync roster, null when the
+  /// roster holds none.
+  final String? Function(String nodeId)? _addressOf;
 
   /// The proxy target for [nodeId], shared by all of its accounts.
   static String targetFor(String nodeId) =>
@@ -70,6 +76,10 @@ class PeerFilesBackend implements FileSystemBackend {
   Future<PlayableFile> playable(String path) async {
     // A source built from a record that names no host has nowhere to read.
     if (nodeId.isEmpty) throw const BackendUnreachable('no peer node id');
+    // A read only waits for a connection; it never makes one. A host this
+    // device is not connected to is dialed once, with the address its
+    // roster entry holds, so a play can reach a host nothing else has.
+    if (!_isConnected(nodeId)) await _dial();
     final token = MediaRoutes.peerFileToken(path);
     // One byte first, so a host that is gone or a file that is gone fails
     // here, where it can be named, rather than inside the video pipeline.
@@ -89,7 +99,8 @@ class PeerFilesBackend implements FileSystemBackend {
     final status = probe.header.status;
     probe.cancel();
     switch (status) {
-      case >= 200 && < 300:
+      // 416 answers a one-byte probe of an empty file: it is there.
+      case (>= 200 && < 300) || 416:
         break;
       case 404:
         throw const BackendNotFound('not on the peer');
@@ -112,6 +123,18 @@ class PeerFilesBackend implements FileSystemBackend {
       url: MediaRoutes.peerFile(
           _proxy.targetBaseUrl(target), hostAccountId, path),
     );
+  }
+
+  /// Dials the host with its roster address. Never throws: a dial that
+  /// fails leaves the probe after it to fail, as unreachable.
+  Future<void> _dial() async {
+    final address = _addressOf?.call(nodeId);
+    if (address == null) return;
+    try {
+      await _transport.dial(address);
+    } catch (e) {
+      debugPrint('[PeerFilesBackend] Dialing $nodeId failed: $e');
+    }
   }
 
   @override

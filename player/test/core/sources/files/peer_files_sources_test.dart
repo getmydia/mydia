@@ -285,9 +285,25 @@ void main() {
     await _settle();
     expect(peer.connection, SourceConnectionStatus.unreachable);
 
-    h.connected.add(hostNode);
+    // Node ids compare without regard to case, as the roster's do.
+    h.connected.add(hostNode.toUpperCase());
     await _settle();
     expect(peer.connection, SourceConnectionStatus.local);
+  });
+
+  test('pull to refresh asks the host of each peer source among the ids',
+      () async {
+    h.client.list.value = [lentFlocal()];
+    final c = await container();
+    final ids = c.read(sourcesProvider).map((s) => s.id).toList();
+    expect(ids, hasLength(2));
+
+    // This device's own source asks nobody.
+    await refreshPeerFilesSources(c.read, [ids.first]);
+    expect(h.client.refreshed, isEmpty);
+
+    await refreshPeerFilesSources(c.read, ids);
+    expect(h.client.refreshed, [hostNode]);
   });
 
   test('revoked_host_removes_sources', () async {

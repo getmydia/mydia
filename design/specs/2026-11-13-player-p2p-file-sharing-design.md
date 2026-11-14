@@ -78,6 +78,8 @@ pub enum PeerFilesResponse {
     IndexPage { records: WireIndexPage, next_cursor: Option<String> },
     StaleRevision,
     NotAuthorized,
+    // Appended last: the host's roster marks the requester revoked.
+    Revoked,
 }
 
 pub struct WireSharedAccount {
@@ -133,27 +135,41 @@ while the device belongs to a sync group.
 - It listens on a new `peer_files_stream` from `mydia_player_p2p` and answers
   with `respond_to_peer_files`, the same shape as `peer_sync_stream` and
   `respond_to_peer_sync`.
-- `Manifest` lists every Files account with its `revision` and `dedupe_key`.
-  The key is the existing normalized identity: `normalizeSmbUrl` plus the
-  share path for SMB, `normalizeWebDavUrl` for WebDAV, null for local
+- `Manifest` lists every Files account with its `revision` and `dedupe_key`,
+  except an account with a hidden server, which is never lent, locked or
+  not. The key is the existing normalized identity: `normalizeSmbUrl` plus
+  the share path for SMB, `normalizeWebDavUrl` for WebDAV, null for local
   folders.
+- A request from a node the host's roster marks revoked is answered
+  `Revoked`, before the proof is checked. A revoked device cannot sync, so
+  this is how it learns of the revocation. `NotAuthorized` covers everything
+  else that fails a check, including a host whose secret did not load, and
+  proves nothing about membership.
 - `IndexPage` reads `FileLibraryIndex` directly. Paths are sent as the host
   stores them: they only mean something to the host, which is also the only
   device that resolves them. If the account's revision no longer equals the
   requested one, the answer is `StaleRevision`.
 - One revision counter per account, persisted in Hive, bumps when
-  `FilesScanController` finishes a scan and when a match or pin changes.
+  `FilesScanController` finishes a scan, when a match or pin changes, and
+  when the account is hidden or unhidden. A bump moves it to one more or to
+  the clock in milliseconds, whichever is larger, so a counter that starts
+  over (the in-memory fallback, a reinstall) never repeats a number a viewer
+  holds. Each bump also sends a throttled sync round, which nudges the
+  members to fetch the manifest.
 - It pushes the member allowlist into Rust.
 
 **Grants.** The host does not pre-register files. On a read for an
 `(account_id, path)` it has no grant for, Rust makes one call into Dart
 (`peer_file_grant_stream`, answered with `respond_peer_file_grant`). Dart
 accepts the path only if it is an indexed file of that account or one of its
-sidecars, calls the backend's `playable()`, and returns the URL and headers,
-or not found.
+sidecars, calls the backend's `playable()`, and answers one of three ways:
+granted (the URL and headers), not shared (404: the path is not lent, or
+the backend says the file is gone), or failed (502: the path is lent but its
+backend could not be opened). A grant request Dart does not answer within 10
+seconds is also a 502.
 Rust caches grants per account and drops an account's cache when its revision
 bumps (Dart tells it) and after any failed read, so a re-addressed SMB share
-resolves again.
+resolves again. A failed answer is never cached.
 
 **Byte serving** (`player/rust/mydia_player_p2p/src/peer_files_host.rs`):
 
@@ -171,7 +187,10 @@ resolves again.
 the shared libraries.
 
 - For every active member it fetches the `Manifest` on startup, after each
-  successful PeerSync round with that member, and on pull to refresh.
+  PeerSync round (sent or received), and on pull to refresh (Home and a
+  library page, for the hosts of the peer sources on screen).
+- A `Revoked` answer to a manifest or page deletes every copy that host
+  lent.
 - For each account whose revision changed, it fetches every `IndexPage` into
   a new generation in the `peer_files_index` Hive box and flips that
   account's generation pointer once the last page arrives, then deletes the
@@ -224,14 +243,19 @@ the manifest, when its host is revoked, or when this device leaves the group.
 - **Host offline.** The replicated index stays, so the library still browses
   with posters and watch state. The source reports unreachable through
   `current_source_status`, from the member's last successful contact. Play
-  tries one dial with the roster's address hints, then fails quickly with
-  "Living Room TV isn't reachable. It needs to be on with Mydia Player open."
+  tries one dial with the roster's address hints (a read alone only waits
+  for a connection), then fails quickly with "Living Room TV isn't
+  reachable. It needs to be on with Mydia Player open."
 - **404** shows "This file is no longer on Living Room TV" and triggers a
   manifest fetch.
 - **502** shows "Living Room TV can't reach its share right now". The host has
-  already dropped that account's grants.
-- **403** is treated as revocation: every peer source from that host is torn
-  down.
+  already dropped that account's grants. A WebDAV share over HTTPS whose
+  certificate chains to a private or user-installed CA plays on the host but
+  answers 502 to peers: the host's Rust reader trusts Mozilla's roots, not
+  the system store.
+- **416** answers the one-byte probe of an empty file, which plays.
+- **403** triggers a manifest fetch. A host that revoked this device answers
+  it `Revoked`, and every peer source from that host is torn down.
 - **Mid-playback drop.** `range_spool` retries the current range on a fresh
   stream. A host that stays gone surfaces as the existing playback error.
 - **Relay.** The detail screen shows the existing via-relay connection badge.
@@ -260,7 +284,8 @@ the manifest, when its host is revoked, or when this device leaves the group.
 
 **`mydia_player_p2p`:** the host byte server against a temp file and a local
 HTTP server: exact bytes for a range, open-ended ranges, 403 for a
-non-member, 404 for an unresolved grant, 502 on upstream failure, a cancel
+non-member, 404 for a path not shared, 502 for a failed or timed-out grant
+and on upstream failure, a cancel
 mid-stream stops the upstream read, the fifth concurrent read from one peer
 waits for a slot, and the grant cache is dropped on invalidation and after a
 failed read.

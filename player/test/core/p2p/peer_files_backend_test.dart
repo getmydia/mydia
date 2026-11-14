@@ -14,13 +14,16 @@ void main() {
   late FakePeerProxy proxy;
 
   PeerFilesBackend backend(FakePeerRangeTransport transport,
-          {bool connected = true, String nodeId = _node}) =>
+          {bool connected = true,
+          String nodeId = _node,
+          String? Function(String)? addressOf}) =>
       PeerFilesBackend(
         nodeId: nodeId,
         hostAccountId: 'flocal',
         proxy: proxy,
         transport: transport,
         isConnected: (_) => connected,
+        addressOf: addressOf,
       );
 
   FakePeerRangeTransport answering(int status) =>
@@ -73,6 +76,46 @@ void main() {
   test('probe_403_throws_unauthorized', () async {
     await expectLater(backend(answering(403)).playable(path),
         throwsA(isA<BackendUnauthorized>()));
+  });
+
+  test('a disconnected host is dialed with its roster address before the probe',
+      () async {
+    const address = '{"id":"$_node","addrs":["192.0.2.7:4921"]}';
+    final asked = <String>[];
+    final transport = answering(206);
+    await backend(transport, connected: false, addressOf: (n) {
+      asked.add(n);
+      return address;
+    }).playable(path);
+    expect(asked, [_node]);
+    expect(transport.calls, ['dial $address', 'open $_node']);
+  });
+
+  test('a connected host is not dialed', () async {
+    final transport = answering(206);
+    await backend(transport, addressOf: (_) => '{"id":"$_node"}')
+        .playable(path);
+    expect(transport.calls, ['open $_node']);
+  });
+
+  test('a failed dial still probes, and no address skips the dial', () async {
+    final failing = answering(206)..dialFailure = Exception('no route');
+    await backend(failing, connected: false, addressOf: (_) => '{"id":"x"}')
+        .playable(path);
+    expect(failing.calls, ['dial {"id":"x"}', 'open $_node']);
+
+    final unknown = answering(206);
+    await backend(unknown, connected: false, addressOf: (_) => null)
+        .playable(path);
+    expect(unknown.calls, ['open $_node']);
+  });
+
+  test('an empty file answers the probe 416 and still plays', () async {
+    final transport = answering(416);
+    final file = await backend(transport).playable(path);
+    expect(transport.streams.single.isCancelled, isTrue);
+    expect(proxy.starts.single, (targetPeer: _node, target: _target));
+    expect(file.url, endsWith('/stream'));
   });
 
   test('list_and_stat_throw', () async {

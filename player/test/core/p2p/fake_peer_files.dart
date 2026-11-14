@@ -52,6 +52,18 @@ class FakePeerRangeTransport implements PeerFilesTransport {
   })>[];
   final streams = <FakeRangeStream>[];
 
+  /// Every call in order: `dial <address>` and `open <peer>`.
+  final calls = <String>[];
+
+  /// Thrown by [dial] when set.
+  Exception? dialFailure;
+
+  @override
+  Future<void> dial(String endpointAddrJson) async {
+    calls.add('dial $endpointAddrJson');
+    if (dialFailure case final e?) throw e;
+  }
+
   @override
   Future<P2pRangeStream> openRangeStream({
     required String peer,
@@ -61,6 +73,7 @@ class FakePeerRangeTransport implements PeerFilesTransport {
     int? rangeEnd,
     String? authToken,
   }) async {
+    calls.add('open $peer');
     opens.add((
       peer: peer,
       sessionId: sessionId,

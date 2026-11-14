@@ -57,8 +57,6 @@ Future<void> openFilesLibraryBoxes() async {
       HivePlaybackProgressStore.boxName);
   final syncBox =
       await Hive.openBox<Map<dynamic, dynamic>>(PeerSyncStore.boxName);
-  await Hive.openBox<int>(HivePeerFilesRevisions.boxName);
-  await Hive.openBox<Map<dynamic, dynamic>>(PeerFilesStore.boxName);
   final syncStore = HivePeerSyncStore(syncBox);
   final progressStore = HivePlaybackProgressStore(progressBox);
   await seedPeerSyncStoreIfNeeded(
@@ -66,6 +64,26 @@ Future<void> openFilesLibraryBoxes() async {
     indexBox: indexBox,
     progressStore: progressStore,
   );
+  await openPeerFilesBoxes();
+}
+
+/// Opens the boxes peer file sharing keeps: the revisions this device
+/// lends at and the copies it borrows. Each failure is its own, and none
+/// fails startup: without the revisions box the counters live in memory
+/// (see `peerFilesRevisionsProvider`), and without the copies box no lent
+/// library shows (see `peerFilesAccountsProvider`). Neither is worth the
+/// files libraries or the peer sync seeding, which run before this.
+Future<void> openPeerFilesBoxes() async {
+  try {
+    await Hive.openBox<int>(HivePeerFilesRevisions.boxName);
+  } catch (e) {
+    debugPrint('[FilesSource] Peer files revisions box did not open: $e');
+  }
+  try {
+    await Hive.openBox<Map<dynamic, dynamic>>(PeerFilesStore.boxName);
+  } catch (e) {
+    debugPrint('[FilesSource] Peer files copies box did not open: $e');
+  }
 }
 
 /// The `files_index` box, opened by [openFilesLibraryBoxes].
@@ -127,12 +145,14 @@ final filesBackendBuilderProvider =
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
   if (isPeerFilesSource(source)) {
     final p2p = ref.read(p2pServiceProvider);
+    final sync = ref.read(peerSyncServiceProvider);
     return PeerFilesBackend(
       nodeId: source.server.machineIdentifier ?? '',
       hostAccountId: peerFilesHostAccountId(source.account.id),
       proxy: ref.read(mediaProxyProvider),
       transport: P2pPeerFilesTransport(p2p),
       isConnected: p2p.isConnectedToPeer,
+      addressOf: (nodeId) => sync.member(nodeId)?.endpointAddrJson,
     );
   }
   if (source.account.id == kFilesLocalAccountId ||
@@ -223,11 +243,12 @@ FilesMediaSource buildFilesSource(
   // then, so the check on open alone would not see it. A lent library is
   // probed again when its host connects instead, since reachable means
   // connected for it.
-  final hostNode = source.server.machineIdentifier;
+  // Node ids compare without regard to case, as the roster does.
+  final hostNode = source.server.machineIdentifier?.toLowerCase();
   final StreamSubscription<Object?> events = peer
       ? ref
           .read(peerConnectedProvider)
-          .where((n) => n == hostNode)
+          .where((n) => n.toLowerCase() == hostNode)
           .listen((_) => unawaited(media.probe()))
       : ref.read(connectionRefreshBusProvider).events.listen((_) {
           unawaited(media.probe());

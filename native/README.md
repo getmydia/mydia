@@ -145,19 +145,44 @@ security boundary:
 - Only peers in the member allowlist Dart pushes in are answered; anyone else
   gets 403.
 - Rust never decides which paths are readable. It asks Dart for a grant per
-  `(account id, path)`. Dart grants only indexed files and their sidecars, and
-  anything without a grant is 404.
+  `(account id, path)` and Dart answers one of three ways
+  (`FlutterPeerFileGrantAnswer`): granted, for an indexed file or one of its
+  sidecars; not shared, for anything else, which is 404; or failed, for a
+  shared path whose backend could not be opened, which is 502. A 404 tells
+  the viewer the file is gone, so it is kept for what Dart knows is not
+  there.
 - A grant is cached per `(account id, path)` so a seeking player does not ask
   Dart on every range. It is dropped when its read finds nothing readable, and
   when Dart invalidates the account (its index changed). A grant resolved
-  across an invalidation is served but not cached.
+  across an invalidation is served but not cached. A failed answer is never
+  cached.
 - Each peer gets 4 concurrent reads (`READS_PER_PEER`). The fifth waits for a
   slot rather than failing.
 - A grant request Dart does not answer in 10 seconds (`GRANT_TIMEOUT`) is a
-  404.
+  502: silence says nothing about whether the file is shared.
+- Node ids in the allowlist compare without regard to case, as Dart's roster
+  does.
 
 A share the host cannot reach answers 502 and drops that account's grants;
 the viewer words it differently from a host that never answered.
+
+TLS on the host's `http(s)` reads uses Mozilla's roots (`webpki-roots`), not
+the operating system's store. A WebDAV share served over HTTPS with a private
+CA, or a certificate the user installed on the host device, plays on the host
+(Dart's client trusts the system store) but answers 502 to every paired
+player. Plain HTTP and publicly trusted certificates are unaffected.
+
+`PeerFilesResponse::Revoked` (appended after `NotAuthorized`) answers a
+manifest or page request from a node the host's roster marks revoked. A
+revoked device cannot sync, so its own roster never learns of the revocation;
+this answer is how it does, and the viewer deletes every copy that host lent
+it. `NotAuthorized` proves nothing about membership (it also covers a host
+whose group secret did not load) and deletes nothing.
+
+Neither `PeerFiles` requests nor `peerfile:` reads dial (see "send_request
+dials on demand" above): before a play, `PeerFilesBackend` dials a host it is
+not connected to once, with the EndpointAddr JSON its peer sync roster entry
+holds.
 
 ## Tracing the transport on a running server
 

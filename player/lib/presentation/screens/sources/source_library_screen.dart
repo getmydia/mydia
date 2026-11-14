@@ -24,6 +24,8 @@ import '../../../l10n/l10n.dart';
 import '../../../core/sources/source.dart' show SourceKind;
 import '../../widgets/browse_grid.dart';
 import '../../../core/sources/files/files_scan_controller.dart';
+import '../../../core/sources/files/peer_files_sources.dart'
+    show refreshPeerFilesSources;
 import '../../widgets/files/files_scan_banner.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/glass/glass_chip.dart';
@@ -340,8 +342,12 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
               query: query,
               onChanged: _setQuery,
             ),
-      onRefresh: () async =>
-          ref.read(invalidatorProvider).invalidate([key.target]),
+      onRefresh: () async {
+        // A library a paired player lends refetches the host's index first,
+        // so the browse below reads the new copy.
+        await refreshPeerFilesSources(ref.read, [library.sourceId]);
+        await ref.read(invalidatorProvider).invalidate([key.target]);
+      },
       body: (context, scrollTopPadding) => _withScanBanner(
           scrollTopPadding,
           (scrollTopPadding) => switch (browse) {

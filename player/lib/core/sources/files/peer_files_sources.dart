@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
 import '../../p2p/p2p_service.dart' show p2pServiceProvider;
@@ -83,6 +84,35 @@ class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
 /// connect a host.
 final peerConnectedProvider = Provider<Stream<String>>(
     (ref) => ref.watch(p2pServiceProvider).onPeerConnected);
+
+/// How long a pull to refresh waits for the hosts it asks. A host that has
+/// not answered by then finishes in the background, and its new copy
+/// rebuilds the source when it lands.
+const peerFilesPullWait = Duration(seconds: 5);
+
+/// Asks the host lending each peer source among [ids] for what it lends
+/// now, so a pull to refresh shows the files it indexed since its last
+/// nudge. [read] is a `ref.read`. Never throws.
+Future<void> refreshPeerFilesSources(
+  T Function<T>(ProviderListenable<T> provider) read,
+  Iterable<SourceId> ids,
+) async {
+  // A source id is `<account>:<profile>:<server>`.
+  final accountIds = {for (final id in ids) id.value.split(':').first};
+  if (!accountIds.any(isPeerFilesAccountId)) return;
+  final nodes = {
+    for (final a in read(peerFilesAccountsProvider))
+      if (accountIds.contains(a.localAccountId)) a.nodeId,
+  };
+  if (nodes.isEmpty) return;
+  final client = read(peerFilesClientProvider);
+  try {
+    await Future.wait([for (final n in nodes) client.refresh(nodeId: n)])
+        .timeout(peerFilesPullWait);
+  } on TimeoutException {
+    // Left to finish: see [peerFilesPullWait].
+  }
+}
 
 /// One source per lent account, labelled with the lending device's name
 /// and the account's, as "Living Room TV · Movies".
