@@ -22138,11 +22138,6 @@ msgstr ""
 msgid "Kept in the download client until the seeding target is met"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:21
-#, elixir-autogen, elixir-format
-msgid "Leave a target blank to seed forever. A tracker's own minimum always applies on top."
-msgstr ""
-
 #: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:50
 #, elixir-autogen, elixir-format
 msgid "Pause"
@@ -22212,4 +22207,9 @@ msgstr ""
 #: lib/mydia_web/components/seeding_components.ex:113
 #, elixir-autogen, elixir-format
 msgid "target %{progress}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:21
+#, elixir-autogen, elixir-format
+msgid "Leave both targets blank to seed forever. A tracker's own minimum always applies on top."
 msgstr ""

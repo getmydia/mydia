@@ -19,7 +19,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
       <legend class="fieldset-legend">{gettext("Seeding")}</legend>
       <p class="text-sm text-base-content/70">
         {gettext(
-          "Leave a target blank to seed forever. A tracker's own minimum always applies on top."
+          "Leave both targets blank to seed forever. A tracker's own minimum always applies on top."
         )}
       </p>
       <%!-- A number input's default step of 1 would make browsers reject 1.5. --%>
