@@ -938,12 +938,11 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
                   pinRevision: pinRecord.updatedAt,
                 );
               } else {
-                final current = source.index.group(pinRecord.groupKey);
-                if (current != null && current.pinned) {
-                  await source.index.putGroup(current.copyWith(
-                    pinned: false,
-                    pinRevision: pinRecord.updatedAt,
-                  ));
+                final released = await source.matcher.applyRemoteUnpin(
+                  pinRecord.groupKey,
+                  pinRevision: pinRecord.updatedAt,
+                );
+                if (released) {
                   await source.invalidateTargets(
                     FilesMediaSource.groupLandedTargets(source.source.id),
                   );

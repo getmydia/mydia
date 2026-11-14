@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/p2p/peer_files_host.dart'
+    show peerFilesHostProvider, peerFilesRevisionsProvider;
 import 'package:player/core/sources/files/backend/smb_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_accounts.dart';
@@ -307,6 +309,62 @@ void main() {
     expect(await storage.read('$namespace/account_token'), isNull);
     expect(c.read(filesIndexProvider(accountId)).roots(), isEmpty);
     expect(FileLibraryIndex(f.box, accountId: accountId).roots(), isEmpty);
+  });
+
+  group('peer files revision', () {
+    test('adding and removing a root bump it', () async {
+      final c = await container();
+      final revisions = c.read(peerFilesRevisionsProvider);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addLocalRoot(
+          path: '/media/films',
+          kind: FilesLibraryKind.movies,
+          accountName: 'This device');
+      await _settle();
+      final added = revisions.revision(kFilesLocalAccountId);
+      expect(added, greaterThan(0));
+
+      await accounts.removeRoot(id, filesRootId('/media/films'));
+      expect(revisions.revision(kFilesLocalAccountId), added + 1);
+    });
+
+    test('removing the account bumps it and drops it from the manifest',
+        () async {
+      final c = await container();
+      final revisions = c.read(peerFilesRevisionsProvider);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addWebDavAccount(
+          url: Uri.parse('https://nas.example.test/dav'),
+          user: 'viewer',
+          password: 'pw');
+      await _settle();
+      final accountId = id.value.split(':').first;
+      final host = c.read(peerFilesHostProvider);
+      expect(host.manifestAccounts().map((a) => a.accountId), [accountId]);
+      final before = revisions.revision(accountId);
+
+      await accounts.removeFilesAccount(accountId);
+
+      expect(revisions.revision(accountId), greaterThan(before));
+      expect(host.manifestAccounts(), isEmpty);
+    });
+
+    test('changing an SMB address bumps it', () async {
+      final smb = FakeSmbNative();
+      final c = await container(smb: smb);
+      final revisions = c.read(peerFilesRevisionsProvider);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addSmbAccount(
+          url: Uri.parse('smb://192.168.1.5/movies'),
+          credentials: const SmbCredentials(user: 'viewer', password: 'pw'));
+      await _settle();
+      final accountId = id.value.split(':').first;
+      final before = revisions.revision(accountId);
+
+      await accounts.setSmbAddress(accountId, host: '10.0.0.7', port: 445);
+
+      expect(revisions.revision(accountId), before + 1);
+    });
   });
 
   test('removing_a_root_drops_it_from_the_index', () async {

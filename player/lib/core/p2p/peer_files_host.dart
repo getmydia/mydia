@@ -144,7 +144,11 @@ class PeerFilesHost {
   StreamSubscription<FlutterInboundPeerFilesRequest>? _requestSub;
   StreamSubscription<FlutterPeerFileGrantRequest>? _grantSub;
   StreamSubscription<void>? _stateSub;
+
+  /// The list Rust last accepted. Recorded only once a push succeeds, so a
+  /// failed one is tried again on the next state change.
   List<String>? _pushedMembers;
+  int _pushes = 0;
 
   /// Listens for requests, then pushes the allowlist, and again on every
   /// change to the group. Outside a group the list is empty, so nothing is
@@ -174,13 +178,28 @@ class PeerFilesHost {
     if (_pushedMembers case final last? when listEquals(last, members)) {
       return;
     }
-    _pushedMembers = members;
+    final push = ++_pushes;
     try {
       await _transport.setPeerFilesMembers(members);
+      // A later push has the last word on what Rust holds.
+      if (push == _pushes) _pushedMembers = members;
     } catch (e) {
+      if (push == _pushes) _pushedMembers = null;
       debugPrint('[PeerFilesHost] Pushing the member allowlist failed: $e');
     }
   }
+
+  /// The accounts a `Manifest` lists, each with its revision and dedupe key.
+  List<FlutterWireSharedAccount> manifestAccounts() => [
+        for (final a in sharedFilesAccounts(_accounts()))
+          FlutterWireSharedAccount(
+            accountId: a.account.id,
+            kind: filesAccountKind(a.account.id),
+            name: a.account.displayName,
+            dedupeKey: filesDedupeKey(a),
+            revision: BigInt.from(_revisions.revision(a.account.id)),
+          ),
+      ];
 
   SourceAccountRecord? _shared(String accountId) =>
       sharedFilesAccounts(_accounts())
@@ -210,16 +229,7 @@ class PeerFilesHost {
     switch (request.request) {
       case FlutterPeerFilesRequest_Manifest(:final authProof):
         if (!_sync.authorizes(request.peer, authProof)) return refused;
-        return FlutterPeerFilesResponse.manifest(accounts: [
-          for (final a in sharedFilesAccounts(_accounts()))
-            FlutterWireSharedAccount(
-              accountId: a.account.id,
-              kind: filesAccountKind(a.account.id),
-              name: a.account.displayName,
-              dedupeKey: filesDedupeKey(a),
-              revision: BigInt.from(_revisions.revision(a.account.id)),
-            ),
-        ]);
+        return FlutterPeerFilesResponse.manifest(accounts: manifestAccounts());
       case FlutterPeerFilesRequest_IndexPage(
           :final authProof,
           :final accountId,

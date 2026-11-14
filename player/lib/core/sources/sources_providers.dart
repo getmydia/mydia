@@ -13,6 +13,7 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
+import '../p2p/peer_files_host.dart' show peerFilesHostProvider;
 import 'files/files_providers.dart'
     show closeRemovedFilesAccount, filesIndexProvider;
 import 'lock/source_lock_controller.dart';
@@ -160,6 +161,18 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
+  /// Tells paired players that a removed files account's pages are gone and
+  /// drops the grants their reads hold, so no cached grant keeps serving
+  /// its files. The record is already gone, so the account has left the
+  /// manifest. Best effort, like [_dropCache].
+  Future<void> _forgetPeerFiles(String accountId) async {
+    try {
+      await ref.read(peerFilesHostProvider).bumpRevision(accountId);
+    } catch (e) {
+      debugPrint('[Sources] Could not withdraw $accountId from peers: $e');
+    }
+  }
+
   /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
   /// like [_dropCache]: leftovers are inert without the account.
   Future<void> _dropCollectionSync(Set<String> sourceIds,
@@ -205,6 +218,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      if (record?.account.kind == SourceKind.files) {
+        await _forgetPeerFiles(accountId);
+      }
       await closeRemovedFilesAccount(ref, accountId);
       // Legacy bare-id entries record no owner and read as the legacy
       // instance's, so they go with the account the legacy rule picked.
@@ -302,6 +318,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         await _dropCache(id);
         if (record.account.kind == SourceKind.files) {
           await _dropFilesIndex(id);
+          await _forgetPeerFiles(id);
           await closeRemovedFilesAccount(ref, id);
         }
         ids.add(id);

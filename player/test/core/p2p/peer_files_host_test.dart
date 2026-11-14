@@ -66,7 +66,10 @@ class _FakeFilesTransport implements PeerFilesTransport {
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) async {
     members.add(nodeIds);
+    if (failMembers) throw Exception('host gone');
   }
+
+  bool failMembers = false;
 
   @override
   Future<void> invalidatePeerFileGrants(String accountId) async {
@@ -478,6 +481,20 @@ void main() {
     expect(groups, hasLength(300));
     expect(movies, hasLength(50));
     expect(shows.single.toMap(), localIndex.show(9100)!.toMap());
+
+    // Exactly once each: the counts match the index and no key repeats.
+    expect(roots, hasLength(localIndex.roots().length));
+    expect(roots.map((r) => r.id).toSet(), hasLength(roots.length));
+    expect(files.map((f) => f.key).toSet(), hasLength(files.length));
+    expect(groups, hasLength(localIndex.groups().length));
+    expect(groups.map((g) => g.groupKey).toSet(), hasLength(groups.length));
+    expect(byKey(groups, (g) => g.groupKey, (g) => g.toMap()),
+        byKey(localIndex.groups(), (g) => g.groupKey, (g) => g.toMap()));
+    expect(movies, hasLength(localIndex.movies().length));
+    expect(movies.map((m) => m.tmdbId).toSet(), hasLength(movies.length));
+    expect(byKey(movies, (m) => '${m.tmdbId}', (m) => m.toMap()),
+        byKey(localIndex.movies(), (m) => '${m.tmdbId}', (m) => m.toMap()));
+    expect(shows, hasLength(localIndex.shows().length));
   });
 
   test('stale_revision_when_scan_finishes_mid_fetch', () async {
@@ -557,6 +574,28 @@ void main() {
     await sync.leaveGroup();
     await pumpEventQueue();
     expect(transport.members.last, isEmpty);
+  });
+
+  test('a failed allowlist push is retried on the next state change', () async {
+    expect(transport.members.last, [_viewerNode]);
+    transport.failMembers = true;
+    await sync.revokePeer(_viewerNode);
+    await pumpEventQueue();
+    expect(transport.members.last, isEmpty);
+    final attempts = transport.members.length;
+
+    // Same roster, but Rust never took the list: it goes again.
+    transport.failMembers = false;
+    await sync.revokePeer(_viewerNode);
+    await pumpEventQueue();
+    expect(transport.members.length, greaterThan(attempts));
+    expect(transport.members.last, isEmpty);
+
+    // Once taken, an unchanged list is not pushed again.
+    final settled = transport.members.length;
+    await sync.revokePeer(_viewerNode);
+    await pumpEventQueue();
+    expect(transport.members.length, settled);
   });
 
   test('bump_invalidates_rust_grants', () async {

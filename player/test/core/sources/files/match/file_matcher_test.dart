@@ -285,6 +285,17 @@ void main() {
     await m.applyRemotePin('coppervalley|2018', isShow: false, tmdbId: 7);
     expect(index.group('coppervalley|2018')!.tmdbId, 7);
     expect(pinned, 2);
+
+    expect(
+        await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 99), isTrue);
+    final g = index.group('coppervalley|2018')!;
+    expect((g.pinned, g.pinRevision), (false, 99));
+    expect(pinned, 3);
+
+    // Nothing pinned: nothing written, nothing reported.
+    expect(await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 100),
+        isFalse);
+    expect(pinned, 3);
   });
 
   test('unmatch_pin_moves_files_to_folders', () async {

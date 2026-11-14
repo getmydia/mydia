@@ -52,8 +52,8 @@ class FileMatcher {
   final void Function()? _onSyncMutation;
   final Future<void> Function()? _onGroupLanded;
 
-  /// Called after a pin (a Fix match here, or one applied from peer sync)
-  /// is written. Automatic matches do not call it: the scan that runs them
+  /// Called after a pin or unpin (a Fix match here, or one applied from
+  /// peer sync) is written. Automatic matches do not call it: the scan that runs them
   /// reports its own end.
   final void Function()? _onPinned;
   final _Semaphore _slots;
@@ -131,6 +131,19 @@ class FileMatcher {
         recordSync: false,
         pinRevision: pinRevision,
       );
+
+  /// Applies an unpin received from remote peer sync: a pinned group is
+  /// released, recording [pinRevision], and is matched automatically on the
+  /// next scan. Returns whether it wrote anything.
+  Future<bool> applyRemoteUnpin(String groupKey, {required int pinRevision}) =>
+      _serialized(groupKey, () async {
+        final current = _index.group(groupKey);
+        if (current == null || !current.pinned) return false;
+        await _index.putGroup(
+            current.copyWith(pinned: false, pinRevision: pinRevision));
+        _onPinned?.call();
+        return true;
+      });
 
   Future<void> _pin(
     String groupKey, {
