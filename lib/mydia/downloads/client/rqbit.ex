@@ -118,6 +118,48 @@ defmodule Mydia.Downloads.Client.Rqbit do
     end)
   end
 
+  @impl true
+  def list_torrent_files(config, torrent) do
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+      {body, params} = build_add_request(torrent, [])
+
+      case HTTP.post(req, "/torrents", params: Map.put(params, :list_only, true), body: body) do
+        {:ok, %{status: status, body: resp_body}} when status in 200..299 ->
+          {:ok, parse_listing(resp_body)}
+
+        {:ok, response} ->
+          {:error, api_error_from(response)}
+
+        {:error, _} = error ->
+          error
+      end
+    end)
+  end
+
+  defp parse_listing(body) when is_map(body) do
+    files =
+      case get_in(body, ["details", "files"]) do
+        files when is_list(files) -> files
+        _ -> []
+      end
+
+    %{
+      files:
+        files
+        |> Enum.with_index()
+        |> Enum.map(fn {file, index} ->
+          %{index: index, path: listing_path(file), length: file["length"] || 0}
+        end),
+      peers: if(is_list(body["seen_peers"]), do: body["seen_peers"], else: [])
+    }
+  end
+
+  defp parse_listing(_), do: %{files: [], peers: []}
+
+  defp listing_path(%{"components" => [_ | _] = components}), do: Enum.join(components, "/")
+  defp listing_path(file), do: file["name"] || ""
+
   defp finish_add(config, resp_body, opts) do
     case extract_info_hash(resp_body) do
       nil ->
@@ -253,7 +295,13 @@ defmodule Mydia.Downloads.Client.Rqbit do
   defp add_params(opts, is_url: is_url) do
     %{is_url: is_url}
     |> maybe_put(:output_folder, opts[:save_path])
+    |> maybe_put(:only_files, join_list(opts[:only_files]))
+    |> maybe_put(:initial_peers, join_list(opts[:initial_peers]))
   end
+
+  # An empty list counts as unset: rqbit rejects an empty `only_files`.
+  defp join_list(list) when is_list(list) and list != [], do: Enum.join(list, ",")
+  defp join_list(_), do: nil
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)

@@ -192,6 +192,123 @@ defmodule Mydia.Downloads.Client.RqbitTest do
     end
   end
 
+  describe "list_torrent_files/2 and selective add (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "list_torrent_files posts list_only and returns files and peers", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["list_only"] == "true"
+
+        json_resp(conn, 200, %{
+          "id" => nil,
+          "output_folder" => "/downloads/Pack",
+          "seen_peers" => ["10.0.0.2:6881"],
+          "details" => %{
+            "info_hash" => @hash,
+            "output_folder" => "/downloads/Pack",
+            "files" => [
+              %{
+                "name" => "e01.mkv",
+                "components" => ["Pack", "e01.mkv"],
+                "length" => 100,
+                "included" => true,
+                "attributes" => %{}
+              }
+            ]
+          }
+        })
+      end)
+
+      assert {:ok,
+              %{files: [%{index: 0, path: "Pack/e01.mkv", length: 100}], peers: ["10.0.0.2:6881"]}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?xt=urn:btih:#{@hash}"})
+    end
+
+    test "list_torrent_files tolerates null seen_peers and falls back to name", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, %{
+          "id" => nil,
+          "seen_peers" => nil,
+          "details" => %{
+            "files" => [%{"name" => "solo.mkv", "components" => [], "length" => 7}]
+          }
+        })
+      end)
+
+      assert {:ok, %{files: [%{index: 0, path: "solo.mkv", length: 7}], peers: []}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?x"})
+    end
+
+    test "list_torrent_files returns the API error on non-2xx", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 400, %{"error_kind" => "internal_error", "human_readable" => "nope"})
+      end)
+
+      assert {:error, %Mydia.Downloads.Client.Error{}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?x"})
+    end
+
+    test "add_torrent sends only_files and initial_peers comma-joined", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["only_files"] == "0,3"
+        assert conn.query_params["initial_peers"] == "10.0.0.2:6881,10.0.0.3:6881"
+        json_resp(conn, 200, add_response(@hash))
+      end)
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: [0, 3],
+                 initial_peers: ["10.0.0.2:6881", "10.0.0.3:6881"]
+               )
+    end
+
+    test "add_torrent omits only_files and initial_peers when nil or empty", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        refute Map.has_key?(conn.query_params, "only_files")
+        refute Map.has_key?(conn.query_params, "initial_peers")
+        json_resp(conn, 200, add_response(@hash))
+      end)
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: nil,
+                 initial_peers: nil
+               )
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: [],
+                 initial_peers: []
+               )
+    end
+
+    test "Client.list_torrent_files returns {:error, :unsupported} without the callback" do
+      defmodule NoListAdapter do
+      end
+
+      assert {:error, :unsupported} =
+               Mydia.Downloads.Client.list_torrent_files(NoListAdapter, %{}, {:magnet, "m"})
+    end
+  end
+
   describe "get_status/2 state mapping (Bypass)" do
     setup do
       bypass = Bypass.open()
