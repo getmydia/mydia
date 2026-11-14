@@ -143,7 +143,10 @@ Enabling backup shows the key, offers save, print and QR, and requires typing
 back one group chosen at random before the vault is created. "Generate a new
 recovery key" replaces the recovery signer, lookup hash and envelope in one
 member update; the old key stops working at once. The key can be shown again
-on any member device, since each member keeps it in `AuthStorage`.
+only on a device that holds it: the one that created or last regenerated it,
+or one restored with it. It is never sent to devices that join by pairing,
+because a device holding the recovery key can rejoin the vault after being
+removed. A device without it offers "Generate a new recovery key" instead.
 
 ### Revocation and rotation
 
