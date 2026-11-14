@@ -320,8 +320,29 @@ defmodule Mydia.Downloads.SeedingGoalTest do
 
       assert required_time == 72 * 3600
 
-      assert %SeedingGoal{met?: true} =
+      assert %SeedingGoal{met?: true, target_met?: true} =
                SeedingGoal.for_download(%{row | ratio: 2.0}, now: @now, target: target)
+    end
+
+    test "target_met? reports the operator target apart from the tracker terms" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 1.2,
+        seeding_time: 60,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{met?: false, target_met?: true} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: false} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 2.0, seed_time: nil})
+
+      # No target at all: nothing of the operator's is pending.
+      assert %SeedingGoal{met?: false, target_met?: true} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: nil, seed_time: nil})
     end
 
     test "a built-in row with no tracker terms carries the target" do

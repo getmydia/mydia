@@ -40,6 +40,7 @@ defmodule Mydia.Downloads.SeedingGoal do
           target_seed_time: non_neg_integer() | nil,
           ratio: float() | nil,
           seeding_time: non_neg_integer() | nil,
+          target_met?: boolean(),
           met?: boolean()
         }
 
@@ -52,6 +53,7 @@ defmodule Mydia.Downloads.SeedingGoal do
     :target_seed_time,
     :ratio,
     :seeding_time,
+    target_met?: true,
     met?: false
   ]
 
@@ -182,6 +184,8 @@ defmodule Mydia.Downloads.SeedingGoal do
   tracker's minimums (nil when it states none, as for a private tracker with
   unknown rules); `target_ratio` and `target_seed_time` are the operator's
   target for a built-in row (nil when there is none). They are never merged.
+  `target_met?` is the operator target alone (true when there is none), so a
+  pending tracker minimum never reads as an unmet target.
   """
   @spec for_download(map(), DateTime.t() | keyword()) :: t() | nil
   def for_download(download, opts \\ [])
@@ -217,6 +221,7 @@ defmodule Mydia.Downloads.SeedingGoal do
         target_seed_time: target && target.seed_time,
         ratio: ratio,
         seeding_time: seeding_time,
+        target_met?: target_met?(target, ratio, seeding_time),
         met?: goal_met?(download, ratio, seeding_time, goal_opts)
       }
     end

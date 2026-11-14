@@ -108,8 +108,29 @@ defmodule MydiaWeb.SeedingComponentsTest do
 
       text = removal_text(goal)
       assert text =~ "Velvet Lantern is a private tracker and its seeding rules are unknown."
-      assert text =~ "seeding target"
+      # The 0.0 target is met; only the unknown rules hold the torrent.
+      refute text =~ "seeding target"
       refute text =~ "requires a ratio of 0.0"
+    end
+
+    test "a met target is not called unmet while the tracker minimum is pending" do
+      row = %{@mixed | metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}}, ratio: 1.2}
+      goal = goal_for(row, %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: true} = goal
+
+      text = removal_text(goal)
+      assert text =~ "Velvet Lantern requires a ratio of 3.0."
+      refute text =~ "seeding target"
+      refute text =~ "not yet reached"
+    end
+
+    test "an unmet target is named alongside the tracker minimum" do
+      row = %{@mixed | metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}}, ratio: 0.5}
+      goal = goal_for(row, %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: false} = goal
+      assert removal_text(goal) =~ "The seeding target of a ratio of 1.0 is not yet reached."
     end
 
     test "the tracker requirement and the target are shown apart" do

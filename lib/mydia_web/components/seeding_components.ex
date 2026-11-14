@@ -183,6 +183,8 @@ defmodule MydiaWeb.SeedingComponents do
         time: format_time(goal.required_seed_time)
       )
 
+  # A met target is not mentioned: only the tracker's minimum is pending.
+  defp target_requirement(%SeedingGoal{target_met?: true}), do: nil
   defp target_requirement(%SeedingGoal{target_ratio: nil, target_seed_time: nil}), do: nil
 
   defp target_requirement(%SeedingGoal{target_seed_time: nil} = goal),
