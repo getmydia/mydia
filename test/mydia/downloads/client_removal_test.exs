@@ -312,6 +312,33 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       refute ClientRemoval.terms_met?(private_no_terms, nil)
     end
 
+    test "the operator target guards built-in removal" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 1.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      # The built-in client is a runtime config, not a settings row.
+      download = download!(%{name: BuiltIn.name()}, imported: true)
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | ratio: 0.4})
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert StubAdapter.take_removes() == []
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | ratio: 1.2})
+      assert :removed = ClientRemoval.maybe_remove_after_import(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
     test "a guarded download stays pending on a seed-aware client even when paused" do
       client = client!(type: :qbittorrent, remove_completed: true)
       download = download!(client, terms: @private_ratio)

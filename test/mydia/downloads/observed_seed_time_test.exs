@@ -1,9 +1,9 @@
 defmodule Mydia.Downloads.ObservedSeedTimeTest do
-  use Mydia.DataCase, async: true
+  use Mydia.DataCase, async: false
 
   import Mydia.DownloadsFixtures
 
-  alias Mydia.Downloads.{Download, ObservedSeedTime}
+  alias Mydia.Downloads.{BuiltIn, Download, ObservedSeedTime}
   alias Mydia.Repo
 
   @t0 ~U[2031-05-10 12:00:00Z]
@@ -88,6 +88,31 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
       assert %{"seconds" => 120} = metadata(download)["observed_seeding"]
       assert metadata(download)["quality"] == "x"
       assert metadata(download)["tracker_terms"] == @terms
+    end
+
+    test "tracks a built-in row with only an operator target" do
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_time: 60}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      download = download_fixture(%{metadata: %{}, download_client: BuiltIn.name()})
+      other = download_fixture(%{metadata: %{}, download_client: "elsewhere"})
+
+      :ok =
+        ObservedSeedTime.record(
+          [
+            row(download, %{download_client: BuiltIn.name()}),
+            row(other, %{download_client: "elsewhere"})
+          ],
+          @t0
+        )
+
+      assert %{"seconds" => 0} = metadata(download)["observed_seeding"]
+      refute Map.has_key?(metadata(other), "observed_seeding")
     end
 
     test "leaves rows alone when the client reports seed time or no goal applies" do

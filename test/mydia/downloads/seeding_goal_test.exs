@@ -199,4 +199,67 @@ defmodule Mydia.Downloads.SeedingGoalTest do
              } = SeedingGoal.for_download(row, @now)
     end
   end
+
+  describe "effective_terms/2" do
+    test "operator target alone" do
+      assert %TrackerTerms{minimum_ratio: 1.0, minimum_seed_time: 3600} =
+               SeedingGoal.effective_terms(nil, %{ratio: 1.0, seed_time: 3600})
+    end
+
+    test "max per dimension, private carried" do
+      tracker = %TrackerTerms{private?: true, minimum_ratio: 2.0, minimum_seed_time: 600}
+
+      assert %TrackerTerms{private?: true, minimum_ratio: 2.0, minimum_seed_time: 3600} =
+               SeedingGoal.effective_terms(tracker, %{ratio: 1.0, seed_time: 3600})
+    end
+
+    test "a nil target returns the tracker terms unchanged" do
+      tracker = %TrackerTerms{private?: true, minimum_ratio: 2.0}
+      assert SeedingGoal.effective_terms(tracker, nil) == tracker
+      assert SeedingGoal.effective_terms(nil, nil) == nil
+    end
+
+    test "ratio 0.0 is a real target" do
+      terms = SeedingGoal.effective_terms(nil, %{ratio: 0.0, seed_time: nil})
+      assert SeedingGoal.met?(terms, 0.0, 0)
+    end
+
+    test "private tracker with unknown terms stays unmet under an operator target" do
+      terms =
+        SeedingGoal.effective_terms(%TrackerTerms{private?: true}, %{ratio: nil, seed_time: nil})
+
+      refute SeedingGoal.met?(terms, 50.0, 10_000_000)
+    end
+  end
+
+  describe "goal_terms/2" do
+    @target %{ratio: 1.0, seed_time: nil}
+
+    test "applies the target only to the built-in client" do
+      built_in = %{metadata: %{}, download_client: Mydia.Downloads.BuiltIn.name()}
+      other = %{metadata: %{}, download_client: "qBit"}
+
+      assert %TrackerTerms{minimum_ratio: 1.0} = SeedingGoal.goal_terms(built_in, target: @target)
+      assert SeedingGoal.goal_terms(other, target: @target) == SeedingGoal.terms(other)
+    end
+  end
+
+  describe "for_download/2 with the operator target" do
+    test "a built-in row with no tracker terms carries the target" do
+      row = %{
+        metadata: %{},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 0.4,
+        seeding_time: 10,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{required_ratio: 1.0, met?: false} =
+               SeedingGoal.for_download(row, now: @now, target: @target)
+
+      assert %SeedingGoal{met?: true} =
+               SeedingGoal.for_download(%{row | ratio: 1.1}, now: @now, target: @target)
+    end
+  end
 end

@@ -18,7 +18,7 @@ defmodule Mydia.Downloads.SeedingGoal do
   removal, and the Downloads page shows `for_download/2`.
   """
 
-  alias Mydia.Downloads.ObservedSeedTime
+  alias Mydia.Downloads.{BuiltIn, ObservedSeedTime}
   alias Mydia.Indexers.Structs.TrackerTerms
 
   @type t :: %__MODULE__{
@@ -50,6 +50,56 @@ defmodule Mydia.Downloads.SeedingGoal do
   end
 
   def terms(_download), do: nil
+
+  @doc """
+  The tracker terms merged with the operator's seeding target (the built-in
+  client's setting), per dimension: the larger requirement wins, and the
+  tracker's `private?` is carried. `seed_time` is in seconds. The target's
+  `:action` is not part of the goal. Nil only when neither side asks for
+  anything.
+  """
+  @spec effective_terms(
+          TrackerTerms.t() | nil,
+          %{required(:ratio) => float() | nil, required(:seed_time) => non_neg_integer() | nil}
+          | nil
+        ) :: TrackerTerms.t() | nil
+  def effective_terms(tracker, nil), do: tracker
+
+  def effective_terms(tracker, %{ratio: ratio, seed_time: seed_time}) do
+    if is_nil(ratio) and is_nil(seed_time) do
+      tracker
+    else
+      %TrackerTerms{} = base = tracker || %TrackerTerms{}
+
+      %TrackerTerms{
+        base
+        | minimum_ratio: larger(base.minimum_ratio, ratio),
+          minimum_seed_time: larger(base.minimum_seed_time, seed_time)
+      }
+    end
+  end
+
+  defp larger(nil, other), do: other
+  defp larger(value, nil), do: value
+  defp larger(a, b), do: max(a, b)
+
+  @doc """
+  The terms a download is held to: its frozen tracker terms merged with the
+  operator's seeding target, for built-in client downloads only. The target
+  is `opts[:target]` when given, else the client's own; other downloads have none.
+  """
+  @spec goal_terms(map(), keyword()) :: TrackerTerms.t() | nil
+  def goal_terms(download, opts \\ []) do
+    effective_terms(terms(download), target(download, opts))
+  end
+
+  # Only the built-in client's downloads are held to the operator target;
+  # `opts[:target]` replaces the runtime lookup (callers that already read it).
+  defp target(download, opts) do
+    if Map.get(download, :download_client) == BuiltIn.name() do
+      Keyword.get_lazy(opts, :target, &BuiltIn.seeding_target/0)
+    end
+  end
 
   @doc "True when the terms ask the download to keep seeding."
   @spec applies?(TrackerTerms.t() | nil) :: boolean()
@@ -117,10 +167,17 @@ defmodule Mydia.Downloads.SeedingGoal do
   map with `:metadata`, `:indexer`, `:status`, `:ratio`, `:seeding_time`,
   `:client_completed_at`, `:db_completed_at` and `:in_client?`), read the same
   way as `Mydia.Downloads.ClientRemoval.terms_met?/2`. Nil when no goal applies.
+  The second argument is a `DateTime` (now) or options `:now` and `:target`.
+  The goal is `goal_terms/2`, so a built-in row carries the operator's target.
   """
-  @spec for_download(map(), DateTime.t()) :: t() | nil
-  def for_download(download, now \\ DateTime.utc_now()) do
-    terms = terms(download)
+  @spec for_download(map(), DateTime.t() | keyword()) :: t() | nil
+  def for_download(download, opts \\ [])
+
+  def for_download(download, %DateTime{} = now), do: for_download(download, now: now)
+
+  def for_download(download, opts) do
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+    terms = goal_terms(download, Keyword.take(opts, [:target]))
 
     if applies?(terms) do
       seeding_time =

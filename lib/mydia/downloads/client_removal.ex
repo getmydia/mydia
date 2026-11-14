@@ -117,7 +117,7 @@ defmodule Mydia.Downloads.ClientRemoval do
   """
   @spec terms_met?(Download.t(), DownloadStatus.t() | nil) :: boolean()
   def terms_met?(%Download{} = download, status) do
-    terms = SeedingGoal.terms(download)
+    terms = SeedingGoal.goal_terms(download)
 
     case status do
       %DownloadStatus{} ->
@@ -186,7 +186,7 @@ defmodule Mydia.Downloads.ClientRemoval do
   # behaviour from before the guard.
   defp remove_when_ready(download, info, mode) do
     guarded? =
-      seeding_client_type?(info.type) and SeedingGoal.applies?(SeedingGoal.terms(download))
+      seeding_client_type?(info.type) and SeedingGoal.applies?(SeedingGoal.goal_terms(download))
 
     with {:ok, status} <- read_status(info, guarded? or seed_aware_type?(info.type)),
          :ok <- check_terms(download, status, guarded?),
