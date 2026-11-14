@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../p2p/peer_files_host.dart' show peerFilesHostProvider;
 import '../connection/app_foreground.dart';
 import '../source.dart';
 import '../sources_providers.dart' show mediaSourceProvider;
@@ -167,7 +168,13 @@ class FilesScanController extends Notifier<ScanState> {
       // A run where every root failed (an unplugged drive, a share that is
       // down) is not a scan: leave the time alone so the next open tries
       // again instead of waiting out the rescan interval.
-      if (roots.isEmpty || scanned > 0) await index.setLastScanAt(now());
+      if (roots.isEmpty || scanned > 0) {
+        await index.setLastScanAt(now());
+        // Paired players browsing this library refetch it.
+        await ref
+            .read(peerFilesHostProvider)
+            .bumpRevision(media.source.account.id);
+      }
       await invalidator
           .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
       final files = index.files().values;

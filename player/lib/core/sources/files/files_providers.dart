@@ -10,6 +10,8 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
+import '../../p2p/peer_files_host.dart'
+    show HivePeerFilesRevisions, peerFilesHostProvider;
 import '../../p2p/peer_sync_service.dart';
 import '../../p2p/peer_sync_store.dart';
 import '../../playback/playback_progress_store.dart';
@@ -42,6 +44,7 @@ Future<void> openFilesLibraryBoxes() async {
       HivePlaybackProgressStore.boxName);
   final syncBox =
       await Hive.openBox<Map<dynamic, dynamic>>(PeerSyncStore.boxName);
+  await Hive.openBox<int>(HivePeerFilesRevisions.boxName);
   final syncStore = HivePeerSyncStore(syncBox);
   final progressStore = HivePlaybackProgressStore(progressBox);
   await seedPeerSyncStoreIfNeeded(
@@ -174,6 +177,9 @@ FilesMediaSource buildFilesSource(
     onSyncMutation: syncMutation,
     onGroupLanded: () =>
         invalidator.invalidate(FilesMediaSource.groupLandedTargets(source.id)),
+    // Paired players browsing this library refetch it.
+    onPinned: () => unawaited(
+        container.read(peerFilesHostProvider).bumpRevision(source.account.id)),
   );
   late final FilesMediaSource media;
   // A resume or a network change probes again, and scans when the app sat

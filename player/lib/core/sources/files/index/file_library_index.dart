@@ -120,6 +120,12 @@ class FileLibraryIndex {
 
   GroupMatch? group(String key) => _groups[key];
 
+  /// Every group, movie and show the index holds, for handing the whole
+  /// index to a paired player.
+  List<GroupMatch> groups() => _groups.values.toList();
+  List<MatchedMovie> movies() => _movies.values.toList();
+  List<MatchedShow> shows() => _shows.values.toList();
+
   Future<void> putGroup(GroupMatch g) async {
     _groups[g.groupKey] = g;
     await _box.put(_key(_group, g.groupKey), g.toMap());

@@ -264,6 +264,29 @@ void main() {
     expect(g.pinned, isFalse);
   });
 
+  test('onPinned fires after each pin write, not for automatic matches',
+      () async {
+    var pinned = 0;
+    final m = FileMatcher(
+      tmdb: relay,
+      names: FakeMediaNames(),
+      index: index,
+      progress: progress,
+      sourceId: source,
+      onPinned: () => pinned++,
+      now: () => t0.add(const Duration(days: 1)),
+    );
+    relay.ids['Copper Valley'] = 7;
+    await addFiles(['Copper Valley (2018).mkv']);
+    await m.matchPending();
+    expect(pinned, 0);
+    await m.pin('coppervalley|2018', isShow: false);
+    expect(pinned, 1);
+    await m.applyRemotePin('coppervalley|2018', isShow: false, tmdbId: 7);
+    expect(index.group('coppervalley|2018')!.tmdbId, 7);
+    expect(pinned, 2);
+  });
+
   test('unmatch_pin_moves_files_to_folders', () async {
     relay.ids['Copper Valley'] = 7;
     await addFiles(['Copper Valley (2018).mkv']);

@@ -404,10 +404,25 @@ class P2pService {
   }
 
   /// Tell the host which node ids may read this player's shared files.
+  ///
+  /// Remembered, and pushed again to every host built later: the list is
+  /// usually set before [initialize] has built one, and a host built anew
+  /// (a reset, a relay change) starts with none.
   Future<void> setPeerFilesMembers(List<String> nodeIds) async {
+    _peerFilesMembers = List.unmodifiable(nodeIds);
     final host = _host;
     if (host == null) return;
     await host.setPeerFilesMembers(nodeIds: nodeIds);
+  }
+
+  List<String>? _peerFilesMembers;
+
+  void _replayPeerFilesMembers(P2PHost host) {
+    final members = _peerFilesMembers;
+    if (members == null) return;
+    unawaited(host.setPeerFilesMembers(nodeIds: members).catchError(
+        (Object e) =>
+            debugPrint('[P2P] Restoring the peer files members failed: $e')));
   }
 
   /// Drop the host's cached grants for [accountId].
@@ -445,6 +460,7 @@ class P2pService {
     _isInitialized = true;
     _peerFilesSubscription = _listenPeerFiles(host);
     _peerFileGrantSubscription = _listenPeerFileGrants(host);
+    _replayPeerFilesMembers(host);
   }
 
   /// Returns true if the P2P host is initialized
@@ -772,6 +788,7 @@ class P2pService {
       // Start Peer-Files Stream.
       _peerFilesSubscription = _listenPeerFiles(_host!);
       _peerFileGrantSubscription = _listenPeerFileGrants(_host!);
+      _replayPeerFilesMembers(_host!);
 
       _isInitialized = true;
       _emitStatus();

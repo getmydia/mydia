@@ -58,6 +58,12 @@ class FakePeerSyncService implements PeerSyncService {
   }
 
   @override
+  bool authorizes(String peer, String proof) => false;
+
+  @override
+  List<String> activeMemberIds() => const [];
+
+  @override
   Future<void> start() async {}
 
   @override

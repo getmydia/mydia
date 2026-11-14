@@ -563,26 +563,12 @@ class PeerSyncService {
     FlutterPeerSyncRequest_Sync req,
   ) async {
     final generation = _generation;
-    final secret = _secret;
     Future<void> reject() => _transport.respondToPeerSync(
           request.requestId,
           const FlutterPeerSyncResponse.notAuthorized(),
         );
 
-    if (secret == null || _leaving) return reject();
-    final valid = secret.verifyAuthProof(
-      senderNodeId: request.peer,
-      proof: req.authProof,
-    );
-    if (!valid) return reject();
-
-    // The group secret proves a device once belonged, not that it still
-    // does: a revoked device keeps it. Only a node the roster already holds
-    // may sync, so a revoked device cannot enroll a fresh node id. A device
-    // that just paired reaches the other members through the one it paired
-    // with (see [_handlePairRequest]).
-    final senderMember = _knownMember(request.peer);
-    if (senderMember == null || senderMember.revoked) return reject();
+    if (!authorizes(request.peer, req.authProof)) return reject();
 
     final nowMs = _clock().millisecondsSinceEpoch;
     final rosterChanged = await _store.mergeRoster(
@@ -656,6 +642,35 @@ class PeerSyncService {
         changes.changedPinKeys.isNotEmpty) {
       unawaited(syncAll(exceptPeer: request.peer));
     }
+  }
+
+  /// Whether [peer] may act as a member of this group: [proof] is its HMAC
+  /// of the group secret, and the roster holds it, not revoked. The secret
+  /// proves a device once belonged, not that it still does: a revoked
+  /// device keeps it. Only a node the roster already holds passes, so a
+  /// revoked device cannot enroll a fresh node id. A device that just
+  /// paired reaches the other members through the one it paired with (see
+  /// [_handlePairRequest]). False while the device is in no group or is
+  /// leaving it.
+  bool authorizes(String peer, String proof) {
+    final secret = _secret;
+    if (secret == null || _leaving) return false;
+    if (!secret.verifyAuthProof(senderNodeId: peer, proof: proof)) {
+      return false;
+    }
+    final member = _knownMember(peer);
+    return member != null && !member.revoked;
+  }
+
+  /// The node ids of the group's active members other than this device,
+  /// sorted; empty while the device is in no group or is leaving it.
+  List<String> activeMemberIds() {
+    if (_secret == null || _leaving) return const [];
+    final local = _transport.nodeId?.toLowerCase();
+    return [
+      for (final m in _store.members().values)
+        if (!m.revoked && m.nodeId.toLowerCase() != local) m.nodeId,
+    ]..sort();
   }
 
   /// The roster entry for [nodeId], matched without regard to case.

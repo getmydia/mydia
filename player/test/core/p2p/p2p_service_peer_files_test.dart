@@ -172,6 +172,42 @@ void main() {
     expect(res, const FlutterPeerFilesResponse.notAuthorized());
   });
 
+  test('the member allowlist set before a host exists reaches each new host',
+      () async {
+    final service = P2pService();
+    addTearDown(service.dispose);
+    await service.setPeerFilesMembers(['n1', 'n2']);
+
+    final first = _FakeHost();
+    addTearDown(first.inbound.close);
+    addTearDown(first.grantRequests.close);
+    service.debugSetHost(first);
+    expect(first.members, [
+      ['n1', 'n2']
+    ]);
+
+    await service.setPeerFilesMembers(['n3']);
+    expect(first.members.last, ['n3']);
+
+    // A host built again (a reset, a relay change) starts with no list.
+    final second = _FakeHost();
+    addTearDown(second.inbound.close);
+    addTearDown(second.grantRequests.close);
+    service.debugSetHost(second);
+    expect(second.members, [
+      ['n3']
+    ]);
+  });
+
+  test('a host with no list set is pushed none', () async {
+    final host = _FakeHost();
+    addTearDown(host.inbound.close);
+    addTearDown(host.grantRequests.close);
+    final service = P2pService()..debugSetHost(host);
+    addTearDown(service.dispose);
+    expect(host.members, isEmpty);
+  });
+
   test('without a host the grant calls are no-ops', () async {
     final service = P2pService();
     addTearDown(service.dispose);

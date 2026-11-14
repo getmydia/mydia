@@ -28,6 +28,7 @@ class FileMatcher {
     PeerSyncStore? syncStore,
     void Function()? onSyncMutation,
     Future<void> Function()? onGroupLanded,
+    void Function()? onPinned,
     int concurrency = 4,
     DateTime Function()? now,
   })  : _tmdb = tmdb,
@@ -38,6 +39,7 @@ class FileMatcher {
         _syncStore = syncStore,
         _onSyncMutation = onSyncMutation,
         _onGroupLanded = onGroupLanded,
+        _onPinned = onPinned,
         _slots = _Semaphore(concurrency),
         _now = now ?? DateTime.now;
 
@@ -49,6 +51,11 @@ class FileMatcher {
   final PeerSyncStore? _syncStore;
   final void Function()? _onSyncMutation;
   final Future<void> Function()? _onGroupLanded;
+
+  /// Called after a pin (a Fix match here, or one applied from peer sync)
+  /// is written. Automatic matches do not call it: the scan that runs them
+  /// reports its own end.
+  final void Function()? _onPinned;
   final _Semaphore _slots;
   final DateTime Function() _now;
 
@@ -171,6 +178,7 @@ class FileMatcher {
         pinRevision: revision,
       ));
     }
+    _onPinned?.call();
     await _onGroupLanded?.call();
   }
 
