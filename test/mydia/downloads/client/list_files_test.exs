@@ -35,4 +35,26 @@ defmodule Mydia.Downloads.ClientListFilesTest do
       assert {:error, %Mydia.Downloads.Client.Error{}} = Client.list_files(nil, %{}, "abc")
     end
   end
+
+  describe "torrent_files/3 and set_file_selection/4" do
+    test "return :unsupported for an adapter without the callbacks" do
+      assert {:error, :unsupported} = Client.torrent_files(ListFilesStubWithout, %{}, "abc")
+
+      assert {:error, :unsupported} =
+               Client.set_file_selection(ListFilesStubWithout, %{}, "abc", [0])
+    end
+
+    test "nil adapter gives a descriptive error" do
+      assert {:error, %Mydia.Downloads.Client.Error{}} = Client.torrent_files(nil, %{}, "abc")
+
+      assert {:error, %Mydia.Downloads.Client.Error{}} =
+               Client.set_file_selection(nil, %{}, "abc", [0])
+    end
+
+    test "supports_file_selection?/1" do
+      refute Client.supports_file_selection?(nil)
+      refute Client.supports_file_selection?(ListFilesStubWithout)
+      assert Client.supports_file_selection?(Mydia.Downloads.Client.Rqbit)
+    end
+  end
 end

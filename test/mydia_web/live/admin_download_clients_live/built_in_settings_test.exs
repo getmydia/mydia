@@ -454,6 +454,45 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
                Mydia.Settings.get_config_setting_by_key("built_in_torrent.vpn_enabled")
     end
 
+    test "the seeding and speed limit fields render", %{conn: conn} do
+      view = open_settings(conn)
+
+      assert has_element?(view, "#built-in-field-seed_ratio")
+      assert has_element?(view, "#built-in-field-seed_time")
+      assert has_element?(view, "#built-in-seed_goal_action-remove")
+      assert has_element?(view, "#built-in-field-download_limit_kib")
+      assert has_element?(view, "#built-in-field-upload_limit_kib")
+      refute has_element?(view, "#built-in-speed-limits")
+    end
+
+    test "saving a seed target and action stores the rows", %{conn: conn} do
+      view = open_settings(conn)
+
+      render_submit(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"seed_ratio" => "1.5", "seed_goal_action" => "remove"}
+      })
+
+      refute has_element?(view, "#built-in-settings-modal")
+
+      assert %{value: "1.5"} =
+               Mydia.Settings.get_config_setting_by_key("built_in_torrent.seed_ratio")
+
+      assert %{value: "remove"} =
+               Mydia.Settings.get_config_setting_by_key("built_in_torrent.seed_goal_action")
+    end
+
+    test "a negative seed ratio shows an error and saves nothing", %{conn: conn} do
+      view = open_settings(conn)
+
+      render_submit(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"seed_ratio" => "-1"}
+      })
+
+      assert has_element?(view, "#built-in-settings-modal")
+      assert has_element?(view, "#built-in-seeding", "must be greater than or equal to 0")
+      assert Mydia.Settings.get_config_setting_by_key("built_in_torrent.seed_ratio") == nil
+    end
+
     test "the state path field explains that a new path starts a new session", %{conn: conn} do
       view = open_settings(conn)
       assert has_element?(view, "#built-in-hint-state_path")
@@ -523,6 +562,39 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert html =~ "MYDIA_TORRENT_DOWNLOAD_PATH"
 
       assert LazyHTML.query(doc, "#built-in-field-listen_port[disabled]") |> Enum.count() == 0
+    end
+
+    test "an env-sourced seed goal action shows no choice" do
+      html =
+        render_component(
+          &BuiltInFormComponents.built_in_settings_modal/1,
+          modal_assigns(%{sources: %{seed_goal_action: :env}})
+        )
+
+      doc = LazyHTML.from_fragment(html)
+      assert LazyHTML.query(doc, "#built-in-seed_goal_action") |> Enum.count() == 0
+      assert html =~ "MYDIA_TORRENT_SEED_GOAL_ACTION"
+    end
+
+    test "the torrent section has rate limit fields, read-only when set from env" do
+      html =
+        render_component(
+          &BuiltInFormComponents.built_in_settings_modal/1,
+          modal_assigns(%{sources: %{upload_limit_kib: :env}})
+        )
+
+      doc = LazyHTML.from_fragment(html)
+
+      assert LazyHTML.query(doc, "#built-in-section-torrent #built-in-field-download_limit_kib")
+             |> Enum.count() == 1
+
+      assert LazyHTML.query(doc, "#built-in-field-download_limit_kib[disabled]") |> Enum.count() ==
+               0
+
+      assert LazyHTML.query(doc, "#built-in-field-upload_limit_kib[disabled]") |> Enum.count() ==
+               1
+
+      assert html =~ "MYDIA_TORRENT_UPLOAD_LIMIT"
     end
 
     test "lists environment-only VPN variable names, never values" do

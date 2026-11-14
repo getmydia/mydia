@@ -11,9 +11,10 @@ defmodule Mydia.Downloads.ClientRemoval do
   question for import, and is an allowlist so blackhole (an unknown external
   client) and any future type keep their source.
 
-  Before either check, a download whose tracker terms set a seeding goal
-  (`Mydia.Downloads.SeedingGoal`) stays in a seed-aware client or rqbit until
-  the goal is met. Manual removal is not guarded.
+  Before either check, a download with a seeding goal (its tracker terms, or
+  the built-in client's operator target; `Mydia.Downloads.SeedingGoal`) stays
+  in a seed-aware client or rqbit until the goal is met. Manual removal is
+  not guarded.
   """
 
   require Logger
@@ -111,29 +112,30 @@ defmodule Mydia.Downloads.ClientRemoval do
   end
 
   @doc """
-  Whether `download` has met its tracker's seeding goal, given the client's
-  current `status`. True for a download whose frozen terms ask for nothing,
-  so removal without terms behaves as before. See `Mydia.Downloads.SeedingGoal`.
+  Whether `download` has met its seeding goal (the tracker's terms and, for
+  the built-in client, the operator's target), given the client's current
+  `status`. True for a download with no goal, so removal without terms
+  behaves as before. See `Mydia.Downloads.SeedingGoal.goal_met?/4`.
   """
   @spec terms_met?(Download.t(), DownloadStatus.t() | nil) :: boolean()
   def terms_met?(%Download{} = download, status) do
-    terms = SeedingGoal.terms(download)
-
     case status do
       %DownloadStatus{} ->
+        counted = status.seeding_time || ObservedSeedTime.seconds(download)
+
         seeding_time =
           SeedingGoal.seeding_time(
-            status.seeding_time || ObservedSeedTime.seconds(download),
+            counted,
             status.state == :seeding,
             status.completed_at,
             download.completed_at,
             DateTime.utc_now()
           )
 
-        SeedingGoal.met?(terms, status.ratio, seeding_time)
+        SeedingGoal.goal_met?(download, status.ratio, seeding_time, counted_seed_time: counted)
 
       nil ->
-        SeedingGoal.met?(terms, nil, nil)
+        SeedingGoal.goal_met?(download, nil, nil)
     end
   end
 
@@ -185,8 +187,7 @@ defmodule Mydia.Downloads.ClientRemoval do
   # client Mydia cannot read a ratio from) and unknown types keep their
   # behaviour from before the guard.
   defp remove_when_ready(download, info, mode) do
-    guarded? =
-      seeding_client_type?(info.type) and SeedingGoal.applies?(SeedingGoal.terms(download))
+    guarded? = seeding_client_type?(info.type) and SeedingGoal.goal_applies?(download)
 
     with {:ok, status} <- read_status(info, guarded? or seed_aware_type?(info.type)),
          :ok <- check_terms(download, status, guarded?),

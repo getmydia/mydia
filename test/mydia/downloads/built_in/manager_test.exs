@@ -193,6 +193,37 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert %Config{min_free_space_bytes: 12_000_000_000} = Manager.await_applied(manager)
     end
 
+    test "a seeding-only reload refreshes the runtime without restarting the engine", ctx do
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+      %BuiltIn.Runtime{api_port: api_port, credentials: creds} = BuiltIn.runtime()
+
+      set(ctx, seed_ratio: 1.5, seed_time: 30, seed_goal_action: "remove")
+      reload(manager)
+
+      assert [^pid] = instance_pids(ctx)
+      runtime = BuiltIn.runtime()
+      assert runtime.api_port == api_port
+      assert runtime.credentials == creds
+      assert runtime.config.seed_ratio == 1.5
+      assert runtime.config.seed_goal_action == :remove
+      assert %{action: :remove} = BuiltIn.seeding_target()
+      assert %Config{seed_ratio: 1.5} = Manager.await_applied(manager)
+    end
+
+    # Speed limits reach rqbit as command-line flags, so only a restart applies them.
+    test "a new speed limit replaces the instance", ctx do
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+
+      set(ctx, upload_limit_kib: 64)
+      reload(manager)
+
+      assert [new_pid] = instance_pids(ctx)
+      refute new_pid == pid
+      assert %Config{upload_limit_bps: 65_536} = Manager.await_applied(manager)
+    end
+
     test "a VPN field edited while the VPN is off leaves the instance alone", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)
@@ -202,8 +233,9 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       reload(manager)
 
       assert [^pid] = instance_pids(ctx)
-      assert BuiltIn.runtime().api_port == runtime.api_port
-      assert BuiltIn.runtime().credentials == runtime.credentials
+      # The runtime entry now carries the reloaded config, with the same engine address.
+      assert %{api_port: api_port, credentials: credentials} = BuiltIn.runtime()
+      assert {api_port, credentials} == {runtime.api_port, runtime.credentials}
       assert File.read!(settings_file(ctx)) == "VPN_ENABLED=false\n"
     end
 

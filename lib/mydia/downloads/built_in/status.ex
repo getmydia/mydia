@@ -88,6 +88,12 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "MYDIA_TORRENT_MIN_FREE_SPACE_GB is #{inspect(value)}, not a whole number of gigabytes. Using the saved setting or 5."
 
+  def describe({:invalid_download_limit, value}),
+    do: rate_limit_description("MYDIA_TORRENT_DOWNLOAD_LIMIT", value)
+
+  def describe({:invalid_upload_limit, value}),
+    do: rate_limit_description("MYDIA_TORRENT_UPLOAD_LIMIT", value)
+
   def describe({:invalid_enabled, value}),
     do:
       "MYDIA_TORRENT_ENABLED is #{inspect(value)}, which is neither true nor false. Ignoring it and deciding automatically."
@@ -167,4 +173,11 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do: "#{inspect(child)}: #{start_failure(reason)}"
 
   defp start_failure(reason), do: inspect(reason)
+
+  defp rate_limit_description(var, value) do
+    min = Mydia.Config.Schema.BuiltInTorrent.min_rate_limit_kib()
+    max = Mydia.Config.Schema.BuiltInTorrent.max_rate_limit_kib()
+
+    "#{var} is #{inspect(value)}, not a whole number of KiB/s from #{min} to #{max}. Ignoring it."
+  end
 end

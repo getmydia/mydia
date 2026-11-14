@@ -152,25 +152,21 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
     :persistent_term.put({__MODULE__, state.name}, config)
 
     if unchanged?(state, config),
-      do: refresh(state, config),
+      do: refresh_live_settings(state, config),
       else: restart(state, config, expected_hash)
   end
 
-  # Settings outside the restart key (the disk reserve) still reach the
-  # running client: the runtime entry gets the new config and keeps the API
-  # port and credentials the engine runs with.
-  defp refresh(state, %Config{enabled?: true} = config) do
+  # A reload that needs no restart can still carry new seeding targets or a
+  # new disk reserve: publish them on the running entry, keeping its API port
+  # and credentials.
+  defp refresh_live_settings(state, config) do
     case BuiltIn.runtime() do
-      %Runtime{} = runtime ->
-        BuiltIn.put_runtime(%{runtime | config: config})
-        %{state | current: config}
-
-      nil ->
-        state
+      nil -> :ok
+      runtime -> BuiltIn.put_runtime(%{runtime | config: config})
     end
-  end
 
-  defp refresh(state, _config), do: state
+    %{state | current: config}
+  end
 
   defp build_config(state, env) do
     {types, name_taken?} =

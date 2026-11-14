@@ -13,7 +13,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   reloaded config.
 
   Values are stored as the strings `Mydia.Config.Schema.Paths.cast_overlay/2`
-  casts back: `"true"`/`"false"` and decimal integers. A blank text field
+  casts back: `"true"`/`"false"`, decimal integers and decimal floats. A blank text field
   deletes its row (back to the default), `enabled = "automatic"` deletes its
   row, and a blank secret keeps the stored value.
   """
@@ -35,9 +35,17 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   @secret_fields BuiltInTorrent.secret_fields()
 
   @booleans [:vpn_enabled, :vpn_port_forwarding]
-  @integers [:listen_port, :api_port, :min_free_space_gb]
+  @integers [
+    :listen_port,
+    :api_port,
+    :min_free_space_gb,
+    :download_limit_kib,
+    :upload_limit_kib,
+    :seed_time
+  ]
+  @floats [:seed_ratio]
   @enabled_choices ["automatic", "true", "false"]
-  @text_fields @fields -- (@booleans ++ @integers ++ [:enabled])
+  @text_fields @fields -- (@booleans ++ @integers ++ @floats ++ [:enabled, :seed_goal_action])
   @identifier_fields [:vpn_provider, :vpn_type]
   # Written to the VPN settings file, which the root-side loop reads only up
   # to 64 KiB (`VpnSettings.render/2`): eleven fields of 4096 bytes fit.
@@ -53,6 +61,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
               cond do
                 field in @booleans -> :boolean
                 field in @integers -> :integer
+                field in @floats -> :float
                 true -> :string
               end
 
@@ -92,9 +101,13 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     |> cast(params, @fields -- locked)
     |> update_change_each(@identifier_fields, &normalize_identifier/1)
     |> validate_inclusion(:enabled, @enabled_choices)
+    |> validate_inclusion(:seed_goal_action, BuiltInTorrent.seed_goal_actions())
+    |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
+    |> validate_number(:seed_time, greater_than_or_equal_to: 0)
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:min_free_space_gb, greater_than_or_equal_to: 0)
+    |> BuiltInTorrent.validate_rate_limits()
     |> validate_single_line(@text_fields -- locked)
     |> validate_lengths(@vpn_text_fields -- locked)
     |> validate_vpn(locked)
@@ -325,6 +338,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   defp encode(_field, nil), do: nil
   defp encode(_field, value) when is_boolean(value), do: to_string(value)
   defp encode(_field, value) when is_integer(value), do: Integer.to_string(value)
+  defp encode(_field, value) when is_float(value), do: Float.to_string(value)
 
   defp encode(_field, value) when is_binary(value) do
     if String.trim(value) == "", do: nil, else: value

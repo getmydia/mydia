@@ -267,7 +267,13 @@ defmodule Mydia.Settings.DownloadClientConfig do
   """
   @spec web_ui_url(t()) :: String.t() | nil
   def web_ui_url(%__MODULE__{web_ui_url: url} = config) do
-    if valid_web_ui_url?(url), do: url, else: derived_web_ui_url(config)
+    cond do
+      # The built-in client's API listens on the server's loopback and has no
+      # web UI, so any link to it opens an empty page in the browser.
+      Mydia.Downloads.BuiltIn.managed?(config) -> nil
+      valid_web_ui_url?(url) -> url
+      true -> derived_web_ui_url(config)
+    end
   end
 
   defp derived_web_ui_url(%{type: type, host: host} = config)

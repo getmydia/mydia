@@ -57,7 +57,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents do
   attr :label, :string, required: true
   attr :sources, :map, required: true
   attr :type, :string, default: "text"
-  attr :rest, :global, include: ~w(placeholder autocomplete)
+  attr :rest, :global, include: ~w(placeholder autocomplete min)
   slot :hint, doc: "help text under the field"
 
   def text_field(assigns) do

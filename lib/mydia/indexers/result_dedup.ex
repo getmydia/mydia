@@ -1,7 +1,8 @@
 defmodule Mydia.Indexers.ResultDedup do
   @moduledoc """
   Merges duplicate releases returned by different indexers, keeping the best
-  copy of each (same info hash or same normalized title).
+  copy of each (same protocol, and same info hash or same normalized title).
+  Torrent and NZB copies of one release stay separate so either can be grabbed.
   """
 
   alias Mydia.Indexers.SearchResult
@@ -17,12 +18,15 @@ defmodule Mydia.Indexers.ResultDedup do
     end)
   end
 
+  # The protocol is part of the key: a torrent and an NZB of the same release
+  # are different grabs that go to different clients. Merging them kept only
+  # the torrent (NZBs have no seeders), so the NZB could never be downloaded.
   defp dedup_key(result) do
     # Extract hash from magnet link if available
     hash = extract_hash_from_url(result.download_url)
     normalized_title = normalize_title(result.title)
 
-    {hash, normalized_title}
+    {result.download_protocol, hash, normalized_title}
   end
 
   defp extract_hash_from_url(url) when is_binary(url) do

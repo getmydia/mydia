@@ -74,6 +74,113 @@ defmodule MydiaWeb.SeedingComponentsTest do
     end
   end
 
+  describe "with an operator seeding target" do
+    @private_unknown %{
+      indexer: "Velvet Lantern",
+      status: "seeding",
+      download_client: Mydia.Downloads.BuiltIn.name(),
+      metadata: %{"tracker_terms" => %{"private" => true}},
+      ratio: 5.0,
+      seeding_time: 10_000_000,
+      in_client?: true
+    }
+
+    @mixed %{
+      indexer: "Velvet Lantern",
+      status: "seeding",
+      download_client: Mydia.Downloads.BuiltIn.name(),
+      metadata: %{
+        "tracker_terms" => %{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600}
+      },
+      ratio: 1.1,
+      seeding_time: 80 * 3600,
+      in_client?: true
+    }
+
+    defp goal_for(row, target),
+      do: SeedingGoal.for_download(row, now: ~U[2026-11-14 00:00:00Z], target: target)
+
+    test "a private tracker with unknown rules is not given the target's numbers" do
+      goal = goal_for(@private_unknown, %{ratio: 0.0, seed_time: nil})
+
+      # The target's numbers appear only after the "target" marker.
+      assert SeedingComponents.chip_text(goal) == "Private, kept seeding · target 5.00 / 0.0"
+
+      text = removal_text(goal)
+      assert text =~ "Velvet Lantern is a private tracker and its seeding rules are unknown."
+      # The 0.0 target is met; only the unknown rules hold the torrent.
+      refute text =~ "seeding target"
+      refute text =~ "requires a ratio of 0.0"
+    end
+
+    test "a met target is not called unmet while the tracker minimum is pending" do
+      row = %{@mixed | metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}}, ratio: 1.2}
+      goal = goal_for(row, %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: true} = goal
+
+      text = removal_text(goal)
+      assert text =~ "Velvet Lantern requires a ratio of 3.0."
+      refute text =~ "seeding target"
+      refute text =~ "not yet reached"
+    end
+
+    test "an unmet target is named alongside the tracker minimum" do
+      row = %{@mixed | metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}}, ratio: 0.5}
+      goal = goal_for(row, %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: false} = goal
+      assert removal_text(goal) =~ "The seeding target of a ratio of 1.0 is not yet reached."
+    end
+
+    test "the tracker requirement and the target are shown apart" do
+      goal = goal_for(@mixed, %{ratio: 2.0, seed_time: nil})
+
+      assert SeedingComponents.chip_text(goal) ==
+               "1.10 / 1.0 · 3d 8h / 3d · target 1.10 / 2.0"
+
+      text = removal_text(goal)
+      assert text =~ "Velvet Lantern requires a ratio of 1.0 or 3d of seeding."
+      refute text =~ "requires a ratio of 2.0"
+      assert text =~ "seeding target"
+      assert text =~ "ratio of 2.0"
+    end
+
+    test "a target without tracker terms is only the target" do
+      row = %{@mixed | metadata: %{}}
+      goal = goal_for(row, %{ratio: 2.0, seed_time: 4 * 86_400})
+
+      chip = SeedingComponents.chip_text(goal)
+      assert chip == "target 1.10 / 2.0 · 3d 8h / 4d"
+      refute removal_text(goal) =~ "requires"
+    end
+
+    test "the tooltip of a target-only row names the target, not the tracker" do
+      row = %{@mixed | metadata: %{}}
+
+      unmet = goal_for(row, %{ratio: 2.0, seed_time: nil})
+
+      assert SeedingComponents.chip_title(unmet) ==
+               "Kept in the download client until the seeding target is met"
+
+      met = goal_for(row, %{ratio: 1.0, seed_time: nil})
+      assert SeedingComponents.chip_title(met) == "The seeding target is met"
+    end
+
+    test "tracker rows keep the tracker wording in the tooltip" do
+      assert SeedingComponents.chip_title(goal_for(@mixed, %{ratio: 2.0, seed_time: nil})) =~
+               "Velvet Lantern's seeding goal"
+
+      assert SeedingComponents.chip_title(
+               goal_for(@private_unknown, %{ratio: 0.0, seed_time: nil})
+             ) =~
+               "Velvet Lantern's seeding goal"
+    end
+
+    defp removal_text(%SeedingGoal{} = goal),
+      do: SeedingComponents.goal_warning_text(goal)
+  end
+
   test "the removal warning states the exact required time" do
     row = %{
       indexer: "Velvet Lantern",

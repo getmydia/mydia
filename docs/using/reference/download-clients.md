@@ -78,6 +78,35 @@ applies to new grabs; torrents already running finish where they started.
 - **Download path.** `/data/downloads` by default. Torrent state lives in
   `/config/rqbit`. In the Docker image, files the engine writes belong to group
   `mydia-torrent`, with or without the VPN.
+- **Seeding target.** On the Torrent tab, set a seed ratio, a seed time in
+  minutes, or both; the target is reached when either is. When it is, the
+  client pauses the torrent, or removes it from the client once it has been
+  imported if you chose "Remove from client". A torrent that has not been
+  imported yet is paused instead. If you resume a paused torrent yourself,
+  Mydia leaves it running. A tracker's own minimum ratio or seed time has to
+  be met as well, so the target never shortens it, and a torrent from a
+  private tracker whose rules Mydia does not know is never paused or removed
+  automatically. Seed time is the time Mydia has seen the torrent seeding,
+  not the time since it finished, so setting a seed time never pauses or
+  removes a long-finished torrent at once.
+  Switching to "Remove from client" applies to every imported
+  torrent still in the client, including ones you resumed by hand, so those
+  already past the target are removed, with their files, within a few
+  minutes. Leave both fields blank for no target.
+- **File selection.** When a torrent's file list is known, Mydia skips the
+  files it would not import (samples, trailers, extras and anything that is not a video or subtitle)
+  and keeps the videos and subtitles. If a torrent has no importable video,
+  everything is downloaded. Open a download in Downloads to see its Files
+  panel and tick or untick files yourself; your choice replaces the automatic
+  one and stays until the download is imported. At least one video file must
+  stay ticked.
+- **Speed limits.** Download and upload limits, in KiB/s, sit under
+  Configure, Torrent. Leave a field blank for no limit; the lowest limit is
+  16 KiB/s, since the engine moves data in 16 KiB blocks. A change restarts the
+  engine within a few seconds, and torrents resume where they were.
+- **No web UI.** The engine has no web interface of its own, so the Downloads
+  page shows no "Open" button for it. Mydia's Downloads page is where you
+  manage its torrents.
 - **VPN (experimental).** Mydia runs a patched gluetun that tunnels only the
   built-in client. The engine starts once the VPN is up and a leak check
   passes, and stops when it drops. Changing any VPN setting runs the same

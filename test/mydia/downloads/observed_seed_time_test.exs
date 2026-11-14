@@ -1,9 +1,9 @@
 defmodule Mydia.Downloads.ObservedSeedTimeTest do
-  use Mydia.DataCase, async: true
+  use Mydia.DataCase, async: false
 
   import Mydia.DownloadsFixtures
 
-  alias Mydia.Downloads.{Download, ObservedSeedTime}
+  alias Mydia.Downloads.{BuiltIn, Download, ObservedSeedTime}
   alias Mydia.Repo
 
   @t0 ~U[2031-05-10 12:00:00Z]
@@ -80,25 +80,51 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
     test "accumulates for a guarded download whose client reports no seed time" do
       download = download_fixture(%{metadata: %{"tracker_terms" => @terms, "quality" => "x"}})
 
-      :ok = ObservedSeedTime.record([row(download, %{})], @t0)
+      [first] = ObservedSeedTime.record([row(download, %{})], @t0)
+      assert %{"seconds" => 0} = first.metadata["observed_seeding"]
       reloaded = Repo.get!(Download, download.id)
 
-      :ok = ObservedSeedTime.record([row(reloaded, %{})], at(120))
+      [second] = ObservedSeedTime.record([row(reloaded, %{})], at(120))
+      assert %{"seconds" => 120} = second.metadata["observed_seeding"]
+      assert second.metadata["quality"] == "x"
 
       assert %{"seconds" => 120} = metadata(download)["observed_seeding"]
       assert metadata(download)["quality"] == "x"
       assert metadata(download)["tracker_terms"] == @terms
     end
 
+    test "tracks a built-in row with only an operator target" do
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_time: 60}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      download = download_fixture(%{metadata: %{}, download_client: BuiltIn.name()})
+      other = download_fixture(%{metadata: %{}, download_client: "elsewhere"})
+
+      [built_in, _other] =
+        ObservedSeedTime.record(
+          [
+            row(download, %{download_client: BuiltIn.name()}),
+            row(other, %{download_client: "elsewhere"})
+          ],
+          @t0
+        )
+
+      assert %{"seconds" => 0} = built_in.metadata["observed_seeding"]
+      assert %{"seconds" => 0} = metadata(download)["observed_seeding"]
+      refute Map.has_key?(metadata(other), "observed_seeding")
+    end
+
     test "leaves rows alone when the client reports seed time or no goal applies" do
       reported = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
       no_goal = download_fixture(%{metadata: %{}})
 
-      :ok =
-        ObservedSeedTime.record(
-          [row(reported, %{seeding_time: 500}), row(no_goal, %{})],
-          @t0
-        )
+      rows = [row(reported, %{seeding_time: 500}), row(no_goal, %{})]
+      assert ObservedSeedTime.record(rows, @t0) == rows
 
       refute Map.has_key?(metadata(reported), "observed_seeding")
       refute Map.has_key?(metadata(no_goal), "observed_seeding")
@@ -113,7 +139,7 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
           metadata: Map.put(download.metadata, "other_writer", true)
         })
 
-      :ok = ObservedSeedTime.record([polled], @t0)
+      [_polled] = ObservedSeedTime.record([polled], @t0)
 
       assert metadata(download)["other_writer"] == true
       assert %{"seconds" => 0} = metadata(download)["observed_seeding"]
@@ -122,7 +148,8 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
     test "a stale snapshot of a seeding torrent does not count as seeding" do
       download = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
 
-      :ok = ObservedSeedTime.record([row(download, %{status_as_of: @t0})], @t0)
+      stale = row(download, %{status_as_of: @t0})
+      assert [^stale] = ObservedSeedTime.record([stale], @t0)
 
       refute Map.has_key?(metadata(download), "observed_seeding")
     end
@@ -139,7 +166,8 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
 
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert :ok = ObservedSeedTime.record([failing, row(download, %{})], @t0)
+          assert [^failing, _recorded] =
+                   ObservedSeedTime.record([failing, row(download, %{})], @t0)
         end)
 
       assert log =~ "Recording observed seed time failed"
@@ -149,7 +177,7 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
     test "a failure is logged and does not raise" do
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert :ok =
+          assert [_unchanged] =
                    ObservedSeedTime.record(
                      [
                        %{
@@ -169,7 +197,7 @@ defmodule Mydia.Downloads.ObservedSeedTimeTest do
     test "does not start counting for a torrent that is not seeding" do
       download = download_fixture(%{metadata: %{"tracker_terms" => @terms}})
 
-      :ok = ObservedSeedTime.record([row(download, %{status: "paused"})], @t0)
+      [_paused] = ObservedSeedTime.record([row(download, %{status: "paused"})], @t0)
 
       refute Map.has_key?(metadata(download), "observed_seeding")
     end

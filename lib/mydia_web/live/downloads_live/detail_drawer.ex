@@ -13,7 +13,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
   import MydiaWeb.Formatters, only: [format_file_size: 1]
 
   alias Mydia.Library.Structs.Quality
-  alias MydiaWeb.DownloadsLive.{ListComponents, ListView}
+  alias MydiaWeb.DownloadsLive.{FilesPanel, ListComponents, ListView}
 
   attr :download, :map, required: true
   attr :tab, :atom, required: true
@@ -172,6 +172,13 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
                 {gettext("Open in %{client}", client: @download.download_client)}
               </a>
             </fieldset>
+
+            <.live_component
+              :if={@download.download_client}
+              module={FilesPanel}
+              id="download-files-panel"
+              download={@download}
+            />
 
             <fieldset id="download-detail-timeline" class="fieldset">
               <legend class="fieldset-legend">{gettext("Timeline")}</legend>

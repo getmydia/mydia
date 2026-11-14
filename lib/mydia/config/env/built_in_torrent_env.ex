@@ -4,9 +4,11 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   environment (`MYDIA_TORRENT_*` and `MYDIA_VPN_*`).
 
   Takes a one-argument getenv function so tests can inject values. Blank values
-  count as unset; a value that does not parse, a port outside 1..65535 or a
-  negative reserve leaves its key out. `BuiltIn.Config` warns about such a
-  value from the raw environment for `MYDIA_TORRENT_ENABLED`, both ports and
+  count as unset; a value that does not parse, a port outside 1..65535, a rate
+  limit outside `BuiltInTorrent.min_rate_limit_kib/0`..`max_rate_limit_kib/0`,
+  a negative seeding value or a negative reserve leaves its key out.
+  `BuiltIn.Config` warns about such a value from the raw environment for
+  `MYDIA_TORRENT_ENABLED`, both ports, both rate limits and
   `MYDIA_TORRENT_MIN_FREE_SPACE_GB`; a bad `MYDIA_VPN_VPN_PORT_FORWARDING` is
   dropped silently.
   """
@@ -15,6 +17,10 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   alias Mydia.Config.Schema.BuiltInTorrent
 
   @integer_fields [:listen_port, :api_port]
+  @non_negative_fields [:seed_time, :min_free_space_gb]
+  @rate_limit_fields [:download_limit_kib, :upload_limit_kib]
+  @min_rate_limit_kib BuiltInTorrent.min_rate_limit_kib()
+  @max_rate_limit_kib BuiltInTorrent.max_rate_limit_kib()
   @boolean_fields [:enabled, :vpn_port_forwarding]
   @downcased_fields [:vpn_provider, :vpn_type]
 
@@ -38,11 +44,36 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
     end
   end
 
-  defp put_field(acc, :min_free_space_gb, raw) do
+  defp put_field(acc, field, raw) when field in @non_negative_fields do
     case Loader.parse_integer(raw) do
-      {:ok, int} when int >= 0 -> Map.put(acc, :min_free_space_gb, int)
+      {:ok, int} when int >= 0 -> Map.put(acc, field, int)
       _ -> acc
     end
+  end
+
+  defp put_field(acc, field, raw) when field in @rate_limit_fields do
+    case Loader.parse_integer(raw) do
+      {:ok, int} when int in @min_rate_limit_kib..@max_rate_limit_kib//1 ->
+        Map.put(acc, field, int)
+
+      _ ->
+        acc
+    end
+  end
+
+  defp put_field(acc, :seed_ratio, raw) do
+    case Float.parse(raw) do
+      {ratio, ""} when ratio >= 0 -> Map.put(acc, :seed_ratio, ratio)
+      _ -> acc
+    end
+  end
+
+  defp put_field(acc, :seed_goal_action, raw) do
+    action = String.downcase(raw)
+
+    if action in BuiltInTorrent.seed_goal_actions(),
+      do: Map.put(acc, :seed_goal_action, action),
+      else: acc
   end
 
   defp put_field(acc, field, raw) when field in @boolean_fields do

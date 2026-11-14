@@ -168,6 +168,11 @@ blank value counts as unset.
 | `MYDIA_TORRENT_PORT` | `51413` | Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below). |
 | `MYDIA_TORRENT_API_PORT` | `3030` | Port of the built-in client's HTTP API on `127.0.0.1`. Change it when something else on the host uses 3030. |
 | `MYDIA_TORRENT_MIN_FREE_SPACE_GB` | `5` | Free space, in GB, the built-in client keeps on the download volume. Grabs that would leave less are refused and downloads pause below it. `0` turns this off. |
+| `MYDIA_TORRENT_SEED_RATIO` | unset | Seed each torrent until it reaches this share ratio (0 or more). Combined with the seed time, whichever comes first counts. A tracker's own minimum has to be met as well. |
+| `MYDIA_TORRENT_SEED_TIME` | unset | Seed each torrent for at least this many minutes. |
+| `MYDIA_TORRENT_SEED_GOAL_ACTION` | `pause` | What happens at the target: `pause` or `remove` (remove from the client once imported). Switching to `remove` also removes, with their files, imported torrents already in the client that are past the target, including ones resumed by hand. |
+| `MYDIA_TORRENT_DOWNLOAD_LIMIT` | unlimited | Maximum download speed in KiB/s, a whole number from 16 to 4194303 (rqbit cannot move a 16 KiB block under a lower limit). Any other value is ignored with a warning in the admin UI. |
+| `MYDIA_TORRENT_UPLOAD_LIMIT` | unlimited | Maximum upload speed in KiB/s, a whole number from 16 to 4194303 (rqbit cannot move a 16 KiB block under a lower limit). Any other value is ignored with a warning in the admin UI. |
 | `MYDIA_VPN_SERVICE_PROVIDER` | unset | Sets the provider, for example `protonvpn` or `pia`, and turns the experimental VPN on. It reaches gluetun as `VPN_SERVICE_PROVIDER`. |
 | `MYDIA_VPN_VPN_TYPE` | provider's first type | `openvpn` or `wireguard`. |
 | `MYDIA_VPN_OPENVPN_USER`, `MYDIA_VPN_OPENVPN_PASSWORD` | unset | OpenVPN login. |

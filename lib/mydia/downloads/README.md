@@ -69,7 +69,11 @@ torrent that seeded past its goal and then stopped is removable. Without either,
 and only while the client reports the torrent as seeding, it is the time since the
 client's `completed_at`, else since `Download.completed_at`. A paused, stopped or
 missing torrent with no reported time has no known seed time, so wall-clock time
-it spent not seeding never meets a goal.
+it spent not seeding never meets a goal. `ObservedSeedTime.record/2` returns the
+polled rows with their new entry merged in, and `DownloadMonitor` hands those to
+`BuiltIn.Policies`, so the first poll that tracks a torrent reads 0 observed
+seconds rather than the time since completion: a seed-time target set after a
+torrent finished counts from when Mydia started observing it.
 
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets
@@ -80,8 +84,47 @@ has no total seed time limit, so a seed-time-only goal is left on the global
 ratio mode. Neither alternative is better: mode 1 needs a ratio, and mode 2
 (unlimited) never pauses, which keeps Remove After Import waiting forever. If
 the global ratio stops such a torrent early, the guard keeps it in the client.
-rTorrent and rqbit get nothing. A failed push is
+rTorrent and rqbit get nothing (rqbit has no per-torrent limits, so the
+built-in client's target is enforced by Mydia, below). A failed push is
 logged and the guard still applies.
+
+**Operator target (built-in client only).** The built-in client's `seed_ratio`
+and `seed_time` settings (minutes; the target holds seconds) are a seeding goal
+of the operator's own, with `seed_goal_action` (`pause` or `remove`). For a
+download whose `download_client` is `BuiltIn.name()`, the goal is a
+conjunction: the tracker terms must be met under the rules above, and the
+target must be met by either its ratio or its seed time. The target's seed time
+counts only time the client reported or `ObservedSeedTime` observed
+(`SeedingGoal.counted_seed_time/1`, passed as `:counted_seed_time`), never the
+wall-clock fallback above, which stays for the tracker terms alone. With
+neither known, as when the first observation failed to write, the target's
+seed time is unreached, so an old torrent is never paused or removed at once.
+`SeedingGoal.goal_applies?/2` and `SeedingGoal.goal_met?/4` are the decision,
+read by the guard, `ObservedSeedTime`, `SeedingPolicy` and the `met?` of
+`for_download/2`; every other client is held to the tracker terms alone.
+Neither half lowers the other: a tracker's 72 hour minimum does not release a
+torrent short of a ratio 2.0 target, and a private tracker with unknown rules
+is never met, so no target (a ratio of 0 included, which is a target) pauses or
+removes it. The Downloads page shows the tracker requirement and the target
+separately (`required_*` and `target_*` on `for_download/2`'s struct).
+`BuiltIn.seeding_target/0` reads the running client's config and returns nil
+without a runtime or with neither field set.
+
+`BuiltIn.Policies`, called from `DownloadMonitor` each poll for the rows of
+the built-in client, runs `BuiltIn.SeedingPolicy` on each. Once the goal is
+met while the torrent is seeding: with `pause`, the torrent is paused through
+the adapter and the row is stamped `metadata["seeding_goal_reached_at"]`; the
+stamp makes the pause one-shot, so a torrent the operator resumes by hand is
+not paused again. With `remove`, an imported row is left to `ClientRemoval`
+(`BuiltIn.client_configs/0` sets `remove_completed` for a remove target, so the
+normal removal path takes it, still behind the guard), and an unimported one is
+paused until it is imported. An imported row with `match_status`
+`"unresolved_files"` is paused and stamped too, since `ClientRemoval` skips it.
+Failures are logged and never fail the poll.
+Switching the action to `remove` applies to the whole backlog:
+`list_pending_removals/1` picks up every imported built-in row without
+`client_removed_at`, stamped or not, so the next poll removes (and deletes the
+data of) each one past the goal, including torrents the operator resumed by hand.
 
 **Manual removal is never guarded.** The Downloads page's cancel and clear
 confirms and the media page's cancel dialog add a hit-and-run warning while the
@@ -133,6 +176,41 @@ runs beside another client named `Built-in`, since clients are looked up by
 name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
+
+**File selection.** `BuiltIn.FileSelectionPolicy` (run by `BuiltIn.Policies`
+for rows that are in the client and downloading, paused, checking or queued)
+deselects junk once per torrent, as soon as the file list is known (a magnet
+has none until its metadata resolves; an empty list waits, and so does a
+`checking` torrent). `Downloads.FileSelection.keep/1` keeps the files the
+importer would take (a video extension that is not a sample, trailer or extra)
+and subtitles, and keeps everything when nothing qualifies. The result goes to
+the client through the adapter's `set_file_selection` (rqbit's file selection
+endpoint) and is recorded in `metadata["file_selection"]`: `auto` with a
+`skipped` count (also 0), `auto_pending` with `attempts` after a failure, and
+`auto_failed` after the third. `auto`, `manual` and `auto_failed` are final,
+and an imported row is never touched. The Downloads drawer's Files panel
+(`MydiaWeb.DownloadsLive.FilesPanel`, backed by `Downloads.TorrentFiles`) is
+the manual side: a checklist the operator edits until the download is
+imported, saved with the `manual` stamp so the automatic pass never overrides
+it. At least one video file must stay selected. The save reads `imported_at`
+from the database, not the drawer's copy. The policy's final check of the
+stored entry, its client write and its stamp, and the save's client write and
+stamp, each run under `TorrentFiles.with_selection_lock/2` (a per-download
+`:global` lock on this node, never taken inside a database transaction), so a
+save cannot land between the policy's check and its write.
+
+**Speed limits.** `download_limit_kib` and `upload_limit_kib` (blank for
+unlimited, otherwise 16 KiB/s or more) reach rqbit as its
+`--ratelimit-download`/`--ratelimit-upload` flags (`BuiltIn.Engine.args/4`).
+They are part of `BuiltIn.Config.restart_key/1`, so a change restarts the
+engine. The seeding fields are not: Mydia's policies read them from the
+runtime entry, and a seeding-only save never restarts rqbit.
+
+**Seeding env vars.** `MYDIA_TORRENT_SEED_RATIO`, `MYDIA_TORRENT_SEED_TIME`
+and `MYDIA_TORRENT_SEED_GOAL_ACTION` map to the three fields through the usual
+overlay (`Config.Env.BuiltInTorrentEnv`), as `MYDIA_TORRENT_DOWNLOAD_LIMIT`
+and `MYDIA_TORRENT_UPLOAD_LIMIT` do for the limits; an env value wins and
+makes the form field read-only.
 
 **Child environment.** rqbit and `torrent-curl` are spawned with every
 `MYDIA_VPN_*` variable and Mydia's secrets unset

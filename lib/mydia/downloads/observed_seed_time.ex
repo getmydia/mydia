@@ -84,20 +84,28 @@ defmodule Mydia.Downloads.ObservedSeedTime do
 
   @doc """
   Updates the running totals for the polled rows (enriched downloads) that
-  need one. A row is tracked when its frozen terms set a seeding goal and its
-  client reports no seed time. Writes only rows whose entry changed.
+  need one. A row is tracked when its seeding goal applies and its client
+  reports no seed time. Writes only rows whose entry changed.
+
+  Returns the rows, each tracked one carrying its new entry in `metadata`, so
+  the policies run on the same poll see it. The first poll that tracks a row
+  therefore reads 0 observed seconds, not the time since completion: seed
+  time counts from when Mydia started observing, so a seed-time target set
+  long after a torrent finished is not met at once. A row whose write failed
+  is returned as it was.
   """
-  @spec record([map()], DateTime.t()) :: :ok
+  @spec record([map()], DateTime.t()) :: [map()]
   def record(rows, now \\ DateTime.utc_now()) do
-    rows
-    |> Enum.filter(&tracked?/1)
-    |> Enum.each(&record_row(&1, now))
+    Enum.map(rows, fn row -> if tracked?(row), do: record_row(row, now), else: row end)
   end
 
   # Each row on its own: one failing row must not skip the rest, nor fail the
   # monitor's poll.
   defp record_row(row, now) do
-    write(row.id, SeedingGoal.currently_seeding?(row), now)
+    case write(row.id, SeedingGoal.currently_seeding?(row), now) do
+      {:ok, %{} = entry} -> %{row | metadata: Map.put(row.metadata || %{}, @key, entry)}
+      _not_written -> row
+    end
   rescue
     exception ->
       Logger.error("Recording observed seed time failed; the poll continues",
@@ -105,11 +113,11 @@ defmodule Mydia.Downloads.ObservedSeedTime do
         error: Exception.message(exception)
       )
 
-      :ok
+      row
   end
 
   defp tracked?(row) do
-    is_nil(Map.get(row, :seeding_time)) and SeedingGoal.applies?(SeedingGoal.terms(row)) and
+    is_nil(Map.get(row, :seeding_time)) and SeedingGoal.goal_applies?(row) and
       (SeedingGoal.currently_seeding?(row) or Map.has_key?(row.metadata, @key))
   end
 
@@ -127,13 +135,15 @@ defmodule Mydia.Downloads.ObservedSeedTime do
     if DB.postgres?(), do: lock(query, "FOR UPDATE"), else: query
   end
 
-  defp step_row(nil, _seeding?, _now), do: :ok
+  # The stored entry after this pass, or nil for a row deleted meanwhile.
+  defp step_row(nil, _seeding?, _now), do: nil
 
   defp step_row(%Download{id: id, metadata: metadata}, seeding?, now) do
     metadata = metadata || %{}
     previous = Map.get(metadata, @key)
     entry = step(previous, seeding?, now)
     if entry != previous, do: update_metadata(id, Map.put(metadata, @key, entry))
+    entry
   end
 
   defp update_metadata(id, metadata),

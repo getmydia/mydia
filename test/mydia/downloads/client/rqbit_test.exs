@@ -2,6 +2,7 @@ defmodule Mydia.Downloads.Client.RqbitTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Downloads.Client.Rqbit
+  alias Mydia.Downloads.Structs.TorrentFile
 
   @hash "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
@@ -625,6 +626,73 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       )
 
       assert {:ok, []} = Rqbit.list_files(config, @hash)
+    end
+  end
+
+  describe "file selection and session limits (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "torrent_files joins details and file_progress by index", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+        json_resp(conn, 200, %{
+          "files" => [
+            %{"name" => "Alpha.S01E01.mkv", "length" => 100, "included" => true},
+            %{
+              "name" => "",
+              "components" => ["Sample", "s.mkv"],
+              "length" => 10,
+              "included" => false
+            }
+          ]
+        })
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/torrents/#{@hash}/stats/v1", fn conn ->
+        json_resp(conn, 200, %{"file_progress" => [40, 0]})
+      end)
+
+      assert {:ok,
+              [
+                %TorrentFile{
+                  index: 0,
+                  path: "Alpha.S01E01.mkv",
+                  size: 100,
+                  included?: true,
+                  downloaded: 40
+                },
+                %TorrentFile{
+                  index: 1,
+                  path: "Sample/s.mkv",
+                  size: 10,
+                  included?: false,
+                  downloaded: 0
+                }
+              ]} = Rqbit.torrent_files(config, @hash)
+    end
+
+    test "set_file_selection posts the index list as JSON", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(body) == %{"only_files" => [0, 2]}
+        json_resp(conn, 200, %{})
+      end)
+
+      assert :ok = Rqbit.set_file_selection(config, @hash, [0, 2])
+    end
+
+    test "set_file_selection maps a 404 to not_found", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        json_resp(conn, 404, %{"error_kind" => "torrent_not_found", "human_readable" => "nope"})
+      end)
+
+      assert {:error, %Mydia.Downloads.Client.Error{type: :not_found}} =
+               Rqbit.set_file_selection(config, @hash, [0])
     end
   end
 

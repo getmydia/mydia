@@ -34,6 +34,43 @@ defmodule Mydia.Downloads.BuiltInTest do
     assert BuiltIn.managed?(%{options: client.connection_settings})
   end
 
+  describe "seeding_target/0" do
+    defp put_config(fields) do
+      BuiltIn.put_runtime(%Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: struct!(Config, fields)
+      })
+    end
+
+    test "is nil with no runtime" do
+      assert BuiltIn.seeding_target() == nil
+    end
+
+    test "converts minutes to seconds and is nil with no targets" do
+      put_config(seed_ratio: nil, seed_time: 90)
+      assert %{ratio: nil, seed_time: 5400, action: :pause} = BuiltIn.seeding_target()
+
+      put_config(seed_ratio: nil, seed_time: nil)
+      assert BuiltIn.seeding_target() == nil
+
+      put_config(seed_ratio: 0.0, seed_time: nil, seed_goal_action: :remove)
+      assert %{ratio: ratio, seed_time: nil, action: :remove} = BuiltIn.seeding_target()
+      assert ratio == 0.0
+    end
+
+    test "client_configs/0 sets remove_completed only for a remove target" do
+      put_config(seed_ratio: 1.0, seed_goal_action: :remove)
+      assert [%{remove_completed: true}] = BuiltIn.client_configs()
+
+      put_config(seed_ratio: 1.0, seed_goal_action: :pause)
+      assert [%{remove_completed: false}] = BuiltIn.client_configs()
+
+      put_config(seed_goal_action: :remove)
+      assert [%{remove_completed: false}] = BuiltIn.client_configs()
+    end
+  end
+
   test "guard/2 passes unmanaged configs through" do
     assert BuiltIn.guard(%{options: %{}}) == :ok
   end
