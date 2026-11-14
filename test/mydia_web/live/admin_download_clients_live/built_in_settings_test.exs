@@ -443,11 +443,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
     test "the seeding and speed limit fields render", %{conn: conn} do
       view = open_settings(conn)
 
-      assert has_element?(view, "#built-in-seed-ratio")
-      assert has_element?(view, "#built-in-seed-time")
-      assert has_element?(view, "#built-in-download-limit")
-      assert has_element?(view, "#built-in-upload-limit")
-      assert has_element?(view, "#built-in-seed-goal-action-remove")
+      assert has_element?(view, "#built-in-field-seed_ratio")
+      assert has_element?(view, "#built-in-field-seed_time")
+      assert has_element?(view, "#built-in-field-download_limit")
+      assert has_element?(view, "#built-in-field-upload_limit")
+      assert has_element?(view, "#built-in-seed_goal_action-remove")
       assert has_element?(view, "#built-in-speed-limits", "unlimited")
     end
 
@@ -558,11 +558,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
         )
 
       doc = LazyHTML.from_fragment(html)
-      assert LazyHTML.query(doc, "#built-in-upload-limit[disabled]") |> Enum.count() == 1
-      assert LazyHTML.query(doc, "#built-in-download-limit[disabled]") |> Enum.count() == 0
+      assert LazyHTML.query(doc, "#built-in-field-upload_limit[disabled]") |> Enum.count() == 1
+      assert LazyHTML.query(doc, "#built-in-field-download_limit[disabled]") |> Enum.count() == 0
       assert LazyHTML.query(doc, "#built-in-source-upload_limit") |> LazyHTML.text() =~ "ENV"
       assert html =~ "MYDIA_TORRENT_UPLOAD_LIMIT"
-      assert LazyHTML.query(doc, "#built-in-seed-goal-action") |> Enum.count() == 0
+      assert LazyHTML.query(doc, "#built-in-seed_goal_action") |> Enum.count() == 0
     end
 
     test "lists environment-only VPN variable names, never values" do

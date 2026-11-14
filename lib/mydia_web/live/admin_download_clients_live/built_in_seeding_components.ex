@@ -22,28 +22,33 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
           "Leave a target blank to seed forever. A tracker's own minimum always applies on top."
         )}
       </p>
-      <.number_row
+      <%!-- A number input's default step of 1 would make browsers reject 1.5. --%>
+      <.text_field
         form={@form}
-        sources={@sources}
         field={:seed_ratio}
-        id="built-in-seed-ratio"
-        label={gettext("Seed ratio")}
-        step="0.1"
-      />
-      <.number_row
-        form={@form}
         sources={@sources}
+        inputmode="decimal"
+        label={gettext("Seed ratio")}
+      />
+      <.text_field
+        form={@form}
         field={:seed_time}
-        id="built-in-seed-time"
+        sources={@sources}
+        type="number"
         label={gettext("Seed time (minutes)")}
-        step="1"
       />
       <.field_row
         field={:seed_goal_action}
         label={gettext("When a target is reached")}
         sources={@sources}
       >
-        <.goal_action form={@form} locked?={locked?(@sources, :seed_goal_action)} />
+        <.choice
+          form={@form}
+          field={:seed_goal_action}
+          locked?={locked?(@sources, :seed_goal_action)}
+          label={gettext("When a target is reached")}
+          options={[{"pause", gettext("Pause")}, {"remove", gettext("Remove from client")}]}
+        />
       </.field_row>
     </fieldset>
 
@@ -53,82 +58,23 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
     >
       <legend class="fieldset-legend">{gettext("Speed limits")}</legend>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-        <.number_row
+        <.text_field
           form={@form}
-          sources={@sources}
           field={:download_limit}
-          id="built-in-download-limit"
-          label={gettext("Download limit (KiB/s)")}
-          step="1"
-        />
-        <.number_row
-          form={@form}
           sources={@sources}
+          type="number"
+          label={gettext("Download limit (KiB/s)")}
+        />
+        <.text_field
+          form={@form}
           field={:upload_limit}
-          id="built-in-upload-limit"
+          sources={@sources}
+          type="number"
           label={gettext("Upload limit (KiB/s)")}
-          step="1"
         />
       </div>
       <p class="label whitespace-normal">{gettext("0 or blank for unlimited.")}</p>
     </fieldset>
-    """
-  end
-
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :sources, :map, required: true
-  attr :field, :atom, required: true
-  attr :id, :string, required: true
-  attr :label, :string, required: true
-  attr :step, :string, required: true
-
-  defp number_row(assigns) do
-    ~H"""
-    <.field_row field={@field} label={@label} sources={@sources} for={@id}>
-      <.input
-        field={@form[@field]}
-        id={@id}
-        type="number"
-        min="0"
-        step={@step}
-        container_class=""
-        disabled={locked?(@sources, @field)}
-      />
-    </.field_row>
-    """
-  end
-
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :locked?, :boolean, required: true
-
-  defp goal_action(assigns) do
-    assigns =
-      assigns
-      |> assign(:value, to_string(assigns.form[:seed_goal_action].value))
-      |> assign(:options, [{"pause", gettext("Pause")}, {"remove", gettext("Remove from client")}])
-
-    ~H"""
-    <%= if @locked? do %>
-      <p id="built-in-seed-goal-action-locked" class="text-sm">
-        {Enum.find_value(@options, @value, fn {v, label} -> if v == @value, do: label end)}
-      </p>
-    <% else %>
-      <.segmented_control
-        id="built-in-seed-goal-action"
-        value={@value}
-        event="validate_built_in"
-        param="seed_goal_action"
-        label={gettext("When a target is reached")}
-      >
-        <:option
-          :for={{value, label} <- @options}
-          id={"built-in-seed-goal-action-#{value}"}
-          value={value}
-          label={label}
-        />
-      </.segmented_control>
-      <input type="hidden" name={@form[:seed_goal_action].name} value={@value} />
-    <% end %>
     """
   end
 end

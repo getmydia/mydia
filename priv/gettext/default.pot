@@ -22101,12 +22101,12 @@ msgstr ""
 msgid "via %{provider}, public IP %{ip}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:73
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:76
 #, elixir-autogen, elixir-format
 msgid "0 or blank for unlimited."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:61
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:66
 #, elixir-autogen, elixir-format
 msgid "Download limit (KiB/s)"
 msgstr ""
@@ -22116,17 +22116,17 @@ msgstr ""
 msgid "Leave a target blank to seed forever. A tracker's own minimum always applies on top."
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:108
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:50
 #, elixir-autogen, elixir-format
 msgid "Pause"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:108
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:50
 #, elixir-autogen, elixir-format
 msgid "Remove from client"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:30
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:31
 #, elixir-autogen, elixir-format
 msgid "Seed ratio"
 msgstr ""
@@ -22141,18 +22141,18 @@ msgstr ""
 msgid "Seeding"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:54
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Speed limits"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:69
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:73
 #, elixir-autogen, elixir-format
 msgid "Upload limit (KiB/s)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:43
-#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:121
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:42
+#: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:49
 #, elixir-autogen, elixir-format
 msgid "When a target is reached"
 msgstr ""
