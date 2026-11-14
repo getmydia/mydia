@@ -3,7 +3,7 @@ defmodule Mydia.Downloads.WantedFilesTest do
 
   import Mydia.MediaFixtures
 
-  alias Mydia.Downloads.WantedFiles
+  alias Mydia.Downloads.{FileSelection, WantedFiles}
   alias Mydia.Indexers.Structs.SearchResultMetadata
 
   @pack "The.Lantern.Keepers.S02"
@@ -131,6 +131,30 @@ defmodule Mydia.Downloads.WantedFilesTest do
 
     assert sel.only_files == [0]
     assert sel.file_episodes == %{}
+  end
+
+  test "junk is whatever FileSelection calls junk" do
+    paths = [
+      "Saltmarsh.Hollow.2031.mkv",
+      "Saltmarsh.Hollow.2031.ts",
+      "Saltmarsh.Hollow.2031.en.srt",
+      "Saltmarsh.Hollow.2031.idx",
+      "Trailers/trailer.mkv",
+      "Saltmarsh.Hollow.2031-sample.mkv",
+      "poster.jpg"
+    ]
+
+    files = paths |> Enum.with_index() |> Enum.map(fn {path, i} -> file(path, i) end)
+
+    sel =
+      WantedFiles.select(%{media_item: nil, season_number: nil, targeted_episode_ids: []}, files)
+
+    expected =
+      for %{index: i, path: path} <- files,
+          FileSelection.importable?(path) or FileSelection.subtitle?(path),
+          do: i
+
+    assert sel.only_files == expected
   end
 
   test "nil media item behaves like a movie" do

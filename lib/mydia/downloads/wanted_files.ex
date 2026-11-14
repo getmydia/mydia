@@ -6,17 +6,22 @@ defmodule Mydia.Downloads.WantedFiles do
   torrent's file list (relative paths) this module keeps the files worth
   importing and reports which episode each kept video belongs to.
 
+  Junk (samples, extras, anything neither an importable video nor a
+  subtitle) is decided by `Mydia.Downloads.FileSelection`, the same rules the
+  built-in client's `BuiltIn.FileSelectionPolicy` applies after an add. This
+  module adds the episode rules on top.
+
   See `design/specs/2026-11-14-builtin-torrent-per-file-and-disk-guard-design.md`,
   "Wanted files".
   """
 
   import Ecto.Query, warn: false
 
+  alias Mydia.Downloads.FileSelection
   alias Mydia.Downloads.Queue.Duplicates
-  alias Mydia.Library.{MediaFile, ReleaseParser, SampleDetector, Scanner}
+  alias Mydia.Library.{MediaFile, ReleaseParser}
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
-  alias Mydia.Subtitles.Archive
 
   defstruct only_files: nil,
             selected_bytes: 0,
@@ -186,21 +191,16 @@ defmodule Mydia.Downloads.WantedFiles do
 
   # -- common -----------------------------------------------------------
 
-  # Drops samples, extras and files that are neither video nor subtitle.
+  # Junk is what `FileSelection` calls junk, so this selection and the
+  # built-in client's post-add `FileSelectionPolicy` agree: a video the
+  # importer would take (not a sample, trailer or extra), or a subtitle.
   defp classify(file) do
-    ext = file.path |> Path.extname() |> String.downcase()
-
     kind =
       cond do
-        ext in Scanner.video_extensions() -> :video
-        ext in Archive.subtitle_extensions() -> :subtitle
+        FileSelection.importable?(file.path) -> :video
+        FileSelection.subtitle?(file.path) -> :subtitle
         true -> :drop
       end
-
-    kind =
-      if kind != :drop and file.path |> SampleDetector.detect() |> SampleDetector.excluded?(),
-        do: :drop,
-        else: kind
 
     %{file: file, kind: kind}
   end
