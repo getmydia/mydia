@@ -19,10 +19,12 @@ defmodule MetadataRelay.Router do
   # request and response line twice.
   #
   # application/x-ndjson passes through unread: POST /player-logs reads its
-  # own gzipped body (MetadataRelay.PlayerLogs.Handler).
+  # own gzipped body (MetadataRelay.PlayerLogs.Handler). The same goes for the
+  # backup bodies: the signature covers their raw bytes (MetadataRelay.Backup.Handler).
+  # Not a +json type: the endpoint's JSON parser would consume that.
   plug(Plug.Parsers,
     parsers: [:urlencoded, :json],
-    pass: ["application/x-ndjson"],
+    pass: ["application/x-ndjson", "application/octet-stream", "application/vnd.mydia.backup"],
     json_decoder: Jason
   )
 
@@ -353,6 +355,10 @@ defmodule MetadataRelay.Router do
   post "/player-logs" do
     MetadataRelay.PlayerLogs.Handler.call(conn)
   end
+
+  # End-to-end encrypted player backup. See MetadataRelay.Backup.Handler and
+  # docs/backup.md. forward keeps conn.request_path whole, which is the signed path.
+  forward("/backup/v1", to: MetadataRelay.Backup.Handler)
 
   # Subtitle Search
   post "/api/v1/subtitles/search" do

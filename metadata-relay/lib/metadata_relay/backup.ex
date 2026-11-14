@@ -23,6 +23,8 @@ defmodule MetadataRelay.Backup do
   @write_window_ms 3_600_000
   @read_attempts 3
   @max_members 16
+  @idle_days 180
+  @sweep_batch 500
 
   @vault_id ~r/\A[0-9a-f]{32}\z/
   @slot_id ~r/\A[0-9a-f]{16}\z/
@@ -98,6 +100,11 @@ defmodule MetadataRelay.Backup do
   end
 
   def lookup(_), do: {:error, :not_found}
+
+  @doc "Whether a vault with this id exists."
+  @spec vault_exists?(String.t()) :: boolean()
+  def vault_exists?(vault_id),
+    do: valid_vault_id?(vault_id) and Repo.exists?(from(v in Vault, where: v.id == ^vault_id))
 
   @doc "Whether `signer` (32 raw bytes) is a current member of the vault."
   @spec member?(String.t(), binary()) :: boolean()
@@ -215,11 +222,8 @@ defmodule MetadataRelay.Backup do
           check_owner!(vault_id, signer, slot_id)
           check_epoch!(vault_id, epoch)
 
-          case RateLimiter.check_rate_limit("backup:vault:#{vault_id}",
-                 limit: @write_limit,
-                 window_ms: @write_window_ms
-               ) do
-            {:ok, _} -> :ok
+          case charge_write(vault_id) do
+            :ok -> :ok
             {:error, :rate_limited} -> Repo.rollback(:rate_limited)
           end
 
@@ -245,6 +249,21 @@ defmodule MetadataRelay.Backup do
     with {:ok, new_seq} <- result do
       if if_match, do: Store.delete(Store.slot_path(vault_id, slot_id, if_match))
       {:ok, new_seq}
+    end
+  end
+
+  @doc """
+  Charges one write against the vault's hourly budget (120 per vault). Slot
+  writes and member changes share it.
+  """
+  @spec charge_write(String.t()) :: :ok | {:error, :rate_limited}
+  def charge_write(vault_id) do
+    case RateLimiter.check_rate_limit("backup:vault:#{vault_id}",
+           limit: @write_limit,
+           window_ms: @write_window_ms
+         ) do
+      {:ok, _} -> :ok
+      {:error, :rate_limited} -> {:error, :rate_limited}
     end
   end
 
@@ -353,6 +372,38 @@ defmodule MetadataRelay.Backup do
 
     :ok
   end
+
+  @doc """
+  Deletes every vault idle for more than 180 days (no write since, or never
+  written and created that long ago), files included. Returns how many.
+  """
+  @spec sweep(DateTime.t()) :: {:ok, non_neg_integer()}
+  def sweep(now \\ DateTime.utc_now()) do
+    cutoff = DateTime.add(now, -@idle_days * 86_400, :second)
+    {:ok, sweep_batches(cutoff, 0)}
+  end
+
+  defp sweep_batches(cutoff, deleted) do
+    ids =
+      Repo.all(
+        from(v in Vault,
+          where: coalesce(v.last_write_at, v.inserted_at) < type(^cutoff, :utc_datetime_usec),
+          select: v.id,
+          order_by: v.id,
+          limit: @sweep_batch
+        )
+      )
+
+    Enum.each(ids, &delete_vault/1)
+
+    if length(ids) == @sweep_batch,
+      do: sweep_batches(cutoff, deleted + length(ids)),
+      else: deleted + length(ids)
+  end
+
+  @doc "Reads `backup.<key>` from the application environment."
+  @spec config(atom()) :: term()
+  def config(key), do: Application.fetch_env!(:metadata_relay, :backup) |> Keyword.get(key)
 
   @doc """
   Adds members, removes members, replaces the recovery key, or rotates the
