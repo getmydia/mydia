@@ -80,8 +80,32 @@ has no total seed time limit, so a seed-time-only goal is left on the global
 ratio mode. Neither alternative is better: mode 1 needs a ratio, and mode 2
 (unlimited) never pauses, which keeps Remove After Import waiting forever. If
 the global ratio stops such a torrent early, the guard keeps it in the client.
-rTorrent and rqbit get nothing. A failed push is
+rTorrent and rqbit get nothing (rqbit has no per-torrent limits, so the
+built-in client's target is enforced by Mydia, below). A failed push is
 logged and the guard still applies.
+
+**Operator target (built-in client only).** The built-in client's `seed_ratio`
+and `seed_time` settings (minutes; the target holds seconds) are a seeding goal
+of the operator's own, with `seed_goal_action` (`pause` or `remove`).
+`SeedingGoal.effective_terms/2` merges it with the frozen tracker terms per
+dimension, the larger requirement winning, and carries the tracker's
+`private?`. `SeedingGoal.goal_terms/2` is what `for_download/2` and the guard
+read: the merged terms for a download whose `download_client` is
+`BuiltIn.name()`, the plain tracker terms for every other client. A ratio of 0
+is a target. A tracker minimum above the target therefore holds the torrent
+longer; the target never lowers it. `BuiltIn.seeding_target/0` reads the
+running client's config and returns nil without a runtime or with neither
+field set.
+
+`BuiltIn.Policies`, called from `DownloadMonitor` each poll for the rows of
+the built-in client, runs `BuiltIn.SeedingPolicy` on each. Once the merged goal
+is met while the torrent is seeding: with `pause`, the torrent is paused through
+the adapter and the row is stamped `metadata["seeding_goal_reached_at"]`; the
+stamp makes the pause one-shot, so a torrent the operator resumes by hand is
+not paused again. With `remove`, an imported row is left to `ClientRemoval`
+(`BuiltIn.client_configs/0` sets `remove_completed` for a remove target, so the
+normal removal path takes it, still behind the guard), and an unimported one is
+paused until it is imported. Failures are logged and never fail the poll.
 
 **Manual removal is never guarded.** The Downloads page's cancel and clear
 confirms and the media page's cancel dialog add a hit-and-run warning while the
@@ -133,6 +157,37 @@ runs beside another client named `Built-in`, since clients are looked up by
 name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
+
+**File selection.** `BuiltIn.FileSelectionPolicy` (run by `BuiltIn.Policies`
+for rows that are in the client and downloading, paused, checking or queued)
+deselects junk once per torrent, as soon as the file list is known (a magnet
+has none until its metadata resolves; an empty list waits, and so does a
+`checking` torrent). `Downloads.FileSelection.keep/1` keeps the files the
+importer would take (a video extension that is not a sample, trailer or extra)
+and subtitles, and keeps everything when nothing qualifies. The result goes to
+the client through the adapter's `set_file_selection` (rqbit's file selection
+endpoint) and is recorded in `metadata["file_selection"]`: `auto` with a
+`skipped` count (also 0), `auto_pending` with `attempts` after a failure, and
+`auto_failed` after the third. `auto`, `manual` and `auto_failed` are final,
+and an imported row is never touched. The Downloads drawer's Files panel
+(`MydiaWeb.DownloadsLive.FilesPanel`, backed by `Downloads.TorrentFiles`) is
+the manual side: a checklist the operator edits until the download is
+imported, saved with the `manual` stamp so the automatic pass never overrides
+it. At least one video file must stay selected.
+
+**Speed limits.** `download_limit` and `upload_limit` (KiB/s, 0 or blank for
+unlimited) are session-wide in rqbit, which forgets them whenever the engine
+restarts. `BuiltIn.Limits`, a process in the instance tree, pushes them each
+time `Status` reports the engine running after a non-running state, and when a
+settings save hands it a new config. A running to running status change pushes
+nothing. A failed push shows as a `{:limits_failed, message}` warning on the
+panel until a later push succeeds.
+
+**Seeding and limit env vars.** `MYDIA_TORRENT_SEED_RATIO`,
+`MYDIA_TORRENT_SEED_TIME`, `MYDIA_TORRENT_SEED_GOAL_ACTION`,
+`MYDIA_TORRENT_DOWNLOAD_LIMIT` and `MYDIA_TORRENT_UPLOAD_LIMIT` map to the five
+fields through the usual overlay (`Config.Env.BuiltInTorrentEnv`); an env value
+wins and makes the form field read-only.
 
 **Child environment.** rqbit and `torrent-curl` are spawned with every
 `MYDIA_VPN_*` variable and Mydia's secrets unset

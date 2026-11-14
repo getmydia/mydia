@@ -78,6 +78,24 @@ applies to new grabs; torrents already running finish where they started.
 - **Download path.** `/data/downloads` by default. Torrent state lives in
   `/config/rqbit`. In the Docker image, files the engine writes belong to group
   `mydia-torrent`, with or without the VPN.
+- **Seeding target.** On the Torrent tab, set a seed ratio, a seed time in
+  minutes, or both; the target is reached when either is. When it is, the
+  client pauses the torrent, or removes it from the client once it has been
+  imported if you chose "Remove from client". A torrent that has not been
+  imported yet is paused instead. If you resume a paused torrent yourself,
+  Mydia leaves it running. A private tracker's own minimum ratio or seed time
+  still applies when it is higher than your target, so the target never
+  shortens it. Leave both fields blank for no target.
+- **File selection.** When a torrent's file list is known, Mydia skips the
+  files it would not import (samples, trailers, extras and anything that is not a video or subtitle)
+  and keeps the videos and subtitles. If a torrent has no importable video,
+  everything is downloaded. Open a download in Downloads to see its Files
+  panel and tick or untick files yourself; your choice replaces the automatic
+  one and stays until the download is imported. At least one video file must
+  stay ticked.
+- **Speed limits.** Download and upload limits in KiB/s apply to the whole
+  client, across all torrents. `0` or blank means unlimited. They are
+  reapplied whenever the client restarts.
 - **VPN (experimental).** Mydia runs a patched gluetun that tunnels only the
   built-in client. The engine starts once the VPN is up and a leak check
   passes, and stops when it drops. Changing any VPN setting runs the same
