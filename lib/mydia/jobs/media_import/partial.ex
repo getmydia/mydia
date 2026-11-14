@@ -163,28 +163,74 @@ defmodule Mydia.Jobs.MediaImport.Partial do
   end
 
   @doc """
-  True while a partial `MediaImport` job for the download is executing and
-  was attempted after this node booted.
+  True while a partial `MediaImport` job for the download is really running.
 
-  No Oban Lifeline runs here, so a job orphaned in `executing` by a crash or
-  restart stays there forever. Every job really running now started after
-  boot, however long a large copy takes; one attempted before boot is an
-  orphan and no longer holds the full import off.
+  No Oban Lifeline runs here, so a job orphaned in `executing` by a crash, a
+  restart or a queue restarted inside this node stays there forever. An
+  executing partial row counts only if its id is among the jobs the
+  `:early_import` queue's producer on this node is running
+  (`Oban.check_queue/1`), however long a large copy takes.
+
+  When that lookup fails (the queue is not running, its producer exited), the
+  boot-time rule stands in: a row attempted after this node booted counts,
+  one attempted before is an orphan.
+
+  The lookup is `config :mydia, #{inspect(__MODULE__)}, running_ids: fun`, a
+  zero-arity function returning `{:ok, [job_id]}` or `:error`; tests replace
+  it so they need no running queue.
   """
   @spec executing?(binary()) :: boolean()
   def executing?(download_id) when is_binary(download_id) do
-    booted_at = Mydia.Application.booted_at()
-
     # The partial flag is a JSON boolean, which SQLite and Postgres extract
     # differently, so it is checked here rather than in SQL.
-    from(j in Oban.Job,
-      where: j.worker == @worker and j.state == "executing",
-      where: j.attempted_at >= ^booted_at,
-      where: ^Mydia.DB.json_equals(:args, "$.download_id", download_id),
-      select: j.args
-    )
-    |> Repo.all()
-    |> Enum.any?(&(&1["partial"] == true))
+    rows =
+      from(j in Oban.Job,
+        where: j.worker == @worker and j.state == "executing",
+        where: ^Mydia.DB.json_equals(:args, "$.download_id", download_id),
+        select: {j.id, j.attempted_at, j.args}
+      )
+      |> Repo.all()
+      |> Enum.filter(fn {_id, _attempted_at, args} -> args["partial"] == true end)
+
+    rows != [] and Enum.any?(rows, live_fun())
+  end
+
+  defp live_fun do
+    case running_ids() do
+      {:ok, ids} ->
+        running = MapSet.new(ids)
+        fn {id, _attempted_at, _args} -> MapSet.member?(running, id) end
+
+      :error ->
+        booted_at = Mydia.Application.booted_at()
+
+        fn {_id, attempted_at, _args} ->
+          not is_nil(attempted_at) and DateTime.compare(attempted_at, booted_at) != :lt
+        end
+    end
+  end
+
+  defp running_ids do
+    lookup =
+      :mydia
+      |> Application.get_env(__MODULE__, [])
+      |> Keyword.get(:running_ids, &oban_running_ids/0)
+
+    case lookup.() do
+      {:ok, ids} when is_list(ids) -> {:ok, ids}
+      _ -> :error
+    end
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  defp oban_running_ids do
+    case Oban.check_queue(queue: @queue) do
+      %{running: ids} when is_list(ids) -> {:ok, ids}
+      _ -> :error
+    end
   end
 
   @doc """

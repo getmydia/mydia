@@ -483,6 +483,79 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
                  "partial" => false
                })
     end
+
+    # The :early_import queue's executor is the authority: a row it is running
+    # is live whatever its attempted_at says.
+    test "an executing partial row the early_import queue is running holds the full import off",
+         ctx do
+      booted_at = DateTime.add(DateTime.utc_now(), -60, :second)
+      put_booted_at(booted_at)
+      download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
+
+      job =
+        insert_executing_job(
+          %{"download_id" => download.id, "partial" => true},
+          DateTime.add(booted_at, -1, :second)
+        )
+
+      put_running_ids(fn -> {:ok, [job.id]} end)
+
+      assert Partial.executing?(download.id)
+
+      assert {:snooze, 30} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir,
+                 "partial" => false
+               })
+    end
+
+    # A queue restarted inside this node orphans its executing rows without a
+    # reboot, so attempted_at alone would hold the full import off forever.
+    test "an executing partial row the early_import queue is not running does not block",
+         ctx do
+      put_booted_at(DateTime.add(DateTime.utc_now(), -2 * 60 * 60, :second))
+      download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
+      stub_status(ctx, [ctx.ep1_path, ctx.ep2_path])
+
+      job =
+        insert_executing_job(
+          %{"download_id" => download.id, "partial" => true},
+          DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        )
+
+      put_running_ids(fn -> {:ok, [job.id + 1]} end)
+
+      refute Partial.executing?(download.id)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir,
+                 "partial" => false
+               })
+    end
+
+    test "a failed running-jobs lookup falls back to the boot-time rule" do
+      booted_at = DateTime.add(DateTime.utc_now(), -60, :second)
+      put_booted_at(booted_at)
+      live_id = Ecto.UUID.generate()
+      orphan_id = Ecto.UUID.generate()
+
+      insert_executing_job(%{"download_id" => live_id, "partial" => true})
+
+      insert_executing_job(
+        %{"download_id" => orphan_id, "partial" => true},
+        DateTime.add(booted_at, -1, :second)
+      )
+
+      for lookup <- [fn -> :error end, fn -> exit(:noproc) end, fn -> raise "registry gone" end] do
+        put_running_ids(lookup)
+
+        assert Partial.executing?(live_id)
+        refute Partial.executing?(orphan_id)
+      end
+    end
   end
 
   describe "exclude_early/2" do
@@ -559,6 +632,13 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
     previous = Mydia.Application.booted_at()
     Mydia.Application.put_booted_at(booted_at)
     on_exit(fn -> Mydia.Application.put_booted_at(previous) end)
+  end
+
+  # Stands in for the :early_import queue's executor; this module runs
+  # async: false.
+  defp put_running_ids(lookup) do
+    Application.put_env(:mydia, Partial, running_ids: lookup)
+    on_exit(fn -> Application.delete_env(:mydia, Partial) end)
   end
 
   # Oban stamps attempted_at when it starts a job, so an executing row has one.

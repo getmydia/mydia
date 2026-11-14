@@ -347,12 +347,16 @@ completion, and a second partial job is dropped until the first finishes.
 Partial jobs run on the single-slot `:early_import` queue, so two of them never
 copy at once even when a copy outlasts the 600-second unique period (the
 second one's atomic copy would remove the first one's temp file); full imports
-stay on `:default`. A full import that starts while a partial job for the download is executing
-snoozes 30 seconds (a snooze does not use an attempt). No Oban Lifeline runs,
-so an executing row is orphaned only by a crash or restart: a partial row
-attempted before this node booted (`Mydia.Application.booted_at/0`) is
-ignored, so a job that died mid-run cannot hold the full import back, while
-one copying a large file for half an hour still does. Partial mode never stamps
+stay on `:default`. A full import that starts while a partial job for the
+download is executing snoozes 30 seconds (a snooze does not use an attempt).
+No Oban Lifeline runs, so a crash, a restart or a queue restarted inside this
+node leaves an orphaned `executing` row. An executing partial row counts only
+if the `:early_import` queue on this node is running its job id
+(`Oban.check_queue/1`'s `:running`), so a job that died mid-run cannot hold
+the full import back, while one copying a large file for half an hour still
+does. When that lookup fails (the queue is not running), the boot-time rule
+stands in: a row attempted before this node booted
+(`Mydia.Application.booted_at/0`) is ignored. Partial mode never stamps
 `imported_at`, runs `detect_partial_pack` or removes the torrent; a file that
 fails stays out of `early_imported_paths` and the full import retries it.
 It records its paths through `MetadataKey.modify/2`, under the same row lock

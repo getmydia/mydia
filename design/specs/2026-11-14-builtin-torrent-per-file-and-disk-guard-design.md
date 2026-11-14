@@ -185,7 +185,10 @@ next poll picks up what it left). Partial jobs run on a single-slot
 `:early_import` queue, so two never copy at once even when a copy outlasts
 the unique period. A partial job that starts after the
 download is marked complete does nothing. A full import that starts while a
-partial job for the download is executing snoozes 30 seconds.
+partial job for the download is executing snoozes 30 seconds. With no Oban
+Lifeline an `executing` row can be orphaned, so a partial row counts only
+while the `:early_import` queue on this node reports its job id as running;
+if that lookup fails, a row attempted after this node booted counts.
 
 ### MediaImport partial mode
 
