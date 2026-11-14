@@ -58,6 +58,8 @@ Future<void> refreshHome(WidgetRef ref, Iterable<SourceId> ids) async {
   // Libraries paired players lend refetch the host's index first, so the
   // feeds below read the new copy.
   await refreshPeerFilesSources(ref.read, ids);
+  // Home may have gone while the hosts answered, taking its ref with it.
+  if (!ref.context.mounted) return;
   for (final id in ids) {
     ref.invalidate(sourceContinueWatchingProvider(id));
     ref.invalidate(sourceRecentlyAddedProvider(id));

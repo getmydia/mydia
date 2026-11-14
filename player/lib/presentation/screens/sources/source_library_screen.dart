@@ -346,6 +346,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
         // A library a paired player lends refetches the host's index first,
         // so the browse below reads the new copy.
         await refreshPeerFilesSources(ref.read, [library.sourceId]);
+        if (!mounted) return;
         await ref.read(invalidatorProvider).invalidate([key.target]);
       },
       body: (context, scrollTopPadding) => _withScanBanner(
