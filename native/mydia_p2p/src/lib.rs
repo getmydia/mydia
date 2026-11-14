@@ -344,7 +344,7 @@ fn start_listening(
             let host = &resource_for_thread.host;
             let mut rx = event_rx.lock().await;
             while let Some(event) = rx.recv().await {
-                // `PeerSync` is the same: it is a player-to-player request, and
+                // `PeerSync` and `PeerFiles` are the same: they are player-to-player requests, and
                 // a client that sends one here would otherwise wait out the
                 // 30s response timeout instead of getting an error.
                 //
@@ -367,7 +367,8 @@ fn start_listening(
                     request:
                         MydiaRequest::RemoteControl(_)
                         | MydiaRequest::Custom(_)
-                        | MydiaRequest::PeerSync(_),
+                        | MydiaRequest::PeerSync(_)
+                        | MydiaRequest::PeerFiles(_),
                     request_id,
                     ..
                 } = &event
