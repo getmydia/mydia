@@ -168,9 +168,15 @@ class FilesFixture {
       title: 'Glass Orchard',
       year: 2021,
       posterPath: '/orchard.jpg',
+      backdropPath: '/orchard-back.jpg',
       seasons: {
         1: [
-          MatchedEpisode(season: 1, episode: 1, title: 'Seedlings'),
+          MatchedEpisode(
+            season: 1,
+            episode: 1,
+            title: 'Seedlings',
+            stillPath: '/seedlings.jpg',
+          ),
           MatchedEpisode(season: 1, episode: 2, title: 'Frost'),
         ],
         0: [],
