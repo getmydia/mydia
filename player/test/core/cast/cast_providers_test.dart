@@ -755,5 +755,48 @@ void main() {
         async.flushMicrotasks();
       });
     });
+
+    test(
+        'sweeps again when a listener comes back, with the app still in the '
+        'foreground', () {
+      fakeAsync((async) {
+        var sweepCalls = 0;
+        final targets = AmbientTargets(
+          rosterSource: () async {
+            sweepCalls++;
+            return const ['node-tv'];
+          },
+          probe: (nodeId) async => null,
+        );
+
+        final c = ProviderContainer(overrides: [
+          ambientTargetsProvider.overrideWithValue(targets),
+        ]);
+
+        var sub = c.listen(ambientPlayingProvider, (_, __) {});
+        async.flushMicrotasks();
+        expect(sweepCalls, 1);
+
+        // A session of this device's own takes the bar: nothing listens,
+        // and the provider is disposed.
+        sub.close();
+        async.elapse(const Duration(seconds: 1));
+        expect(c.exists(ambientPlayingProvider), isFalse,
+            reason: 'baseline: autodispose ran');
+
+        // Detached: the bar listens for the banner again.
+        sub = c.listen(ambientPlayingProvider, (_, __) {});
+        async.flushMicrotasks();
+        expect(sweepCalls, 2,
+            reason: 'losing every listener is not an app background; the '
+                'banner must come back after a detach without waiting for '
+                'the next app resume');
+
+        sub.close();
+        c.dispose();
+        unawaited(targets.dispose());
+        async.flushMicrotasks();
+      });
+    });
   });
 }

@@ -203,8 +203,8 @@ void forgetDismissalsOnStop(Ref ref, AmbientTargets targets) {
 /// [AmbientTargets]' own dartdoc), so it only runs while the banner actually
 /// has room to show one — `CastMiniController` only watches this when there
 /// is no cast session and no remembered target of its own. Losing every
-/// listener drops the held connections via [AmbientTargets.onBackground]
-/// (see `ref.onDispose` below); gaining one again re-sweeps.
+/// listener drops the held connections via [AmbientTargets.release] (see
+/// `ref.onDispose` below); gaining one again re-sweeps.
 final ambientPlayingProvider =
     StreamProvider.autoDispose<List<AmbientTarget>>((ref) async* {
   final targets = ref.watch(ambientTargetsProvider);
@@ -218,9 +218,13 @@ final ambientPlayingProvider =
     _ambientResweepInterval,
     (_) => unawaited(targets.sweep()),
   );
+  // Release, not background: losing every listener (a session of this
+  // device's own took the bar) says nothing about the app's lifecycle, and
+  // a backgrounded `AmbientTargets` ignores the sweep the next listener
+  // starts, until the app is next resumed.
   ref.onDispose(() {
     resweep.cancel();
-    targets.onBackground();
+    targets.release();
   });
 
   yield* targets.playing;
