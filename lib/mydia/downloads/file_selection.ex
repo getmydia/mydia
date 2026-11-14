@@ -1,0 +1,218 @@
+defmodule Mydia.Downloads.FileSelection do
+  @moduledoc """
+  Decides which files of a multi-file torrent Mydia will download.
+
+  Season packs often contain episodes the library already owns. Given the
+  torrent's file list (relative paths) this module keeps the files worth
+  importing and reports which episode each kept video belongs to.
+
+  See `design/specs/2026-11-14-builtin-torrent-per-file-and-disk-guard-design.md`,
+  "Wanted files".
+  """
+
+  import Ecto.Query, warn: false
+
+  alias Mydia.Downloads.Queue.Duplicates
+  alias Mydia.Library.{MediaFile, ReleaseParser, SampleDetector, Scanner}
+  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Repo
+  alias Mydia.Subtitles.Archive
+
+  defstruct only_files: nil,
+            selected_bytes: 0,
+            file_episodes: %{},
+            skipped_owned_episode_ids: []
+
+  @type file_map :: %{index: non_neg_integer(), path: String.t(), length: non_neg_integer()}
+  @type context :: %{
+          media_item: MediaItem.t() | nil,
+          season_number: integer() | nil,
+          targeted_episode_ids: [binary()]
+        }
+  @type t :: %__MODULE__{
+          only_files: [non_neg_integer()] | nil,
+          selected_bytes: non_neg_integer(),
+          file_episodes: %{non_neg_integer() => binary()},
+          skipped_owned_episode_ids: [binary()]
+        }
+
+  @doc """
+  Builds the selection context for a search result.
+
+  Uses `opts[:media_item_id]`, `opts[:episode_id]` and the result's metadata
+  (`season_number`, `episode_ids`).
+  """
+  @spec context_for(map(), keyword()) :: context()
+  def context_for(search_result, opts) do
+    metadata = Duplicates.normalize_metadata(Map.get(search_result, :metadata))
+    episode_id = opts[:episode_id]
+
+    episode =
+      if episode_id, do: Repo.get(Episode, episode_id)
+
+    media_item_id = opts[:media_item_id] || (episode && episode.media_item_id)
+    media_item = if media_item_id, do: Repo.get(MediaItem, media_item_id)
+
+    season_number =
+      (metadata && metadata.season_number) || (episode && episode.season_number)
+
+    metadata_ids = (metadata && metadata.episode_ids) || []
+
+    %{
+      media_item: media_item,
+      season_number: season_number,
+      targeted_episode_ids: Enum.uniq(List.wrap(episode_id) ++ metadata_ids)
+    }
+  end
+
+  @doc "Chooses the files to keep. See the module doc."
+  @spec select(context(), [file_map()]) :: t()
+  def select(context, files) do
+    media_item = context.media_item
+
+    entries =
+      files
+      |> Enum.map(&classify/1)
+      |> Enum.reject(&(&1.kind == :drop))
+
+    if match?(%MediaItem{type: "tv_show"}, media_item) do
+      select_episodes(context, files, entries)
+    else
+      finish(files, entries, %{}, [])
+    end
+  end
+
+  @doc "Serialises a selection for download metadata (string keys)."
+  @spec to_metadata(t() | nil) :: map()
+  def to_metadata(nil), do: %{}
+
+  def to_metadata(%__MODULE__{} = sel) do
+    %{
+      "selected_files" => sel.only_files,
+      "file_episodes" => Map.new(sel.file_episodes, fn {i, id} -> {to_string(i), id} end),
+      "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids
+    }
+  end
+
+  # -- episodes ---------------------------------------------------------
+
+  defp select_episodes(context, files, entries) do
+    entries = Enum.map(entries, &parse/1)
+
+    episode_map = lookup_episodes(context, entries)
+    owned = owned_episode_ids(Map.values(episode_map) |> Enum.map(& &1.id))
+    targeted = MapSet.new(context.targeted_episode_ids)
+
+    {kept, dropped_ids, file_episodes} =
+      Enum.reduce(entries, {[], [], %{}}, fn entry, {kept, dropped, fe} ->
+        case episode_for(entry, context, episode_map) do
+          nil ->
+            {[entry | kept], dropped, fe}
+
+          ep ->
+            if MapSet.member?(targeted, ep.id) or not MapSet.member?(owned, ep.id) do
+              {[entry | kept], dropped, Map.put(fe, entry.file.index, ep.id)}
+            else
+              {kept, [ep.id | dropped], fe}
+            end
+        end
+      end)
+
+    finish(files, Enum.reverse(kept), file_episodes, dropped_ids)
+  end
+
+  defp parse(entry) do
+    parsed = ReleaseParser.parse(Path.basename(entry.file.path), [])
+    Map.put(entry, :parsed, parsed)
+  end
+
+  # Only a file naming exactly one episode of the targeted season is mapped.
+  defp episode_for(%{parsed: parsed}, context, episode_map) do
+    with [number] <- parsed.episodes,
+         season when is_integer(season) <- parsed.season,
+         true <- is_nil(context.season_number) or context.season_number == season do
+      Map.get(episode_map, {season, number})
+    else
+      _ -> nil
+    end
+  end
+
+  defp lookup_episodes(context, entries) do
+    keys =
+      for %{parsed: %{season: s, episodes: [n]}} <- entries,
+          is_integer(s),
+          is_nil(context.season_number) or s == context.season_number,
+          do: {s, n}
+
+    seasons = keys |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    numbers = keys |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+    if keys == [] do
+      %{}
+    else
+      Repo.all(
+        from(e in Episode,
+          where:
+            e.media_item_id == ^context.media_item.id and e.season_number in ^seasons and
+              e.episode_number in ^numbers
+        )
+      )
+      |> Map.new(&{{&1.season_number, &1.episode_number}, &1})
+    end
+  end
+
+  # Mirrors `Queue.Duplicates.all_episodes_have_files?/1`.
+  defp owned_episode_ids([]), do: MapSet.new()
+
+  defp owned_episode_ids(ids) do
+    from(f in MediaFile,
+      where: f.episode_id in ^ids and is_nil(f.trashed_at) and is_nil(f.extra_kind),
+      select: f.episode_id,
+      distinct: true
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  # -- common -----------------------------------------------------------
+
+  # Drops samples, extras and files that are neither video nor subtitle.
+  defp classify(file) do
+    ext = file.path |> Path.extname() |> String.downcase()
+
+    kind =
+      cond do
+        ext in Scanner.video_extensions() -> :video
+        ext in Archive.subtitle_extensions() -> :subtitle
+        true -> :drop
+      end
+
+    kind =
+      if kind != :drop and file.path |> SampleDetector.detect() |> SampleDetector.excluded?(),
+        do: :drop,
+        else: kind
+
+    %{file: file, kind: kind}
+  end
+
+  defp finish(files, kept, file_episodes, dropped_episode_ids) do
+    kept_files = Enum.map(kept, & &1.file)
+    kept_indices = kept_files |> Enum.map(& &1.index) |> MapSet.new()
+    keeps_video? = Enum.any?(kept, &(&1.kind == :video))
+
+    if length(kept_files) == length(files) or not keeps_video? do
+      %__MODULE__{
+        only_files: nil,
+        selected_bytes: files |> Enum.map(& &1.length) |> Enum.sum(),
+        file_episodes: Map.take(file_episodes, MapSet.to_list(kept_indices))
+      }
+    else
+      %__MODULE__{
+        only_files: kept_files |> Enum.map(& &1.index) |> Enum.sort(),
+        selected_bytes: kept_files |> Enum.map(& &1.length) |> Enum.sum(),
+        file_episodes: file_episodes,
+        skipped_owned_episode_ids: Enum.uniq(dropped_episode_ids)
+      }
+    end
+  end
+end
