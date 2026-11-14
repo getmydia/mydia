@@ -39,6 +39,27 @@ void main() {
   const a = PlayableFile(url: 'file:///a.mkv');
   const b = PlayableFile(url: 'file:///b.mkv');
 
+  group('hasRealTracks', () {
+    test('an empty or missing track list is not ready', () {
+      expect(hasRealTracks(null), isFalse);
+      expect(hasRealTracks(const <Object?>[]), isFalse);
+      expect(hasRealTracks('[]'), isFalse);
+      expect(hasRealTracks(const [<String, Object?>{}]), isFalse);
+    });
+
+    test('a list with a video, audio or sub track is ready', () {
+      for (final type in ['video', 'audio', 'sub']) {
+        expect(
+          hasRealTracks([
+            {'id': 1, 'type': type},
+          ]),
+          isTrue,
+          reason: type,
+        );
+      }
+    });
+  });
+
   test('runs one probe at a time', () async {
     final inner = _FakeProbe();
     final serialized = SerializedMediaProbe(inner);

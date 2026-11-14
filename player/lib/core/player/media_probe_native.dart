@@ -32,39 +32,47 @@ class MpvMediaProbe implements MediaProbe {
       await platform.setProperty('ao', 'null');
       await platform.setProperty('pause', 'yes');
 
-      final tracksReady = player.stream.tracks
-          .firstWhere((t) => t.video.length + t.audio.length > 0);
-      // If we bail out early, dispose closes the stream and this future would
-      // otherwise complete with an unhandled error.
-      unawaited(tracksReady.then<void>((_) {}, onError: (_) {}));
-      await player.open(
-        Media(playable.url, httpHeaders: playable.headers),
-        play: false,
-      );
+      // One deadline for everything below, measured from the start of probe.
+      Duration remaining() => timeout - stopwatch.elapsed;
 
-      try {
-        await tracksReady.timeout(timeout);
-      } on TimeoutException {
-        debugPrint('[MediaProbe] timed out waiting for tracks');
+      await player
+          .open(
+            Media(playable.url, httpHeaders: playable.headers),
+            play: false,
+          )
+          .timeout(remaining());
+
+      // media_kit's `Tracks` always carries the `auto` and `no` pseudo-tracks,
+      // so its stream cannot say when the file has loaded. Poll mpv's own
+      // track-list until it holds a real track.
+      List<Object?>? tracks;
+      while (remaining() > Duration.zero) {
+        final json = await platform.getProperty('track-list');
+        final decoded = json.isEmpty ? null : jsonDecode(json);
+        if (hasRealTracks(decoded)) {
+          tracks = (decoded as List).cast<Object?>();
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
+      if (tracks == null) {
+        debugPrint('[MediaProbe] no tracks before the deadline');
         return null;
       }
 
-      // Video params arrive a little after the track list. Wait for the rest
-      // of the budget, but only when there is a video track to wait for.
-      final hasVideo = player.state.tracks.video.any(
-        (t) => t.id != 'auto' && t.id != 'no',
-      );
+      // Video params arrive a little after the track list.
+      final hasVideo = tracks.any((t) => t is Map && t['type'] == 'video');
       if (hasVideo) {
-        while (stopwatch.elapsed < timeout &&
+        while (remaining() > Duration.zero &&
             (await platform.getProperty('video-params/w')).isEmpty) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
       }
 
+      // Re-read: codec details can fill in after the first non-empty list.
       final trackJson = await platform.getProperty('track-list');
-      if (trackJson.isEmpty) return null;
-      final decodedTracks = jsonDecode(trackJson);
-      if (decodedTracks is! List) return null;
+      final reread = trackJson.isEmpty ? null : jsonDecode(trackJson);
+      final decodedTracks = (hasRealTracks(reread) ? reread : tracks) as List;
 
       final paramsJson = await platform.getProperty('video-params');
       Map<String, Object?>? videoParams;

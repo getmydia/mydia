@@ -18,6 +18,17 @@ abstract interface class MediaProbe {
   });
 }
 
+/// Whether a decoded mpv `track-list` holds at least one real video, audio or
+/// subtitle track. An empty list (file not loaded yet) is not ready.
+bool hasRealTracks(Object? decodedTrackList) {
+  if (decodedTrackList is! List) return false;
+  return decodedTrackList.any(
+    (t) =>
+        t is Map &&
+        (t['type'] == 'video' || t['type'] == 'audio' || t['type'] == 'sub'),
+  );
+}
+
 /// Runs probes one at a time, process wide, and turns every failure into null.
 class SerializedMediaProbe implements MediaProbe {
   SerializedMediaProbe(this._inner);
