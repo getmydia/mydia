@@ -13,7 +13,13 @@ defmodule Mydia.Downloads.MetadataKey do
   alias Mydia.Downloads.Download
   alias Mydia.Repo
 
-  @doc "Puts `key` => `value` into the download's metadata. `:ok` for a missing row."
+  @doc """
+  Puts `key` => `value` into the download's metadata. `:ok` for a missing row.
+
+  A database that is busy or unreachable (SQLite `BUSY`, an exhausted pool) is
+  an `{:error, exception}`, not a raise: callers run inside a poll and treat a
+  failed write as one to retry.
+  """
   @spec put(binary(), String.t(), term()) :: :ok | {:error, term()}
   def put(download_id, key, value) do
     result =
@@ -33,6 +39,8 @@ defmodule Mydia.Downloads.MetadataKey do
       {:ok, :ok} -> :ok
       {:error, reason} -> {:error, reason}
     end
+  rescue
+    error in [Exqlite.Error, Postgrex.Error, DBConnection.ConnectionError] -> {:error, error}
   end
 
   defp locked_row(id) do
