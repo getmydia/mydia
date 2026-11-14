@@ -7,8 +7,9 @@ defmodule Mydia.Downloads.TorrentFiles do
   the automatic `BuiltIn.FileSelectionPolicy` never overrides it.
   """
 
-  alias Mydia.Downloads.{Client, FileSelection, MetadataKey, Queue}
+  alias Mydia.Downloads.{Client, Download, FileSelection, MetadataKey, Queue}
   alias Mydia.Downloads.Structs.TorrentFile
+  alias Mydia.Repo
 
   @key "file_selection"
 
@@ -39,11 +40,14 @@ defmodule Mydia.Downloads.TorrentFiles do
   @doc """
   Applies `indexes` as the files to download. Refuses an imported download and
   a selection without any importable file.
+
+  Whether the download is imported is read from the database, not from
+  `download`, which may be a snapshot taken before the import.
   """
   @spec save(map(), [non_neg_integer()]) ::
           :ok | {:error, :imported | :no_importable_file | term()}
   def save(download, indexes) when is_list(indexes) do
-    with :ok <- check_editable(download),
+    with :ok <- check_editable(download.id),
          {:ok, adapter, config} <- Queue.resolve_adapter(download.download_client),
          {:ok, files} <- Client.torrent_files(adapter, config, download.download_client_id),
          :ok <- check_importable(files, indexes),
@@ -52,8 +56,13 @@ defmodule Mydia.Downloads.TorrentFiles do
     end
   end
 
-  defp check_editable(download),
-    do: if(editable?(download), do: :ok, else: {:error, :imported})
+  # A row deleted meanwhile is refused too, leaving the client untouched.
+  defp check_editable(download_id) do
+    case Repo.get(Download, download_id) do
+      %Download{imported_at: nil} -> :ok
+      _imported_or_deleted -> {:error, :imported}
+    end
+  end
 
   defp check_importable(files, indexes) do
     selected = MapSet.new(indexes)

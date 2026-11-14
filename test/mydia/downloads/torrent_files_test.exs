@@ -114,10 +114,30 @@ defmodule Mydia.Downloads.TorrentFilesTest do
     assert StubAdapter.selections() == []
   end
 
+  defp mark_imported(row) do
+    row.id
+    |> Downloads.get_download!()
+    |> Ecto.Changeset.change(imported_at: DateTime.truncate(DateTime.utc_now(), :second))
+    |> Mydia.Repo.update!()
+  end
+
   test "save refuses after import" do
     StubAdapter.put_files({:ok, [file(0, "a/x.mkv")]})
+    row = row(%{imported_at: DateTime.utc_now()})
+    mark_imported(row)
 
-    assert {:error, :imported} = TorrentFiles.save(row(%{imported_at: DateTime.utc_now()}), [0])
+    assert {:error, :imported} = TorrentFiles.save(row, [0])
     assert StubAdapter.selections() == []
+  end
+
+  test "save reads the import from the database, not the drawer's snapshot" do
+    StubAdapter.put_files({:ok, [file(0, "a/x.mkv")]})
+    # The drawer loaded the row before the import finished.
+    row = row()
+    mark_imported(row)
+
+    assert {:error, :imported} = TorrentFiles.save(row, [0])
+    assert StubAdapter.selections() == []
+    refute Downloads.get_download!(row.id).metadata["file_selection"]
   end
 end
