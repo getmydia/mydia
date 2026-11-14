@@ -162,6 +162,38 @@ class BackupVaultOps {
     );
   }
 
+  /// Adds the device owning [memberSigner] and [memberBox] to [vaultId] at
+  /// [epoch], without rotation: one envelope of [vaultKey], for that device.
+  /// Signed by [signer], any member. Throws `conflict` when the epoch moved.
+  Future<void> addMember({
+    required String vaultId,
+    required SimpleKeyPair signer,
+    required int epoch,
+    required Uint8List vaultKey,
+    required List<int> memberSigner,
+    required List<int> memberBox,
+  }) async {
+    await _relay.updateMembers(
+      vaultId,
+      signer,
+      MemberUpdate(
+        expectedEpoch: epoch,
+        newEpoch: epoch,
+        add: [
+          MemberAdd(
+            signer: memberSigner,
+            boxPub: memberBox,
+            slotId: VaultCrypto.slotIdFor(memberSigner),
+          ),
+        ],
+        envelopes: {
+          backupB64(memberSigner):
+              await seal(vaultKey, memberBox, vaultId, epoch),
+        },
+      ),
+    );
+  }
+
   /// Adds [identity] to [vaultId] as the recovery member, without rotation:
   /// one envelope, for the device itself. On a `conflict` (the epoch moved
   /// since [epoch]) the manifest and the recovery envelope are read again
@@ -178,21 +210,13 @@ class BackupVaultOps {
     var current = (epoch: epoch, vaultKey: vaultKey);
     for (var attempt = 0;; attempt++) {
       try {
-        await _relay.updateMembers(
-          vaultId,
-          recovery.signer,
-          MemberUpdate(
-            expectedEpoch: current.epoch,
-            newEpoch: current.epoch,
-            add: [
-              MemberAdd(
-                  signer: signerPub, boxPub: boxPub, slotId: identity.slotId),
-            ],
-            envelopes: {
-              backupB64(signerPub):
-                  await seal(current.vaultKey, boxPub, vaultId, current.epoch),
-            },
-          ),
+        await addMember(
+          vaultId: vaultId,
+          signer: recovery.signer,
+          epoch: current.epoch,
+          vaultKey: current.vaultKey,
+          memberSigner: signerPub,
+          memberBox: boxPub,
         );
         return current;
       } on BackupRelayException catch (e) {

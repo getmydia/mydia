@@ -41,6 +41,19 @@ void main() {
     expect(s.manifestEtag, isNull);
   });
 
+  test('a state without a recovery key (joined by pairing) round-trips',
+      () async {
+    final store = BackupVaultStateStore(MockAuthStorage());
+    await store.save(BackupVaultState(
+      vaultId: 'vault-1',
+      epoch: 1,
+      keysByEpoch: {1: _key(1)},
+      recoveryKeyText: null,
+      ownSeq: 0,
+    ));
+    expect((await store.load())!.recoveryKeyText, isNull);
+  });
+
   test('a pending recovery key round-trips and clears', () async {
     final store = BackupVaultStateStore(MockAuthStorage());
     await store.save(_state().copyWith(pendingRecoveryKeyText: () => 'WXYZ'));

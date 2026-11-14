@@ -112,7 +112,8 @@ class PendingAccountOffer {
 /// Local bookkeeping of the cloud backup that is not itself backed up:
 /// fingerprints that keep a record's `updatedAt` stable while its value is
 /// unchanged, pending account offers and dismissals, the `seq` of each slot
-/// already merged, and the p2p node id to backup slot id map.
+/// already merged, the p2p node id to backup slot id map, and whether the
+/// joined-by-pairing notice is pending.
 class BackupMetaStore {
   BackupMetaStore(this._storage);
 
@@ -228,4 +229,15 @@ class BackupMetaStore {
 
   Future<void> removeNode(String nodeId) =>
       _storage.delete('$_nodePrefix$nodeId');
+
+  /// Whether the "now backed up with your group" notice is still to be
+  /// seen: set when pairing joined this device to a vault, so it survives a
+  /// restart before the viewer saw it.
+  bool get joinedNoticePending => _storage.get(_joinedNoticeKey) == '1';
+
+  Future<void> setJoinedNoticePending(bool pending) => pending
+      ? _storage.put(_joinedNoticeKey, '1')
+      : _storage.delete(_joinedNoticeKey);
+
+  static const _joinedNoticeKey = 'notice:joined';
 }

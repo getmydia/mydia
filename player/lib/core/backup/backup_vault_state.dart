@@ -22,7 +22,10 @@ class BackupVaultState {
   final String vaultId;
   final int epoch;
   final Map<int, Uint8List> keysByEpoch;
-  final String recoveryKeyText;
+
+  /// Null on a device that joined through pairing: the recovery key never
+  /// travels over p2p, and this device has not replaced it since.
+  final String? recoveryKeyText;
   final int ownSeq;
   final int? lastSuccessMs;
   final String? manifestEtag;
@@ -96,7 +99,7 @@ class BackupVaultState {
     if (vaultId is! String ||
         epoch is! int ||
         keys is! Map ||
-        recovery is! String ||
+        (recovery != null && recovery is! String) ||
         ownSeq is! int ||
         (lastSuccess != null && lastSuccess is! int) ||
         (etag != null && etag is! String) ||
@@ -124,7 +127,7 @@ class BackupVaultState {
       vaultId: vaultId,
       epoch: epoch,
       keysByEpoch: decoded,
-      recoveryKeyText: recovery,
+      recoveryKeyText: recovery as String?,
       ownSeq: ownSeq,
       lastSuccessMs: lastSuccess as int?,
       manifestEtag: etag as String?,

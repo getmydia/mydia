@@ -11,6 +11,7 @@ import 'package:hive_ce/hive.dart';
 import '../auth/auth_storage.dart';
 import '../auth/device_info_service.dart';
 import '../cache/watcher_registry.dart' show invalidatorProvider;
+import '../p2p/p2p_service.dart' show p2pServiceProvider;
 import '../p2p/peer_sync_service.dart';
 import '../p2p/peer_sync_store.dart';
 import '../player/subtitle_language_prefs.dart';
@@ -93,7 +94,8 @@ Future<void> _putRoots(
 
 /// The cloud backup. Native only: `app.dart` starts it after peer sync and
 /// forwards `paused` (flush) and `resumed` (poll).
-final backupSyncServiceProvider = Provider<BackupSyncService>((ref) {
+final Provider<BackupSyncService> backupSyncServiceProvider =
+    Provider<BackupSyncService>((ref) {
   final device = DeviceInfoService();
   final service = BackupSyncService(
     relay: BackupRelayClient(),
@@ -102,6 +104,7 @@ final backupSyncServiceProvider = Provider<BackupSyncService>((ref) {
     snapshot: ref.watch(backupSnapshotProvider),
     deviceName: device.getDeviceName,
     platform: device.getPlatform(),
+    localNodeId: () => ref.read(p2pServiceProvider).nodeId,
   );
 
   // A watch or pin written by anyone (playback, the UI, a p2p merge).
@@ -135,4 +138,21 @@ final backupSyncServiceProvider = Provider<BackupSyncService>((ref) {
     service.dispose();
   });
   return service;
+});
+
+/// What `peerSyncServiceProvider` hands [PeerSyncService] so pairing joins
+/// the group's backup vault and revocation leaves it. Each hook reads
+/// [backupSyncServiceProvider] only when called: that provider watches
+/// `peerSyncServiceProvider`, so reading it here would be a cycle.
+final Provider<BackupPairingHooks> backupPairingHooksProvider =
+    Provider<BackupPairingHooks>((ref) {
+  if (kIsWeb) return const BackupPairingHooks();
+  BackupSyncService backup() => ref.read(backupSyncServiceProvider);
+  return BackupPairingHooks(
+    backupKeysForPair: () => backup().pairKeys(),
+    onJoinerBackupKeys: (nodeId, signer, box) =>
+        backup().addMemberForPair(signer, box, nodeId: nodeId),
+    onJoinedVault: (vaultId) => backup().adoptVault(vaultId),
+    onPeerRevoked: (nodeId) => backup().removeMemberForNode(nodeId),
+  );
 });

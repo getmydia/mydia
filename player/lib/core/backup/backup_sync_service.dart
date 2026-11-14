@@ -20,6 +20,9 @@ import 'backup_vault_state.dart';
 import 'recovery_key.dart';
 import 'vault_crypto.dart';
 
+/// The vault this device is in and the one pairing offered it.
+typedef VaultChoice = ({String current, String offered});
+
 /// Uploads this device's slot of the end-to-end encrypted cloud backup,
 /// polls and merges the other members' slots, and runs the vault's member
 /// changes. Free of Riverpod: `backupSyncServiceProvider` wires the
@@ -36,6 +39,8 @@ class BackupSyncService {
     required Future<String> Function() deviceName,
     required String platform,
     DateTime Function()? clock,
+    String? Function()? localNodeId,
+    Future<void> Function(Duration)? delay,
   })  : _relay = relay,
         _ops = BackupVaultOps(relay),
         _auth = authStorage,
@@ -44,7 +49,9 @@ class BackupSyncService {
         _snapshot = snapshot,
         _deviceName = deviceName,
         _platform = platform,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _localNodeId = localNodeId,
+        _delay = delay ?? Future<void>.delayed;
 
   static const debounce = Duration(minutes: 2);
   static const pollInterval = Duration(minutes: 15);
@@ -61,11 +68,35 @@ class BackupSyncService {
   final String _platform;
   final DateTime Function() _clock;
 
+  /// This device's p2p node id, null while p2p is not up. Recorded with
+  /// the own slot id so the group record maps every member.
+  final String? Function()? _localNodeId;
+
+  /// Waits between the manifest reads of [adoptVault].
+  final Future<void> Function(Duration) _delay;
+
+  /// The joiner reads the offered vault's manifest this many more times
+  /// when it is not listed yet, [adoptRetryDelay] times the attempt apart.
+  static const adoptRetries = 3;
+  static const adoptRetryDelay = Duration(milliseconds: 500);
+
   final _status = ValueNotifier<BackupStatus>(const BackupOff());
   final _unreadable = ValueNotifier<Set<String>>(const {});
   final _recoveryMismatch = ValueNotifier<bool>(false);
+  late final _joinedNotice = ValueNotifier<bool>(_meta.joinedNoticePending);
+  final _vaultChoice = ValueNotifier<VaultChoice?>(null);
 
   ValueListenable<BackupStatus> get status => _status;
+
+  /// True from the moment pairing joined this device to its group's vault
+  /// until [acknowledgeJoinedNotice]: "This device is now backed up with
+  /// your group".
+  ValueListenable<bool> get joinedNotice => _joinedNotice;
+  bool get showJoinedNotice => _joinedNotice.value;
+
+  /// Set when pairing offered a vault while this device was already in
+  /// another one: the viewer picks with [resolveVaultChoice].
+  ValueListenable<VaultChoice?> get pendingVaultChoice => _vaultChoice;
 
   /// Slot ids whose last download could not be opened or decoded.
   ValueListenable<Set<String>> get unreadableSlots => _unreadable;
@@ -149,6 +180,8 @@ class BackupSyncService {
     _status.dispose();
     _unreadable.dispose();
     _recoveryMismatch.dispose();
+    _joinedNotice.dispose();
+    _vaultChoice.dispose();
   }
 
   // Triggers
@@ -346,21 +379,238 @@ class BackupSyncService {
   Future<void> disable() => _userOp(() async {
         if (_state == null) return _set(const BackupOff());
         final (state, identity) = _require();
-        await _ignoreGone(() async {
-          final m = (await _relay.manifest(state.vaultId, identity.signer))!;
-          final others = m.members
-              .where((x) => !x.recovery && x.slotId != identity.slotId);
-          if (others.isEmpty) {
-            await _relay.deleteVault(state.vaultId, identity.signer);
-          } else {
-            await _ops.rotate(
-                vaultId: state.vaultId,
-                signer: identity.signer,
-                removeSlotId: identity.slotId);
-          }
-        });
+        await _leaveOnRelay(state.vaultId, identity);
         await _leave(const BackupOff());
       });
+
+  /// Takes this device out of [vaultId] on the relay: a rotation that
+  /// removes it, or deleting the vault when no other device is in it. A
+  /// vault already gone, or this device already out, is done.
+  Future<void> _leaveOnRelay(String vaultId, BackupIdentity identity) =>
+      _ignoreGone(() async {
+        final m = (await _relay.manifest(vaultId, identity.signer))!;
+        final others =
+            m.members.where((x) => !x.recovery && x.slotId != identity.slotId);
+        if (others.isEmpty) {
+          await _relay.deleteVault(vaultId, identity.signer);
+        } else {
+          await _ops.rotate(
+              vaultId: vaultId,
+              signer: identity.signer,
+              removeSlotId: identity.slotId);
+        }
+      });
+
+  // Pairing
+
+  /// This device's backup public keys (base64url signer and box key), sent
+  /// in a pairing request so the host can add it to the group's vault.
+  /// Creates the identity on first use; null when that fails, which never
+  /// fails the pairing.
+  Future<({String signer, String box})?> pairKeys() async {
+    try {
+      final identity = _identity ??= await BackupIdentity.loadOrCreate(_auth);
+      return (
+        signer: backupB64((await identity.signer.extractPublicKey()).bytes),
+        box: backupB64((await identity.box.extractPublicKey()).bytes),
+      );
+    } catch (e) {
+      debugPrint('[Backup] No backup keys for pairing: ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  /// The host side of pairing: adds the joiner owning [signerB64] and
+  /// [boxB64] to this device's vault at the current epoch (no rotation),
+  /// records [nodeId]'s slot for a later revocation, and returns the vault
+  /// id. Null when backup is off or the add failed: pairing goes on
+  /// without it.
+  Future<String?> addMemberForPair(String signerB64, String boxB64,
+          {String? nodeId}) =>
+      _serialise(() async {
+        if (!_active) return null;
+        try {
+          final signerPub = backupUnb64(signerB64);
+          final boxPub = backupUnb64(boxB64);
+          if (signerPub.length != 32 || boxPub.length != 32) return null;
+          final (_, identity) = _require();
+          for (var attempt = 0;; attempt++) {
+            final vaultId = _state!.vaultId;
+            final m = (await _relay.manifest(vaultId, identity.signer))!;
+            final state = await _adoptEpoch(m);
+            final listed = m.members
+                .any((x) => !x.recovery && listEquals(x.signer, signerPub));
+            if (!listed) {
+              try {
+                await _ops.addMember(
+                  vaultId: vaultId,
+                  signer: identity.signer,
+                  epoch: state.epoch,
+                  vaultKey: state.keysByEpoch[state.epoch]!,
+                  memberSigner: signerPub,
+                  memberBox: boxPub,
+                );
+              } on BackupRelayException catch (e) {
+                if (e.kind != BackupRelayError.conflict || attempt > 0) {
+                  rethrow;
+                }
+                continue;
+              }
+            }
+            if (nodeId != null) {
+              await _meta.setNodeToSlot(
+                  nodeId, VaultCrypto.slotIdFor(signerPub));
+              markDirty();
+            }
+            return vaultId;
+          }
+        } catch (e) {
+          debugPrint('[Backup] Paired device not added: ${e.runtimeType}');
+          return null;
+        }
+      });
+
+  /// The joiner side of pairing: takes up [vaultId], which the host just
+  /// added this device to, uploads this device's slot, merges the group's,
+  /// and raises [joinedNotice]. A device already in another vault is not
+  /// switched: [pendingVaultChoice] asks the viewer instead.
+  Future<void> adoptVault(String vaultId) => _serialise(() async {
+        final current = _state;
+        if (current != null) {
+          if (current.vaultId != vaultId) {
+            _setChoice((current: current.vaultId, offered: vaultId));
+          }
+          return;
+        }
+        final identity = await _loadIdentity();
+        await _switchTo(await _openAsMember(vaultId, identity), identity);
+        await _meta.setJoinedNoticePending(true);
+        if (!_disposed) _joinedNotice.value = true;
+        await _attempt(_uploadAndMerge);
+      });
+
+  void acknowledgeJoinedNotice() {
+    if (!_disposed) _joinedNotice.value = false;
+    unawaited(_meta.setJoinedNoticePending(false));
+  }
+
+  /// Settles [pendingVaultChoice]. Keeping the offered vault moves this
+  /// device into it (its records are local, so they go up with its slot)
+  /// and then leaves the old one, deleting it when this device was its
+  /// only one. Keeping the current vault leaves both as they are.
+  Future<void> resolveVaultChoice({required bool keepOffered}) =>
+      _serialise(() async {
+        final choice = _vaultChoice.value;
+        if (choice == null) return;
+        if (!keepOffered) return _setChoice(null);
+        final identity = await _loadIdentity();
+        final BackupVaultState next;
+        try {
+          next = await _openAsMember(choice.offered, identity);
+        } on BackupRelayException catch (e) {
+          // This device is no longer in the offered vault: nothing to pick.
+          if (_gone(e)) _setChoice(null);
+          rethrow;
+        }
+        _setChoice(null);
+        await _switchTo(next, identity);
+        await _attempt(_uploadAndMerge);
+        if (choice.current == choice.offered) return;
+        try {
+          await _leaveOnRelay(choice.current, identity);
+        } catch (e) {
+          debugPrint('[Backup] Old vault not left: ${e.runtimeType}');
+        }
+      });
+
+  /// Removes the vault member that p2p node [nodeId] is, when this device
+  /// knows its slot (recorded at pairing or merged from a group record).
+  /// A node that never joined the vault is skipped.
+  Future<void> removeMemberForNode(String nodeId) async {
+    if (_state == null) return;
+    final wanted = nodeId.toLowerCase();
+    final slotId = _meta
+        .nodeToSlot()
+        .entries
+        .where((e) => e.key.toLowerCase() == wanted)
+        .firstOrNull
+        ?.value;
+    if (slotId == null || slotId == _identity?.slotId) return;
+    await removeMember(slotId);
+  }
+
+  /// Reads [vaultId]'s manifest as [identity], again up to [adoptRetries]
+  /// times while this device is not listed yet (the host's add can land
+  /// after its pairing reply), and opens this device's envelope.
+  Future<BackupVaultState> _openAsMember(
+      String vaultId, BackupIdentity identity) async {
+    for (var attempt = 0;; attempt++) {
+      BackupManifest? m;
+      try {
+        m = await _relay.manifest(vaultId, identity.signer);
+      } on BackupRelayException catch (e) {
+        if (e.kind != BackupRelayError.notMember || attempt >= adoptRetries) {
+          rethrow;
+        }
+      }
+      if (m != null &&
+          m.members.any((x) => !x.recovery && x.slotId == identity.slotId)) {
+        final Uint8List key;
+        try {
+          key = await VaultCrypto.openEnvelope(
+            box: identity.box,
+            envelope: m.envelope,
+            vaultId: vaultId,
+            epoch: m.epoch,
+          );
+        } on VaultCryptoException {
+          throw const BackupRelayException(BackupRelayError.invalid);
+        }
+        final own =
+            m.slots.where((s) => s.slotId == identity.slotId).firstOrNull;
+        return BackupVaultState(
+          vaultId: vaultId,
+          epoch: m.epoch,
+          keysByEpoch: {m.epoch: key},
+          recoveryKeyText: null,
+          ownSeq: own?.seq ?? 0,
+        );
+      }
+      if (attempt >= adoptRetries) {
+        throw const BackupRelayException(BackupRelayError.notMember);
+      }
+      await _delay(adoptRetryDelay * (attempt + 1));
+    }
+  }
+
+  /// Makes [state] this device's vault: what was known of another vault
+  /// (merged seqs, slot names, failures) is dropped first.
+  Future<void> _switchTo(
+      BackupVaultState state, BackupIdentity identity) async {
+    _cancelTimers();
+    _failedSlots.clear();
+    _slotNames.clear();
+    _accountRecords.clear();
+    _setMismatch(false);
+    await _meta.clearMergedSeqs();
+    try {
+      await _save(state);
+    } catch (_) {
+      _state = null;
+      _set(const BackupError(BackupRelayError.server, null));
+      rethrow;
+    }
+    await _join(state, identity);
+  }
+
+  Future<void> _uploadAndMerge() async {
+    await _upload(force: true);
+    await _pollOnce(full: true);
+  }
+
+  void _setChoice(VaultChoice? choice) {
+    if (!_disposed) _vaultChoice.value = choice;
+  }
 
   // Upload
 
@@ -374,6 +624,7 @@ class BackupSyncService {
     var (state, identity) = _require();
     _dirty = false;
     try {
+      await _recordOwnNode(identity);
       final records = lwwMerge([await _snapshot.collect(nowMs: _nowMs)]);
       final hash = sha256
           .convert(
@@ -500,9 +751,20 @@ class BackupSyncService {
 
   Future<ApplyResult> _apply(
       Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
+    final nodes = _meta.nodeToSlot();
     for (final p in payloads.values) {
       for (final r in p.records.whereType<AccountBackupRecord>()) {
         if (!r.deleted) _accountRecords[r.accountId] = r;
+      }
+      // Every member's group record, not only the winning one: each maps
+      // the devices it paired, which a revocation from here needs.
+      for (final r in p.records.whereType<GroupBackupRecord>()) {
+        if (r.deleted) continue;
+        for (final MapEntry(:key, :value) in r.nodeToSlot.entries) {
+          if (nodes.containsKey(key)) continue;
+          nodes[key] = value;
+          await _meta.setNodeToSlot(key, value);
+        }
       }
     }
     return applyByOrigin(_snapshot, payloads, mode: mode, nowMs: _nowMs);
@@ -524,9 +786,21 @@ class BackupSyncService {
       );
       await _save(state);
     }
+    // A device that joined by pairing keeps no key, so none can be wrong.
+    final kept = state.recoveryKeyText;
     _setMismatch(
-        !await _isRecoverySigner(state.recoveryKeyText, m.recoverySigner));
+        kept != null && !await _isRecoverySigner(kept, m.recoverySigner));
     return state;
+  }
+
+  /// Records this device's node id against its slot id, so the group
+  /// record it uploads lets another member revoke it.
+  Future<void> _recordOwnNode(BackupIdentity identity) async {
+    final nodeId = _localNodeId?.call();
+    if (nodeId == null) return;
+    if (_meta.nodeToSlot()[nodeId] != identity.slotId) {
+      await _meta.setNodeToSlot(nodeId, identity.slotId);
+    }
   }
 
   Future<bool> _isRecoverySigner(String keyText, List<int> signer) async {
@@ -650,8 +924,11 @@ class BackupSyncService {
     _setMismatch(false);
     _accountRecords.clear();
     _slotNames.clear();
+    _setChoice(null);
+    if (!_disposed) _joinedNotice.value = false;
     await _store.clear();
     await _meta.clearMergedSeqs();
+    await _meta.setJoinedNoticePending(false);
     if (!_disposed) _unreadable.value = const {};
     _set(next);
   }

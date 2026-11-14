@@ -10,6 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 import '../../native/lib.dart';
 import '../auth/auth_storage.dart';
 import '../auth/device_info_service.dart';
+import '../backup/backup_providers.dart' show backupPairingHooksProvider;
 import '../relay/relay_api_client.dart';
 import '../sources/cache/source_rules.dart';
 import '../sources/connection/connection_refresh_bus.dart';
@@ -94,6 +95,23 @@ class P2pPeerSyncTransport implements PeerSyncTransport {
   bool isConnectedToPeer(String peer) => _p2pService.isConnectedToPeer(peer);
 }
 
+/// The cloud backup's part in pairing, as [PeerSyncService] takes it. All
+/// null when backup is not offered (web).
+class BackupPairingHooks {
+  const BackupPairingHooks({
+    this.backupKeysForPair,
+    this.onJoinerBackupKeys,
+    this.onJoinedVault,
+    this.onPeerRevoked,
+  });
+
+  final Future<({String signer, String box})?> Function()? backupKeysForPair;
+  final Future<String?> Function(
+      String nodeId, String signerB64, String boxB64)? onJoinerBackupKeys;
+  final Future<void> Function(String vaultId)? onJoinedVault;
+  final Future<void> Function(String nodeId)? onPeerRevoked;
+}
+
 class ActivePairingOffer {
   const ActivePairingOffer({
     required this.code,
@@ -129,7 +147,16 @@ class PeerSyncService {
     )? onRemoteChangesApplied,
     void Function(PeerMember joinedPeer)? onPeerPaired,
     DateTime Function()? clock,
-  })  : _store = store,
+    Future<({String signer, String box})?> Function()? backupKeysForPair,
+    Future<String?> Function(String nodeId, String signerB64, String boxB64)?
+        onJoinerBackupKeys,
+    Future<void> Function(String vaultId)? onJoinedVault,
+    Future<void> Function(String nodeId)? onPeerRevoked,
+  })  : _backupKeysForPair = backupKeysForPair,
+        _onJoinerBackupKeys = onJoinerBackupKeys,
+        _onJoinedVault = onJoinedVault,
+        _onPeerRevoked = onPeerRevoked,
+        _store = store,
         _authStorage = authStorage,
         _transport = transport,
         _relayClient = relayClient,
@@ -155,6 +182,26 @@ class PeerSyncService {
   )? _onRemoteChangesApplied;
   final void Function(PeerMember joinedPeer)? _onPeerPaired;
   final DateTime Function() _clock;
+
+  // The cloud backup's part in pairing (see `backupPairingHooksProvider`).
+  // Every one is best effort: a failure is logged and pairing goes on.
+
+  /// Joiner: this device's backup public keys, sent with `Pair`.
+  final Future<({String signer, String box})?> Function()? _backupKeysForPair;
+
+  /// Host: adds the joiner to this device's vault and returns its id.
+  final Future<String?> Function(
+      String nodeId, String signerB64, String boxB64)? _onJoinerBackupKeys;
+
+  /// Joiner: takes up the vault the host added it to.
+  final Future<void> Function(String vaultId)? _onJoinedVault;
+
+  /// Removes a revoked device from the vault.
+  final Future<void> Function(String nodeId)? _onPeerRevoked;
+
+  /// How long the host waits on the vault add before replying without it,
+  /// well inside the 30 s the joiner waits for the reply.
+  static const backupAdmitTimeout = Duration(seconds: 10);
 
   final _stateChangedController = StreamController<void>.broadcast();
   final _peerPairedController = StreamController<PeerMember>.broadcast();
@@ -406,13 +453,20 @@ class PeerSyncService {
     await _transport.dial(hostNodeAddr);
 
     final localNodeAddr = await _transport.getNodeAddr() ?? _transport.nodeAddr;
+    ({String signer, String box})? backupKeys;
+    try {
+      backupKeys = await _backupKeysForPair?.call();
+    } catch (e) {
+      debugPrint('[PeerSyncService] No backup keys to pair with: '
+          '${e.runtimeType}');
+    }
     final req = FlutterPeerSyncRequest.pair(
       claimCode: claimCode,
       deviceName: _deviceName,
       platform: _platform,
       endpointAddrJson: localNodeAddr,
-      backupSigner: null,
-      backupBox: null,
+      backupSigner: backupKeys?.signer,
+      backupBox: backupKeys?.box,
     );
 
     final res = await _transport.sendPeerSync(hostNodeId, req);
@@ -464,6 +518,16 @@ class PeerSyncService {
 
     await syncAll(ignoreCooldown: true);
     _notifyStateChanged();
+
+    final vaultId = res.vaultId;
+    if (vaultId != null && backupKeys != null) {
+      try {
+        await _onJoinedVault?.call(vaultId);
+      } catch (e) {
+        debugPrint('[PeerSyncService] Group backup not joined: '
+            '${e.runtimeType}');
+      }
+    }
   }
 
   Future<void> _handleInboundPeerSyncRequest(
@@ -539,6 +603,32 @@ class PeerSyncService {
       await _transport.addAddressHint(req.endpointAddrJson!);
     }
 
+    // The joiner joins this device's backup vault, when there is one.
+    String? vaultId;
+    final backupSigner = req.backupSigner;
+    final backupBox = req.backupBox;
+    final admit = _onJoinerBackupKeys;
+    if (backupSigner != null && backupBox != null && admit != null) {
+      final generation = _generation;
+      try {
+        vaultId = await admit(request.peer, backupSigner, backupBox)
+            .timeout(backupAdmitTimeout);
+      } catch (e) {
+        debugPrint('[PeerSyncService] Joiner not added to the backup: '
+            '${e.runtimeType}');
+      }
+      // This device left the group while the add ran: no pairing to finish.
+      if (_stale(generation)) {
+        await _transport.respondToPeerSync(
+          request.requestId,
+          const FlutterPeerSyncResponse.pairRejected(
+            reason: 'This device left its group',
+          ),
+        );
+        return;
+      }
+    }
+
     final rosterWire = _store.members().values.map((m) => m.toWire()).toList();
     final watchWire =
         _store.allWatchRecords().values.map((w) => w.toWire()).toList();
@@ -552,7 +642,7 @@ class PeerSyncService {
         roster: rosterWire,
         watchRecords: watchWire,
         pinRecords: pinWire,
-        vaultId: null,
+        vaultId: vaultId,
       ),
     );
 
@@ -870,6 +960,14 @@ class PeerSyncService {
     await _store.putMember(updated);
     await syncAll(ignoreCooldown: true);
     _notifyStateChanged();
+
+    // Out of the backup vault too, with a rotation, when it was in it.
+    try {
+      await _onPeerRevoked?.call(nodeId);
+    } catch (e) {
+      debugPrint('[PeerSyncService] Revoked device still in the backup: '
+          '${e.runtimeType}');
+    }
   }
 
   Future<void> leaveGroup() async {
@@ -987,12 +1085,14 @@ Future<void> applyRemoteFilesChanges({
   }
 }
 
-final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
+final Provider<PeerSyncService> peerSyncServiceProvider =
+    Provider<PeerSyncService>((ref) {
   final store = ref.watch(peerSyncStoreProvider);
   final authStorage = getAuthStorage();
   final p2p = ref.watch(p2pServiceProvider);
   final transport = P2pPeerSyncTransport(p2p);
   final relay = RelayApiClient();
+  final backup = ref.watch(backupPairingHooksProvider);
 
   final service = PeerSyncService(
     store: store,
@@ -1008,6 +1108,10 @@ final peerSyncServiceProvider = Provider<PeerSyncService>((ref) {
       changedWatchKeys: changedWatchKeys,
       changedPinKeys: changedPinKeys,
     ),
+    backupKeysForPair: backup.backupKeysForPair,
+    onJoinerBackupKeys: backup.onJoinerBackupKeys,
+    onJoinedVault: backup.onJoinedVault,
+    onPeerRevoked: backup.onPeerRevoked,
   );
 
   final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((_) {
