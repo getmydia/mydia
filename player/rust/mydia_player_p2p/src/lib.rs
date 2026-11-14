@@ -20,9 +20,10 @@ use flutter_rust_bridge::frb;
 use mydia_p2p_core::{
     runtime, Event, GraphQLRequest, HlsCancel, HlsRequest, HlsRequester, HlsResponseHeader,
     HlsStreamResponse, Host, HostConfig, LoadContentRequest, LogLevel, MydiaRequest, MydiaResponse,
-    PairingRequest, PeerConnectionType, PeerSyncRequest, PeerSyncResponse, PlaybackSnapshot,
-    PlaybackState, RemoteControlRequest, RemoteControlResponse, TargetCapabilities, TrackInfo,
-    WirePeerMember, WirePinRecord, WireWatchRecord,
+    PairingRequest, PeerConnectionType, PeerFilesRequest, PeerFilesResponse, PeerSyncRequest,
+    PeerSyncResponse, PlaybackSnapshot, PlaybackState, RemoteControlRequest, RemoteControlResponse,
+    TargetCapabilities, TrackInfo, WireIndexPage, WirePeerMember, WirePinRecord, WireSharedAccount,
+    WireWatchRecord,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -138,6 +139,9 @@ pub struct P2pHost {
     /// Inbound peer sync requests, routed here by the same `init` dispatcher.
     /// Drained by `peer_sync_stream`.
     peer_sync_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundPeerSyncRequest>>>,
+    /// Inbound peer files requests, routed here by the same `init` dispatcher.
+    /// Drained by `peer_files_stream`.
+    peer_files_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundPeerFilesRequest>>>,
     /// How many `Event::Log` entries are currently sitting on
     /// `generic_event_rx`, waiting for `event_stream` to drain them.
     ///
@@ -800,6 +804,187 @@ pub struct FlutterInboundPeerSyncRequest {
     pub request: FlutterPeerSyncRequest,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterWireSharedAccount {
+    pub account_id: String,
+    pub kind: String,
+    pub name: String,
+    pub dedupe_key: Option<String>,
+    pub revision: u64,
+}
+
+/// Each record is one CBOR blob exactly as Dart encodes it, so the bridge
+/// never mirrors the Dart record shapes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FlutterWireIndexPage {
+    pub roots: Vec<Vec<u8>>,
+    pub files: Vec<Vec<u8>>,
+    pub groups: Vec<Vec<u8>>,
+    pub movies: Vec<Vec<u8>>,
+    pub shows: Vec<Vec<u8>>,
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlutterPeerFilesRequest {
+    Manifest {
+        auth_proof: String,
+    },
+    IndexPage {
+        auth_proof: String,
+        account_id: String,
+        revision: u64,
+        cursor: Option<String>,
+    },
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlutterPeerFilesResponse {
+    Manifest {
+        accounts: Vec<FlutterWireSharedAccount>,
+    },
+    IndexPage {
+        page: FlutterWireIndexPage,
+        next_cursor: Option<String>,
+    },
+    StaleRevision,
+    NotAuthorized,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlutterInboundPeerFilesRequest {
+    pub peer: String,
+    pub request_id: String,
+    pub request: FlutterPeerFilesRequest,
+}
+
+impl From<FlutterWireSharedAccount> for WireSharedAccount {
+    fn from(a: FlutterWireSharedAccount) -> Self {
+        WireSharedAccount {
+            account_id: a.account_id,
+            kind: a.kind,
+            name: a.name,
+            dedupe_key: a.dedupe_key,
+            revision: a.revision,
+        }
+    }
+}
+
+impl From<WireSharedAccount> for FlutterWireSharedAccount {
+    fn from(a: WireSharedAccount) -> Self {
+        FlutterWireSharedAccount {
+            account_id: a.account_id,
+            kind: a.kind,
+            name: a.name,
+            dedupe_key: a.dedupe_key,
+            revision: a.revision,
+        }
+    }
+}
+
+impl From<FlutterWireIndexPage> for WireIndexPage {
+    fn from(p: FlutterWireIndexPage) -> Self {
+        WireIndexPage {
+            roots: p.roots,
+            files: p.files,
+            groups: p.groups,
+            movies: p.movies,
+            shows: p.shows,
+        }
+    }
+}
+
+impl From<WireIndexPage> for FlutterWireIndexPage {
+    fn from(p: WireIndexPage) -> Self {
+        FlutterWireIndexPage {
+            roots: p.roots,
+            files: p.files,
+            groups: p.groups,
+            movies: p.movies,
+            shows: p.shows,
+        }
+    }
+}
+
+impl From<FlutterPeerFilesRequest> for PeerFilesRequest {
+    fn from(r: FlutterPeerFilesRequest) -> Self {
+        match r {
+            FlutterPeerFilesRequest::Manifest { auth_proof } => {
+                PeerFilesRequest::Manifest { auth_proof }
+            }
+            FlutterPeerFilesRequest::IndexPage {
+                auth_proof,
+                account_id,
+                revision,
+                cursor,
+            } => PeerFilesRequest::IndexPage {
+                auth_proof,
+                account_id,
+                revision,
+                cursor,
+            },
+        }
+    }
+}
+
+impl From<PeerFilesRequest> for FlutterPeerFilesRequest {
+    fn from(r: PeerFilesRequest) -> Self {
+        match r {
+            PeerFilesRequest::Manifest { auth_proof } => {
+                FlutterPeerFilesRequest::Manifest { auth_proof }
+            }
+            PeerFilesRequest::IndexPage {
+                auth_proof,
+                account_id,
+                revision,
+                cursor,
+            } => FlutterPeerFilesRequest::IndexPage {
+                auth_proof,
+                account_id,
+                revision,
+                cursor,
+            },
+        }
+    }
+}
+
+impl From<FlutterPeerFilesResponse> for PeerFilesResponse {
+    fn from(r: FlutterPeerFilesResponse) -> Self {
+        match r {
+            FlutterPeerFilesResponse::Manifest { accounts } => PeerFilesResponse::Manifest {
+                accounts: accounts.into_iter().map(Into::into).collect(),
+            },
+            FlutterPeerFilesResponse::IndexPage { page, next_cursor } => {
+                PeerFilesResponse::IndexPage {
+                    page: page.into(),
+                    next_cursor,
+                }
+            }
+            FlutterPeerFilesResponse::StaleRevision => PeerFilesResponse::StaleRevision,
+            FlutterPeerFilesResponse::NotAuthorized => PeerFilesResponse::NotAuthorized,
+        }
+    }
+}
+
+impl From<PeerFilesResponse> for FlutterPeerFilesResponse {
+    fn from(r: PeerFilesResponse) -> Self {
+        match r {
+            PeerFilesResponse::Manifest { accounts } => FlutterPeerFilesResponse::Manifest {
+                accounts: accounts.into_iter().map(Into::into).collect(),
+            },
+            PeerFilesResponse::IndexPage { page, next_cursor } => {
+                FlutterPeerFilesResponse::IndexPage {
+                    page: page.into(),
+                    next_cursor,
+                }
+            }
+            PeerFilesResponse::StaleRevision => FlutterPeerFilesResponse::StaleRevision,
+            PeerFilesResponse::NotAuthorized => FlutterPeerFilesResponse::NotAuthorized,
+        }
+    }
+}
+
 pub struct FlutterSealedClaim {
     pub lookup_key: String,
     pub sealed: String,
@@ -1062,6 +1247,7 @@ async fn run_event_dispatcher(
     event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     control_tx: mpsc::Sender<FlutterInboundControlRequest>,
     peer_sync_tx: mpsc::Sender<FlutterInboundPeerSyncRequest>,
+    peer_files_tx: mpsc::Sender<FlutterInboundPeerFilesRequest>,
     generic_tx: mpsc::UnboundedSender<Event>,
     queued_log_events: Arc<AtomicUsize>,
 ) {
@@ -1108,6 +1294,27 @@ async fn run_event_dispatcher(
                         }
                     };
                     tracing::warn!("Dropping inbound peer sync request: {reason}");
+                }
+            }
+            Event::RequestReceived {
+                peer,
+                request: MydiaRequest::PeerFiles(req),
+                request_id,
+            } => {
+                if let Err(err) = peer_files_tx.try_send(FlutterInboundPeerFilesRequest {
+                    peer,
+                    request_id,
+                    request: req.into(),
+                }) {
+                    let reason = match err {
+                        mpsc::error::TrySendError::Full(_) => {
+                            "the peer files channel is full (32 unconsumed requests)"
+                        }
+                        mpsc::error::TrySendError::Closed(_) => {
+                            "the peer files channel has no receiver"
+                        }
+                    };
+                    tracing::warn!("Dropping inbound peer files request: {reason}");
                 }
             }
             event @ Event::Log { .. } => {
@@ -1221,6 +1428,7 @@ impl P2pHost {
         let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
         let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
         let (peer_sync_tx, peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
+        let (peer_files_tx, peer_files_rx) = mpsc::channel::<FlutterInboundPeerFilesRequest>(32);
         // See `MAX_QUEUED_LOG_EVENTS` and the doc comment on the struct
         // field: the dispatcher increments this, `event_stream` decrements
         // it, and it is what keeps `generic_tx` from growing without bound
@@ -1233,6 +1441,7 @@ impl P2pHost {
             event_rx,
             control_tx,
             peer_sync_tx,
+            peer_files_tx,
             generic_tx,
             queued_log_events.clone(),
         ));
@@ -1244,6 +1453,7 @@ impl P2pHost {
                 generic_event_rx: Arc::new(Mutex::new(generic_rx)),
                 control_rx: Arc::new(Mutex::new(control_rx)),
                 peer_sync_rx: Arc::new(Mutex::new(peer_sync_rx)),
+                peer_files_rx: Arc::new(Mutex::new(peer_files_rx)),
                 queued_log_events,
             },
             node_id,
@@ -1477,6 +1687,56 @@ impl P2pHost {
     ) -> anyhow::Result<()> {
         self.inner
             .send_response(request_id, MydiaResponse::PeerSync(res.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("send_response failed: {e}"))
+    }
+
+    /// Stream inbound peer files requests to Flutter.
+    pub fn peer_files_stream(
+        &self,
+        sink: StreamSink<FlutterInboundPeerFilesRequest>,
+    ) -> anyhow::Result<()> {
+        let rx = self.peer_files_rx.clone();
+        let _guard = runtime::enter();
+        runtime::spawn(async move {
+            let mut rx = rx.lock().await;
+            while let Some(inbound) = rx.recv().await {
+                if sink.add(inbound).is_err() {
+                    tracing::warn!("peer_files_stream sink closed, exiting");
+                    break;
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Send a peer files request to a peer and await its answer.
+    pub async fn send_peer_files(
+        &self,
+        peer: String,
+        req: FlutterPeerFilesRequest,
+    ) -> anyhow::Result<FlutterPeerFilesResponse> {
+        let response = self
+            .inner
+            .send_request(peer, MydiaRequest::PeerFiles(req.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("peer files request failed: {e}"))?;
+
+        match response {
+            MydiaResponse::PeerFiles(res) => Ok(res.into()),
+            MydiaResponse::Error(e) => Err(anyhow::anyhow!("target returned an error: {e}")),
+            other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Answer an inbound peer files request.
+    pub async fn respond_to_peer_files(
+        &self,
+        request_id: String,
+        res: FlutterPeerFilesResponse,
+    ) -> anyhow::Result<()> {
+        self.inner
+            .send_response(request_id, MydiaResponse::PeerFiles(res.into()))
             .await
             .map_err(|e| anyhow::anyhow!("send_response failed: {e}"))
     }
@@ -2046,6 +2306,8 @@ mod event_dispatcher_tests {
             // to reproduce a full channel.
             let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
             let (peer_sync_tx, _peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
+            let (peer_files_tx, _peer_files_rx) =
+                mpsc::channel::<FlutterInboundPeerFilesRequest>(32);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
             let queued_log_events = Arc::new(AtomicUsize::new(0));
 
@@ -2054,6 +2316,7 @@ mod event_dispatcher_tests {
                 event_rx,
                 control_tx,
                 peer_sync_tx,
+                peer_files_tx,
                 generic_tx,
                 queued_log_events,
             ));
@@ -2107,6 +2370,8 @@ mod event_dispatcher_tests {
             let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
             drop(control_rx);
             let (peer_sync_tx, _peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
+            let (peer_files_tx, _peer_files_rx) =
+                mpsc::channel::<FlutterInboundPeerFilesRequest>(32);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
             let queued_log_events = Arc::new(AtomicUsize::new(0));
 
@@ -2115,6 +2380,7 @@ mod event_dispatcher_tests {
                 event_rx,
                 control_tx,
                 peer_sync_tx,
+                peer_files_tx,
                 generic_tx,
                 queued_log_events,
             ));
@@ -2136,6 +2402,8 @@ mod event_dispatcher_tests {
             let (event_tx, event_rx) = mpsc::channel::<Event>(100);
             let event_rx = Arc::new(Mutex::new(event_rx));
             let (control_tx, _control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+            let (peer_files_tx, _peer_files_rx) =
+                mpsc::channel::<FlutterInboundPeerFilesRequest>(32);
             let (peer_sync_tx, mut peer_sync_rx) =
                 mpsc::channel::<FlutterInboundPeerSyncRequest>(2);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
@@ -2146,6 +2414,7 @@ mod event_dispatcher_tests {
                 event_rx,
                 control_tx,
                 peer_sync_tx,
+                peer_files_tx,
                 generic_tx,
                 queued_log_events,
             ));
@@ -2174,6 +2443,90 @@ mod event_dispatcher_tests {
             }
             assert_eq!(received, 2);
         });
+    }
+
+    #[test]
+    fn peer_files_request_routes_to_peer_files_channel() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            let (control_tx, _control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+            let (peer_sync_tx, _peer_sync_rx) = mpsc::channel::<FlutterInboundPeerSyncRequest>(32);
+            let (peer_files_tx, mut peer_files_rx) =
+                mpsc::channel::<FlutterInboundPeerFilesRequest>(32);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                peer_sync_tx,
+                peer_files_tx,
+                generic_tx,
+                queued_log_events,
+            ));
+
+            event_tx
+                .send(Event::RequestReceived {
+                    peer: "peer-files-node".to_string(),
+                    request: MydiaRequest::PeerFiles(PeerFilesRequest::Manifest {
+                        auth_proof: "proof".to_string(),
+                    }),
+                    request_id: "req-files".to_string(),
+                })
+                .await
+                .unwrap();
+            // A generic marker after it: once it arrives the dispatcher has
+            // handled the files request, so its absence on the generic side
+            // is conclusive.
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let inbound = timeout(Duration::from_secs(2), peer_files_rx.recv())
+                .await
+                .expect("the request must reach the peer files channel")
+                .expect("peer_files_tx must still be open");
+            assert_eq!(inbound.peer, "peer-files-node");
+            assert_eq!(inbound.request_id, "req-files");
+            assert_eq!(
+                inbound.request,
+                FlutterPeerFilesRequest::Manifest {
+                    auth_proof: "proof".to_string()
+                }
+            );
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect("generic delivery must continue")
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+            assert!(generic_rx.try_recv().is_err());
+        });
+    }
+
+    #[test]
+    fn peer_files_wire_types_round_trip_through_the_mirrors() {
+        let res = PeerFilesResponse::IndexPage {
+            page: WireIndexPage {
+                roots: vec![vec![1]],
+                files: vec![vec![2, 3]],
+                groups: vec![],
+                movies: vec![vec![4]],
+                shows: vec![vec![5]],
+            },
+            next_cursor: Some("c".into()),
+        };
+        let back: PeerFilesResponse = FlutterPeerFilesResponse::from(res.clone()).into();
+        assert_eq!(back, res);
+
+        let req = PeerFilesRequest::IndexPage {
+            auth_proof: "p".into(),
+            account_id: "a".into(),
+            revision: u64::MAX,
+            cursor: None,
+        };
+        let back: PeerFilesRequest = FlutterPeerFilesRequest::from(req.clone()).into();
+        assert_eq!(back, req);
     }
 }
 

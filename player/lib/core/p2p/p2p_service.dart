@@ -264,6 +264,9 @@ class P2pService {
   // stall the unbounded generic channel `_eventSubscription` reads from.
   StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
   StreamSubscription<FlutterInboundPeerSyncRequest>? _peerSyncSubscription;
+  // Cancelled in `_detachNativeSubscriptions`.
+  // ignore: cancel_subscriptions
+  StreamSubscription<FlutterInboundPeerFilesRequest>? _peerFilesSubscription;
 
   // Stream of P2P status updates
   /// Set by [dispose]. Checked after every await in [_initialize], which can
@@ -343,6 +346,57 @@ class P2pService {
     final host = _host;
     if (host == null) throw Exception('P2P host not initialized');
     return host.sendPeerSync(peer: peer, req: request);
+  }
+
+  // Stream of inbound peer files requests from another player.
+  final _peerFilesRequestController =
+      StreamController<FlutterInboundPeerFilesRequest>.broadcast();
+
+  /// Peer files requests arriving from another player.
+  Stream<FlutterInboundPeerFilesRequest> get onPeerFilesRequest =>
+      _peerFilesRequestController.stream;
+
+  /// Answer an inbound peer files request carried on [onPeerFilesRequest].
+  ///
+  /// A no-op host (never initialized, or torn down since the request arrived)
+  /// silently drops the response rather than throwing.
+  Future<void> respondToPeerFiles(
+    String requestId,
+    FlutterPeerFilesResponse response,
+  ) async {
+    final host = _host;
+    if (host == null) return;
+    await host.respondToPeerFiles(requestId: requestId, res: response);
+  }
+
+  /// Send a peer files request to a peer and await its answer.
+  Future<FlutterPeerFilesResponse> sendPeerFiles(
+    String peer,
+    FlutterPeerFilesRequest request,
+  ) async {
+    final host = _host;
+    if (host == null) throw Exception('P2P host not initialized');
+    return host.sendPeerFiles(peer: peer, req: request);
+  }
+
+  StreamSubscription<FlutterInboundPeerFilesRequest> _listenPeerFiles(
+    P2PHost host,
+  ) {
+    return host.peerFilesStream().listen((request) {
+      debugPrint(
+          '[P2P] Peer files request: ${request.requestId} from ${request.peer}');
+      if (_peerFilesRequestController.isClosed) return;
+      _peerFilesRequestController.add(request);
+    });
+  }
+
+  /// Install [host] as the live host without initializing iroh, wiring its
+  /// peer files stream the way [_initialize] does. Tests only.
+  @visibleForTesting
+  void debugSetHost(P2PHost host) {
+    _host = host;
+    _isInitialized = true;
+    _peerFilesSubscription = _listenPeerFiles(host);
   }
 
   /// Returns true if the P2P host is initialized
@@ -666,6 +720,9 @@ class P2pService {
         if (_peerSyncRequestController.isClosed) return;
         _peerSyncRequestController.add(request);
       });
+
+      // Start Peer-Files Stream.
+      _peerFilesSubscription = _listenPeerFiles(_host!);
 
       _isInitialized = true;
       _emitStatus();
@@ -1118,6 +1175,12 @@ class P2pService {
       debugPrint(
           '[P2P] Error cancelling peer sync subscription on $reason: $e');
     }));
+    final peerFilesSubscription = _peerFilesSubscription;
+    _peerFilesSubscription = null;
+    unawaited(peerFilesSubscription?.cancel().catchError((Object e) {
+      debugPrint(
+          '[P2P] Error cancelling peer files subscription on $reason: $e');
+    }));
   }
 
   Future<void> dispose() async {
@@ -1135,6 +1198,7 @@ class P2pService {
     await _peerConnectedController.close();
     await _controlRequestController.close();
     await _peerSyncRequestController.close();
+    await _peerFilesRequestController.close();
   }
 }
 
