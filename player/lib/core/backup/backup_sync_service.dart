@@ -423,12 +423,20 @@ class BackupSyncService {
   /// The host side of pairing: adds the joiner owning [signerB64] and
   /// [boxB64] to this device's vault at the current epoch (no rotation),
   /// records [nodeId]'s slot for a later revocation, and returns the vault
-  /// id. Null when backup is off or the add failed: pairing goes on
-  /// without it.
+  /// id. Null when backup is off, the add failed, or [deadline] (wall
+  /// clock) passed before the relay write: the host has stopped waiting by
+  /// then, and a late write would leave a member that never adopts the
+  /// vault. Pairing goes on without it.
+  ///
+  /// A signer already in the vault is not recorded against [nodeId]: the
+  /// joiner proved nothing about owning it, and a revocation must not
+  /// reach another member's slot. That member's own group record says
+  /// which node it is.
   Future<String?> addMemberForPair(String signerB64, String boxB64,
-          {String? nodeId}) =>
+          {String? nodeId, DateTime? deadline}) =>
       _serialise(() async {
-        if (!_active) return null;
+        bool late() => deadline != null && DateTime.now().isAfter(deadline);
+        if (!_active || late()) return null;
         try {
           final signerPub = backupUnb64(signerB64);
           final boxPub = backupUnb64(boxB64);
@@ -440,22 +448,22 @@ class BackupSyncService {
             final state = await _adoptEpoch(m);
             final listed = m.members
                 .any((x) => !x.recovery && listEquals(x.signer, signerPub));
-            if (!listed) {
-              try {
-                await _ops.addMember(
-                  vaultId: vaultId,
-                  signer: identity.signer,
-                  epoch: state.epoch,
-                  vaultKey: state.keysByEpoch[state.epoch]!,
-                  memberSigner: signerPub,
-                  memberBox: boxPub,
-                );
-              } on BackupRelayException catch (e) {
-                if (e.kind != BackupRelayError.conflict || attempt > 0) {
-                  rethrow;
-                }
-                continue;
+            if (listed) return vaultId;
+            if (late()) return null;
+            try {
+              await _ops.addMember(
+                vaultId: vaultId,
+                signer: identity.signer,
+                epoch: state.epoch,
+                vaultKey: state.keysByEpoch[state.epoch]!,
+                memberSigner: signerPub,
+                memberBox: boxPub,
+              );
+            } on BackupRelayException catch (e) {
+              if (e.kind != BackupRelayError.conflict || attempt > 0) {
+                rethrow;
               }
+              continue;
             }
             if (nodeId != null) {
               await _meta.setNodeToSlot(
@@ -471,11 +479,16 @@ class BackupSyncService {
       });
 
   /// The joiner side of pairing: takes up [vaultId], which the host just
-  /// added this device to, uploads this device's slot, merges the group's,
-  /// and raises [joinedNotice]. A device already in another vault is not
-  /// switched: [pendingVaultChoice] asks the viewer instead.
+  /// added this device to, and raises [joinedNotice]. Uploading this
+  /// device's slot and merging the group's is queued, not awaited, so
+  /// pairing does not wait on a 4 MB transfer. A device already in another
+  /// vault is not switched: [pendingVaultChoice] asks the viewer instead.
   Future<void> adoptVault(String vaultId) => _serialise(() async {
-        final current = _state;
+        // Null before start() ran: read the stored state, so a vault this
+        // device is already in is never overwritten. A load that fails
+        // aborts the adoption. Not kept in memory: start() loads it with
+        // the identity that uploads need.
+        final current = _state ?? await _store.load();
         if (current != null) {
           if (current.vaultId != vaultId) {
             _setChoice((current: current.vaultId, offered: vaultId));
@@ -486,8 +499,12 @@ class BackupSyncService {
         await _switchTo(await _openAsMember(vaultId, identity), identity);
         await _meta.setJoinedNoticePending(true);
         if (!_disposed) _joinedNotice.value = true;
-        await _attempt(_uploadAndMerge);
+        unawaited(_background(_uploadAndMerge));
       });
+
+  /// Completes once every operation queued so far has run.
+  @visibleForTesting
+  Future<void> settled() => _serialise(() async {});
 
   void acknowledgeJoinedNotice() {
     if (!_disposed) _joinedNotice.value = false;
@@ -497,13 +514,23 @@ class BackupSyncService {
   /// Settles [pendingVaultChoice]. Keeping the offered vault moves this
   /// device into it (its records are local, so they go up with its slot)
   /// and then leaves the old one, deleting it when this device was its
-  /// only one. Keeping the current vault leaves both as they are.
+  /// only one. Keeping the current vault takes this device out of the
+  /// offered one (best effort), where the host had added it.
   Future<void> resolveVaultChoice({required bool keepOffered}) =>
       _serialise(() async {
         final choice = _vaultChoice.value;
         if (choice == null) return;
-        if (!keepOffered) return _setChoice(null);
         final identity = await _loadIdentity();
+        if (!keepOffered) {
+          _setChoice(null);
+          if (choice.offered == choice.current) return;
+          try {
+            await _leaveOnRelay(choice.offered, identity);
+          } catch (e) {
+            debugPrint('[Backup] Offered vault not left: ${e.runtimeType}');
+          }
+          return;
+        }
         final BackupVaultState next;
         try {
           next = await _openAsMember(choice.offered, identity);
@@ -523,18 +550,27 @@ class BackupSyncService {
         }
       });
 
-  /// Removes the vault member that p2p node [nodeId] is, when this device
-  /// knows its slot (recorded at pairing or merged from a group record).
-  /// A node that never joined the vault is skipped.
+  /// Removes the vault member that p2p node [nodeId] is. Its slot comes
+  /// from this device's own pairing record or from that slot's own group
+  /// record claiming the node, never from what one member says of
+  /// another's slot. A node that never joined the vault is skipped, and so
+  /// is one that two slots claim: removing either could hit the wrong
+  /// device.
   Future<void> removeMemberForNode(String nodeId) async {
     if (_state == null) return;
     final wanted = nodeId.toLowerCase();
-    final slotId = _meta
-        .nodeToSlot()
-        .entries
-        .where((e) => e.key.toLowerCase() == wanted)
-        .firstOrNull
-        ?.value;
+    final slots = <String>{
+      for (final e in _meta.nodeToSlot().entries)
+        if (e.key.toLowerCase() == wanted) e.value,
+      for (final e in _meta.slotClaims().entries)
+        if (e.value.any((n) => n.toLowerCase() == wanted)) e.key,
+    };
+    if (slots.length > 1) {
+      debugPrint('[Backup] Revocation not applied to the backup: more than '
+          'one device claims that node');
+      return;
+    }
+    final slotId = slots.firstOrNull;
     if (slotId == null || slotId == _identity?.slotId) return;
     await removeMember(slotId);
   }
@@ -593,6 +629,7 @@ class BackupSyncService {
     _accountRecords.clear();
     _setMismatch(false);
     await _meta.clearMergedSeqs();
+    await _meta.clearSlotClaims();
     try {
       await _save(state);
     } catch (_) {
@@ -751,20 +788,22 @@ class BackupSyncService {
 
   Future<ApplyResult> _apply(
       Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
-    final nodes = _meta.nodeToSlot();
-    for (final p in payloads.values) {
+    for (final MapEntry(key: slotId, value: p) in payloads.entries) {
       for (final r in p.records.whereType<AccountBackupRecord>()) {
         if (!r.deleted) _accountRecords[r.accountId] = r;
       }
-      // Every member's group record, not only the winning one: each maps
-      // the devices it paired, which a revocation from here needs.
-      for (final r in p.records.whereType<GroupBackupRecord>()) {
-        if (r.deleted) continue;
-        for (final MapEntry(:key, :value) in r.nodeToSlot.entries) {
-          if (nodes.containsKey(key)) continue;
-          nodes[key] = value;
-          await _meta.setNodeToSlot(key, value);
-        }
+      // Each slot's group record, not only the winning one, but only for
+      // the nodes it says are its own: a member's word about another
+      // member's slot would let it aim a revocation at that member.
+      final group = p.records
+          .whereType<GroupBackupRecord>()
+          .where((r) => !r.deleted)
+          .firstOrNull;
+      if (group != null) {
+        await _meta.setSlotClaim(slotId, {
+          for (final MapEntry(:key, :value) in group.nodeToSlot.entries)
+            if (value == slotId) key,
+        });
       }
     }
     return applyByOrigin(_snapshot, payloads, mode: mode, nowMs: _nowMs);
@@ -928,6 +967,7 @@ class BackupSyncService {
     if (!_disposed) _joinedNotice.value = false;
     await _store.clear();
     await _meta.clearMergedSeqs();
+    await _meta.clearSlotClaims();
     await _meta.setJoinedNoticePending(false);
     if (!_disposed) _unreadable.value = const {};
     _set(next);

@@ -86,6 +86,14 @@ class FakeBackupRelay {
   /// relay accepted it.
   bool dropNextMembersResponse = false;
 
+  /// Requests it matches get no answer until [releaseHung].
+  bool Function(http.Request request)? hangWhen;
+  final _hung = Completer<void>();
+
+  void releaseHung() {
+    if (!_hung.isCompleted) _hung.complete();
+  }
+
   late final http.Client client = MockClient(_handle);
 
   BackupRelayClient relayClient() =>
@@ -105,6 +113,7 @@ class FakeBackupRelay {
 
   Future<http.Response> _handle(http.Request r) async {
     requests.add('${r.method} ${r.url.path}');
+    if (hangWhen?.call(r) ?? false) await _hung.future;
     onRequest?.call(r);
     final replaced = override?.call(r);
     if (replaced != null) return replaced;

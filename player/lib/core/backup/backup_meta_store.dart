@@ -124,6 +124,7 @@ class BackupMetaStore {
   static const _dismissedPrefix = 'dismissed:';
   static const _seqPrefix = 'seq:';
   static const _nodePrefix = 'node:';
+  static const _claimPrefix = 'claim:';
 
   final BackupMetaStorage _storage;
 
@@ -218,6 +219,8 @@ class BackupMetaStore {
     }
   }
 
+  /// What this device itself recorded: its own node and the devices it
+  /// added to the vault at pairing. Uploaded in its group record.
   Map<String, String> nodeToSlot() => {
         for (final k in _storage.keys)
           if (k.startsWith(_nodePrefix))
@@ -229,6 +232,32 @@ class BackupMetaStore {
 
   Future<void> removeNode(String nodeId) =>
       _storage.delete('$_nodePrefix$nodeId');
+
+  /// The p2p node ids each slot's owner says are its own, by slot id: read
+  /// from that slot's group record and nowhere else, so no member can
+  /// claim a node for another member's slot.
+  Map<String, Set<String>> slotClaims() => {
+        for (final k in _storage.keys)
+          if (k.startsWith(_claimPrefix))
+            k.substring(_claimPrefix.length): {
+              for (final n in _storage.get(k)!.split(','))
+                if (n.isNotEmpty) n,
+            },
+      };
+
+  /// Replaces [slotId]'s claim with [nodeIds] (its latest upload wins).
+  Future<void> setSlotClaim(String slotId, Set<String> nodeIds) =>
+      nodeIds.isEmpty
+          ? _storage.delete('$_claimPrefix$slotId')
+          : _storage.put(
+              '$_claimPrefix$slotId', (nodeIds.toList()..sort()).join(','));
+
+  /// Forgets every claim, when this device leaves a vault.
+  Future<void> clearSlotClaims() async {
+    for (final k in _storage.keys.toList()) {
+      if (k.startsWith(_claimPrefix)) await _storage.delete(k);
+    }
+  }
 
   /// Whether the "now backed up with your group" notice is still to be
   /// seen: set when pairing joined this device to a vault, so it survives a

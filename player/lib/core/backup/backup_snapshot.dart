@@ -517,11 +517,10 @@ class BackupSnapshot {
       debugPrint('[Backup] Group secret in the backup is malformed');
       return;
     }
+    // The node map is not taken from here: the merged record has lost which
+    // slot sent it, and a node is believed only from its own slot (see
+    // `BackupSyncService._apply`).
     await _auth.write(PeerGroupSecret.storageKey, r.groupSecretB64);
-    final known = _meta.nodeToSlot();
-    for (final MapEntry(:key, :value) in r.nodeToSlot.entries) {
-      if (!known.containsKey(key)) await _meta.setNodeToSlot(key, value);
-    }
   }
 }
 

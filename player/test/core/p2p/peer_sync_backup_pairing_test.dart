@@ -41,7 +41,7 @@ class _Node {
       snapshot: snapshot,
       deviceName: () async => name,
       platform: 'linux',
-      localNodeId: () => nodeId,
+      localNodeId: () => reportsNode ? nodeId : null,
       delay: (d) async {
         delays.add(d);
         await onDelay?.call();
@@ -57,12 +57,17 @@ class _Node {
       resolveDeviceName: () async => name,
       clock: net.clock.call,
       backupKeysForPair: () => keysForPair(),
-      onJoinerBackupKeys: (node, signer, box) =>
-          backup.addMemberForPair(signer, box, nodeId: node),
+      onJoinerBackupKeys: (node, signer, box, deadline) => backup
+          .addMemberForPair(signer, box, nodeId: node, deadline: deadline),
       onJoinedVault: backup.adoptVault,
       onPeerRevoked: backup.removeMemberForNode,
+      backupHookTimeout: net.hookTimeout,
     );
   }
+
+  /// When false the backup does not know this device's node id, so its
+  /// group record carries only what the test put in [meta].
+  bool reportsNode = true;
 
   final String name;
   final String nodeId;
@@ -106,6 +111,7 @@ class _Net {
   final backupRelay = FakeBackupRelay();
   final clock = TestClock();
   final nodes = <_Node>[];
+  Duration hookTimeout = PeerSyncService.backupAdmitTimeout;
 
   Future<_Node> node(String name, String nodeId) async {
     final n = _Node(name, nodeId, this);
@@ -117,9 +123,18 @@ class _Net {
   Future<void> pair(_Node host, _Node joiner) async {
     final offer = await host.peers.startPairingOffer();
     await joiner.peers.pairWithCode(offer.code);
+    // The joiner's first upload and merge run after pairing returns.
+    await joiner.backup.settled();
+  }
+
+  /// Uploads [n]'s current records now.
+  Future<void> upload(_Node n) async {
+    n.backup.markDirty();
+    await n.backup.flush();
   }
 
   void dispose() {
+    backupRelay.releaseHung();
     for (final n in nodes) {
       n.dispose();
     }
@@ -152,11 +167,12 @@ void main() {
     expect(vault.epoch, 1, reason: 'joining does not rotate');
     expect(net.backupRelay.slotWrites[joinerSlot], 1);
     expect(host.meta.nodeToSlot()['node-b'], joinerSlot);
-    // The host's own mapping comes over in its group record, which its
-    // next upload carries (the group did not exist when it enabled backup).
+    // The host's own node comes over as its slot's claim, in the group
+    // record its next upload carries (the group did not exist when it
+    // enabled backup).
     await host.backup.flush();
     await joiner.backup.poll();
-    expect(joiner.meta.nodeToSlot()['node-a'], await host.slotId());
+    expect(joiner.meta.slotClaims()[await host.slotId()], {'node-a'});
     expect(joiner.meta.nodeToSlot()['node-b'], joinerSlot);
 
     joiner.backup.acknowledgeJoinedNotice();
@@ -242,7 +258,8 @@ void main() {
     expect(net.backupRelay.requests.skip(before), isEmpty);
   });
 
-  test('a device revokes a peer it learned of from the group record', () async {
+  test('a device revokes a peer that claims its node in its own slot',
+      () async {
     final host = await net.node('Living Room TV', 'node-a');
     final laptop = await net.node('Night Harbor Laptop', 'node-b');
     final phone = await net.node('Pocket Phone', 'node-c');
@@ -251,17 +268,144 @@ void main() {
     await net.pair(host, phone);
     expect(laptop.meta.nodeToSlot().containsKey('node-c'), isFalse);
 
-    // The host's slot now carries node-c's slot; the laptop merges it.
-    host.backup.markDirty();
-    await host.backup.flush();
+    // The phone's first upload says node-c is its own; the laptop merges it.
     await laptop.backup.poll();
     final phoneSlot = await phone.slotId();
-    expect(laptop.meta.nodeToSlot()['node-c'], phoneSlot);
+    expect(laptop.meta.slotClaims()[phoneSlot], {'node-c'});
 
     await laptop.peers.revokePeer('node-c');
     final vault = net.backupRelay.onlyVault;
     expect(vault.epoch, 2);
     expect(vault.slots.containsKey(phoneSlot), isFalse);
+  });
+
+  test('a member cannot aim a revocation at another member slot', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final laptop = await net.node('Night Harbor Laptop', 'node-b');
+    final phone = await net.node('Pocket Phone', 'node-c');
+    await host.enableBackup();
+    await net.pair(host, laptop);
+    await net.pair(host, phone);
+    final hostSlot = await host.slotId();
+    final laptopSlot = await laptop.slotId();
+
+    // The laptop uploads a group record saying its node is the host's slot.
+    laptop.reportsNode = false;
+    await laptop.meta.setNodeToSlot('node-b', hostSlot);
+    await net.upload(laptop);
+    await phone.backup.poll();
+    expect(phone.meta.slotClaims()[laptopSlot] ?? const <String>{},
+        isNot(contains('node-b')));
+
+    await phone.peers.revokePeer('node-b');
+
+    final vault = net.backupRelay.onlyVault;
+    expect(vault.epoch, 1, reason: 'no claim the phone believes names it');
+    expect(vault.slots.containsKey(hostSlot), isTrue);
+  });
+
+  test('a node two slots claim is not revoked from the vault', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final laptop = await net.node('Night Harbor Laptop', 'node-b');
+    final phone = await net.node('Pocket Phone', 'node-c');
+    await host.enableBackup();
+    await net.pair(host, laptop);
+    await net.pair(host, phone);
+
+    // The phone claims the laptop's node for its own slot.
+    await phone.meta.setNodeToSlot('node-b', await phone.slotId());
+    await net.upload(phone);
+    await host.backup.poll();
+
+    await host.peers.revokePeer('node-b');
+
+    final vault = net.backupRelay.onlyVault;
+    expect(host.store.member('node-b')!.revoked, isTrue);
+    expect(vault.epoch, 1);
+    expect(vault.slots.keys,
+        containsAll([await laptop.slotId(), await phone.slotId()]));
+  });
+
+  test('a signer already in the vault is not recorded against the node',
+      () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final laptop = await net.node('Night Harbor Laptop', 'node-b');
+    await host.enableBackup();
+    await net.pair(host, laptop);
+    final hostKeys = (await host.backup.pairKeys())!;
+
+    // node-x presents the host's own public keys.
+    expect(
+        await host.backup
+            .addMemberForPair(hostKeys.signer, hostKeys.box, nodeId: 'node-x'),
+        isNotNull);
+    expect(host.meta.nodeToSlot().containsKey('node-x'), isFalse);
+  });
+
+  test('a host add past its deadline writes nothing', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final joiner = await net.node('Night Harbor Laptop', 'node-b');
+    await host.enableBackup();
+    final keys = (await joiner.backup.pairKeys())!;
+    final before = net.backupRelay.requests.length;
+
+    final vaultId = await host.backup.addMemberForPair(keys.signer, keys.box,
+        nodeId: 'node-b',
+        deadline: DateTime.now().subtract(const Duration(seconds: 1)));
+
+    expect(vaultId, isNull);
+    expect(net.backupRelay.requests.skip(before), isEmpty);
+    expect(net.backupRelay.onlyVault.members, hasLength(2));
+  });
+
+  group('a relay that never answers', () {
+    setUp(() => net.hookTimeout = const Duration(milliseconds: 200));
+
+    test('does not hold up the host reply', () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      net.backupRelay.hangWhen = (_) => true;
+
+      final clock = Stopwatch()..start();
+      final offer = await host.peers.startPairingOffer();
+      await joiner.peers.pairWithCode(offer.code);
+
+      expect(clock.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(joiner.peers.isPaired, isTrue);
+      expect(joiner.backup.enabled, isFalse);
+    });
+
+    test('does not hold up the joiner', () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      final signer = (await joiner.backup.pairKeys())!.signer;
+      net.backupRelay.hangWhen =
+          (r) => (r.headers['authorization'] ?? '').contains('signer=$signer');
+
+      final clock = Stopwatch()..start();
+      final offer = await host.peers.startPairingOffer();
+      await joiner.peers.pairWithCode(offer.code);
+
+      expect(clock.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(joiner.peers.isPaired, isTrue);
+      expect(host.store.member('node-b')!.revoked, isFalse);
+    });
+
+    test('does not hold up a revocation', () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      await net.pair(host, joiner);
+      net.backupRelay.hangWhen = (_) => true;
+
+      final clock = Stopwatch()..start();
+      await host.peers.revokePeer('node-b');
+
+      expect(clock.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(host.store.member('node-b')!.revoked, isTrue);
+    });
   });
 
   test('leaving the p2p group keeps this device in the vault', () async {
@@ -322,19 +466,66 @@ void main() {
     expect(joiner.backup.status.value, isA<BackupIdle>());
   });
 
-  test('keeping the current vault leaves both as they were', () async {
+  test('keeping the current vault leaves the offered one', () async {
     final host = await net.node('Living Room TV', 'node-a');
     final joiner = await net.node('Night Harbor Laptop', 'node-b');
     await host.enableBackup();
     await joiner.enableBackup();
+    final hostVault = (await host.state())!.vaultId;
     final ownVault = (await joiner.state())!.vaultId;
     await net.pair(host, joiner);
+    final joinerSlot = await joiner.slotId();
+    expect(net.backupRelay.vault(hostVault).members.values.map((m) => m.slotId),
+        contains(joinerSlot));
 
     await joiner.backup.resolveVaultChoice(keepOffered: false);
 
     expect(joiner.backup.pendingVaultChoice.value, isNull);
     expect((await joiner.state())!.vaultId, ownVault);
     expect(net.backupRelay.vaults, hasLength(2));
+    final offered = net.backupRelay.vault(hostVault);
+    expect(offered.members.values.map((m) => m.slotId),
+        isNot(contains(joinerSlot)));
+    expect(offered.epoch, 2, reason: 'leaving rotates the vault key');
+  });
+
+  test('adoptVault before start keeps a stored vault', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final joiner = await net.node('Night Harbor Laptop', 'node-b');
+    await host.enableBackup();
+    await joiner.enableBackup();
+    final hostVault = (await host.state())!.vaultId;
+    final ownVault = (await joiner.state())!.vaultId;
+
+    final fresh = BackupSyncService(
+      relay: net.backupRelay.relayClient(),
+      authStorage: joiner.auth,
+      meta: joiner.meta,
+      snapshot: joiner.snapshot,
+      deviceName: () async => joiner.name,
+      platform: 'linux',
+    );
+    addTearDown(fresh.dispose);
+    await fresh.adoptVault(hostVault);
+
+    expect((await joiner.state())!.vaultId, ownVault);
+    expect(fresh.pendingVaultChoice.value,
+        (current: ownVault, offered: hostVault));
+  });
+
+  test('adoptVault aborts when the stored state cannot be read', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final joiner = _Node('Night Harbor Laptop', 'node-b', net);
+    net.nodes.add(joiner);
+    await host.enableBackup();
+    final hostVault = (await host.state())!.vaultId;
+    await joiner.auth.write(BackupVaultStateStore.storageKey, '{"v": 9}');
+
+    await expectLater(joiner.backup.adoptVault(hostVault), throwsA(anything));
+
+    expect(
+        await joiner.auth.read(BackupVaultStateStore.storageKey), '{"v": 9}');
+    expect(joiner.backup.showJoinedNotice, isFalse);
   });
 
   test('adoptVault waits for the host add that races the reply', () async {

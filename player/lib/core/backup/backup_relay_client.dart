@@ -258,6 +258,8 @@ class BackupRelayClient {
     http.Client? client,
     String baseUrl = metadataRelayBaseUrl,
     DateTime Function()? clock,
+    this.requestTimeout = const Duration(seconds: 30),
+    this.slotTimeout = const Duration(seconds: 120),
   })  : _client = client ?? http.Client(),
         _baseUrl = baseUrl.endsWith('/')
             ? baseUrl.substring(0, baseUrl.length - 1)
@@ -265,6 +267,13 @@ class BackupRelayClient {
         _clock = clock ?? DateTime.now;
 
   static const _api = '/backup/v1';
+
+  /// How long a JSON call may take before it fails as
+  /// [BackupRelayError.network].
+  final Duration requestTimeout;
+
+  /// The same for a slot upload or download, which can carry 4 MB.
+  final Duration slotTimeout;
 
   final http.Client _client;
   final String _baseUrl;
@@ -328,6 +337,7 @@ class BackupRelayClient {
         'x-backup-epoch': '$epoch',
         if (ifMatch != null) 'if-match': '$ifMatch',
       },
+      slot: true,
     );
     return _json(r)['seq'] as int;
   }
@@ -341,6 +351,7 @@ class BackupRelayClient {
       'GET',
       '$_api/vaults/$vaultId/slots/$slotId',
       signer: signer,
+      slot: true,
     );
     return r.bodyBytes;
   }
@@ -400,6 +411,7 @@ class BackupRelayClient {
     String? contentType,
     Map<String, String> headers = const {},
     bool accept304 = false,
+    bool slot = false,
   }) async {
     for (var attempt = 0;; attempt++) {
       final request = http.Request(method, Uri.parse('$_baseUrl$path'));
@@ -413,9 +425,11 @@ class BackupRelayClient {
 
       final http.Response response;
       try {
-        response = await http.Response.fromStream(
-          await _client.send(request),
-        );
+        // A relay that never answers is a network failure, not a hang.
+        response = await _client
+            .send(request)
+            .then(http.Response.fromStream)
+            .timeout(slot ? slotTimeout : requestTimeout);
       } on Object {
         throw const BackupRelayException(BackupRelayError.network);
       }

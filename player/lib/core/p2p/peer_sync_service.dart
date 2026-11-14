@@ -95,6 +95,12 @@ class P2pPeerSyncTransport implements PeerSyncTransport {
   bool isConnectedToPeer(String peer) => _p2pService.isConnectedToPeer(peer);
 }
 
+/// Host: adds the joiner owning [signerB64] and [boxB64] to the vault and
+/// returns its id, or null. No relay write may start after [deadline]
+/// (wall clock): the host has replied without the vault by then.
+typedef JoinerBackupKeysHook = Future<String?> Function(
+    String nodeId, String signerB64, String boxB64, DateTime deadline);
+
 /// The cloud backup's part in pairing, as [PeerSyncService] takes it. All
 /// null when backup is not offered (web).
 class BackupPairingHooks {
@@ -106,8 +112,7 @@ class BackupPairingHooks {
   });
 
   final Future<({String signer, String box})?> Function()? backupKeysForPair;
-  final Future<String?> Function(
-      String nodeId, String signerB64, String boxB64)? onJoinerBackupKeys;
+  final JoinerBackupKeysHook? onJoinerBackupKeys;
   final Future<void> Function(String vaultId)? onJoinedVault;
   final Future<void> Function(String nodeId)? onPeerRevoked;
 }
@@ -148,11 +153,12 @@ class PeerSyncService {
     void Function(PeerMember joinedPeer)? onPeerPaired,
     DateTime Function()? clock,
     Future<({String signer, String box})?> Function()? backupKeysForPair,
-    Future<String?> Function(String nodeId, String signerB64, String boxB64)?
-        onJoinerBackupKeys,
+    JoinerBackupKeysHook? onJoinerBackupKeys,
     Future<void> Function(String vaultId)? onJoinedVault,
     Future<void> Function(String nodeId)? onPeerRevoked,
-  })  : _backupKeysForPair = backupKeysForPair,
+    Duration backupHookTimeout = backupAdmitTimeout,
+  })  : _backupHookTimeout = backupHookTimeout,
+        _backupKeysForPair = backupKeysForPair,
         _onJoinerBackupKeys = onJoinerBackupKeys,
         _onJoinedVault = onJoinedVault,
         _onPeerRevoked = onPeerRevoked,
@@ -190,8 +196,7 @@ class PeerSyncService {
   final Future<({String signer, String box})?> Function()? _backupKeysForPair;
 
   /// Host: adds the joiner to this device's vault and returns its id.
-  final Future<String?> Function(
-      String nodeId, String signerB64, String boxB64)? _onJoinerBackupKeys;
+  final JoinerBackupKeysHook? _onJoinerBackupKeys;
 
   /// Joiner: takes up the vault the host added it to.
   final Future<void> Function(String vaultId)? _onJoinedVault;
@@ -199,9 +204,12 @@ class PeerSyncService {
   /// Removes a revoked device from the vault.
   final Future<void> Function(String nodeId)? _onPeerRevoked;
 
-  /// How long the host waits on the vault add before replying without it,
-  /// well inside the 30 s the joiner waits for the reply.
+  /// How long pairing or a revocation waits on a backup hook: the host's
+  /// vault add before replying without it (well inside the 30 s the joiner
+  /// waits for the reply), the joiner's vault adoption, the removal from
+  /// the vault after a revoke.
   static const backupAdmitTimeout = Duration(seconds: 10);
+  final Duration _backupHookTimeout;
 
   final _stateChangedController = StreamController<void>.broadcast();
   final _peerPairedController = StreamController<PeerMember>.broadcast();
@@ -522,7 +530,7 @@ class PeerSyncService {
     final vaultId = res.vaultId;
     if (vaultId != null && backupKeys != null) {
       try {
-        await _onJoinedVault?.call(vaultId);
+        await _onJoinedVault?.call(vaultId).timeout(_backupHookTimeout);
       } catch (e) {
         debugPrint('[PeerSyncService] Group backup not joined: '
             '${e.runtimeType}');
@@ -611,8 +619,9 @@ class PeerSyncService {
     if (backupSigner != null && backupBox != null && admit != null) {
       final generation = _generation;
       try {
-        vaultId = await admit(request.peer, backupSigner, backupBox)
-            .timeout(backupAdmitTimeout);
+        vaultId = await admit(request.peer, backupSigner, backupBox,
+                DateTime.now().add(_backupHookTimeout))
+            .timeout(_backupHookTimeout);
       } catch (e) {
         debugPrint('[PeerSyncService] Joiner not added to the backup: '
             '${e.runtimeType}');
@@ -963,7 +972,7 @@ class PeerSyncService {
 
     // Out of the backup vault too, with a rotation, when it was in it.
     try {
-      await _onPeerRevoked?.call(nodeId);
+      await _onPeerRevoked?.call(nodeId).timeout(_backupHookTimeout);
     } catch (e) {
       debugPrint('[PeerSyncService] Revoked device still in the backup: '
           '${e.runtimeType}');

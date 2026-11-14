@@ -727,7 +727,8 @@ void main() {
           mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
       expect(
           await b.auth.read(PeerGroupSecret.storageKey), secret.toBase64Url());
-      expect(b.meta.nodeToSlot(), {'nodeA': 'slotA'});
+      expect(b.meta.nodeToSlot(), isEmpty,
+          reason: 'node claims are taken per slot by BackupSyncService');
 
       final c = _Device();
       const local = 'local-secret-kept';

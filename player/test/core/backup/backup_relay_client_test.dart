@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -265,6 +266,30 @@ void main() {
   test('transport failure is network', () async {
     final c = client((_) async => throw http.ClientException('down'));
     await expectKind(c.deleteVault('v', kp), BackupRelayError.network);
+  });
+
+  test('a relay that never answers times out as network', () async {
+    final hang = Completer<http.Response>();
+    final c = BackupRelayClient(
+      client: MockClient((_) => hang.future),
+      baseUrl: 'https://relay.test',
+      clock: () => _now,
+      requestTimeout: const Duration(milliseconds: 20),
+      slotTimeout: const Duration(milliseconds: 60),
+    );
+    await expectKind(c.manifest('v', kp), BackupRelayError.network);
+
+    final slot = Stopwatch()..start();
+    await expectKind(c.getSlot('v', kp, 'abcd'), BackupRelayError.network);
+    expect(slot.elapsedMilliseconds, greaterThanOrEqualTo(60),
+        reason: 'slot transfers get the longer budget');
+  });
+
+  test('the default budgets are 30 s for JSON and 120 s for slots', () {
+    final c = BackupRelayClient(
+        client: MockClient((_) async => http.Response('', 204)));
+    expect(c.requestTimeout, const Duration(seconds: 30));
+    expect(c.slotTimeout, const Duration(seconds: 120));
   });
 
   group('skew', () {

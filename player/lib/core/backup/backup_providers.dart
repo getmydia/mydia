@@ -150,8 +150,8 @@ final Provider<BackupPairingHooks> backupPairingHooksProvider =
   BackupSyncService backup() => ref.read(backupSyncServiceProvider);
   return BackupPairingHooks(
     backupKeysForPair: () => backup().pairKeys(),
-    onJoinerBackupKeys: (nodeId, signer, box) =>
-        backup().addMemberForPair(signer, box, nodeId: nodeId),
+    onJoinerBackupKeys: (nodeId, signer, box, deadline) => backup()
+        .addMemberForPair(signer, box, nodeId: nodeId, deadline: deadline),
     onJoinedVault: (vaultId) => backup().adoptVault(vaultId),
     onPeerRevoked: (nodeId) => backup().removeMemberForNode(nodeId),
   );
