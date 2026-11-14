@@ -41,13 +41,23 @@ defmodule Mydia.Downloads.BuiltIn.Limits do
     :ok = Phoenix.PubSub.subscribe(Mydia.PubSub, topic)
 
     state = %{
-      config: Keyword.fetch!(opts, :config),
+      config: initial_config(opts),
       status: Keyword.get(opts, :status, Status),
       resolve: Keyword.get(opts, :resolve, fn -> Queue.resolve_adapter(BuiltIn.name()) end),
       running?: false
     }
 
     {:ok, state, {:continue, :sync}}
+  end
+
+  # The child spec's config is frozen when the tree starts, while a live reload
+  # only updates the runtime entry. A process restarted inside the tree must
+  # not bring back the old limits, so the runtime entry wins when present.
+  defp initial_config(opts) do
+    case BuiltIn.runtime() do
+      %{config: %Config{} = config} -> config
+      _ -> Keyword.fetch!(opts, :config)
+    end
   end
 
   # The engine may have reported running before this process subscribed.
