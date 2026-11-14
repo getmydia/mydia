@@ -23,6 +23,8 @@ MediaFileInfo filesMediaFileInfo({
   final extension = dot <= 0 ? null : fileName.substring(dot + 1).toLowerCase();
 
   final duration = probe?.durationSeconds;
+  // The mapping owns size * 8 / duration using mpv's file-size. This covers
+  // only a probe that reported no file-size, using the index's size.
   final bitrate = probe == null
       ? null
       : probe.bitrate ??

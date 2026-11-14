@@ -53,12 +53,24 @@ void main() {
     expect(subs.where((s) => s.language == 'fra'), isEmpty);
   });
 
-  test('bitrate sums track bitrates, else falls back to size * 8 / duration',
-      () {
-    expect(mapFixture('hevc_dv_mkv.json').bitrate, 52000000 + 4200000 + 192000);
+  test('bitrate is size * 8 / duration, track sum only as a fallback', () {
+    // The fixture's video track reports no demux-bitrate, as FFmpeg does for
+    // HEVC in Matroska, so summing tracks would show only the audio.
+    expect(mapFixture('hevc_dv_mkv.json').bitrate, 48211345408 * 8 ~/ 7384.512);
     final r = mapFixture('sparse_avi.json');
     expect(r.bitrate, 1000000);
     expect(r.container, 'avi');
+    final noSize = mapMpvProbe(
+      fileFormat: 'matroska',
+      duration: 100,
+      fileSize: null,
+      trackList: const [
+        {'type': 'audio', 'demux-bitrate': 192000},
+        {'type': 'audio', 'demux-bitrate': 8000},
+      ],
+      videoParams: null,
+    );
+    expect(noSize.bitrate, 200000);
   });
 
   test('audio-only file has no resolution or codec', () {
@@ -70,11 +82,18 @@ void main() {
   });
 
   test('resolution buckets', () {
-    String? res(int h) => ProbeResult(streams: [
-          MediaStream(type: MediaStreamType.video, height: h),
+    String? res(int h, [int? w]) => ProbeResult(streams: [
+          MediaStream(type: MediaStreamType.video, height: h, width: w),
         ]).resolution;
     expect([res(2160), res(1080), res(720), res(480), res(304)],
         ['2160p', '1080p', '720p', '480p', '304p']);
+    // Cropped scope encodes keep the source width.
+    expect(res(800, 1920), '1080p');
+    expect(res(1600, 3840), '2160p');
+    expect(res(536, 1280), '720p');
+    // Near a standard height the width is ignored (true ultrawide).
+    expect(res(1080, 2560), '1080p');
+    expect(res(1080, 1920), '1080p');
   });
 
   test('toMap/fromMap round-trips', () {

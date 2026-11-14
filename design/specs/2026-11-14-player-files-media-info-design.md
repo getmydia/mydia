@@ -68,10 +68,14 @@ Each entry starts from the index, with no I/O:
 
 `ParsedName` carries no resolution or codec, so those stay null until a
 probe answers. The probe result, when there is one, overrides `container`,
-and adds `resolution` (from the default video stream's height, `2160p`,
-`1080p`, `720p`, `480p`, else `<height>p`), `codec` (that stream's codec),
-`durationSeconds`, `bitrate` and `streams`. `bitrate`
-falls back to `size * 8 / duration` when mpv reports none.
+and adds `resolution` (from the default video stream: `2160p`, `1440p`,
+`1080p`, `720p`, `480p`, else `<height>p`; when the height is not within 24
+of a standard tier, the tier is inferred from the width, as the server does,
+so 1920x800 reads `1080p`), `codec` (that stream's codec),
+`durationSeconds`, `bitrate` and `streams`. `bitrate` is `size * 8 / duration`
+from mpv's `file-size` and `duration`; the sum of the tracks' `demux-bitrate`
+is only a fallback, because FFmpeg often leaves it empty for video. The index's
+size covers a probe that reported no `file-size`.
 
 ### `MediaProbe`
 

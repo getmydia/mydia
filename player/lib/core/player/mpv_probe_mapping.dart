@@ -40,18 +40,38 @@ class ProbeResult {
     return videos.firstWhere((s) => s.isDefault, orElse: () => videos.first);
   }
 
-  /// `2160p`, `1080p`, ... from the default video stream's height.
+  /// `2160p`, `1080p`, ... from the default video stream. Mirrors the
+  /// server's rule: cropped scope encodes (1920x800) keep the source width, so
+  /// when the height is not near a standard tier the tier comes from the width.
   String? get resolution {
-    final height = _defaultVideo?.height;
+    final video = _defaultVideo;
+    final height = video?.height;
     if (height == null || height <= 0) return null;
-    if (height >= 2000) return '2160p';
-    if (height >= 1000) return '1080p';
-    if (height >= 700) return '720p';
-    if (height >= 400) return '480p';
-    return '${height}p';
+    final effective = _effectiveHeight(video?.width, height);
+    if (effective >= 2000) return '2160p';
+    if (effective >= 1400) return '1440p';
+    if (effective >= 1000) return '1080p';
+    if (effective >= 700) return '720p';
+    if (effective >= 400) return '480p';
+    return '${effective}p';
   }
 
   String? get videoCodec => _defaultVideo?.codec;
+}
+
+const _standardHeights = [2160, 1440, 1080, 720, 480, 360];
+const _heightTolerance = 24;
+
+int _effectiveHeight(int? width, int height) {
+  if (width == null || width <= height) return height;
+  if (_standardHeights.any((h) => (height - h).abs() <= _heightTolerance)) {
+    return height;
+  }
+  if (width >= 3800) return 2160;
+  if (width >= 2500) return 1440;
+  if (width >= 1900) return 1080;
+  if (width >= 1200) return 720;
+  return height;
 }
 
 /// Maps the values mpv reports (`file-format`, `duration`, `file-size`,
@@ -94,15 +114,16 @@ ProbeResult mapMpvProbe({
         _mapTrack(t, type, identical(t, colourTrack) ? videoParams : null));
   }
 
-  final trackBitrates = tracks.map((t) => _int(t['demux-bitrate'])).nonNulls;
+  // File size over duration is the real overall rate. FFmpeg often leaves
+  // demux-bitrate empty for video, so the track sum is only a fallback.
   int? bitrate;
-  if (trackBitrates.isNotEmpty) {
-    bitrate = trackBitrates.fold<int>(0, (a, b) => a + b);
-  } else if (fileSize != null &&
-      fileSize > 0 &&
-      duration != null &&
-      duration > 0) {
+  if (fileSize != null && fileSize > 0 && duration != null && duration > 0) {
     bitrate = fileSize * 8 ~/ duration;
+  } else {
+    final trackBitrates = tracks.map((t) => _int(t['demux-bitrate'])).nonNulls;
+    if (trackBitrates.isNotEmpty) {
+      bitrate = trackBitrates.fold<int>(0, (a, b) => a + b);
+    }
   }
 
   final format = fileFormat?.split(',').first.trim();
