@@ -104,7 +104,10 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
-  defp perform_with_download(download, args, attempt, raw_args) do
+  @doc false
+  # Public only so a test can hand in a struct read before a partial job
+  # finished.
+  def perform_with_download(download, args, attempt, raw_args) do
     download_id = download.id
 
     cond do
@@ -141,13 +144,23 @@ defmodule Mydia.Jobs.MediaImport do
 
         {:snooze, @partial_wait_seconds}
 
-      is_nil(download.completed_at) ->
-        Failure.handle_incomplete_download(download, args, attempt, raw_args)
-
       true ->
-        run_full_import(download, args, attempt)
+        # A partial job that finished after the read above wrote
+        # early_imported_paths and early_imported_episode_ids this struct
+        # predates. Read the row again so the full import skips those files
+        # and counts those episodes.
+        case fetch_download(download_id) do
+          :not_found -> :ok
+          {:ok, download} -> perform_unblocked(download, args, attempt, raw_args)
+        end
     end
   end
+
+  defp perform_unblocked(%{completed_at: nil} = download, args, attempt, raw_args),
+    do: Failure.handle_incomplete_download(download, args, attempt, raw_args)
+
+  defp perform_unblocked(download, args, attempt, _raw_args),
+    do: run_full_import(download, args, attempt)
 
   defp run_full_import(download, args, attempt) do
     args = %{args | move_source: ClientRemoval.import_consumes_source?(download)}
@@ -466,13 +479,19 @@ defmodule Mydia.Jobs.MediaImport do
   # episode arrived early, or only an .nfo or a sample remains), the import
   # still finishes: it stamps `imported_at`, checks for a partial pack over the
   # early episodes and lets the client remove the torrent, as it would have.
+  # When every remaining file is unresolved, the early files still count as
+  # placed: the import finishes as a partial import, with the unresolved
+  # files flagged and the torrent kept, as it would had they arrived together.
   defp process_after_early_import(download, [], library_path, args),
     do: finish_import(download, [], [], nil, library_path, args)
 
   defp process_after_early_import(download, files, library_path, args) do
     case do_process_import(download, files, library_path, args) do
-      {:error, :no_importable_files} -> finish_import(download, [], [], nil, library_path, args)
-      result -> result
+      {:error, reason} when reason in [:no_importable_files, :all_files_unresolved] ->
+        finish_import(download, [], [], nil, library_path, args)
+
+      result ->
+        result
     end
   end
 

@@ -17,7 +17,7 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Structs.DownloadStatus
   alias Mydia.Jobs.MediaImport
-  alias Mydia.Jobs.MediaImport.Partial
+  alias Mydia.Jobs.MediaImport.{Args, Partial}
   alias Mydia.Library
   alias Mydia.Repo
   alias Mydia.Settings
@@ -348,6 +348,75 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       assert [] = Library.list_media_files(episode_id: ctx.ep1.id)
       assert [] = Library.list_media_files(episode_id: ctx.ep2.id)
       assert [_] = StubAdapter.take_removes()
+    end
+
+    # A partial job can finish between the full import's first read of the row
+    # and its executing? check. The metadata it wrote must still be honoured.
+    test "full import rereads the row after the partial check", ctx do
+      download =
+        pack_download(ctx, %{
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 2,
+            "early_imported_paths" => [ctx.ep1_path],
+            "early_imported_episode_ids" => [ctx.ep1.id]
+          }
+        })
+
+      stub_status(ctx, [ctx.ep1_path, ctx.ep2_path])
+
+      stale =
+        Downloads.get_download!(download.id,
+          preload: [{:media_item, :episodes}, :episode, :library_path]
+        )
+
+      stale = %{stale | metadata: %{"season_pack" => true, "season_number" => 1}}
+      raw = %{"download_id" => download.id, "save_path" => ctx.shared_dir, "partial" => false}
+
+      assert {:ok, :imported} =
+               MediaImport.perform_with_download(stale, Args.parse(raw), 1, raw)
+
+      updated = Downloads.get_download!(download.id)
+      assert %DateTime{} = updated.imported_at
+      assert is_nil(updated.match_status)
+      assert [] = Library.list_media_files(episode_id: ctx.ep1.id)
+      assert [_] = Library.list_media_files(episode_id: ctx.ep2.id)
+    end
+
+    test "an early import followed by only unresolved files still finishes", ctx do
+      download =
+        pack_download(ctx, %{
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 2,
+            "early_imported_paths" => [ctx.ep1_path],
+            "early_imported_episode_ids" => [ctx.ep1.id]
+          }
+        })
+
+      # A season with no episode number resolves to nothing, without the
+      # episode refresh a missing episode number would trigger.
+      stray = Path.join(ctx.shared_dir, "Saltmarsh.Hollow.S01.mkv")
+      File.write!(stray, "a stray episode")
+      stub_status(ctx, [ctx.ep1_path, stray])
+
+      assert {:ok, :partial_import} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir
+               })
+
+      updated = Downloads.get_download!(download.id)
+      assert %DateTime{} = updated.imported_at
+      assert updated.match_status == "unresolved_files"
+      assert is_nil(updated.import_next_retry_at)
+      assert StubAdapter.take_removes() == []
     end
 
     test "full import snoozes 30s while a partial job is executing", ctx do
