@@ -40,7 +40,7 @@ msgstr ""
 #: lib/mydia_web/components/core_components.ex:555
 #: lib/mydia_web/components/flash_components.ex:67
 #: lib/mydia_web/live/components/trending_detail_modal.ex:372
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:251
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:258
 #, elixir-autogen, elixir-format
 msgid "close"
 msgstr ""
@@ -2561,7 +2561,7 @@ msgstr ""
 msgid "Add TV Show"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:317
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:324
 #, elixir-autogen, elixir-format
 msgid "Add a path mapping"
 msgstr ""
@@ -2835,7 +2835,7 @@ msgstr ""
 msgid "Already in sync"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1655
+#: lib/mydia_web/live/downloads_live/index.ex:1659
 #, elixir-autogen, elixir-format
 msgid "Already matched to that title."
 msgstr ""
@@ -2926,19 +2926,19 @@ msgstr[1] ""
 msgid "Apply Changes"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:295
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:302
 #: lib/mydia_web/live/downloads_live/issue_components.ex:255
 #, elixir-autogen, elixir-format
 msgid "Apply mapping %{remote} to %{local} and retry"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:301
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:308
 #: lib/mydia_web/live/downloads_live/issue_components.ex:261
 #, elixir-autogen, elixir-format
 msgid "Apply mapping & retry"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:293
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:300
 #: lib/mydia_web/live/downloads_live/issue_components.ex:253
 #, elixir-autogen, elixir-format
 msgid "Applying…"
@@ -3006,7 +3006,7 @@ msgstr ""
 msgid "Attempt:"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:219
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:226
 #, elixir-autogen, elixir-format
 msgid "Attempts"
 msgstr ""
@@ -3232,7 +3232,7 @@ msgstr ""
 msgid "Cancelling the download"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1321
+#: lib/mydia_web/live/downloads_live/index.ex:1325
 #, elixir-autogen, elixir-format
 msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} day."
 msgid_plural "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} days."
@@ -3551,7 +3551,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/presets_components.ex:104
 #: lib/mydia_web/live/admin_requests_live/components.ex:276
 #: lib/mydia_web/live/components/trending_detail_modal.ex:118
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:241
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:248
 #: lib/mydia_web/live/jobs_live/components.ex:299
 #: lib/mydia_web/live/media_live/show/find_file_components.ex:100
 #: lib/mydia_web/live/media_live/show/modals.ex:583
@@ -4005,7 +4005,7 @@ msgstr ""
 msgid "Could not start download for \"%{title}\""
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1305
+#: lib/mydia_web/live/downloads_live/index.ex:1309
 #, elixir-autogen, elixir-format
 msgid "Could not start removing that download"
 msgstr ""
@@ -4594,7 +4594,7 @@ msgstr ""
 msgid "Download installer"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1141
+#: lib/mydia_web/live/downloads_live/index.ex:1145
 #, elixir-autogen, elixir-format
 msgid "Download matched and import queued"
 msgstr ""
@@ -5007,7 +5007,7 @@ msgstr ""
 msgid "Failed to mark file as preferred"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1151
+#: lib/mydia_web/live/downloads_live/index.ex:1155
 #, elixir-autogen, elixir-format
 msgid "Failed to match download"
 msgstr ""
@@ -5171,7 +5171,7 @@ msgstr ""
 msgid "Failed to update the library"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1646
+#: lib/mydia_web/live/downloads_live/index.ex:1650
 #, elixir-autogen, elixir-format
 msgid "Failed to update the match."
 msgstr ""
@@ -5186,7 +5186,7 @@ msgstr ""
 msgid "Failed: %{reason} — click to retry"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:216
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:223
 #, elixir-autogen, elixir-format
 msgid "Failure"
 msgstr ""
@@ -5458,7 +5458,7 @@ msgstr ""
 msgid "Good pick, noted"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:356
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:363
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:335
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:339
 #, elixir-autogen, elixir-format
@@ -5898,7 +5898,7 @@ msgstr ""
 msgid "Last Aired (Recent)"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:358
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:365
 #, elixir-autogen, elixir-format
 msgid "Last progress"
 msgstr ""
@@ -6073,7 +6073,7 @@ msgstr ""
 msgid "Match files…"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1643
+#: lib/mydia_web/live/downloads_live/index.ex:1647
 #, elixir-autogen, elixir-format
 msgid "Match updated — the import will use the corrected match."
 msgstr ""
@@ -6364,7 +6364,7 @@ msgstr ""
 msgid "My Collection"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:275
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:282
 #, elixir-autogen, elixir-format
 msgid "Mydia can't see the download client's path. This usually means its volume isn't mounted into the Mydia container at the same path."
 msgstr ""
@@ -6495,7 +6495,7 @@ msgstr ""
 msgid "Next Airing (Soon)"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:224
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:231
 #, elixir-autogen, elixir-format
 msgid "Next retry"
 msgstr ""
@@ -7682,7 +7682,7 @@ msgstr ""
 msgid "Re-match failed."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1652
+#: lib/mydia_web/live/downloads_live/index.ex:1656
 #, elixir-autogen, elixir-format
 msgid "Re-match queued — the file will be moved and relinked."
 msgstr ""
@@ -8105,7 +8105,7 @@ msgstr ""
 msgid "Reorder %{widget}. Use arrow keys to move."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:212
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:219
 #, elixir-autogen, elixir-format
 msgid "Reported path"
 msgstr ""
@@ -8242,7 +8242,7 @@ msgstr ""
 msgid "Retest failed: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:304
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:311
 #, elixir-autogen, elixir-format
 msgid "Retries %{count} download"
 msgid_plural "Retries %{count} downloads"
@@ -9203,7 +9203,7 @@ msgstr ""
 msgid "Stall timer reset. Mydia will keep waiting on this download."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:360
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:367
 #, elixir-autogen, elixir-format
 msgid "Stalled since"
 msgstr ""
@@ -9506,12 +9506,12 @@ msgstr ""
 msgid "That changed since, so it was left as it is."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1433
+#: lib/mydia_web/live/downloads_live/index.ex:1437
 #, elixir-autogen, elixir-format
 msgid "That download is no longer in this list"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1273
+#: lib/mydia_web/live/downloads_live/index.ex:1277
 #: lib/mydia_web/live/media_live/show/download_events.ex:32
 #: lib/mydia_web/live/media_live/show/download_events.ex:155
 #, elixir-autogen, elixir-format
@@ -9658,12 +9658,12 @@ msgstr ""
 msgid "That title's type doesn't match an available library."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1147
+#: lib/mydia_web/live/downloads_live/index.ex:1151
 #, elixir-autogen, elixir-format
 msgid "That torrent is already tracked"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1133
+#: lib/mydia_web/live/downloads_live/index.ex:1137
 #, elixir-autogen, elixir-format
 msgid "That torrent is no longer in the client"
 msgstr ""
@@ -9679,12 +9679,12 @@ msgstr ""
 msgid "The code expired. Please try again."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:349
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:356
 #, elixir-autogen, elixir-format
 msgid "The download and library folders are on different filesystems, so hardlinks are not possible."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:343
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:350
 #, elixir-autogen, elixir-format
 msgid "The download and library folders are on the same disk but reached through different mounts. Map one parent folder (for example /data) that holds both, and point the download client at the same path."
 msgstr ""
@@ -9694,7 +9694,7 @@ msgstr ""
 msgid "The download will be stopped and marked as cancelled."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1298
+#: lib/mydia_web/live/downloads_live/index.ex:1302
 #, elixir-autogen, elixir-format
 msgid "The last removal attempt is still finishing. Try again shortly."
 msgstr ""
@@ -9902,7 +9902,7 @@ msgstr ""
 msgid "Time remaining"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:177
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:184
 #, elixir-autogen, elixir-format
 msgid "Timeline"
 msgstr ""
@@ -11092,7 +11092,7 @@ msgctxt "download"
 msgid "Checking"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:361
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:368
 #: lib/mydia_web/live/downloads_live/list_view.ex:33
 #: lib/mydia_web/live/media_live/show/formatters.ex:26
 #, elixir-autogen, elixir-format
@@ -11132,7 +11132,7 @@ msgctxt "download"
 msgid "Grabbing…"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:363
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:370
 #: lib/mydia_web/live/downloads_live/index.html.heex:98
 #: lib/mydia_web/live/downloads_live/index.html.heex:535
 #: lib/mydia_web/live/downloads_live/list_view.ex:37
@@ -11254,7 +11254,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:164
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:195
-#: lib/mydia_web/live/downloads_live/detail_drawer.ex:209
+#: lib/mydia_web/live/downloads_live/detail_drawer.ex:216
 #, elixir-autogen, elixir-format
 msgctxt "import"
 msgid "Import"
@@ -22155,4 +22155,29 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/built_in_seeding_components.ex:49
 #, elixir-autogen, elixir-format
 msgid "When a target is reached"
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:45
+#, elixir-autogen, elixir-format
+msgid "Couldn't update the file selection."
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:81
+#, elixir-autogen, elixir-format
+msgid "Files"
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:38
+#, elixir-autogen, elixir-format
+msgid "Keep at least one video file."
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:122
+#, elixir-autogen, elixir-format
+msgid "Save selection"
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:41
+#, elixir-autogen, elixir-format
+msgid "This download was already imported."
 msgstr ""
