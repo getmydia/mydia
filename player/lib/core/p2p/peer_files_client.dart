@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../native/lib.dart';
 import '../sources/files/files_account.dart' show kFilesLocalAccountId;
+import '../sources/files/files_providers.dart' show filesMediaInfoCacheProvider;
+import '../sources/files/media_info/files_media_info_cache.dart';
 import '../sources/sources_providers.dart' show sourceRecordsProvider;
 import '../sources/store/source_records.dart';
 import 'p2p_service.dart';
@@ -88,9 +90,11 @@ class PeerFilesClient {
     Future<void> Function()? localAccountsReady,
     Stream<void>? localAccountsChanged,
     Stream<String>? peerConnected,
+    FilesMediaInfoCache? mediaInfoCache,
   })  : _transport = transport,
         _sync = sync,
         _store = store,
+        _mediaInfoCache = mediaInfoCache,
         _localAccounts = localAccounts,
         _localAccountsReady = localAccountsReady,
         _localAccountsChanged = localAccountsChanged,
@@ -107,6 +111,13 @@ class PeerFilesClient {
   final PeerFilesTransport _transport;
   final PeerSyncService _sync;
   final PeerFilesStore _store;
+  final FilesMediaInfoCache? _mediaInfoCache;
+
+  /// Deletes [localAccountId]'s copy and the probe results kept for it.
+  Future<void> _removeCopy(String localAccountId) async {
+    await _store.remove(localAccountId);
+    await _mediaInfoCache?.clearAccount(localAccountId);
+  }
 
   /// This device's accounts, null while they have not loaded or failed to.
   final List<SourceAccountRecord>? Function() _localAccounts;
@@ -153,7 +164,7 @@ class PeerFilesClient {
         // A failed delete must not stop the client starting: the copy is
         // not shown (its host is revoked) and the next start tries again.
         try {
-          await _store.remove(a.localAccountId);
+          await _removeCopy(a.localAccountId);
         } catch (e) {
           debugPrint('[PeerFilesClient] Removing a revoked copy failed: $e');
         }
@@ -433,7 +444,7 @@ class PeerFilesClient {
   Future<void> _drop(String localAccountId) async {
     _deleting.add(localAccountId);
     try {
-      await _store.remove(localAccountId);
+      await _removeCopy(localAccountId);
     } catch (e) {
       debugPrint('[PeerFilesClient] Removing $localAccountId failed: $e');
       return;
@@ -505,6 +516,7 @@ final peerFilesClientProvider = Provider<PeerFilesClient>((ref) {
     localAccountsReady: () => ref.read(sourceRecordsProvider.future),
     localAccountsChanged: localChanges.stream,
     peerConnected: p2p.onPeerConnected,
+    mediaInfoCache: ref.watch(filesMediaInfoCacheProvider),
   );
   ref.onDispose(() {
     client.dispose();

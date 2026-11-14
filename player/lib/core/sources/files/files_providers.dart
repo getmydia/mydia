@@ -34,6 +34,7 @@ import 'files_media_source.dart';
 import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
+import 'media_info/files_media_info_cache.dart';
 import 'media_names.dart';
 import 'peer_files_sources.dart'
     show
@@ -65,6 +66,12 @@ Future<void> openFilesLibraryBoxes() async {
     progressStore: progressStore,
   );
   await openPeerFilesBoxes();
+  // A cache, not worth failing startup: without it details are probed again.
+  try {
+    await Hive.openBox<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName);
+  } catch (e) {
+    debugPrint('[FilesSource] Media info cache box did not open: $e');
+  }
 }
 
 /// Opens the boxes peer file sharing keeps: the revisions this device
@@ -112,6 +119,14 @@ final peerSyncStoreProvider = Provider<PeerSyncStore>((ref) {
         Hive.box<Map<dynamic, dynamic>>(PeerSyncStore.boxName));
   }
   return InMemoryPeerSyncStore();
+});
+
+/// The probe result cache, or null when its box is not open (tests, or a
+/// failed startup).
+final filesMediaInfoCacheProvider = Provider<FilesMediaInfoCache?>((ref) {
+  if (!Hive.isBoxOpen(FilesMediaInfoCache.boxName)) return null;
+  return FilesMediaInfoCache(
+      Hive.box<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName));
 });
 
 /// Whether the boxes [openFilesLibraryBoxes] opens are there. False when

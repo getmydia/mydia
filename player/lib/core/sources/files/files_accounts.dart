@@ -456,5 +456,6 @@ class FilesAccounts {
   Future<void> removeFilesAccount(String accountId) async {
     await _ref.read(sourceRecordsProvider.notifier).removeAccount(accountId);
     await _ref.read(filesIndexProvider(accountId)).clear();
+    await _ref.read(filesMediaInfoCacheProvider)?.clearAccount(accountId);
   }
 }
