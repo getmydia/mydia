@@ -69,10 +69,14 @@ class _FakeFilesTransport implements PeerFilesTransport {
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) async {
     members.add(nodeIds);
+    if (membersGate case final gate?) await gate.future;
     if (failMembers) throw Exception('host gone');
   }
 
   bool failMembers = false;
+
+  /// When set, a push does not land until it completes.
+  Completer<void>? membersGate;
 
   @override
   Future<void> invalidatePeerFileGrants(String accountId) async {
@@ -701,6 +705,32 @@ void main() {
     await sync.revokePeer(_viewerNode);
     await pumpEventQueue();
     expect(transport.members.length, settled);
+  });
+
+  test('a revocation during a push is pushed once that push lands', () async {
+    expect(transport.members.last, [_viewerNode]);
+    for (final id in ['third-node', 'fourth-node']) {
+      await store.putMember(PeerMember(
+        nodeId: id,
+        deviceName: id,
+        platform: 'linux',
+        updatedAt: 2,
+      ));
+    }
+    final gate = transport.membersGate = Completer<void>();
+    await sync.revokePeer('fourth-node');
+    await pumpEventQueue();
+    expect(transport.members.last..sort(), [_viewerNode, 'third-node']..sort());
+
+    // Back to the list Rust held before the push in flight: it must still
+    // go, since that push is about to replace it.
+    await sync.revokePeer('third-node');
+    await pumpEventQueue();
+    transport.membersGate = null;
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(transport.members.last, [_viewerNode]);
   });
 
   test('bump_invalidates_rust_grants', () async {

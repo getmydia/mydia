@@ -180,7 +180,10 @@ class PeerFilesHost {
   /// The list Rust last accepted. Recorded only once a push succeeds, so a
   /// failed one is tried again on the next state change.
   List<String>? _pushedMembers;
-  int _pushes = 0;
+
+  /// The push in flight, and whether the roster changed since it read it.
+  Future<void>? _pushing;
+  bool _pushAgain = false;
 
   /// Listens for requests, then pushes the allowlist, and again on every
   /// change to the group. Outside a group the list is empty, so nothing is
@@ -215,20 +218,35 @@ class PeerFilesHost {
     }
   }
 
-  Future<void> _pushMembers() async {
-    final members = _sync.activeMemberIds();
-    if (_pushedMembers case final last? when listEquals(last, members)) {
-      return;
+  /// Pushes the allowlist, one push at a time. A change that arrives while
+  /// a push is in flight is not compared against [_pushedMembers], which
+  /// does not yet hold what that push sends: it marks the loop to read the
+  /// roster again once the push lands. Otherwise a revocation during a push
+  /// of the old list would match the list before it and be skipped, leaving
+  /// Rust allowing the revoked device.
+  Future<void> _pushMembers() {
+    if (_pushing case final running?) {
+      _pushAgain = true;
+      return running;
     }
-    final push = ++_pushes;
-    try {
-      await _transport.setPeerFilesMembers(members);
-      // A later push has the last word on what Rust holds.
-      if (push == _pushes) _pushedMembers = members;
-    } catch (e) {
-      if (push == _pushes) _pushedMembers = null;
-      debugPrint('[PeerFilesHost] Pushing the member allowlist failed: $e');
-    }
+    return _pushing = _pushLoop().whenComplete(() => _pushing = null);
+  }
+
+  Future<void> _pushLoop() async {
+    do {
+      _pushAgain = false;
+      final members = _sync.activeMemberIds();
+      if (_pushedMembers case final last? when listEquals(last, members)) {
+        continue;
+      }
+      try {
+        await _transport.setPeerFilesMembers(members);
+        _pushedMembers = members;
+      } catch (e) {
+        _pushedMembers = null;
+        debugPrint('[PeerFilesHost] Pushing the member allowlist failed: $e');
+      }
+    } while (_pushAgain);
   }
 
   /// The accounts a `Manifest` lists, each with its revision and dedupe key.
