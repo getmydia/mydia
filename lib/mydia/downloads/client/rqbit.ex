@@ -67,7 +67,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
 
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.Client.{Error, HTTP}
-  alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
+  alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus, TorrentFile}
 
   # A managed (built-in) config reports why the engine is not running instead
   # of a connection error to 127.0.0.1.
@@ -213,7 +213,69 @@ defmodule Mydia.Downloads.Client.Rqbit do
     control(config, client_id, "start")
   end
 
+  @impl true
+  def torrent_files(config, client_id) do
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+
+      with {:ok, details} <- fetch_details(req, client_id),
+           {:ok, stats} <- fetch_stats(req, client_id) do
+        progress = List.wrap(stats["file_progress"])
+
+        files =
+          details["files"]
+          |> List.wrap()
+          |> Enum.with_index()
+          |> Enum.map(fn {file, index} ->
+            %TorrentFile{
+              index: index,
+              path: file_path(file),
+              size: file["length"] || 0,
+              included?: file["included"] != false,
+              downloaded: Enum.at(progress, index) || 0
+            }
+          end)
+
+        {:ok, files}
+      end
+    end)
+  end
+
+  @impl true
+  def set_file_selection(config, client_id, indexes) when is_list(indexes) do
+    post_json(config, "/torrents/#{client_id}/update_only_files", %{only_files: indexes})
+  end
+
+  @doc """
+  Applies session-wide speed limits (bytes per second, `nil` = unlimited).
+
+  rqbit treats an omitted key as unlimited, so both keys are always sent.
+  """
+  @spec set_session_limits(map(), %{
+          download_bps: pos_integer() | nil,
+          upload_bps: pos_integer() | nil
+        }) :: :ok | {:error, Error.t()}
+  def set_session_limits(config, %{download_bps: download, upload_bps: upload}) do
+    post_json(config, "/torrents/limits", %{download_bps: download, upload_bps: upload})
+  end
+
   ## Private Functions
+
+  defp post_json(config, path, body) do
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+
+      case HTTP.post(req, path, json: body) do
+        {:ok, %{status: status}} when status in 200..299 -> :ok
+        {:ok, response} -> {:error, api_error_from(response)}
+        {:error, _} = error -> error
+      end
+    end)
+  end
+
+  defp file_path(%{"name" => name}) when is_binary(name) and name != "", do: name
+  defp file_path(%{"components" => parts}) when is_list(parts), do: Path.join(parts)
+  defp file_path(_), do: ""
 
   defp control(config, client_id, action) do
     guarded(config, fn ->

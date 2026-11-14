@@ -337,7 +337,28 @@ defmodule Mydia.Downloads.Client do
   @callback set_share_limits(config(), client_id :: String.t(), share_limits()) ::
               :ok | {:error, Error.t()}
 
-  @optional_callbacks list_files: 2, set_share_limits: 3
+  @doc """
+  Lists a torrent's files with their selection state and progress.
+
+  Optional. Only adapters whose client supports per-file selection implement
+  it.
+  """
+  @callback torrent_files(config(), client_id :: String.t()) ::
+              {:ok, [Mydia.Downloads.Structs.TorrentFile.t()]} | {:error, Error.t()}
+
+  @doc """
+  Restricts a torrent to the given file indexes. Files not listed stop
+  downloading.
+
+  Optional, like `c:torrent_files/2`.
+  """
+  @callback set_file_selection(config(), client_id :: String.t(), [non_neg_integer()]) ::
+              :ok | {:error, Error.t()}
+
+  @optional_callbacks list_files: 2,
+                      set_share_limits: 3,
+                      torrent_files: 2,
+                      set_file_selection: 3
 
   ## Convenience Functions
 
@@ -453,5 +474,41 @@ defmodule Mydia.Downloads.Client do
     else
       {:error, :unsupported}
     end
+  end
+
+  @doc """
+  Lists a torrent's files with selection state and progress, or returns
+  `{:error, :unsupported}` for adapters without `c:torrent_files/2`.
+  """
+  def torrent_files(nil, _config, _client_id), do: no_adapter_error()
+
+  def torrent_files(adapter, config, client_id) when is_atom(adapter) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :torrent_files, 2) do
+      adapter.torrent_files(config, client_id)
+    else
+      {:error, :unsupported}
+    end
+  end
+
+  @doc """
+  Selects which files of a torrent to download, or returns
+  `{:error, :unsupported}` for adapters without `c:set_file_selection/3`.
+  """
+  def set_file_selection(nil, _config, _client_id, _indexes), do: no_adapter_error()
+
+  def set_file_selection(adapter, config, client_id, indexes) when is_atom(adapter) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :set_file_selection, 3) do
+      adapter.set_file_selection(config, client_id, indexes)
+    else
+      {:error, :unsupported}
+    end
+  end
+
+  @doc "True when the adapter can list and select a torrent's files."
+  def supports_file_selection?(nil), do: false
+
+  def supports_file_selection?(adapter) when is_atom(adapter) do
+    Code.ensure_loaded?(adapter) and function_exported?(adapter, :torrent_files, 2) and
+      function_exported?(adapter, :set_file_selection, 3)
   end
 end
