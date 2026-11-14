@@ -879,7 +879,7 @@ fn wire__crate__P2PHost_respond_peer_file_grant_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>,
             >>::sse_decode(&mut deserializer);
             let api_request_id = <String>::sse_decode(&mut deserializer);
-            let api_grant = <Option<crate::FlutterPeerFileGrant>>::sse_decode(&mut deserializer);
+            let api_answer = <crate::FlutterPeerFileGrantAnswer>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
@@ -901,7 +901,7 @@ fn wire__crate__P2PHost_respond_peer_file_grant_impl(
                         crate::P2pHost::respond_peer_file_grant(
                             &*api_that_guard,
                             api_request_id,
-                            api_grant,
+                            api_answer,
                         );
                     })?;
                     std::result::Result::Ok(output_ok)
@@ -2635,6 +2635,28 @@ impl SseDecode for crate::FlutterPeerFileGrant {
     }
 }
 
+impl SseDecode for crate::FlutterPeerFileGrantAnswer {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_grant = <crate::FlutterPeerFileGrant>::sse_decode(deserializer);
+                return crate::FlutterPeerFileGrantAnswer::Granted { grant: var_grant };
+            }
+            1 => {
+                return crate::FlutterPeerFileGrantAnswer::NotShared;
+            }
+            2 => {
+                return crate::FlutterPeerFileGrantAnswer::Failed;
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseDecode for crate::FlutterPeerFileGrantRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2704,6 +2726,9 @@ impl SseDecode for crate::FlutterPeerFilesResponse {
             }
             3 => {
                 return crate::FlutterPeerFilesResponse::NotAuthorized;
+            }
+            4 => {
+                return crate::FlutterPeerFilesResponse::Revoked;
             }
             _ => {
                 unimplemented!("");
@@ -3295,17 +3320,6 @@ impl SseDecode for Option<crate::smb::FfiSmbEntry> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::smb::FfiSmbEntry>::sse_decode(deserializer));
-        } else {
-            return None;
-        }
-    }
-}
-
-impl SseDecode for Option<crate::FlutterPeerFileGrant> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::FlutterPeerFileGrant>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -4044,6 +4058,32 @@ impl flutter_rust_bridge::IntoIntoDart<crate::FlutterPeerFileGrant>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::FlutterPeerFileGrantAnswer {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::FlutterPeerFileGrantAnswer::Granted { grant } => {
+                [0.into_dart(), grant.into_into_dart().into_dart()].into_dart()
+            }
+            crate::FlutterPeerFileGrantAnswer::NotShared => [1.into_dart()].into_dart(),
+            crate::FlutterPeerFileGrantAnswer::Failed => [2.into_dart()].into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::FlutterPeerFileGrantAnswer
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::FlutterPeerFileGrantAnswer>
+    for crate::FlutterPeerFileGrantAnswer
+{
+    fn into_into_dart(self) -> crate::FlutterPeerFileGrantAnswer {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::FlutterPeerFileGrantRequest {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -4117,6 +4157,7 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterPeerFilesResponse {
             .into_dart(),
             crate::FlutterPeerFilesResponse::StaleRevision => [2.into_dart()].into_dart(),
             crate::FlutterPeerFilesResponse::NotAuthorized => [3.into_dart()].into_dart(),
+            crate::FlutterPeerFilesResponse::Revoked => [4.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -4974,6 +5015,27 @@ impl SseEncode for crate::FlutterPeerFileGrant {
     }
 }
 
+impl SseEncode for crate::FlutterPeerFileGrantAnswer {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::FlutterPeerFileGrantAnswer::Granted { grant } => {
+                <i32>::sse_encode(0, serializer);
+                <crate::FlutterPeerFileGrant>::sse_encode(grant, serializer);
+            }
+            crate::FlutterPeerFileGrantAnswer::NotShared => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::FlutterPeerFileGrantAnswer::Failed => {
+                <i32>::sse_encode(2, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseEncode for crate::FlutterPeerFileGrantRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5028,6 +5090,9 @@ impl SseEncode for crate::FlutterPeerFilesResponse {
             }
             crate::FlutterPeerFilesResponse::NotAuthorized => {
                 <i32>::sse_encode(3, serializer);
+            }
+            crate::FlutterPeerFilesResponse::Revoked => {
+                <i32>::sse_encode(4, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -5515,16 +5580,6 @@ impl SseEncode for Option<crate::smb::FfiSmbEntry> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::smb::FfiSmbEntry>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<crate::FlutterPeerFileGrant> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::FlutterPeerFileGrant>::sse_encode(value, serializer);
         }
     }
 }

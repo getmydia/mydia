@@ -391,16 +391,17 @@ class P2pService {
   Stream<FlutterPeerFileGrantRequest> get onPeerFileGrantRequest =>
       _peerFileGrantRequestController.stream;
 
-  /// Answer a grant question from [onPeerFileGrantRequest]; null denies.
+  /// Answer a grant question from [onPeerFileGrantRequest]: granted, not
+  /// shared (the read gets 404) or failed (502).
   ///
   /// A no-op without a host, like [respondToPeerFiles].
   Future<void> respondPeerFileGrant(
     String requestId,
-    FlutterPeerFileGrant? grant,
+    FlutterPeerFileGrantAnswer answer,
   ) async {
     final host = _host;
     if (host == null) return;
-    await host.respondPeerFileGrant(requestId: requestId, grant: grant);
+    await host.respondPeerFileGrant(requestId: requestId, answer: answer);
   }
 
   /// Tell the host which node ids may read this player's shared files.

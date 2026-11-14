@@ -635,7 +635,10 @@ class PeerSyncService {
       ),
     );
 
-    if (rosterChanged.isNotEmpty) _notifyStateChanged();
+    // Always, as the sender does on every ack: a sync round is also how a
+    // member says it has something new to fetch (a files library it lends
+    // was rescanned, say), and the listeners of this refetch it.
+    _notifyStateChanged();
     if (changes.changedWatchKeys.isNotEmpty ||
         changes.changedPinKeys.isNotEmpty) {
       await _onRemoteChangesApplied?.call(

@@ -35,7 +35,7 @@ class _FakeFilesTransport implements PeerFilesTransport {
   // ignore: close_sinks
   final grants = StreamController<FlutterPeerFileGrantRequest>();
   final responses = <String, FlutterPeerFilesResponse>{};
-  final grantAnswers = <String, FlutterPeerFileGrant?>{};
+  final grantAnswers = <String, FlutterPeerFileGrantAnswer>{};
   final members = <List<String>>[];
   final invalidated = <String>[];
 
@@ -58,10 +58,13 @@ class _FakeFilesTransport implements PeerFilesTransport {
   @override
   Future<void> respondPeerFileGrant(
     String requestId,
-    FlutterPeerFileGrant? grant,
+    FlutterPeerFileGrantAnswer answer,
   ) async {
-    grantAnswers[requestId] = grant;
+    grantAnswers[requestId] = answer;
   }
+
+  @override
+  Future<void> dial(String endpointAddrJson) => throw UnimplementedError();
 
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) async {
@@ -116,10 +119,17 @@ class _QuietSyncTransport implements PeerSyncTransport {
   Future<void> dial(String endpointAddrJson) async {}
   @override
   Future<void> addAddressHint(String endpointAddrJson) async {}
+
+  /// Told of every sync request sent, by peer.
+  void Function(String peer)? onSend;
+
   @override
   Future<FlutterPeerSyncResponse> sendPeerSync(
-          String peer, FlutterPeerSyncRequest req) =>
-      Future.error(Exception('unreachable'));
+      String peer, FlutterPeerSyncRequest req) {
+    onSend?.call(peer);
+    return Future.error(Exception('unreachable'));
+  }
+
   @override
   Future<void> respondToPeerSync(
       String requestId, FlutterPeerSyncResponse res) async {}
@@ -258,6 +268,7 @@ void main() {
   late _RecordingBackend backend;
   late List<SourceAccountRecord> accounts;
   late PeerFilesHost host;
+  var backendMissing = false;
   var n = 0;
   var requestCounter = 0;
 
@@ -310,8 +321,10 @@ void main() {
     );
     await sync.start();
 
-    revisions = InMemoryPeerFilesRevisions();
+    // A clock at zero leaves each bump a plain increment.
+    revisions = InMemoryPeerFilesRevisions(nowMs: () => 0);
     backend = _RecordingBackend();
+    backendMissing = false;
     accounts = [
       _filesRecord(kFilesLocalAccountId, 'This device'),
       _filesRecord(_smbAccount, 'NAS', connections: [
@@ -326,7 +339,7 @@ void main() {
       revisions: revisions,
       accounts: () => accounts,
       indexFor: (id) => id == _smbAccount ? smbIndex : localIndex,
-      backendFor: (_) => backend,
+      backendFor: (_) => backendMissing ? null : backend,
       pageBudget: 64 * 1024,
     );
     await host.start();
@@ -353,13 +366,17 @@ void main() {
     return transport.responses[id]!;
   }
 
-  Future<FlutterPeerFileGrant?> grant(String accountId, String path) async {
+  const notShared = FlutterPeerFileGrantAnswer.notShared();
+  const failed = FlutterPeerFileGrantAnswer.failed();
+
+  Future<FlutterPeerFileGrantAnswer> grant(
+      String accountId, String path) async {
     final id = 'grant-${requestCounter++}';
     transport.grants.add(FlutterPeerFileGrantRequest(
         requestId: id, accountId: accountId, path: path));
     await pumpEventQueue();
     expect(transport.grantAnswers.containsKey(id), isTrue);
-    return transport.grantAnswers[id];
+    return transport.grantAnswers[id]!;
   }
 
   String proof([String node = _viewerNode]) => secret.authProof(node);
@@ -392,14 +409,23 @@ void main() {
     );
   });
 
-  test('rejects_revoked_member', () async {
+  test('a revoked member is told it was revoked', () async {
     await sync.revokePeer(_viewerNode);
+    const revoked = FlutterPeerFilesResponse.revoked();
     expect(await ask(FlutterPeerFilesRequest.manifest(authProof: proof())),
-        const FlutterPeerFilesResponse.notAuthorized());
-    expect(await ask(page(kFilesLocalAccountId, 0)),
-        const FlutterPeerFilesResponse.notAuthorized());
+        revoked);
+    expect(await ask(page(kFilesLocalAccountId, 0)), revoked);
+    // Whatever its proof: the roster is the evidence. The node id matches
+    // without regard to case, as the roster does everywhere.
+    final wrong = PeerGroupSecret.generate().authProof(_viewerNode);
+    expect(
+        await ask(FlutterPeerFilesRequest.manifest(authProof: wrong)), revoked);
+    expect(
+        await ask(FlutterPeerFilesRequest.manifest(authProof: proof()),
+            peer: _viewerNode.toUpperCase()),
+        revoked);
 
-    // A node the roster has never held is refused too, proof or not.
+    // A node the roster has never held is refused, not revoked.
     expect(
       await ask(FlutterPeerFilesRequest.manifest(authProof: proof('stranger')),
           peer: 'stranger'),
@@ -428,6 +454,64 @@ void main() {
         revision: BigInt.two,
       ),
     ]);
+  });
+
+  test('a hidden files account is never lent, locked or not', () async {
+    const path = '/Media/Harbor Kites.mkv';
+    expect(await grant(_smbAccount, path),
+        isA<FlutterPeerFileGrantAnswer_Granted>());
+    accounts = [
+      for (final a in accounts)
+        if (a.account.id == _smbAccount)
+          a.copyWith(serverLocks: {_smbAccount: SourceLock.hidden})
+        else
+          a,
+    ];
+    final res = await ask(FlutterPeerFilesRequest.manifest(authProof: proof()));
+    expect(
+        (res as FlutterPeerFilesResponse_Manifest)
+            .accounts
+            .map((a) => a.accountId),
+        [kFilesLocalAccountId]);
+    expect(await ask(page(_smbAccount, 0)),
+        const FlutterPeerFilesResponse.staleRevision());
+    expect(await grant(_smbAccount, path), notShared);
+    // Only hiding withdraws it. A PIN lock gates opening the source here,
+    // where it still shows.
+    accounts = [
+      for (final a in accounts)
+        if (a.account.id == _smbAccount)
+          a.copyWith(serverLocks: {_smbAccount: SourceLock.locked})
+        else
+          a,
+    ];
+    expect(await grant(_smbAccount, path),
+        isA<FlutterPeerFileGrantAnswer_Granted>());
+    // Dedupe still sees it: a hidden share is this device's own.
+    expect(
+        sharedFilesAccounts([
+          accounts[1].copyWith(serverLocks: {_smbAccount: SourceLock.hidden}),
+        ]),
+        hasLength(1));
+  });
+
+  test('a bump nudges the members with a throttled sync round', () async {
+    // The viewer sits out its failure cooldown from the startup sync, which
+    // this transport never completes; a member added since has none.
+    await store.putMember(const PeerMember(
+      nodeId: 'third-node',
+      deviceName: 'third',
+      platform: 'linux',
+      updatedAt: 2,
+    ));
+    final rounds = <String>[];
+    syncTransport.onSend = rounds.add;
+    await host.bumpRevision(kFilesLocalAccountId);
+    await host.bumpRevision(_smbAccount);
+    expect(rounds, isEmpty, reason: 'throttled, not sent at once');
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    // Both bumps folded into one round.
+    expect(rounds, ['third-node']);
   });
 
   test('filesDedupeKey normalizes WebDAV and leaves local folders out', () {
@@ -514,19 +598,19 @@ void main() {
   });
 
   test('grant_refuses_path_outside_index', () async {
-    expect(await grant(kFilesLocalAccountId, '/etc/passwd'), isNull);
-    expect(await grant(kFilesLocalAccountId, '../x'), isNull);
+    expect(await grant(kFilesLocalAccountId, '/etc/passwd'), notShared);
+    expect(await grant(kFilesLocalAccountId, '../x'), notShared);
     // The relative path as stored is not the form a read names.
     expect(
         await grant(kFilesLocalAccountId, 'The Copper Lantern 0/Lantern 0.mkv'),
-        isNull);
+        notShared);
     // Another account's file.
-    expect(
-        await grant(kFilesLocalAccountId, '/Media/Harbor Kites.mkv'), isNull);
+    expect(await grant(kFilesLocalAccountId, '/Media/Harbor Kites.mkv'),
+        notShared);
     expect(
         await grant(
             _smbAccount, '/media/films/The Copper Lantern 0/Lantern 0.mkv'),
-        isNull);
+        notShared);
     expect(backend.played, isEmpty);
   });
 
@@ -534,13 +618,33 @@ void main() {
       () async {
     const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
     final g = await grant(kFilesLocalAccountId, path);
-    expect(g, isNotNull);
-    expect(g!.url, contains(Uri.encodeComponent(path)));
-    expect(g.headers, [('Authorization', 'Basic abc')]);
+    expect(g, isA<FlutterPeerFileGrantAnswer_Granted>());
+    final granted = (g as FlutterPeerFileGrantAnswer_Granted).grant;
+    expect(granted.url, contains(Uri.encodeComponent(path)));
+    expect(granted.headers, [('Authorization', 'Basic abc')]);
     expect(backend.played, [path]);
+  });
 
+  test('a backend failure is a failed grant, a gone file is not shared',
+      () async {
+    const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
+    // The share is down: the file is there, so the viewer must not be told
+    // it is gone.
     backend.failure = const BackendUnreachable('down');
-    expect(await grant(kFilesLocalAccountId, path), isNull);
+    expect(await grant(kFilesLocalAccountId, path), failed);
+    backend.failure = const BackendUnauthorized('password changed');
+    expect(await grant(kFilesLocalAccountId, path), failed);
+    backend.failure = const BackendNotFound('deleted since the scan');
+    expect(await grant(kFilesLocalAccountId, path), notShared);
+  });
+
+  test('a lent account whose backend cannot be built is a failed grant',
+      () async {
+    backendMissing = true;
+    expect(
+        await grant(kFilesLocalAccountId,
+            '/media/films/The Copper Lantern 0/Lantern 0.mkv'),
+        failed);
   });
 
   test('grant_allows_sidecar_of_indexed_file', () async {
@@ -554,7 +658,8 @@ void main() {
     final path =
         filesBackendPath(root, 'The Copper Lantern 7/Lantern 7.en.srt');
     expect(path, '/media/series/The Copper Lantern 7/Lantern 7.en.srt');
-    expect(await grant(kFilesLocalAccountId, path), isNotNull);
+    expect(await grant(kFilesLocalAccountId, path),
+        isA<FlutterPeerFileGrantAnswer_Granted>());
     expect(backend.played, [path]);
   });
 
@@ -606,10 +711,33 @@ void main() {
 
   test('a bumped revision persists in its Hive box', () async {
     final box = await Hive.openBox<int>(HivePeerFilesRevisions.boxName);
-    final stored = HivePeerFilesRevisions(box);
+    final stored = HivePeerFilesRevisions(box, nowMs: () => 0);
     expect(await stored.bump(_smbAccount), 1);
     expect(await stored.bump(_smbAccount), 2);
     expect(HivePeerFilesRevisions(box).revision(_smbAccount), 2);
     expect(stored.revision(kFilesLocalAccountId), 0);
+  });
+
+  test('revisions never repeat across a reset store', () async {
+    var now = 1700000000000;
+    // Three bumps inside one millisecond still each move forward.
+    final first = InMemoryPeerFilesRevisions(nowMs: () => now);
+    final handedOut = [
+      for (var i = 0; i < 3; i++) await first.bump(_smbAccount),
+    ];
+    expect(handedOut, [now, now + 1, now + 2]);
+
+    // The in-memory fallback starts over on the next launch, as a box does
+    // after a reinstall. A viewer still holds the old numbers, so the new
+    // ones must all be past them.
+    now += 1000;
+    final reset = InMemoryPeerFilesRevisions(nowMs: () => now);
+    expect(await reset.bump(_smbAccount), greaterThan(handedOut.last));
+
+    final box = await Hive.openBox<int>('${HivePeerFilesRevisions.boxName}_r');
+    expect(await HivePeerFilesRevisions(box, nowMs: () => now).bump('a'), now);
+    // A clock that went backwards still moves the counter forward.
+    expect(
+        await HivePeerFilesRevisions(box, nowMs: () => 5).bump('a'), now + 1);
   });
 }

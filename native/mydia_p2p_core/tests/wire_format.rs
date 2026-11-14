@@ -209,6 +209,23 @@ fn peer_files_is_the_last_request_variant() {
         hex(&serde_cbor::to_vec(&MydiaResponse::Pong).unwrap()),
         "64506f6e67"
     );
+    // Revoked was appended to PeerFilesResponse after NotAuthorized. Unit
+    // variants encode as their name, so the earlier ones are unchanged.
+    let revoked =
+        serde_cbor::to_vec(&MydiaResponse::PeerFiles(PeerFilesResponse::Revoked)).unwrap();
+    assert!(
+        String::from_utf8_lossy(&revoked).contains("Revoked"),
+        "inner renamed"
+    );
+    assert_eq!(
+        serde_cbor::from_slice::<MydiaResponse>(&revoked).unwrap(),
+        MydiaResponse::PeerFiles(PeerFilesResponse::Revoked)
+    );
+    assert_eq!(
+        hex(&serde_cbor::to_vec(&PeerFilesResponse::NotAuthorized).unwrap()),
+        "6d4e6f74417574686f72697a6564"
+    );
+
     let peer_sync =
         serde_cbor::to_vec(&MydiaResponse::PeerSync(PeerSyncResponse::NotAuthorized)).unwrap();
     let decoded: MydiaResponse = serde_cbor::from_slice(&peer_sync).unwrap();

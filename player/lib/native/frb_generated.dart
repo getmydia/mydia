@@ -131,7 +131,7 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateP2PHostRespondPeerFileGrant(
       {required P2PHost that,
       required String requestId,
-      FlutterPeerFileGrant? grant});
+      required FlutterPeerFileGrantAnswer answer});
 
   Future<void> crateP2PHostRespondToPeerFiles(
       {required P2PHost that,
@@ -686,14 +686,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateP2PHostRespondPeerFileGrant(
       {required P2PHost that,
       required String requestId,
-      FlutterPeerFileGrant? grant}) {
+      required FlutterPeerFileGrantAnswer answer}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
             that, serializer);
         sse_encode_String(requestId, serializer);
-        sse_encode_opt_box_autoadd_flutter_peer_file_grant(grant, serializer);
+        sse_encode_box_autoadd_flutter_peer_file_grant_answer(
+            answer, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 16, port: port_);
       },
@@ -702,7 +703,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: null,
       ),
       constMeta: kCrateP2PHostRespondPeerFileGrantConstMeta,
-      argValues: [that, requestId, grant],
+      argValues: [that, requestId, answer],
       apiImpl: this,
     ));
   }
@@ -710,7 +711,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateP2PHostRespondPeerFileGrantConstMeta =>
       const TaskConstMeta(
         debugName: "P2PHost_respond_peer_file_grant",
-        argNames: ["that", "requestId", "grant"],
+        argNames: ["that", "requestId", "answer"],
       );
 
   @override
@@ -1625,6 +1626,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterPeerFileGrantAnswer
+      dco_decode_box_autoadd_flutter_peer_file_grant_answer(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_flutter_peer_file_grant_answer(raw);
+  }
+
+  @protected
   FlutterPeerFilesRequest dco_decode_box_autoadd_flutter_peer_files_request(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -2055,6 +2063,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterPeerFileGrantAnswer dco_decode_flutter_peer_file_grant_answer(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return FlutterPeerFileGrantAnswer_Granted(
+          grant: dco_decode_box_autoadd_flutter_peer_file_grant(raw[1]),
+        );
+      case 1:
+        return FlutterPeerFileGrantAnswer_NotShared();
+      case 2:
+        return FlutterPeerFileGrantAnswer_Failed();
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   FlutterPeerFileGrantRequest dco_decode_flutter_peer_file_grant_request(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -2105,6 +2131,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return FlutterPeerFilesResponse_StaleRevision();
       case 3:
         return FlutterPeerFilesResponse_NotAuthorized();
+      case 4:
+        return FlutterPeerFilesResponse_Revoked();
       default:
         throw Exception("unreachable");
     }
@@ -2517,15 +2545,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPeerFileGrant? dco_decode_opt_box_autoadd_flutter_peer_file_grant(
-      dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null
-        ? null
-        : dco_decode_box_autoadd_flutter_peer_file_grant(raw);
-  }
-
-  @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
@@ -2806,6 +2825,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_flutter_peer_file_grant(deserializer));
+  }
+
+  @protected
+  FlutterPeerFileGrantAnswer
+      sse_decode_box_autoadd_flutter_peer_file_grant_answer(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_flutter_peer_file_grant_answer(deserializer));
   }
 
   @protected
@@ -3228,6 +3255,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterPeerFileGrantAnswer sse_decode_flutter_peer_file_grant_answer(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_grant =
+            sse_decode_box_autoadd_flutter_peer_file_grant(deserializer);
+        return FlutterPeerFileGrantAnswer_Granted(grant: var_grant);
+      case 1:
+        return FlutterPeerFileGrantAnswer_NotShared();
+      case 2:
+        return FlutterPeerFileGrantAnswer_Failed();
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   FlutterPeerFileGrantRequest sse_decode_flutter_peer_file_grant_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3284,6 +3331,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return FlutterPeerFilesResponse_StaleRevision();
       case 3:
         return FlutterPeerFilesResponse_NotAuthorized();
+      case 4:
+        return FlutterPeerFilesResponse_Revoked();
       default:
         throw UnimplementedError('');
     }
@@ -3827,18 +3876,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPeerFileGrant? sse_decode_opt_box_autoadd_flutter_peer_file_grant(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_flutter_peer_file_grant(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -4159,6 +4196,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       FlutterPeerFileGrant self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_flutter_peer_file_grant(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_flutter_peer_file_grant_answer(
+      FlutterPeerFileGrantAnswer self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_flutter_peer_file_grant_answer(self, serializer);
   }
 
   @protected
@@ -4497,6 +4541,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_flutter_peer_file_grant_answer(
+      FlutterPeerFileGrantAnswer self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case FlutterPeerFileGrantAnswer_Granted(grant: final grant):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_flutter_peer_file_grant(grant, serializer);
+      case FlutterPeerFileGrantAnswer_NotShared():
+        sse_encode_i_32(1, serializer);
+      case FlutterPeerFileGrantAnswer_Failed():
+        sse_encode_i_32(2, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_flutter_peer_file_grant_request(
       FlutterPeerFileGrantRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -4546,6 +4605,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(2, serializer);
       case FlutterPeerFilesResponse_NotAuthorized():
         sse_encode_i_32(3, serializer);
+      case FlutterPeerFilesResponse_Revoked():
+        sse_encode_i_32(4, serializer);
     }
   }
 
@@ -4979,17 +5040,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_peer_file_grant(
-      FlutterPeerFileGrant? self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_flutter_peer_file_grant(self, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -5196,7 +5246,7 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
           .crateP2PHostOpenHlsStream(that: this, peer: peer, req: req);
 
   /// Stream the host's grant requests to Dart. Each must be answered with
-  /// `respond_peer_file_grant` within 10 seconds or the read gets 404.
+  /// `respond_peer_file_grant` within 10 seconds or the read gets 502.
   Stream<FlutterPeerFileGrantRequest> peerFileGrantStream() =>
       RustLib.instance.api.crateP2PHostPeerFileGrantStream(
         that: this,
@@ -5230,12 +5280,13 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
         that: this,
       );
 
-  /// Answer a grant request. `None` means the path is not one this player
-  /// shares, and the read gets 404.
+  /// Answer a grant request: granted, not shared (the read gets 404), or
+  /// failed (the read gets 502).
   Future<void> respondPeerFileGrant(
-          {required String requestId, FlutterPeerFileGrant? grant}) =>
+          {required String requestId,
+          required FlutterPeerFileGrantAnswer answer}) =>
       RustLib.instance.api.crateP2PHostRespondPeerFileGrant(
-          that: this, requestId: requestId, grant: grant);
+          that: this, requestId: requestId, answer: answer);
 
   /// Answer an inbound peer files request.
   Future<void> respondToPeerFiles(

@@ -57,7 +57,11 @@ class PeerSharedAccount {
   int get hashCode => Object.hash(nodeId, deviceName, wire);
 }
 
-enum _Fetch { done, stale, failed }
+enum _Fetch { done, stale, failed, revoked }
+
+/// A host's answer to a manifest request: what it lends, or that it marks
+/// this device revoked. Null accounts and not revoked: no answer to use.
+typedef _Manifest = ({List<FlutterWireSharedAccount>? accounts, bool revoked});
 
 /// Keeps [accounts] and the store in step with what each active member
 /// lends.
@@ -69,10 +73,12 @@ enum _Fetch { done, stale, failed }
 /// for everything asked meanwhile.
 ///
 /// A copy is deleted only on positive evidence: its host is marked revoked
-/// in the roster, this device completed leaving the group, or the host's
-/// manifest no longer lists the account. An empty member list proves
-/// nothing (the group secret may simply not have loaded), so it deletes
-/// nothing.
+/// in the roster, this device completed leaving the group, the host's
+/// manifest no longer lists the account, or the host answers `Revoked`
+/// (its roster marks this device revoked, which this device's own roster
+/// never learns: a revoked device cannot sync). An empty member list
+/// proves nothing (the group secret may simply not have loaded), and
+/// neither does `NotAuthorized`, so neither deletes anything.
 class PeerFilesClient {
   PeerFilesClient({
     required PeerFilesTransport transport,
@@ -140,7 +146,13 @@ class PeerFilesClient {
     }
     for (final a in _store.storedAccounts()) {
       if (_revoked(a.nodeId)) {
-        await _store.remove(a.localAccountId);
+        // A failed delete must not stop the client starting: the copy is
+        // not shown (its host is revoked) and the next start tries again.
+        try {
+          await _store.remove(a.localAccountId);
+        } catch (e) {
+          debugPrint('[PeerFilesClient] Removing a revoked copy failed: $e');
+        }
       } else {
         _lent[a.localAccountId] = (nodeId: a.nodeId, wire: a.wire);
       }
@@ -252,28 +264,45 @@ class PeerFilesClient {
       final proof = _sync.authProofForSelf();
       if (proof == null || _disposed) return;
       final manifest = await _manifest(nodeId, proof);
+      if (manifest.revoked) {
+        await _dropHost(nodeId);
+        return;
+      }
       // Unreachable, or refusing: keep what it lent last time.
-      if (manifest == null) return;
-      if (!await _apply(nodeId, proof, manifest, localKeys)) return;
+      final accounts = manifest.accounts;
+      if (accounts == null) return;
+      if (!await _apply(nodeId, proof, accounts, localKeys)) return;
     }
   }
 
-  Future<List<FlutterWireSharedAccount>?> _manifest(
-      String nodeId, String proof) async {
+  Future<_Manifest> _manifest(String nodeId, String proof) async {
     try {
       final response = await _transport.sendPeerFiles(
         nodeId,
         FlutterPeerFilesRequest.manifest(authProof: proof),
       );
-      if (response is FlutterPeerFilesResponse_Manifest) {
-        return response.accounts;
+      switch (response) {
+        case FlutterPeerFilesResponse_Manifest(:final accounts):
+          return (accounts: accounts, revoked: false);
+        case FlutterPeerFilesResponse_Revoked():
+          debugPrint('[PeerFilesClient] $nodeId revoked this device');
+          return (accounts: null, revoked: true);
+        default:
+          debugPrint('[PeerFilesClient] $nodeId answered a manifest with '
+              '${response.runtimeType}');
       }
-      debugPrint('[PeerFilesClient] $nodeId answered a manifest with '
-          '${response.runtimeType}');
     } catch (e) {
       debugPrint('[PeerFilesClient] Manifest from $nodeId failed: $e');
     }
-    return null;
+    return (accounts: null, revoked: false);
+  }
+
+  /// Deletes every copy [nodeId] lent, for a host that revoked this device.
+  Future<void> _dropHost(String nodeId) async {
+    final node = nodeId.toLowerCase();
+    for (final entry in _lent.entries.toList()) {
+      if (entry.value.nodeId.toLowerCase() == node) await _drop(entry.key);
+    }
   }
 
   /// Brings [nodeId]'s accounts in line with [manifest], and says whether
@@ -318,6 +347,10 @@ class PeerFilesClient {
       if (_store.revision(id) == wire.revision.toInt()) continue;
       final outcome = await _fetch(nodeId, proof, id, wire);
       if (outcome == _Fetch.stale) stale = true;
+      if (outcome == _Fetch.revoked) {
+        await _dropHost(nodeId);
+        return false;
+      }
     }
     return stale;
   }
@@ -360,6 +393,8 @@ class PeerFilesClient {
             cursor = nextCursor;
           case FlutterPeerFilesResponse_StaleRevision():
             return _Fetch.stale;
+          case FlutterPeerFilesResponse_Revoked():
+            return _Fetch.revoked;
           case FlutterPeerFilesResponse_NotAuthorized() ||
                 FlutterPeerFilesResponse_Manifest():
             debugPrint('[PeerFilesClient] $nodeId answered a page of '

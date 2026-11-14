@@ -122,6 +122,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       dynamic raw);
 
   @protected
+  FlutterPeerFileGrantAnswer
+      dco_decode_box_autoadd_flutter_peer_file_grant_answer(dynamic raw);
+
+  @protected
   FlutterPeerFilesRequest dco_decode_box_autoadd_flutter_peer_files_request(
       dynamic raw);
 
@@ -258,6 +262,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FlutterPeerFileGrant dco_decode_flutter_peer_file_grant(dynamic raw);
 
   @protected
+  FlutterPeerFileGrantAnswer dco_decode_flutter_peer_file_grant_answer(
+      dynamic raw);
+
+  @protected
   FlutterPeerFileGrantRequest dco_decode_flutter_peer_file_grant_request(
       dynamic raw);
 
@@ -368,10 +376,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiSmbEntry? dco_decode_opt_box_autoadd_ffi_smb_entry(dynamic raw);
-
-  @protected
-  FlutterPeerFileGrant? dco_decode_opt_box_autoadd_flutter_peer_file_grant(
-      dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
@@ -516,6 +520,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   FlutterPeerFileGrant sse_decode_box_autoadd_flutter_peer_file_grant(
       SseDeserializer deserializer);
+
+  @protected
+  FlutterPeerFileGrantAnswer
+      sse_decode_box_autoadd_flutter_peer_file_grant_answer(
+          SseDeserializer deserializer);
 
   @protected
   FlutterPeerFilesRequest sse_decode_box_autoadd_flutter_peer_files_request(
@@ -667,6 +676,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  FlutterPeerFileGrantAnswer sse_decode_flutter_peer_file_grant_answer(
+      SseDeserializer deserializer);
+
+  @protected
   FlutterPeerFileGrantRequest sse_decode_flutter_peer_file_grant_request(
       SseDeserializer deserializer);
 
@@ -794,10 +807,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiSmbEntry? sse_decode_opt_box_autoadd_ffi_smb_entry(
-      SseDeserializer deserializer);
-
-  @protected
-  FlutterPeerFileGrant? sse_decode_opt_box_autoadd_flutter_peer_file_grant(
       SseDeserializer deserializer);
 
   @protected
@@ -946,6 +955,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_flutter_peer_file_grant(
       FlutterPeerFileGrant self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_flutter_peer_file_grant_answer(
+      FlutterPeerFileGrantAnswer self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_flutter_peer_files_request(
@@ -1099,6 +1112,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       FlutterPeerFileGrant self, SseSerializer serializer);
 
   @protected
+  void sse_encode_flutter_peer_file_grant_answer(
+      FlutterPeerFileGrantAnswer self, SseSerializer serializer);
+
+  @protected
   void sse_encode_flutter_peer_file_grant_request(
       FlutterPeerFileGrantRequest self, SseSerializer serializer);
 
@@ -1232,10 +1249,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_ffi_smb_entry(
       FfiSmbEntry? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_opt_box_autoadd_flutter_peer_file_grant(
-      FlutterPeerFileGrant? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);

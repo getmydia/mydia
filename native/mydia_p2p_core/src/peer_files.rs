@@ -59,7 +59,14 @@ pub enum PeerFilesResponse {
     /// The index changed since the revision the requester named, so it must
     /// restart from the manifest.
     StaleRevision,
+    /// The request failed a check: a bad proof, a node the roster does not
+    /// hold, or a responder whose group secret did not load. Proves nothing
+    /// about the requester's membership.
     NotAuthorized,
+    /// The responder's roster marks the requester revoked. A revoked device
+    /// cannot sync, so this is how it learns it was removed. Appended last so
+    /// the earlier variants keep their encoding.
+    Revoked,
 }
 
 #[cfg(test)]
@@ -125,6 +132,7 @@ mod tests {
         for response in [
             PeerFilesResponse::StaleRevision,
             PeerFilesResponse::NotAuthorized,
+            PeerFilesResponse::Revoked,
         ] {
             let bytes = serde_cbor::to_vec(&response).expect("serialize");
             let decoded: PeerFilesResponse = serde_cbor::from_slice(&bytes).expect("deserialize");

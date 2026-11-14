@@ -32,45 +32,62 @@ abstract interface class PeerFilesRevisions {
   /// 0 for an account never bumped.
   int revision(String accountId);
 
-  /// Increments and stores [accountId]'s revision, returning the new one.
+  /// Moves [accountId]'s revision forward and stores it, returning the new
+  /// one.
   Future<int> bump(String accountId);
 }
 
+/// The revision a bump moves [current] to: one more, but never less than
+/// the clock in milliseconds. A viewer keeps the revision it fetched at, so
+/// a counter that starts over (the in-memory fallback on every launch, the
+/// box after a reinstall) must not hand out a number it may already hold
+/// for a different index. Starting from the clock puts every new number
+/// past any handed out before the reset.
+int nextPeerFilesRevision(int current, int nowMs) =>
+    current + 1 > nowMs ? current + 1 : nowMs;
+
+int _nowMs() => DateTime.now().millisecondsSinceEpoch;
+
 class HivePeerFilesRevisions implements PeerFilesRevisions {
-  HivePeerFilesRevisions(this._box);
+  HivePeerFilesRevisions(this._box, {int Function() nowMs = _nowMs})
+      : _now = nowMs;
 
   static const boxName = 'peer_files_revisions';
 
   final Box<int> _box;
+  final int Function() _now;
 
   @override
   int revision(String accountId) => _box.get(accountId) ?? 0;
 
   @override
   Future<int> bump(String accountId) async {
-    final next = revision(accountId) + 1;
+    final next = nextPeerFilesRevision(revision(accountId), _now());
     await _box.put(accountId, next);
     return next;
   }
 }
 
 class InMemoryPeerFilesRevisions implements PeerFilesRevisions {
+  InMemoryPeerFilesRevisions({int Function() nowMs = _nowMs}) : _now = nowMs;
+
   final _revisions = <String, int>{};
+  final int Function() _now;
 
   @override
   int revision(String accountId) => _revisions[accountId] ?? 0;
 
   @override
-  Future<int> bump(String accountId) async =>
-      _revisions[accountId] = revision(accountId) + 1;
+  Future<int> bump(String accountId) async => _revisions[accountId] =
+      nextPeerFilesRevision(revision(accountId), _now());
 }
 
 /// Accounts derived from another member's share carry this prefix: a
 /// lent library is never lent onward.
 final _peerAccountId = RegExp(r'^p[0-9a-f]{12}_');
 
-/// The files accounts this player lends: its own Files libraries, never
-/// one it borrowed from a peer.
+/// This player's own Files accounts, never one it borrowed from a peer.
+/// What dedupe compares against, hidden or not.
 List<SourceAccountRecord> sharedFilesAccounts(
         Iterable<SourceAccountRecord> accounts) =>
     [
@@ -78,6 +95,21 @@ List<SourceAccountRecord> sharedFilesAccounts(
         if (a.account.kind == SourceKind.files &&
             !_peerAccountId.hasMatch(a.account.id))
           a,
+    ];
+
+/// Whether [record] has a server hidden behind the app lock.
+bool hasHiddenServer(SourceAccountRecord record) =>
+    record.serverLocks.values.contains(SourceLock.hidden);
+
+/// The files accounts this player lends: [sharedFilesAccounts] minus any
+/// with a hidden server. Hidden means no trace on this device while it is
+/// locked, so it is never lent, locked or not: a paired device has no app
+/// lock of this device's to respect.
+List<SourceAccountRecord> lentFilesAccounts(
+        Iterable<SourceAccountRecord> accounts) =>
+    [
+      for (final a in sharedFilesAccounts(accounts))
+        if (!hasHiddenServer(a)) a,
     ];
 
 /// The wire kind of a files account: `local`, `smb` or `webdav`.
@@ -164,12 +196,22 @@ class PeerFilesHost {
   /// Bumps [accountId]'s revision and drops Rust's grants for it, so a
   /// viewer fetching pages starts over and a moved file resolves anew.
   /// Never throws: sharing must not fail the scan or pin that called it.
+  ///
+  /// Then nudges the members with a (throttled) sync round. Each member
+  /// that receives it notifies its sync state, which is what refreshes its
+  /// [PeerFilesClient], so a viewer with the library open sees the new
+  /// index without waiting for an unrelated sync.
   Future<void> bumpRevision(String accountId) async {
     try {
       await _revisions.bump(accountId);
       await _transport.invalidatePeerFileGrants(accountId);
     } catch (e) {
       debugPrint('[PeerFilesHost] Revision bump for $accountId failed: $e');
+    }
+    try {
+      await _sync.notifyLocalMutation(throttle: true);
+    } catch (e) {
+      debugPrint('[PeerFilesHost] Nudging members failed: $e');
     }
   }
 
@@ -191,7 +233,7 @@ class PeerFilesHost {
 
   /// The accounts a `Manifest` lists, each with its revision and dedupe key.
   List<FlutterWireSharedAccount> manifestAccounts() => [
-        for (final a in sharedFilesAccounts(_accounts()))
+        for (final a in lentFilesAccounts(_accounts()))
           FlutterWireSharedAccount(
             accountId: a.account.id,
             kind: filesAccountKind(a.account.id),
@@ -202,7 +244,7 @@ class PeerFilesHost {
       ];
 
   SourceAccountRecord? _shared(String accountId) =>
-      sharedFilesAccounts(_accounts())
+      lentFilesAccounts(_accounts())
           .where((a) => a.account.id == accountId)
           .firstOrNull;
 
@@ -226,6 +268,14 @@ class PeerFilesHost {
   FlutterPeerFilesResponse _answer(FlutterInboundPeerFilesRequest request) {
     const refused = FlutterPeerFilesResponse.notAuthorized();
     const stale = FlutterPeerFilesResponse.staleRevision();
+    // A revoked device cannot sync, so its own roster never learns it was
+    // removed; this is where it does. The roster marking it revoked is the
+    // evidence, whatever its proof and whether or not this device's secret
+    // loaded. iroh authenticated the node id, so this tells a node only
+    // about itself.
+    if (_sync.member(request.peer)?.revoked ?? false) {
+      return const FlutterPeerFilesResponse.revoked();
+    }
     switch (request.request) {
       case FlutterPeerFilesRequest_Manifest(:final authProof):
         if (!_sync.authorizes(request.peer, authProof)) return refused;
@@ -257,36 +307,50 @@ class PeerFilesHost {
   }
 
   Future<void> _onGrantRequest(FlutterPeerFileGrantRequest request) async {
-    FlutterPeerFileGrant? grant;
+    FlutterPeerFileGrantAnswer answer;
     try {
-      grant = await _grantFor(request.accountId, request.path);
+      answer = await _grantFor(request.accountId, request.path);
     } catch (e) {
+      // The path may well be shared: a 404 would tell the viewer the file
+      // is gone. A 502 says the host could not serve it right now.
       debugPrint('[PeerFilesHost] Grant ${request.requestId} failed: $e');
-      grant = null;
+      answer = const FlutterPeerFileGrantAnswer.failed();
     }
     try {
-      await _transport.respondPeerFileGrant(request.requestId, grant);
+      await _transport.respondPeerFileGrant(request.requestId, answer);
     } catch (e) {
       debugPrint('[PeerFilesHost] Answering grant ${request.requestId} '
           'failed: $e');
     }
   }
 
-  Future<FlutterPeerFileGrant?> _grantFor(String accountId, String path) async {
-    if (_sync.activeMemberIds().isEmpty) return null;
-    if (_shared(accountId) == null) return null;
-    if (!_indexedPath(_indexFor(accountId), path)) return null;
+  /// Not shared (404) when the path is not one this device lends, or its
+  /// backend says the file is gone. Failed (502) when it is lent but its
+  /// backend cannot be built or reached: the file is there, its share is
+  /// not answering.
+  Future<FlutterPeerFileGrantAnswer> _grantFor(
+      String accountId, String path) async {
+    const notShared = FlutterPeerFileGrantAnswer.notShared();
+    const failed = FlutterPeerFileGrantAnswer.failed();
+    if (_sync.activeMemberIds().isEmpty) return notShared;
+    if (_shared(accountId) == null) return notShared;
+    if (!_indexedPath(_indexFor(accountId), path)) return notShared;
     final backend = _backendFor(accountId);
-    if (backend == null) return null;
+    if (backend == null) return failed;
     try {
       final playable = await backend.playable(path);
-      return FlutterPeerFileGrant(
-        url: playable.url,
-        headers: [for (final h in playable.headers.entries) (h.key, h.value)],
+      return FlutterPeerFileGrantAnswer.granted(
+        grant: FlutterPeerFileGrant(
+          url: playable.url,
+          headers: [for (final h in playable.headers.entries) (h.key, h.value)],
+        ),
       );
+    } on BackendNotFound catch (e) {
+      debugPrint('[PeerFilesHost] A read in $accountId names a gone file: $e');
+      return notShared;
     } on BackendFailure catch (e) {
       debugPrint('[PeerFilesHost] No grant for a read in $accountId: $e');
-      return null;
+      return failed;
     }
   }
 
@@ -342,8 +406,8 @@ final peerFilesHostProvider = Provider<PeerFilesHost>((ref) {
     accounts: stored,
     indexFor: (id) => ref.read(filesIndexProvider(id)),
     // The account's own source and its backend, the one its playback and
-    // scans use. None while the source cannot be built (locked away, or
-    // its storage failed to open): the read is then refused.
+    // scans use. None while the source cannot be built (its storage failed
+    // to open, say): the read is then answered 502.
     backendFor: (id) {
       final record = stored().where((a) => a.account.id == id).firstOrNull;
       final source =

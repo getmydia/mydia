@@ -9,8 +9,10 @@
 //! - Only peers in the member allowlist Dart pushes in are answered (403).
 //! - Rust never decides which paths are readable. It asks Dart for a grant per
 //!   `(account id, path)`, and Dart grants only indexed files and their
-//!   sidecars. Anything without a grant is 404, so a read can only ever touch
-//!   what Dart handed back.
+//!   sidecars. A path Dart does not share is 404, so a read can only ever
+//!   touch what Dart handed back. A path it shares but whose backend failed,
+//!   or a grant request Dart never answered, is 502: the file is there, the
+//!   host just cannot reach it right now.
 //! - Each peer gets [`READS_PER_PEER`] concurrent reads. Further reads wait.
 //!
 //! Everything here is `pub(crate)`: `flutter_rust_bridge` generates Dart
@@ -37,7 +39,7 @@ use tokio::sync::{mpsc, oneshot, Semaphore};
 pub(crate) const READS_PER_PEER: usize = 4;
 
 /// How long a read waits for Dart to answer a grant request before it is
-/// answered 404.
+/// answered 502.
 pub(crate) const GRANT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Read size for local files when the sink has no file streaming of its own.
@@ -51,10 +53,20 @@ pub(crate) struct Grant {
     pub(crate) headers: Vec<(String, String)>,
 }
 
-/// Turns `(account id, path)` into a grant, or `None` when the path is not
-/// one the account shares.
+/// What a grant request came back with.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum GrantAnswer {
+    Granted(Grant),
+    /// The path is not one the account shares: 404.
+    NotShared,
+    /// The path is shared but its backend could not be opened, or Dart did
+    /// not answer in time: 502. Never cached.
+    Failed,
+}
+
+/// Turns `(account id, path)` into a [`GrantAnswer`].
 pub(crate) trait GrantResolver: Send + Sync + 'static {
-    fn resolve(&self, account_id: &str, path: &str) -> impl Future<Output = Option<Grant>> + Send;
+    fn resolve(&self, account_id: &str, path: &str) -> impl Future<Output = GrantAnswer> + Send;
 }
 
 /// Where a read's response goes: an HLS response stream in the app, a
@@ -344,8 +356,13 @@ impl<R: GrantResolver> PeerFilesHost<R> {
     /// A removed peer's slots are dropped. If it is added back it gets a
     /// fresh set of [`READS_PER_PEER`], so reads it still had streaming from
     /// before do not count against them.
+    ///
+    /// Node ids are compared without regard to case, as Dart's roster does.
     pub(crate) fn set_members(&self, node_ids: Vec<String>) {
-        let members: HashSet<String> = node_ids.into_iter().collect();
+        let members: HashSet<String> = node_ids
+            .into_iter()
+            .map(|id| id.to_ascii_lowercase())
+            .collect();
         lock(&self.slots).retain(|peer, _| members.contains(peer));
         *lock(&self.members) = members;
     }
@@ -365,29 +382,30 @@ impl<R: GrantResolver> PeerFilesHost<R> {
     }
 
     fn is_member(&self, peer: &str) -> bool {
-        lock(&self.members).contains(peer)
+        lock(&self.members).contains(&peer.to_ascii_lowercase())
     }
 
     fn slots_for(&self, peer: &str) -> Arc<Semaphore> {
         lock(&self.slots)
-            .entry(peer.to_string())
+            .entry(peer.to_ascii_lowercase())
             .or_insert_with(|| Arc::new(Semaphore::new(READS_PER_PEER)))
             .clone()
     }
 
-    async fn grant(&self, account_id: &str, path: &str) -> Option<Grant> {
+    async fn grant(&self, account_id: &str, path: &str) -> GrantAnswer {
         let key = (account_id.to_string(), path.to_string());
         if let Some(grant) = lock(&self.grants).get(&key).cloned() {
-            return Some(grant);
+            return GrantAnswer::Granted(grant);
         }
         let generation = self.generation(account_id);
-        let grant = self.resolver.resolve(account_id, path).await?;
-        let generations = lock(&self.generations);
-        if generations.get(account_id).copied().unwrap_or(0) == generation {
-            lock(&self.grants).insert(key, grant.clone());
+        let answer = self.resolver.resolve(account_id, path).await;
+        if let GrantAnswer::Granted(grant) = &answer {
+            let generations = lock(&self.generations);
+            if generations.get(account_id).copied().unwrap_or(0) == generation {
+                lock(&self.grants).insert(key, grant.clone());
+            }
         }
-        drop(generations);
-        Some(grant)
+        answer
     }
 
     /// Answer one `peerfile:` read on `sink`.
@@ -415,9 +433,16 @@ impl<R: GrantResolver> PeerFilesHost<R> {
             reply_status(&sink, 403, None).await;
             return;
         }
-        let Some(grant) = self.grant(&account_id, &path).await else {
-            reply_status(&sink, 404, None).await;
-            return;
+        let grant = match self.grant(&account_id, &path).await {
+            GrantAnswer::Granted(grant) => grant,
+            GrantAnswer::NotShared => {
+                reply_status(&sink, 404, None).await;
+                return;
+            }
+            GrantAnswer::Failed => {
+                reply_status(&sink, 502, None).await;
+                return;
+            }
         };
         if !self.is_member(&peer) {
             reply_status(&sink, 403, None).await;
@@ -571,14 +596,15 @@ async fn serve_file<S: ByteSink>(sink: &S, path: &str, request: &HlsRequest) -> 
 /// through `respond`.
 pub(crate) struct DartGrantResolver {
     requests: mpsc::Sender<FlutterPeerFileGrantRequest>,
-    pending: Mutex<HashMap<String, oneshot::Sender<Option<Grant>>>>,
+    pending: Mutex<HashMap<String, oneshot::Sender<GrantAnswer>>>,
     next_id: AtomicU64,
     wait: Duration,
 }
 
 impl DartGrantResolver {
     /// The resolver and the receiving end of its requests. A request nobody
-    /// answers within `wait` resolves to `None`.
+    /// answers within `wait` resolves to [`GrantAnswer::Failed`]: Dart not
+    /// answering says nothing about whether the file is shared.
     pub(crate) fn new(wait: Duration) -> (Self, mpsc::Receiver<FlutterPeerFileGrantRequest>) {
         // Each peer holds at most READS_PER_PEER requests here at once, so
         // this only fills when Dart is not draining at all.
@@ -596,9 +622,9 @@ impl DartGrantResolver {
 
     /// Deliver Dart's answer. An answer for a request that already timed out
     /// is dropped.
-    pub(crate) fn respond(&self, request_id: &str, grant: Option<Grant>) {
+    pub(crate) fn respond(&self, request_id: &str, answer: GrantAnswer) {
         if let Some(tx) = lock(&self.pending).remove(request_id) {
-            let _ = tx.send(grant);
+            let _ = tx.send(answer);
         }
     }
 }
@@ -606,7 +632,7 @@ impl DartGrantResolver {
 impl GrantResolver for DartGrantResolver {
     // Trait methods are bound whatever the item's visibility.
     #[frb(ignore)]
-    async fn resolve(&self, account_id: &str, path: &str) -> Option<Grant> {
+    async fn resolve(&self, account_id: &str, path: &str) -> GrantAnswer {
         let request_id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
         let (tx, rx) = oneshot::channel();
         lock(&self.pending).insert(request_id.clone(), tx);
@@ -620,10 +646,10 @@ impl GrantResolver for DartGrantResolver {
                 .await
                 .ok()
                 .and_then(Result::ok)
-                .flatten(),
+                .unwrap_or(GrantAnswer::Failed),
             Err(e) => {
                 tracing::warn!("peer files: cannot ask Dart for a grant: {e}");
-                None
+                GrantAnswer::Failed
             }
         };
         lock(&self.pending).remove(&request_id);
@@ -735,10 +761,12 @@ mod tests {
         }
     }
 
-    /// Answers from a fixed map and counts every call.
+    /// Answers from a fixed map and counts every call. A path in `failing`
+    /// answers `Failed`, as a shared file whose backend is down does.
     #[derive(Default)]
     struct MapResolver {
         grants: Mutex<HashMap<(String, String), Grant>>,
+        failing: Mutex<Vec<String>>,
         calls: AtomicUsize,
     }
 
@@ -761,13 +789,17 @@ mod tests {
     }
 
     impl GrantResolver for MapResolver {
-        async fn resolve(&self, account_id: &str, path: &str) -> Option<Grant> {
+        async fn resolve(&self, account_id: &str, path: &str) -> GrantAnswer {
             self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.failing.lock().unwrap().iter().any(|p| p == path) {
+                return GrantAnswer::Failed;
+            }
             self.grants
                 .lock()
                 .unwrap()
                 .get(&(account_id.to_string(), path.to_string()))
                 .cloned()
+                .map_or(GrantAnswer::NotShared, GrantAnswer::Granted)
         }
     }
 
@@ -808,11 +840,11 @@ mod tests {
     }
 
     impl GrantResolver for BlockingResolver {
-        async fn resolve(&self, _account_id: &str, _path: &str) -> Option<Grant> {
+        async fn resolve(&self, _account_id: &str, _path: &str) -> GrantAnswer {
             self.calls.fetch_add(1, Ordering::SeqCst);
             self.entered.add_permits(1);
             self.release.acquire().await.unwrap().forget();
-            Some(self.grant.clone())
+            GrantAnswer::Granted(self.grant.clone())
         }
     }
 
@@ -1604,26 +1636,112 @@ mod tests {
             let req = requests.recv().await.unwrap();
             assert_eq!(req.account_id, "acct");
             assert_eq!(req.path, "/x.mkv");
-            resolver.respond(
-                &req.request_id,
-                Some(Grant {
-                    url: "/x.mkv".to_string(),
-                    headers: vec![],
-                }),
-            );
-            assert_eq!(
-                answer.await.unwrap().map(|g| g.url),
-                Some("/x.mkv".to_string())
-            );
+            let grant = Grant {
+                url: "/x.mkv".to_string(),
+                headers: vec![],
+            };
+            resolver.respond(&req.request_id, GrantAnswer::Granted(grant.clone()));
+            assert_eq!(answer.await.unwrap(), GrantAnswer::Granted(grant));
         });
     }
 
     #[test]
-    fn dart_resolver_times_out_to_none() {
+    fn dart_resolver_passes_on_not_shared_and_failed() {
+        runtime::block_on(async {
+            let (resolver, mut requests) = DartGrantResolver::new(Duration::from_secs(5));
+            let resolver = Arc::new(resolver);
+            let _guard = runtime::enter();
+            for expected in [GrantAnswer::NotShared, GrantAnswer::Failed] {
+                let r = resolver.clone();
+                let answer = runtime::spawn(async move { r.resolve("acct", "/x.mkv").await });
+                let req = requests.recv().await.unwrap();
+                resolver.respond(&req.request_id, expected.clone());
+                assert_eq!(answer.await.unwrap(), expected);
+            }
+        });
+    }
+
+    #[test]
+    fn dart_resolver_times_out_to_failed() {
         runtime::block_on(async {
             let (resolver, _requests) = DartGrantResolver::new(Duration::from_millis(50));
-            assert!(resolver.resolve("acct", "/x.mkv").await.is_none());
+            assert_eq!(
+                resolver.resolve("acct", "/x.mkv").await,
+                GrantAnswer::Failed
+            );
             assert!(resolver.pending.lock().unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn grant_timeout_gets_502_not_404() {
+        runtime::block_on(async {
+            // Nobody drains the requests: Dart never answers.
+            let (resolver, _requests) = DartGrantResolver::new(Duration::from_millis(50));
+            let host = host_with(resolver);
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/a.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+            assert!(sink.finished());
+        });
+    }
+
+    #[test]
+    fn failed_grant_gets_502_and_is_asked_again() {
+        runtime::block_on(async {
+            let resolver = MapResolver::default();
+            resolver
+                .failing
+                .lock()
+                .unwrap()
+                .push("/down.mkv".to_string());
+            let host = host_with(resolver);
+            for _ in 0..2 {
+                let sink = RecordingSink::default();
+                host.serve(
+                    MEMBER.to_string(),
+                    request("/down.mkv", None, None),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(502));
+                assert!(sink.body().is_empty());
+            }
+            // Never cached: each read asks Dart again.
+            assert_eq!(host.resolver().calls(), 2);
+        });
+    }
+
+    #[test]
+    fn members_match_without_regard_to_case() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = Arc::new(PeerFilesHost::new(MapResolver::with(path, path)));
+            host.set_members(vec!["ABCdef".to_string()]);
+            for peer in ["abcdef", "ABCDEF", "ABCdef"] {
+                let sink = RecordingSink::default();
+                host.serve(
+                    peer.to_string(),
+                    request(path, Some(0), Some(0)),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(206), "{peer}");
+            }
+            let sink = RecordingSink::default();
+            host.serve(
+                "abcdeg".to_string(),
+                request(path, Some(0), Some(0)),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(403));
         });
     }
 }

@@ -28,7 +28,7 @@ use mydia_p2p_core::{
     WireWatchRecord, PEER_FILE_SESSION_PREFIX,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use peer_files_host::{DartGrantResolver, Grant, PeerFilesHost, GRANT_TIMEOUT};
+use peer_files_host::{DartGrantResolver, Grant, GrantAnswer, PeerFilesHost, GRANT_TIMEOUT};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex};
@@ -861,6 +861,8 @@ pub enum FlutterPeerFilesResponse {
     },
     StaleRevision,
     NotAuthorized,
+    /// The host's roster marks the requester revoked.
+    Revoked,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -885,6 +887,34 @@ pub struct FlutterPeerFileGrantRequest {
 pub struct FlutterPeerFileGrant {
     pub url: String,
     pub headers: Vec<(String, String)>,
+}
+
+/// Dart's answer to a grant request.
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlutterPeerFileGrantAnswer {
+    Granted {
+        grant: FlutterPeerFileGrant,
+    },
+    /// The path is not one this player shares: the read gets 404.
+    NotShared,
+    /// The path is shared but its backend could not be opened: the read
+    /// gets 502, and the next read asks again.
+    Failed,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<FlutterPeerFileGrantAnswer> for GrantAnswer {
+    fn from(a: FlutterPeerFileGrantAnswer) -> Self {
+        match a {
+            FlutterPeerFileGrantAnswer::Granted { grant } => GrantAnswer::Granted(Grant {
+                url: grant.url,
+                headers: grant.headers,
+            }),
+            FlutterPeerFileGrantAnswer::NotShared => GrantAnswer::NotShared,
+            FlutterPeerFileGrantAnswer::Failed => GrantAnswer::Failed,
+        }
+    }
 }
 
 impl From<FlutterWireSharedAccount> for WireSharedAccount {
@@ -991,6 +1021,7 @@ impl From<FlutterPeerFilesResponse> for PeerFilesResponse {
             }
             FlutterPeerFilesResponse::StaleRevision => PeerFilesResponse::StaleRevision,
             FlutterPeerFilesResponse::NotAuthorized => PeerFilesResponse::NotAuthorized,
+            FlutterPeerFilesResponse::Revoked => PeerFilesResponse::Revoked,
         }
     }
 }
@@ -1009,6 +1040,7 @@ impl From<PeerFilesResponse> for FlutterPeerFilesResponse {
             }
             PeerFilesResponse::StaleRevision => FlutterPeerFilesResponse::StaleRevision,
             PeerFilesResponse::NotAuthorized => FlutterPeerFilesResponse::NotAuthorized,
+            PeerFilesResponse::Revoked => FlutterPeerFilesResponse::Revoked,
         }
     }
 }
@@ -1831,7 +1863,7 @@ impl P2pHost {
     }
 
     /// Stream the host's grant requests to Dart. Each must be answered with
-    /// `respond_peer_file_grant` within 10 seconds or the read gets 404.
+    /// `respond_peer_file_grant` within 10 seconds or the read gets 502.
     pub fn peer_file_grant_stream(
         &self,
         sink: StreamSink<FlutterPeerFileGrantRequest>,
@@ -1855,23 +1887,19 @@ impl P2pHost {
         Ok(())
     }
 
-    /// Answer a grant request. `None` means the path is not one this player
-    /// shares, and the read gets 404.
+    /// Answer a grant request: granted, not shared (the read gets 404), or
+    /// failed (the read gets 502).
     #[expect(
         clippy::needless_pass_by_value,
         reason = "flutter_rust_bridge API: the Dart-facing signature takes an owned String, and changing it regenerates the bindings"
     )]
-    pub fn respond_peer_file_grant(&self, request_id: String, grant: Option<FlutterPeerFileGrant>) {
+    pub fn respond_peer_file_grant(&self, request_id: String, answer: FlutterPeerFileGrantAnswer) {
         #[cfg(not(target_arch = "wasm32"))]
-        self.peer_files_host.resolver().respond(
-            &request_id,
-            grant.map(|g| Grant {
-                url: g.url,
-                headers: g.headers,
-            }),
-        );
+        self.peer_files_host
+            .resolver()
+            .respond(&request_id, answer.into());
         #[cfg(target_arch = "wasm32")]
-        let _ = (&request_id, grant);
+        let _ = (&request_id, answer);
     }
 
     /// Forget every grant of `account_id`, for when its index changed.
@@ -2738,6 +2766,15 @@ mod event_dispatcher_tests {
         };
         let back: PeerFilesResponse = FlutterPeerFilesResponse::from(res.clone()).into();
         assert_eq!(back, res);
+
+        for res in [
+            PeerFilesResponse::StaleRevision,
+            PeerFilesResponse::NotAuthorized,
+            PeerFilesResponse::Revoked,
+        ] {
+            let back: PeerFilesResponse = FlutterPeerFilesResponse::from(res.clone()).into();
+            assert_eq!(back, res);
+        }
 
         let req = PeerFilesRequest::IndexPage {
             auth_proof: "p".into(),

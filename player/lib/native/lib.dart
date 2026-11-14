@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `collect_hls_body`, `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Space on the volume holding `path`, for sizing the playback spool.
 /// Always an error in a browser, which has no filesystem to ask.
@@ -79,7 +79,7 @@ abstract class P2PHost implements RustOpaqueInterface {
       {required String peer, required FlutterHlsRequest req});
 
   /// Stream the host's grant requests to Dart. Each must be answered with
-  /// `respond_peer_file_grant` within 10 seconds or the read gets 404.
+  /// `respond_peer_file_grant` within 10 seconds or the read gets 502.
   Stream<FlutterPeerFileGrantRequest> peerFileGrantStream();
 
   /// Stream inbound peer files requests to Flutter.
@@ -101,10 +101,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// control target.
   Stream<FlutterInboundControlRequest> remoteControlStream();
 
-  /// Answer a grant request. `None` means the path is not one this player
-  /// shares, and the read gets 404.
+  /// Answer a grant request: granted, not shared (the read gets 404), or
+  /// failed (the read gets 502).
   Future<void> respondPeerFileGrant(
-      {required String requestId, FlutterPeerFileGrant? grant});
+      {required String requestId, required FlutterPeerFileGrantAnswer answer});
 
   /// Answer an inbound peer files request.
   Future<void> respondToPeerFiles(
@@ -622,6 +622,24 @@ class FlutterPeerFileGrant {
           headers == other.headers;
 }
 
+@freezed
+sealed class FlutterPeerFileGrantAnswer with _$FlutterPeerFileGrantAnswer {
+  const FlutterPeerFileGrantAnswer._();
+
+  const factory FlutterPeerFileGrantAnswer.granted({
+    required FlutterPeerFileGrant grant,
+  }) = FlutterPeerFileGrantAnswer_Granted;
+
+  /// The path is not one this player shares: the read gets 404.
+  const factory FlutterPeerFileGrantAnswer.notShared() =
+      FlutterPeerFileGrantAnswer_NotShared;
+
+  /// The path is shared but its backend could not be opened: the read
+  /// gets 502, and the next read asks again.
+  const factory FlutterPeerFileGrantAnswer.failed() =
+      FlutterPeerFileGrantAnswer_Failed;
+}
+
 /// Rust asking Dart what a paired player's read of `path` in `account_id`
 /// may open. Answered with `respond_peer_file_grant` under `request_id`.
 class FlutterPeerFileGrantRequest {
@@ -678,6 +696,10 @@ sealed class FlutterPeerFilesResponse with _$FlutterPeerFilesResponse {
       FlutterPeerFilesResponse_StaleRevision;
   const factory FlutterPeerFilesResponse.notAuthorized() =
       FlutterPeerFilesResponse_NotAuthorized;
+
+  /// The host's roster marks the requester revoked.
+  const factory FlutterPeerFilesResponse.revoked() =
+      FlutterPeerFilesResponse_Revoked;
 }
 
 @freezed

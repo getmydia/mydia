@@ -37,6 +37,9 @@ class _FakeHost {
   final pages = <String, List<FlutterWireIndexPage>>{};
   bool offline = false;
 
+  /// Answers every manifest with this instead of the accounts it lends.
+  FlutterPeerFilesResponse? manifestOverride;
+
   /// Answers an index page in place of [pages] when it returns non-null.
   FlutterPeerFilesResponse? Function(FlutterPeerFilesRequest_IndexPage)?
       pageOverride;
@@ -114,6 +117,7 @@ class _FakeFilesTransport implements PeerFilesTransport {
     switch (request) {
       case FlutterPeerFilesRequest_Manifest(:final authProof):
         manifestCalls.add(peer);
+        if (host.manifestOverride case final r?) return r;
         if (authProof != expectedProof) {
           return const FlutterPeerFilesResponse.notAuthorized();
         }
@@ -152,8 +156,10 @@ class _FakeFilesTransport implements PeerFilesTransport {
       throw UnimplementedError();
   @override
   Future<void> respondPeerFileGrant(
-          String requestId, FlutterPeerFileGrant? grant) =>
+          String requestId, FlutterPeerFileGrantAnswer answer) =>
       throw UnimplementedError();
+  @override
+  Future<void> dial(String endpointAddrJson) => throw UnimplementedError();
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) =>
       throw UnimplementedError();
@@ -600,6 +606,57 @@ void main() {
     expect(store.revision(peerFilesAccountId(_desk, _smbId)), isNull);
   });
 
+  test('a host answering Revoked tears down its copies, NotAuthorized does not',
+      () async {
+    await client.start();
+    final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
+
+    // Refusing proves nothing: the host's secret may not have loaded.
+    tv().manifestOverride = const FlutterPeerFilesResponse.notAuthorized();
+    await client.refresh();
+    expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
+
+    // This device's own roster still holds the TV, active: only the host
+    // knows it revoked this device.
+    tv().manifestOverride = const FlutterPeerFilesResponse.revoked();
+    await client.refresh();
+    expect(shown(), ['Desk · NAS']);
+    expect(store.revision(films), isNull);
+    expect(store.storedAccounts().map((a) => a.nodeId), [_desk]);
+    expect(sync.member(_tv)!.revoked, isFalse);
+  });
+
+  test('an index page answered Revoked tears down that host', () async {
+    tv().lend('w2222222222222222', 'Concerts', 1, ['Brass Tide.mkv'],
+        kind: 'webdav', dedupeKey: 'https://dav.tv.test/');
+    await client.start();
+    expect(shown(), hasLength(3));
+
+    tv().lend(kFilesLocalAccountId, 'Films', 2, ['Cedar Signal.mkv']);
+    tv().pageOverride = (_) => const FlutterPeerFilesResponse.revoked();
+    await client.refresh(nodeId: _tv);
+    expect(shown(), ['Desk · NAS']);
+    expect(store.storedAccounts().map((a) => a.nodeId), [_desk]);
+  });
+
+  test('a failing delete of a revoked copy does not stop start', () async {
+    await client.start();
+    client.dispose();
+    await syncStore.putMember(const PeerMember(
+      nodeId: _tv,
+      deviceName: 'Living Room TV',
+      platform: 'linux',
+      updatedAt: 99,
+      revoked: true,
+    ));
+    store = _UnremovableStore(box);
+    client = newClient();
+    await client.start();
+    // Started, refreshed and published regardless.
+    expect(shown(), ['Desk · NAS']);
+    expect(transport.manifestsFrom(_desk), 2);
+  });
+
   test('host_revoked_while_closed_never_shows', () async {
     await client.start();
     client.dispose();
@@ -696,4 +753,13 @@ void main() {
 class _UnreadableAuthStorage extends MockAuthStorage {
   @override
   Future<String?> read(String key) async => throw Exception('keyring locked');
+}
+
+/// A store whose box refuses deletes, as a corrupt Hive box can.
+class _UnremovableStore extends PeerFilesStore {
+  _UnremovableStore(super.box);
+
+  @override
+  Future<void> remove(String localAccountId) async =>
+      throw HiveError('box is corrupt');
 }

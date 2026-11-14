@@ -16,7 +16,7 @@ class _FakeHost implements P2PHost {
   // Closed by each test through addTearDown.
   // ignore: close_sinks
   final grantRequests = StreamController<FlutterPeerFileGrantRequest>();
-  final grantResponses = <(String, FlutterPeerFileGrant?)>[];
+  final grantResponses = <(String, FlutterPeerFileGrantAnswer)>[];
   final members = <List<String>>[];
   final invalidated = <String>[];
 
@@ -27,9 +27,9 @@ class _FakeHost implements P2PHost {
   @override
   Future<void> respondPeerFileGrant({
     required String requestId,
-    FlutterPeerFileGrant? grant,
+    required FlutterPeerFileGrantAnswer answer,
   }) async {
-    grantResponses.add((requestId, grant));
+    grantResponses.add((requestId, answer));
   }
 
   @override
@@ -136,12 +136,20 @@ void main() {
     expect(received.single.requestId, 'g1');
     expect(received.single.path, 'a/b.txt');
 
-    const grant = FlutterPeerFileGrant(url: 'file:///x', headers: []);
+    const grant = FlutterPeerFileGrantAnswer.granted(
+        grant: FlutterPeerFileGrant(url: 'file:///x', headers: []));
     await transport.respondPeerFileGrant('g1', grant);
-    await transport.respondPeerFileGrant('g2', null);
+    await transport.respondPeerFileGrant(
+        'g2', const FlutterPeerFileGrantAnswer.notShared());
+    await transport.respondPeerFileGrant(
+        'g3', const FlutterPeerFileGrantAnswer.failed());
     await transport.setPeerFilesMembers(['n1', 'n2']);
     await transport.invalidatePeerFileGrants('acct');
-    expect(host.grantResponses, [('g1', grant), ('g2', null)]);
+    expect(host.grantResponses, [
+      ('g1', grant),
+      ('g2', const FlutterPeerFileGrantAnswer.notShared()),
+      ('g3', const FlutterPeerFileGrantAnswer.failed()),
+    ]);
     expect(host.members.single, ['n1', 'n2']);
     expect(host.invalidated.single, 'acct');
   });
@@ -211,7 +219,8 @@ void main() {
   test('without a host the grant calls are no-ops', () async {
     final service = P2pService();
     addTearDown(service.dispose);
-    await service.respondPeerFileGrant('g', null);
+    await service.respondPeerFileGrant(
+        'g', const FlutterPeerFileGrantAnswer.notShared());
     await service.setPeerFilesMembers(['n']);
     await service.invalidatePeerFileGrants('acct');
   });

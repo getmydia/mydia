@@ -19,10 +19,13 @@ abstract interface class PeerFilesTransport {
   );
   Future<void> respondPeerFileGrant(
     String requestId,
-    FlutterPeerFileGrant? grant,
+    FlutterPeerFileGrantAnswer answer,
   );
   Future<void> setPeerFilesMembers(List<String> nodeIds);
   Future<void> invalidatePeerFileGrants(String accountId);
+
+  /// Connects to a peer by its EndpointAddr JSON, as the roster stores it.
+  Future<void> dial(String endpointAddrJson);
   Future<P2pRangeStream> openRangeStream({
     required String peer,
     required String sessionId,
@@ -63,9 +66,9 @@ class P2pPeerFilesTransport implements PeerFilesTransport {
   @override
   Future<void> respondPeerFileGrant(
     String requestId,
-    FlutterPeerFileGrant? grant,
+    FlutterPeerFileGrantAnswer answer,
   ) =>
-      _p2pService.respondPeerFileGrant(requestId, grant);
+      _p2pService.respondPeerFileGrant(requestId, answer);
 
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) =>
@@ -74,6 +77,10 @@ class P2pPeerFilesTransport implements PeerFilesTransport {
   @override
   Future<void> invalidatePeerFileGrants(String accountId) =>
       _p2pService.invalidatePeerFileGrants(accountId);
+
+  @override
+  Future<void> dial(String endpointAddrJson) =>
+      _p2pService.dial(endpointAddrJson);
 
   @override
   Future<P2pRangeStream> openRangeStream({

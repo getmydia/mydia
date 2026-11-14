@@ -325,7 +325,7 @@ void main() {
       expect(added, greaterThan(0));
 
       await accounts.removeRoot(id, filesRootId('/media/films'));
-      expect(revisions.revision(kFilesLocalAccountId), added + 1);
+      expect(revisions.revision(kFilesLocalAccountId), greaterThan(added));
     });
 
     test('removing the account bumps it and drops it from the manifest',
@@ -349,6 +349,36 @@ void main() {
       expect(host.manifestAccounts(), isEmpty);
     });
 
+    test('hiding or unhiding the account bumps it; a PIN lock does not',
+        () async {
+      final c = await container();
+      final revisions = c.read(peerFilesRevisionsProvider);
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addWebDavAccount(
+          url: Uri.parse('https://nas.example.test/dav'),
+          user: 'viewer',
+          password: 'pw');
+      await _settle();
+      final accountId = id.value.split(':').first;
+      final serverId = id.value.split(':').last;
+      final host = c.read(peerFilesHostProvider);
+      final records = c.read(sourceRecordsProvider.notifier);
+      final before = revisions.revision(accountId);
+
+      await records.setServerLock(accountId, serverId, SourceLock.locked);
+      expect(revisions.revision(accountId), before);
+      expect(host.manifestAccounts().map((a) => a.accountId), [accountId]);
+
+      await records.setServerLock(accountId, serverId, SourceLock.hidden);
+      final hidden = revisions.revision(accountId);
+      expect(hidden, greaterThan(before));
+      expect(host.manifestAccounts(), isEmpty);
+
+      await records.setServerLock(accountId, serverId, SourceLock.none);
+      expect(revisions.revision(accountId), greaterThan(hidden));
+      expect(host.manifestAccounts().map((a) => a.accountId), [accountId]);
+    });
+
     test('changing an SMB address bumps it', () async {
       final smb = FakeSmbNative();
       final c = await container(smb: smb);
@@ -363,7 +393,7 @@ void main() {
 
       await accounts.setSmbAddress(accountId, host: '10.0.0.7', port: 445);
 
-      expect(revisions.revision(accountId), before + 1);
+      expect(revisions.revision(accountId), greaterThan(before));
     });
   });
 

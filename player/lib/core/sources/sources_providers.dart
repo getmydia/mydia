@@ -13,7 +13,8 @@ import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
-import '../p2p/peer_files_host.dart' show peerFilesHostProvider;
+import '../p2p/peer_files_host.dart'
+    show hasHiddenServer, peerFilesHostProvider;
 import 'files/files_providers.dart'
     show closeRemovedFilesAccount, filesIndexProvider;
 import 'files/peer_files_sources.dart' show peerFilesSourcesProvider;
@@ -286,8 +287,16 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         if (record == null) return;
         final locks = {...record.serverLocks}..remove(serverId);
         if (lock != SourceLock.none) locks[serverId] = lock;
-        await _write(
-            (store) => store.putAccount(record.copyWith(serverLocks: locks)));
+        final updated = record.copyWith(serverLocks: locks);
+        await _write((store) => store.putAccount(updated));
+        // A hidden files account is not lent (see `lentFilesAccounts`).
+        // Hiding one drops the grants paired players' reads hold and
+        // nudges them to fetch the manifest, which no longer lists it, so
+        // the copies they keep go; unhiding brings it back the same way.
+        if (record.account.kind == SourceKind.files &&
+            hasHiddenServer(record) != hasHiddenServer(updated)) {
+          await _forgetPeerFiles(accountId);
+        }
       });
 
   Future<void> setIncludedInAllServers(SourceId id, bool included) =>

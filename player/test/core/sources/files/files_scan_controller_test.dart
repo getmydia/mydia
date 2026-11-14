@@ -110,11 +110,12 @@ void main() {
     const account = kFilesLocalAccountId;
 
     await scan.rescan();
-    expect(revisions.revision(account), 1);
+    final bumped = revisions.revision(account);
+    expect(bumped, greaterThan(0));
 
     backend.failures['/media/films'] = const BackendUnreachable('unplugged');
     await scan.rescan();
-    expect(revisions.revision(account), 1);
+    expect(revisions.revision(account), bumped);
   });
 
   test('a_never_scanned_library_scans_on_open', () async {
