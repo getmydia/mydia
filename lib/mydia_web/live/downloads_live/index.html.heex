@@ -1,5 +1,10 @@
 <Layouts.app {assigns}>
   <div class="flex flex-col h-full">
+    <MydiaWeb.AdminDownloadClientsLive.BuiltInComponents.low_disk_alert
+      id="downloads-low-disk"
+      class="mb-4"
+      disk={@built_in_disk}
+    />
     <%!-- Header --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>

@@ -62,6 +62,19 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInTest do
     assert render(element(view, "#built-in-state-badge")) =~ "Running"
   end
 
+  test "a low disk shows a banner and a healthy disk hides it", %{conn: conn} do
+    Status.put(:engine, :running)
+    {:ok, view, _html} = live(conn, ~p"/admin/clients")
+    refute has_element?(view, "#built-in-low-disk")
+
+    Status.put(:disk, {:low, %{free: "3.1 GB", reserve: "5 GB"}})
+    assert has_element?(view, "#built-in-low-disk")
+    assert render(element(view, "#built-in-low-disk")) =~ "3.1 GB"
+
+    Status.put(:disk, :ok)
+    refute has_element?(view, "#built-in-low-disk")
+  end
+
   test "restart is offered only for a crashed engine", %{conn: conn} do
     Status.put(:engine, :running)
     {:ok, view, _html} = live(conn, ~p"/admin/clients")

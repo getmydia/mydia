@@ -2,6 +2,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.BuiltIn.Status, as: BuiltInStatus
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
@@ -64,12 +65,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
     # Subscribe to download updates for real-time progress
     if connected?(socket) do
       PubSub.subscribe(Mydia.PubSub, "downloads")
+      PubSub.subscribe(Mydia.PubSub, BuiltInStatus.topic())
       schedule_progress_refresh()
     end
 
     {:ok,
      socket
      |> assign(:page_title, gettext("Downloads"))
+     |> assign(:built_in_disk, built_in_disk())
      |> assign(:active_tab, :downloads)
      |> assign(:view, :active)
      |> assign(:sort_by, @default_sort)
@@ -1044,6 +1047,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp media_type_atom("tv_show"), do: :tv_show
 
   @impl true
+  def handle_info({:built_in_status, %BuiltInStatus{disk: disk}}, socket),
+    do: {:noreply, assign(socket, :built_in_disk, disk)}
+
   def handle_info({:download_updated, _download_id}, socket),
     do: {:noreply, schedule_reload(socket)}
 
@@ -1760,4 +1766,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp adopted_from_client?(_download), do: false
 
   defp get_display_title(download), do: ListView.display_title(download)
+
+  # The built-in client's disk state, :ok when it is off or unreadable. The
+  # Status process is an Agent, so a call exits when it is absent.
+  defp built_in_disk do
+    if Mydia.Downloads.BuiltIn.runtime(), do: BuiltInStatus.get().disk, else: :ok
+  catch
+    :exit, _ -> :ok
+  end
 end
