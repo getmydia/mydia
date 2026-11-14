@@ -4476,6 +4476,16 @@ blank value counts as unset.</p>
 <td>Port of the built-in client's HTTP API on <code>127.0.0.1</code>. Change it when something else on the host uses 3030.</td>
 </tr>
 <tr>
+<td><code>MYDIA_TORRENT_DOWNLOAD_LIMIT</code></td>
+<td>unlimited</td>
+<td>Maximum download speed in KiB/s, a whole number from 16 to 4194303 (rqbit cannot move a 16 KiB block under a lower limit). Any other value is ignored with a warning in the admin UI.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_UPLOAD_LIMIT</code></td>
+<td>unlimited</td>
+<td>Maximum upload speed in KiB/s, a whole number from 16 to 4194303 (rqbit cannot move a 16 KiB block under a lower limit). Any other value is ignored with a warning in the admin UI.</td>
+</tr>
+<tr>
 <td><code>MYDIA_VPN_SERVICE_PROVIDER</code></td>
 <td>unset</td>
 <td>Sets the provider, for example <code>protonvpn</code> or <code>pia</code>, and turns the experimental VPN on. It reaches gluetun as <code>VPN_SERVICE_PROVIDER</code>.</td>
