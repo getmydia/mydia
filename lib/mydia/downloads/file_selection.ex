@@ -25,6 +25,7 @@ defmodule Mydia.Downloads.FileSelection do
 
   @type file_map :: %{index: non_neg_integer(), path: String.t(), length: non_neg_integer()}
   @type context :: %{
+          optional(:single_episode?) => boolean(),
           media_item: MediaItem.t() | nil,
           season_number: integer() | nil,
           targeted_episode_ids: [binary()]
@@ -61,7 +62,8 @@ defmodule Mydia.Downloads.FileSelection do
     %{
       media_item: media_item,
       season_number: season_number,
-      targeted_episode_ids: Enum.uniq(List.wrap(episode_id) ++ metadata_ids)
+      targeted_episode_ids: Enum.uniq(List.wrap(episode_id) ++ metadata_ids),
+      single_episode?: not is_nil(episode_id)
     }
   end
 
@@ -102,6 +104,7 @@ defmodule Mydia.Downloads.FileSelection do
     episode_map = lookup_episodes(context, entries)
     owned = owned_episode_ids(Map.values(episode_map) |> Enum.map(& &1.id))
     targeted = MapSet.new(context.targeted_episode_ids)
+    single? = Map.get(context, :single_episode?, false)
 
     {kept, dropped_ids, file_episodes} =
       Enum.reduce(entries, {[], [], %{}}, fn entry, {kept, dropped, fe} ->
@@ -110,8 +113,11 @@ defmodule Mydia.Downloads.FileSelection do
             {[entry | kept], dropped, fe}
 
           ep ->
-            if MapSet.member?(targeted, ep.id) or not MapSet.member?(owned, ep.id) do
-              {[entry | kept], dropped, Map.put(fe, entry.file.index, ep.id)}
+            if single? or MapSet.member?(targeted, ep.id) or not MapSet.member?(owned, ep.id) do
+              # Only videos map to an episode; early import treats every
+              # `file_episodes` entry as that episode's media file.
+              fe = if entry.kind == :video, do: Map.put(fe, entry.file.index, ep.id), else: fe
+              {[entry | kept], dropped, fe}
             else
               {kept, [ep.id | dropped], fe}
             end

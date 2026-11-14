@@ -54,6 +54,22 @@ defmodule Mydia.Downloads.FileSelectionTest do
 
     sel = FileSelection.select(ctx(show, Enum.drop(ids, 4)), files)
     assert sel.only_files == [1, 2]
+    assert sel.file_episodes == %{2 => Enum.at(ids, 4)}
+  end
+
+  test "single-episode grabs keep every video, even owned untargeted ones", %{
+    show: show,
+    ids: ids
+  } do
+    ctx = %{ctx(show, [Enum.at(ids, 4)]) | targeted_episode_ids: [Enum.at(ids, 4)]}
+    ctx = Map.put(ctx, :single_episode?, true)
+
+    sel = FileSelection.select(ctx, [ep_file(0, 5), ep_file(1, 1)])
+    assert sel.only_files == nil
+    assert sel.skipped_owned_episode_ids == []
+
+    sel = FileSelection.select(ctx, [ep_file(0, 5), ep_file(1, 1), file("Sample/s02e05.mkv", 2)])
+    assert sel.only_files == [0, 1]
   end
 
   test "samples, extras and junk are dropped", %{show: show, ids: ids} do
@@ -155,6 +171,7 @@ defmodule Mydia.Downloads.FileSelectionTest do
     test "single episode grab includes episode id", %{show: show, eps: [ep | _]} do
       ctx = FileSelection.context_for(%{metadata: nil}, media_item_id: show.id, episode_id: ep.id)
       assert ctx.targeted_episode_ids == [ep.id]
+      assert ctx.single_episode?
       assert ctx.season_number == 2
     end
 
