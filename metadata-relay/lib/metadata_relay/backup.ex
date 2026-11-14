@@ -21,6 +21,7 @@ defmodule MetadataRelay.Backup do
   @max_slot_bytes 4_194_304
   @write_limit 120
   @write_window_ms 3_600_000
+  @read_attempts 3
 
   @vault_id ~r/\A[0-9a-f]{32}\z/
   @slot_id ~r/\A[0-9a-f]{16}\z/
@@ -56,7 +57,8 @@ defmodule MetadataRelay.Backup do
 
         case Repo.insert(vault) do
           {:ok, _} -> :ok
-          {:error, _} -> Repo.rollback(:lookup_taken)
+          {:error, %Ecto.Changeset{errors: [lookup_hash: _]}} -> Repo.rollback(:lookup_taken)
+          {:error, _} -> Repo.rollback(:invalid)
         end
 
         Repo.insert!(%Member{
@@ -150,14 +152,22 @@ defmodule MetadataRelay.Backup do
   Writes a slot's ciphertext. `if_match` is the current seq (nil for the
   first write) and `epoch` must equal the vault epoch. Returns the new seq.
 
-  The row update is a conditional `update_all` (or an insert that does
-  nothing on conflict) inside a transaction, and the file is written inside
-  that same transaction after the row step succeeds. A concurrent writer
-  with the same `if_match` therefore blocks on the row lock and then fails
-  its condition without touching the file, and a reader (who only sees
-  committed rows) never finds a row pointing at a missing file. If the file
-  write fails the transaction rolls back (`{:error, :storage}`). The
-  previous seq's file is deleted after commit.
+  Everything runs in one `:immediate` SQLite transaction, which takes the
+  database write lock up front. Two overlapping writers therefore queue
+  (SQLite has no row locks, and a deferred transaction that reads before
+  writing would raise SQLITE_BUSY instead). Inside it the slot row changes by
+  a conditional `update_all` (or an insert that does nothing on conflict), and
+  only when that matches does the file get written. A loser of a race on the
+  same `if_match` fails its condition without touching the file. Readers see
+  only committed rows, and the file is written before commit, so a row never
+  points at a missing file. A file write failure rolls back
+  (`{:error, :storage}`); a failure after the write but before commit can
+  leave an orphan file at the new seq, which the next write at that seq
+  overwrites. The previous seq's file is deleted after commit.
+
+  The rate limit is charged before the conditional update, so a write that
+  then fails with `:precondition_failed` still counts. The recovery signer
+  never owns a slot and always gets `:not_owner`.
   """
   @spec put_slot(String.t(), binary(), String.t(), binary(), integer() | nil, integer()) ::
           {:ok, pos_integer()}
@@ -186,33 +196,37 @@ defmodule MetadataRelay.Backup do
 
   defp do_put_slot(vault_id, signer, slot_id, body, if_match, epoch) do
     result =
-      Repo.transaction(fn ->
-        check_owner!(vault_id, signer, slot_id)
-        check_epoch!(vault_id, epoch)
+      Repo.transaction(
+        fn ->
+          check_owner!(vault_id, signer, slot_id)
+          check_epoch!(vault_id, epoch)
 
-        case RateLimiter.check_rate_limit("backup:vault:#{vault_id}",
-               limit: @write_limit,
-               window_ms: @write_window_ms
-             ) do
-          {:ok, _} -> :ok
-          {:error, :rate_limited} -> Repo.rollback(:rate_limited)
-        end
+          case RateLimiter.check_rate_limit("backup:vault:#{vault_id}",
+                 limit: @write_limit,
+                 window_ms: @write_window_ms
+               ) do
+            {:ok, _} -> :ok
+            {:error, :rate_limited} -> Repo.rollback(:rate_limited)
+          end
 
-        new_seq = (if_match || 0) + 1
-        path = Store.slot_path(vault_id, slot_id, new_seq)
-        now = DateTime.utc_now()
+          new_seq = (if_match || 0) + 1
+          path = Store.slot_path(vault_id, slot_id, new_seq)
+          now = DateTime.utc_now()
 
-        if cas_slot(vault_id, slot_id, if_match, new_seq, epoch, byte_size(body), path, now) != 1,
-          do: Repo.rollback(:precondition_failed)
+          if cas_slot(vault_id, slot_id, if_match, new_seq, epoch, byte_size(body), path, now) !=
+               1,
+             do: Repo.rollback(:precondition_failed)
 
-        case Store.write(path, body) do
-          :ok -> :ok
-          {:error, _} -> Repo.rollback(:storage)
-        end
+          case Store.write(path, body) do
+            :ok -> :ok
+            {:error, _} -> Repo.rollback(:storage)
+          end
 
-        Repo.update_all(from(v in Vault, where: v.id == ^vault_id), set: [last_write_at: now])
-        new_seq
-      end)
+          Repo.update_all(from(v in Vault, where: v.id == ^vault_id), set: [last_write_at: now])
+          new_seq
+        end,
+        mode: :immediate
+      )
 
     with {:ok, new_seq} <- result do
       if if_match, do: Store.delete(Store.slot_path(vault_id, slot_id, if_match))
@@ -221,8 +235,10 @@ defmodule MetadataRelay.Backup do
   end
 
   defp check_owner!(vault_id, signer, slot_id) do
+    recovery = Repo.one(from(v in Vault, where: v.id == ^vault_id, select: v.recovery_signer))
+
     case get_member(vault_id, signer) do
-      %Member{slot_id: ^slot_id} -> :ok
+      %Member{slot_id: ^slot_id, signer: member_signer} when member_signer != recovery -> :ok
       _ -> Repo.rollback(:not_owner)
     end
   end
@@ -267,16 +283,49 @@ defmodule MetadataRelay.Backup do
     count
   end
 
-  @doc "Reads a slot's current ciphertext and seq."
-  @spec get_slot(String.t(), String.t()) :: {:ok, binary(), pos_integer()} | {:error, :not_found}
-  def get_slot(vault_id, slot_id) do
-    with true <- valid_vault_id?(vault_id) and valid_slot_id?(slot_id),
-         %Slot{path: path, seq: seq} <-
-           Repo.get_by(Slot, vault_id: vault_id, slot_id: slot_id),
-         {:ok, body} <- Store.read(path) do
-      {:ok, body, seq}
-    else
-      _ -> {:error, :not_found}
+  @doc """
+  Reads a slot's current ciphertext and seq.
+
+  A write committing between the row read and the file read deletes the old
+  file, so on a missing file the row is re-read and the read retried (up to
+  #{@read_attempts} attempts) when its seq moved. `:not_found` is returned
+  only when the row is gone or its seq is unchanged.
+
+  `opts[:after_row]` is a test hook called after the first row read.
+  """
+  @spec get_slot(String.t(), String.t(), keyword()) ::
+          {:ok, binary(), pos_integer()} | {:error, :not_found}
+  def get_slot(vault_id, slot_id, opts \\ []) do
+    if valid_vault_id?(vault_id) and valid_slot_id?(slot_id),
+      do: read_slot(vault_id, slot_id, @read_attempts, opts),
+      else: {:error, :not_found}
+  end
+
+  defp read_slot(vault_id, slot_id, attempts, opts) do
+    case Repo.get_by(Slot, vault_id: vault_id, slot_id: slot_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Slot{path: path, seq: seq} ->
+        if hook = opts[:after_row], do: hook.()
+
+        case Store.read(path) do
+          {:ok, body} ->
+            {:ok, body, seq}
+
+          {:error, :enoent} ->
+            current =
+              Repo.one(
+                from(s in Slot,
+                  where: s.vault_id == ^vault_id and s.slot_id == ^slot_id,
+                  select: s.seq
+                )
+              )
+
+            if attempts > 1 and current not in [nil, seq],
+              do: read_slot(vault_id, slot_id, attempts - 1, Keyword.delete(opts, :after_row)),
+              else: {:error, :not_found}
+        end
     end
   end
 

@@ -170,6 +170,28 @@ defmodule MetadataRelay.BackupTest do
              Backup.put_slot(v.vault, v.signer, "../../etc/passwd", "x", nil, 1)
   end
 
+  test "the recovery signer cannot write even its own slot" do
+    v = create()
+
+    assert {:error, :not_owner} =
+             Backup.put_slot(v.vault, v.recovery, v.attrs.recovery_slot_id, "x", nil, 1)
+  end
+
+  test "get_slot retries when a write lands between the row read and the file read" do
+    v = create()
+    {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "one", nil, 1)
+
+    hook = fn -> {:ok, 2} = Backup.put_slot(v.vault, v.signer, v.slot, "two", 1, 1) end
+    assert {:ok, "two", 2} = Backup.get_slot(v.vault, v.slot, after_row: hook)
+  end
+
+  test "get_slot is not_found when the file is gone and the seq is unchanged" do
+    v = create()
+    {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "one", nil, 1)
+    Store.delete(Store.slot_path(v.vault, v.slot, 1))
+    assert {:error, :not_found} = Backup.get_slot(v.vault, v.slot)
+  end
+
   test "size limit is 4 MiB" do
     v = create()
     big = :binary.copy(<<0>>, 4_194_305)
