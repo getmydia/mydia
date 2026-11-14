@@ -184,7 +184,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           field={:download_limit_kib}
           sources={@sources}
           type="number"
-          min="1"
+          min="16"
           placeholder={gettext("Unlimited")}
           label={gettext("Download limit (KiB/s)")}
         />
@@ -193,7 +193,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
           field={:upload_limit_kib}
           sources={@sources}
           type="number"
-          min="1"
+          min="16"
           placeholder={gettext("Unlimited")}
           label={gettext("Upload limit (KiB/s)")}
         />

@@ -224,6 +224,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   defp rate_limit_warnings(value, warning) do
+    min = BuiltInTorrent.min_rate_limit_kib()
     max = BuiltInTorrent.max_rate_limit_kib()
 
     case blank_to_nil(value) do
@@ -232,7 +233,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
       value ->
         case Integer.parse(String.trim(value)) do
-          {kib, ""} when kib >= 1 and kib <= max -> []
+          {kib, ""} when kib >= min and kib <= max -> []
           _ -> [{warning, value}]
         end
     end

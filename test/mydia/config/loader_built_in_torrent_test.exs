@@ -46,7 +46,7 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
     assert loaded.download_limit_kib == 2048
     assert loaded.upload_limit_kib == 512
 
-    for bad <- ["0", "-5", "abc", "4194304", "1.5"],
+    for bad <- ["0", "15", "-5", "abc", "4194304", "1.5"],
         {var, key} <- [
           {"MYDIA_TORRENT_DOWNLOAD_LIMIT", :download_limit_kib},
           {"MYDIA_TORRENT_UPLOAD_LIMIT", :upload_limit_kib}
@@ -56,6 +56,9 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
 
     assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_UPLOAD_LIMIT" => "4194303"})).upload_limit_kib ==
              4_194_303
+
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_UPLOAD_LIMIT" => "16"})).upload_limit_kib ==
+             16
   end
 
   test "enabled accepts off and ignores junk" do

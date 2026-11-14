@@ -207,9 +207,9 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
     end
 
     test "rate limits convert from KiB/s to bytes per second, nil meaning unlimited" do
-      config = load([download_limit_kib: 2048, upload_limit_kib: 1], [])
+      config = load([download_limit_kib: 2048, upload_limit_kib: 16], [])
       assert config.download_limit_bps == 2_097_152
-      assert config.upload_limit_bps == 1024
+      assert config.upload_limit_bps == 16_384
 
       unlimited = load([], [])
       assert unlimited.download_limit_bps == nil
@@ -221,12 +221,12 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
         load([], [],
           env: %{
             "MYDIA_TORRENT_DOWNLOAD_LIMIT" => "fast",
-            "MYDIA_TORRENT_UPLOAD_LIMIT" => "0"
+            "MYDIA_TORRENT_UPLOAD_LIMIT" => "15"
           }
         )
 
       assert {:invalid_download_limit, "fast"} in config.warnings
-      assert {:invalid_upload_limit, "0"} in config.warnings
+      assert {:invalid_upload_limit, "15"} in config.warnings
 
       assert %Config{warnings: []} =
                load([], [], env: %{"MYDIA_TORRENT_DOWNLOAD_LIMIT" => " 100 "})

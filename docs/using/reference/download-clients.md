@@ -79,7 +79,8 @@ applies to new grabs; torrents already running finish where they started.
   `/config/rqbit`. In the Docker image, files the engine writes belong to group
   `mydia-torrent`, with or without the VPN.
 - **Speed limits.** Download and upload limits, in KiB/s, sit under
-  Configure, Torrent. Leave a field blank for no limit. A change restarts the
+  Configure, Torrent. Leave a field blank for no limit; the lowest limit is
+  16 KiB/s, since the engine moves data in 16 KiB blocks. A change restarts the
   engine within a few seconds, and torrents resume where they were.
 - **No web UI.** The engine has no web interface of its own, so the Downloads
   page shows no "Open" button for it. Mydia's Downloads page is where you

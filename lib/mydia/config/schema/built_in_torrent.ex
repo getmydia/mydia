@@ -67,8 +67,16 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
 
   @secret_fields [:vpn_openvpn_password, :vpn_wireguard_private_key]
 
-  # rqbit takes the limits in bytes per second as a u32.
+  # rqbit takes the limits in bytes per second as a u32, and its limiter's
+  # burst equals the limit. Peers move 16 KiB blocks and rqbit errors on a
+  # block larger than the burst instead of waiting, so below 16 KiB/s a
+  # download loops through peer reconnects and uploads stop.
+  @min_rate_limit_kib 16
   @max_rate_limit_kib div(4_294_967_295, 1024)
+
+  @doc "The smallest rate limit, in KiB/s, rqbit can transfer under."
+  @spec min_rate_limit_kib() :: pos_integer()
+  def min_rate_limit_kib, do: @min_rate_limit_kib
 
   @doc "The largest rate limit, in KiB/s, rqbit accepts."
   @spec max_rate_limit_kib() :: pos_integer()
@@ -92,13 +100,13 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> validate_rate_limits()
   end
 
-  @doc "Validates both rate limits against 1..`max_rate_limit_kib/0`."
+  @doc "Validates both rate limits against `min_rate_limit_kib/0`..`max_rate_limit_kib/0`."
   @spec validate_rate_limits(Ecto.Changeset.t()) :: Ecto.Changeset.t()
   def validate_rate_limits(changeset) do
     for field <- [:download_limit_kib, :upload_limit_kib], reduce: changeset do
       changeset ->
         validate_number(changeset, field,
-          greater_than_or_equal_to: 1,
+          greater_than_or_equal_to: @min_rate_limit_kib,
           less_than_or_equal_to: @max_rate_limit_kib
         )
     end
