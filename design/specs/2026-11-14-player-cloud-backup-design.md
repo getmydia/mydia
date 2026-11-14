@@ -234,7 +234,10 @@ and per-slot `seq` already merged.
 `vault_id`, all `#[serde(default)]` so peers on older builds still pair. When
 the host has a vault and the joiner sent keys, the host seals VK to the
 joiner, adds it as a member, and returns `vault_id`. The joiner then has
-backup on with no recovery key typed. A joiner that already had its own vault
+backup on with no recovery key typed, and shows a one-time notice: "This
+device is now backed up with your group", linking to Backup & sync. This is
+the only way backup turns on without the user enabling it on that device;
+the group opted in when its first device did. A joiner that already had its own vault
 is asked which to keep; the other is deleted after its records are merged.
 
 ### UX
