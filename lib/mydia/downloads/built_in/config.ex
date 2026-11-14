@@ -19,6 +19,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @default_port 51413
   @default_api_port 3030
   @default_min_free_space_gb 5
+  # `min_free_space_gb` is decimal gigabytes, like `DiskSpace.format_gb/1`.
+  @gb 1_000_000_000
   @default_download_path "/data/downloads"
   @default_state_dir "/config/rqbit"
 
@@ -61,7 +63,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
-            min_free_space_bytes: @default_min_free_space_gb * 1024 ** 3,
+            min_free_space_bytes: @default_min_free_space_gb * @gb,
             vpn?: false,
             vpn_provider: nil,
             vpn_type: nil,
@@ -116,7 +118,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       state_dir: state_dir,
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
-      min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * 1024 ** 3,
+      min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * @gb,
       vpn?: section.vpn_enabled == true,
       vpn_provider: blank_to_nil(section.vpn_provider),
       vpn_type: blank_to_nil(section.vpn_type),

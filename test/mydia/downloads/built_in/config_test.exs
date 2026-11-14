@@ -166,9 +166,9 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %BuiltInTorrent{vpn_provider: "protonvpn"} = config.vpn_section
     end
 
-    test "min_free_space_bytes defaults to 5 GiB and follows the section" do
-      assert load([], []).min_free_space_bytes == 5 * 1024 ** 3
-      assert load([min_free_space_gb: 12], []).min_free_space_bytes == 12 * 1024 ** 3
+    test "min_free_space_bytes is decimal gigabytes, 5 GB by default" do
+      assert load([], []).min_free_space_bytes == 5_000_000_000
+      assert load([min_free_space_gb: 12], []).min_free_space_bytes == 12_000_000_000
       assert load([min_free_space_gb: 0], []).min_free_space_bytes == 0
     end
 

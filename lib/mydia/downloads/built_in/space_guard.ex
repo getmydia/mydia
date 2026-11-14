@@ -38,7 +38,9 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Queue.ClientSelection
 
+  # The recovery gap is binary, the reserve itself decimal gigabytes.
   @gib 1024 ** 3
+  @gb 1_000_000_000
   @record_file "space-paused"
   @warn_every_ms :timer.hours(1)
 
@@ -108,7 +110,7 @@ defmodule Mydia.Downloads.BuiltIn.SpaceGuard do
     state =
       put_disk(
         state,
-        {:low, %{free: DiskSpace.format_gb(free), reserve: "#{div(reserve, @gib)} GB"}}
+        {:low, %{free: DiskSpace.format_gb(free), reserve: "#{div(reserve, @gb)} GB"}}
       )
 
     with_torrents(state, fn adapter, client_config, torrents ->

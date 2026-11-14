@@ -24,6 +24,9 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.TorrentFetch
   require Logger
 
+  # The disk reserve is set in decimal gigabytes (`min_free_space_gb`).
+  @gb 1_000_000_000
+
   # Returns an Oban changeset, or nil when there is nothing sensible to search
   # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
   # association instead: a deleted media item yields nil rather than raising in
@@ -280,7 +283,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   defp insufficient_space_error(needed, free, reserve) do
     message =
       "Not enough space on the download volume: needs #{DiskSpace.format_gb(needed)}, " <>
-        "#{DiskSpace.format_gb(free)} free, #{div(reserve, 1024 ** 3)} GB kept free"
+        "#{DiskSpace.format_gb(free)} free, #{div(reserve, @gb)} GB kept free"
 
     Client.Error.insufficient_space(message, %{needed: needed, free: free, reserve: reserve})
   end

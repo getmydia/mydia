@@ -16,7 +16,6 @@ defmodule Mydia.Downloads.Queue.DiskGuardGrabTest do
 
   @hash "0123456789abcdef0123456789abcdef01234567"
   @gb 1_000_000_000
-  @gib 1024 ** 3
 
   setup do
     bypass = Bypass.open()
@@ -45,7 +44,7 @@ defmodule Mydia.Downloads.Queue.DiskGuardGrabTest do
     end)
 
     put_runtime_clients([client(bypass.port, true)])
-    put_builtin_runtime(5 * @gib)
+    put_builtin_runtime(5 * @gb)
 
     start_supervised!({Status, name: Status})
     Status.put(:engine, :running)
@@ -61,7 +60,7 @@ defmodule Mydia.Downloads.Queue.DiskGuardGrabTest do
     assert error.message ==
              "Not enough space on the download volume: needs 41.2 GB, 12.8 GB free, 5 GB kept free"
 
-    assert error.details == %{needed: 41_200_000_000, free: 12_800_000_000, reserve: 5 * @gib}
+    assert error.details == %{needed: 41_200_000_000, free: 12_800_000_000, reserve: 5 * @gb}
     refute_received :add
     assert Repo.all(ReleaseBlacklist) == []
   end
