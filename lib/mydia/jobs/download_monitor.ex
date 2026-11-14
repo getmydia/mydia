@@ -110,6 +110,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       |> Enum.reject(& &1.removal_requested_at)
 
     Mydia.Downloads.ObservedSeedTime.record(downloads, now)
+    Mydia.Downloads.BuiltIn.Policies.run(downloads, now)
 
     # Re-adopt downloads whose client was renamed, deleted, or disabled but
     # whose torrent is still sitting in exactly one other configured client.
