@@ -68,6 +68,10 @@ class _RecordingManager implements CastSessionManager {
   Future<void> pause() async => calls.add('pause');
 
   @override
+  Future<void> connectTo(CastDevice device) async =>
+      calls.add('connectTo:${device.id}:${device.metadata['nowPlayingTitle']}');
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -233,6 +237,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CastControlsSheet), findsOneWidget);
       expect(find.text('Ready to play on Cottage Chromecast'), findsOneWidget);
+    });
+
+    testWidgets('a tap on the banner takes control as it opens the sheet',
+        (tester) async {
+      final manager = _RecordingManager();
+      await pump(
+        tester,
+        state: CastBarAmbient(target: _ambient(), deviceName: 'Lantern Room'),
+        manager: manager,
+      );
+      await fromNative(tester, 'accessoryTapped');
+      await tester.pumpAndSettle();
+
+      expect(manager.calls, ['connectTo:${_ambient().device.id}:Night Harbor'],
+          reason: 'the sheet must open onto the connect, not onto the same '
+              'banner with a View button to tap a second time');
+      expect(find.byType(CastControlsSheet), findsOneWidget);
+    });
+
+    testWidgets('a tap on any other state only opens the sheet',
+        (tester) async {
+      final manager = _RecordingManager();
+      await pump(tester, state: const CastBarIdle(_device), manager: manager);
+      await fromNative(tester, 'accessoryTapped');
+      await tester.pumpAndSettle();
+      expect(manager.calls, isEmpty);
     });
 
     testWidgets("the sheet's controller reports no cast bar extent",

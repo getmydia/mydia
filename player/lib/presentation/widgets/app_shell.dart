@@ -868,7 +868,9 @@ class _AppShellState extends ConsumerState<AppShell>
             )
           : Breakpoints.railContentInset(pinned: pinned);
       final chrome = WindowChromeInsets.of(context);
-      return Scaffold(
+      // See the phone layout's return below.
+      return ExcludeCastBarPageInset(
+          child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
@@ -952,7 +954,7 @@ class _AppShellState extends ConsumerState<AppShell>
             ),
           ],
         ),
-      );
+      ));
     }
 
     final navEntries = ref.watch(sourceNavEntriesProvider(location));
@@ -1026,9 +1028,14 @@ class _AppShellState extends ConsumerState<AppShell>
           native: native, coveredByPage: coveredByPage),
       child: ReportedDrawer(
         open: _drawerOpen,
-        child: usesMenu
-            ? ShellMenuScope(open: _openMenu, child: scaffold)
-            : scaffold,
+        // `DockInsets` already adds the cast bar to the shell's screens; the
+        // padding the layer raises for pages pushed over the shell would
+        // count it a second time.
+        child: ExcludeCastBarPageInset(
+          child: usesMenu
+              ? ShellMenuScope(open: _openMenu, child: scaffold)
+              : scaffold,
+        ),
       ),
     );
   }

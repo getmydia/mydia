@@ -191,6 +191,19 @@ class AmbientTargets {
   /// class doc; the next [sweep] *after* [onForeground] is what recovers.
   void onBackground() {
     _backgrounded = true;
+    release();
+  }
+
+  /// Drops every held connection, and makes any [sweep] or refresh still in
+  /// flight stale, without marking the app backgrounded: the next [sweep]
+  /// runs as normal.
+  ///
+  /// For when nobody is reading [playing] any more (the cast bar is busy
+  /// with this device's own session) rather than when the app has left the
+  /// foreground. Treating that as a background left [sweep] inert until the
+  /// next app resume, so the "Playing on" banner could not come back after
+  /// a detach while the app stayed open.
+  void release() {
     _epoch++;
     _pollTimer?.cancel();
     _pollTimer = null;

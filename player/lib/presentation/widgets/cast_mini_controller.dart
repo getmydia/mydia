@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +15,7 @@ import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
+import '../../core/router/page_cover_observer.dart';
 import '../../core/router/push_route.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/cast_device.dart';
@@ -53,7 +56,17 @@ import 'toast/toaster.dart';
 /// mobile nav drawer open: the layer paints above `Scaffold.drawer`, so the
 /// bar would otherwise sit on the drawer and its scrim. It stays mounted, as
 /// `AppShell.dockChrome` keeps the dock mounted, so no screen's
-/// `DockInsets` reflow behind the drawer.
+/// `DockInsets` reflow behind the drawer. The same goes for any popup (a
+/// bottom sheet such as the server picker, a dialog, a popover) on the root
+/// or shell navigator: the bar would cover the popup's bottom rows and stay
+/// tappable above its barrier.
+///
+/// Pages pushed over the shell (the iOS menu page, settings sub-pages, the
+/// connection screens) do not use `DockInsets`, so the layer raises their
+/// `MediaQuery` bottom padding to clear the bar instead: their `SafeArea`s
+/// and scroll views then keep their last rows out from under it. `AppShell`
+/// undoes that for itself ([ExcludeCastBarPageInset]), because `DockInsets`
+/// already adds the bar to its screens.
 ///
 /// Stands down entirely while the shell reports the native iOS tab bar through
 /// `ReportedNativeBar`: that bar's accessory shows the same state. The shell
@@ -61,21 +74,48 @@ import 'toast/toaster.dart';
 /// pushed screen) covers the shell. Drawer open or not, dialog or bottom sheet
 /// up or not (the native accessory's own cast sheet is one), it stays
 /// reported, so none of those bring this bar back over what is on screen.
-class CastBarLayer extends StatefulWidget {
+class CastBarLayer extends ConsumerStatefulWidget {
   const CastBarLayer({super.key, required this.child});
 
   final Widget child;
 
   @override
-  State<CastBarLayer> createState() => _CastBarLayerState();
+  ConsumerState<CastBarLayer> createState() => _CastBarLayerState();
 }
 
-class _CastBarLayerState extends State<CastBarLayer> {
+class _CastBarLayerState extends ConsumerState<CastBarLayer> {
   double _dock = 0;
   double _castBar = 0;
   double _sidebar = 0;
   bool _drawerOpen = false;
   bool _nativeBar = false;
+  bool _popup = false;
+
+  late final PageCoverObserver _rootRoutes =
+      ref.read(pageCoverObserverProvider);
+  late final ShellPopupObserver _shellRoutes =
+      ref.read(shellPopupObserverProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _rootRoutes.addListener(_onRoutes);
+    _shellRoutes.addListener(_onRoutes);
+    _popup = _rootRoutes.hasPopup || _shellRoutes.hasPopup;
+  }
+
+  @override
+  void dispose() {
+    _rootRoutes.removeListener(_onRoutes);
+    _shellRoutes.removeListener(_onRoutes);
+    super.dispose();
+  }
+
+  void _onRoutes() {
+    final popup = _rootRoutes.hasPopup || _shellRoutes.hasPopup;
+    if (!mounted || popup == _popup) return;
+    setState(() => _popup = popup);
+  }
 
   void _setDock(double height) {
     if (!mounted || height == _dock) return;
@@ -105,6 +145,20 @@ class _CastBarLayerState extends State<CastBarLayer> {
   @override
   Widget build(BuildContext context) {
     final hasDock = _dock > 0;
+    final hidden = _drawerOpen || _popup;
+    final media = MediaQuery.of(context);
+    // What a page pushed over the shell must keep clear at the bottom: the
+    // bar floats at the window edge there (the shell's dock reports 0 once
+    // covered). Nothing while the bar is hidden or has stood down, and
+    // nothing above the keyboard, which covers the bar.
+    final pageInset = !_nativeBar &&
+            !hidden &&
+            !hasDock &&
+            _castBar > 0 &&
+            media.viewInsets.bottom == 0
+        ? DockGlass.sideMargin + _castBar + DockExtents.gap
+        : 0.0;
+    final raisesPages = pageInset > media.padding.bottom;
     return DockExtents(
       dock: _dock,
       castBar: _castBar,
@@ -116,9 +170,24 @@ class _CastBarLayerState extends State<CastBarLayer> {
       onDrawer: _setDrawer,
       nativeBar: _nativeBar,
       onNativeBar: _setNativeBar,
+      pageInset: raisesPages ? pageInset : 0,
+      basePadding: media.padding.bottom,
+      baseViewPadding: media.viewPadding.bottom,
       child: Stack(
         children: [
-          widget.child,
+          // Always wrapped, raised or not: swapping the wrapper in and out
+          // would change this slot's widget type and remount the router.
+          MediaQuery(
+            data: raisesPages
+                ? media.copyWith(
+                    padding: media.padding.copyWith(bottom: pageInset),
+                    viewPadding: media.viewPadding.copyWith(
+                      bottom: math.max(media.viewPadding.bottom, pageInset),
+                    ),
+                  )
+                : media,
+            child: widget.child,
+          ),
           // Neither the Overlay nor the Align hit-tests its own empty space,
           // so everything outside the bar still reaches `child` below.
           Positioned.fill(
@@ -150,9 +219,9 @@ class _CastBarLayerState extends State<CastBarLayer> {
                         context: context,
                         removeBottom: hasDock,
                         child: IgnorePointer(
-                          ignoring: _drawerOpen,
+                          ignoring: hidden,
                           child: AnimatedOpacity(
-                            opacity: _drawerOpen ? 0 : 1,
+                            opacity: hidden ? 0 : 1,
                             duration: const Duration(milliseconds: 200),
                             // The native tab bar's accessory is the cast
                             // bar while the shell shows it. Unmounting, not
@@ -334,74 +403,41 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       );
 
   /// The "Playing on X" row; see [castBarStateProvider] for when it shows.
+  ///
+  /// The whole row takes control, so one tap reaches the transport
+  /// (`_buildPlaying`, once the connect resolves). View says the same thing
+  /// as a visible button.
   Widget _buildAmbient(AmbientTarget ambientTarget, String name) {
+    void open() => connectToAmbientTarget(context, ref, ambientTarget, name);
     return CastPill(
-      child: CastBarRow(
-        leading: CastThumb(imageUrl: ambientTarget.snapshot.imageUrl),
-        title: ambientTarget.snapshot.title,
-        status: CastBarText.ambientStatus(context.l10n, name),
-        dot: CastDot.live,
-        actions: [
-          CastPrimaryAction(
-            key: const Key('cast-bar-ambient-open'),
-            label: context.l10n.castBarView,
-            onPressed: () => _openAmbientTarget(ambientTarget, name),
-          ),
-          _closeButton(
-            key: const Key('cast-bar-ambient-dismiss'),
-            tooltip: context.l10n.castBarHideStatus(
-              CastBarText.ambientStatus(context.l10n, name),
+      child: InkWell(
+        key: const Key('cast-bar-ambient-row'),
+        borderRadius: CastPill.radius,
+        onTap: open,
+        child: CastBarRow(
+          leading: CastThumb(imageUrl: ambientTarget.snapshot.imageUrl),
+          title: ambientTarget.snapshot.title,
+          status: CastBarText.ambientStatus(context.l10n, name),
+          dot: CastDot.live,
+          actions: [
+            CastPrimaryAction(
+              key: const Key('cast-bar-ambient-open'),
+              label: context.l10n.castBarView,
+              onPressed: open,
             ),
-            onPressed: () => ref
-                .read(ambientDismissalsProvider.notifier)
-                .dismiss(ambientTarget),
-          ),
-        ],
+            _closeButton(
+              key: const Key('cast-bar-ambient-dismiss'),
+              tooltip: context.l10n.castBarHideStatus(
+                CastBarText.ambientStatus(context.l10n, name),
+              ),
+              onPressed: () => ref
+                  .read(ambientDismissalsProvider.notifier)
+                  .dismiss(ambientTarget),
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  /// Connects to an ambient target, tapping through to the remote UI —
-  /// `_buildPlaying` below, once the connect resolves and republishes the
-  /// session with media on it.
-  ///
-  /// [AmbientTarget.device] carries no `nowPlayingTitle` metadata of its own
-  /// (only [AmbientTargets.sweep]'s roster-wide probe sets that, on the
-  /// *discovery*-shaped [CastDevice] `MydiaCastBackend._probeSequence`
-  /// builds — an ambient one never goes through that path). Without it,
-  /// `isPlayingMydiaTarget` would read this device as idle and connect
-  /// media-less instead of adopting, showing "Ready to play on" over a
-  /// receiver that is actually mid-film. [ambientTarget.snapshot] already
-  /// has the one field that check needs, so this rebuilds the device with it
-  /// set rather than reaching back into discovery for it.
-  Future<void> _openAmbientTarget(
-    AmbientTarget ambientTarget,
-    String name,
-  ) async {
-    if (!mounted) return;
-
-    final device = CastDevice(
-      id: ambientTarget.device.id,
-      name: name,
-      protocol: CastProtocolKind.mydia,
-      metadata: {
-        'nodeId': ambientTarget.device.id,
-        'nowPlayingTitle': ambientTarget.snapshot.title,
-      },
-    );
-
-    try {
-      final manager = await ref.read(castSessionManagerProvider.future);
-      await manager.connectTo(device);
-    } on CastBackendException catch (e) {
-      if (!mounted) return;
-      showCastErrorToast(context, e, ref: ref, isMydiaTarget: true);
-    } catch (e) {
-      debugPrint('[CastMiniController] Unexpected error opening $name: $e');
-      if (!mounted) return;
-      showToast(context, context.l10n.castBarOpenFailed(name, '$e'),
-          kind: ToastKind.error);
-    }
   }
 
   /// Re-open a media-less connection.
@@ -798,18 +834,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// Stops controlling the target and leaves it playing. This is what the
   /// playing row's close button does on a Mydia target.
   ///
-  /// The dismissal goes in before `detach()` publishes null. The other way
-  /// round, the ambient "Playing on" row for this same item can flash up for
-  /// a frame in between.
+  /// The bar folds back to the "Playing on X" banner it was opened from,
+  /// without controls: the receiver is still playing, and the banner is one
+  /// tap from taking control again. Hiding the banner too is its own close
+  /// button's job.
   Future<void> _detach(CastSession session) async {
     if (!mounted) return;
-    final title = session.mediaInfo?.title;
-    if (title != null) {
-      final nodeId = session.device.metadata['nodeId'] ?? session.device.id;
-      ref
-          .read(ambientDismissalsProvider.notifier)
-          .dismissKey(AmbientDismissal(nodeId.toLowerCase(), title));
-    }
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
       await manager.detach();

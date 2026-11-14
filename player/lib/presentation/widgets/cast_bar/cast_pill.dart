@@ -30,6 +30,14 @@ class CastPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Inside a surface that is already glass (the native accessory's cast
+    // sheet), a second glass pill would draw a frame inside the sheet's own.
+    if (CastPillBare.of(context)) {
+      return Material(
+        type: MaterialType.transparency,
+        child: Padding(padding: const EdgeInsets.all(_padding), child: child),
+      );
+    }
     final liquid = GlassStyle.of(context);
     final shape = liquid ? liquidRadius : radius;
     final body = Padding(padding: const EdgeInsets.all(_padding), child: child);
@@ -63,4 +71,16 @@ class CastPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Makes every [CastPill] below it drop its own glass, border, shadow and side
+/// margin, for a host that is already a framed surface.
+class CastPillBare extends InheritedWidget {
+  const CastPillBare({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<CastPillBare>() != null;
+
+  @override
+  bool updateShouldNotify(CastPillBare oldWidget) => false;
 }

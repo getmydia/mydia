@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'cast_bar/cast_bar_state.dart';
+import 'cast_bar/cast_pill.dart';
 import 'glass/glass_sheet.dart';
 import 'cast_mini_controller.dart';
 import 'nav/dock_glass.dart';
@@ -24,14 +25,21 @@ Future<void> showCastControlsSheet(BuildContext context) =>
 class CastControlsSheet extends ConsumerWidget {
   const CastControlsSheet({super.key});
 
+  /// Whether the sheet has nothing left to control once the bar moves from
+  /// [previous] to [next]: casting ended, or a detach dropped the controls
+  /// and left only the "Playing on X" banner, which the accessory itself
+  /// already shows.
+  @visibleForTesting
+  static bool closesOn(CastBarState? previous, CastBarState? next) =>
+      next == null || (next is CastBarAmbient && previous is! CastBarAmbient);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Casting ended while the sheet was open: an empty sheet is useless.
     // Remove this sheet's own route rather than popping the top one: a
     // confirm dialog from the controller may be open above it.
     final route = ModalRoute.of(context);
     ref.listen(castBarStateProvider, (previous, next) {
-      if (next == null && route != null && route.isActive) {
+      if (closesOn(previous, next) && route != null && route.isActive) {
         Navigator.of(context).removeRoute(route);
       }
     });
@@ -44,8 +52,12 @@ class CastControlsSheet extends ConsumerWidget {
           DockGlass.sideMargin,
           DockGlass.sideMargin,
         ),
-        // Not floating over the screens, so it must not pad them.
-        child: CastMiniController(reportsExtent: false),
+        // The sheet is the frame; the bar's own pill would nest a second
+        // one inside it.
+        child: CastPillBare(
+          // Not floating over the screens, so it must not pad them.
+          child: CastMiniController(reportsExtent: false),
+        ),
       ),
     );
   }

@@ -18,6 +18,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/ambient_targets.dart';
+import 'package:player/core/router/page_cover_observer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/native/lib.dart';
@@ -27,7 +28,10 @@ import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_bar_parts.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
+import 'package:player/presentation/widgets/cast_controls_sheet.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/glass/glass_slider.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
@@ -291,7 +295,10 @@ Future<bool Function()> _pumpLayer(
   ]);
   addTearDown(container.dispose);
 
-  final router = GoRouter(routes: [
+  // Wired as `app_router.dart` wires it, so the layer sees popups.
+  final router = GoRouter(observers: [
+    container.read(pageCoverObserverProvider),
+  ], routes: [
     GoRoute(
       path: '/',
       builder: (context, state) =>
@@ -459,6 +466,76 @@ void main() {
       );
       await tester.pump();
       expect(find.byType(CastMiniController), findsOneWidget);
+    });
+
+    testWidgets('hides the bar under a bottom sheet and brings it back',
+        (tester) async {
+      late BuildContext screenContext;
+      await _pumpLayer(
+        tester,
+        target: _device,
+        screen: (context) {
+          screenContext = context;
+          return const SizedBox.expand();
+        },
+      );
+      await tester.pumpAndSettle();
+      expect(_barFade(tester).opacity, 1);
+
+      unawaited(showModalBottomSheet<void>(
+        context: screenContext,
+        builder: (_) => const SizedBox(height: 200),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(_barFade(tester).opacity, 0,
+          reason: 'the bar paints above every route, so it would cover the '
+              'sheet\'s bottom rows (the server picker\'s, say)');
+      expect(_barGate(tester).ignoring, isTrue);
+
+      Navigator.of(screenContext).pop();
+      await tester.pumpAndSettle();
+
+      expect(_barFade(tester).opacity, 1);
+      expect(_barGate(tester).ignoring, isFalse);
+    });
+
+    testWidgets('raises a page\'s bottom padding to clear the bar',
+        (tester) async {
+      var padding = -1.0;
+      await _pumpLayer(
+        tester,
+        target: _device,
+        screen: (context) => Builder(builder: (context) {
+          padding = MediaQuery.paddingOf(context).bottom;
+          return const SizedBox.expand();
+        }),
+      );
+      await tester.pumpAndSettle();
+
+      final bar = tester.getRect(find.byType(CastMiniController));
+      final layer = tester.getRect(find.byType(CastBarLayer));
+      expect(padding, layer.bottom - bar.top + DockExtents.gap,
+          reason: 'a SafeArea on a page pushed over the shell (the iOS menu '
+              'page) must keep its last row out from under the bar');
+    });
+
+    testWidgets('the shell opts out of the raised padding', (tester) async {
+      var padding = -1.0;
+      await _pumpLayer(
+        tester,
+        target: _device,
+        screen: (context) => ExcludeCastBarPageInset(
+          child: Builder(builder: (context) {
+            padding = MediaQuery.paddingOf(context).bottom;
+            return const SizedBox.expand();
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(padding, 0,
+          reason: 'DockInsets already adds the bar to the shell\'s padding');
     });
 
     group('with the mobile nav drawer', () {
@@ -1274,10 +1351,14 @@ void main() {
     /// Connects [harness] to [lanternDevice] and pumps the bar over a stream
     /// that replays the adopted session and then follows the manager's own
     /// updates, including the null that `detach()` and `stopCast()` publish.
+    ///
+    /// With [targets], the banner comes from the real `ambientPlayingProvider`
+    /// over them rather than a canned list.
     Future<ProviderContainer> pumpLantern(
       WidgetTester tester,
-      _ManagerHarness harness,
-    ) async {
+      _ManagerHarness harness, {
+      AmbientTargets? targets,
+    }) async {
       await harness.manager.connectTo(lanternDevice);
 
       final sessionController = StreamController<CastSession?>();
@@ -1292,8 +1373,11 @@ void main() {
         harness: harness,
         sessionStream: sessionController.stream,
         extraOverrides: [
-          ambientPlayingProvider.overrideWith((ref) =>
-              Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+          if (targets != null)
+            ambientTargetsProvider.overrideWithValue(targets)
+          else
+            ambientPlayingProvider.overrideWith((ref) =>
+                Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
         ],
       );
       container.read(castTargetProvider.notifier).set(lanternDevice);
@@ -1327,7 +1411,7 @@ void main() {
 
     testWidgets(
         'on a Mydia target it leaves the target playing, clears the target '
-        'and hides the banner for that item, without asking', (tester) async {
+        'and folds back to the banner, without asking', (tester) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
       addTearDown(harness.manager.dispose);
@@ -1349,12 +1433,47 @@ void main() {
       expect(harness.manager.currentSession, isNull);
       expect(container.read(castTargetProvider), isNull,
           reason: 'the next play must stay on this device');
-      expect(container.read(ambientDismissalsProvider),
-          contains(const AmbientDismissal('node-tv', 'The Lantern Keepers')));
-      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing,
-          reason: 'the Playing on banner for the same item must not pop '
-              'straight back after dismissing');
+      expect(container.read(ambientDismissalsProvider), isEmpty,
+          reason: 'hiding the banner is its own close button\'s job');
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget,
+          reason: 'the other device is still playing, so the bar folds back '
+              'to the Playing on banner it was opened from');
+      expect(find.byKey(const Key('cast-bar-transport')), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'the banner comes back through the real ambient provider, with no '
+        'app resume', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      addTearDown(harness.manager.dispose);
+      final targets = AmbientTargets(
+        rosterSource: () async => const ['node-tv'],
+        // A real probe is a network round trip. An instant one answers
+        // before `ambientPlayingProvider` has subscribed to the updates.
+        probe: (nodeId) async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return _snapshot(title: 'The Lantern Keepers');
+        },
+      );
+
+      final container = await pumpLantern(tester, harness, targets: targets);
+      expect(find.byKey(const Key('cast-bar-transport')), findsOneWidget);
+
+      // The session held the bar, so nothing listened to the ambient
+      // provider and it was disposed. That must not leave the targets
+      // unable to sweep for the listener the detach brings back.
+      await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget,
+          reason: 'the other device is still playing; the banner must not '
+              'wait for the app to be backgrounded and resumed');
+
+      // Its poll and resweep timers go with the tree, inside the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await targets.dispose();
     });
 
     testWidgets('the Mydia transport stop button confirms, then stops',
@@ -1746,6 +1865,38 @@ void main() {
               'the receiver');
     });
 
+    testWidgets('tapping the banner row itself takes control in one tap',
+        (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith((ref) => Stream.value([
+                AmbientTarget(
+                  device: const CastDevice(
+                    id: 'node-tv',
+                    name: 'node-tv',
+                    protocol: CastProtocolKind.mydia,
+                  ),
+                  snapshot: _snapshot(
+                      title: 'The Lantern Keepers', mediaItemId: 'movie-9'),
+                ),
+              ])),
+        ],
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('The Lantern Keepers'));
+      await tester.pumpAndSettle();
+
+      expect(mydiaBackend.connectAttempts.map((d) => d.id), ['node-tv']);
+    });
+
     testWidgets(
         'does not show ambient playing bar when local playback is active',
         (tester) async {
@@ -1950,6 +2101,61 @@ void main() {
           session:
               _session(duration: const Duration(minutes: 40), isStale: true));
       await expectPill(tester, const Key('cast-stale-reconnect'));
+    });
+
+    testWidgets('inside an already framed host the pill draws no glass',
+        (tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        hasMydiaProvider.overrideWithValue(true),
+        castSessionProvider.overrideWith((ref) =>
+            Stream.value(_session(duration: const Duration(minutes: 40)))),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: CastPillBare(
+              child: CastMiniController(reportsExtent: false),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-play-pause')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CastPill),
+          matching: find.byType(GlassSurface),
+        ),
+        findsNothing,
+        reason: 'the native accessory\'s sheet is the frame; a glass pill '
+            'inside it draws a frame on a frame',
+      );
+    });
+
+    test('the controls sheet closes once only the banner is left', () {
+      final ambient = CastBarAmbient(
+        target: _ambient('node-tv', 'The Lantern Keepers'),
+        deviceName: 'Living Room',
+      );
+      final playing =
+          CastBarPlaying(_session(duration: const Duration(minutes: 40)));
+      const connecting = CastBarConnecting(_device);
+
+      expect(CastControlsSheet.closesOn(playing, ambient), isTrue,
+          reason: 'a detach leaves nothing to control');
+      expect(CastControlsSheet.closesOn(playing, null), isTrue);
+      expect(CastControlsSheet.closesOn(ambient, connecting), isFalse,
+          reason: 'tapping the banner opens the sheet onto the connect');
+      expect(CastControlsSheet.closesOn(connecting, playing), isFalse);
+      expect(CastControlsSheet.closesOn(ambient, ambient), isFalse);
     });
 
     testWidgets('the ambient row shows the title and where it plays',

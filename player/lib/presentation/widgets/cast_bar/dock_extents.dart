@@ -25,8 +25,19 @@ class DockExtents extends InheritedWidget {
     required this.onDrawer,
     this.nativeBar = false,
     this.onNativeBar,
+    this.pageInset = 0,
+    this.basePadding = 0,
+    this.baseViewPadding = 0,
     required super.child,
   });
+
+  /// The bottom padding `CastBarLayer` raised every route's `MediaQuery` to,
+  /// so pages pushed over the shell clear the floating bar; 0 when it raised
+  /// nothing. [ExcludeCastBarPageInset] puts back [basePadding] and
+  /// [baseViewPadding], the values from before.
+  final double pageInset;
+  final double basePadding;
+  final double baseViewPadding;
 
   /// Space between the bar and the dock, and between the bar and content.
   static const double gap = 8;
@@ -65,7 +76,36 @@ class DockExtents extends InheritedWidget {
       old.castBar != castBar ||
       old.sidebar != sidebar ||
       old.drawerOpen != drawerOpen ||
-      old.nativeBar != nativeBar;
+      old.nativeBar != nativeBar ||
+      old.pageInset != pageInset ||
+      old.basePadding != basePadding ||
+      old.baseViewPadding != baseViewPadding;
+}
+
+/// Undoes `CastBarLayer`'s raised bottom padding for [child].
+///
+/// `AppShell` wraps itself in this: `DockInsets` adds the bar's height to
+/// the shell's own padding, so the raised padding would count the bar twice.
+class ExcludeCastBarPageInset extends StatelessWidget {
+  const ExcludeCastBarPageInset({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final extents = DockExtents.maybeOf(context);
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: extents == null || extents.pageInset == 0
+          ? media
+          : media.copyWith(
+              padding: media.padding.copyWith(bottom: extents.basePadding),
+              viewPadding:
+                  media.viewPadding.copyWith(bottom: extents.baseViewPadding),
+            ),
+      child: child,
+    );
+  }
 }
 
 /// Reports [child]'s laid-out extent along [axis] (its height by default)
