@@ -2835,7 +2835,7 @@ msgstr ""
 msgid "Already in sync"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1659
+#: lib/mydia_web/live/downloads_live/index.ex:1655
 #, elixir-autogen, elixir-format
 msgid "Already matched to that title."
 msgstr ""
@@ -3232,7 +3232,7 @@ msgstr ""
 msgid "Cancelling the download"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1325
+#: lib/mydia_web/live/downloads_live/index.ex:1321
 #, elixir-autogen, elixir-format
 msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} day."
 msgid_plural "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} days."
@@ -4005,7 +4005,7 @@ msgstr ""
 msgid "Could not start download for \"%{title}\""
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1309
+#: lib/mydia_web/live/downloads_live/index.ex:1305
 #, elixir-autogen, elixir-format
 msgid "Could not start removing that download"
 msgstr ""
@@ -4594,7 +4594,7 @@ msgstr ""
 msgid "Download installer"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1145
+#: lib/mydia_web/live/downloads_live/index.ex:1141
 #, elixir-autogen, elixir-format
 msgid "Download matched and import queued"
 msgstr ""
@@ -5007,7 +5007,7 @@ msgstr ""
 msgid "Failed to mark file as preferred"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1155
+#: lib/mydia_web/live/downloads_live/index.ex:1151
 #, elixir-autogen, elixir-format
 msgid "Failed to match download"
 msgstr ""
@@ -5171,7 +5171,7 @@ msgstr ""
 msgid "Failed to update the library"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1650
+#: lib/mydia_web/live/downloads_live/index.ex:1646
 #, elixir-autogen, elixir-format
 msgid "Failed to update the match."
 msgstr ""
@@ -6073,7 +6073,7 @@ msgstr ""
 msgid "Match files…"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1647
+#: lib/mydia_web/live/downloads_live/index.ex:1643
 #, elixir-autogen, elixir-format
 msgid "Match updated — the import will use the corrected match."
 msgstr ""
@@ -7682,7 +7682,7 @@ msgstr ""
 msgid "Re-match failed."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1656
+#: lib/mydia_web/live/downloads_live/index.ex:1652
 #, elixir-autogen, elixir-format
 msgid "Re-match queued — the file will be moved and relinked."
 msgstr ""
@@ -9506,12 +9506,12 @@ msgstr ""
 msgid "That changed since, so it was left as it is."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1437
+#: lib/mydia_web/live/downloads_live/index.ex:1433
 #, elixir-autogen, elixir-format
 msgid "That download is no longer in this list"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1277
+#: lib/mydia_web/live/downloads_live/index.ex:1273
 #: lib/mydia_web/live/media_live/show/download_events.ex:32
 #: lib/mydia_web/live/media_live/show/download_events.ex:155
 #, elixir-autogen, elixir-format
@@ -9658,12 +9658,12 @@ msgstr ""
 msgid "That title's type doesn't match an available library."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1151
+#: lib/mydia_web/live/downloads_live/index.ex:1147
 #, elixir-autogen, elixir-format
 msgid "That torrent is already tracked"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1137
+#: lib/mydia_web/live/downloads_live/index.ex:1133
 #, elixir-autogen, elixir-format
 msgid "That torrent is no longer in the client"
 msgstr ""
@@ -9694,7 +9694,7 @@ msgstr ""
 msgid "The download will be stopped and marked as cancelled."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.ex:1302
+#: lib/mydia_web/live/downloads_live/index.ex:1298
 #, elixir-autogen, elixir-format
 msgid "The last removal attempt is still finishing. Try again shortly."
 msgstr ""
@@ -22157,12 +22157,12 @@ msgstr ""
 msgid "When a target is reached"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:45
+#: lib/mydia_web/live/downloads_live/files_panel.ex:44
 #, elixir-autogen, elixir-format
 msgid "Couldn't update the file selection."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:81
+#: lib/mydia_web/live/downloads_live/files_panel.ex:79
 #, elixir-autogen, elixir-format
 msgid "Files"
 msgstr ""
@@ -22172,7 +22172,7 @@ msgstr ""
 msgid "Keep at least one video file."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:122
+#: lib/mydia_web/live/downloads_live/files_panel.ex:120
 #, elixir-autogen, elixir-format
 msgid "Save selection"
 msgstr ""

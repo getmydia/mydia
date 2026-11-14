@@ -220,24 +220,23 @@ defmodule Mydia.Downloads.Client.Rqbit do
 
       with {:ok, details} <- fetch_details(req, client_id),
            {:ok, stats} <- fetch_stats(req, client_id) do
-        progress = List.wrap(stats["file_progress"])
-
-        files =
-          details["files"]
-          |> List.wrap()
-          |> Enum.with_index()
-          |> Enum.map(fn {file, index} ->
-            %TorrentFile{
-              index: index,
-              path: file_path(file),
-              size: file["length"] || 0,
-              included?: file["included"] != false,
-              downloaded: Enum.at(progress, index) || 0
-            }
-          end)
-
-        {:ok, files}
+        {:ok, build_torrent_files(details["files"], List.wrap(stats["file_progress"]))}
       end
+    end)
+  end
+
+  defp build_torrent_files(files, progress) do
+    files
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.map(fn {file, index} ->
+      %TorrentFile{
+        index: index,
+        path: file_path(file),
+        size: file["length"] || 0,
+        included?: file["included"] != false,
+        downloaded: Enum.at(progress, index) || 0
+      }
     end)
   end
 

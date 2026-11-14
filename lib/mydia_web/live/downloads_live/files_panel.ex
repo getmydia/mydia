@@ -38,16 +38,14 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
         {:noreply, assign(socket, :error, gettext("Keep at least one video file."))}
 
       {:error, :imported} ->
-        send(self(), {:flash, :error, gettext("This download was already imported.")})
-        {:noreply, load(socket)}
+        {:noreply, load(socket, gettext("This download was already imported."))}
 
       {:error, _reason} ->
-        send(self(), {:flash, :error, gettext("Couldn't update the file selection.")})
-        {:noreply, load(socket)}
+        {:noreply, load(socket, gettext("Couldn't update the file selection."))}
     end
   end
 
-  defp load(socket) do
+  defp load(socket, error \\ nil) do
     download = socket.assigns.download
     supported = TorrentFiles.supported?(download)
 
@@ -58,7 +56,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
         _ -> []
       end
 
-    assign(socket, supported: supported, files: files, error: nil)
+    assign(socket, supported: supported, files: files, error: error)
   end
 
   defp parse_index(value) do

@@ -1090,10 +1090,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # Grab outcomes are broadcast on the "downloads" topic and handled by
   # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
   # so the catch-all below keeps meaning "genuinely unexpected message".
-  # From the drawer's files panel, which cannot flash on its own.
-  def handle_info({:flash, kind, message}, socket) when kind in [:info, :error],
-    do: {:noreply, put_flash(socket, kind, message)}
-
   def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
   def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
   def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
