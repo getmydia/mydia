@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/files/files_scan_controller.dart';
+import 'package:player/core/sources/files/media_info/files_probe_queue.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/files/files_scan_banner.dart';
 
@@ -69,4 +70,52 @@ void main() {
     expect(find.text('Reading folders: 1,204'), findsOneWidget);
     expect(find.textContaining('of 0'), findsNothing);
   });
+
+  testWidgets('shows Reading file details while probing after a scan',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        filesScanProvider(fakeSourceId)
+            .overrideWith(() => _IdleScan(fakeSourceId)),
+        filesProbeQueueProvider(fakeSourceId)
+            .overrideWith(() => _FixedProbe(fakeSourceId)),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+      ),
+    ));
+    expect(find.byKey(const Key('files-probe-progress')), findsOneWidget);
+    expect(find.text('Reading file details 3 of 10'), findsOneWidget);
+    expect(find.byKey(const Key('files-scan-banner')), findsNothing);
+  });
+
+  test('an idle scan shows the banner only while probing', () {
+    const idle = ScanState(done: 10, total: 10);
+    expect(filesScanBannerShows(idle), isFalse);
+    expect(
+        filesScanBannerShows(idle,
+            probe: const ProbeProgress(running: true, done: 1, total: 2)),
+        isTrue);
+    expect(
+        filesScanBannerShows(idle,
+            probe: const ProbeProgress(done: 2, total: 2)),
+        isFalse);
+  });
+}
+
+class _IdleScan extends FilesScanController {
+  _IdleScan(super.sourceId);
+
+  @override
+  ScanState build() => const ScanState(done: 10, total: 10);
+}
+
+class _FixedProbe extends FilesProbeQueue {
+  _FixedProbe(super.sourceId);
+
+  @override
+  ProbeProgress build() =>
+      const ProbeProgress(running: true, done: 3, total: 10);
 }

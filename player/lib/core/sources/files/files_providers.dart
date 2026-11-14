@@ -15,6 +15,7 @@ import '../../p2p/peer_files_host.dart'
 import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
 import '../../p2p/p2p_service.dart' show p2pServiceProvider;
 import '../../p2p/peer_files_backend.dart';
+import '../../player/media_probe.dart' show mediaProbeProvider;
 import '../../p2p/peer_files_client.dart' show peerFilesClientProvider;
 import '../../p2p/peer_files_store.dart' show PeerFilesStore;
 import '../../p2p/peer_files_transport.dart' show P2pPeerFilesTransport;
@@ -34,6 +35,7 @@ import 'files_media_source.dart';
 import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
+import 'media_info/files_media_info_cache.dart';
 import 'media_names.dart';
 import 'peer_files_sources.dart'
     show
@@ -65,6 +67,12 @@ Future<void> openFilesLibraryBoxes() async {
     progressStore: progressStore,
   );
   await openPeerFilesBoxes();
+  // A cache, not worth failing startup: without it details are probed again.
+  try {
+    await Hive.openBox<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName);
+  } catch (e) {
+    debugPrint('[FilesSource] Media info cache box did not open: $e');
+  }
 }
 
 /// Opens the boxes peer file sharing keeps: the revisions this device
@@ -112,6 +120,14 @@ final peerSyncStoreProvider = Provider<PeerSyncStore>((ref) {
         Hive.box<Map<dynamic, dynamic>>(PeerSyncStore.boxName));
   }
   return InMemoryPeerSyncStore();
+});
+
+/// The probe result cache, or null when its box is not open (tests, or a
+/// failed startup).
+final filesMediaInfoCacheProvider = Provider<FilesMediaInfoCache?>((ref) {
+  if (!Hive.isBoxOpen(FilesMediaInfoCache.boxName)) return null;
+  return FilesMediaInfoCache(
+      Hive.box<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName));
 });
 
 /// Whether the boxes [openFilesLibraryBoxes] opens are there. False when
@@ -282,6 +298,8 @@ FilesMediaSource buildFilesSource(
               nodeId: nodeId,
             ))
         : null,
+    probe: ref.read(mediaProbeProvider),
+    mediaInfoCache: ref.read(filesMediaInfoCacheProvider),
     // An SMB account's playback URLs outlive this source: saving new
     // credentials or a folder rebuilds it, and a playback in progress
     // streams through them. They go with the account

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/media_stream.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/media_info_sheet.dart';
 
@@ -123,5 +124,27 @@ void main() {
 
       expect(find.byKey(const Key('media-info-retry')), findsOneWidget);
     });
+
+    testWidgets('a source failure names it instead of the generic line',
+        (tester) async {
+      await pumpSheet(
+          tester, _FailingMediaInfoSource(const SourceException.unreachable()));
+
+      expect(find.text(_en.sourceErrorUnreachable), findsOneWidget);
+      expect(find.text(_en.mediaInfoLoadFailed), findsNothing);
+      expect(find.byKey(const Key('media-info-retry')), findsOneWidget);
+    });
   });
+}
+
+final _en = lookupAppLocalizations(const Locale('en'));
+
+/// A source whose media info read fails with [error].
+class _FailingMediaInfoSource extends FakeCapableSource {
+  _FailingMediaInfoSource(this.error);
+
+  final SourceException error;
+
+  @override
+  Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async => throw error;
 }

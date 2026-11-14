@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/models/download_option.dart';
 import '../../../domain/models/download_plan.dart';
+import '../../../domain/models/media_stream.dart' show MediaFileInfo;
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -17,6 +18,8 @@ import '../../p2p/peer_sync_records.dart';
 import '../../p2p/peer_sync_store.dart';
 import '../../playback/local_playback_progress.dart';
 import '../../playback/playback_progress_store.dart';
+import '../../player/media_probe.dart';
+import '../../player/mpv_probe_mapping.dart' show ProbeResult;
 import '../cache/source_keys.dart';
 import '../cache/source_rules.dart';
 import '../capabilities.dart';
@@ -29,6 +32,8 @@ import 'files_ids.dart';
 import 'files_queries.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
+import 'media_info/files_media_info.dart';
+import 'media_info/files_media_info_cache.dart';
 import 'media_names.dart';
 import 'peer_files_sources.dart' show isPeerFilesSource;
 
@@ -55,7 +60,8 @@ class FilesMediaSource extends MediaSource
         RecentlyAdded,
         UnwatchedListing,
         MatchEditing,
-        Downloadable {
+        Downloadable,
+        MediaInfo {
   FilesMediaSource({
     required this.source,
     required this.backend,
@@ -72,7 +78,11 @@ class FilesMediaSource extends MediaSource
     String? syncAccountId,
     String Function()? peerDeviceName,
     void Function(String nodeId)? onPeerFilesChanged,
+    MediaProbe? probe,
+    FilesMediaInfoCache? mediaInfoCache,
   })  : _peerDeviceName = peerDeviceName,
+        _probe = probe,
+        _mediaInfoCache = mediaInfoCache,
         _onPeerFilesChanged = onPeerFilesChanged,
         syncAccountId = syncAccountId ?? source.account.id,
         _progress = progress,
@@ -106,6 +116,15 @@ class FilesMediaSource extends MediaSource
   final void Function()? _onSyncMutation;
   final void Function()? _onReauthNeeded;
   final FilesInvalidate? _invalidate;
+
+  /// Reads stream details from a file on demand; none means index only.
+  final MediaProbe? _probe;
+
+  /// Probe results by account and file; none means nothing is kept.
+  final FilesMediaInfoCache? _mediaInfoCache;
+
+  /// Probes running now, by file key, so concurrent asks share one.
+  final _probing = <String, Future<ProbeResult?>>{};
 
   /// The lending device's name, for a library a paired player lends.
   final String Function()? _peerDeviceName;
@@ -189,6 +208,7 @@ class FilesMediaSource extends MediaSource
         SourceCapability.unwatchedListing,
         SourceCapability.matchEditing,
         SourceCapability.castable,
+        SourceCapability.mediaInfo,
         if (_downloadable) SourceCapability.downloadable,
       };
 
@@ -762,14 +782,83 @@ class FilesMediaSource extends MediaSource
       );
     } on BackendFailure catch (e) {
       reportReachability(e);
-      throw switch (e) {
+      throw _backendException(e);
+    }
+  }
+
+  SourceException _backendException(BackendFailure e) => switch (e) {
         BackendUnauthorized() ||
         BackendPermissionLost() =>
           const SourceException.unauthorized(),
         BackendNotFound() => const SourceException.notFound(),
         BackendUnreachable() => const SourceException.unreachable(),
       };
+
+  // MediaInfo
+
+  @override
+  Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
+    final detail = await item(ref);
+    final out = <MediaFileInfo>[];
+    for (final version in detail.versions) {
+      final file = indexedFile(version.id);
+      final root = file == null ? null : rootFor(file);
+      if (file == null || root == null) continue;
+      final probe = _mediaInfoCache?.get(source.account.id, file) ??
+          await probeFileKey(file.key);
+      out.add(filesMediaFileInfo(file: file, root: root, probe: probe));
     }
+    return out;
+  }
+
+  /// Probes [fileKey] and caches a result. Concurrent calls for one file
+  /// share a probe; a failed read is null and is not cached, so the next
+  /// call tries again. A lent library's play failures throw as in
+  /// [playableForFileKey].
+  Future<ProbeResult?> probeFileKey(String fileKey) {
+    final running = _probing[fileKey];
+    if (running != null) return running;
+    final started = _probeOnce(fileKey);
+    _probing[fileKey] = started;
+    // Removed on success and on failure, so a later call probes again.
+    // The caller gets the error; this copy of it is dropped.
+    started.whenComplete(() => _probing.remove(fileKey)).ignore();
+    return started;
+  }
+
+  Future<ProbeResult?> _probeOnce(String fileKey) async {
+    final probe = _probe;
+    if (probe == null) return null;
+    // The fingerprint the bytes are read under: taken before the read, so a
+    // scan that replaces the file meanwhile cannot file old streams under
+    // the new size and time.
+    final before = indexedFile(fileKey);
+    final PlayableFile playable;
+    try {
+      playable = await playableForFileKey(fileKey);
+    } on BackendFailure catch (e) {
+      // A lent library's failures arrive already mapped, so this is a
+      // local or network share.
+      reportReachability(e);
+      throw _backendException(e);
+    }
+    final result = await probe.probe(playable);
+    final file = indexedFile(fileKey);
+    final cache = _mediaInfoCache;
+    if (result != null &&
+        before != null &&
+        file != null &&
+        file.size == before.size &&
+        file.modified == before.modified &&
+        cache != null) {
+      try {
+        await cache.put(source.account.id, file, result);
+      } catch (e) {
+        // A cache failure must not hide a probe that worked.
+        debugPrint('[FilesMediaSource] Media info not cached: $e');
+      }
+    }
+    return result;
   }
 
   bool _disposed = false;

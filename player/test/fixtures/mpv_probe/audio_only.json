@@ -1,0 +1,10 @@
+{
+  "file-format": "mp3",
+  "duration": 241.3,
+  "file-size": 9652000,
+  "track-list": [
+    {"id": 1, "type": "video", "src-id": 0, "albumart": true, "image": true, "default": true, "codec": "mjpeg", "demux-w": 600, "demux-h": 600},
+    {"id": 1, "type": "audio", "src-id": 1, "default": true, "codec": "mp3", "demux-channel-count": 2, "demux-channels": "stereo", "demux-samplerate": 44100, "demux-bitrate": 320000}
+  ],
+  "video-params": null
+}

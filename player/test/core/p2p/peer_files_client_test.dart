@@ -14,8 +14,10 @@ import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/relay/relay_api_client.dart';
+import 'package:player/core/player/mpv_probe_mapping.dart' show ProbeResult;
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
+import 'package:player/core/sources/files/media_info/files_media_info_cache.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -508,6 +510,42 @@ void main() {
     expect(client.accounts.value, isEmpty);
     expect(store.revision(nas), isNull);
     expect(store.storedAccounts(), isEmpty);
+  });
+
+  test('a dropped copy also clears its cached media info', () async {
+    final infoBox =
+        await Hive.openBox<Map<dynamic, dynamic>>('pfc_info_${n++}');
+    final cache = FilesMediaInfoCache(infoBox);
+    final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
+    final nas = peerFilesAccountId(_desk, _smbId);
+    final at = DateTime.fromMillisecondsSinceEpoch(1700000000000);
+    final item = IndexedFile(
+        key: 'k1',
+        rootId: 'r',
+        path: 'a.mkv',
+        size: 1,
+        modified: at,
+        firstSeen: at);
+    await cache.put(films, item, const ProbeResult(container: 'matroska'));
+    await cache.put(nas, item, const ProbeResult(container: 'matroska'));
+
+    client.dispose();
+    client = PeerFilesClient(
+      transport: transport,
+      sync: sync,
+      store: store,
+      localAccounts: () => local,
+      localAccountsReady: localReady,
+      localAccountsChanged: localChanges.stream,
+      peerConnected: connected.stream,
+      mediaInfoCache: cache,
+    );
+    await client.start();
+    await sync.revokePeer(_tv);
+    await client.refresh();
+
+    expect(cache.get(films, item), isNull);
+    expect(cache.get(nas, item), isNotNull);
   });
 
   test('offline_member_keeps_accounts', () async {

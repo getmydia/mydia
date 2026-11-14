@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show Locale;
@@ -6,7 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
+import 'package:player/core/player/media_probe.dart';
+import 'package:player/core/player/mpv_probe_mapping.dart';
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
+import 'package:player/core/sources/files/media_info/files_media_info_cache.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/match/file_matcher.dart';
 import 'package:player/core/sources/files/media_names.dart';
@@ -90,6 +95,10 @@ class FilesFixture {
   }
 
   SourceId get sourceId => filesLocalSource.id;
+
+  /// A media info cache over a box of its own, closed with the fixture.
+  Future<FilesMediaInfoCache> mediaInfoCache() async => FilesMediaInfoCache(
+      await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_${_n++}'));
 
   ItemRef ref(ItemKind kind, String id) =>
       ItemRef(sourceId: sourceId, kind: kind, externalId: id);
@@ -202,6 +211,27 @@ class FilesFixture {
         durationSeconds: duration,
         updatedAt: at ?? filesT0,
       ));
+}
+
+/// A [MediaProbe] that answers [result] (null is a failed read) and records
+/// every URL it was asked for. While [gate] is set, each probe waits on it.
+class FakeMediaProbe implements MediaProbe {
+  FakeMediaProbe([this.result]);
+
+  ProbeResult? result;
+  Completer<void>? gate;
+  final probed = <String>[];
+
+  @override
+  Future<ProbeResult?> probe(
+    PlayableFile playable, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    probed.add(playable.url);
+    final g = gate;
+    if (g != null) await g.future;
+    return result;
+  }
 }
 
 /// A relay that is always down, unless [movies] or [shows] answer a search.

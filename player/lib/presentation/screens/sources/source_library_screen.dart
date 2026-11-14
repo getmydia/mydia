@@ -24,6 +24,7 @@ import '../../../l10n/l10n.dart';
 import '../../../core/sources/source.dart' show SourceKind;
 import '../../widgets/browse_grid.dart';
 import '../../../core/sources/files/files_scan_controller.dart';
+import '../../../core/sources/files/media_info/files_probe_queue.dart';
 import '../../../core/sources/files/peer_files_sources.dart'
     show refreshPeerFilesSources;
 import '../../widgets/files/files_scan_banner.dart';
@@ -405,14 +406,16 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   }
 
   /// Files libraries show scan progress above the list while a scan runs,
-  /// and after one that skipped folders, in its own band, so it never covers
+  /// after one that skipped folders, and while file details are read in the
+  /// background on desktop, in its own band, so it never covers
   /// the first rows. [content] is built
   /// with the top padding its scroll view should keep.
   Widget _withScanBanner(double top, Widget Function(double top) content) {
     final sourceId = widget.library.sourceId;
     final source = ref.watch(mediaSourceProvider(sourceId));
     if (source?.kind != SourceKind.files ||
-        !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)))) {
+        !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)),
+            probe: ref.watch(filesProbeQueueProvider(sourceId)))) {
       return KeyedSubtree(key: _contentKey, child: content(top));
     }
     return Column(
