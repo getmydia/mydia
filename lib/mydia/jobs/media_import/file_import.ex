@@ -117,6 +117,9 @@ defmodule Mydia.Jobs.MediaImport.FileImport do
     metadata = download.metadata || %{}
     expected_count = metadata["episode_count"]
 
+    skipped_count = length(List.wrap(metadata["skipped_owned_episode_ids"]))
+    expected_count = if is_integer(expected_count), do: expected_count - skipped_count
+
     if not is_integer(expected_count) or expected_count <= 0 do
       nil
     else
