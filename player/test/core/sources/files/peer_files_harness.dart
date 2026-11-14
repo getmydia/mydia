@@ -37,6 +37,12 @@ class FakePeerFilesClient implements PeerFilesClient {
   @override
   ValueListenable<List<PeerSharedAccount>> get accounts => list;
 
+  /// The `nodeId` of every [refresh], in order.
+  final refreshed = <String?>[];
+
+  @override
+  Future<void> refresh({String? nodeId}) async => refreshed.add(nodeId);
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');

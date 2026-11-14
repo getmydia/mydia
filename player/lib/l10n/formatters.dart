@@ -112,6 +112,9 @@ extension AppFormatters on AppLocalizations {
       SourceFault.stashReportedError => sourceFaultStashReportedError,
       SourceFault.stashStatus => sourceFaultStashStatus(value),
       SourceFault.stashNotConfirmed => sourceFaultStashNotConfirmed,
+      SourceFault.peerFilesHostUnreachable => peerFilesHostUnreachable(value),
+      SourceFault.peerFilesFileGone => peerFilesFileGone(value),
+      SourceFault.peerFilesShareDown => peerFilesShareDown(value),
     };
   }
 

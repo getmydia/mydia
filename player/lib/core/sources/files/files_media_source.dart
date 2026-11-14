@@ -70,7 +70,11 @@ class FilesMediaSource extends MediaSource
     AppLocalizations Function()? l10n,
     void Function()? onDispose,
     String? syncAccountId,
-  })  : syncAccountId = syncAccountId ?? source.account.id,
+    String Function()? peerDeviceName,
+    void Function(String nodeId)? onPeerFilesChanged,
+  })  : _peerDeviceName = peerDeviceName,
+        _onPeerFilesChanged = onPeerFilesChanged,
+        syncAccountId = syncAccountId ?? source.account.id,
         _progress = progress,
         _tmdb = tmdb,
         _syncStore = syncStore,
@@ -102,6 +106,13 @@ class FilesMediaSource extends MediaSource
   final void Function()? _onSyncMutation;
   final void Function()? _onReauthNeeded;
   final FilesInvalidate? _invalidate;
+
+  /// The lending device's name, for a library a paired player lends.
+  final String Function()? _peerDeviceName;
+
+  /// Asks for the lending host's manifest again, for a library a paired
+  /// player lends.
+  final void Function(String nodeId)? _onPeerFilesChanged;
 
   /// The account id sync keys carry. A library lent by a paired player
   /// keys on the host's id for it, so watch state lands on the host's
@@ -247,7 +258,44 @@ class FilesMediaSource extends MediaSource
         'Playable file not found',
       );
     }
-    return backend.playable(filesBackendPath(root, indexed.path));
+    final path = filesBackendPath(root, indexed.path);
+    if (!_isPeer) return backend.playable(path);
+    try {
+      return await backend.playable(path);
+    } on BackendFailure catch (e) {
+      throw _peerPlayFailure(e);
+    }
+  }
+
+  /// What a failed play from a lent library tells the viewer, worded with
+  /// the lending device's name. A missing file or a refused read also asks
+  /// the client for that host's manifest, which is where a withdrawn file
+  /// or a revoked grant becomes visible; the revocation itself comes from
+  /// the roster, not from here.
+  SourceException _peerPlayFailure(BackendFailure e) {
+    final device = _peerDeviceName?.call() ?? '';
+    final nodeId = source.server.machineIdentifier;
+    void refresh() {
+      if (nodeId != null) _onPeerFilesChanged?.call(nodeId);
+    }
+
+    switch (e) {
+      case BackendNotFound():
+        refresh();
+        return SourceException.fault(SourceFault.peerFilesFileGone,
+            detail: device);
+      case BackendUnauthorized() || BackendPermissionLost():
+        refresh();
+        return const SourceException.unauthorized();
+      case BackendUnreachable(status: 502):
+        // The host answered, so it is connected: the status stays as is.
+        return SourceException.fault(SourceFault.peerFilesShareDown,
+            detail: device);
+      case BackendUnreachable():
+        reportReachability(e);
+        return SourceException.fault(SourceFault.peerFilesHostUnreachable,
+            detail: device);
+    }
   }
 
   @override

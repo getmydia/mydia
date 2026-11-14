@@ -554,6 +554,57 @@ files account in again (`/sources/add/files?account=`) redirects to the
 folder picker for `flocal` and to the prefilled WebDAV form otherwise.
 `removeFilesAccount` removes the record and secrets, then clears the index.
 
+### Peer files sources
+
+A paired player can lend its files libraries to the others in its sync group.
+Each lent account is a files `Source` that `peerFilesSourcesProvider`
+(`files/peer_files_sources.dart`) derives from `PeerFilesClient.accounts`. None
+is stored: it cannot be renamed, rescanned or removed here, and it goes when
+its host stops lending it (the host is revoked, this device left the group, or
+the host's manifest no longer lists the account). The label is
+`<device> · <account>`, such as "Living Room TV · Movies".
+
+The account id is `p<12 hex>_<host account id>`: the first 12 hex characters
+of the host's node id, then the host's own id for the account
+(`peerFilesAccountId`). `isPeerFilesSource` recognises the prefix and
+`peerFilesHostAccountId` strips it. Everything that edits a files source
+checks the first one. The host's node id is the server's
+`machineIdentifier`, which is where every read is sent.
+
+Dedupe: when a host lends an SMB or WebDAV share this device already has,
+the client skips it. Two accounts are the same share when their normalized
+URLs agree (`filesDedupeKey`), whichever device stored them. Folders on a
+device have no such key, so a lent `flocal` always shows, and it never
+collides with this device's own because the prefix differs.
+
+The source reads the live copy of the host's index from `PeerFilesStore`, and
+is rebuilt when a new copy lands. It is read-only on purpose. The index is the
+host's: the next copy fetched replaces whatever this device wrote, so a scan
+or any index write here would be lost and could race the replacement. There is
+no scan (the host scans and bumps its revision), matching and pinning are
+unsupported, and files are not downloadable. Watch state is the exception: it
+syncs on the host's account id (`syncAccountId`), so it lands on the host's
+records.
+
+Read path: `PeerFilesBackend.playable` opens one byte of the file as an
+`HlsStream` request to the host with session id `peerfile:<host account id>`
+and the host's full backend path as base64url without padding
+(`MediaRoutes.peerFileToken`). A 404, 403 or 502 there fails the play before
+the video pipeline sees it. Then it starts a local proxy target for the host
+and returns `/peerfile/<host account id>/<token>/stream` on it. The host's side
+is described in `native/README.md`.
+
+Status comes from the probe: a peer backend is reachable only while its host
+is connected, so an unconnected host reads `unreachable` and the library still
+browses from the local copy. The source probes again when its host connects
+(`peerConnectedProvider`), not on resume, since reachability is connection.
+
+Errors are worded with the device name (`SourceFault.peerFiles*`): an
+unconnected or silent host is "isn't reachable", a 502 from a host that is up
+is "can't reach its share", and a 404 is "no longer on" the device and asks the
+client to refresh that host's manifest. A 403 also refreshes it; revocation
+itself arrives from the roster, so a refused read never tears sources down.
+
 ### Peer-to-peer watch-state and match-pin sync
 
 When players pair directly over iroh (`/settings/paired-devices`), watch

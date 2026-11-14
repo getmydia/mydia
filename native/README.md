@@ -128,6 +128,37 @@ connection (`connection_stalled`, or the connection closing under it). It never 
 dial to the same address rarely fixes, and never a mutation, which may already
 have run. Media streams have their own recovery and are not probed.
 
+## Paired players read each other's files over HlsStream
+
+Files libraries lent between paired players use two paths. The index and
+manifest travel as `MydiaRequest::PeerFiles` (`PeerFilesRequest::Manifest` and
+`IndexPage`, CBOR, each carrying an auth proof), answered by Dart through the
+peer files channel; the server listener refuses it. File bytes never ride
+that request. They use the existing `HlsStream` request with session id
+`peerfile:<host account id>` and the host's file path as base64url without
+padding (`PEER_FILE_SESSION_PREFIX`). Range support is the same as any other
+stream.
+
+`peer_files_host.rs` in `mydia_player_p2p` answers those reads, and it is the
+security boundary:
+
+- Only peers in the member allowlist Dart pushes in are answered; anyone else
+  gets 403.
+- Rust never decides which paths are readable. It asks Dart for a grant per
+  `(account id, path)`. Dart grants only indexed files and their sidecars, and
+  anything without a grant is 404.
+- A grant is cached per `(account id, path)` so a seeking player does not ask
+  Dart on every range. It is dropped when its read finds nothing readable, and
+  when Dart invalidates the account (its index changed). A grant resolved
+  across an invalidation is served but not cached.
+- Each peer gets 4 concurrent reads (`READS_PER_PEER`). The fifth waits for a
+  slot rather than failing.
+- A grant request Dart does not answer in 10 seconds (`GRANT_TIMEOUT`) is a
+  404.
+
+A share the host cannot reach answers 502 and drops that account's grants;
+the viewer words it differently from a host that never answered.
+
 ## Tracing the transport on a running server
 
 The NIF's logs reach the journal only through the Elixir Logger, which drops

@@ -15,6 +15,7 @@ import '../../p2p/peer_files_host.dart'
 import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
 import '../../p2p/p2p_service.dart' show p2pServiceProvider;
 import '../../p2p/peer_files_backend.dart';
+import '../../p2p/peer_files_client.dart' show peerFilesClientProvider;
 import '../../p2p/peer_files_store.dart' show PeerFilesStore;
 import '../../p2p/peer_files_transport.dart' show P2pPeerFilesTransport;
 import '../../p2p/peer_sync_service.dart';
@@ -38,6 +39,7 @@ import 'peer_files_sources.dart'
     show
         isPeerFilesSource,
         peerConnectedProvider,
+        peerFilesAccountsProvider,
         peerFilesHostAccountId,
         peerFilesIndexProvider;
 import 'files_accounts.dart' show filesAccountsProvider;
@@ -244,6 +246,21 @@ FilesMediaSource buildFilesSource(
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
     syncAccountId: peer ? peerFilesHostAccountId(source.account.id) : null,
+    // Read when an error is worded, so a renamed device shows its new name.
+    peerDeviceName: peer
+        ? () =>
+            container
+                .read(peerFilesAccountsProvider)
+                .where((a) => a.localAccountId == source.account.id)
+                .firstOrNull
+                ?.deviceName ??
+            source.server.name
+        : null,
+    onPeerFilesChanged: peer
+        ? (nodeId) => unawaited(container.read(peerFilesClientProvider).refresh(
+              nodeId: nodeId,
+            ))
+        : null,
     // An SMB account's playback URLs outlive this source: saving new
     // credentials or a folder rebuilds it, and a playback in progress
     // streams through them. They go with the account
