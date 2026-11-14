@@ -3,25 +3,25 @@ import { composeYaml } from '../data/compose';
 
 const steps = [
   {
-    title: 'Generate your secrets',
+    title: 'Generate secret keys',
     body: 'Run openssl rand -base64 48 twice, once for SECRET_KEY_BASE and once for GUARDIAN_SECRET_KEY.',
   },
   {
-    title: 'Create the file',
-    body: 'Save the Compose file below as docker-compose.yml and paste both secrets into it, and point the media paths at your library.',
+    title: 'Create docker-compose.yml',
+    body: 'Save the Compose file below as docker-compose.yml, paste both secret keys into it, and set the media volume path to your library directory.',
   },
   {
     title: 'Start Mydia Server',
-    body: 'Run docker compose up -d, then open http://localhost:4000.',
+    body: 'Run docker compose up -d, then open http://localhost:4000 to create your admin account.',
   },
 ];
 ---
 
 <section id="install" class="py-20 px-4 scroll-mt-16">
   <div class="max-w-3xl mx-auto">
-    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">Get started in minutes</h2>
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">Install with Docker Compose</h2>
     <p class="text-base-content/60 text-center mb-10 max-w-xl mx-auto">
-      Deploy Mydia Server with Docker Compose. Point it at your media and you're done.
+      Mydia Server runs as a single container with SQLite included.
     </p>
 
     <ol class="space-y-4 mb-8">

@@ -1,31 +1,28 @@
 ---
 title: "Welcome to Mydia"
 date: 2026-02-21
-summary: "Introducing the Mydia project blog. Follow along for updates, release notes, and development insights."
+summary: "Project updates, release notes, and development notes from Mydia."
 tags: ["announcement"]
 ---
 
-Welcome to the official Mydia blog. This is where we'll share project updates, release notes, and development insights.
+This blog covers Mydia releases, architecture decisions, and project updates.
 
 ## What is Mydia?
 
-Mydia is a self-hosted media management application for organizing and tracking TV shows and movies. It's designed for people who want complete control over their media collection data, running on their own hardware.
+Mydia is a self-hosted media manager for TV shows and movies. It runs on your own hardware and keeps your library and metadata in a local database under your control.
 
-### Key features
+### Features
 
-- **Media library management** - Organize your movies and TV shows with automatic file detection
-- **Automatic metadata** - Fetches artwork, descriptions, and episode data from TVDB and TMDB
-- **P2P remote access** - Stream your media from anywhere using decentralized peer-to-peer connectivity
-- **Self-hosted** - Your data stays on your server, under your control
-- **Docker deployment** - Get running in minutes with Docker Compose
+- **Media library management**: Scans movie and TV show directories and matches files automatically
+- **Metadata fetching**: Pulls artwork, descriptions, and episode data from TVDB and TMDB
+- **Peer-to-peer remote access**: Streams media outside your local network without port forwarding
+- **Self-hosted**: Stores library state and user accounts on your own server
+- **Docker Compose deployment**: Runs in a single container with SQLite included
 
-## What to expect
+## What we will post here
 
-We'll be posting here about:
+- Release announcements and changelogs
+- Architecture and design notes
+- Configuration and deployment guides
 
-- New feature releases
-- Architecture and development decisions
-- Tips for getting the most out of Mydia
-- Roadmap updates
-
-Stay tuned, and feel free to [check out the project on GitHub](https://github.com/getmydia/mydia).
+Source code and issue tracking are on [GitHub](https://github.com/getmydia/mydia).
