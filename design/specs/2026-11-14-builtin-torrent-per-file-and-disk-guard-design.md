@@ -93,10 +93,16 @@ For each file:
 | --- | --- |
 | Video whose name parses (`Mydia.Library.ReleaseParser`) to episodes of this show, at least one of them targeted or without a file | yes |
 | Video whose episodes are all untargeted and already have a file | no |
-| Sample, trailer or extra (`SampleDetector.detect/1`, path rules only) | no |
+| Sample, trailer or extra (not `FileSelection.importable?/1`) | no |
 | Subtitle whose base name matches a kept video | yes |
 | Video or subtitle that does not parse or does not match | yes |
 | Anything else (`.nfo`, `.txt`, `.jpg`, `.url`, `.exe`) | no |
+
+Junk is decided by `Mydia.Downloads.FileSelection` (`importable?/1`, the
+importer's video extensions minus samples, trailers and extras;
+`subtitle?/1`), the rules the built-in client's post-add
+`BuiltIn.FileSelectionPolicy` uses, so the two agree. `WantedFiles` only
+adds the episode rules.
 
 "Has a file" uses the rule `Queue.Duplicates` already applies: a
 `MediaFile` with that `episode_id`, not trashed, `extra_kind` nil. Episodes
@@ -110,8 +116,7 @@ The selection keeps every file (`only_files: nil`) when nothing would be
 dropped, and when every video would be dropped (a pack that adds nothing is not this feature's call
 to make; the duplicate check already handles it).
 
-`SampleDetector` checks that read file size or contents are skipped: at
-selection time nothing is on disk. Only the path rules apply.
+Sample detection uses path rules only: at selection time nothing is on disk.
 
 ### Adapter and grab
 
@@ -137,8 +142,13 @@ other adapters ignore.
 fifth tuple element, and both callers (`Queue.Lifecycle.initiate_download/2`
 and `Grabber.run_grab/3`) merge `WantedFiles.to_metadata/1` into the
 download's metadata: `"selected_files"` (indices), `"file_episodes"` (file
-index, as a string, to the one episode id a kept video parsed to) and
-`"skipped_owned_episode_ids"`.
+index, as a string, to the one episode id a kept video parsed to),
+`"skipped_owned_episode_ids"` and `"file_selection" => %{"source" => "auto",
+"skipped" => n}` (`FileSelectionPolicy.auto_entry/1`, `n` the files left
+out). That last entry is final for `FileSelectionPolicy`, so the policy never
+re-selects files this selection skipped; a manual selection still replaces it.
+With no selection nothing is recorded, and the policy deselects junk after the
+add.
 
 `FileImport.detect_partial_pack/2` subtracts `skipped_owned_episode_ids` from
 the expected count, so a pack whose owned episodes were skipped is not

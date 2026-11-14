@@ -93,9 +93,12 @@ applies to new grabs; torrents already running finish where they started.
   torrent still in the client, including ones you resumed by hand, so those
   already past the target are removed, with their files, within a few
   minutes. Leave both fields blank for no target.
-- **File selection.** When a torrent's file list is known, Mydia skips the
-  files it would not import (samples, trailers, extras and anything that is not a video or subtitle)
-  and keeps the videos and subtitles. If a torrent has no importable video,
+- **File selection.** Mydia skips the files it would not import (samples,
+  trailers, extras and anything that is not a video or subtitle) and keeps
+  the videos and subtitles. It normally chooses before adding the torrent,
+  which also skips season-pack episodes you already have (see "Only the files
+  Mydia needs" below). If it could not read the file list then, it skips the
+  junk as soon as the list is known. If a torrent has no importable video,
   everything is downloaded. Open a download in Downloads to see its Files
   panel and tick or untick files yourself; your choice replaces the automatic
   one and stays until the download is imported. At least one video file must
@@ -125,8 +128,12 @@ For a season pack, episodes your library already has are skipped, unless your
 search asked for that episode specifically. Samples, trailers, extras, and
 files like `.nfo` or `.txt` are left out. Subtitles are kept, except those
 for episodes that are skipped. A video Mydia cannot match to the show is kept too, so an oddly named
-release still gets imported rather than silently dropped. If Mydia cannot read
-the file list, or cannot choose from it, it downloads everything, as before.
+release still gets imported rather than silently dropped. Samples and junk
+are judged by the same rules as the built-in client's file selection above.
+You can still change the choice in the download's Files panel. If Mydia
+cannot read the file list, or cannot choose from it, a rqbit you run yourself
+downloads everything, and the built-in client falls back to skipping only the
+junk once the torrent's file list is known.
 
 Because only part of the torrent is downloaded, it also seeds only the pieces
 it holds. On a private tracker, a partial pack contributes less to the swarm

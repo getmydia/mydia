@@ -177,7 +177,11 @@ name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
 
-**File selection.** `BuiltIn.FileSelectionPolicy` (run by `BuiltIn.Policies`
+**File selection.** Most built-in torrents get their files chosen before
+the add, by `WantedFiles` (see "Wanted files and early import" below), which
+records the policy's final `auto` entry so nothing re-selects what it skipped.
+`BuiltIn.FileSelectionPolicy` is the fallback for a grab whose listing failed
+or timed out. It (run by `BuiltIn.Policies`
 for rows that are in the client and downloading, paused, checking or queued)
 deselects junk once per torrent, as soon as the file list is known (a magnet
 has none until its metadata resolves; an empty list waits, and so does a
@@ -306,8 +310,17 @@ leave the tunnel from the port the peer contacted. See
 `Client.Rqbit` lists a torrent's files before adding it, and
 `Queue.ClientSelection` decides which to keep (`WantedFiles.select/2`) and
 adds with `only_files`. Clients without `list_torrent_files/2` add everything.
-The selection is recorded in the download's metadata:
+Junk is what `FileSelection.importable?/1` and `subtitle?/1` say it is, the
+same rules `FileSelectionPolicy` applies, so the two never disagree on a
+sample or an `.nfo`; `WantedFiles` adds the episode rules (skip an owned
+episode the search did not target, keep anything it cannot match). The
+selection is recorded in the download's metadata:
 
+- `"file_selection"`: `%{"source" => "auto", "skipped" => n}`, `n` the files
+  left out (0 when everything is kept). It is `FileSelectionPolicy`'s final
+  entry, so the policy leaves the torrent alone; a manual selection from the
+  Files panel replaces it with `manual` as usual. A failed listing records
+  none of these keys, and the policy deselects junk after the add.
 - `"selected_files"`: indices of the files kept.
 - `"file_episodes"`: file index (a string) to the single episode id a kept
   video parsed to. Multi-episode and unmatched files have no entry.
@@ -331,3 +344,10 @@ partial rows older than 10 minutes are treated as stale and ignored, so a job
 that died mid-run cannot hold the full import back. Partial mode never stamps
 `imported_at`, runs `detect_partial_pack` or removes the torrent; a file that
 fails stays out of `early_imported_paths` and the full import retries it.
+It records its paths through `MetadataKey.modify/2`, under the same row lock
+the policies and the Files panel stamp with, so neither side drops the other's
+keys.
+
+A manual selection made after the grab does not rewrite `"file_episodes"`.
+A file the operator deselects never completes, so it is never imported early;
+one they add has no entry and waits for the full import.
