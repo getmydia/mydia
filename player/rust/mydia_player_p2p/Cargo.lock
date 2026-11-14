@@ -2029,17 +2029,28 @@ version = "0.1.0"
 dependencies = [
  "android_logger",
  "anyhow",
+ "base64 0.23.1",
+ "bytes",
  "flutter_rust_bridge",
  "fs4",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "log",
  "mydia-media-names",
  "mydia_p2p_core",
  "mydia_smb",
+ "reqwest",
+ "rustls",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-android",
  "tracing-subscriber",
+ "url",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3461,6 +3472,19 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tempfile"
+version = "3.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
+dependencies = [
+ "fastrand",
+ "getrandom 0.4.3",
+ "once_cell",
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

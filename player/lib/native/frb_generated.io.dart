@@ -76,6 +76,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       dco_decode_StreamSink_flutter_inbound_peer_sync_request_Sse(dynamic raw);
 
   @protected
+  RustStreamSink<FlutterPeerFileGrantRequest>
+      dco_decode_StreamSink_flutter_peer_file_grant_request_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
@@ -109,6 +113,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterPairingRequest dco_decode_box_autoadd_flutter_pairing_request(
+      dynamic raw);
+
+  @protected
+  FlutterPeerFileGrant dco_decode_box_autoadd_flutter_peer_file_grant(
       dynamic raw);
 
   @protected
@@ -245,6 +253,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FlutterPairingResponse dco_decode_flutter_pairing_response(dynamic raw);
 
   @protected
+  FlutterPeerFileGrant dco_decode_flutter_peer_file_grant(dynamic raw);
+
+  @protected
+  FlutterPeerFileGrantRequest dco_decode_flutter_peer_file_grant_request(
+      dynamic raw);
+
+  @protected
   FlutterPeerFilesRequest dco_decode_flutter_peer_files_request(dynamic raw);
 
   @protected
@@ -338,6 +353,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
@@ -348,6 +366,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiSmbEntry? dco_decode_opt_box_autoadd_ffi_smb_entry(dynamic raw);
+
+  @protected
+  FlutterPeerFileGrant? dco_decode_opt_box_autoadd_flutter_peer_file_grant(
+      dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
@@ -370,6 +392,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     String
   ) dco_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_p_2_p_host_string(
       dynamic raw);
+
+  @protected
+  (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -442,6 +467,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
           SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<FlutterPeerFileGrantRequest>
+      sse_decode_StreamSink_flutter_peer_file_grant_request_Sse(
+          SseDeserializer deserializer);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -479,6 +509,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterPairingRequest sse_decode_box_autoadd_flutter_pairing_request(
+      SseDeserializer deserializer);
+
+  @protected
+  FlutterPeerFileGrant sse_decode_box_autoadd_flutter_peer_file_grant(
       SseDeserializer deserializer);
 
   @protected
@@ -627,6 +661,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  FlutterPeerFileGrant sse_decode_flutter_peer_file_grant(
+      SseDeserializer deserializer);
+
+  @protected
+  FlutterPeerFileGrantRequest sse_decode_flutter_peer_file_grant_request(
+      SseDeserializer deserializer);
+
+  @protected
   FlutterPeerFilesRequest sse_decode_flutter_peer_files_request(
       SseDeserializer deserializer);
 
@@ -736,6 +778,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<(String, String)> sse_decode_list_record_string_string(
+      SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -746,6 +792,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FfiSmbEntry? sse_decode_opt_box_autoadd_ffi_smb_entry(
+      SseDeserializer deserializer);
+
+  @protected
+  FlutterPeerFileGrant? sse_decode_opt_box_autoadd_flutter_peer_file_grant(
       SseDeserializer deserializer);
 
   @protected
@@ -768,6 +818,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     P2PHost,
     String
   ) sse_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_p_2_p_host_string(
+      SseDeserializer deserializer);
+
+  @protected
+  (String, String) sse_decode_record_string_string(
       SseDeserializer deserializer);
 
   @protected
@@ -842,6 +896,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseSerializer serializer);
 
   @protected
+  void sse_encode_StreamSink_flutter_peer_file_grant_request_Sse(
+      RustStreamSink<FlutterPeerFileGrantRequest> self,
+      SseSerializer serializer);
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
@@ -881,6 +940,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_flutter_pairing_request(
       FlutterPairingRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_flutter_peer_file_grant(
+      FlutterPeerFileGrant self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_flutter_peer_files_request(
@@ -1030,6 +1093,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       FlutterPairingResponse self, SseSerializer serializer);
 
   @protected
+  void sse_encode_flutter_peer_file_grant(
+      FlutterPeerFileGrant self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_peer_file_grant_request(
+      FlutterPeerFileGrantRequest self, SseSerializer serializer);
+
+  @protected
   void sse_encode_flutter_peer_files_request(
       FlutterPeerFilesRequest self, SseSerializer serializer);
 
@@ -1143,6 +1214,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       Uint8List self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_record_string_string(
+      List<(String, String)> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -1155,6 +1230,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_ffi_smb_entry(
       FfiSmbEntry? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_flutter_peer_file_grant(
+      FlutterPeerFileGrant? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
@@ -1177,6 +1256,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void
       sse_encode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_p_2_p_host_string(
           (P2PHost, String) self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_string(
+      (String, String) self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

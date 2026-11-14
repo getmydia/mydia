@@ -36,6 +36,24 @@ fs4 = "1.1"
 # the wasm build gets stub FFI functions instead (see src/smb.rs).
 mydia_smb = { path = "../mydia_smb" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# The peer file host (src/peer_files_host.rs) reads files and http(s) grants
+# for paired players. `fs` and `io-util` read local files, `time` bounds the
+# wait for Dart to answer a grant.
+tokio = { version = "1.49", features = ["sync", "fs", "io-util", "time"] }
+# The read path arrives as base64url without padding. The same major as
+# mydia_p2p_core's.
+base64 = { version = "0.23", default-features = false, features = ["alloc"] }
+# file:// grant URLs.
+url = "2"
+# The reqwest iroh already links, with iroh's crypto provider (ring) instead
+# of aws-lc-rs, so no second TLS stack is built. `rustls-no-provider` means
+# the client must be handed a provider, which `peer_files_host` does with a
+# preconfigured rustls config.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# Mozilla's roots, compiled in. The platform verifier needs a JNI handle on
+# Android that this app never gives it.
+webpki-roots = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 mydia_p2p_core = { path = "../../../native/mydia_p2p_core", default-features = false }
@@ -48,6 +66,17 @@ tracing = { version = "0.1", features = ["log"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 tracing-android = "0.2"
+
+# The peer file host's tests: a ranged HTTP server on loopback and a temp
+# file. Same hyper versions as mydia_smb's range server.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+futures-util = "0.3"
+tempfile = "3"
+tokio = { version = "1.49", features = ["net", "rt-multi-thread", "macros"] }
 
 # Never strip build scripts or proc-macros. Rust 1.96's bundled objcopy writes
 # Mach-O string tables that macOS 27's dyld rejects ("mis-aligned LINKEDIT

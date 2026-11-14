@@ -1,0 +1,1355 @@
+//! Serves file reads from paired players: the bytes behind a shared Files
+//! library.
+//!
+//! A viewer reads a file as an `HlsStream` request whose session id is
+//! `peerfile:<account id>` and whose path is the host's file path, base64url
+//! without padding. This module is the host's side of that, and the security
+//! boundary of the feature:
+//!
+//! - Only peers in the member allowlist Dart pushes in are answered (403).
+//! - Rust never decides which paths are readable. It asks Dart for a grant per
+//!   `(account id, path)`, and Dart grants only indexed files and their
+//!   sidecars. Anything without a grant is 404, so a read can only ever touch
+//!   what Dart handed back.
+//! - Each peer gets [`READS_PER_PEER`] concurrent reads. Further reads wait.
+//!
+//! Everything here is `pub(crate)`: `flutter_rust_bridge` generates Dart
+//! bindings for every `pub` item in the crate, and none of this is Dart's.
+//! `P2pHost` carries the FFI surface.
+
+use crate::FlutterPeerFileGrantRequest;
+use base64::Engine as _;
+use flutter_rust_bridge::frb;
+use mydia_p2p_core::runtime::time::timeout;
+use mydia_p2p_core::{
+    HlsRequest, HlsResponder, HlsResponseHeader, HLS_PEER_STOPPED, PEER_FILE_SESSION_PREFIX,
+};
+use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::io::SeekFrom;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
+use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
+use tokio::sync::{mpsc, oneshot, Semaphore};
+
+/// Concurrent reads one peer may have open. The next one waits for a slot.
+pub(crate) const READS_PER_PEER: usize = 4;
+
+/// How long a read waits for Dart to answer a grant request before it is
+/// answered 404.
+pub(crate) const GRANT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Read size for local files when the sink has no file streaming of its own.
+const FILE_CHUNK: usize = 256 * 1024;
+
+/// What Dart resolved a read path to: a local path or `file://` URL, or an
+/// `http(s)` URL with the headers it needs (`WebDAV` credentials, say).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Grant {
+    pub(crate) url: String,
+    pub(crate) headers: Vec<(String, String)>,
+}
+
+/// Turns `(account id, path)` into a grant, or `None` when the path is not
+/// one the account shares.
+pub(crate) trait GrantResolver: Send + Sync + 'static {
+    fn resolve(&self, account_id: &str, path: &str) -> impl Future<Output = Option<Grant>> + Send;
+}
+
+/// Where a read's response goes: an HLS response stream in the app, a
+/// recorder in tests.
+pub(crate) trait ByteSink: Send + Sync + 'static {
+    fn header(&self, h: HlsResponseHeader) -> impl Future<Output = Result<(), String>> + Send;
+    /// An `Err` means the viewer is gone, and nothing more should be read.
+    fn chunk(&self, b: Vec<u8>) -> impl Future<Output = Result<(), String>> + Send;
+    fn finish(&self) -> impl Future<Output = ()> + Send;
+    fn abort(&self) -> impl Future<Output = ()> + Send;
+
+    /// Send `length` bytes of the file at `path` from `offset`, after the
+    /// header, and end the stream. An error starting with
+    /// `HLS_PEER_STOPPED` means the viewer stopped reading; any other means
+    /// the file could not be read.
+    fn stream_file(
+        &self,
+        path: String,
+        offset: u64,
+        length: u64,
+    ) -> impl Future<Output = Result<(), String>> + Send {
+        async move { stream_file_in_chunks(self, &path, offset, length).await }
+    }
+}
+
+/// The app's sink: one HLS response stream on the p2p host.
+impl ByteSink for (HlsResponder, String) {
+    async fn header(&self, h: HlsResponseHeader) -> Result<(), String> {
+        self.0.send_header(self.1.clone(), h).await
+    }
+
+    async fn chunk(&self, b: Vec<u8>) -> Result<(), String> {
+        self.0.send_chunk(self.1.clone(), b).await
+    }
+
+    async fn finish(&self) {
+        if let Err(e) = self.0.finish(self.1.clone()).await {
+            tracing::debug!("peer file stream {} did not finish: {e}", self.1);
+        }
+    }
+
+    async fn abort(&self) {
+        // The stream is often already gone (the viewer cancelled), which is
+        // exactly what an abort would have achieved.
+        let _ = self.0.abort(self.1.clone()).await;
+    }
+
+    /// The core reads the file and writes it to the QUIC stream itself,
+    /// which skips a hop per chunk.
+    async fn stream_file(&self, path: String, offset: u64, length: u64) -> Result<(), String> {
+        self.0
+            .stream_file_range(self.1.clone(), path, offset, length)
+            .await
+    }
+}
+
+async fn stream_file_in_chunks<S: ByteSink + ?Sized>(
+    sink: &S,
+    path: &str,
+    offset: u64,
+    length: u64,
+) -> Result<(), String> {
+    let mut file = match tokio::fs::File::open(path).await {
+        Ok(file) => file,
+        Err(e) => {
+            sink.abort().await;
+            return Err(format!("Failed to open {path}: {e}"));
+        }
+    };
+    if let Err(e) = file.seek(SeekFrom::Start(offset)).await {
+        sink.abort().await;
+        return Err(format!("Failed to seek {path}: {e}"));
+    }
+    let mut remaining = length;
+    while remaining > 0 {
+        let want = usize::try_from(remaining).map_or(FILE_CHUNK, |r| r.min(FILE_CHUNK));
+        let mut buf = vec![0u8; want];
+        if let Err(e) = file.read_exact(&mut buf).await {
+            sink.abort().await;
+            return Err(format!("Failed to read {path}: {e}"));
+        }
+        remaining -= want as u64;
+        if let Err(e) = sink.chunk(buf).await {
+            return Err(format!("{HLS_PEER_STOPPED}: {e}"));
+        }
+    }
+    sink.finish().await;
+    Ok(())
+}
+
+/// How a read ended, which decides whether its grant is kept.
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    Done,
+    /// The viewer went away. The grant is fine.
+    Cancelled,
+    /// The grant led nowhere readable, so it is dropped and the next read
+    /// asks Dart again (an SMB share that moved, a file that was deleted).
+    Failed,
+}
+
+/// Where a grant points.
+enum Target {
+    File(String),
+    Http(String),
+}
+
+fn grant_target(url: &str) -> Option<Target> {
+    match url::Url::parse(url) {
+        Ok(parsed) => match parsed.scheme() {
+            "http" | "https" => Some(Target::Http(url.to_string())),
+            "file" => parsed
+                .to_file_path()
+                .ok()
+                .and_then(|p| p.to_str().map(str::to_string))
+                .map(Target::File),
+            // A Windows path such as `C:\Movies\a.mkv` parses as scheme `c`.
+            scheme if scheme.len() == 1 => Some(Target::File(url.to_string())),
+            _ => None,
+        },
+        // No scheme: a plain path.
+        Err(_) => Some(Target::File(url.to_string())),
+    }
+}
+
+/// The byte span a request asks for out of `total`.
+enum Span {
+    Whole,
+    /// Inclusive bounds.
+    Part {
+        start: u64,
+        end: u64,
+    },
+    Unsatisfiable,
+}
+
+/// A range end past EOF is clamped to the last byte. A start at or past EOF
+/// cannot be served at all.
+fn span(range_start: Option<u64>, range_end: Option<u64>, total: u64) -> Span {
+    if range_start.is_none() && range_end.is_none() {
+        return Span::Whole;
+    }
+    let start = range_start.unwrap_or(0);
+    if start >= total {
+        return Span::Unsatisfiable;
+    }
+    let end = range_end.map_or(total - 1, |e| e.min(total - 1));
+    if end < start {
+        Span::Unsatisfiable
+    } else {
+        Span::Part { start, end }
+    }
+}
+
+fn range_header(range_start: Option<u64>, range_end: Option<u64>) -> Option<String> {
+    match (range_start, range_end) {
+        (None, None) => None,
+        (start, Some(end)) => Some(format!("bytes={}-{end}", start.unwrap_or(0))),
+        (Some(start), None) => Some(format!("bytes={start}-")),
+    }
+}
+
+/// The account id and decoded path a `peerfile:` request names, or `None`
+/// when either is missing or the path is not base64url without padding.
+fn read_target(request: &HlsRequest) -> Option<(String, String)> {
+    let account_id = request.session_id.strip_prefix(PEER_FILE_SESSION_PREFIX)?;
+    if account_id.is_empty() {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(&request.path)
+        .ok()?;
+    let path = String::from_utf8(bytes).ok()?;
+    if path.is_empty() {
+        return None;
+    }
+    Some((account_id.to_string(), path))
+}
+
+/// The media type players expect for the files a library holds, by
+/// extension.
+fn content_type_for(path: &str) -> &'static str {
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    match ext.as_deref() {
+        Some("mp4" | "m4v") => "video/mp4",
+        Some("mkv") => "video/x-matroska",
+        Some("webm") => "video/webm",
+        Some("avi") => "video/x-msvideo",
+        Some("mov") => "video/quicktime",
+        Some("ts" | "m2ts" | "mts") => "video/mp2t",
+        Some("mpg" | "mpeg") => "video/mpeg",
+        Some("wmv") => "video/x-ms-wmv",
+        Some("flv") => "video/x-flv",
+        Some("srt") => "application/x-subrip",
+        Some("vtt") => "text/vtt",
+        Some("ass" | "ssa") => "text/x-ssa",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        Some("webp") => "image/webp",
+        _ => "application/octet-stream",
+    }
+}
+
+/// A header with no body, then the end of the stream.
+async fn reply_status<S: ByteSink>(sink: &S, status: u16, content_range: Option<String>) {
+    let header = HlsResponseHeader {
+        status,
+        content_type: "text/plain".to_string(),
+        content_length: 0,
+        content_range,
+        cache_control: None,
+    };
+    if sink.header(header).await.is_ok() {
+        sink.finish().await;
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// A client for `http(s)` grants with the ring provider iroh already uses and
+/// Mozilla's roots. `None` only if rustls rejects its own default protocol
+/// versions, in which case `http(s)` grants answer 502.
+fn http_client() -> Option<reqwest::Client> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let roots = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    let tls = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .inspect_err(|e| tracing::warn!("peer files: no TLS config: {e}"))
+        .ok()?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    reqwest::Client::builder()
+        .tls_backend_preconfigured(tls)
+        .connect_timeout(Duration::from_secs(10))
+        // A stalled upstream would otherwise hold one of the peer's slots
+        // forever.
+        .read_timeout(Duration::from_secs(30))
+        .build()
+        .inspect_err(|e| tracing::warn!("peer files: no HTTP client: {e}"))
+        .ok()
+}
+
+pub(crate) struct PeerFilesHost<R> {
+    resolver: R,
+    /// Node ids of the active members of the sync group. Starts empty, so
+    /// nothing is served until Dart says who may read.
+    members: Mutex<HashSet<String>>,
+    slots: Mutex<HashMap<String, Arc<Semaphore>>>,
+    grants: Mutex<HashMap<(String, String), Grant>>,
+    http: Option<reqwest::Client>,
+}
+
+impl<R: GrantResolver> PeerFilesHost<R> {
+    pub(crate) fn new(resolver: R) -> Self {
+        Self {
+            resolver,
+            members: Mutex::new(HashSet::new()),
+            slots: Mutex::new(HashMap::new()),
+            grants: Mutex::new(HashMap::new()),
+            http: http_client(),
+        }
+    }
+
+    pub(crate) fn resolver(&self) -> &R {
+        &self.resolver
+    }
+
+    /// Replace the allowlist. Reads already streaming finish; the next read
+    /// from a removed peer is 403.
+    pub(crate) fn set_members(&self, node_ids: Vec<String>) {
+        let members: HashSet<String> = node_ids.into_iter().collect();
+        lock(&self.slots).retain(|peer, _| members.contains(peer));
+        *lock(&self.members) = members;
+    }
+
+    /// Drop every cached grant of `account_id`, for when its index changed.
+    pub(crate) fn invalidate_account(&self, account_id: &str) {
+        lock(&self.grants).retain(|(account, _), _| account != account_id);
+    }
+
+    fn is_member(&self, peer: &str) -> bool {
+        lock(&self.members).contains(peer)
+    }
+
+    fn slots_for(&self, peer: &str) -> Arc<Semaphore> {
+        lock(&self.slots)
+            .entry(peer.to_string())
+            .or_insert_with(|| Arc::new(Semaphore::new(READS_PER_PEER)))
+            .clone()
+    }
+
+    async fn grant(&self, account_id: &str, path: &str) -> Option<Grant> {
+        let key = (account_id.to_string(), path.to_string());
+        if let Some(grant) = lock(&self.grants).get(&key).cloned() {
+            return Some(grant);
+        }
+        let grant = self.resolver.resolve(account_id, path).await?;
+        lock(&self.grants).insert(key, grant.clone());
+        Some(grant)
+    }
+
+    /// Answer one `peerfile:` read on `sink`.
+    pub(crate) async fn serve<S: ByteSink>(&self, peer: String, request: HlsRequest, sink: S) {
+        if !self.is_member(&peer) {
+            tracing::info!("peer files: refusing a read from non-member {peer}");
+            reply_status(&sink, 403, None).await;
+            return;
+        }
+        let Some((account_id, path)) = read_target(&request) else {
+            reply_status(&sink, 404, None).await;
+            return;
+        };
+        // Taken before the grant so a peer cannot queue unbounded grant
+        // requests into Dart either. Held until this function returns, which
+        // is when the stream has ended.
+        let Ok(_permit) = self.slots_for(&peer).acquire_owned().await else {
+            return;
+        };
+        let Some(grant) = self.grant(&account_id, &path).await else {
+            reply_status(&sink, 404, None).await;
+            return;
+        };
+        let outcome = match grant_target(&grant.url) {
+            Some(Target::File(file)) => serve_file(&sink, &file, &request).await,
+            Some(Target::Http(url)) => {
+                self.serve_http(&sink, &url, &grant.headers, &path, &request)
+                    .await
+            }
+            None => {
+                tracing::warn!("peer files: grant for {account_id} has an unsupported scheme");
+                reply_status(&sink, 404, None).await;
+                Outcome::Failed
+            }
+        };
+        if outcome == Outcome::Failed {
+            lock(&self.grants).remove(&(account_id, path));
+        }
+    }
+
+    async fn serve_http<S: ByteSink>(
+        &self,
+        sink: &S,
+        url: &str,
+        headers: &[(String, String)],
+        read_path: &str,
+        request: &HlsRequest,
+    ) -> Outcome {
+        let Some(client) = &self.http else {
+            reply_status(sink, 502, None).await;
+            return Outcome::Failed;
+        };
+        let mut upstream = client.get(url);
+        for (name, value) in headers {
+            upstream = upstream.header(name.as_str(), value.as_str());
+        }
+        if let Some(range) = range_header(request.range_start, request.range_end) {
+            upstream = upstream.header(reqwest::header::RANGE, range);
+        }
+        let mut response = match upstream.send().await {
+            Ok(response) if response.status().as_u16() < 400 => response,
+            Ok(response) => {
+                tracing::warn!("peer files: upstream answered {}", response.status());
+                reply_status(sink, 502, None).await;
+                return Outcome::Failed;
+            }
+            Err(e) => {
+                tracing::warn!("peer files: upstream unreachable: {e}");
+                reply_status(sink, 502, None).await;
+                return Outcome::Failed;
+            }
+        };
+        let text_header = |name: reqwest::header::HeaderName| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string)
+        };
+        let header = HlsResponseHeader {
+            status: response.status().as_u16(),
+            content_type: text_header(reqwest::header::CONTENT_TYPE)
+                .unwrap_or_else(|| content_type_for(read_path).to_string()),
+            content_length: response.content_length().unwrap_or(0),
+            content_range: text_header(reqwest::header::CONTENT_RANGE),
+            cache_control: None,
+        };
+        if sink.header(header).await.is_err() {
+            return Outcome::Cancelled;
+        }
+        loop {
+            match response.chunk().await {
+                Ok(Some(bytes)) => {
+                    if sink.chunk(bytes.to_vec()).await.is_err() {
+                        // Returning drops `response`, which closes the
+                        // upstream connection: nothing more is read.
+                        sink.abort().await;
+                        return Outcome::Cancelled;
+                    }
+                }
+                Ok(None) => {
+                    sink.finish().await;
+                    return Outcome::Done;
+                }
+                Err(e) => {
+                    tracing::warn!("peer files: upstream body failed: {e}");
+                    sink.abort().await;
+                    return Outcome::Failed;
+                }
+            }
+        }
+    }
+}
+
+async fn serve_file<S: ByteSink>(sink: &S, path: &str, request: &HlsRequest) -> Outcome {
+    let total = match tokio::fs::metadata(path).await {
+        Ok(meta) if meta.is_file() => meta.len(),
+        Ok(_) | Err(_) => {
+            reply_status(sink, 404, None).await;
+            return Outcome::Failed;
+        }
+    };
+    let (status, offset, length, content_range) =
+        match span(request.range_start, request.range_end, total) {
+            Span::Whole => (200, 0, total, None),
+            Span::Part { start, end } => (
+                206,
+                start,
+                end - start + 1,
+                Some(format!("bytes {start}-{end}/{total}")),
+            ),
+            Span::Unsatisfiable => {
+                reply_status(sink, 416, Some(format!("bytes */{total}"))).await;
+                return Outcome::Done;
+            }
+        };
+    let header = HlsResponseHeader {
+        status,
+        content_type: content_type_for(path).to_string(),
+        content_length: length,
+        content_range,
+        cache_control: None,
+    };
+    if sink.header(header).await.is_err() {
+        return Outcome::Cancelled;
+    }
+    match sink.stream_file(path.to_string(), offset, length).await {
+        Ok(()) => Outcome::Done,
+        Err(e) if e.starts_with(HLS_PEER_STOPPED) => Outcome::Cancelled,
+        Err(e) => {
+            tracing::warn!("peer files: {e}");
+            Outcome::Failed
+        }
+    }
+}
+
+/// Asks Dart for grants: each request goes out on a channel that
+/// `peer_file_grant_stream` forwards to Dart, and Dart's answer comes back
+/// through `respond`.
+pub(crate) struct DartGrantResolver {
+    requests: mpsc::Sender<FlutterPeerFileGrantRequest>,
+    pending: Mutex<HashMap<String, oneshot::Sender<Option<Grant>>>>,
+    next_id: AtomicU64,
+    wait: Duration,
+}
+
+impl DartGrantResolver {
+    /// The resolver and the receiving end of its requests. A request nobody
+    /// answers within `wait` resolves to `None`.
+    pub(crate) fn new(wait: Duration) -> (Self, mpsc::Receiver<FlutterPeerFileGrantRequest>) {
+        // Each peer holds at most READS_PER_PEER requests here at once, so
+        // this only fills when Dart is not draining at all.
+        let (tx, rx) = mpsc::channel(32);
+        (
+            Self {
+                requests: tx,
+                pending: Mutex::new(HashMap::new()),
+                next_id: AtomicU64::new(0),
+                wait,
+            },
+            rx,
+        )
+    }
+
+    /// Deliver Dart's answer. An answer for a request that already timed out
+    /// is dropped.
+    pub(crate) fn respond(&self, request_id: &str, grant: Option<Grant>) {
+        if let Some(tx) = lock(&self.pending).remove(request_id) {
+            let _ = tx.send(grant);
+        }
+    }
+}
+
+impl GrantResolver for DartGrantResolver {
+    // Trait methods are bound whatever the item's visibility.
+    #[frb(ignore)]
+    async fn resolve(&self, account_id: &str, path: &str) -> Option<Grant> {
+        let request_id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
+        let (tx, rx) = oneshot::channel();
+        lock(&self.pending).insert(request_id.clone(), tx);
+        let sent = self.requests.try_send(FlutterPeerFileGrantRequest {
+            request_id: request_id.clone(),
+            account_id: account_id.to_string(),
+            path: path.to_string(),
+        });
+        let answer = match sent {
+            Ok(()) => timeout(self.wait, rx)
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .flatten(),
+            Err(e) => {
+                tracing::warn!("peer files: cannot ask Dart for a grant: {e}");
+                None
+            }
+        };
+        lock(&self.pending).remove(&request_id);
+        answer
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use http_body_util::{combinators::BoxBody, BodyExt, Full, StreamBody};
+    use hyper::body::Frame;
+    use hyper::{Request, Response};
+    use hyper_util::rt::TokioIo;
+    use mydia_p2p_core::runtime;
+    use mydia_p2p_core::runtime::time::{sleep, Duration};
+    use std::collections::HashMap;
+    use std::convert::Infallible;
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::Semaphore;
+
+    const TOTAL: usize = 1024 * 1024;
+    const MEMBER: &str = "member-node";
+    const ACCOUNT: &str = "flocal";
+
+    fn buffer() -> Vec<u8> {
+        (0..=255u8).cycle().take(TOTAL).collect()
+    }
+
+    #[derive(Default)]
+    struct Recorded {
+        header: Option<HlsResponseHeader>,
+        body: Vec<u8>,
+        chunks: usize,
+        finished: bool,
+        aborted: bool,
+    }
+
+    /// Records what `serve` writes. `fail_after` makes `chunk` fail once that
+    /// many chunks were taken, as a viewer that cancelled does. `gate` holds
+    /// every `chunk` until the gate is closed, which then fails it.
+    #[derive(Clone, Default)]
+    struct RecordingSink {
+        rec: Arc<Mutex<Recorded>>,
+        fail_after: Option<usize>,
+        gate: Option<Arc<Semaphore>>,
+    }
+
+    impl RecordingSink {
+        fn gated() -> (Self, Arc<Semaphore>) {
+            let gate = Arc::new(Semaphore::new(0));
+            (
+                Self {
+                    gate: Some(gate.clone()),
+                    ..Self::default()
+                },
+                gate,
+            )
+        }
+
+        fn status(&self) -> Option<u16> {
+            self.rec.lock().unwrap().header.as_ref().map(|h| h.status)
+        }
+
+        fn header(&self) -> HlsResponseHeader {
+            self.rec.lock().unwrap().header.clone().expect("a header")
+        }
+
+        fn body(&self) -> Vec<u8> {
+            self.rec.lock().unwrap().body.clone()
+        }
+
+        fn finished(&self) -> bool {
+            self.rec.lock().unwrap().finished
+        }
+    }
+
+    impl ByteSink for RecordingSink {
+        async fn header(&self, h: HlsResponseHeader) -> Result<(), String> {
+            self.rec.lock().unwrap().header = Some(h);
+            Ok(())
+        }
+
+        async fn chunk(&self, b: Vec<u8>) -> Result<(), String> {
+            if let Some(gate) = &self.gate {
+                gate.acquire()
+                    .await
+                    .map_err(|_| "peer_stopped: gate closed".to_string())?
+                    .forget();
+            }
+            let mut rec = self.rec.lock().unwrap();
+            if self.fail_after.is_some_and(|n| rec.chunks >= n) {
+                return Err("peer_stopped: viewer cancelled".to_string());
+            }
+            rec.chunks += 1;
+            rec.body.extend_from_slice(&b);
+            Ok(())
+        }
+
+        async fn finish(&self) {
+            self.rec.lock().unwrap().finished = true;
+        }
+
+        async fn abort(&self) {
+            self.rec.lock().unwrap().aborted = true;
+        }
+    }
+
+    /// Answers from a fixed map and counts every call.
+    #[derive(Default)]
+    struct MapResolver {
+        grants: Mutex<HashMap<(String, String), Grant>>,
+        calls: AtomicUsize,
+    }
+
+    impl MapResolver {
+        fn with(path: &str, url: &str) -> Self {
+            let r = Self::default();
+            r.grants.lock().unwrap().insert(
+                (ACCOUNT.to_string(), path.to_string()),
+                Grant {
+                    url: url.to_string(),
+                    headers: vec![("x-test-auth".to_string(), "secret".to_string())],
+                },
+            );
+            r
+        }
+
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl GrantResolver for MapResolver {
+        async fn resolve(&self, account_id: &str, path: &str) -> Option<Grant> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.grants
+                .lock()
+                .unwrap()
+                .get(&(account_id.to_string(), path.to_string()))
+                .cloned()
+        }
+    }
+
+    fn temp_file() -> tempfile::NamedTempFile {
+        let mut f = tempfile::Builder::new().suffix(".mkv").tempfile().unwrap();
+        f.write_all(&buffer()).unwrap();
+        f.flush().unwrap();
+        f
+    }
+
+    fn host_with(resolver: MapResolver) -> Arc<PeerFilesHost<MapResolver>> {
+        let host = Arc::new(PeerFilesHost::new(resolver));
+        host.set_members(vec![MEMBER.to_string()]);
+        host
+    }
+
+    fn request(path: &str, range_start: Option<u64>, range_end: Option<u64>) -> HlsRequest {
+        HlsRequest {
+            session_id: format!("{PEER_FILE_SESSION_PREFIX}{ACCOUNT}"),
+            path: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(path),
+            range_start,
+            range_end,
+            auth_token: None,
+        }
+    }
+
+    /// A loopback HTTP server over `buffer()` with Range support.
+    /// `/fail` answers 500. `/slow` sends 16 KiB frames 5 ms apart and counts
+    /// the bytes it handed to the connection, so a test can tell whether the
+    /// client kept reading.
+    struct TestServer {
+        base: String,
+        slow_sent: Arc<AtomicU64>,
+        seen_auth: Arc<Mutex<Vec<String>>>,
+    }
+
+    type TestBody = BoxBody<Bytes, Infallible>;
+
+    fn parse_range(req: &Request<hyper::body::Incoming>) -> Option<(usize, usize)> {
+        let value = req.headers().get(hyper::header::RANGE)?.to_str().ok()?;
+        let spec = value.strip_prefix("bytes=")?;
+        let (s, e) = spec.split_once('-')?;
+        let start: usize = s.parse().ok()?;
+        let end: usize = if e.is_empty() {
+            TOTAL - 1
+        } else {
+            e.parse::<usize>().ok()?.min(TOTAL - 1)
+        };
+        Some((start, end))
+    }
+
+    #[expect(clippy::unused_async, reason = "hyper's service_fn wants a future")]
+    async fn handle(
+        req: Request<hyper::body::Incoming>,
+        buf: Arc<Vec<u8>>,
+        slow_sent: Arc<AtomicU64>,
+        seen_auth: Arc<Mutex<Vec<String>>>,
+    ) -> Result<Response<TestBody>, Infallible> {
+        if let Some(auth) = req.headers().get("x-test-auth") {
+            seen_auth
+                .lock()
+                .unwrap()
+                .push(auth.to_str().unwrap().to_string());
+        }
+        if req.uri().path() == "/fail" {
+            return Ok(Response::builder()
+                .status(500)
+                .body(Full::new(Bytes::new()).boxed())
+                .unwrap());
+        }
+        let (start, end, partial) = match parse_range(&req) {
+            Some((s, e)) => (s, e, true),
+            None => (0, TOTAL - 1, false),
+        };
+        let mut builder = Response::builder()
+            .header("content-type", "video/x-matroska")
+            .header("content-length", (end - start + 1).to_string());
+        builder = if partial {
+            builder
+                .status(206)
+                .header("content-range", format!("bytes {start}-{end}/{TOTAL}"))
+        } else {
+            builder.status(200)
+        };
+        if req.uri().path() == "/slow" {
+            let (tx, rx) = mpsc::channel::<Bytes>(1);
+            let data = buf[start..=end].to_vec();
+            tokio::spawn(async move {
+                for piece in data.chunks(16 * 1024) {
+                    if tx.send(Bytes::copy_from_slice(piece)).await.is_err() {
+                        break;
+                    }
+                    slow_sent.fetch_add(piece.len() as u64, Ordering::SeqCst);
+                    sleep(Duration::from_millis(5)).await;
+                }
+            });
+            let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+                rx.recv()
+                    .await
+                    .map(|b| (Ok::<_, Infallible>(Frame::data(b)), rx))
+            });
+            return Ok(builder.body(StreamBody::new(stream).boxed()).unwrap());
+        }
+        Ok(builder
+            .body(Full::new(Bytes::copy_from_slice(&buf[start..=end])).boxed())
+            .unwrap())
+    }
+
+    async fn start_server() -> TestServer {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let buf = Arc::new(buffer());
+        let slow_sent = Arc::new(AtomicU64::new(0));
+        let seen_auth = Arc::new(Mutex::new(Vec::new()));
+        let (s, a) = (slow_sent.clone(), seen_auth.clone());
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    return;
+                };
+                let (buf, s, a) = (buf.clone(), s.clone(), a.clone());
+                tokio::spawn(async move {
+                    let service = hyper::service::service_fn(move |req| {
+                        handle(req, buf.clone(), s.clone(), a.clone())
+                    });
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(TokioIo::new(stream), service)
+                        .await;
+                });
+            }
+        });
+        TestServer {
+            base: format!("http://{addr}"),
+            slow_sent,
+            seen_auth,
+        }
+    }
+
+    async fn wait_for(sink: &RecordingSink, what: impl Fn(&RecordingSink) -> bool) {
+        for _ in 0..200 {
+            if what(sink) {
+                return;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+        panic!("condition never held");
+    }
+
+    #[test]
+    fn non_member_gets_403() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                "stranger".to_string(),
+                request(path, None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(403));
+            assert!(sink.body().is_empty());
+            assert!(sink.finished());
+            assert_eq!(host.resolver().calls(), 0);
+        });
+    }
+
+    #[test]
+    fn allowlist_starts_empty() {
+        runtime::block_on(async {
+            let host = Arc::new(PeerFilesHost::new(MapResolver::default()));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/a.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(403));
+        });
+    }
+
+    #[test]
+    fn unknown_grant_gets_404() {
+        runtime::block_on(async {
+            let host = host_with(MapResolver::default());
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/nope.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(404));
+            assert!(sink.body().is_empty());
+            assert!(sink.finished());
+        });
+    }
+
+    #[test]
+    fn bad_base64_path_gets_404() {
+        runtime::block_on(async {
+            let host = host_with(MapResolver::default());
+            for bad in ["not base64!", "L2EubWt2==", "L2EubWt2+/"] {
+                let sink = RecordingSink::default();
+                let mut req = request("/a.mkv", None, None);
+                req.path = bad.to_string();
+                host.serve(MEMBER.to_string(), req, sink.clone()).await;
+                assert_eq!(sink.status(), Some(404), "{bad}");
+            }
+            assert_eq!(host.resolver().calls(), 0);
+        });
+    }
+
+    #[test]
+    fn empty_account_id_gets_404() {
+        runtime::block_on(async {
+            let host = host_with(MapResolver::default());
+            let sink = RecordingSink::default();
+            let mut req = request("/a.mkv", None, None);
+            req.session_id = PEER_FILE_SESSION_PREFIX.to_string();
+            host.serve(MEMBER.to_string(), req, sink.clone()).await;
+            assert_eq!(sink.status(), Some(404));
+            assert_eq!(host.resolver().calls(), 0);
+        });
+    }
+
+    #[test]
+    fn file_range_returns_exact_bytes() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(100), Some(199)),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(header.status, 206);
+            assert_eq!(
+                header.content_range.as_deref(),
+                Some("bytes 100-199/1048576")
+            );
+            assert_eq!(header.content_length, 100);
+            assert_eq!(header.content_type, "video/x-matroska");
+            assert_eq!(sink.body(), buffer()[100..200].to_vec());
+            assert!(sink.finished());
+        });
+    }
+
+    #[test]
+    fn file_open_ended_range() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(1_048_000), None),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(header.status, 206);
+            assert_eq!(
+                header.content_range.as_deref(),
+                Some("bytes 1048000-1048575/1048576")
+            );
+            assert_eq!(sink.body(), buffer()[1_048_000..].to_vec());
+        });
+    }
+
+    #[test]
+    fn file_without_range_is_200_and_whole() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let url = url::Url::from_file_path(path).unwrap().to_string();
+            let host = host_with(MapResolver::with(path, &url));
+            let sink = RecordingSink::default();
+            host.serve(MEMBER.to_string(), request(path, None, None), sink.clone())
+                .await;
+            let header = sink.header();
+            assert_eq!(header.status, 200);
+            assert_eq!(header.content_range, None);
+            assert_eq!(header.content_length, TOTAL as u64);
+            assert_eq!(sink.body(), buffer());
+        });
+    }
+
+    #[test]
+    fn file_range_end_past_eof_is_clamped() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(1_048_570), Some(9_999_999)),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(
+                header.content_range.as_deref(),
+                Some("bytes 1048570-1048575/1048576")
+            );
+            assert_eq!(sink.body(), buffer()[1_048_570..].to_vec());
+        });
+    }
+
+    #[test]
+    fn file_range_start_past_eof_is_416() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(TOTAL as u64), None),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(header.status, 416);
+            assert_eq!(header.content_range.as_deref(), Some("bytes */1048576"));
+            assert!(sink.body().is_empty());
+            assert!(sink.finished());
+        });
+    }
+
+    #[test]
+    fn http_range_forwards_status_and_bytes() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/movie.mkv", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", Some(1000), Some(4999)),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(header.status, 206);
+            assert_eq!(
+                header.content_range.as_deref(),
+                Some("bytes 1000-4999/1048576")
+            );
+            assert_eq!(header.content_length, 4000);
+            assert_eq!(header.content_type, "video/x-matroska");
+            assert_eq!(sink.body(), buffer()[1000..5000].to_vec());
+            assert!(sink.finished());
+            assert_eq!(
+                *server.seen_auth.lock().unwrap(),
+                vec!["secret".to_string()]
+            );
+        });
+    }
+
+    #[test]
+    fn http_without_range_forwards_200() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/movie.mkv", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            let header = sink.header();
+            assert_eq!(header.status, 200);
+            assert_eq!(header.content_length, TOTAL as u64);
+            assert_eq!(sink.body(), buffer());
+        });
+    }
+
+    #[test]
+    fn http_upstream_500_becomes_502() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/fail", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+            assert!(sink.body().is_empty());
+            assert!(sink.finished());
+        });
+    }
+
+    #[test]
+    fn http_connection_error_becomes_502() {
+        runtime::block_on(async {
+            // Bind then drop, so nothing listens on the port.
+            let port = std::net::TcpListener::bind("127.0.0.1:0")
+                .unwrap()
+                .local_addr()
+                .unwrap()
+                .port();
+            let url = format!("http://127.0.0.1:{port}/movie.mkv");
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+        });
+    }
+
+    #[test]
+    fn cancel_stops_upstream_reads() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/slow", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink {
+                fail_after: Some(1),
+                ..RecordingSink::default()
+            };
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(200));
+            assert!(!sink.finished());
+            // The whole body takes over 300 ms to send. Had the reader kept
+            // going, the server would be well past 256 KiB by now.
+            sleep(Duration::from_millis(500)).await;
+            let sent = server.slow_sent.load(Ordering::SeqCst);
+            assert!(
+                sent < 256 * 1024,
+                "server sent {sent} bytes after the cancel"
+            );
+        });
+    }
+
+    #[test]
+    fn fifth_read_waits_for_a_slot() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap().to_string();
+            let host = host_with(MapResolver::with(&path, &path));
+            let _guard = runtime::enter();
+
+            let mut gates = Vec::new();
+            for _ in 0..4 {
+                let (sink, gate) = RecordingSink::gated();
+                let (h, p) = (host.clone(), path.clone());
+                let s = sink.clone();
+                runtime::spawn(async move {
+                    h.serve(MEMBER.to_string(), request(&p, None, None), s)
+                        .await;
+                });
+                wait_for(&sink, |s| s.status().is_some()).await;
+                gates.push(gate);
+            }
+
+            let fifth = RecordingSink::default();
+            let (h, p, s) = (host.clone(), path.clone(), fifth.clone());
+            runtime::spawn(async move {
+                h.serve(MEMBER.to_string(), request(&p, None, None), s)
+                    .await;
+            });
+            sleep(Duration::from_millis(100)).await;
+            assert_eq!(fifth.status(), None, "the fifth read must wait");
+
+            // Another peer has slots of its own.
+            host.set_members(vec![MEMBER.to_string(), "other-member".to_string()]);
+            let other = RecordingSink::default();
+            host.serve(
+                "other-member".to_string(),
+                request(&path, Some(0), Some(9)),
+                other.clone(),
+            )
+            .await;
+            assert_eq!(other.status(), Some(206));
+
+            gates[0].close();
+            wait_for(&fifth, |s| s.status().is_some()).await;
+            wait_for(&fifth, RecordingSink::finished).await;
+            assert_eq!(fifth.body(), buffer());
+            for gate in &gates {
+                gate.close();
+            }
+        });
+    }
+
+    #[test]
+    fn grants_are_cached() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            for _ in 0..3 {
+                let sink = RecordingSink::default();
+                host.serve(
+                    MEMBER.to_string(),
+                    request(path, Some(0), Some(0)),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(206));
+            }
+            assert_eq!(host.resolver().calls(), 1);
+        });
+    }
+
+    #[test]
+    fn invalidate_drops_cached_grant() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let serve = || async {
+                let sink = RecordingSink::default();
+                host.serve(
+                    MEMBER.to_string(),
+                    request(path, Some(0), Some(0)),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(206));
+            };
+            serve().await;
+            host.invalidate_account("some-other-account");
+            serve().await;
+            assert_eq!(host.resolver().calls(), 1);
+            host.invalidate_account(ACCOUNT);
+            serve().await;
+            assert_eq!(host.resolver().calls(), 2);
+        });
+    }
+
+    #[test]
+    fn failed_read_evicts_grant() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/fail", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            for expected_calls in 1..=2 {
+                let sink = RecordingSink::default();
+                host.serve(
+                    MEMBER.to_string(),
+                    request("/share/movie.mkv", None, None),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(502));
+                assert_eq!(host.resolver().calls(), expected_calls);
+            }
+        });
+    }
+
+    #[test]
+    fn missing_local_file_is_404_and_evicts_grant() {
+        runtime::block_on(async {
+            let dir = tempfile::tempdir().unwrap();
+            let gone = dir.path().join("gone.mkv");
+            let gone = gone.to_str().unwrap();
+            let host = host_with(MapResolver::with(gone, gone));
+            for expected_calls in 1..=2 {
+                let sink = RecordingSink::default();
+                host.serve(MEMBER.to_string(), request(gone, None, None), sink.clone())
+                    .await;
+                assert_eq!(sink.status(), Some(404));
+                assert_eq!(host.resolver().calls(), expected_calls);
+            }
+        });
+    }
+
+    #[test]
+    fn content_type_falls_back_to_octet_stream() {
+        assert_eq!(content_type_for("/a/b.MP4"), "video/mp4");
+        assert_eq!(content_type_for("/a/b.srt"), "application/x-subrip");
+        assert_eq!(content_type_for("/a/b.weird"), "application/octet-stream");
+        assert_eq!(content_type_for("/a/noext"), "application/octet-stream");
+    }
+
+    #[test]
+    fn dart_resolver_round_trips_a_grant() {
+        runtime::block_on(async {
+            let (resolver, mut requests) = DartGrantResolver::new(Duration::from_secs(5));
+            let resolver = Arc::new(resolver);
+            let _guard = runtime::enter();
+            let r = resolver.clone();
+            let answer = runtime::spawn(async move { r.resolve("acct", "/x.mkv").await });
+            let req = requests.recv().await.unwrap();
+            assert_eq!(req.account_id, "acct");
+            assert_eq!(req.path, "/x.mkv");
+            resolver.respond(
+                &req.request_id,
+                Some(Grant {
+                    url: "/x.mkv".to_string(),
+                    headers: vec![],
+                }),
+            );
+            assert_eq!(
+                answer.await.unwrap().map(|g| g.url),
+                Some("/x.mkv".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn dart_resolver_times_out_to_none() {
+        runtime::block_on(async {
+            let (resolver, _requests) = DartGrantResolver::new(Duration::from_millis(50));
+            assert!(resolver.resolve("acct", "/x.mkv").await.is_none());
+            assert!(resolver.pending.lock().unwrap().is_empty());
+        });
+    }
+}
