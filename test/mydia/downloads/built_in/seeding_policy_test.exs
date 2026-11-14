@@ -175,6 +175,33 @@ defmodule Mydia.Downloads.BuiltIn.SeedingPolicyTest do
     assert StubAdapter.pauses() == []
   end
 
+  test "a new seed-time target does not count the days since completion on its first poll" do
+    put_target(seed_time: 60)
+    now = now()
+
+    # Finished three days ago, never observed, ratio far from anything.
+    row =
+      row(%{
+        ratio: 0.1,
+        seeding_time: nil,
+        client_completed_at: DateTime.add(now, -3 * 86_400, :second)
+      })
+
+    # The monitor's order: record the observation, then run the policies on
+    # the rows it returns.
+    rows = Mydia.Downloads.ObservedSeedTime.record([row], now)
+    assert [%{metadata: %{"observed_seeding" => %{"seconds" => 0}}}] = rows
+
+    assert :ok = Policies.run(rows, now)
+    assert StubAdapter.pauses() == []
+    refute stamp(row)
+
+    # Once an hour of seeding has been observed, the target is met.
+    [seen] = rows
+    seen = %{seen | metadata: put_in(seen.metadata, ["observed_seeding", "seconds"], 3600)}
+    assert :paused = SeedingPolicy.apply(seen, now)
+  end
+
   test "Policies.run skips other clients and survives a raising row" do
     other = %{row() | download_client: "Other"}
     broken = %{row() | download_client_id: nil, metadata: :boom}

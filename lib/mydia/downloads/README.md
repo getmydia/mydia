@@ -69,7 +69,11 @@ torrent that seeded past its goal and then stopped is removable. Without either,
 and only while the client reports the torrent as seeding, it is the time since the
 client's `completed_at`, else since `Download.completed_at`. A paused, stopped or
 missing torrent with no reported time has no known seed time, so wall-clock time
-it spent not seeding never meets a goal.
+it spent not seeding never meets a goal. `ObservedSeedTime.record/2` returns the
+polled rows with their new entry merged in, and `DownloadMonitor` hands those to
+`BuiltIn.Policies`, so the first poll that tracks a torrent reads 0 observed
+seconds rather than the time since completion: a seed-time target set after a
+torrent finished counts from when Mydia started observing it.
 
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets
