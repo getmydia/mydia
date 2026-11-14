@@ -84,6 +84,33 @@ applies to new grabs; torrents already running finish where they started.
   checks again before the engine resumes. The panel shows the VPN state,
   public IP, forwarded port and the reason for any failure.
 
+### Only the files Mydia needs
+
+When the built-in client (or a rqbit instance you run yourself) adds a torrent,
+Mydia first reads its file list and downloads only the files it will import.
+For a season pack, episodes your library already has are skipped, unless your
+search asked for that episode specifically. Samples, trailers, extras, and
+files like `.nfo` or `.txt` are left out. Subtitles that go with a kept video
+are kept. A video Mydia cannot match to the show is kept too, so an oddly named
+release still gets imported rather than silently dropped. If Mydia cannot read
+the file list, it adds the whole torrent as before. These features apply to
+rqbit only, not to the other clients.
+
+Because only part of the torrent is downloaded, it also seeds only the pieces
+it holds. On a private tracker, a partial pack contributes less to the swarm
+than a complete one. Seeding limits and observed seed time still work the same.
+
+### Episodes arrive as they finish
+
+When a season pack is downloading, Mydia imports each episode as soon as its
+file is complete instead of waiting for the whole pack. You will see episodes
+appear in the library while the download is still running. The files are
+hardlinked or copied, so the torrent keeps seeding them. When the download
+finishes, Mydia imports whatever is left and then handles the torrent as it
+normally would. If an early import fails for a file, that file is retried at
+the end. Files whose episode cannot be told from the name, and multi-episode
+files, wait for the full import.
+
 ### Set it up with environment variables
 
 Every setting has an environment variable that overrides the UI; they are

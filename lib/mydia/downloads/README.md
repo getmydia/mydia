@@ -222,3 +222,34 @@ In VPN mode the engine is started with `--listen-ip <tunnel IPv4>`, read from
 `ip -4 -o addr show dev <iface>` as the mydia user, so that inbound UDP replies
 leave the tunnel from the port the peer contacted. See
 `vendor/gluetun/README.md`, "Inbound UDP needs a bound socket".
+
+## Wanted files and early import (rqbit)
+
+`Client.Rqbit` lists a torrent's files before adding it, and
+`Queue.ClientSelection` decides which to keep (`FileSelection.select/2`) and
+adds with `only_files`. Clients without `list_torrent_files/2` add everything.
+The selection is recorded in the download's metadata:
+
+- `"selected_files"`: indices of the files kept.
+- `"file_episodes"`: file index (a string) to the single episode id a kept
+  video parsed to. Multi-episode and unmatched files have no entry.
+- `"skipped_owned_episode_ids"`: episodes dropped because the library already
+  has them. `FileImport.detect_partial_pack/2` subtracts these, so such a pack
+  is not flagged `partial_pack`.
+- `"early_imported_paths"` and `"early_imported_episode_ids"`: what partial
+  imports already placed. The full import excludes those paths.
+
+Early import is driven by `Downloads.EarlyImport` from `DownloadMonitor`. The
+rqbit torrent list carries no per-file data, so EarlyImport fetches per-download
+status (`file_progress`) to learn which files are whole. Only files with a
+recorded episode and a path that exists on this host are imported early.
+
+A partial `MediaImport` job (`"partial" => true`) is unique on
+`[:download_id, :partial]`, so it never swallows the full import enqueued at
+completion, and a second partial job is dropped until the first finishes. A
+full import that starts while a recent partial job for the download is
+executing snoozes 30 seconds (a snooze does not use an attempt). Executing
+partial rows older than 10 minutes are treated as stale and ignored, so a job
+that died mid-run cannot hold the full import back. Partial mode never stamps
+`imported_at`, runs `detect_partial_pack` or removes the torrent; a file that
+fails stays out of `early_imported_paths` and the full import retries it.
