@@ -87,6 +87,9 @@ Every record is LWW per key on its origin `updatedAt`, the rule
   download storage locations). An explicit allowlist in
   `BackupSnapshot` names the keys that are included; a new setting is
   excluded until added.
+- **WebDAV and SMB accounts** carry their folder roots, so a restored share
+  comes back with its folders and rescans. A local-folders account is not
+  backed up at all: its paths only mean something on the device that made it.
 - **Excluded entirely**: lock modes (`serverLocks`), so a restore cannot
   unlock anything; the Files index and match cache, rebuilt by rescanning;
   downloads and caches; the iroh node key and the backup identity, which stay
