@@ -247,6 +247,29 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
   end
 
   describe "restart_key/1" do
+    test "seeding fields do not change it, with the VPN off or on" do
+      new = [seed_ratio: 2.0, seed_time: 60, seed_goal_action: "remove"]
+
+      for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]] do
+        base = load(vpn, [])
+        changed = load(vpn ++ new, [])
+        assert Config.restart_key(base) == Config.restart_key(changed)
+        assert changed.seed_goal_action == :remove
+        assert changed.seed_ratio == 2.0
+        assert changed.seed_time == 60
+      end
+
+      assert load([], []).seed_goal_action == :pause
+    end
+
+    # Speed limits reach rqbit as command-line flags, so a change must restart it.
+    test "speed limits change it, with the VPN off or on" do
+      for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]],
+          limit <- [[download_limit_kib: 100], [upload_limit_kib: 50]] do
+        refute Config.restart_key(load(vpn, [])) == Config.restart_key(load(vpn ++ limit, []))
+      end
+    end
+
     test "ignores warnings and nothing else" do
       a = load([], [], env: %{"MYDIA_TORRENT_PORT" => "nope"})
       b = load([], [])

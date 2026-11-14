@@ -58,11 +58,44 @@ defmodule Mydia.Downloads.BuiltIn do
             password: pass,
             download_directory: config.download_path,
             connection_settings: %{"managed" => true},
-            external_torrents: :auto
+            external_torrents: :auto,
+            remove_completed: remove_target?(seeding_target(config))
           }
         ]
     end
   end
+
+  @doc """
+  The seeding goal the running client enforces, or nil with no runtime or no
+  target. `seed_time` is in seconds (the setting is in minutes). A ratio of 0
+  is a target.
+  """
+  @spec seeding_target() ::
+          %{
+            ratio: float() | nil,
+            seed_time: non_neg_integer() | nil,
+            action: :pause | :remove
+          }
+          | nil
+  def seeding_target do
+    case runtime() do
+      %Runtime{config: config} -> seeding_target(config)
+      nil -> nil
+    end
+  end
+
+  defp seeding_target(%{seed_ratio: nil, seed_time: nil}), do: nil
+
+  defp seeding_target(config) do
+    %{
+      ratio: config.seed_ratio,
+      seed_time: config.seed_time && config.seed_time * 60,
+      action: config.seed_goal_action
+    }
+  end
+
+  defp remove_target?(%{action: :remove}), do: true
+  defp remove_target?(_target), do: false
 
   @spec managed?(map()) :: boolean()
   def managed?(config) do

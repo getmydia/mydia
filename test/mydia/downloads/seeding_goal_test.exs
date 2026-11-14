@@ -199,4 +199,222 @@ defmodule Mydia.Downloads.SeedingGoalTest do
              } = SeedingGoal.for_download(row, @now)
     end
   end
+
+  describe "goal_applies?/2" do
+    @target %{ratio: 1.0, seed_time: nil}
+
+    test "applies the target only to the built-in client" do
+      built_in = %{metadata: %{}, download_client: Mydia.Downloads.BuiltIn.name()}
+      other = %{metadata: %{}, download_client: "qBit"}
+
+      assert SeedingGoal.goal_applies?(built_in, target: @target)
+      refute SeedingGoal.goal_applies?(other, target: @target)
+      refute SeedingGoal.goal_applies?(built_in, target: nil)
+      refute SeedingGoal.goal_applies?(built_in, target: %{ratio: nil, seed_time: nil})
+    end
+
+    test "tracker terms apply on any client" do
+      private = %{metadata: %{"tracker_terms" => %{"private" => true}}, download_client: "qBit"}
+      assert SeedingGoal.goal_applies?(private, target: nil)
+    end
+  end
+
+  describe "goal_met?/4" do
+    @built_in Mydia.Downloads.BuiltIn.name()
+
+    defp built_in_row(tracker_terms) do
+      metadata = if tracker_terms, do: %{"tracker_terms" => tracker_terms}, else: %{}
+      %{metadata: metadata, download_client: @built_in}
+    end
+
+    test "ratio 0.0 is a real target" do
+      row = built_in_row(nil)
+      assert SeedingGoal.goal_met?(row, 0.0, 0, target: %{ratio: 0.0, seed_time: nil})
+      refute SeedingGoal.goal_met?(row, nil, nil, target: %{ratio: 0.0, seed_time: nil})
+    end
+
+    test "a private tracker with unknown terms is never met, whatever the target" do
+      row = built_in_row(%{"private" => true})
+
+      for target <- [%{ratio: 0.0, seed_time: nil}, %{ratio: nil, seed_time: 0}, nil] do
+        refute SeedingGoal.goal_met?(row, 50.0, 10_000_000, target: target)
+      end
+    end
+
+    test "a tracker minimum never lowers the operator target" do
+      row = built_in_row(%{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600})
+      target = %{ratio: 2.0, seed_time: nil}
+
+      # The tracker is satisfied (80h), the operator target (ratio 2.0) is not.
+      refute SeedingGoal.goal_met?(row, 1.1, 80 * 3600, target: target)
+      assert SeedingGoal.goal_met?(row, 2.0, 80 * 3600, target: target)
+      assert SeedingGoal.goal_met?(row, 2.0, 0, target: target)
+    end
+
+    test "an operator target never lowers the tracker minimum" do
+      row = built_in_row(%{"minimum_ratio" => 3.0})
+      target = %{ratio: 1.0, seed_time: 3600}
+
+      refute SeedingGoal.goal_met?(row, 1.5, 7200, target: target)
+      assert SeedingGoal.goal_met?(row, 3.0, 0, target: target)
+    end
+
+    test "either dimension of the operator target meets it" do
+      row = built_in_row(nil)
+      target = %{ratio: 2.0, seed_time: 3600}
+
+      refute SeedingGoal.goal_met?(row, 1.0, 60, target: target, counted_seed_time: 60)
+      assert SeedingGoal.goal_met?(row, 1.0, 3600, target: target, counted_seed_time: 3600)
+      assert SeedingGoal.goal_met?(row, 2.0, 60, target: target, counted_seed_time: 60)
+    end
+
+    test "the target's seed time never counts the wall-clock fallback" do
+      row = built_in_row(nil)
+      target = %{ratio: nil, seed_time: 3600}
+
+      # Three days of wall-clock time, but nothing reported or observed.
+      refute SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target)
+      refute SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target, counted_seed_time: nil)
+      assert SeedingGoal.goal_met?(row, 0.1, 3 * @day, target: target, counted_seed_time: 3600)
+
+      # Without the option, the download's observed seconds count.
+      observed = %{row | metadata: %{"observed_seeding" => %{"seconds" => 3600}}}
+      assert SeedingGoal.goal_met?(observed, 0.1, 3 * @day, target: target)
+    end
+
+    test "a tracker seed-time minimum still accepts the wall-clock fallback" do
+      row = built_in_row(%{"minimum_seed_time" => 3600})
+      assert SeedingGoal.goal_met?(row, 0.0, 3 * @day, target: nil)
+    end
+
+    test "other clients ignore the operator target" do
+      row = %{metadata: %{}, download_client: "qBit"}
+      assert SeedingGoal.goal_met?(row, 0.0, 0, target: %{ratio: 5.0, seed_time: nil})
+    end
+  end
+
+  describe "for_download/2 with the operator target" do
+    test "a private row with unknown terms is never met under a target" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"private" => true}},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 5.0,
+        seeding_time: 10_000_000,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{
+               private?: true,
+               required_ratio: nil,
+               required_seed_time: nil,
+               target_ratio: +0.0,
+               target_seed_time: nil,
+               met?: false
+             } =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 0.0, seed_time: nil})
+    end
+
+    test "the tracker and the target must both be met" do
+      row = %{
+        metadata: %{
+          "tracker_terms" => %{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600}
+        },
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 1.1,
+        seeding_time: 80 * 3600,
+        in_client?: true
+      }
+
+      target = %{ratio: 2.0, seed_time: nil}
+
+      assert %SeedingGoal{
+               required_ratio: 1.0,
+               required_seed_time: required_time,
+               target_ratio: 2.0,
+               target_seed_time: nil,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: target)
+
+      assert required_time == 72 * 3600
+
+      assert %SeedingGoal{met?: true, target_met?: true} =
+               SeedingGoal.for_download(%{row | ratio: 2.0}, now: @now, target: target)
+    end
+
+    test "a seed-time target is unmet with no reported or observed time" do
+      completed = DateTime.add(@now, -3 * @day, :second)
+
+      row = %{
+        metadata: %{},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 0.1,
+        seeding_time: nil,
+        client_completed_at: completed,
+        in_client?: true
+      }
+
+      target = %{ratio: nil, seed_time: 3600}
+
+      # The displayed seed time keeps the fallback; the target does not use it.
+      assert %SeedingGoal{
+               seeding_time: seeding_time,
+               target_seeding_time: nil,
+               target_met?: false,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: target)
+
+      assert seeding_time == 3 * @day
+
+      observed = %{row | metadata: %{"observed_seeding" => %{"seconds" => 3600}}}
+
+      assert %SeedingGoal{target_seeding_time: 3600, target_met?: true, met?: true} =
+               SeedingGoal.for_download(observed, now: @now, target: target)
+    end
+
+    test "target_met? reports the operator target apart from the tracker terms" do
+      row = %{
+        metadata: %{"tracker_terms" => %{"minimum_ratio" => 3.0}},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 1.2,
+        seeding_time: 60,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{met?: false, target_met?: true} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 1.0, seed_time: nil})
+
+      assert %SeedingGoal{met?: false, target_met?: false} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: 2.0, seed_time: nil})
+
+      # No target at all: nothing of the operator's is pending.
+      assert %SeedingGoal{met?: false, target_met?: true} =
+               SeedingGoal.for_download(row, now: @now, target: %{ratio: nil, seed_time: nil})
+    end
+
+    test "a built-in row with no tracker terms carries the target" do
+      row = %{
+        metadata: %{},
+        download_client: Mydia.Downloads.BuiltIn.name(),
+        status: "seeding",
+        ratio: 0.4,
+        seeding_time: 10,
+        in_client?: true
+      }
+
+      assert %SeedingGoal{
+               required_ratio: nil,
+               required_seed_time: nil,
+               target_ratio: 1.0,
+               target_seed_time: nil,
+               met?: false
+             } = SeedingGoal.for_download(row, now: @now, target: @target)
+
+      assert %SeedingGoal{met?: true} =
+               SeedingGoal.for_download(%{row | ratio: 1.1}, now: @now, target: @target)
+    end
+  end
 end

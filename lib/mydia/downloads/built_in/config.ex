@@ -33,6 +33,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @section_vpn_fields for {field, _var} <- BuiltInTorrent.env_vars(),
                           String.starts_with?(Atom.to_string(field), "vpn_"),
                           do: field
+  # Seeding targets are read by Mydia's own policies, never by the engine, so
+  # changing one needs no restart. Speed limits are engine flags and do.
+  @live_keys [:seed_ratio, :seed_time, :seed_goal_action]
   @secret_fragments ~w(SECRET PASSWORD TOKEN)
 
   @type t :: %__MODULE__{
@@ -49,6 +52,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           vpn_type: String.t() | nil,
           vpn_section: BuiltInTorrent.t(),
           vpn_interface: String.t(),
+          seed_ratio: float() | nil,
+          seed_time: non_neg_integer() | nil,
+          seed_goal_action: :pause | :remove,
           env_vpn_names: [String.t()],
           state_dir: String.t(),
           gluetun_dir: String.t(),
@@ -68,6 +74,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             vpn_type: nil,
             vpn_section: %BuiltInTorrent{},
             vpn_interface: "tun0",
+            seed_ratio: nil,
+            seed_time: nil,
+            seed_goal_action: :pause,
             env_vpn_names: [],
             state_dir: @default_state_dir,
             gluetun_dir: "/config/gluetun",
@@ -124,6 +133,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       vpn_type: blank_to_nil(section.vpn_type),
       vpn_section: section,
       vpn_interface: vpn_interface(section, env),
+      seed_ratio: section.seed_ratio,
+      seed_time: section.seed_time,
+      seed_goal_action: seed_goal_action(section.seed_goal_action),
       env_vpn_names: env_vpn_names(env),
       warnings:
         enabled_warnings(env["MYDIA_TORRENT_ENABLED"]) ++
@@ -138,20 +150,22 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   @doc """
   What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
-  the config minus `warnings` and, while the VPN is off, minus every VPN
+  the config minus `warnings`, the seeding fields (read by Mydia, not by the
+  engine) and, while the VPN is off, minus every VPN
   field, since those do not reach a client running without it. Turning the
   VPN on still changes the key.
   """
   @spec restart_key(t()) :: map()
   def restart_key(%__MODULE__{} = config) do
-    key = config |> Map.from_struct() |> Map.delete(:warnings)
+    key = config |> Map.from_struct() |> Map.drop([:warnings | @live_keys])
+    key = Map.update!(key, :vpn_section, &(&1 |> Map.from_struct() |> Map.drop(@live_keys)))
 
     if config.vpn? do
       key
     else
       key
       |> Map.drop(@vpn_keys)
-      |> Map.update!(:vpn_section, &(&1 |> Map.from_struct() |> Map.drop(@section_vpn_fields)))
+      |> Map.update!(:vpn_section, &Map.drop(&1, @section_vpn_fields))
     end
   end
 
@@ -260,6 +274,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   defp reserved_warnings(env) do
     for name <- @reserved, Map.has_key?(env, "MYDIA_VPN_" <> name), do: {:reserved_variable, name}
   end
+
+  defp seed_goal_action("remove"), do: :remove
+  defp seed_goal_action(_other), do: :pause
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(value), do: if(String.trim(value) == "", do: nil, else: value)

@@ -151,7 +151,20 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
     config = %{config | warnings: config.warnings ++ write_settings(config, env)}
     :persistent_term.put({__MODULE__, state.name}, config)
 
-    if unchanged?(state, config), do: state, else: restart(state, config, expected_hash)
+    if unchanged?(state, config),
+      do: refresh_live_settings(state, config),
+      else: restart(state, config, expected_hash)
+  end
+
+  # A reload that needs no restart can still carry new seeding targets:
+  # publish them on the running entry, keeping its API port and credentials.
+  defp refresh_live_settings(state, config) do
+    case BuiltIn.runtime() do
+      nil -> :ok
+      runtime -> BuiltIn.put_runtime(%{runtime | config: config})
+    end
+
+    %{state | current: config}
   end
 
   defp build_config(state, env) do

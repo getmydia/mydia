@@ -312,6 +312,138 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       refute ClientRemoval.terms_met?(private_no_terms, nil)
     end
 
+    test "the operator target guards built-in removal" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 1.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      # The built-in client is a runtime config, not a settings row.
+      download = download!(%{name: BuiltIn.name()}, imported: true)
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | ratio: 0.4})
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert StubAdapter.take_removes() == []
+
+      StubAdapter.put(%{status(:seeding, download.download_client_id) | ratio: 1.2})
+      assert :removed = ClientRemoval.maybe_remove_after_import(download)
+      assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    end
+
+    test "the operator target never removes a private built-in download with unknown terms" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 0.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download = download!(%{name: BuiltIn.name()}, imported: true, terms: %{"private" => true})
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 50.0,
+          seeding_time: 400 * 86_400
+      })
+
+      assert :still_seeding = ClientRemoval.maybe_remove_after_import(download)
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+      assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+    end
+
+    test "a built-in download waits for both the tracker minimum and the operator target" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_ratio: 2.0, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download =
+        download!(%{name: BuiltIn.name()},
+          imported: true,
+          terms: %{"minimum_ratio" => 1.0, "minimum_seed_time" => 72 * 3600}
+        )
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 1.1,
+          seeding_time: 80 * 3600
+      })
+
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 2.0,
+          seeding_time: 80 * 3600
+      })
+
+      assert :removed = ClientRemoval.finish_pending_removal(download)
+    end
+
+    test "a seed-time target never removes on time since completion alone" do
+      alias Mydia.Downloads.BuiltIn
+
+      BuiltIn.put_runtime(%BuiltIn.Runtime{
+        api_port: 3030,
+        credentials: {"mydia", "s3cret"},
+        config: %BuiltIn.Config{seed_time: 60, seed_goal_action: :remove}
+      })
+
+      on_exit(fn -> BuiltIn.clear_runtime() end)
+
+      previous = Registry.lookup(:rqbit)
+      Registry.register(:rqbit, StubAdapter)
+      on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+      download = download!(%{name: BuiltIn.name()}, imported: true)
+
+      # Seeding, finished three days ago, no reported or observed seed time
+      # (the first observation failed to write).
+      StubAdapter.put(%{
+        status(:seeding, download.download_client_id)
+        | ratio: 0.1,
+          completed_at: DateTime.add(DateTime.utc_now(), -3 * 86_400, :second)
+      })
+
+      assert :still_seeding = ClientRemoval.finish_pending_removal(download)
+      assert StubAdapter.take_removes() == []
+
+      :ok =
+        Mydia.Downloads.MetadataKey.put(download.id, "observed_seeding", %{
+          "seconds" => 3600,
+          "last_seen_at" => nil
+        })
+
+      assert :removed = ClientRemoval.finish_pending_removal(Downloads.get_download!(download.id))
+    end
+
     test "a guarded download stays pending on a seed-aware client even when paused" do
       client = client!(type: :qbittorrent, remove_completed: true)
       download = download!(client, terms: @private_ratio)

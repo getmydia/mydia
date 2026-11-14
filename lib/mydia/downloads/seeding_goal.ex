@@ -14,11 +14,21 @@ defmodule Mydia.Downloads.SeedingGoal do
   - Private with no known ratio or seed time: never met. Keeping a file is
     the safe wrong answer; the operator can still remove it by hand.
 
+  Built-in client downloads are also held to the operator's seeding target
+  (`Mydia.Downloads.BuiltIn.seeding_target/0`). The goal is a conjunction:
+  the tracker terms above must be met and, separately, the target (by either
+  its ratio or its seed time). Neither can lower the other, and a target can
+  never release a private torrent whose rules are unknown. `goal_applies?/2`
+  and `goal_met?/4` are the decision. The struct from `for_download/2` keeps
+  the two apart for display: `required_*` are the tracker's minimums and
+  `target_*` the operator's target.
+
   `Mydia.Downloads.ClientRemoval.terms_met?/2` applies this before automatic
-  removal, and the Downloads page shows `for_download/2`.
+  removal, `Mydia.Downloads.BuiltIn.SeedingPolicy` before pausing, and the
+  Downloads page shows `for_download/2`.
   """
 
-  alias Mydia.Downloads.ObservedSeedTime
+  alias Mydia.Downloads.{BuiltIn, ObservedSeedTime}
   alias Mydia.Indexers.Structs.TrackerTerms
 
   @type t :: %__MODULE__{
@@ -26,8 +36,12 @@ defmodule Mydia.Downloads.SeedingGoal do
           private?: boolean() | nil,
           required_ratio: float() | nil,
           required_seed_time: non_neg_integer() | nil,
+          target_ratio: float() | nil,
+          target_seed_time: non_neg_integer() | nil,
           ratio: float() | nil,
           seeding_time: non_neg_integer() | nil,
+          target_seeding_time: non_neg_integer() | nil,
+          target_met?: boolean(),
           met?: boolean()
         }
 
@@ -36,8 +50,12 @@ defmodule Mydia.Downloads.SeedingGoal do
     :private?,
     :required_ratio,
     :required_seed_time,
+    :target_ratio,
+    :target_seed_time,
     :ratio,
     :seeding_time,
+    :target_seeding_time,
+    target_met?: true,
     met?: false
   ]
 
@@ -50,6 +68,72 @@ defmodule Mydia.Downloads.SeedingGoal do
   end
 
   def terms(_download), do: nil
+
+  @doc """
+  True when the download has a seeding goal: its frozen tracker terms ask it
+  to keep seeding (`applies?/1`), or it belongs to the built-in client and
+  the operator set a seeding target. The target is `opts[:target]` when
+  given, else the client's own.
+  """
+  @spec goal_applies?(map(), keyword()) :: boolean()
+  def goal_applies?(download, opts \\ []) do
+    applies?(terms(download)) or not is_nil(target(download, opts))
+  end
+
+  @doc """
+  Whether `ratio` and `seeding_time` (seconds) meet the download's goal. Both
+  halves must hold:
+
+  - the tracker terms, under `met?/3` (met when they ask for nothing, never
+    when the tracker is private with no known minimum), and
+  - the operator's seeding target, for built-in client downloads that have
+    one: met when either its ratio or its seed time is reached.
+
+  So a tracker minimum never lowers the operator target, and the operator
+  target never lowers a tracker minimum. Options as in `goal_applies?/2`,
+  plus `:counted_seed_time`.
+
+  `seeding_time` may include the wall-clock fallback of `seeding_time/5`,
+  and the tracker terms accept it. The target's seed time does not: it is
+  judged on `opts[:counted_seed_time]`, seed time the client reported or
+  Mydia observed (`counted_seed_time/1` of the download when not given).
+  With neither known, the target's seed time is unreached, so a torrent that
+  finished long ago never meets a new target at once (for example after the
+  first observation failed to write).
+  """
+  @spec goal_met?(map(), number() | nil, non_neg_integer() | nil, keyword()) :: boolean()
+  def goal_met?(download, ratio, seeding_time, opts \\ []) do
+    counted = Keyword.get_lazy(opts, :counted_seed_time, fn -> counted_seed_time(download) end)
+
+    met?(terms(download), ratio, seeding_time) and
+      target_met?(target(download, opts), ratio, counted)
+  end
+
+  @doc """
+  Seed time the client reported (`:seeding_time` on a polled row) or Mydia
+  observed (`Mydia.Downloads.ObservedSeedTime`), never a wall-clock estimate.
+  Nil when neither is known.
+  """
+  @spec counted_seed_time(map()) :: non_neg_integer() | nil
+  def counted_seed_time(download),
+    do: Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download)
+
+  defp target_met?(nil, _ratio, _seeding_time), do: true
+
+  defp target_met?(%{ratio: required_ratio, seed_time: required_time}, ratio, seeding_time),
+    do: reached?(ratio, required_ratio) or reached?(seeding_time, required_time)
+
+  # Only the built-in client's downloads are held to the operator target;
+  # `opts[:target]` replaces the runtime lookup (callers that already read it).
+  # A target asking for nothing is no target.
+  defp target(download, opts) do
+    if Map.get(download, :download_client) == BuiltIn.name() do
+      case Keyword.get_lazy(opts, :target, &BuiltIn.seeding_target/0) do
+        %{ratio: nil, seed_time: nil} -> nil
+        target -> target
+      end
+    end
+  end
 
   @doc "True when the terms ask the download to keep seeding."
   @spec applies?(TrackerTerms.t() | nil) :: boolean()
@@ -117,15 +201,35 @@ defmodule Mydia.Downloads.SeedingGoal do
   map with `:metadata`, `:indexer`, `:status`, `:ratio`, `:seeding_time`,
   `:client_completed_at`, `:db_completed_at` and `:in_client?`), read the same
   way as `Mydia.Downloads.ClientRemoval.terms_met?/2`. Nil when no goal applies.
+  The second argument is a `DateTime` (now) or options `:now` and `:target`.
+  `met?` is `goal_met?/4`. `required_ratio` and `required_seed_time` are the
+  tracker's minimums (nil when it states none, as for a private tracker with
+  unknown rules); `target_ratio` and `target_seed_time` are the operator's
+  target for a built-in row (nil when there is none). They are never merged.
+  `target_met?` is the operator target alone (true when there is none), so a
+  pending tracker minimum never reads as an unmet target. `seeding_time`
+  includes the wall-clock fallback the tracker terms accept;
+  `target_seeding_time` is `counted_seed_time/1`, the seed time the target
+  is judged on.
   """
-  @spec for_download(map(), DateTime.t()) :: t() | nil
-  def for_download(download, now \\ DateTime.utc_now()) do
-    terms = terms(download)
+  @spec for_download(map(), DateTime.t() | keyword()) :: t() | nil
+  def for_download(download, opts \\ [])
 
-    if applies?(terms) do
+  def for_download(download, %DateTime{} = now), do: for_download(download, now: now)
+
+  def for_download(download, opts) do
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+    # Resolved once; every check below reuses it.
+    target = target(download, Keyword.take(opts, [:target]))
+
+    if goal_applies?(download, target: target) do
+      terms = terms(download) || %TrackerTerms{}
+      counted = counted_seed_time(download)
+      goal_opts = [target: target, counted_seed_time: counted]
+
       seeding_time =
         seeding_time(
-          Map.get(download, :seeding_time) || ObservedSeedTime.seconds(download),
+          counted,
           currently_seeding?(download),
           Map.get(download, :client_completed_at),
           Map.get(download, :db_completed_at),
@@ -139,9 +243,13 @@ defmodule Mydia.Downloads.SeedingGoal do
         private?: terms.private?,
         required_ratio: terms.minimum_ratio,
         required_seed_time: terms.minimum_seed_time,
+        target_ratio: target && target.ratio,
+        target_seed_time: target && target.seed_time,
         ratio: ratio,
         seeding_time: seeding_time,
-        met?: met?(terms, ratio, seeding_time)
+        target_seeding_time: counted,
+        target_met?: target_met?(target, ratio, counted),
+        met?: goal_met?(download, ratio, seeding_time, goal_opts)
       }
     end
   end

@@ -39,6 +39,9 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :vpn_server_cities, :string
     field :vpn_server_hostnames, :string
     field :vpn_port_forwarding, :boolean, default: false
+    field :seed_ratio, :float
+    field :seed_time, :integer
+    field :seed_goal_action, :string, default: "pause"
   end
 
   @type t :: %__MODULE__{}
@@ -62,8 +65,17 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     vpn_server_regions: "MYDIA_VPN_SERVER_REGIONS",
     vpn_server_cities: "MYDIA_VPN_SERVER_CITIES",
     vpn_server_hostnames: "MYDIA_VPN_SERVER_HOSTNAMES",
-    vpn_port_forwarding: "MYDIA_VPN_VPN_PORT_FORWARDING"
+    vpn_port_forwarding: "MYDIA_VPN_VPN_PORT_FORWARDING",
+    seed_ratio: "MYDIA_TORRENT_SEED_RATIO",
+    seed_time: "MYDIA_TORRENT_SEED_TIME",
+    seed_goal_action: "MYDIA_TORRENT_SEED_GOAL_ACTION"
   ]
+
+  @seed_goal_actions ~w(pause remove)
+
+  @doc "The accepted `seed_goal_action` values."
+  @spec seed_goal_actions() :: [String.t()]
+  def seed_goal_actions, do: @seed_goal_actions
 
   @secret_fields [:vpn_openvpn_password, :vpn_wireguard_private_key]
 
@@ -97,6 +109,9 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> normalize_identifier(:vpn_type)
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
+    |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
+    |> validate_number(:seed_time, greater_than_or_equal_to: 0)
+    |> validate_inclusion(:seed_goal_action, @seed_goal_actions)
     |> validate_rate_limits()
   end
 
