@@ -39,7 +39,7 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
     children =
       BuiltInSupervisor.children(%Config{enabled?: true, vpn?: true}, credentials: {"u", "p"})
 
-    assert ids(children) == [Status, Engine, SpaceGuard, Vpn]
+    assert ids(children) == [Status, Engine, Vpn, SpaceGuard]
     assert engine_opts(children)[:autostart] == false
   end
 

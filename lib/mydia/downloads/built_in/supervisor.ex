@@ -1,7 +1,7 @@
 defmodule Mydia.Downloads.BuiltIn.Supervisor do
   @moduledoc """
   One running instance of the built-in torrent client: `Status`, `Engine`,
-  the `SpaceGuard` and, with the VPN on, the `Vpn` gate.
+  with the VPN on the `Vpn` gate, and last the `SpaceGuard`.
 
   `Mydia.Downloads.BuiltIn.Manager` decides what runs and starts this tree
   under a `DynamicSupervisor`, replacing the whole tree whenever the effective
@@ -46,14 +46,15 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
       )
 
     # Engine and Vpn write the default-named Status too.
-    base = [
-      {Status, warnings: config.warnings},
-      engine,
-      {SpaceGuard, config: config, status: Status}
-    ]
+    base = [{Status, warnings: config.warnings}, engine]
 
-    if config.vpn?,
-      do: base ++ [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
-      else: base
+    vpn =
+      if config.vpn?,
+        do: [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
+        else: []
+
+    # Last, so under rest_for_one a guard crash restarts only the guard and
+    # never the VPN gate.
+    base ++ vpn ++ [{SpaceGuard, config: config, status: Status}]
   end
 end
