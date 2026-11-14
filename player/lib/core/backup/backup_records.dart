@@ -34,7 +34,10 @@ sealed class BackupRecord {
   /// Returns null for an unknown `type`, so records written by a newer build
   /// are skipped rather than fatal. Throws a [TypeError] or [FormatException]
   /// when a known type is malformed.
+  static const _knownTypes = {'watch', 'pin', 'account', 'setting', 'group'};
+
   static BackupRecord? fromJson(Map<String, dynamic> json) {
+    if (!_knownTypes.contains(json['type'])) return null;
     final key = json['key'] as String;
     final updatedAt = (json['updatedAt'] as num).toInt();
     final deleted = json['deleted'] as bool? ?? false;
@@ -59,9 +62,11 @@ sealed class BackupRecord {
           deleted: deleted,
         );
       case 'account':
+        if (!key.startsWith(AccountBackupRecord.keyPrefix)) {
+          throw FormatException('account record key $key');
+        }
         return AccountBackupRecord(
           key: key,
-          accountId: json['accountId'] as String,
           recordJson: Map<String, dynamic>.from(
               json['recordJson'] as Map<dynamic, dynamic>),
           secrets: Map<String, String>.from(
@@ -174,14 +179,17 @@ class PinBackupRecord extends BackupRecord {
 class AccountBackupRecord extends BackupRecord {
   const AccountBackupRecord({
     required super.key,
-    required this.accountId,
     required this.recordJson,
     required this.secrets,
     required super.updatedAt,
     super.deleted,
   });
 
-  final String accountId;
+  static const keyPrefix = 'account:';
+
+  /// Derived from [key], so the two cannot drift.
+  String get accountId => key.substring(keyPrefix.length);
+
   final Map<String, dynamic> recordJson;
   final Map<String, String> secrets;
 
@@ -190,7 +198,6 @@ class AccountBackupRecord extends BackupRecord {
 
   @override
   Map<String, dynamic> get fields => {
-        'accountId': accountId,
         'recordJson': recordJson,
         'secrets': secrets,
       };

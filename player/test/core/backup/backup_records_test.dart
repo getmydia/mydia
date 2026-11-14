@@ -21,7 +21,6 @@ const _pin = PinBackupRecord(
 );
 const _account = AccountBackupRecord(
   key: 'account:acc1',
-  accountId: 'acc1',
   recordJson: {
     'id': 'acc1',
     'kind': 'jellyfin',
@@ -119,6 +118,38 @@ void main() {
         throwsFormatException);
   });
 
+  test('unknown-type record without key is skipped, not fatal', () {
+    final d = BackupPayload.decode(_gz({
+      'v': 1,
+      'deviceName': 'd',
+      'platform': 'p',
+      'createdAt': 1,
+      'records': [
+        {'type': 'hologram', 'updatedAt': 'soon'},
+        _enc(_watch),
+      ],
+    }));
+    expect(d.records.single, isA<WatchBackupRecord>());
+  });
+
+  test('account id derives from key; bad account key is a FormatException', () {
+    expect(_account.accountId, 'acc1');
+    expect(
+        () => BackupPayload.decode(_gz({
+              'v': 1,
+              'deviceName': 'd',
+              'platform': 'p',
+              'createdAt': 1,
+              'records': [
+                {
+                  ..._enc(_account),
+                  'key': 'acc1',
+                },
+              ],
+            })),
+        throwsFormatException);
+  });
+
   test('toString never leaks secrets', () {
     expect(_account.toString(), isNot(contains('super-secret-token')));
   });
@@ -189,8 +220,6 @@ void main() {
       createdAt: 1,
       records: records,
     ).encode();
-    // ignore: avoid_print
-    print('payload bytes: ${bytes.length}');
     expect(bytes.length, lessThan(1024 * 1024));
   });
 }
