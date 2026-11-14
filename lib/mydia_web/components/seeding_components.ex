@@ -125,14 +125,32 @@ defmodule MydiaWeb.SeedingComponents do
     |> Enum.join(" · ")
   end
 
-  defp chip_title(%SeedingGoal{met?: true} = goal),
-    do: gettext("%{tracker}'s seeding goal is met", tracker: tracker(goal))
+  @doc "The chip's tooltip. A row held only by the operator's target names the target."
+  @spec chip_title(SeedingGoal.t()) :: String.t()
+  def chip_title(%SeedingGoal{} = goal) do
+    case {target_only?(goal), goal.met?} do
+      {true, true} ->
+        gettext("The seeding target is met")
 
-  defp chip_title(goal),
+      {true, false} ->
+        gettext("Kept in the download client until the seeding target is met")
+
+      {false, true} ->
+        gettext("%{tracker}'s seeding goal is met", tracker: tracker(goal))
+
+      {false, false} ->
+        gettext("Kept in the download client until %{tracker}'s seeding goal is met",
+          tracker: tracker(goal)
+        )
+    end
+  end
+
+  # No tracker requirement (and not a private tracker): only the target applies.
+  defp target_only?(%SeedingGoal{} = goal),
     do:
-      gettext("Kept in the download client until %{tracker}'s seeding goal is met",
-        tracker: tracker(goal)
-      )
+      is_nil(goal.required_ratio) and is_nil(goal.required_seed_time) and
+        goal.private? != true and
+        not (is_nil(goal.target_ratio) and is_nil(goal.target_seed_time))
 
   # A target with no tracker terms at all has no tracker sentence.
   defp requirement(%SeedingGoal{required_ratio: nil, required_seed_time: nil} = goal) do

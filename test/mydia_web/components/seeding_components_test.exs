@@ -134,6 +134,28 @@ defmodule MydiaWeb.SeedingComponentsTest do
       refute removal_text(goal) =~ "requires"
     end
 
+    test "the tooltip of a target-only row names the target, not the tracker" do
+      row = %{@mixed | metadata: %{}}
+
+      unmet = goal_for(row, %{ratio: 2.0, seed_time: nil})
+
+      assert SeedingComponents.chip_title(unmet) ==
+               "Kept in the download client until the seeding target is met"
+
+      met = goal_for(row, %{ratio: 1.0, seed_time: nil})
+      assert SeedingComponents.chip_title(met) == "The seeding target is met"
+    end
+
+    test "tracker rows keep the tracker wording in the tooltip" do
+      assert SeedingComponents.chip_title(goal_for(@mixed, %{ratio: 2.0, seed_time: nil})) =~
+               "Velvet Lantern's seeding goal"
+
+      assert SeedingComponents.chip_title(
+               goal_for(@private_unknown, %{ratio: 0.0, seed_time: nil})
+             ) =~
+               "Velvet Lantern's seeding goal"
+    end
+
     defp removal_text(%SeedingGoal{} = goal),
       do: SeedingComponents.goal_warning_text(goal)
   end
