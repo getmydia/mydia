@@ -46,6 +46,26 @@ final class BackupRemoved extends BackupStatus {
   const BackupRemoved();
 }
 
+/// One device in the vault, for the settings screen's member list. The
+/// recovery member is not one.
+class BackupMemberInfo {
+  const BackupMemberInfo({
+    required this.slotId,
+    required this.isThisDevice,
+    this.deviceName,
+    this.lastUploadMs,
+  });
+
+  final String slotId;
+  final bool isThisDevice;
+
+  /// From the device's own slot, null until a slot of it was read.
+  final String? deviceName;
+
+  /// The slot's `updated_at` (unix ms), null before its first upload.
+  final int? lastUploadMs;
+}
+
 /// A recovery key's vault, read but not yet joined: what a restore would
 /// bring. [BackupSyncService.commitRestore] applies it.
 class RestorePreview {

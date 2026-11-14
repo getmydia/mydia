@@ -651,6 +651,80 @@ void main() {
     });
   });
 
+  group('members and offers', () {
+    test('members lists each device with its name and last upload', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Night Harbor Laptop', key);
+      await a.service.poll();
+
+      final members = a.service.members.value;
+      expect(members, hasLength(2));
+      final own = members.singleWhere((m) => m.isThisDevice);
+      expect(own.slotId, await a.slotId());
+      final other = members.singleWhere((m) => !m.isThisDevice);
+      expect(other.slotId, await b.slotId());
+      expect(other.deviceName, 'Night Harbor Laptop');
+      expect(other.lastUploadMs, isNotNull);
+
+      // A restart reads only slots whose seq moved, so the names are kept.
+      a.service.dispose();
+      a.build();
+      await a.service.start();
+      await a.service.poll();
+      expect(
+          a.service.members.value
+              .singleWhere((m) => !m.isThisDevice)
+              .deviceName,
+          'Night Harbor Laptop');
+    });
+
+    test('a removed device leaves the member list', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Night Harbor Laptop', key);
+      await a.service.poll();
+      await a.service.removeMember(await b.slotId());
+      expect(a.service.members.value.map((m) => m.slotId), [await a.slotId()]);
+    });
+
+    test('turning backup off clears the member list', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      await rig.joined('Night Harbor Laptop', key);
+      await a.service.poll();
+      await a.service.disable();
+      expect(a.service.members.value, isEmpty);
+    });
+
+    test('pendingOffers follows offers as they arrive and are dismissed',
+        () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Laptop', key);
+      expect(b.service.pendingOffers.value, isEmpty);
+      await a.sources.putAccount(_plex());
+      a.service.markDirty();
+      await a.service.flush();
+      await b.service.poll();
+      final offer = b.service.pendingOffers.value.single;
+      expect(offer.accountId, 'p1');
+      expect(offer.fromDevice, 'Living Room TV');
+
+      await b.service.dismissPendingAccount('p1');
+      expect(b.service.pendingOffers.value, isEmpty);
+    });
+
+    test('accepting an offer removes it from pendingOffers', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Laptop', key);
+      await a.sources.putAccount(_plex());
+      a.service.markDirty();
+      await a.service.flush();
+      await b.service.poll();
+      expect(b.service.pendingOffers.value, hasLength(1));
+
+      await b.service.acceptPendingAccount('p1');
+      expect(b.service.pendingOffers.value, isEmpty);
+    });
+  });
+
   group('timing', () {
     _fake('30 progress updates within 2 minutes produce one upload',
         (rig) async {

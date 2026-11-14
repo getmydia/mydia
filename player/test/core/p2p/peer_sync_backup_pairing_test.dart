@@ -513,6 +513,34 @@ void main() {
         (current: ownVault, offered: hostVault));
   });
 
+  test('declining the offered vault clears the choice even without identity',
+      () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final joiner = await net.node('Night Harbor Laptop', 'node-b');
+    await host.enableBackup();
+    await joiner.enableBackup();
+    final hostVault = (await host.state())!.vaultId;
+
+    // A service that has not started holds no identity, and this one
+    // cannot load it.
+    final fresh = BackupSyncService(
+      relay: net.backupRelay.relayClient(),
+      authStorage: joiner.auth,
+      meta: joiner.meta,
+      snapshot: joiner.snapshot,
+      deviceName: () async => joiner.name,
+      platform: 'linux',
+    );
+    addTearDown(fresh.dispose);
+    await fresh.adoptVault(hostVault);
+    expect(fresh.pendingVaultChoice.value, isNotNull);
+    await joiner.auth.write(BackupIdentity.storageKey, 'not json');
+
+    await fresh.resolveVaultChoice(keepOffered: false);
+
+    expect(fresh.pendingVaultChoice.value, isNull);
+  });
+
   test('adoptVault aborts when the stored state cannot be read', () async {
     final host = await net.node('Living Room TV', 'node-a');
     final joiner = _Node('Night Harbor Laptop', 'node-b', net);

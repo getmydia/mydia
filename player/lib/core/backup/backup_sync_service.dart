@@ -114,9 +114,21 @@ class BackupSyncService {
   /// them every time.
   final _recoverySigners = <String, Uint8List?>{};
 
-  /// Device names from the slots read so far, by slot id.
-  Map<String, String> get slotDeviceNames => Map.unmodifiable(_slotNames);
-  final _slotNames = <String, String>{};
+  /// Device names from the slots read so far, by slot id. Kept in the meta
+  /// store, so they outlive a restart.
+  Map<String, String> get slotDeviceNames => _meta.slotNames();
+
+  final _members = ValueNotifier<List<BackupMemberInfo>>(const []);
+  late final _offers =
+      ValueNotifier<List<PendingAccountOffer>>(_meta.pendingAccounts());
+
+  /// Every device in the vault, this one first, as of the last manifest
+  /// read. Empty while off.
+  ValueListenable<List<BackupMemberInfo>> get members => _members;
+
+  /// Accounts other devices backed up that this one has not added or
+  /// dismissed.
+  ValueListenable<List<PendingAccountOffer>> get pendingOffers => _offers;
 
   BackupVaultState? _state;
   BackupIdentity? _identity;
@@ -182,6 +194,8 @@ class BackupSyncService {
     _recoveryMismatch.dispose();
     _joinedNotice.dispose();
     _vaultChoice.dispose();
+    _members.dispose();
+    _offers.dispose();
   }
 
   // Triggers
@@ -257,6 +271,8 @@ class BackupSyncService {
           rethrow;
         }
         await _join(state, identity);
+        _setMembers(
+            [BackupMemberInfo(slotId: identity.slotId, isThisDevice: true)]);
         await _attempt(() => _upload(force: true));
       });
 
@@ -312,8 +328,10 @@ class BackupSyncService {
           await _meta.setMergedSeq(e.key, e.value);
         }
         for (final e in preview.payloads.entries) {
-          _slotNames[e.key] = e.value.deviceName;
+          await _rememberName(e.key, e.value.deviceName);
         }
+        _refreshOffers();
+        _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
         await _attempt(() => _upload(force: true));
         return result;
@@ -324,21 +342,26 @@ class BackupSyncService {
   /// Adds an account another device backed up. Polls first when its record
   /// is no longer in memory (after a restart).
   Future<void> acceptPendingAccount(String accountId) => _userOp(() async {
-        if (!_accountRecords.containsKey(accountId) && _state != null) {
-          await _pollOnce(full: true);
-        }
-        final record = _accountRecords[accountId];
-        if (record == null) {
-          throw StateError('account $accountId is not in the backup');
-        }
-        if (!await _snapshot.addAccount(record)) {
-          throw StateError('account $accountId could not be added');
+        try {
+          if (!_accountRecords.containsKey(accountId) && _state != null) {
+            await _pollOnce(full: true);
+          }
+          final record = _accountRecords[accountId];
+          if (record == null) {
+            throw StateError('account $accountId is not in the backup');
+          }
+          if (!await _snapshot.addAccount(record)) {
+            throw StateError('account $accountId could not be added');
+          }
+        } finally {
+          _refreshOffers();
         }
       });
 
   Future<void> dismissPendingAccount(String accountId) async {
     final offer = _meta.pendingAccount(accountId);
     if (offer != null) await _meta.dismiss(accountId, offer.updatedAt);
+    _refreshOffers();
   }
 
   // Member changes
@@ -347,6 +370,10 @@ class BackupSyncService {
   /// sealed to every remaining member and the recovery member.
   Future<void> removeMember(String slotId) => _userOp(() async {
         final rotation = await _rotate(removeSlotId: slotId);
+        _setMembers([
+          for (final m in _members.value)
+            if (m.slotId != slotId) m,
+        ]);
         if (rotation != null) await _attempt(() => _upload(force: true));
       });
 
@@ -520,17 +547,19 @@ class BackupSyncService {
       _serialise(() async {
         final choice = _vaultChoice.value;
         if (choice == null) return;
-        final identity = await _loadIdentity();
         if (!keepOffered) {
+          // Cleared first: leaving the offered vault is best effort, and
+          // an identity that does not load must not leave the choice up.
           _setChoice(null);
           if (choice.offered == choice.current) return;
           try {
-            await _leaveOnRelay(choice.offered, identity);
+            await _leaveOnRelay(choice.offered, await _loadIdentity());
           } catch (e) {
             debugPrint('[Backup] Offered vault not left: ${e.runtimeType}');
           }
           return;
         }
+        final identity = await _loadIdentity();
         final BackupVaultState next;
         try {
           next = await _openAsMember(choice.offered, identity);
@@ -625,11 +654,12 @@ class BackupSyncService {
       BackupVaultState state, BackupIdentity identity) async {
     _cancelTimers();
     _failedSlots.clear();
-    _slotNames.clear();
     _accountRecords.clear();
     _setMismatch(false);
+    _setMembers(const []);
     await _meta.clearMergedSeqs();
     await _meta.clearSlotClaims();
+    await _meta.clearSlotNames();
     try {
       await _save(state);
     } catch (_) {
@@ -714,6 +744,17 @@ class BackupSyncService {
         await _save(state);
         _uploadedHash = hash;
         _tooLarge = false;
+        _setMembers([
+          for (final m in _members.value)
+            m.isThisDevice
+                ? BackupMemberInfo(
+                    slotId: m.slotId,
+                    isThisDevice: true,
+                    deviceName: m.deviceName,
+                    lastUploadMs: state.lastSuccessMs,
+                  )
+                : m,
+        ]);
         _set(BackupIdle(state.lastSuccessMs));
         return;
       }
@@ -765,6 +806,8 @@ class BackupSyncService {
         await _meta.setMergedSeq(s.slotId, s.seq);
       }
     }
+    _refreshOffers();
+    _publishMembers(m, identity.slotId);
     if (!_disposed) _unreadable.value = unreadable;
     // An unreadable slot keeps the ETag unset, so the next poll reads the
     // manifest again (the slot itself only once its seq moves) and the
@@ -782,8 +825,40 @@ class BackupSyncService {
   Future<BackupPayload?> _readSlot(String vaultId, SimpleKeyPair signer,
       ManifestSlot slot, Map<int, Uint8List> keys) async {
     final payload = await _ops.readSlot(vaultId, signer, slot, keys);
-    if (payload != null) _slotNames[slot.slotId] = payload.deviceName;
+    if (payload != null) await _rememberName(slot.slotId, payload.deviceName);
     return payload;
+  }
+
+  Future<void> _rememberName(String slotId, String name) async {
+    if (_meta.slotNames()[slotId] != name) {
+      await _meta.setSlotName(slotId, name);
+    }
+  }
+
+  /// [m]'s devices (not the recovery member), this device first and listed
+  /// even when the manifest predates its joining.
+  void _publishMembers(BackupManifest m, String ownSlotId) {
+    final names = _meta.slotNames();
+    final updated = {for (final s in m.slots) s.slotId: s.updatedAt};
+    BackupMemberInfo info(String slotId) => BackupMemberInfo(
+          slotId: slotId,
+          isThisDevice: slotId == ownSlotId,
+          deviceName: names[slotId],
+          lastUploadMs: updated[slotId],
+        );
+    _setMembers([
+      info(ownSlotId),
+      for (final x in m.members)
+        if (!x.recovery && x.slotId != ownSlotId) info(x.slotId),
+    ]);
+  }
+
+  void _setMembers(List<BackupMemberInfo> members) {
+    if (!_disposed) _members.value = List.unmodifiable(members);
+  }
+
+  void _refreshOffers() {
+    if (!_disposed) _offers.value = _meta.pendingAccounts();
   }
 
   Future<ApplyResult> _apply(
@@ -962,12 +1037,13 @@ class BackupSyncService {
     _failedSlots.clear();
     _setMismatch(false);
     _accountRecords.clear();
-    _slotNames.clear();
+    _setMembers(const []);
     _setChoice(null);
     if (!_disposed) _joinedNotice.value = false;
     await _store.clear();
     await _meta.clearMergedSeqs();
     await _meta.clearSlotClaims();
+    await _meta.clearSlotNames();
     await _meta.setJoinedNoticePending(false);
     if (!_disposed) _unreadable.value = const {};
     _set(next);

@@ -112,7 +112,8 @@ class PendingAccountOffer {
 /// Local bookkeeping of the cloud backup that is not itself backed up:
 /// fingerprints that keep a record's `updatedAt` stable while its value is
 /// unchanged, pending account offers and dismissals, the `seq` of each slot
-/// already merged, the p2p node id to backup slot id map, and whether the
+/// already merged, each slot's device name, the p2p node id to backup slot
+/// id map, and whether the
 /// joined-by-pairing notice is pending.
 class BackupMetaStore {
   BackupMetaStore(this._storage);
@@ -125,6 +126,7 @@ class BackupMetaStore {
   static const _seqPrefix = 'seq:';
   static const _nodePrefix = 'node:';
   static const _claimPrefix = 'claim:';
+  static const _namePrefix = 'name:';
 
   final BackupMetaStorage _storage;
 
@@ -256,6 +258,24 @@ class BackupMetaStore {
   Future<void> clearSlotClaims() async {
     for (final k in _storage.keys.toList()) {
       if (k.startsWith(_claimPrefix)) await _storage.delete(k);
+    }
+  }
+
+  /// The device name each slot last uploaded under, by slot id, for the
+  /// member list: a poll after a restart reads only the slots that changed.
+  Map<String, String> slotNames() => {
+        for (final k in _storage.keys)
+          if (k.startsWith(_namePrefix))
+            k.substring(_namePrefix.length): _storage.get(k)!,
+      };
+
+  Future<void> setSlotName(String slotId, String name) =>
+      _storage.put('$_namePrefix$slotId', name);
+
+  /// Forgets every slot name, when this device leaves a vault.
+  Future<void> clearSlotNames() async {
+    for (final k in _storage.keys.toList()) {
+      if (k.startsWith(_namePrefix)) await _storage.delete(k);
     }
   }
 
