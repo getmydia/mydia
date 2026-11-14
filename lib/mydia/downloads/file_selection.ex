@@ -16,13 +16,18 @@ defmodule Mydia.Downloads.FileSelection do
 
   @subtitle_extensions ~w(.srt .ass .ssa .sub .idx .sup .vtt)
 
-  @doc "True when the importer would take the file at `path`."
+  @doc """
+  True when the importer would take the file at `path`. Same filters in the
+  same order as `ImportCandidates`: the extension first, then sample
+  detection, which the importer skips for some types (`.m2ts`, `.flv`).
+  """
   @spec importable?(String.t()) :: boolean()
   def importable?(""), do: false
 
   def importable?(path) when is_binary(path) do
     ImportCandidates.importable?(%{name: Path.basename(path)}, :series) and
-      not SampleDetector.excluded?(SampleDetector.detect(path))
+      (SampleDetector.skip_detection?(path) or
+         not SampleDetector.excluded?(SampleDetector.detect(path)))
   end
 
   @doc "True when `path` has a subtitle extension, ignoring case."

@@ -34,6 +34,14 @@ defmodule Mydia.Downloads.FileSelectionTest do
     assert index_of(files, "Glass Harbor S02/Glass.Harbor.S02E01.en.srt") in kept
   end
 
+  test "files the importer takes without sample detection are kept" do
+    # The importer skips sample detection for .m2ts and .flv, so a name that
+    # reads as a sample is still imported and must not be deselected.
+    assert FileSelection.importable?("Glass Harbor S02/Sample/sample.m2ts")
+    assert FileSelection.importable?("Glass Harbor S02/glass.harbor.s02e01.sample.flv")
+    refute FileSelection.importable?("Glass Harbor S02/Sample/sample.mkv")
+  end
+
   test "trailer and .exe are skipped" do
     files = [
       "Glass Harbor/Glass.Harbor.2020.mkv",
