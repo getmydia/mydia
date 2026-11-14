@@ -411,6 +411,8 @@ class PeerSyncService {
       deviceName: _deviceName,
       platform: _platform,
       endpointAddrJson: localNodeAddr,
+      backupSigner: null,
+      backupBox: null,
     );
 
     final res = await _transport.sendPeerSync(hostNodeId, req);
@@ -550,6 +552,7 @@ class PeerSyncService {
         roster: rosterWire,
         watchRecords: watchWire,
         pinRecords: pinWire,
+        vaultId: null,
       ),
     );
 

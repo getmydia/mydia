@@ -711,6 +711,8 @@ sealed class FlutterPeerSyncRequest with _$FlutterPeerSyncRequest {
     required String deviceName,
     required String platform,
     String? endpointAddrJson,
+    String? backupSigner,
+    String? backupBox,
   }) = FlutterPeerSyncRequest_Pair;
   const factory FlutterPeerSyncRequest.sync_({
     required String authProof,
@@ -731,6 +733,7 @@ sealed class FlutterPeerSyncResponse with _$FlutterPeerSyncResponse {
     required List<FlutterWirePeerMember> roster,
     required List<FlutterWireWatchRecord> watchRecords,
     required List<FlutterWirePinRecord> pinRecords,
+    String? vaultId,
   }) = FlutterPeerSyncResponse_Paired;
   const factory FlutterPeerSyncResponse.pairRejected({
     required String reason,
