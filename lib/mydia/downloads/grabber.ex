@@ -33,6 +33,7 @@ defmodule Mydia.Downloads.Grabber do
   import Ecto.Query, warn: false
 
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.FileSelection
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Queue
   alias Mydia.Events
@@ -122,16 +123,16 @@ defmodule Mydia.Downloads.Grabber do
 
   defp attach_to_client(download, search_result, opts) do
     case Queue.select_and_add_to_client(search_result, opts) do
-      {:ok, client_config, client_id, _detected_type} ->
-        finalize_success(download, client_config.name, client_id, opts)
+      {:ok, client_config, client_id, _detected_type, selection} ->
+        finalize_success(download, client_config.name, client_id, selection, opts)
 
       {:error, reason} ->
         fail_grab(download, reason)
     end
   end
 
-  defp finalize_success(download, client_name, client_id, opts) do
-    case store_client_assignment(download, client_name, client_id) do
+  defp finalize_success(download, client_name, client_id, selection, opts) do
+    case store_client_assignment(download, client_name, client_id, selection) do
       {:ok, download} ->
         emit_initiated_event(download, opts)
 
@@ -159,8 +160,11 @@ defmodule Mydia.Downloads.Grabber do
 
   # Persist the client assignment, clearing a stale record that already holds
   # this (client, client_id) pair — mirrors create_download_record_with_retry.
-  defp store_client_assignment(download, client_name, client_id) do
-    attrs = %{download_client: client_name, download_client_id: client_id}
+  # The file selection is merged into the metadata written at grab_async/2.
+  defp store_client_assignment(download, client_name, client_id, selection) do
+    attrs =
+      %{download_client: client_name, download_client_id: client_id}
+      |> put_selection_metadata(download, selection)
 
     case History.update_download(download, attrs) do
       {:ok, updated} ->
@@ -177,6 +181,13 @@ defmodule Mydia.Downloads.Grabber do
           resolve_client_assignment_conflict(download, attrs, client_name, client_id, changeset)
         end
     end
+  end
+
+  defp put_selection_metadata(attrs, _download, nil), do: attrs
+
+  defp put_selection_metadata(attrs, download, selection) do
+    metadata = Map.merge(download.metadata || %{}, FileSelection.to_metadata(selection))
+    Map.put(attrs, :metadata, metadata)
   end
 
   defp resolve_client_assignment_conflict(download, attrs, client_name, client_id, changeset) do
