@@ -176,7 +176,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
             other -> other
           end
 
-        {selection, peers} =
+        {selection, peers, listed} =
           select_files(
             adapter,
             config_to_map(client_config),
@@ -188,7 +188,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
 
         add_opts =
           opts_with_type
-          |> Keyword.put(:only_files, selection && selection.only_files)
+          |> Keyword.put(:only_files, add_only_files(selection, listed))
           |> Keyword.put(:initial_peers, peers)
 
         with :ok <- check_space(client_config, selection, search_result, opts_with_type),
@@ -204,17 +204,17 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   end
 
   # Lists a torrent's files and decides which ones to download. Returns
-  # `{selection | nil, peers}`; peers are only returned by a successful listing.
-  # Any failure means "add every file": the selection is an optimisation, never
-  # a reason to refuse a grab.
+  # `{selection | nil, peers, listed_files}`; peers and files are only returned
+  # by a successful listing. Any failure means "add every file": the selection
+  # is an optimisation, never a reason to refuse a grab.
   defp select_files(adapter, config, torrent_input, download_type, search_result, opts) do
     if torrent_input?(torrent_input, download_type) do
       case Client.list_torrent_files(adapter, config, torrent_input) do
         {:ok, %{files: files, peers: peers}} ->
-          {safe_select(search_result, files, opts), peers}
+          {safe_select(search_result, files, opts), peers, files}
 
         {:error, :unsupported} ->
-          {nil, nil}
+          {nil, nil, []}
 
         {:error, reason} ->
           Logger.warning("Could not list torrent files; adding every file",
@@ -222,12 +222,22 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
             reason: inspect(reason)
           )
 
-          {nil, nil}
+          {nil, nil, []}
       end
     else
-      {nil, nil}
+      {nil, nil, []}
     end
   end
+
+  # A selection that keeps every file leaves `only_files` nil, but the add
+  # still names every listed file: rqbit keeps an older, narrower selection on
+  # a torrent it already manages unless the add asks for something explicit.
+  # Without a listing (or a selection) nothing is sent, as before.
+  defp add_only_files(%WantedFiles{only_files: nil}, [_ | _] = listed),
+    do: listed |> Enum.map(& &1.index) |> Enum.sort()
+
+  defp add_only_files(%WantedFiles{only_files: only_files}, _listed), do: only_files
+  defp add_only_files(nil, _listed), do: nil
 
   defp torrent_input?({:magnet, _}, download_type), do: download_type in [nil, :torrent]
   defp torrent_input?(_input, download_type), do: download_type == :torrent

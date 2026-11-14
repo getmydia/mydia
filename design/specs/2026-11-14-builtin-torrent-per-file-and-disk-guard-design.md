@@ -135,8 +135,10 @@ other adapters ignore.
 3. Disk guard check (see below); a refusal returns
    `{:error, {:client_error, Error.insufficient_space(...)}}` and adds
    nothing.
-4. Add with `only_files` (omitted when everything is kept) and
-   `initial_peers`.
+4. Add with `only_files` and `initial_peers`. When everything is kept the
+   selection's `only_files` stays nil, but the add names every listed index,
+   so a torrent rqbit already manages with a narrower selection is widened.
+   Without a listing no selection is sent.
 
 `select_and_add_to_client/2` returns the `%WantedFiles{}` (or nil) as a
 fifth tuple element, and both callers (`Queue.Lifecycle.initiate_download/2`

@@ -309,7 +309,10 @@ leave the tunnel from the port the peer contacted. See
 
 `Client.Rqbit` lists a torrent's files before adding it, and
 `Queue.ClientSelection` decides which to keep (`WantedFiles.select/2`) and
-adds with `only_files`. Clients without `list_torrent_files/2` add everything.
+adds with `only_files`. A selection that keeps everything (`only_files: nil`)
+still adds with every listed index, so rqbit widens an older, narrower
+selection on a torrent it already manages. Clients without
+`list_torrent_files/2`, and a failed listing, add with no selection.
 Junk is what `FileSelection.importable?/1` and `subtitle?/1` say it is, the
 same rules `FileSelectionPolicy` applies, so the two never disagree on a
 sample or an `.nfo`; `WantedFiles` adds the episode rules (skip an owned

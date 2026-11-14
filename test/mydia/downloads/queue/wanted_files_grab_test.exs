@@ -84,6 +84,8 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
       assert reloaded.metadata["file_selection"] == %{"source" => "auto", "skipped" => 4}
     end
 
+    # The add still names every file, so rqbit widens an older, narrower
+    # selection on a torrent it already manages.
     test "a keep-everything grab records no file_selection, leaving junk to the policy", ctx do
       expect_rqbit(ctx.bypass, listing: :ok)
 
@@ -91,7 +93,7 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
                Queue.initiate_download(pack_result(ctx.eps), episode_id: Enum.at(ctx.eps, 4).id)
 
       assert_received {:add, add_params}
-      refute Map.has_key?(add_params, "only_files")
+      assert add_params["only_files"] == "0,1,2,3,4,5,6,7,8,9"
 
       reloaded = Repo.get!(Download, download.id)
       assert reloaded.metadata["selected_files"] == nil
@@ -203,7 +205,29 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
 
       assert map_size(sel.file_episodes) == 10
       assert_received {:add, add_params}
-      refute Map.has_key?(add_params, "only_files")
+      assert add_params["only_files"] == "0,1,2,3,4,5,6,7,8,9"
+    end
+
+    test "a keep-everything grab widens an already-managed torrent's narrower selection",
+         ctx do
+      # rqbit already manages the torrent with only files 4..9 included and
+      # answers the add with that torrent unchanged.
+      expect_rqbit(ctx.bypass, listing: :ok, add_included: Enum.map(0..9, &(&1 >= 4)))
+      test_pid = self()
+
+      Bypass.expect_once(ctx.bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:update_only_files, Jason.decode!(body)})
+        json_resp(conn, 200, %{})
+      end)
+
+      assert {:ok, _config, @hash, :torrent, %WantedFiles{only_files: nil}} =
+               Queue.select_and_add_to_client(pack_result(ctx.eps),
+                 episode_id: Enum.at(ctx.eps, 0).id,
+                 download_type: :torrent
+               )
+
+      assert_received {:update_only_files, %{"only_files" => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}}
     end
   end
 
@@ -255,7 +279,9 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
     }
   end
 
-  defp expect_rqbit(bypass, listing: listing) do
+  defp expect_rqbit(bypass, opts) do
+    listing = Keyword.fetch!(opts, :listing)
+    add_body = add_response(Keyword.get(opts, :add_included))
     test_pid = self()
 
     Bypass.expect(bypass, "POST", "/torrents", fn conn ->
@@ -266,9 +292,24 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
         conn |> Plug.Conn.put_private(:test_pid, test_pid) |> listing_response(listing)
       else
         send(test_pid, {:add, conn.query_params})
-        json_resp(conn, 200, %{"id" => 0, "details" => %{"id" => 0, "info_hash" => @hash}})
+        json_resp(conn, 200, add_body)
       end
     end)
+  end
+
+  defp add_response(nil), do: %{"id" => 0, "details" => %{"id" => 0, "info_hash" => @hash}}
+
+  # The selection in force on a torrent rqbit already manages.
+  defp add_response(included) do
+    files =
+      included
+      |> Enum.with_index(1)
+      |> Enum.map(fn {included?, n} ->
+        num = n |> Integer.to_string() |> String.pad_leading(2, "0")
+        %{"name" => "#{@pack}E#{num}.1080p.mkv", "length" => 100, "included" => included?}
+      end)
+
+    put_in(add_response(nil), ["details", "files"], files)
   end
 
   defp listing_response(conn, :ok), do: json_resp(conn, 200, listing_body())
