@@ -15,6 +15,7 @@ import '../../p2p/peer_files_host.dart'
 import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
 import '../../p2p/p2p_service.dart' show p2pServiceProvider;
 import '../../p2p/peer_files_backend.dart';
+import '../../player/media_probe.dart' show mediaProbeProvider;
 import '../../p2p/peer_files_client.dart' show peerFilesClientProvider;
 import '../../p2p/peer_files_store.dart' show PeerFilesStore;
 import '../../p2p/peer_files_transport.dart' show P2pPeerFilesTransport;
@@ -297,6 +298,8 @@ FilesMediaSource buildFilesSource(
               nodeId: nodeId,
             ))
         : null,
+    probe: ref.read(mediaProbeProvider),
+    mediaInfoCache: ref.read(filesMediaInfoCacheProvider),
     // An SMB account's playback URLs outlive this source: saving new
     // credentials or a folder rebuilds it, and a playback in progress
     // streams through them. They go with the account

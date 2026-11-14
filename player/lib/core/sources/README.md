@@ -554,6 +554,23 @@ files account in again (`/sources/add/files?account=`) redirects to the
 folder picker for `flocal` and to the prefilled WebDAV form otherwise.
 `removeFilesAccount` removes the record and secrets, then clears the index.
 
+### Media Info
+
+`FilesMediaSource` implements `MediaInfo`: one entry per file of a movie,
+episode or loose file (`files/media_info/files_media_info.dart`). The index
+gives the name, folder, size, the extension as the container and the sidecar
+subtitles with no I/O. Streams, resolution, codec, duration and bitrate come
+from `MediaProbe` (`core/player/media_probe.dart`), a headless mpv that opens
+the file through the same `PlayableFile` playback uses, one probe at a time
+process wide with a 15 second timeout. Results go into the Hive box
+`files_media_info` (`FilesMediaInfoCache`), keyed by account and file key and
+valid while the file's size and modified time are unchanged; they never touch
+the `FileLibraryIndex`. A failed read shows the index details with `streams`
+null and is not cached. On desktop a background queue probes new files after
+each scan; on mobile and TV, and for libraries a paired player lends, files
+are probed lazily when the panel asks (`probeFileKey`, which shares one probe
+between concurrent asks for a file).
+
 ### Peer files sources
 
 A paired player can lend its files libraries to the others in its sync group.
