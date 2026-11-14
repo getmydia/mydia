@@ -35,6 +35,13 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
     end
   end
 
+  defp put_field(acc, :min_free_space_gb, raw) do
+    case Loader.parse_integer(raw) do
+      {:ok, int} when int >= 0 -> Map.put(acc, :min_free_space_gb, int)
+      _ -> acc
+    end
+  end
+
   defp put_field(acc, field, raw) when field in @boolean_fields do
     case parse_boolean(raw) do
       {:ok, bool} -> Map.put(acc, field, bool)

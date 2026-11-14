@@ -18,6 +18,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @reserved ~w(SPLIT_TUNNEL_GID HTTP_CONTROL_SERVER_ADDRESS HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH DNS_ADDRESS DNS_SERVER)
   @default_port 51413
   @default_api_port 3030
+  @default_min_free_space_gb 5
   @default_download_path "/data/downloads"
   @default_state_dir "/config/rqbit"
 
@@ -42,6 +43,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
+          min_free_space_bytes: non_neg_integer(),
           vpn?: boolean(),
           vpn_provider: String.t() | nil,
           vpn_type: String.t() | nil,
@@ -59,6 +61,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
+            min_free_space_bytes: @default_min_free_space_gb * 1024 ** 3,
             vpn?: false,
             vpn_provider: nil,
             vpn_type: nil,
@@ -113,6 +116,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       state_dir: state_dir,
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
+      min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * 1024 ** 3,
       vpn?: section.vpn_enabled == true,
       vpn_provider: blank_to_nil(section.vpn_provider),
       vpn_type: blank_to_nil(section.vpn_type),
@@ -130,20 +134,25 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   @doc """
   What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
-  the config minus `warnings` and, while the VPN is off, minus every VPN
+  the config minus `warnings`, `min_free_space_bytes` (the disk guard reads it
+  live, the engine never does) and, while the VPN is off, minus every VPN
   field, since those do not reach a client running without it. Turning the
   VPN on still changes the key.
   """
   @spec restart_key(t()) :: map()
   def restart_key(%__MODULE__{} = config) do
-    key = config |> Map.from_struct() |> Map.delete(:warnings)
+    key =
+      config
+      |> Map.from_struct()
+      |> Map.drop([:warnings, :min_free_space_bytes])
+      |> Map.update!(:vpn_section, &(&1 |> Map.from_struct() |> Map.delete(:min_free_space_gb)))
 
     if config.vpn? do
       key
     else
       key
       |> Map.drop(@vpn_keys)
-      |> Map.update!(:vpn_section, &(&1 |> Map.from_struct() |> Map.drop(@section_vpn_fields)))
+      |> Map.update!(:vpn_section, &Map.drop(&1, @section_vpn_fields))
     end
   end
 

@@ -180,6 +180,13 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :listen_port)
     end
 
+    test "min_free_space_gb accepts zero and rejects negatives" do
+      assert changeset(%{"min_free_space_gb" => "0"}).valid?
+      assert changeset(%{"min_free_space_gb" => "12"}).valid?
+      cs = changeset(%{"min_free_space_gb" => "-1"})
+      assert Keyword.has_key?(cs.errors, :min_free_space_gb)
+    end
+
     test "enabled accepts only automatic, true or false" do
       assert changeset(%{"enabled" => "automatic"}).valid?
       assert changeset(%{"enabled" => "true"}).valid?

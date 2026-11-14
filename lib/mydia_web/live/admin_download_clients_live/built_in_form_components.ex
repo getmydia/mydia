@@ -173,6 +173,19 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
       </.text_field>
       <.text_field
         form={@form}
+        field={:min_free_space_gb}
+        sources={@sources}
+        type="number"
+        label={gettext("Keep free (GB)")}
+      >
+        <:hint>
+          {gettext(
+            "Grabs that would leave less than this free are refused, and downloads pause below it. 0 turns this off."
+          )}
+        </:hint>
+      </.text_field>
+      <.text_field
+        form={@form}
         field={:listen_port}
         sources={@sources}
         type="number"

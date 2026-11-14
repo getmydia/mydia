@@ -24,6 +24,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :state_path, :string, default: "/config/rqbit"
     field :listen_port, :integer, default: 51413
     field :api_port, :integer, default: 3030
+    field :min_free_space_gb, :integer, default: 5
     field :vpn_enabled, :boolean, default: false
     field :vpn_provider, :string
     field :vpn_type, :string
@@ -46,6 +47,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     state_path: "MYDIA_TORRENT_STATE_PATH",
     listen_port: "MYDIA_TORRENT_PORT",
     api_port: "MYDIA_TORRENT_API_PORT",
+    min_free_space_gb: "MYDIA_TORRENT_MIN_FREE_SPACE_GB",
     vpn_enabled: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_provider: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_type: "MYDIA_VPN_VPN_TYPE",
@@ -77,6 +79,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> normalize_identifier(:vpn_type)
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
+    |> validate_number(:min_free_space_gb, greater_than_or_equal_to: 0)
   end
 
   defp normalize_identifier(changeset, field) do

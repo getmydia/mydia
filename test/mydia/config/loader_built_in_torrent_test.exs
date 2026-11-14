@@ -37,6 +37,16 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
            ).valid?
   end
 
+  test "min free space accepts zero and ignores negatives and junk" do
+    var = "MYDIA_TORRENT_MIN_FREE_SPACE_GB"
+    assert BuiltInTorrentEnv.load(env(%{var => "12"})).min_free_space_gb == 12
+    assert BuiltInTorrentEnv.load(env(%{var => "0"})).min_free_space_gb == 0
+
+    for bad <- ["-1", "abc"] do
+      refute Map.has_key?(BuiltInTorrentEnv.load(env(%{var => bad})), :min_free_space_gb)
+    end
+  end
+
   test "enabled accepts off and ignores junk" do
     assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_ENABLED" => " OFF "})).enabled ==
              false
