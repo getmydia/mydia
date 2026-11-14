@@ -5,6 +5,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
 import '../../screens/sources/source_browse_providers.dart';
 import 'media_info_content.dart';
@@ -25,8 +26,9 @@ class MediaInfoSheet extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
           ),
-          error: (_, __) => _PanelShell(
+          error: (error, _) => _PanelShell(
             child: _ErrorBody(
+              error: error,
               onRetry: () => ref.invalidate(sourceMediaInfoProvider(item)),
             ),
           ),
@@ -236,12 +238,17 @@ class _PanelShell extends StatelessWidget {
 }
 
 class _ErrorBody extends StatelessWidget {
+  /// What the read failed with: a source failure is named, anything else
+  /// gets the generic line.
+  final Object error;
   final VoidCallback onRetry;
 
-  const _ErrorBody({required this.onRetry});
+  const _ErrorBody({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final e = error;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
       child: Column(
@@ -249,7 +256,9 @@ class _ErrorBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            context.l10n.mediaInfoLoadFailed,
+            e is SourceException
+                ? l10n.sourceError(e)
+                : l10n.mediaInfoLoadFailed,
             style: TextStyle(
                 color: context.palette.textSecondary,
                 fontSize: 13,
