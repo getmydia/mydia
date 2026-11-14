@@ -38,25 +38,41 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
         {:noreply, assign(socket, :error, gettext("Keep at least one video file."))}
 
       {:error, :imported} ->
-        {:noreply, load(socket, gettext("This download was already imported."))}
+        {:noreply,
+         socket
+         |> assign(:editable, false)
+         |> reload_after_error(gettext("This download was already imported."))}
 
       {:error, _reason} ->
-        {:noreply, load(socket, gettext("Couldn't update the file selection."))}
+        {:noreply, reload_after_error(socket, gettext("Couldn't update the file selection."))}
     end
   end
 
-  defp load(socket, error \\ nil) do
+  defp load(socket) do
     download = socket.assigns.download
     supported = TorrentFiles.supported?(download)
 
+    assign(socket, supported: supported, files: list_files(download, supported), error: nil)
+  end
+
+  # After a failed save the client may not answer either: keep the list the
+  # operator just saw, so the error shown with it stays on screen.
+  defp reload_after_error(socket, error) do
     files =
-      with true <- supported, {:ok, files} <- TorrentFiles.list(download) do
-        files
-      else
-        _ -> []
+      case list_files(socket.assigns.download, socket.assigns.supported) do
+        [] -> socket.assigns.files
+        files -> files
       end
 
-    assign(socket, supported: supported, files: files, error: error)
+    assign(socket, files: files, error: error)
+  end
+
+  defp list_files(download, supported) do
+    with true <- supported, {:ok, files} <- TorrentFiles.list(download) do
+      files
+    else
+      _ -> []
+    end
   end
 
   defp parse_index(value) do

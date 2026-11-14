@@ -16,18 +16,32 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
   defmodule StubAdapter do
     @behaviour Mydia.Downloads.Client
 
+    @keys [:files, :selections, :files_down, :selection_fails]
+
     def put_files(files), do: :persistent_term.put({__MODULE__, :files}, files)
     def selections, do: :persistent_term.get({__MODULE__, :selections}, [])
-    def cleanup, do: Enum.each([:files, :selections], &:persistent_term.erase({__MODULE__, &1}))
+    # The client stops answering for its file list.
+    def files_down!, do: :persistent_term.put({__MODULE__, :files_down}, true)
+    # The selection is refused, and the client goes down with it.
+    def selection_fails!, do: :persistent_term.put({__MODULE__, :selection_fails}, true)
+    def cleanup, do: Enum.each(@keys, &:persistent_term.erase({__MODULE__, &1}))
 
     @impl true
-    def torrent_files(_config, _id),
-      do: {:ok, :persistent_term.get({__MODULE__, :files}, [])}
+    def torrent_files(_config, _id) do
+      if :persistent_term.get({__MODULE__, :files_down}, false),
+        do: {:error, Mydia.Downloads.Client.Error.connection_failed("down")},
+        else: {:ok, :persistent_term.get({__MODULE__, :files}, [])}
+    end
 
     @impl true
     def set_file_selection(_config, id, indexes) do
-      :persistent_term.put({__MODULE__, :selections}, [{id, indexes} | selections()])
-      :ok
+      if :persistent_term.get({__MODULE__, :selection_fails}, false) do
+        files_down!()
+        {:error, Mydia.Downloads.Client.Error.connection_failed("down")}
+      else
+        :persistent_term.put({__MODULE__, :selections}, [{id, indexes} | selections()])
+        :ok
+      end
     end
 
     @impl true
@@ -142,6 +156,29 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     view |> form("#download-files-form", %{"files" => ["1"]}) |> render_submit()
 
     assert has_element?(view, "#download-files-error", "Keep at least one video file.")
+    assert StubAdapter.selections() == []
+  end
+
+  test "a failed save keeps its error visible when the file list cannot be reloaded",
+       %{conn: conn} do
+    view = open(conn, built_in_download())
+    StubAdapter.selection_fails!()
+
+    view |> form("#download-files-form", %{"files" => ["0"]}) |> render_submit()
+
+    assert has_element?(view, "#download-files-error", "Couldn't update the file selection.")
+  end
+
+  test "saving an imported download shows why and turns the panel read-only", %{conn: conn} do
+    view = open(conn, built_in_download(%{imported_at: DateTime.utc_now()}))
+    StubAdapter.files_down!()
+
+    # The checkboxes are disabled, so submit the event directly, as a stale
+    # page would.
+    view |> element("#download-files-form") |> render_submit(%{"files" => ["0"]})
+
+    assert has_element?(view, "#download-files-error", "This download was already imported.")
+    refute has_element?(view, "#download-files-save")
     assert StubAdapter.selections() == []
   end
 
