@@ -299,6 +299,8 @@ fn http_client() -> Option<reqwest::Client> {
         // A stalled upstream would otherwise hold one of the peer's slots
         // forever.
         .read_timeout(Duration::from_secs(30))
+        // Never fetch a URL the grant did not name: a 3xx is answered 502.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .inspect_err(|e| tracing::warn!("peer files: no HTTP client: {e}"))
         .ok()
@@ -311,6 +313,11 @@ pub(crate) struct PeerFilesHost<R> {
     members: Mutex<HashSet<String>>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     grants: Mutex<HashMap<(String, String), Grant>>,
+    /// Bumped per account by `invalidate_account`. A resolve that started
+    /// under an older generation is served but not cached, so an answer from
+    /// before an invalidation never outlives it. Lock order: this, then
+    /// `grants`.
+    generations: Mutex<HashMap<String, u64>>,
     http: Option<reqwest::Client>,
 }
 
@@ -321,6 +328,7 @@ impl<R: GrantResolver> PeerFilesHost<R> {
             members: Mutex::new(HashSet::new()),
             slots: Mutex::new(HashMap::new()),
             grants: Mutex::new(HashMap::new()),
+            generations: Mutex::new(HashMap::new()),
             http: http_client(),
         }
     }
@@ -329,8 +337,13 @@ impl<R: GrantResolver> PeerFilesHost<R> {
         &self.resolver
     }
 
-    /// Replace the allowlist. Reads already streaming finish; the next read
-    /// from a removed peer is 403.
+    /// Replace the allowlist. Reads already streaming finish; a removed
+    /// peer's next read is 403, and so is a read of its that was waiting for
+    /// a slot or a grant.
+    ///
+    /// A removed peer's slots are dropped. If it is added back it gets a
+    /// fresh set of [`READS_PER_PEER`], so reads it still had streaming from
+    /// before do not count against them.
     pub(crate) fn set_members(&self, node_ids: Vec<String>) {
         let members: HashSet<String> = node_ids.into_iter().collect();
         lock(&self.slots).retain(|peer, _| members.contains(peer));
@@ -339,7 +352,16 @@ impl<R: GrantResolver> PeerFilesHost<R> {
 
     /// Drop every cached grant of `account_id`, for when its index changed.
     pub(crate) fn invalidate_account(&self, account_id: &str) {
+        let mut generations = lock(&self.generations);
+        *generations.entry(account_id.to_string()).or_insert(0) += 1;
         lock(&self.grants).retain(|(account, _), _| account != account_id);
+    }
+
+    fn generation(&self, account_id: &str) -> u64 {
+        lock(&self.generations)
+            .get(account_id)
+            .copied()
+            .unwrap_or(0)
     }
 
     fn is_member(&self, peer: &str) -> bool {
@@ -358,8 +380,13 @@ impl<R: GrantResolver> PeerFilesHost<R> {
         if let Some(grant) = lock(&self.grants).get(&key).cloned() {
             return Some(grant);
         }
+        let generation = self.generation(account_id);
         let grant = self.resolver.resolve(account_id, path).await?;
-        lock(&self.grants).insert(key, grant.clone());
+        let generations = lock(&self.generations);
+        if generations.get(account_id).copied().unwrap_or(0) == generation {
+            lock(&self.grants).insert(key, grant.clone());
+        }
+        drop(generations);
         Some(grant)
     }
 
@@ -378,12 +405,24 @@ impl<R: GrantResolver> PeerFilesHost<R> {
         // requests into Dart either. Held until this function returns, which
         // is when the stream has ended.
         let Ok(_permit) = self.slots_for(&peer).acquire_owned().await else {
+            // The semaphore is never closed, so this does not happen; end the
+            // stream rather than leave the viewer waiting if it ever does.
+            sink.abort().await;
             return;
         };
+        // Membership can change while a read waits for a slot or a grant.
+        if !self.is_member(&peer) {
+            reply_status(&sink, 403, None).await;
+            return;
+        }
         let Some(grant) = self.grant(&account_id, &path).await else {
             reply_status(&sink, 404, None).await;
             return;
         };
+        if !self.is_member(&peer) {
+            reply_status(&sink, 403, None).await;
+            return;
+        }
         let outcome = match grant_target(&grant.url) {
             Some(Target::File(file)) => serve_file(&sink, &file, &request).await,
             Some(Target::Http(url)) => {
@@ -420,8 +459,9 @@ impl<R: GrantResolver> PeerFilesHost<R> {
         if let Some(range) = range_header(request.range_start, request.range_end) {
             upstream = upstream.header(reqwest::header::RANGE, range);
         }
+        // A 3xx is not followed (see `http_client`), so only a 2xx is served.
         let mut response = match upstream.send().await {
-            Ok(response) if response.status().as_u16() < 400 => response,
+            Ok(response) if response.status().is_success() => response,
             Ok(response) => {
                 tracing::warn!("peer files: upstream answered {}", response.status());
                 reply_status(sink, 502, None).await;
@@ -432,6 +472,15 @@ impl<R: GrantResolver> PeerFilesHost<R> {
                 reply_status(sink, 502, None).await;
                 return Outcome::Failed;
             }
+        };
+        // The response header has no way to say "length unknown": the viewer
+        // sets Content-Length from it, and a body longer than that fails on
+        // its side. An upstream that will not say how long the body is
+        // cannot be relayed.
+        let Some(content_length) = response.content_length() else {
+            tracing::warn!("peer files: upstream sent no Content-Length");
+            reply_status(sink, 502, None).await;
+            return Outcome::Failed;
         };
         let text_header = |name: reqwest::header::HeaderName| {
             response
@@ -444,7 +493,7 @@ impl<R: GrantResolver> PeerFilesHost<R> {
             status: response.status().as_u16(),
             content_type: text_header(reqwest::header::CONTENT_TYPE)
                 .unwrap_or_else(|| content_type_for(read_path).to_string()),
-            content_length: response.content_length().unwrap_or(0),
+            content_length,
             content_range: text_header(reqwest::header::CONTENT_RANGE),
             cache_control: None,
         };
@@ -729,10 +778,42 @@ mod tests {
         f
     }
 
-    fn host_with(resolver: MapResolver) -> Arc<PeerFilesHost<MapResolver>> {
+    fn host_with<R: GrantResolver>(resolver: R) -> Arc<PeerFilesHost<R>> {
         let host = Arc::new(PeerFilesHost::new(resolver));
         host.set_members(vec![MEMBER.to_string()]);
         host
+    }
+
+    /// Answers one fixed grant, but only once the test lets each call
+    /// through, so a test can act while a resolve is in flight.
+    struct BlockingResolver {
+        grant: Grant,
+        entered: Semaphore,
+        release: Semaphore,
+        calls: AtomicUsize,
+    }
+
+    impl BlockingResolver {
+        fn new(url: &str) -> Self {
+            Self {
+                grant: Grant {
+                    url: url.to_string(),
+                    headers: vec![],
+                },
+                entered: Semaphore::new(0),
+                release: Semaphore::new(0),
+                calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl GrantResolver for BlockingResolver {
+        async fn resolve(&self, _account_id: &str, _path: &str) -> Option<Grant> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.entered.add_permits(1);
+            self.release.acquire().await.unwrap().forget();
+            Some(self.grant.clone())
+        }
     }
 
     fn request(path: &str, range_start: Option<u64>, range_end: Option<u64>) -> HlsRequest {
@@ -746,7 +827,8 @@ mod tests {
     }
 
     /// A loopback HTTP server over `buffer()` with Range support.
-    /// `/fail` answers 500. `/slow` sends 16 KiB frames 5 ms apart and counts
+    /// `/fail` answers 500, `/redirect` a 302 to `/movie.mkv`, and
+    /// `/nolength` a body without Content-Length. `/slow` sends 16 KiB frames 5 ms apart and counts
     /// the bytes it handed to the connection, so a test can tell whether the
     /// client kept reading.
     struct TestServer {
@@ -787,6 +869,22 @@ mod tests {
             return Ok(Response::builder()
                 .status(500)
                 .body(Full::new(Bytes::new()).boxed())
+                .unwrap());
+        }
+        if req.uri().path() == "/redirect" {
+            return Ok(Response::builder()
+                .status(302)
+                .header("location", "/movie.mkv")
+                .body(Full::new(Bytes::new()).boxed())
+                .unwrap());
+        }
+        if req.uri().path() == "/nolength" {
+            // A streamed body with no length: hyper sends it chunked.
+            let piece = Bytes::copy_from_slice(&buf[..1000]);
+            let stream = futures_util::stream::iter([Ok::<_, Infallible>(Frame::data(piece))]);
+            return Ok(Response::builder()
+                .status(200)
+                .body(StreamBody::new(stream).boxed())
                 .unwrap());
         }
         let (start, end, partial) = match parse_range(&req) {
@@ -1308,6 +1406,182 @@ mod tests {
                 assert_eq!(sink.status(), Some(404));
                 assert_eq!(host.resolver().calls(), expected_calls);
             }
+        });
+    }
+
+    #[test]
+    fn removed_member_next_read_is_403() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap();
+            let host = host_with(MapResolver::with(path, path));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(0), Some(9)),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(206));
+
+            host.set_members(vec![]);
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(path, Some(0), Some(9)),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(403));
+            assert!(sink.body().is_empty());
+        });
+    }
+
+    #[test]
+    fn read_queued_for_a_slot_is_403_once_its_peer_is_revoked() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let held = file.path().to_str().unwrap().to_string();
+            let other = temp_file();
+            let queued = other.path().to_str().unwrap().to_string();
+            let resolver = MapResolver::with(&held, &held);
+            resolver.grants.lock().unwrap().insert(
+                (ACCOUNT.to_string(), queued.clone()),
+                Grant {
+                    url: queued.clone(),
+                    headers: vec![],
+                },
+            );
+            let host = host_with(resolver);
+            let _guard = runtime::enter();
+
+            let mut gates = Vec::new();
+            for _ in 0..4 {
+                let (sink, gate) = RecordingSink::gated();
+                let (h, p, s) = (host.clone(), held.clone(), sink.clone());
+                runtime::spawn(async move {
+                    h.serve(MEMBER.to_string(), request(&p, None, None), s)
+                        .await;
+                });
+                wait_for(&sink, |s| s.status().is_some()).await;
+                gates.push(gate);
+            }
+            assert_eq!(host.resolver().calls(), 1);
+
+            let fifth = RecordingSink::default();
+            let (h, p, s) = (host.clone(), queued.clone(), fifth.clone());
+            runtime::spawn(async move {
+                h.serve(MEMBER.to_string(), request(&p, None, None), s)
+                    .await;
+            });
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(fifth.status(), None);
+
+            host.set_members(vec![]);
+            gates[0].close();
+            wait_for(&fifth, |s| s.status().is_some()).await;
+            assert_eq!(fifth.status(), Some(403));
+            assert!(fifth.body().is_empty());
+            // Only the held path was ever resolved: the queued read stopped
+            // before asking for its grant.
+            assert_eq!(host.resolver().calls(), 1);
+            for gate in &gates {
+                gate.close();
+            }
+        });
+    }
+
+    #[test]
+    fn read_whose_peer_is_revoked_during_the_grant_is_403() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap().to_string();
+            let host = host_with(BlockingResolver::new(&path));
+            let _guard = runtime::enter();
+            let sink = RecordingSink::default();
+            let (h, p, s) = (host.clone(), path.clone(), sink.clone());
+            let read = runtime::spawn(async move {
+                h.serve(MEMBER.to_string(), request(&p, None, None), s)
+                    .await;
+            });
+            host.resolver().entered.acquire().await.unwrap().forget();
+            host.set_members(vec![]);
+            host.resolver().release.add_permits(1);
+            read.await.unwrap();
+            assert_eq!(sink.status(), Some(403));
+            assert!(sink.body().is_empty());
+        });
+    }
+
+    #[test]
+    fn grant_resolved_across_an_invalidation_is_served_but_not_cached() {
+        runtime::block_on(async {
+            let file = temp_file();
+            let path = file.path().to_str().unwrap().to_string();
+            let host = host_with(BlockingResolver::new(&path));
+            let _guard = runtime::enter();
+            let sink = RecordingSink::default();
+            let (h, p, s) = (host.clone(), path.clone(), sink.clone());
+            let read = runtime::spawn(async move {
+                h.serve(MEMBER.to_string(), request(&p, Some(0), Some(9)), s)
+                    .await;
+            });
+            host.resolver().entered.acquire().await.unwrap().forget();
+            host.invalidate_account(ACCOUNT);
+            host.resolver().release.add_permits(1);
+            read.await.unwrap();
+            assert_eq!(sink.status(), Some(206));
+            assert_eq!(sink.body(), buffer()[..10].to_vec());
+
+            // The next read asks again rather than using the stale answer.
+            host.resolver().release.add_permits(1);
+            let again = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request(&path, Some(0), Some(9)),
+                again.clone(),
+            )
+            .await;
+            assert_eq!(again.status(), Some(206));
+            assert_eq!(host.resolver().calls.load(Ordering::SeqCst), 2);
+        });
+    }
+
+    #[test]
+    fn http_redirect_becomes_502_and_is_not_followed() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/redirect", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+            assert!(sink.body().is_empty());
+            // One request reached the server: the redirect target never did.
+            assert_eq!(server.seen_auth.lock().unwrap().len(), 1);
+        });
+    }
+
+    #[test]
+    fn http_without_content_length_becomes_502() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let url = format!("{}/nolength", server.base);
+            let host = host_with(MapResolver::with("/share/movie.mkv", &url));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+            assert!(sink.body().is_empty());
         });
     }
 

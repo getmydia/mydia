@@ -1246,6 +1246,11 @@ fn should_forward_log_event(queued: usize, cap: usize) -> bool {
     queued < cap
 }
 
+/// Takes a `peerfile:` HLS stream request (peer, request, stream id) and
+/// answers it in the background. Must not block: the dispatcher calls it
+/// inline.
+type PeerFileRoute = Arc<dyn Fn(String, HlsRequest, String) + Send + Sync>;
+
 /// Drains `event_rx`, routing an inbound `RemoteControl` request onto
 /// `control_tx` and every other event onto `generic_tx`. Spawned once,
 /// unconditionally, by `P2pHost::init` — see the comment at that call site
@@ -1271,11 +1276,9 @@ fn should_forward_log_event(queued: usize, cap: usize) -> bool {
 /// event is actually sent. Relaxed ordering is enough on both sides: this is
 /// a coarse back pressure gate on one counter, not a synchronization
 /// primitive protecting other memory.
-/// Takes a `peerfile:` HLS stream request (peer, request, stream id) and
-/// answers it in the background. Must not block: the dispatcher calls it
-/// inline.
-type PeerFileRoute = Arc<dyn Fn(String, HlsRequest, String) + Send + Sync>;
-
+///
+/// A `peerfile:` HLS stream request goes to `peer_file_route` when there is
+/// one; every other HLS request stays on `generic_tx`.
 async fn run_event_dispatcher(
     event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     control_tx: mpsc::Sender<FlutterInboundControlRequest>,
