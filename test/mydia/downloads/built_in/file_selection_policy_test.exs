@@ -132,6 +132,26 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     refute stamped(row)
   end
 
+  test "a manual save made after the poll snapshot is never overridden" do
+    StubAdapter.put_files({:ok, video_and_junk()})
+    # The poll read the row before the operator saved a selection.
+    row = row()
+    :ok = Mydia.Downloads.MetadataKey.put(row.id, "file_selection", %{"source" => "manual"})
+
+    assert :done = FileSelectionPolicy.apply(row)
+    assert StubAdapter.selections() == []
+    assert stamped(row) == %{"source" => "manual"}
+  end
+
+  test "a failure after a manual save keeps the manual stamp" do
+    StubAdapter.fail!()
+    row = row()
+    :ok = Mydia.Downloads.MetadataKey.put(row.id, "file_selection", %{"source" => "manual"})
+
+    assert {:error, _} = FileSelectionPolicy.apply(row)
+    assert stamped(row) == %{"source" => "manual"}
+  end
+
   test "waits while the torrent is checking, without asking the client" do
     assert :waiting = FileSelectionPolicy.apply(row(%{status: "checking"}))
     assert StubAdapter.list_calls() == 0

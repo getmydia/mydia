@@ -10,11 +10,13 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
     * `%{"source" => "auto_failed", "attempts" => 3}` after the third failure
 
   `auto`, `manual` and `auto_failed` entries are final; the policy never
-  overrides an operator's choice.
+  overrides an operator's choice. The stored entry is read again before the
+  policy acts, so a selection saved after the poll's snapshot still wins.
   """
 
-  alias Mydia.Downloads.{Client, FileSelection, MetadataKey, Queue}
+  alias Mydia.Downloads.{Client, Download, FileSelection, MetadataKey, Queue}
   alias Mydia.Downloads.Structs.EnrichedDownload
+  alias Mydia.Repo
 
   @key "file_selection"
   @final_sources ~w(auto manual auto_failed)
@@ -27,7 +29,7 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
 
     cond do
       not is_nil(row.imported_at) -> :done
-      entry["source"] in @final_sources -> :done
+      final?(entry) -> :done
       row.status == "checking" -> :waiting
       true -> select(row, entry)
     end
@@ -45,6 +47,10 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
   defp decide(_row, _adapter, _config, []), do: :waiting
 
   defp decide(row, adapter, config, files) do
+    if final_now?(row.id), do: :done, else: select_files(row, adapter, config, files)
+  end
+
+  defp select_files(row, adapter, config, files) do
     keep = FileSelection.keep(files)
     skipped = length(files) - length(keep)
 
@@ -70,7 +76,19 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
         do: %{"source" => "auto_failed", "attempts" => @max_attempts},
         else: %{"source" => "auto_pending", "attempts" => attempts}
 
-    MetadataKey.put(row.id, @key, value)
+    unless final_now?(row.id), do: MetadataKey.put(row.id, @key, value)
     {:error, reason}
   end
+
+  # The row is the poll's snapshot: the operator may have saved a selection
+  # since, and that choice must win. A deleted row needs nothing either.
+  defp final_now?(id) do
+    case Repo.get(Download, id) do
+      %Download{metadata: metadata} -> final?(Map.get(metadata || %{}, @key))
+      nil -> true
+    end
+  end
+
+  defp final?(%{"source" => source}), do: source in @final_sources
+  defp final?(_entry), do: false
 end
