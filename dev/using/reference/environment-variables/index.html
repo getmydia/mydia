@@ -4476,6 +4476,21 @@ blank value counts as unset.</p>
 <td>Port of the built-in client's HTTP API on <code>127.0.0.1</code>. Change it when something else on the host uses 3030.</td>
 </tr>
 <tr>
+<td><code>MYDIA_TORRENT_SEED_RATIO</code></td>
+<td>unset</td>
+<td>Seed each torrent until it reaches this share ratio (0 or more). Combined with the seed time, whichever comes first counts. A tracker's own minimum has to be met as well.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_SEED_TIME</code></td>
+<td>unset</td>
+<td>Seed each torrent for at least this many minutes.</td>
+</tr>
+<tr>
+<td><code>MYDIA_TORRENT_SEED_GOAL_ACTION</code></td>
+<td><code>pause</code></td>
+<td>What happens at the target: <code>pause</code> or <code>remove</code> (remove from the client once imported). Switching to <code>remove</code> also removes, with their files, imported torrents already in the client that are past the target, including ones resumed by hand.</td>
+</tr>
+<tr>
 <td><code>MYDIA_TORRENT_DOWNLOAD_LIMIT</code></td>
 <td>unlimited</td>
 <td>Maximum download speed in KiB/s, a whole number from 16 to 4194303 (rqbit cannot move a 16 KiB block under a lower limit). Any other value is ignored with a warning in the admin UI.</td>
