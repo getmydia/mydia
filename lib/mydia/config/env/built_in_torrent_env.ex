@@ -4,8 +4,11 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   environment (`MYDIA_TORRENT_*` and `MYDIA_VPN_*`).
 
   Takes a one-argument getenv function so tests can inject values. Blank values
-  count as unset; a value that does not parse, or a port outside 1..65535, leaves its key out
-  (`BuiltIn.Config` still warns about it from the raw environment).
+  count as unset; a value that does not parse, a port outside 1..65535 or a
+  negative reserve leaves its key out. `BuiltIn.Config` warns about such a
+  value from the raw environment for `MYDIA_TORRENT_ENABLED`, both ports and
+  `MYDIA_TORRENT_MIN_FREE_SPACE_GB`; a bad `MYDIA_VPN_VPN_PORT_FORWARDING` is
+  dropped silently.
   """
 
   alias Mydia.Config.Loader

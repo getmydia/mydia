@@ -212,6 +212,18 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
     end
 
+    test "a bad disk reserve in the environment warns" do
+      for bad <- ["lots", "-1", "2.5"] do
+        config = load([], [], env: %{"MYDIA_TORRENT_MIN_FREE_SPACE_GB" => bad})
+        assert {:invalid_min_free_space, bad} in config.warnings
+      end
+
+      for good <- ["0", "12", " 7 ", " "] do
+        config = load([], [], env: %{"MYDIA_TORRENT_MIN_FREE_SPACE_GB" => good})
+        assert config.warnings == [], inspect(good)
+      end
+    end
+
     test "reserved gluetun variables are reported" do
       env = %{
         "MYDIA_VPN_SPLIT_TUNNEL_GID" => "5",

@@ -130,6 +130,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           name_warnings ++
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
+          reserve_warnings(env["MYDIA_TORRENT_MIN_FREE_SPACE_GB"]) ++
           reserved_warnings(env)
     }
   end
@@ -222,6 +223,20 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         case Integer.parse(String.trim(value)) do
           {port, ""} when port in 1..65_535 -> []
           _ -> [{warning, value}]
+        end
+    end
+  end
+
+  # The env loader drops anything but a whole number >= 0.
+  defp reserve_warnings(value) do
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {gb, ""} when gb >= 0 -> []
+          _ -> [{:invalid_min_free_space, value}]
         end
     end
   end

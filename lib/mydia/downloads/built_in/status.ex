@@ -84,6 +84,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe({:invalid_api_port, value}),
     do: "MYDIA_TORRENT_API_PORT is #{inspect(value)}, not a port number. Using 3030."
 
+  def describe({:invalid_min_free_space, value}),
+    do:
+      "MYDIA_TORRENT_MIN_FREE_SPACE_GB is #{inspect(value)}, not a whole number of gigabytes. Using the saved setting or 5."
+
   def describe({:invalid_enabled, value}),
     do:
       "MYDIA_TORRENT_ENABLED is #{inspect(value)}, which is neither true nor false. Ignoring it and deciding automatically."
