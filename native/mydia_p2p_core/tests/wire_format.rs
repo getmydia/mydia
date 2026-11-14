@@ -15,7 +15,7 @@
 use mydia_p2p_core::{
     MydiaRequest, MydiaResponse, PeerFilesRequest, PeerFilesResponse, PeerSyncResponse,
     PlaybackSnapshot, PlaybackState, RemoteControlRequest, RemoteControlResponse,
-    TargetCapabilities,
+    TargetCapabilities, WireIndexPage,
 };
 
 fn hex(bytes: &[u8]) -> String {
@@ -233,4 +233,56 @@ fn peer_files_is_the_last_request_variant() {
         decoded,
         MydiaResponse::PeerSync(PeerSyncResponse::NotAuthorized)
     );
+}
+
+/// Index records are CBOR byte strings: a major type 2 header and then the
+/// record's bytes verbatim. The integer-array form serde gives `Vec<u8>` by
+/// default spends two bytes on most JSON characters, which doubles a page
+/// past the budget the Dart pager assumes.
+#[test]
+fn index_page_records_encode_as_byte_strings() {
+    let record = br#"{"id":"r1"}"#.to_vec();
+    let page = WireIndexPage {
+        roots: vec![record.clone()],
+        ..WireIndexPage::default()
+    };
+
+    let encoded = serde_cbor::to_vec(&page).unwrap();
+
+    // 0x4b: byte string of length 11, then the record itself.
+    let framed = format!("4b{}", hex(&record));
+    assert!(
+        hex(&encoded).contains(&framed),
+        "record not framed as a byte string: {}",
+        hex(&encoded)
+    );
+    assert_eq!(
+        serde_cbor::from_slice::<WireIndexPage>(&encoded).unwrap(),
+        page
+    );
+}
+
+/// A page whose records arrive as integer arrays still decodes.
+#[test]
+fn index_page_records_decode_from_integer_arrays() {
+    #[derive(serde::Serialize)]
+    struct ArrayPage {
+        roots: Vec<Vec<u8>>,
+        files: Vec<Vec<u8>>,
+        groups: Vec<Vec<u8>>,
+        movies: Vec<Vec<u8>>,
+        shows: Vec<Vec<u8>>,
+    }
+    let encoded = serde_cbor::to_vec(&ArrayPage {
+        roots: vec![b"{}".to_vec()],
+        files: vec![],
+        groups: vec![],
+        movies: vec![],
+        shows: vec![],
+    })
+    .unwrap();
+
+    let decoded: WireIndexPage = serde_cbor::from_slice(&encoded).unwrap();
+
+    assert_eq!(decoded.roots, vec![b"{}".to_vec()]);
 }

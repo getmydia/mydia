@@ -25,13 +25,41 @@ pub struct WireSharedAccount {
 /// One page of an account's index. Each element is a single record exactly as
 /// Dart encodes it (UTF-8 JSON of the record's `toMap()`), so Rust never has
 /// to mirror the Dart record shapes.
+///
+/// Each record is encoded as a CBOR byte string. serde's default for
+/// `Vec<u8>` is an array of integers, which costs two bytes for most JSON
+/// characters and so doubles a page past `PEER_FILES_PAGE_BUDGET`, whose
+/// accounting in Dart assumes byte-string framing.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WireIndexPage {
+    #[serde(with = "byte_strings")]
     pub roots: Vec<Vec<u8>>,
+    #[serde(with = "byte_strings")]
     pub files: Vec<Vec<u8>>,
+    #[serde(with = "byte_strings")]
     pub groups: Vec<Vec<u8>>,
+    #[serde(with = "byte_strings")]
     pub movies: Vec<Vec<u8>>,
+    #[serde(with = "byte_strings")]
     pub shows: Vec<Vec<u8>>,
+}
+
+/// A list of records, each as a byte string. Decoding also takes the
+/// integer-array form, which `serde_bytes::ByteBuf` accepts.
+mod byte_strings {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use serde_bytes::{ByteBuf, Bytes};
+
+    pub fn serialize<S: Serializer>(records: &[Vec<u8>], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(records.iter().map(|record| Bytes::new(record)))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<Vec<u8>>, D::Error> {
+        let records = Vec::<ByteBuf>::deserialize(deserializer)?;
+        Ok(records.into_iter().map(ByteBuf::into_vec).collect())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
