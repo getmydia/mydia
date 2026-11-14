@@ -143,12 +143,13 @@ fifth tuple element, and both callers (`Queue.Lifecycle.initiate_download/2`
 and `Grabber.run_grab/3`) merge `WantedFiles.to_metadata/1` into the
 download's metadata: `"selected_files"` (indices), `"file_episodes"` (file
 index, as a string, to the one episode id a kept video parsed to),
-`"skipped_owned_episode_ids"` and `"file_selection" => %{"source" => "auto",
-"skipped" => n}` (`FileSelectionPolicy.auto_entry/1`, `n` the files left
-out). That last entry is final for `FileSelectionPolicy`, so the policy never
-re-selects files this selection skipped; a manual selection still replaces it.
-With no selection nothing is recorded, and the policy deselects junk after the
-add.
+`"skipped_owned_episode_ids"`, and, only when the selection left files out
+(`only_files` set), `"file_selection" => %{"source" => "auto", "skipped" =>
+n}` (`FileSelectionPolicy.auto_entry/1`, `n` >= 1 the files left out). That
+entry is final for `FileSelectionPolicy`, so the policy never re-selects files
+this selection skipped; a manual selection still replaces it. A selection that
+keeps everything, or no selection at all, records no entry, and the policy
+deselects junk after the add.
 
 `FileImport.detect_partial_pack/2` subtracts `skipped_owned_episode_ids` from
 the expected count, so a pack whose owned episodes were skipped is not

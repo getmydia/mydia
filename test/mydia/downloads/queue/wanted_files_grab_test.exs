@@ -84,6 +84,20 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
       assert reloaded.metadata["file_selection"] == %{"source" => "auto", "skipped" => 4}
     end
 
+    test "a keep-everything grab records no file_selection, leaving junk to the policy", ctx do
+      expect_rqbit(ctx.bypass, listing: :ok)
+
+      assert {:ok, download} =
+               Queue.initiate_download(pack_result(ctx.eps), episode_id: Enum.at(ctx.eps, 4).id)
+
+      assert_received {:add, add_params}
+      refute Map.has_key?(add_params, "only_files")
+
+      reloaded = Repo.get!(Download, download.id)
+      assert reloaded.metadata["selected_files"] == nil
+      refute Map.has_key?(reloaded.metadata, "file_selection")
+    end
+
     test "a failed listing records no file_selection, leaving it to the policy", ctx do
       expect_rqbit(ctx.bypass, listing: :error)
 

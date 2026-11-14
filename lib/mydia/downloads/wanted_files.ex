@@ -93,11 +93,12 @@ defmodule Mydia.Downloads.WantedFiles do
   @doc """
   Serialises a selection for download metadata (string keys).
 
-  A selection also records `BuiltIn.FileSelectionPolicy`'s final `"auto"`
-  entry, so the policy treats the torrent as decided and never re-selects
-  files this selection skipped. No selection (`nil`: the listing failed or
-  the adapter cannot list) records nothing, and the policy deselects junk
-  after the add as usual.
+  A selection that left files out (`only_files` set) also records
+  `BuiltIn.FileSelectionPolicy`'s final `"auto"` entry, so the policy treats
+  the torrent as decided and never re-selects files this selection skipped.
+  A selection that keeps everything, or no selection (`nil`: the listing
+  failed or the adapter cannot list), records no entry, and the policy
+  deselects junk after the add as usual.
   """
   @spec to_metadata(t() | nil) :: map()
   def to_metadata(nil), do: %{}
@@ -106,10 +107,20 @@ defmodule Mydia.Downloads.WantedFiles do
     %{
       "selected_files" => sel.only_files,
       "file_episodes" => Map.new(sel.file_episodes, fn {i, id} -> {to_string(i), id} end),
-      "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids,
-      FileSelectionPolicy.metadata_key() => FileSelectionPolicy.auto_entry(sel.skipped_files)
+      "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids
     }
+    |> put_policy_entry(sel)
   end
+
+  # Only a selection that left files out is final for the policy. One that
+  # keeps everything (including the every-video-owned fallback) leaves the
+  # policy to deselect junk after the add.
+  defp put_policy_entry(metadata, %__MODULE__{only_files: [_ | _], skipped_files: n})
+       when n > 0,
+       do:
+         Map.put(metadata, FileSelectionPolicy.metadata_key(), FileSelectionPolicy.auto_entry(n))
+
+  defp put_policy_entry(metadata, _sel), do: metadata
 
   # -- episodes ---------------------------------------------------------
 

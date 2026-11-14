@@ -177,11 +177,11 @@ name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
 
-**File selection.** Most built-in torrents get their files chosen before
-the add, by `WantedFiles` (see "Wanted files and early import" below), which
-records the policy's final `auto` entry so nothing re-selects what it skipped.
-`BuiltIn.FileSelectionPolicy` is the fallback for a grab whose listing failed
-or timed out. It (run by `BuiltIn.Policies`
+**File selection.** When `WantedFiles` (see "Wanted files and early import"
+below) leaves files out before the add, it records the policy's final `auto`
+entry so nothing re-selects what it skipped. Otherwise (it kept every file,
+or the listing failed or timed out) `BuiltIn.FileSelectionPolicy` deselects
+the junk after the add. It (run by `BuiltIn.Policies`
 for rows that are in the client and downloading, paused, checking or queued)
 deselects junk once per torrent, as soon as the file list is known (a magnet
 has none until its metadata resolves; an empty list waits, and so does a
@@ -316,11 +316,14 @@ sample or an `.nfo`; `WantedFiles` adds the episode rules (skip an owned
 episode the search did not target, keep anything it cannot match). The
 selection is recorded in the download's metadata:
 
-- `"file_selection"`: `%{"source" => "auto", "skipped" => n}`, `n` the files
-  left out (0 when everything is kept). It is `FileSelectionPolicy`'s final
-  entry, so the policy leaves the torrent alone; a manual selection from the
-  Files panel replaces it with `manual` as usual. A failed listing records
-  none of these keys, and the policy deselects junk after the add.
+- `"file_selection"`: `%{"source" => "auto", "skipped" => n}`, `n` (1 or
+  more) the files left out, written only when the selection left files out
+  (`only_files` set). It is `FileSelectionPolicy`'s final entry, so the
+  policy leaves the torrent alone; a manual selection from the Files panel
+  replaces it with `manual` as usual. A selection that keeps everything
+  (including the every-video-owned fallback) writes no entry, and neither
+  does a failed listing (which records none of these keys), so the policy
+  deselects junk after the add.
 - `"selected_files"`: indices of the files kept.
 - `"file_episodes"`: file index (a string) to the single episode id a kept
   video parsed to. Multi-episode and unmatched files have no entry.

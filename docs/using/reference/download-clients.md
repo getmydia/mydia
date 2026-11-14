@@ -97,8 +97,8 @@ applies to new grabs; torrents already running finish where they started.
   trailers, extras and anything that is not a video or subtitle) and keeps
   the videos and subtitles. It normally chooses before adding the torrent,
   which also skips season-pack episodes you already have (see "Only the files
-  Mydia needs" below). If it could not read the file list then, it skips the
-  junk as soon as the list is known. If a torrent has no importable video,
+  Mydia needs" below). If it could not read the file list then, or chose to
+  keep every file, it skips the junk as soon as the list is known. If a torrent has no importable video,
   everything is downloaded. Open a download in Downloads to see its Files
   panel and tick or untick files yourself; your choice replaces the automatic
   one and stays until the download is imported. At least one video file must

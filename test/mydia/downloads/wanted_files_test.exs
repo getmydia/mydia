@@ -177,13 +177,18 @@ defmodule Mydia.Downloads.WantedFilesTest do
     assert WantedFiles.to_metadata(nil) == %{}
   end
 
-  test "to_metadata/1 of a keep-everything selection records zero skipped", %{
+  test "to_metadata/1 of a keep-everything selection leaves file_selection to the policy", %{
     show: show,
     ids: ids
   } do
     sel = WantedFiles.select(ctx(show, ids), Enum.map(5..10, &ep_file(&1 - 5, &1)))
     assert sel.only_files == nil
-    assert WantedFiles.to_metadata(sel)["file_selection"] == %{"source" => "auto", "skipped" => 0}
+    refute Map.has_key?(WantedFiles.to_metadata(sel), "file_selection")
+
+    # The every-video-owned fallback keeps everything too.
+    sel = WantedFiles.select(ctx(show, []), Enum.map(1..4, &ep_file(&1 - 1, &1)))
+    assert sel.only_files == nil
+    refute Map.has_key?(WantedFiles.to_metadata(sel), "file_selection")
   end
 
   describe "context_for/2" do
