@@ -76,9 +76,12 @@ Every record is LWW per key on its origin `updatedAt`, the rule
   node address. Restore adds them flagged `needsReauth`. Their watch state
   lives on the server, and a server token copied to a second install is a
   device the server cannot revoke separately.
-- **Jellyfin** tokens are bound to the `DeviceId` sent at sign-in. The account
-  record carries that id, and a restored account keeps using it. If the server
-  has dropped the session, the existing 401 path flags `needsReauth`.
+- **Jellyfin** tokens are bound to the `DeviceId` sent at sign-in, which the
+  player keeps once per install (`JellyfinIdentity.deviceIdKey`), not per
+  account. The backup does not carry it: sharing one install's id between two
+  live devices would make the server treat them as one. A restored token is
+  sent with the new install's id; if the server refuses it, the existing 401
+  path flags `needsReauth`.
 - **Plex Home**: only the active user's tokens are stored, as on the device.
 - **Settings** exclude device-shaped keys (window geometry, TV focus state,
   download storage locations). An explicit allowlist in
