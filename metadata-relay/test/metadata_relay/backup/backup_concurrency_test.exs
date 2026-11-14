@@ -92,4 +92,30 @@ defmodule MetadataRelay.BackupConcurrencyTest do
     assert {:ok, body, 2} = Backup.get_slot(vault, slot_id(s))
     assert body in ["a", "b", "c"]
   end
+
+  test "two update_members with the same expected_epoch: one wins, one conflicts" do
+    s = signer()
+    vault = create_vault([s])
+    {:ok, %{members: members}, _} = Backup.manifest(vault, s)
+    recovery = Enum.find(members, &(&1.signer != s)).signer
+
+    results =
+      [signer(), signer()]
+      |> Enum.map(fn new ->
+        Task.async(fn ->
+          Backup.update_members(vault, s, %{
+            expected_epoch: 1,
+            new_epoch: 2,
+            add: [%{signer: new, slot_id: slot_id(new)}],
+            remove: [],
+            recovery: nil,
+            envelopes: %{s => "e", recovery => "r", new => "n"}
+          })
+        end)
+      end)
+      |> Task.await_many(15_000)
+
+    assert Enum.count(results, &(&1 == {:ok, 2})) == 1
+    assert Enum.count(results, &(&1 == {:error, :conflict})) == 1
+  end
 end

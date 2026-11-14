@@ -22,6 +22,7 @@ defmodule MetadataRelay.Backup do
   @write_limit 120
   @write_window_ms 3_600_000
   @read_attempts 3
+  @max_members 16
 
   @vault_id ~r/\A[0-9a-f]{32}\z/
   @slot_id ~r/\A[0-9a-f]{16}\z/
@@ -339,6 +340,273 @@ defmodule MetadataRelay.Backup do
 
     :ok
   end
+
+  @doc """
+  Adds members, removes members, replaces the recovery key, or rotates the
+  vault key, in one call compare-and-swapped on the vault epoch.
+
+  `change` keys (all binaries raw, as elsewhere in this module):
+
+    * `:expected_epoch` - must equal the vault epoch, else `:conflict`.
+    * `:new_epoch` - `expected_epoch` (no rotation) or `expected_epoch + 1`
+      (rotation).
+    * `:add` - `[%{signer, slot_id}]`, new members.
+    * `:remove` - `[signer]`. Their slot row and file are deleted. Removing a
+      member, or replacing the recovery key, requires a rotation, otherwise
+      the removed party would keep the current key (`:invalid`). The recovery
+      signer can only leave through `:recovery`. A member may remove itself.
+    * `:envelopes` - `%{signer => envelope}`. Without rotation it must hold
+      exactly the added signers. On rotation it must cover every remaining
+      member and the recovery member (a replaced recovery's envelope is
+      `recovery.envelope`, so listing it here too is optional).
+    * `:recovery` - `nil` or `%{signer, slot_id, envelope, lookup_hash}`,
+      replacing the recovery member, its envelope and the lookup hash at once.
+
+  `signer` must be a current member (the recovery signer qualifies, which is
+  how a restoring device adds itself), else `{:error, :not_member}`. The
+  recovery member counts toward the 16 member limit. Returns the vault epoch
+  after the change. Files of removed members are deleted after commit.
+  """
+  @spec update_members(String.t(), binary(), map()) ::
+          {:ok, pos_integer()}
+          | {:error, :conflict | :too_many_members | :invalid | :not_member}
+  def update_members(vault_id, signer, change) when is_map(change) do
+    if valid_vault_id?(vault_id) and valid_signer?(signer) do
+      result =
+        Repo.transaction(fn -> apply_member_change(vault_id, signer, change) end,
+          mode: :immediate
+        )
+
+      with {:ok, {epoch, paths}} <- result do
+        Enum.each(paths, &Store.delete/1)
+        {:ok, epoch}
+      end
+    else
+      {:error, :not_member}
+    end
+  end
+
+  def update_members(_, _, _), do: {:error, :invalid}
+
+  defp apply_member_change(vault_id, signer, change) do
+    vault = Repo.get(Vault, vault_id) || Repo.rollback(:not_member)
+    get_member(vault_id, signer) || Repo.rollback(:not_member)
+
+    c = parse_change(change)
+    if c.expected_epoch != vault.epoch, do: Repo.rollback(:conflict)
+
+    members = Repo.all(from(m in Member, where: m.vault_id == ^vault_id))
+    plan = plan_members(vault, members, c)
+
+    if length(plan.final) > @max_members, do: Repo.rollback(:too_many_members)
+
+    {1, _} =
+      from(v in Vault, where: v.id == ^vault_id and v.epoch == ^c.expected_epoch)
+      |> Repo.update_all(set: [epoch: c.new_epoch])
+
+    paths = delete_members(vault_id, plan.removed)
+
+    Enum.each(plan.added, fn m ->
+      Repo.insert!(%Member{
+        vault_id: vault_id,
+        signer: m.signer,
+        slot_id: m.slot_id,
+        envelope: m.envelope
+      })
+    end)
+
+    if c.rotate? do
+      rotate_envelopes(vault_id, plan.envelopes)
+
+      if is_nil(c.recovery) do
+        from(v in Vault, where: v.id == ^vault_id)
+        |> Repo.update_all(
+          set: [recovery_envelope: Map.fetch!(plan.envelopes, vault.recovery_signer)]
+        )
+      end
+    end
+
+    if c.recovery, do: replace_recovery(vault_id, c.recovery)
+
+    {c.new_epoch, paths}
+  end
+
+  # Validates the change against the current members and returns
+  # %{removed: [b64 signer], added: [member map], final: [b64 signer],
+  #   envelopes: %{b64 signer => b64 envelope}}.
+  defp plan_members(vault, members, c) do
+    rotate? = c.rotate?
+    current = MapSet.new(members, & &1.signer)
+    old_recovery = vault.recovery_signer
+    new_recovery = if c.recovery, do: c.recovery.signer, else: old_recovery
+
+    removed = Enum.uniq(c.remove)
+    added = c.add
+    added_signers = Enum.map(added, & &1.signer)
+
+    replaced_recovery? = c.recovery != nil and new_recovery != old_recovery
+    removed_all = if replaced_recovery?, do: [old_recovery | removed], else: removed
+
+    survivors = MapSet.difference(current, MapSet.new(removed_all))
+
+    incoming =
+      MapSet.new(added_signers ++ if(c.recovery, do: [new_recovery], else: []))
+
+    final = MapSet.union(survivors, incoming)
+
+    slot_ids =
+      (members
+       |> Enum.reject(&(&1.signer in removed_all))
+       |> Enum.map(& &1.slot_id)) ++
+        Enum.map(added, & &1.slot_id) ++
+        if(replaced_recovery?, do: [c.recovery.slot_id], else: [])
+
+    cond do
+      not Enum.all?(removed, &(&1 in current)) -> invalid()
+      old_recovery in removed and not replaced_recovery? -> invalid()
+      (removed != [] or c.recovery != nil) and not rotate? -> invalid()
+      length(added_signers) != length(Enum.uniq(added_signers)) -> invalid()
+      Enum.any?(added_signers, &(&1 in survivors or &1 == new_recovery)) -> invalid()
+      replaced_recovery? and new_recovery in current -> invalid()
+      length(slot_ids) != length(Enum.uniq(slot_ids)) -> invalid()
+      true -> :ok
+    end
+
+    envelopes = c.envelopes
+
+    expected_keys =
+      cond do
+        not rotate? -> MapSet.new(added_signers)
+        c.recovery -> MapSet.delete(final, new_recovery)
+        true -> final
+      end
+
+    given_keys = MapSet.new(Map.keys(envelopes))
+    given_keys = if c.recovery, do: MapSet.delete(given_keys, new_recovery), else: given_keys
+
+    if given_keys != expected_keys, do: invalid()
+
+    envelopes =
+      if c.recovery, do: Map.put(envelopes, new_recovery, c.recovery.envelope), else: envelopes
+
+    added =
+      if replaced_recovery?,
+        do: added ++ [%{signer: new_recovery, slot_id: c.recovery.slot_id}],
+        else: added
+
+    added =
+      Enum.map(added, fn a -> Map.put(a, :envelope, Map.fetch!(envelopes, a.signer)) end)
+
+    %{removed: removed_all, added: added, final: MapSet.to_list(final), envelopes: envelopes}
+  end
+
+  defp invalid, do: Repo.rollback(:invalid)
+
+  defp delete_members(_vault_id, []), do: []
+
+  defp delete_members(vault_id, removed_b64) do
+    removed_members =
+      Repo.all(from(m in Member, where: m.vault_id == ^vault_id and m.signer in ^removed_b64))
+
+    slot_ids = Enum.map(removed_members, & &1.slot_id)
+
+    paths =
+      from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id in ^slot_ids)
+      |> Repo.all()
+      |> Enum.map(&Store.slot_path(vault_id, &1.slot_id, &1.seq))
+
+    Repo.delete_all(from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id in ^slot_ids))
+
+    Repo.delete_all(
+      from(m in Member, where: m.vault_id == ^vault_id and m.signer in ^removed_b64)
+    )
+
+    paths
+  end
+
+  defp rotate_envelopes(vault_id, envelopes) do
+    Enum.each(envelopes, fn {signer, envelope} ->
+      from(m in Member, where: m.vault_id == ^vault_id and m.signer == ^signer)
+      |> Repo.update_all(set: [envelope: envelope])
+    end)
+  end
+
+  defp replace_recovery(vault_id, r) do
+    changeset =
+      Vault
+      |> Repo.get!(vault_id)
+      |> Ecto.Changeset.change(
+        recovery_signer: r.signer,
+        recovery_envelope: r.envelope,
+        lookup_hash: r.lookup_hash
+      )
+      |> Ecto.Changeset.unique_constraint(:lookup_hash)
+
+    case Repo.update(changeset) do
+      {:ok, _} -> :ok
+      {:error, _} -> Repo.rollback(:invalid)
+    end
+  end
+
+  # Normalises the caller's change into base64url strings; anything malformed
+  # rolls back as :invalid.
+  defp parse_change(change) do
+    expected = change[:expected_epoch]
+    new = change[:new_epoch]
+
+    unless is_integer(expected) and (new == expected or new == expected + 1), do: invalid()
+
+    add = Enum.map(list(change[:add]), &parse_added/1)
+    remove = Enum.map(list(change[:remove]), &signer_b64/1)
+
+    envelopes =
+      case change[:envelopes] do
+        nil -> %{}
+        m when is_map(m) -> Map.new(m, fn {s, e} -> {signer_b64(s), envelope_b64(e)} end)
+        _ -> invalid()
+      end
+
+    recovery =
+      case change[:recovery] do
+        nil -> nil
+        %{} = r -> parse_recovery(r)
+        _ -> invalid()
+      end
+
+    %{
+      expected_epoch: expected,
+      new_epoch: new,
+      rotate?: new == expected + 1,
+      add: add,
+      remove: remove,
+      envelopes: envelopes,
+      recovery: recovery
+    }
+  end
+
+  defp parse_added(%{signer: s, slot_id: slot_id}) do
+    unless valid_slot_id?(slot_id), do: invalid()
+    %{signer: signer_b64(s), slot_id: slot_id}
+  end
+
+  defp parse_added(_), do: invalid()
+
+  defp parse_recovery(%{signer: s, slot_id: slot_id, envelope: e, lookup_hash: h}) do
+    unless valid_slot_id?(slot_id) and is_binary(h) and Regex.match?(@lookup_hash, h),
+      do: invalid()
+
+    %{signer: signer_b64(s), slot_id: slot_id, envelope: envelope_b64(e), lookup_hash: h}
+  end
+
+  defp parse_recovery(_), do: invalid()
+
+  defp list(nil), do: []
+  defp list(l) when is_list(l), do: l
+  defp list(_), do: invalid()
+
+  defp signer_b64(s), do: if(valid_signer?(s), do: b64(s), else: invalid())
+
+  defp envelope_b64(e), do: if(is_binary(e) and e != "", do: b64(e), else: invalid())
 
   defp validate_create(attrs) do
     a = Map.take(attrs, ~w(signer slot_id envelope recovery_signer recovery_slot_id
