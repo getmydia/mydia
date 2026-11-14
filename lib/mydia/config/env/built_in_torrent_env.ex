@@ -4,7 +4,8 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   environment (`MYDIA_TORRENT_*` and `MYDIA_VPN_*`).
 
   Takes a one-argument getenv function so tests can inject values. Blank values
-  count as unset; a value that does not parse, or a port outside 1..65535, leaves its key out
+  count as unset; a value that does not parse, a port outside 1..65535 or a rate
+  limit outside `BuiltInTorrent.min_rate_limit_kib/0`..`max_rate_limit_kib/0`, leaves its key out
   (`BuiltIn.Config` still warns about it from the raw environment).
   """
 
@@ -12,6 +13,9 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
   alias Mydia.Config.Schema.BuiltInTorrent
 
   @integer_fields [:listen_port, :api_port]
+  @rate_limit_fields [:download_limit_kib, :upload_limit_kib]
+  @min_rate_limit_kib BuiltInTorrent.min_rate_limit_kib()
+  @max_rate_limit_kib BuiltInTorrent.max_rate_limit_kib()
   @boolean_fields [:enabled, :vpn_port_forwarding]
   @downcased_fields [:vpn_provider, :vpn_type]
 
@@ -32,6 +36,16 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
     case Loader.parse_integer(raw) do
       {:ok, int} when int in 1..65_535 -> Map.put(acc, field, int)
       _ -> acc
+    end
+  end
+
+  defp put_field(acc, field, raw) when field in @rate_limit_fields do
+    case Loader.parse_integer(raw) do
+      {:ok, int} when int in @min_rate_limit_kib..@max_rate_limit_kib//1 ->
+        Map.put(acc, field, int)
+
+      _ ->
+        acc
     end
   end
 

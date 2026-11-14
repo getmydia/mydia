@@ -24,6 +24,9 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :state_path, :string, default: "/config/rqbit"
     field :listen_port, :integer, default: 51413
     field :api_port, :integer, default: 3030
+    # KiB/s; nil is unlimited.
+    field :download_limit_kib, :integer
+    field :upload_limit_kib, :integer
     field :vpn_enabled, :boolean, default: false
     field :vpn_provider, :string
     field :vpn_type, :string
@@ -46,6 +49,8 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     state_path: "MYDIA_TORRENT_STATE_PATH",
     listen_port: "MYDIA_TORRENT_PORT",
     api_port: "MYDIA_TORRENT_API_PORT",
+    download_limit_kib: "MYDIA_TORRENT_DOWNLOAD_LIMIT",
+    upload_limit_kib: "MYDIA_TORRENT_UPLOAD_LIMIT",
     vpn_enabled: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_provider: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_type: "MYDIA_VPN_VPN_TYPE",
@@ -62,6 +67,21 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
 
   @secret_fields [:vpn_openvpn_password, :vpn_wireguard_private_key]
 
+  # rqbit takes the limits in bytes per second as a u32, and its limiter's
+  # burst equals the limit. Peers move 16 KiB blocks and rqbit errors on a
+  # block larger than the burst instead of waiting, so below 16 KiB/s a
+  # download loops through peer reconnects and uploads stop.
+  @min_rate_limit_kib 16
+  @max_rate_limit_kib div(4_294_967_295, 1024)
+
+  @doc "The smallest rate limit, in KiB/s, rqbit can transfer under."
+  @spec min_rate_limit_kib() :: pos_integer()
+  def min_rate_limit_kib, do: @min_rate_limit_kib
+
+  @doc "The largest rate limit, in KiB/s, rqbit accepts."
+  @spec max_rate_limit_kib() :: pos_integer()
+  def max_rate_limit_kib, do: @max_rate_limit_kib
+
   @doc "The single field-to-environment-variable table."
   @spec env_vars() :: [{atom(), String.t()}]
   def env_vars, do: @env_vars
@@ -77,6 +97,19 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> normalize_identifier(:vpn_type)
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
+    |> validate_rate_limits()
+  end
+
+  @doc "Validates both rate limits against `min_rate_limit_kib/0`..`max_rate_limit_kib/0`."
+  @spec validate_rate_limits(Ecto.Changeset.t()) :: Ecto.Changeset.t()
+  def validate_rate_limits(changeset) do
+    for field <- [:download_limit_kib, :upload_limit_kib], reduce: changeset do
+      changeset ->
+        validate_number(changeset, field,
+          greater_than_or_equal_to: @min_rate_limit_kib,
+          less_than_or_equal_to: @max_rate_limit_kib
+        )
+    end
   end
 
   defp normalize_identifier(changeset, field) do

@@ -55,6 +55,21 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
   end
 
   describe "web_ui_url/1" do
+    # Its API listens on the server's loopback and serves no web UI, so a
+    # derived http://127.0.0.1:3030/web/ opens an empty page in the browser.
+    test "is nil for the managed built-in client" do
+      managed =
+        client(%{
+          type: :rqbit,
+          host: "127.0.0.1",
+          port: 3030,
+          connection_settings: %{"managed" => true}
+        })
+
+      assert DownloadClientConfig.web_ui_url(managed) == nil
+      assert DownloadClientConfig.web_ui_url(%{managed | web_ui_url: "https://x.example/"}) == nil
+    end
+
     test "an explicit web_ui_url wins" do
       assert DownloadClientConfig.web_ui_url(client(%{web_ui_url: "https://qbit.example.org/"})) ==
                "https://qbit.example.org/"

@@ -45,10 +45,28 @@ defmodule Mydia.Config.Schema.BuiltInTorrentTest do
 
   test "env_vars/0 has one row per field" do
     rows = BuiltInTorrent.env_vars()
-    assert length(rows) == 17
-    assert rows |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length() == 17
+    assert length(rows) == 19
+    assert rows |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length() == 19
     assert {:vpn_enabled, "MYDIA_VPN_SERVICE_PROVIDER"} in rows
     assert {:listen_port, "MYDIA_TORRENT_PORT"} in rows
+    assert {:download_limit_kib, "MYDIA_TORRENT_DOWNLOAD_LIMIT"} in rows
+    assert {:upload_limit_kib, "MYDIA_TORRENT_UPLOAD_LIMIT"} in rows
+  end
+
+  test "changeset/2 bounds the rate limits to what rqbit accepts" do
+    # rqbit's limiter bursts at the limit and errors on a 16 KiB block larger than that.
+    min = BuiltInTorrent.min_rate_limit_kib()
+    max = BuiltInTorrent.max_rate_limit_kib()
+    assert min == 16
+    assert max == 4_194_303
+
+    for ok <- [min, max] do
+      assert BuiltInTorrent.changeset(%BuiltInTorrent{}, %{download_limit_kib: ok}).valid?
+    end
+
+    for bad <- [0, min - 1, max + 1] do
+      refute BuiltInTorrent.changeset(%BuiltInTorrent{}, %{upload_limit_kib: bad}).valid?
+    end
   end
 
   test "secret_fields/0" do

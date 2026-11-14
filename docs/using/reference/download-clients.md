@@ -78,6 +78,13 @@ applies to new grabs; torrents already running finish where they started.
 - **Download path.** `/data/downloads` by default. Torrent state lives in
   `/config/rqbit`. In the Docker image, files the engine writes belong to group
   `mydia-torrent`, with or without the VPN.
+- **Speed limits.** Download and upload limits, in KiB/s, sit under
+  Configure, Torrent. Leave a field blank for no limit; the lowest limit is
+  16 KiB/s, since the engine moves data in 16 KiB blocks. A change restarts the
+  engine within a few seconds, and torrents resume where they were.
+- **No web UI.** The engine has no web interface of its own, so the Downloads
+  page shows no "Open" button for it. Mydia's Downloads page is where you
+  manage its torrents.
 - **VPN (experimental).** Mydia runs a patched gluetun that tunnels only the
   built-in client. The engine starts once the VPN is up and a leak check
   passes, and stops when it drops. Changing any VPN setting runs the same

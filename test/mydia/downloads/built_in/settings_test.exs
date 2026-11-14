@@ -180,6 +180,17 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :listen_port)
     end
 
+    test "rate limits accept 16..4194303 KiB/s, and blank means unlimited" do
+      assert changeset(%{"download_limit_kib" => "16", "upload_limit_kib" => "4194303"}).valid?
+      assert changeset(%{"download_limit_kib" => "", "upload_limit_kib" => ""}).valid?
+
+      for bad <- ["0", "15", "4194304", "-1"] do
+        cs = changeset(%{"download_limit_kib" => bad, "upload_limit_kib" => bad})
+        assert Keyword.has_key?(cs.errors, :download_limit_kib)
+        assert Keyword.has_key?(cs.errors, :upload_limit_kib)
+      end
+    end
+
     test "enabled accepts only automatic, true or false" do
       assert changeset(%{"enabled" => "automatic"}).valid?
       assert changeset(%{"enabled" => "true"}).valid?

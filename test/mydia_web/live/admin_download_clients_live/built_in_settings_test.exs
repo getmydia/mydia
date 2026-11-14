@@ -511,6 +511,27 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert LazyHTML.query(doc, "#built-in-field-listen_port[disabled]") |> Enum.count() == 0
     end
 
+    test "the torrent section has rate limit fields, read-only when set from env" do
+      html =
+        render_component(
+          &BuiltInFormComponents.built_in_settings_modal/1,
+          modal_assigns(%{sources: %{upload_limit_kib: :env}})
+        )
+
+      doc = LazyHTML.from_fragment(html)
+
+      assert LazyHTML.query(doc, "#built-in-section-torrent #built-in-field-download_limit_kib")
+             |> Enum.count() == 1
+
+      assert LazyHTML.query(doc, "#built-in-field-download_limit_kib[disabled]") |> Enum.count() ==
+               0
+
+      assert LazyHTML.query(doc, "#built-in-field-upload_limit_kib[disabled]") |> Enum.count() ==
+               1
+
+      assert html =~ "MYDIA_TORRENT_UPLOAD_LIMIT"
+    end
+
     test "lists environment-only VPN variable names, never values" do
       html =
         render_component(
