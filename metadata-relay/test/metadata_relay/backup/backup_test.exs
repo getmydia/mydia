@@ -26,6 +26,7 @@ defmodule MetadataRelay.BackupTest do
   defp slot_id(signer),
     do: :crypto.hash(:sha256, signer) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 
+  defp box(s), do: :crypto.hash(:sha256, "box" <> s)
   defp handle, do: :crypto.strong_rand_bytes(32)
 
   defp create do
@@ -37,6 +38,8 @@ defmodule MetadataRelay.BackupTest do
       signer: s,
       slot_id: slot_id(s),
       envelope: "env-" <> Base.encode16(s),
+      box_pub: box(s),
+      recovery_box_pub: box(r),
       recovery_signer: r,
       recovery_slot_id: slot_id(r),
       recovery_envelope: "renv-" <> Base.encode16(r),
@@ -91,6 +94,8 @@ defmodule MetadataRelay.BackupTest do
     assert {:error, :invalid} = Backup.create_vault(%{ok | recovery_signer: s})
     assert {:error, :invalid} = Backup.create_vault(%{ok | recovery_slot_id: ok.slot_id})
     assert {:error, :invalid} = Backup.create_vault(Map.delete(ok, :envelope))
+    assert {:error, :invalid} = Backup.create_vault(%{ok | box_pub: "short"})
+    assert {:error, :invalid} = Backup.create_vault(%{ok | recovery_box_pub: <<0::248>>})
     assert {:ok, _} = Backup.create_vault(ok)
   end
 
@@ -115,8 +120,13 @@ defmodule MetadataRelay.BackupTest do
     assert Enum.sort_by(m.members, & &1.slot_id) ==
              Enum.sort_by(
                [
-                 %{signer: v.signer, slot_id: v.slot},
-                 %{signer: v.recovery, slot_id: v.attrs.recovery_slot_id}
+                 %{signer: v.signer, box_pub: box(v.signer), slot_id: v.slot, recovery?: false},
+                 %{
+                   signer: v.recovery,
+                   box_pub: box(v.recovery),
+                   slot_id: v.attrs.recovery_slot_id,
+                   recovery?: true
+                 }
                ],
                & &1.slot_id
              )

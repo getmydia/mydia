@@ -22,6 +22,7 @@ defmodule MetadataRelay.BackupConcurrencyTest do
     :ok
   end
 
+  defp box(s), do: :crypto.hash(:sha256, "box" <> s)
   defp signer, do: :crypto.strong_rand_bytes(32)
 
   defp slot_id(s),
@@ -37,6 +38,8 @@ defmodule MetadataRelay.BackupConcurrencyTest do
         signer: first,
         slot_id: slot_id(first),
         envelope: "e",
+        box_pub: box(first),
+        recovery_box_pub: box(r),
         recovery_signer: r,
         recovery_slot_id: slot_id(r),
         recovery_envelope: "re",
@@ -56,7 +59,8 @@ defmodule MetadataRelay.BackupConcurrencyTest do
       vault_id: vault,
       signer: Base.url_encode64(s, padding: false),
       slot_id: slot_id(s),
-      envelope: "e"
+      envelope: "e",
+      box_pub: box(s)
     })
   end
 
@@ -106,7 +110,7 @@ defmodule MetadataRelay.BackupConcurrencyTest do
           Backup.update_members(vault, s, %{
             expected_epoch: 1,
             new_epoch: 2,
-            add: [%{signer: new, slot_id: slot_id(new)}],
+            add: [%{signer: new, slot_id: slot_id(new), box_pub: box(new)}],
             remove: [],
             recovery: nil,
             envelopes: %{s => "e", recovery => "r", new => "n"}

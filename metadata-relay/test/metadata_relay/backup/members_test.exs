@@ -26,6 +26,7 @@ defmodule MetadataRelay.Backup.MembersTest do
   defp slot_id(s),
     do: :crypto.hash(:sha256, s) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 
+  defp box(s), do: :crypto.hash(:sha256, "box" <> s)
   defp hash(h), do: Base.encode16(:crypto.hash(:sha256, h), case: :lower)
 
   defp create do
@@ -38,6 +39,8 @@ defmodule MetadataRelay.Backup.MembersTest do
         signer: s,
         slot_id: slot_id(s),
         envelope: "env-1",
+        box_pub: box(s),
+        recovery_box_pub: box(r),
         recovery_signer: r,
         recovery_slot_id: slot_id(r),
         recovery_envelope: "renv-1",
@@ -58,7 +61,10 @@ defmodule MetadataRelay.Backup.MembersTest do
     Backup.update_members(
       vault,
       s,
-      change(add: [%{signer: new, slot_id: slot_id(new)}], envelopes: %{new => "env-new"})
+      change(
+        add: [%{signer: new, slot_id: slot_id(new), box_pub: box(new)}],
+        envelopes: %{new => "env-new"}
+      )
     )
   end
 
@@ -84,7 +90,10 @@ defmodule MetadataRelay.Backup.MembersTest do
              Backup.update_members(
                v.vault,
                v.recovery,
-               change(add: [%{signer: new, slot_id: slot_id(new)}], envelopes: %{new => "e"})
+               change(
+                 add: [%{signer: new, slot_id: slot_id(new), box_pub: box(new)}],
+                 envelopes: %{new => "e"}
+               )
              )
   end
 
@@ -101,7 +110,7 @@ defmodule MetadataRelay.Backup.MembersTest do
              Backup.update_members(
                v.vault,
                v.signer,
-               change(add: [%{signer: new, slot_id: slot_id(new)}])
+               change(add: [%{signer: new, slot_id: slot_id(new), box_pub: box(new)}])
              )
 
     refute Backup.member?(v.vault, new)
@@ -169,7 +178,9 @@ defmodule MetadataRelay.Backup.MembersTest do
         change(
           expected_epoch: epoch,
           new_epoch: epoch + 1,
-          add: [%{signer: extra_signer, slot_id: slot_id(extra_signer)}],
+          add: [
+            %{signer: extra_signer, slot_id: slot_id(extra_signer), box_pub: box(extra_signer)}
+          ],
           envelopes: Map.merge(%{v.signer => "e", v.recovery => "r", extra_signer => "n"}, others)
         )
       )
@@ -261,6 +272,7 @@ defmodule MetadataRelay.Backup.MembersTest do
                  recovery: %{
                    signer: r2,
                    slot_id: slot_id(r2),
+                   box_pub: box(r2),
                    envelope: "r2-env",
                    lookup_hash: hash(h2)
                  }
@@ -292,6 +304,7 @@ defmodule MetadataRelay.Backup.MembersTest do
                  recovery: %{
                    signer: r2,
                    slot_id: slot_id(r2),
+                   box_pub: box(r2),
                    envelope: "x",
                    lookup_hash: hash(other.handle)
                  }
@@ -301,6 +314,58 @@ defmodule MetadataRelay.Backup.MembersTest do
     assert {:ok, %{epoch: 1}, _} = Backup.manifest(v.vault, v.signer)
     assert Backup.member?(v.vault, v.recovery)
     refute Backup.member?(v.vault, r2)
+  end
+
+  test "an add with a 31-byte box_pub is :invalid" do
+    v = create()
+    new = signer()
+
+    assert {:error, :invalid} =
+             Backup.update_members(
+               v.vault,
+               v.signer,
+               change(
+                 add: [%{signer: new, slot_id: slot_id(new), box_pub: <<0::248>>}],
+                 envelopes: %{new => "e"}
+               )
+             )
+
+    refute Backup.member?(v.vault, new)
+  end
+
+  test "a added member's box_pub appears in the manifest" do
+    v = create()
+    new = signer()
+    {:ok, 1} = add_device(v, new)
+    {:ok, m, _} = Backup.manifest(v.vault, v.signer)
+    entry = Enum.find(m.members, &(&1.signer == new))
+    assert entry.box_pub == box(new)
+    refute entry.recovery?
+    assert Enum.find(m.members, & &1.recovery?).signer == v.recovery
+  end
+
+  test "a recovery replacement with the current recovery signer is :invalid" do
+    v = create()
+    h2 = :crypto.strong_rand_bytes(32)
+
+    assert {:error, :invalid} =
+             Backup.update_members(
+               v.vault,
+               v.signer,
+               change(
+                 new_epoch: 2,
+                 envelopes: %{v.signer => "a"},
+                 recovery: %{
+                   signer: v.recovery,
+                   slot_id: slot_id(v.recovery),
+                   box_pub: box(v.recovery),
+                   envelope: "x",
+                   lookup_hash: hash(h2)
+                 }
+               )
+             )
+
+    assert {:ok, %{epoch: 1}, _} = Backup.manifest(v.vault, v.signer)
   end
 
   test "the 17th member is :too_many_members" do

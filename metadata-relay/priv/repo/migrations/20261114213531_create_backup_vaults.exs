@@ -23,6 +23,7 @@ defmodule MetadataRelay.Repo.Migrations.CreateBackupVaults do
       add :signer, :text, null: false
       add :slot_id, :text, null: false
       add :envelope, :text, null: false
+      add :box_pub, :text, null: false
 
       timestamps(type: :utc_datetime_usec, updated_at: false)
     end

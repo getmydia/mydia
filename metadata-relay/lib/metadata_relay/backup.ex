@@ -32,8 +32,9 @@ defmodule MetadataRelay.Backup do
 
   @doc """
   Creates a vault at epoch 1 with two members: the first device (`signer`,
-  `slot_id`, `envelope`) and the recovery key (`recovery_signer`,
-  `recovery_slot_id`, `recovery_envelope`). The recovery signer can
+  `slot_id`, `envelope`, `box_pub`) and the recovery key (`recovery_signer`,
+  `recovery_slot_id`, `recovery_envelope`, `recovery_box_pub`). Box keys are
+  32-byte X25519 public keys. The recovery signer can
   authenticate but never writes a slot. `lookup_hash` is the lowercase hex
   SHA-256 of the lookup handle.
   """
@@ -66,14 +67,16 @@ defmodule MetadataRelay.Backup do
           vault_id: vault_id,
           signer: b64(a.signer),
           slot_id: a.slot_id,
-          envelope: b64(a.envelope)
+          envelope: b64(a.envelope),
+          box_pub: b64(a.box_pub)
         })
 
         Repo.insert!(%Member{
           vault_id: vault_id,
           signer: b64(a.recovery_signer),
           slot_id: a.recovery_slot_id,
-          envelope: b64(a.recovery_envelope)
+          envelope: b64(a.recovery_envelope),
+          box_pub: b64(a.recovery_box_pub)
         })
 
         vault_id
@@ -109,12 +112,13 @@ defmodule MetadataRelay.Backup do
   Shape (all keys and envelopes are raw binaries):
 
       %{epoch: integer,
-        members: [%{signer: binary, slot_id: String.t()}],
+        members: [%{signer: binary, box_pub: binary, slot_id: String.t(), recovery?: boolean}],
         envelope: binary,           # the requester's own
         recovery_signer: binary,
         slots: [%{slot_id, seq, epoch, size, updated_at: DateTime.t()}]}
 
-  `members` includes the recovery signer; `recovery_signer` identifies it.
+  `members` includes the recovery signer (`recovery?: true`) and every member's
+  X25519 `box_pub`, which devices seal a rotated vault key to.
   """
   @spec manifest(String.t(), binary()) ::
           {:ok, map(), String.t()} | {:error, :not_found}
@@ -127,7 +131,16 @@ defmodule MetadataRelay.Backup do
 
       manifest = %{
         epoch: vault.epoch,
-        members: Enum.map(members, &%{signer: unb64(&1.signer), slot_id: &1.slot_id}),
+        members:
+          Enum.map(
+            members,
+            &%{
+              signer: unb64(&1.signer),
+              box_pub: unb64(&1.box_pub),
+              slot_id: &1.slot_id,
+              recovery?: &1.signer == vault.recovery_signer
+            }
+          ),
         envelope: unb64(me.envelope),
         recovery_signer: unb64(vault.recovery_signer),
         slots:
@@ -350,7 +363,7 @@ defmodule MetadataRelay.Backup do
     * `:expected_epoch` - must equal the vault epoch, else `:conflict`.
     * `:new_epoch` - `expected_epoch` (no rotation) or `expected_epoch + 1`
       (rotation).
-    * `:add` - `[%{signer, slot_id}]`, new members.
+    * `:add` - `[%{signer, slot_id, box_pub}]`, new members.
     * `:remove` - `[signer]`. Their slot row and file are deleted. Removing a
       member, or replacing the recovery key, requires a rotation, otherwise
       the removed party would keep the current key (`:invalid`). The recovery
@@ -359,8 +372,8 @@ defmodule MetadataRelay.Backup do
       exactly the added signers. On rotation it must cover every remaining
       member and the recovery member (a replaced recovery's envelope is
       `recovery.envelope`, so listing it here too is optional).
-    * `:recovery` - `nil` or `%{signer, slot_id, envelope, lookup_hash}`,
-      replacing the recovery member, its envelope and the lookup hash at once.
+    * `:recovery` - `nil` or `%{signer, slot_id, envelope, lookup_hash, box_pub}`
+      with a new signer (the current one is `:invalid`), replacing the recovery member, its envelope and the lookup hash at once.
 
   `signer` must be a current member (the recovery signer qualifies, which is
   how a restoring device adds itself), else `{:error, :not_member}`. The
@@ -400,9 +413,11 @@ defmodule MetadataRelay.Backup do
 
     if length(plan.final) > @max_members, do: Repo.rollback(:too_many_members)
 
-    {1, _} =
-      from(v in Vault, where: v.id == ^vault_id and v.epoch == ^c.expected_epoch)
-      |> Repo.update_all(set: [epoch: c.new_epoch])
+    case from(v in Vault, where: v.id == ^vault_id and v.epoch == ^c.expected_epoch)
+         |> Repo.update_all(set: [epoch: c.new_epoch]) do
+      {1, _} -> :ok
+      {0, _} -> Repo.rollback(:conflict)
+    end
 
     paths = delete_members(vault_id, plan.removed)
 
@@ -411,7 +426,8 @@ defmodule MetadataRelay.Backup do
         vault_id: vault_id,
         signer: m.signer,
         slot_id: m.slot_id,
-        envelope: m.envelope
+        envelope: m.envelope,
+        box_pub: m.box_pub
       })
     end)
 
@@ -463,6 +479,7 @@ defmodule MetadataRelay.Backup do
 
     cond do
       not Enum.all?(removed, &(&1 in current)) -> invalid()
+      c.recovery != nil and not replaced_recovery? -> invalid()
       old_recovery in removed and not replaced_recovery? -> invalid()
       (removed != [] or c.recovery != nil) and not rotate? -> invalid()
       length(added_signers) != length(Enum.uniq(added_signers)) -> invalid()
@@ -491,7 +508,9 @@ defmodule MetadataRelay.Backup do
 
     added =
       if replaced_recovery?,
-        do: added ++ [%{signer: new_recovery, slot_id: c.recovery.slot_id}],
+        do:
+          added ++
+            [%{signer: new_recovery, slot_id: c.recovery.slot_id, box_pub: c.recovery.box_pub}],
         else: added
 
     added =
@@ -584,18 +603,24 @@ defmodule MetadataRelay.Backup do
     }
   end
 
-  defp parse_added(%{signer: s, slot_id: slot_id}) do
+  defp parse_added(%{signer: s, slot_id: slot_id, box_pub: box_pub}) do
     unless valid_slot_id?(slot_id), do: invalid()
-    %{signer: signer_b64(s), slot_id: slot_id}
+    %{signer: signer_b64(s), slot_id: slot_id, box_pub: signer_b64(box_pub)}
   end
 
   defp parse_added(_), do: invalid()
 
-  defp parse_recovery(%{signer: s, slot_id: slot_id, envelope: e, lookup_hash: h}) do
+  defp parse_recovery(%{signer: s, slot_id: slot_id, envelope: e, lookup_hash: h, box_pub: bp}) do
     unless valid_slot_id?(slot_id) and is_binary(h) and Regex.match?(@lookup_hash, h),
       do: invalid()
 
-    %{signer: signer_b64(s), slot_id: slot_id, envelope: envelope_b64(e), lookup_hash: h}
+    %{
+      signer: signer_b64(s),
+      slot_id: slot_id,
+      envelope: envelope_b64(e),
+      lookup_hash: h,
+      box_pub: signer_b64(bp)
+    }
   end
 
   defp parse_recovery(_), do: invalid()
@@ -610,9 +635,10 @@ defmodule MetadataRelay.Backup do
 
   defp validate_create(attrs) do
     a = Map.take(attrs, ~w(signer slot_id envelope recovery_signer recovery_slot_id
-                           recovery_envelope lookup_hash)a)
+                           recovery_envelope lookup_hash box_pub recovery_box_pub)a)
 
-    if map_size(a) == 7 and valid_signer?(a.signer) and valid_signer?(a.recovery_signer) and
+    if map_size(a) == 9 and valid_signer?(a.box_pub) and valid_signer?(a.recovery_box_pub) and
+         valid_signer?(a.signer) and valid_signer?(a.recovery_signer) and
          a.signer != a.recovery_signer and valid_slot_id?(a.slot_id) and
          valid_slot_id?(a.recovery_slot_id) and a.slot_id != a.recovery_slot_id and
          is_binary(a.envelope) and a.envelope != "" and is_binary(a.recovery_envelope) and
