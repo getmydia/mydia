@@ -138,7 +138,9 @@ class BackupSyncService {
         // A change made just before the app was killed may never have gone
         // up.
         markDirty();
-        unawaited(poll());
+        // Unconditional, so the recovery key check (in-memory) runs once
+        // per launch even when nothing changed since the stored ETag.
+        unawaited(_background(() => _pollOnce(conditional: false)));
       });
 
   void dispose() {
@@ -435,13 +437,13 @@ class BackupSyncService {
 
   // Poll
 
-  /// Reads the manifest (conditionally unless [full]), takes up a new
-  /// epoch, and merges every slot whose seq is above what was merged (every
-  /// slot when [full]) in live mode.
-  Future<void> _pollOnce({bool full = false}) async {
+  /// Reads the manifest (with the stored ETag when [conditional] and not
+  /// [full]), takes up a new epoch, and merges every slot whose seq is above
+  /// what was merged (every slot when [full]) in live mode.
+  Future<void> _pollOnce({bool full = false, bool conditional = true}) async {
     var (state, identity) = _require();
     final m = await _relay.manifest(state.vaultId, identity.signer,
-        etag: full ? null : state.manifestEtag);
+        etag: full || !conditional ? null : state.manifestEtag);
     if (m == null) return _idle();
     state = await _reconcileRecovery(state, m);
     state = await _adoptEpoch(m);
@@ -690,8 +692,11 @@ class BackupSyncService {
         _halted = false;
         try {
           final result = await op();
-          if (wasHalted && _state != null && _pollTimer == null) {
-            _startPolling();
+          if (wasHalted && !_halted) {
+            if (_state != null && _pollTimer == null) _startPolling();
+            if (_status.value is BackupUnavailable) {
+              _state == null ? _set(const BackupOff()) : _idle();
+            }
           }
           return result;
         } on BackupRelayException catch (e) {

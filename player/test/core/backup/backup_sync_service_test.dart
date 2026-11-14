@@ -599,6 +599,25 @@ void main() {
       await a.service.poll();
       expect(a.service.recoveryKeyMismatch.value, isTrue);
       expect((await a.state())!.recoveryKeyText, key.display);
+
+      // The flag lives in memory; a restart finds it again even though the
+      // manifest is unchanged since the stored ETag.
+      a.service.dispose();
+      a.build();
+      await a.service.start();
+      await a.service.poll();
+      expect(a.service.recoveryKeyMismatch.value, isTrue);
+    });
+
+    test('a user op that reaches the relay lifts Unavailable at once',
+        () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      rig.relay.available = false;
+      await a.service.poll();
+      expect(a.service.status.value, isA<BackupUnavailable>());
+      rig.relay.available = true;
+      await a.service.previewRestore(key.display);
+      expect(a.service.status.value, isA<BackupIdle>());
     });
 
     test('disable leaves the vault; the others keep it', () async {
