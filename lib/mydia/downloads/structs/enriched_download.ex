@@ -52,6 +52,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # payload finishes downloading. `nil` when the client doesn't report a
     # file list or hasn't resolved one yet.
     :files,
+    # Per-file progress copied from `DownloadStatus.file_progress`.
+    :file_progress,
     :completed_at,
     # The client's own completion time, when it reported one.
     :client_completed_at,
@@ -158,6 +160,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           leechers: integer() | nil,
           save_path: String.t() | nil,
           files: [String.t()] | nil,
+          file_progress: [map()] | nil,
           completed_at: DateTime.t() | nil,
           client_completed_at: DateTime.t() | nil,
           error_message: String.t() | nil,

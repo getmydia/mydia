@@ -318,6 +318,35 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.save_path == "/mnt/storage/media/Downloads/rqbit/"
       assert status.files == ["/mnt/storage/media/Downloads/rqbit/Silo.S03E03.mkv"]
     end
+
+    test "maps file_progress by index, keeping indices of excluded files", %{
+      bypass: bypass,
+      config: config
+    } do
+      stub_pack_details(bypass)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", progress_bytes: 140, total_bytes: 150)
+        |> Map.put("file_progress", [100, 0, 40])
+      )
+
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+
+      assert status.file_progress == [
+               %{index: 0, path: "/downloads/Pack/e01.mkv", length: 100, have: 100},
+               %{index: 2, path: "/downloads/Pack/e03.mkv", length: 50, have: 40}
+             ]
+
+      assert status.files == ["/downloads/Pack/e01.mkv", "/downloads/Pack/e03.mkv"]
+    end
+
+    test "file_progress is nil when stats carry none", %{bypass: bypass, config: config} do
+      stub_pack_details(bypass)
+      stub_stats(bypass, stats(state: "live", progress_bytes: 0, total_bytes: 150))
+
+      assert {:ok, %{file_progress: nil}} = Rqbit.get_status(config, @hash)
+    end
   end
 
   describe "list_torrents/2 (Bypass)" do
@@ -538,6 +567,37 @@ defmodule Mydia.Downloads.Client.RqbitTest do
         "name" => "Movie",
         "output_folder" => "/downloads",
         "total_pieces" => 100
+      })
+    end)
+  end
+
+  defp stub_pack_details(bypass) do
+    Bypass.stub(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+      json_resp(conn, 200, %{
+        "id" => 0,
+        "info_hash" => @hash,
+        "name" => "Pack",
+        "output_folder" => "/downloads",
+        "files" => [
+          %{
+            "name" => "Pack/e01.mkv",
+            "components" => ["Pack", "e01.mkv"],
+            "length" => 100,
+            "included" => true
+          },
+          %{
+            "name" => "Pack/e02.mkv",
+            "components" => ["Pack", "e02.mkv"],
+            "length" => 60,
+            "included" => false
+          },
+          %{
+            "name" => "Pack/e03.mkv",
+            "components" => ["Pack", "e03.mkv"],
+            "length" => 50,
+            "included" => true
+          }
+        ]
       })
     end)
   end

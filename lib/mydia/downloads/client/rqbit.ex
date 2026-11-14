@@ -332,6 +332,8 @@ defmodule Mydia.Downloads.Client.Rqbit do
       ratio: ratio(stats["uploaded_bytes"], total_bytes),
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
+      file_progress:
+        resolve_file_progress(output_folder, details["files"], stats["file_progress"]),
       added_at: nil,
       completed_at: nil
     })
@@ -354,6 +356,31 @@ defmodule Mydia.Downloads.Client.Rqbit do
       list -> list
     end
   end
+
+  # Zip by position BEFORE dropping excluded files: rqbit's `file_progress`
+  # lines up with `details.files` including `included: false` entries, and the
+  # index must stay the torrent's own file index.
+  defp resolve_file_progress(output_folder, files, have)
+       when is_list(files) and is_list(have) do
+    progress =
+      files
+      |> Enum.zip(have)
+      |> Enum.with_index()
+      |> Enum.filter(fn {{file, _have}, _index} -> file_included?(file) end)
+      |> Enum.flat_map(fn {{file, bytes}, index} ->
+        case absolute_torrent_path(output_folder, file) do
+          path when is_binary(path) and path != "" ->
+            [%{index: index, path: path, length: file["length"] || 0, have: bytes}]
+
+          _ ->
+            []
+        end
+      end)
+
+    if progress == [], do: nil, else: progress
+  end
+
+  defp resolve_file_progress(_output_folder, _files, _have), do: nil
 
   defp file_included?(%{"included" => false}), do: false
   defp file_included?(_), do: true

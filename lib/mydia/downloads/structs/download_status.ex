@@ -69,6 +69,10 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     # root DIRECTORY. Anything that needs to know what is actually inside a
     # torrent must use `Mydia.Downloads.Client.list_files/3` instead.
     files: nil,
+    # Per-file progress, when the client reports it (rqbit). `index` is the
+    # file's position in the torrent's own file list, which stays stable even
+    # when excluded files are dropped from this list.
+    file_progress: nil,
     # Categories or labels the client reports for this item, as the client
     # spells them. Empty for a client with no such concept (rqbit) and for
     # every adapter that does not report them.
@@ -114,6 +118,16 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           ratio: float(),
           save_path: String.t(),
           files: [String.t()] | nil,
+          file_progress:
+            [
+              %{
+                index: non_neg_integer(),
+                path: String.t(),
+                length: non_neg_integer(),
+                have: non_neg_integer()
+              }
+            ]
+            | nil,
           added_at: DateTime.t() | nil,
           completed_at: DateTime.t() | nil,
           seeding_time: non_neg_integer() | nil,

@@ -717,6 +717,7 @@ defmodule Mydia.Downloads.History do
       leechers: if(metadata, do: metadata.leechers, else: nil),
       save_path: torrent_status.save_path,
       files: torrent_status.files,
+      file_progress: Map.get(torrent_status, :file_progress),
       completed_at: download.completed_at || torrent_status.completed_at,
       client_completed_at: torrent_status.completed_at,
       error_message: download.error_message,
