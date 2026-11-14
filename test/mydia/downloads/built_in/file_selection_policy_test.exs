@@ -6,13 +6,14 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
   alias Mydia.Downloads
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.BuiltIn.{FileSelectionPolicy, Policies}
+  alias Mydia.Downloads.TorrentFiles
   alias Mydia.Downloads.Client.{Error, Registry}
   alias Mydia.Downloads.Structs.{EnrichedDownload, TorrentFile}
 
   defmodule StubAdapter do
     @behaviour Mydia.Downloads.Client
 
-    @keys [:files, :selections, :list_calls, :fail]
+    @keys [:files, :selections, :list_calls, :fail, :notify]
 
     def reset do
       :persistent_term.put({__MODULE__, :files}, {:ok, []})
@@ -22,6 +23,8 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     end
 
     def put_files(result), do: :persistent_term.put({__MODULE__, :files}, result)
+    # `pid` is sent `:files_listed` each time the file list is read.
+    def notify(pid), do: :persistent_term.put({__MODULE__, :notify}, pid)
     def fail!, do: :persistent_term.put({__MODULE__, :fail}, true)
     def selections, do: :persistent_term.get({__MODULE__, :selections}, [])
     def list_calls, do: :persistent_term.get({__MODULE__, :list_calls}, 0)
@@ -30,6 +33,11 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     @impl true
     def torrent_files(_config, _id) do
       :persistent_term.put({__MODULE__, :list_calls}, list_calls() + 1)
+
+      case :persistent_term.get({__MODULE__, :notify}, nil) do
+        pid when is_pid(pid) -> send(pid, :files_listed)
+        nil -> :ok
+      end
 
       if :persistent_term.get({__MODULE__, :fail}, false),
         do: {:error, Error.connection_failed("down")},
@@ -139,6 +147,28 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     :ok = Mydia.Downloads.MetadataKey.put(row.id, "file_selection", %{"source" => "manual"})
 
     assert :done = FileSelectionPolicy.apply(row)
+    assert StubAdapter.selections() == []
+    assert stamped(row) == %{"source" => "manual"}
+  end
+
+  test "a policy run waiting on the selection lock sees the manual stamp saved under it" do
+    StubAdapter.put_files({:ok, video_and_junk()})
+    row = row()
+    StubAdapter.notify(self())
+
+    # The test holds the lock as the operator's save would. The policy reads
+    # the file list (outside the lock), then blocks on the lock; the manual
+    # stamp is written before the lock is released, so whenever the policy
+    # gets it, its final check sees "manual".
+    task =
+      TorrentFiles.with_selection_lock(row.id, fn ->
+        task = Task.async(fn -> FileSelectionPolicy.apply(row) end)
+        assert_receive :files_listed, 5_000
+        :ok = Mydia.Downloads.MetadataKey.put(row.id, "file_selection", %{"source" => "manual"})
+        task
+      end)
+
+    assert Task.await(task, 30_000) == :done
     assert StubAdapter.selections() == []
     assert stamped(row) == %{"source" => "manual"}
   end

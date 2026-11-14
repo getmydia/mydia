@@ -187,7 +187,12 @@ and an imported row is never touched. The Downloads drawer's Files panel
 (`MydiaWeb.DownloadsLive.FilesPanel`, backed by `Downloads.TorrentFiles`) is
 the manual side: a checklist the operator edits until the download is
 imported, saved with the `manual` stamp so the automatic pass never overrides
-it. At least one video file must stay selected.
+it. At least one video file must stay selected. The save reads `imported_at`
+from the database, not the drawer's copy. The policy's final check of the
+stored entry, its client write and its stamp, and the save's client write and
+stamp, each run under `TorrentFiles.with_selection_lock/2` (a per-download
+`:global` lock on this node, never taken inside a database transaction), so a
+save cannot land between the policy's check and its write.
 
 **Speed limits.** `download_limit_kib` and `upload_limit_kib` (blank for
 unlimited, otherwise 16 KiB/s or more) reach rqbit as its

@@ -42,19 +42,35 @@ defmodule Mydia.Downloads.TorrentFiles do
   a selection without any importable file.
 
   Whether the download is imported is read from the database, not from
-  `download`, which may be a snapshot taken before the import.
+  `download`, which may be a snapshot taken before the import. The client
+  write and the `"manual"` stamp run under `with_selection_lock/2`.
   """
   @spec save(map(), [non_neg_integer()]) ::
           :ok | {:error, :imported | :no_importable_file | term()}
   def save(download, indexes) when is_list(indexes) do
-    with :ok <- check_editable(download.id),
-         {:ok, adapter, config} <- Queue.resolve_adapter(download.download_client),
-         {:ok, files} <- Client.torrent_files(adapter, config, download.download_client_id),
-         :ok <- check_importable(files, indexes),
-         :ok <- Client.set_file_selection(adapter, config, download.download_client_id, indexes) do
-      MetadataKey.put(download.id, @key, %{"source" => "manual"})
-    end
+    with_selection_lock(download.id, fn ->
+      with :ok <- check_editable(download.id),
+           {:ok, adapter, config} <- Queue.resolve_adapter(download.download_client),
+           {:ok, files} <- Client.torrent_files(adapter, config, download.download_client_id),
+           :ok <- check_importable(files, indexes),
+           :ok <-
+             Client.set_file_selection(adapter, config, download.download_client_id, indexes) do
+        MetadataKey.put(download.id, @key, %{"source" => "manual"})
+      end
+    end)
   end
+
+  @doc """
+  Runs `fun` holding the download's file selection lock, so the operator's save
+  and `BuiltIn.FileSelectionPolicy` never interleave their check, client write
+  and stamp. Mydia runs on one node, so the lock is taken on this node only.
+  Never take it inside a database transaction, which it would hold open
+  across the client call, nor again in the process that holds it: the inner
+  release would free the outer hold.
+  """
+  @spec with_selection_lock(binary(), (-> result)) :: result when result: term()
+  def with_selection_lock(download_id, fun) when is_function(fun, 0),
+    do: :global.trans({{__MODULE__, download_id}, self()}, fun, [node()])
 
   # A row deleted meanwhile is refused too, leaving the client untouched.
   defp check_editable(download_id) do

@@ -11,10 +11,13 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
 
   `auto`, `manual` and `auto_failed` entries are final; the policy never
   overrides an operator's choice. The stored entry is read again before the
-  policy acts, so a selection saved after the poll's snapshot still wins.
+  policy acts, under `Mydia.Downloads.TorrentFiles.with_selection_lock/2`
+  (which the operator's save also holds), so a selection saved after the
+  poll's snapshot still wins and a save never lands between the check and the
+  policy's client write.
   """
 
-  alias Mydia.Downloads.{Client, Download, FileSelection, MetadataKey, Queue}
+  alias Mydia.Downloads.{Client, Download, FileSelection, MetadataKey, Queue, TorrentFiles}
   alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Repo
 
@@ -38,16 +41,27 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
   defp select(row, entry) do
     with {:ok, adapter, config} <- Queue.resolve_adapter(row.download_client),
          {:ok, files} <- Client.torrent_files(adapter, config, row.download_client_id) do
-      decide(row, adapter, config, files)
+      decide(row, entry, adapter, config, files)
     else
       {:error, reason} -> fail(row, entry, reason)
     end
   end
 
-  defp decide(_row, _adapter, _config, []), do: :waiting
+  defp decide(_row, _entry, _adapter, _config, []), do: :waiting
 
-  defp decide(row, adapter, config, files) do
-    if final_now?(row.id), do: :done, else: select_files(row, adapter, config, files)
+  # The final check, the client write and the stamp hold the lock the
+  # operator's save takes, so a save cannot land between them. A failed
+  # client write is recorded after the lock is released (`fail/3` takes it).
+  defp decide(row, entry, adapter, config, files) do
+    locked =
+      TorrentFiles.with_selection_lock(row.id, fn ->
+        if final_now?(row.id), do: :done, else: select_files(row, adapter, config, files)
+      end)
+
+    case locked do
+      {:client_error, reason} -> fail(row, entry, reason)
+      outcome -> outcome
+    end
   end
 
   defp select_files(row, adapter, config, files) do
@@ -59,7 +73,7 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
     else
       case Client.set_file_selection(adapter, config, row.download_client_id, keep) do
         :ok -> stamp(row, %{"source" => "auto", "skipped" => skipped}, :applied)
-        {:error, reason} -> fail(row, Map.get(row.metadata || %{}, @key) || %{}, reason)
+        {:error, reason} -> {:client_error, reason}
       end
     end
   end
@@ -76,7 +90,10 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
         do: %{"source" => "auto_failed", "attempts" => @max_attempts},
         else: %{"source" => "auto_pending", "attempts" => attempts}
 
-    unless final_now?(row.id), do: MetadataKey.put(row.id, @key, value)
+    TorrentFiles.with_selection_lock(row.id, fn ->
+      unless final_now?(row.id), do: MetadataKey.put(row.id, @key, value)
+    end)
+
     {:error, reason}
   end
 
