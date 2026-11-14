@@ -824,8 +824,8 @@ pub struct FlutterWireSharedAccount {
     pub revision: u64,
 }
 
-/// Each record is one CBOR blob exactly as Dart encodes it, so the bridge
-/// never mirrors the Dart record shapes.
+/// Each record is the UTF-8 JSON of the record's `toMap()`, exactly as Dart
+/// encodes it, so the bridge never mirrors the Dart record shapes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FlutterWireIndexPage {
     pub roots: Vec<Vec<u8>>,

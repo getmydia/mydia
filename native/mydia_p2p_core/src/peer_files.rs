@@ -23,8 +23,8 @@ pub struct WireSharedAccount {
 }
 
 /// One page of an account's index. Each element is a single record exactly as
-/// Dart encodes it (CBOR of the record's `toMap()`), so Rust never has to
-/// mirror the Dart record shapes.
+/// Dart encodes it (UTF-8 JSON of the record's `toMap()`), so Rust never has
+/// to mirror the Dart record shapes.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WireIndexPage {
     pub roots: Vec<Vec<u8>>,

@@ -948,8 +948,8 @@ class FlutterTrackInfo {
           language == other.language;
 }
 
-/// Each record is one CBOR blob exactly as Dart encodes it, so the bridge
-/// never mirrors the Dart record shapes.
+/// Each record is the UTF-8 JSON of the record's `toMap()`, exactly as Dart
+/// encodes it, so the bridge never mirrors the Dart record shapes.
 class FlutterWireIndexPage {
   final List<Uint8List> roots;
   final List<Uint8List> files;
