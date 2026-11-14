@@ -599,7 +599,11 @@ void main() {
   test('completed_leave_removes_everything_without_a_refresh', () async {
     await client.start();
     await sync.leaveGroup();
-    await pumpEventQueue();
+    // The deletes are box writes, not microtasks: under a loaded suite a
+    // fixed pump can finish before they land, so wait for them (bounded).
+    for (var i = 0; i < 100 && store.storedAccounts().isNotEmpty; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
 
     expect(client.accounts.value, isEmpty);
     expect(store.storedAccounts(), isEmpty);
