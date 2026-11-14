@@ -53,6 +53,7 @@ const kMydiaHiveBoxes = <String>[
   'peer_sync',
   'peer_files_revisions',
   'peer_files_index',
+  'backup_meta',
 ];
 
 /// Moves each of [boxes] from [from] to [to], best-effort.

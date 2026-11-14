@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../auth/auth_storage.dart';
 import '../player/subtitle_size.dart';
 import '../theme/glass_material.dart';
@@ -27,6 +29,14 @@ class SettingsService {
   static const _themePresetKey = 'theme_preset';
   static const _glassMaterialKey = 'glass_material';
   static const _localeKey = 'interface_locale';
+
+  /// The library keys [setLibrarySort] has stored, as a JSON list, so the
+  /// cloud backup can find them: secure storage cannot list its keys. Not
+  /// under [_librarySortKeyPrefix], so it is never taken for a sort.
+  static const _librarySortIndexKey = 'library_sorts_index';
+
+  /// Library keys stored before [_librarySortIndexKey] existed.
+  static const _legacyLibrarySortKeys = ['movies', 'tvShows'];
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -94,6 +104,54 @@ class SettingsService {
   /// Set the remembered sort for a library, as its encoded string.
   Future<void> setLibrarySort(String libraryKey, String encoded) async {
     await _storage.write('$_librarySortKeyPrefix$libraryKey', encoded);
+    if (_legacyLibrarySortKeys.contains(libraryKey)) return;
+    final known = await _librarySortIndex();
+    if (known.contains(libraryKey)) return;
+    await _storage.write(
+        _librarySortIndexKey, jsonEncode([...known, libraryKey]));
+  }
+
+  /// The storage key of every library sort this device may hold, stored or
+  /// cleared. For the cloud backup.
+  Future<List<String>> librarySortStorageKeys() async => [
+        for (final k in {
+          ..._legacyLibrarySortKeys,
+          ...await _librarySortIndex()
+        })
+          '$_librarySortKeyPrefix$k',
+      ];
+
+  Future<List<String>> _librarySortIndex() async {
+    final raw = await _storage.read(_librarySortIndexKey);
+    if (raw == null) return const [];
+    try {
+      return List<String>.from(jsonDecode(raw) as List);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Whether [storageKey] is a library sort key, as
+  /// [librarySortStorageKeys] lists them.
+  static bool isLibrarySortKey(String storageKey) =>
+      storageKey.startsWith(_librarySortKeyPrefix) &&
+      storageKey.length > _librarySortKeyPrefix.length;
+
+  /// The stored string under [storageKey], for the cloud backup, which
+  /// decides which keys it may read.
+  Future<String?> readStoredValue(String storageKey) =>
+      _storage.read(storageKey);
+
+  /// Writes [value] under [storageKey], or deletes it when null, for a
+  /// cloud backup restore. A library sort goes through [setLibrarySort] so
+  /// it is indexed.
+  Future<void> writeStoredValue(String storageKey, String? value) async {
+    if (value == null) return _storage.delete(storageKey);
+    if (isLibrarySortKey(storageKey)) {
+      return setLibrarySort(
+          storageKey.substring(_librarySortKeyPrefix.length), value);
+    }
+    await _storage.write(storageKey, value);
   }
 
   /// The release track this install follows, as its stored string.
