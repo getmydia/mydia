@@ -121,6 +121,10 @@ class PeerFilesClient {
   /// manifest entry. Accounts with no index yet are held here but not shown.
   final _lent = <String, ({String nodeId, FlutterWireSharedAccount wire})>{};
 
+  /// Lent accounts whose copy is being deleted, or whose delete the store
+  /// refused and the next refresh retries. Never shown.
+  final _deleting = <String>{};
+
   final _subs = <StreamSubscription<Object?>>[];
   bool _started = false;
   bool _disposed = false;
@@ -244,6 +248,9 @@ class PeerFilesClient {
   }
 
   Future<void> _refreshOnce(Set<String>? only) async {
+    for (final id in _deleting.toList()) {
+      await _drop(id);
+    }
     for (final entry in _lent.entries.toList()) {
       if (_revoked(entry.value.nodeId)) await _drop(entry.key);
     }
@@ -342,6 +349,9 @@ class PeerFilesClient {
     for (final wire in wanted) {
       if (_disposed) return false;
       final id = peerFilesAccountId(nodeId, wire.accountId);
+      // A copy whose delete is still pending is not lent again until the
+      // delete lands, or the retry would remove what this fetch writes.
+      if (_deleting.contains(id)) continue;
       await _store.saveAccount(id, nodeId: nodeId, wire: wire);
       _lent[id] = (nodeId: nodeId, wire: wire);
       if (_store.revision(id) == wire.revision.toInt()) continue;
@@ -402,7 +412,9 @@ class PeerFilesClient {
             return _Fetch.failed;
         }
       } while (cursor != null);
-      if (_disposed || !_lent.containsKey(localAccountId)) {
+      if (_disposed ||
+          !_lent.containsKey(localAccountId) ||
+          _deleting.contains(localAccountId)) {
         return _Fetch.failed;
       }
       await _store.replace(localAccountId, wire.revision.toInt(), pages);
@@ -414,9 +426,20 @@ class PeerFilesClient {
     }
   }
 
+  /// Deletes [localAccountId]'s copy. Never throws: a delete the store
+  /// refuses keeps the account in [_lent], hidden, and in [_deleting], so
+  /// the next refresh tries again and the caller's other deletes and its
+  /// publish still run.
   Future<void> _drop(String localAccountId) async {
+    _deleting.add(localAccountId);
+    try {
+      await _store.remove(localAccountId);
+    } catch (e) {
+      debugPrint('[PeerFilesClient] Removing $localAccountId failed: $e');
+      return;
+    }
+    _deleting.remove(localAccountId);
     _lent.remove(localAccountId);
-    await _store.remove(localAccountId);
   }
 
   /// Shows each account with an index whose host the roster holds and has
@@ -427,7 +450,7 @@ class PeerFilesClient {
     final localKeys = _localKeys();
     final next = <PeerSharedAccount>[];
     for (final MapEntry(key: id, value: lent) in _lent.entries) {
-      if (_store.revision(id) == null) continue;
+      if (_store.revision(id) == null || _deleting.contains(id)) continue;
       final member = _sync.member(lent.nodeId);
       if (member == null || member.revoked) continue;
       if (_dedupable(lent.wire) &&

@@ -661,6 +661,32 @@ void main() {
     expect(transport.manifestsFrom(_desk), 2);
   });
 
+  test('a refused delete hides that copy, removes the rest and is retried',
+      () async {
+    final flaky = _FlakyRemoveStore(box);
+    store = flaky;
+    client.dispose();
+    client = newClient();
+    await client.start();
+    expect(shown(), hasLength(2));
+    final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
+    final nas = peerFilesAccountId(_desk, _smbId);
+    flaky.refusing.add(films);
+
+    await sync.leaveGroup();
+    await client.refresh();
+
+    // The refused copy is not shown, and the other one still went.
+    expect(client.accounts.value, isEmpty);
+    expect(store.revision(nas), isNull);
+    expect(store.revision(films), 1);
+
+    flaky.refusing.clear();
+    await client.refresh();
+    expect(store.revision(films), isNull);
+    expect(store.storedAccounts(), isEmpty);
+  });
+
   test('host_revoked_while_closed_never_shows', () async {
     await client.start();
     client.dispose();
@@ -757,6 +783,19 @@ void main() {
 class _UnreadableAuthStorage extends MockAuthStorage {
   @override
   Future<String?> read(String key) async => throw Exception('keyring locked');
+}
+
+/// A store that refuses deletes of the accounts in [refusing].
+class _FlakyRemoveStore extends PeerFilesStore {
+  _FlakyRemoveStore(super.box);
+
+  final refusing = <String>{};
+
+  @override
+  Future<void> remove(String localAccountId) async {
+    if (refusing.contains(localAccountId)) throw HiveError('disk full');
+    await super.remove(localAccountId);
+  }
 }
 
 /// A store whose box refuses deletes, as a corrupt Hive box can.
