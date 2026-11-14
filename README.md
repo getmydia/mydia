@@ -6,9 +6,18 @@
 [![TestFlight](https://img.shields.io/badge/TestFlight-Install%20on%20iOS-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
 [![Translation status](https://hosted.weblate.org/widget/mydia/svg-badge.svg)](https://hosted.weblate.org/engage/mydia/)
 
-**Your personal media companion, built with Phoenix LiveView**
+Mydia is two open source apps for your movies and TV.
 
-Mydia Server is a modern, self-hosted media management platform for tracking, organizing, and monitoring your movies and TV shows.
+- **[Mydia Server](#mydia-server)** runs your library. It organizes what you
+  have, finds what is missing and downloads it. One self-hosted app where the
+  usual setup needs Sonarr, Radarr, Prowlarr and Overseerr.
+- **[Mydia Player](#mydia-player)** plays your media on every screen you own.
+  Think Infuse, but open source, free, and not limited to Apple devices.
+
+Each one stands on its own. The player is happy with Plex or Jellyfin and no
+Mydia Server at all, and the server works fine with whatever player you already
+use. Run them together and you get [a few things neither does
+alone](#better-together).
 
 > [!TIP]
 > **Speak another language? Help translate Mydia.** Translations happen on
@@ -22,23 +31,68 @@ Mydia Server is a modern, self-hosted media management platform for tracking, or
 >   </picture>
 > </a>
 
+## Mydia Server
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="screenshots/homepage-light.png" />
-    <img src="screenshots/homepage.png" alt="Mydia Dashboard" width="800" />
+    <img src="screenshots/homepage.png" alt="Mydia Server dashboard" width="800" />
   </picture>
 </p>
 
-## Quick Start
+### Why not Sonarr and Radarr?
 
-**1. Generate secrets:**
+A typical *arr install is four or five services that each keep their own copy of your
+settings, and most households only wanted one app.
+
+| | Mydia Server | The *arr stack |
+|---|---|---|
+| Movies and TV | One app, one library, one set of quality profiles | Radarr for movies, Sonarr for TV, configured twice |
+| Indexers | Prowlarr or Jackett, or built-in Cardigann definitions (experimental) | Prowlarr or Jackett |
+| Family and friends | Accounts, guest roles and requests built in | Add Overseerr or Ombi |
+| Single sign-on | OIDC built in | Local login, or forward auth at your reverse proxy |
+| Configuration | Web UI, YAML file or environment variables, and the UI shows where each value came from | Web UI only |
+| Debrid | Built-in providers next to your torrent and Usenet clients | Through third-party tools |
+| Watching remotely | Mydia Player connects peer-to-peer, no port forwarding or VPN | Not their job; run a media server |
+
+Configuration deserves a sentence of its own. You can declare download clients,
+indexers and libraries in a Compose file so they exist on first boot, and keep
+settings you want to tweak in the browser. The UI marks which values come from
+the file and keeps those read-only. The *arr apps keep everything in their own
+database, so a fresh instance always starts with clicking.
+
+### What it does
+
+- **Library and metadata.** Scans your folders (or an S3 bucket) and fills in
+  posters, descriptions and episode details from TMDB and TVDB.
+- **Automated downloads.** Monitors what you want, picks a release that matches
+  your languages, quality profile and custom formats, and upgrades it later when
+  something better shows up. [How it picks a release](docs/using/explanation/quality-decisions.md).
+- **Download clients.** qBittorrent, Transmission, rqbit, SABnzbd, NZBGet and
+  debrid providers.
+- **Requests.** Guests ask, admins approve, the download starts.
+- **Import lists.** Follow TMDB watchlists, popular and trending (experimental).
+- **Plugins.** Sandboxed add-ons that can only do what you approve.
+- **Your database.** SQLite by default, PostgreSQL if you prefer.
+- **Themes and languages.** Light, dark and several community themes, with the
+  interface translated by contributors.
+
+| Movies | TV Shows | Series | Calendar |
+|:------:|:--------:|:------:|:--------:|
+| ![Movies](screenshots/movies.png) | ![TV Shows](screenshots/tv-shows.png) | ![Series](screenshots/series.png) | ![Calendar](screenshots/calendar.png) |
+
+### Quick start
+
+Generate two secrets:
 
 ```bash
 openssl rand -base64 48  # SECRET_KEY_BASE
 openssl rand -base64 48  # GUARDIAN_SECRET_KEY
 ```
 
-**2. Create `docker-compose.yml`:**
+Create `docker-compose.yml`. Paste the two values in place of the secret
+placeholders, and replace `/path/to/media` with the folder that holds your
+movies and TV:
 
 ```yaml
 services:
@@ -62,119 +116,74 @@ services:
     restart: unless-stopped
 ```
 
-**3. Start and access:**
-
-```bash
-docker compose up -d
-```
-
-Open http://localhost:4000 and create your admin account.
-
-## Features
-
-- **Unified Media Management** - Movies + TV shows with TMDB/TVDB metadata
-- **Automated Downloads** - Monitored search, quality profiles, automatic upgrades
-- **Release Ranking** - Picks the right release for you: the right episode, your languages, your quality profile and custom formats
-- **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet, debrid providers
-- **Indexers** - Prowlarr, Jackett, built-in Cardigann (experimental)
-- **Multi-User** - Admin/guest roles with request workflow
-- **SSO** - Local auth + OIDC/OpenID Connect
-- **Import Lists** - Sync from TMDB watchlists, popular, trending (experimental)
-- **Real-Time UI** - Phoenix LiveView with instant updates
-
-## How Mydia Picks a Release
-
-Automatic and manual search rank releases the same way. Automatic search grabs
-the top one; manual search shows you the list in that order.
-
-```mermaid
-flowchart TD
-    A[Releases found by your indexers] --> B[Drop wrong and unwanted releases]
-    B --> C[Order the rest by what you asked for]
-    C --> D{Who is choosing}
-    D -->|Automatic search| E[Grab the top release]
-    D -->|You, in manual search| F[See the same order and pick]
-```
-
-**Dropped before ranking**
-
-- Fake or malformed release names
-- A different title than the one searched *
-- Tags you blocked
-- Custom formats your profile rejects
-- Sources your profile excludes, such as cam rips *
-- Resolutions below your profile's minimum *
-- Usenet posts too new to be complete
-
-\* Manual search keeps these at the bottom of the list instead.
-
-**Ranking order**, each step only breaking ties left by the one above
-
-1. Right season and episode
-2. Preferred audio language
-3. Resolution, in your profile's order; unlisted resolutions last
-4. Number of preferred audio languages
-5. Custom format score
-6. Quality score: about 60% profile fit (resolution, codec, audio, source,
-   size, HDR), plus seeders or Usenet completeness, plus name match. Torrents
-   with 0 seeders lose 30%.
-
-**Upgrades**
-
-- Found with the same ranking
-- Must beat your current file by the profile's upgrade margin, or add a
-  preferred audio language
-- Checked twice: the release before download, the real file after
-- Your old file is kept until the new one passes
-
-More detail: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md)
-and [Custom Formats](docs/configuration/custom-formats.md).
+Start it with `docker compose up -d`, open http://localhost:4000 and create your
+admin account. NixOS, PostgreSQL, reverse proxies and SSO are covered in the
+[how-to guides](https://docs.mydia.dev/latest/using/how-to/).
 
 ## Mydia Player
-
-A cross-platform app that streams your library from anywhere over an encrypted
-peer-to-peer connection. No port forwarding, no VPN.
-
-It can also browse and play from Plex, Jellyfin and Stash servers.
-[Connect Plex, Jellyfin or Stash](https://docs.mydia.dev/latest/using/how-to/connect-other-servers/).
 
 <p align="center">
   <img src="screenshots/player-desktop.png" alt="Mydia Player on the desktop" width="800" />
 </p>
 
+Infuse set the bar for a good-looking player that sits on top of the servers
+and shares you already have. Mydia Player aims at the same job. The differences
+are that it is AGPL-licensed, costs nothing, and runs on Android, Android TV,
+Windows and Linux as well as iPhone, iPad and Mac.
+
+| | Mydia Player | Infuse |
+|---|---|---|
+| License | Open source (AGPL-3.0) | Closed source |
+| Price | Free, every feature | Free tier, with Pro by subscription or lifetime purchase |
+| Platforms | Android, Android TV, iOS, iPadOS, macOS, Windows, Linux, web | iOS, iPadOS, tvOS, macOS, visionOS |
+| Servers | Plex (with Home profiles), Jellyfin, Stash, Mydia Server | Plex, Jellyfin, Emby |
+| Files | Local folders, SMB and WebDAV, with metadata matching (beta) | SMB, NFS, WebDAV, FTP and cloud drives |
+| Casting | Chromecast, DLNA and AirPlay | AirPlay |
+| Offline downloads | Yes, from every server; transcoded sizes from Mydia Server | Yes |
+| Continue watching | One row across all your servers | Per library, plus Trakt sync |
+| Away from home | Peer-to-peer to Mydia Server, no port forwarding or VPN | Whatever your server or share exposes |
+
 | Home | Shows |
 |:----:|:-----:|
 | ![Mydia Player home](screenshots/player-home.png) | ![Mydia Player shows library](screenshots/player-shows.png) |
 
+### Install
+
 | Platform | Get it | Notes |
 |---|---|---|
-| Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources; updates itself afterward, track chosen in Settings |
+| Android and Android TV | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources; updates itself afterward, track chosen in Settings |
 | iOS | [Install via TestFlight](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
 | macOS | [Download .dmg](https://mydia.dev/download/macos) | Notarized, updates itself |
 | Windows | `irm https://mydia.dev/install.ps1 \| iex` in PowerShell, or [download installer](https://mydia.dev/download/windows) | Per-user install. The command avoids the SmartScreen prompt the unsigned installer gets |
 | Linux | [Flatpak](https://mydia.dev/download/flatpak) or [.tar.gz](https://mydia.dev/download/linux) | Flatpak recommended |
-| Web | Served by your own Mydia server at `/player` | Nothing to install |
+| Web | Served by your own Mydia Server at `/player` | Nothing to install |
 
-**[All platforms and install instructions](https://mydia.dev/download)**
+[All platforms and install instructions](https://mydia.dev/download).
+To use it with Plex, Jellyfin or Stash, see
+[Connect Plex, Jellyfin or Stash](https://docs.mydia.dev/latest/using/how-to/connect-other-servers/).
+
+## Better together
+
+Neither app needs the other. Pair them and:
+
+- The player reaches your server from anywhere over an encrypted peer-to-peer
+  connection. No port forwarding, VPN or dynamic DNS; when a direct path is
+  blocked, a relay carries the traffic. [How remote access works](docs/using/explanation/remote-access.md).
+- Offline downloads can be transcoded to a smaller size on the server before
+  they reach your phone.
+- Everyone signs in to the player with the account you gave them on the
+  server, and keeps their own watch progress.
+- Your server serves a web build of the player at `/player`, so a browser is
+  enough.
 
 ## Documentation
 
-Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
+Everything is at **[docs.mydia.dev](https://docs.mydia.dev)**:
 
-- [Tutorials](https://docs.mydia.dev/latest/using/tutorials/) - get Mydia running from scratch
-- [How-to guides](https://docs.mydia.dev/latest/using/how-to/) - install, connect clients and indexers, deploy
-- [Reference](https://docs.mydia.dev/latest/using/reference/) - environment variables, configuration, database, API
-- [Explanation](https://docs.mydia.dev/latest/using/explanation/) - how Mydia works and why
-- [Contributing](https://docs.mydia.dev/latest/contributing/setup/) - development setup
-
-## Screenshots
-
-Shown in the dark theme. Mydia ships light, dark and follow-your-system, and the
-dashboard above switches with your GitHub theme.
-
-| Movies | TV Shows | Series | Calendar |
-|:------:|:--------:|:------:|:--------:|
-| ![Movies](screenshots/movies.png) | ![TV Shows](screenshots/tv-shows.png) | ![Series](screenshots/series.png) | ![Calendar](screenshots/calendar.png) |
+- [Tutorials](https://docs.mydia.dev/latest/using/tutorials/) to get Mydia running from scratch
+- [How-to guides](https://docs.mydia.dev/latest/using/how-to/) for installing, connecting clients and indexers, and deploying
+- [Reference](https://docs.mydia.dev/latest/using/reference/) for environment variables, configuration, database and API
+- [Explanation](https://docs.mydia.dev/latest/using/explanation/) for how Mydia works and why
 
 ## Contributing
 
@@ -185,7 +194,8 @@ dashboard above switches with your GitHub theme.
 ./dev mix precommit      # Run all checks
 ```
 
-See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/) for details.
+See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/)
+for the server and `player/docs/` for the player.
 
 ### Translations
 
@@ -195,16 +205,18 @@ account, no git and no code. See [TRANSLATING.md](TRANSLATING.md) for the conven
 
 [![Translation status](https://hosted.weblate.org/widget/mydia/multi-auto.svg)](https://hosted.weblate.org/engage/mydia/)
 
-### Documentation
+### Documentation site
 
-Docs are built with [MkDocs](https://www.mkdocs.org/) and [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/). Requires [uv](https://docs.astral.sh/uv/).
+The docs site is built with [MkDocs](https://www.mkdocs.org/) and
+[Material for MkDocs](https://squidfunk.github.io/mkdocs-material/), and needs
+[uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv sync --project docs            # Install dependencies
+uv sync --project docs               # Install dependencies
 uv run --project docs mkdocs serve   # Serve at http://localhost:8000
 uv run --project docs mkdocs build   # Build static site to /site
 ```
 
 ## License
 
-Built with Elixir & Phoenix
+[AGPL-3.0](LICENSE).
