@@ -166,10 +166,38 @@ defmodule Mydia.Downloads.Client.Rqbit do
         {:error, Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
 
       info_hash ->
-        maybe_pause_after_add(config, info_hash, opts)
-        {:ok, info_hash}
+        with :ok <- reconcile_only_files(config, info_hash, resp_body, opts[:only_files]) do
+          maybe_pause_after_add(config, info_hash, opts)
+          {:ok, info_hash}
+        end
     end
   end
+
+  # rqbit answers an add for an info hash it already manages with that torrent
+  # unchanged (AlreadyManaged) and ignores the new `only_files`. The response
+  # reports the selection in force through `details.files[].included`; when it
+  # differs from the one asked for, set it explicitly. A response without a
+  # file list says nothing either way and is left alone.
+  defp reconcile_only_files(config, info_hash, resp_body, [_ | _] = only_files) do
+    wanted = MapSet.new(only_files)
+
+    case reported_selection(resp_body) do
+      nil -> :ok
+      ^wanted -> :ok
+      _other -> set_file_selection(config, info_hash, Enum.sort(only_files))
+    end
+  end
+
+  defp reconcile_only_files(_config, _info_hash, _resp_body, _only_files), do: :ok
+
+  defp reported_selection(%{"details" => %{"files" => files}}) when is_list(files) do
+    files
+    |> Enum.with_index()
+    |> Enum.filter(fn {file, _index} -> file_included?(file) end)
+    |> MapSet.new(fn {_file, index} -> index end)
+  end
+
+  defp reported_selection(_resp_body), do: nil
 
   @impl true
   def get_status(config, client_id) do

@@ -301,6 +301,48 @@ defmodule Mydia.Downloads.Client.RqbitTest do
                )
     end
 
+    test "an already-managed torrent with a different selection gets only_files updated", %{
+      bypass: bypass,
+      config: config
+    } do
+      # rqbit returns the existing torrent unchanged and ignores the new only_files.
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, true, true, true]))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(body) == %{"only_files" => [0, 3]}
+        json_resp(conn, 200, %{})
+      end)
+
+      assert {:ok, @hash} = Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [3, 0])
+    end
+
+    test "an add whose reported selection matches only_files sends no update", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, false, false, true]))
+      end)
+
+      assert {:ok, @hash} = Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [0, 3])
+    end
+
+    test "a failed only_files update fails the add", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, true]))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        json_resp(conn, 400, %{"error_kind" => "internal_error", "human_readable" => "nope"})
+      end)
+
+      assert {:error, %Mydia.Downloads.Client.Error{}} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [1])
+    end
+
     test "Client.list_torrent_files returns {:error, :unsupported} without the callback" do
       defmodule NoListAdapter do
       end
@@ -728,6 +770,17 @@ defmodule Mydia.Downloads.Client.RqbitTest do
         "total_pieces" => 100
       }
     }
+  end
+
+  defp add_response_with_files(hash, included) do
+    files =
+      included
+      |> Enum.with_index()
+      |> Enum.map(fn {included?, index} ->
+        %{"name" => "e0#{index}.mkv", "length" => 100, "included" => included?}
+      end)
+
+    put_in(add_response(hash), ["details", "files"], files)
   end
 
   defp stats(overrides \\ []) do
