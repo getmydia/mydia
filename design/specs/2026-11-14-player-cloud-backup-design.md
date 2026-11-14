@@ -103,7 +103,8 @@ first 16 hex characters of `SHA-256(signer public key)`.
 ### Vault key
 
 The vault key (VK) is 32 random bytes with an integer `epoch`, starting at 1.
-A slot body is the CBOR-encoded record list, gzip'd, then sealed with
+A slot body is the JSON-encoded record list (the player has no CBOR
+library), gzip'd, then sealed with
 XChaCha20-Poly1305 under VK and a random 24-byte nonce. The AAD is
 `"mydia/backup/slot/v1|" + vaultId + "|" + epoch + "|" + slotId + "|" + seq`,
 so a blob cannot be moved to another slot or vault, or replayed from an older
@@ -169,7 +170,9 @@ Authorization: MydiaSig signer=<base64url pub>, ts=<unix ms>, sig=<base64url>
 
 where `sig` is Ed25519 over `method \n path \n hex(sha256(body)) \n ts`. The
 relay rejects a `ts` more than 5 minutes from its clock and a signer that is
-not a current member of the vault in the path. Replayed reads leak nothing;
+not a current member of the vault in the path. A skew rejection carries
+`x-backup-server-time`, and the player retries once with that offset, so a
+device with a wrong clock still backs up. Replayed reads leak nothing;
 writes are guarded by sequence and epoch CAS.
 
 ### Endpoints (`/backup/v1`)
