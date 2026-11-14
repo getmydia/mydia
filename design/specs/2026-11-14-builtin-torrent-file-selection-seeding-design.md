@@ -1,7 +1,9 @@
-# Built-in torrent client: selective files, seeding targets, speed limits
+# Built-in torrent client: selective files, seeding targets
 
 Status: approved design, 2026-11-14. Answers part of issue #1403, Suggestion
 2. Builds on `design/specs/2026-11-12-ui-builtin-torrent-vpn-design.md`.
+Speed limits, the third goal of the original design, shipped separately in
+#1406 and are out of this spec's scope (see "Speed limits" below).
 
 ## Goal
 
@@ -14,9 +16,8 @@ An operator using the built-in torrent client (rqbit) can:
    whichever target it reaches first, then Mydia pauses it or removes it from
    the client, as the operator chooses. A tracker's own minimum must be met
    as well, so it can hold a torrent longer but never release it sooner.
-3. Cap the client's total download and upload speed.
 
-All three are configured in the built-in client's settings and layered like
+Both are configured in the built-in client's settings and layered like
 the rest of the `built_in_torrent` section (yaml, then database, then env).
 
 ## Where Mydia stands
@@ -33,10 +34,6 @@ the rest of the `built_in_torrent` section (yaml, then database, then env).
     `components`, `length` and `included`; stats carry `file_progress[]`.
     For a paused or live torrent, stats `total_bytes` counts selected pieces
     only, so progress and completion follow the selection.
-  - `GET`/`POST /torrents/limits` with
-    `{"upload_bps": n | null, "download_bps": n | null}`, session-wide. An
-    omitted field means unlimited. These limits are session state and do not
-    survive an engine restart. There is no per-torrent rate limit over HTTP.
 - `Mydia.Downloads.SeedingGoal` judges a goal from the tracker terms frozen on
   a download: met when the ratio or the seed time reaches its minimum,
   whichever comes first. `Mydia.Downloads.ClientRemoval.terms_met?/2` applies
@@ -60,8 +57,6 @@ New fields in `Mydia.Config.Schema.BuiltInTorrent`, with entries in
 | `seed_ratio` | `MYDIA_TORRENT_SEED_RATIO` | float, >= 0 | ratio target; blank = none |
 | `seed_time` | `MYDIA_TORRENT_SEED_TIME` | integer minutes, >= 0 | seed-time target; blank = none |
 | `seed_goal_action` | `MYDIA_TORRENT_SEED_GOAL_ACTION` | `"pause"` (default) or `"remove"` | what happens at the target |
-| `download_limit` | `MYDIA_TORRENT_DOWNLOAD_LIMIT` | integer KiB/s, >= 0 | 0 or blank = unlimited |
-| `upload_limit` | `MYDIA_TORRENT_UPLOAD_LIMIT` | integer KiB/s, >= 0 | 0 or blank = unlimited |
 
 With `seed_ratio` and `seed_time` both blank, behaviour is unchanged: built-in
 torrents seed forever.
@@ -71,7 +66,9 @@ torrents seed forever.
 existing booleans and integers are. Env-set fields stay read-only.
 
 None of the new fields joins `BuiltIn.Config.restart_key/1`: changing them
-never restarts the engine.
+never restarts the engine. A reload that leaves the key unchanged still
+publishes the new config on the running `Runtime` entry, where the policies
+read it.
 
 ## Seeding targets
 
@@ -223,18 +220,12 @@ the Downloads list poll.
 
 ## Speed limits
 
-`Client.Rqbit.set_session_limits(config, %{download_bps: n | nil, upload_bps: n | nil})`
-posts `/torrents/limits` with both fields every time. KiB/s from settings is
-multiplied by 1024, and 0 or blank is sent as `null`.
-
-`BuiltIn.Manager` pushes the limits:
-
-1. each time `BuiltIn.Status` reports the engine running, because a restarted
-   engine forgets them, and
-2. on a config reload where `download_limit` or `upload_limit` changed.
-
-A failed push is logged and recorded as a warning in `BuiltIn.Status`, which
-the admin panel already renders. The next reload or engine start retries it.
+Out of scope here. Download and upload limits shipped separately in #1406
+(`download_limit_kib`, `upload_limit_kib`, `MYDIA_TORRENT_DOWNLOAD_LIMIT`,
+`MYDIA_TORRENT_UPLOAD_LIMIT`): rqbit gets them as its
+`--ratelimit-download`/`--ratelimit-upload` flags, a change restarts the
+engine through `BuiltIn.Config.restart_key/1`, and 16 KiB/s is the lowest
+accepted limit.
 
 ## Errors
 
@@ -247,7 +238,7 @@ without this feature.
 
 - `test/mydia/downloads/client/rqbit_test.exs` (Bypass): `torrent_files/2`
   joining files and progress, `set_file_selection/3` body shape and error
-  mapping, `set_session_limits/2` with null fields.
+  mapping.
 - `FileSelection`: season pack, sample folder, trailer, subtitles kept,
   `.nfo`/`.exe` skipped, all-junk fallback keeps everything.
 - `SeedingGoal.effective_terms/2`: operator only, tracker only, max per
@@ -266,8 +257,8 @@ without this feature.
   clients are unchanged.
 - `BuiltIn.Settings`: the new fields validate, cast and stay read-only under
   env.
-- `BuiltIn.Manager`: limits pushed on engine start and on a limits-only
-  reload, no engine restart.
+- `BuiltIn.Manager`: a seeding-only reload refreshes the runtime entry
+  without restarting the engine.
 - LiveView (drawer): the Files section renders, saves, shows the
   no-importable-file error, and is read-only after import.
 
@@ -275,8 +266,8 @@ without this feature.
 
 - Issue #1403 Suggestion 1: listing the built-in client by default and
   disabling external clients instead of deleting them.
-- The "Open Built-in" buttons opening an empty page. This is a separate small
-  fix.
+- The "Open Built-in" buttons opening an empty page. This shipped separately
+  in #1406.
 - The download directory: `download_path` already exists in the section.
 - File selection for qBittorrent and Transmission. The adapter seam allows it
   later.
@@ -286,4 +277,4 @@ without this feature.
 
 Update `lib/mydia/downloads/README.md`: the "Seeding guard and share limits"
 section (operator target, effective goal) and the "Built-in client" section
-(file selection, speed limits, the new env vars). Ship in the same PR.
+(file selection, the new env vars). Ship in the same PR.

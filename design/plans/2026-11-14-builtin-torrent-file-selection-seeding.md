@@ -10,16 +10,25 @@
 
 **Spec:** `design/specs/2026-11-14-builtin-torrent-file-selection-seeding-design.md`
 
+> **Note (2026-11-14):** speed limits shipped separately in #1406, as rqbit's
+> `--ratelimit-download`/`--ratelimit-upload` flags with a restart on change
+> and a 16 KiB/s floor. The speed-limit parts of this plan (the
+> `download_limit`/`upload_limit` fields, `Rqbit.set_session_limits/2`, the
+> `BuiltIn.Limits` process and its `{:limits_failed, _}` warning, and the
+> "Speed limits" form group) were built, then dropped when this branch merged
+> #1406. They stay below as a record of what was planned; the spec describes
+> what shipped.
+
 ## Global Constraints
 
-- rqbit endpoints, exactly: `POST /torrents/{hash}/update_only_files` with JSON `{"only_files": [ints]}`; `GET /torrents/{hash}` `files[]` (`name`, `components`, `length`, `included`); `GET /torrents/{hash}/stats/v1` `file_progress[]`; `POST /torrents/limits` with `{"upload_bps": n | null, "download_bps": n | null}`, both keys always sent.
-- Env vars: `MYDIA_TORRENT_SEED_RATIO`, `MYDIA_TORRENT_SEED_TIME`, `MYDIA_TORRENT_SEED_GOAL_ACTION`, `MYDIA_TORRENT_DOWNLOAD_LIMIT`, `MYDIA_TORRENT_UPLOAD_LIMIT`.
-- Units: `seed_time` in minutes in settings, seconds everywhere downstream (`TrackerTerms.minimum_seed_time`). Speed limits in KiB/s in settings, `* 1024` bytes/s to rqbit. 0 or blank speed = unlimited (`null`).
+- rqbit endpoints, exactly: `POST /torrents/{hash}/update_only_files` with JSON `{"only_files": [ints]}`; `GET /torrents/{hash}` `files[]` (`name`, `components`, `length`, `included`); `GET /torrents/{hash}/stats/v1` `file_progress[]`.
+- Env vars: `MYDIA_TORRENT_SEED_RATIO`, `MYDIA_TORRENT_SEED_TIME`, `MYDIA_TORRENT_SEED_GOAL_ACTION`.
+- Units: `seed_time` in minutes in settings, seconds everywhere downstream (`TrackerTerms.minimum_seed_time`).
 - `seed_ratio = 0` is a valid target (stop seeding at completion). Blank is "no target". Both targets blank = no change to today's behaviour.
 - `seed_goal_action` is `"pause"` (default) or `"remove"`.
 - Metadata keys: `"seeding_goal_reached_at"` (ISO 8601 string), `"file_selection"` (`%{"source" => "auto" | "manual" | "auto_failed" | "auto_pending", ...}`).
 - Subtitle extensions kept by auto-selection: `.srt .ass .ssa .sub .idx .sup .vtt`.
-- None of the new settings may change `BuiltIn.Config.restart_key/1`.
+- None of the new seeding settings may change `BuiltIn.Config.restart_key/1`. The speed limits from #1406 must change it.
 - No em dashes in code comments, docs or UI copy. All UI strings through `gettext`. Never real movie or TV titles in tests; invent them.
 - Tests that touch `BuiltIn.put_runtime/1` (a `:persistent_term`) are `async: false` and clear it in `on_exit`.
 - Commit with `devenv shell -- git commit -F <msgfile>` after staging every path; verify with `git show --stat`.

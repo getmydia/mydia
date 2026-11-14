@@ -185,19 +185,18 @@ the manual side: a checklist the operator edits until the download is
 imported, saved with the `manual` stamp so the automatic pass never overrides
 it. At least one video file must stay selected.
 
-**Speed limits.** `download_limit` and `upload_limit` (KiB/s, 0 or blank for
-unlimited) are session-wide in rqbit, which forgets them whenever the engine
-restarts. `BuiltIn.Limits`, a process in the instance tree, pushes them each
-time `Status` reports the engine running after a non-running state, and when a
-settings save hands it a new config. A running to running status change pushes
-nothing. A failed push shows as a `{:limits_failed, message}` warning on the
-panel until a later push succeeds.
+**Speed limits.** `download_limit_kib` and `upload_limit_kib` (blank for
+unlimited, otherwise 16 KiB/s or more) reach rqbit as its
+`--ratelimit-download`/`--ratelimit-upload` flags (`BuiltIn.Engine.args/4`).
+They are part of `BuiltIn.Config.restart_key/1`, so a change restarts the
+engine. The seeding fields are not: Mydia's policies read them from the
+runtime entry, and a seeding-only save never restarts rqbit.
 
-**Seeding and limit env vars.** `MYDIA_TORRENT_SEED_RATIO`,
-`MYDIA_TORRENT_SEED_TIME`, `MYDIA_TORRENT_SEED_GOAL_ACTION`,
-`MYDIA_TORRENT_DOWNLOAD_LIMIT` and `MYDIA_TORRENT_UPLOAD_LIMIT` map to the five
-fields through the usual overlay (`Config.Env.BuiltInTorrentEnv`); an env value
-wins and makes the form field read-only.
+**Seeding env vars.** `MYDIA_TORRENT_SEED_RATIO`, `MYDIA_TORRENT_SEED_TIME`
+and `MYDIA_TORRENT_SEED_GOAL_ACTION` map to the three fields through the usual
+overlay (`Config.Env.BuiltInTorrentEnv`), as `MYDIA_TORRENT_DOWNLOAD_LIMIT`
+and `MYDIA_TORRENT_UPLOAD_LIMIT` do for the limits; an env value wins and
+makes the form field read-only.
 
 **Child environment.** rqbit and `torrent-curl` are spawned with every
 `MYDIA_VPN_*` variable and Mydia's secrets unset
