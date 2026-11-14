@@ -72,7 +72,12 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
-  @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
+  @spec perform(Oban.Job.t()) ::
+          :ok
+          | {:ok, term()}
+          | {:error, term()}
+          | {:cancel, term()}
+          | {:snooze, pos_integer()}
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"download_id" => _} = raw_args, attempt: attempt}) do
     args = Args.parse(raw_args)

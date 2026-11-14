@@ -201,6 +201,8 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       assert updated.metadata["early_imported_paths"] == [ctx.ep1_path, ctx.ep2_path]
       assert updated.metadata["early_imported_episode_ids"] == [ctx.ep1.id, ctx.ep2.id]
       assert is_nil(updated.imported_at)
+      # Re-placing ep1 reused its record rather than adding a second one.
+      assert [_] = Library.list_media_files(episode_id: ctx.ep1.id)
     end
 
     test "a failed target is left out of early_imported_paths and does not fail the others",
@@ -327,6 +329,44 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       assert Partial.executing?(download.id)
       refute Partial.executing?(Ecto.UUID.generate())
     end
+
+    # No Oban Lifeline runs here, so a partial job orphaned in `executing` by
+    # a crash or restart would otherwise hold the full import off forever.
+    test "a partial job stuck in executing for over 10 minutes does not block the full import",
+         ctx do
+      download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
+      stub_status(ctx, [ctx.ep1_path, ctx.ep2_path])
+
+      insert_executing_job(
+        %{"download_id" => download.id, "partial" => true},
+        DateTime.add(DateTime.utc_now(), -11 * 60, :second)
+      )
+
+      refute Partial.executing?(download.id)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir,
+                 "partial" => false
+               })
+    end
+
+    test "a partial job that started a minute ago still holds the full import off", ctx do
+      download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
+
+      insert_executing_job(
+        %{"download_id" => download.id, "partial" => true},
+        DateTime.add(DateTime.utc_now(), -60, :second)
+      )
+
+      assert {:snooze, 30} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir,
+                 "partial" => false
+               })
+    end
   end
 
   describe "exclude_early/2" do
@@ -384,11 +424,12 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
     end
   end
 
-  defp insert_executing_job(args) do
-    %{"download_id" => args["download_id"]}
-    |> Map.merge(args)
+  # Oban stamps attempted_at when it starts a job, so an executing row has one.
+  defp insert_executing_job(args, attempted_at \\ DateTime.utc_now()) do
+    args
     |> MediaImport.new()
     |> Ecto.Changeset.put_change(:state, "executing")
+    |> Ecto.Changeset.put_change(:attempted_at, attempted_at)
     |> Repo.insert!()
   end
 end

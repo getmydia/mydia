@@ -53,15 +53,24 @@ defmodule Mydia.Jobs.MediaImport.Partial do
     end
   end
 
+  # A partial import is a handful of hardlinks or copies. No Oban Lifeline
+  # runs here, so a job orphaned in `executing` by a crash or restart stays
+  # there forever; past this age it no longer holds the full import off.
+  @stale_after_seconds 10 * 60
+
   @doc """
-  True while a partial `MediaImport` job for the download is executing.
+  True while a partial `MediaImport` job for the download is executing and
+  started less than 10 minutes ago.
   """
   @spec executing?(binary()) :: boolean()
   def executing?(download_id) when is_binary(download_id) do
+    cutoff = DateTime.add(DateTime.utc_now(), -@stale_after_seconds, :second)
+
     # The partial flag is a JSON boolean, which SQLite and Postgres extract
     # differently, so it is checked here rather than in SQL.
     from(j in Oban.Job,
       where: j.worker == @worker and j.state == "executing",
+      where: j.attempted_at >= ^cutoff,
       where: ^Mydia.DB.json_equals(:args, "$.download_id", download_id),
       select: j.args
     )
