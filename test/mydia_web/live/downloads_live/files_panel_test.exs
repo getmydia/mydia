@@ -189,6 +189,37 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     refute has_element?(view, "#download-files-save")
   end
 
+  test "opened before the metadata resolves, it offers a refresh that lists the files later",
+       %{conn: conn} do
+    files = :persistent_term.get({StubAdapter, :files})
+    StubAdapter.put_files([])
+    view = open(conn, built_in_download())
+
+    assert has_element?(view, "#download-files-panel #download-files-unavailable")
+    assert has_element?(view, "#download-files-refresh")
+    refute has_element?(view, "#download-files-form")
+
+    # The metadata resolved; the operator asks again.
+    StubAdapter.put_files(files)
+    view |> element("#download-files-refresh") |> render_click()
+
+    assert has_element?(view, "#download-files-form input[type=checkbox][value='0']")
+    assert has_element?(view, "#download-files-form input[type=checkbox][value='1']")
+    refute has_element?(view, "#download-files-refresh")
+  end
+
+  test "a failed file list load can be refreshed", %{conn: conn} do
+    StubAdapter.files_down!()
+    view = open(conn, built_in_download())
+
+    assert has_element?(view, "#download-files-refresh")
+
+    :persistent_term.erase({StubAdapter, :files_down})
+    view |> element("#download-files-refresh") |> render_click()
+
+    assert has_element?(view, "#download-files-form input[type=checkbox][value='0']")
+  end
+
   test "is absent for a client without file selection", %{conn: conn} do
     client = download_client_config_fixture(%{type: "qbittorrent"})
     download = download_fixture(%{download_client: client.name})
