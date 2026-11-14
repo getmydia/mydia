@@ -93,6 +93,36 @@ defmodule Mydia.Downloads.EarlyImportTest do
       assert EarlyImport.ready_targets(d, all_exist()) == []
     end
 
+    test "excludes paths whose early import failed" do
+      d =
+        download(%{
+          metadata: %{
+            "file_episodes" => %{"0" => "ep-a", "1" => "ep-b"},
+            "early_import_failed_paths" => ["/dl/Pack/e00.mkv"]
+          }
+        })
+
+      assert EarlyImport.ready_targets(d, all_exist()) == []
+    end
+
+    test "applies the path mapping before checking and recording a path" do
+      map = fn "/dl/" <> rest -> "/local/" <> rest end
+      local_only = &String.starts_with?(&1, "/local/")
+
+      assert [%{"path" => "/local/Pack/e00.mkv", "episode_id" => "ep-a"}] =
+               EarlyImport.ready_targets(download(), local_only, map)
+
+      imported =
+        download(%{
+          metadata: %{
+            "file_episodes" => %{"0" => "ep-a", "1" => "ep-b"},
+            "early_imported_paths" => ["/local/Pack/e00.mkv"]
+          }
+        })
+
+      assert EarlyImport.ready_targets(imported, local_only, map) == []
+    end
+
     test "excludes files with no file_episodes entry" do
       d = download(%{metadata: %{"file_episodes" => %{"1" => "ep-b"}}})
       assert EarlyImport.ready_targets(d, all_exist()) == []

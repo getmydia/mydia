@@ -6,8 +6,8 @@ defmodule Mydia.Downloads.EarlyImport do
   `DownloadMonitor` calls `run/1` on each poll. The monitor's list comes from
   the client's list endpoint, which for rqbit carries no per-file progress, so
   `run/1` fetches a fresh status for each candidate (a download with recorded
-  `metadata["file_episodes"]`). `ready_targets/2` is pure and judges the
-  struct as given.
+  `metadata["file_episodes"]`). `ready_targets/3` judges the struct as given,
+  with the existence check and the path mapping passed in.
   """
 
   require Logger
@@ -16,34 +16,50 @@ defmodule Mydia.Downloads.EarlyImport do
   alias Mydia.Downloads.Queue.ClientSelection
   alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Jobs.MediaImport.Partial
+  alias Mydia.Library.PathMapping
 
   @type target :: %{String.t() => String.t()}
 
   @doc """
   Files of the download that can be imported now: complete, with a recorded
-  single episode, present on this host and not already early imported.
+  single episode, present on this host and neither early imported nor failed
+  an early import before (the full import retries those).
+
+  Paths go through `map_path` (the configured path mappings, as the full
+  import's discovery applies them) before the existence check, and the mapped
+  path is what a target carries, so `Partial.exclude_early/2` sees the path
+  the full import discovers.
   """
-  @spec ready_targets(EnrichedDownload.t(), (String.t() -> boolean())) :: [target()]
-  def ready_targets(download, exists? \\ &File.exists?/1)
+  @spec ready_targets(
+          EnrichedDownload.t(),
+          (String.t() -> boolean()),
+          (String.t() -> String.t())
+        ) :: [target()]
+  def ready_targets(download, exists? \\ &File.exists?/1, map_path \\ &PathMapping.rewrite/1)
 
   def ready_targets(
         %EnrichedDownload{status: "downloading", file_progress: [_, _ | _] = progress} = d,
-        exists?
+        exists?,
+        map_path
       ) do
     metadata = d.metadata || %{}
     episodes = metadata["file_episodes"] || %{}
-    imported = metadata["early_imported_paths"] || []
+
+    skip =
+      List.wrap(metadata["early_imported_paths"]) ++
+        List.wrap(metadata["early_import_failed_paths"])
 
     for entry <- progress,
         entry.have == entry.length,
         episode_id = Map.get(episodes, Integer.to_string(entry.index)),
-        entry.path not in imported,
-        exists?.(entry.path) do
-      %{"path" => entry.path, "episode_id" => episode_id}
+        path = map_path.(entry.path),
+        path not in skip,
+        exists?.(path) do
+      %{"path" => path, "episode_id" => episode_id}
     end
   end
 
-  def ready_targets(_download, _exists?), do: []
+  def ready_targets(_download, _exists?, _map_path), do: []
 
   @doc """
   Enqueues a partial import for each download with ready files. Never raises.

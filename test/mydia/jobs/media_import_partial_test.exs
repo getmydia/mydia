@@ -222,10 +222,27 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       updated = Downloads.get_download!(download.id)
       assert updated.metadata["early_imported_paths"] == [ctx.ep1_path]
       assert updated.metadata["early_imported_episode_ids"] == [ctx.ep1.id]
+      # Recorded so the monitor stops offering it; the full import still tries.
+      assert updated.metadata["early_import_failed_paths"] == [missing]
       assert is_nil(updated.imported_at)
       assert is_nil(updated.import_last_error)
       assert [_] = Library.list_media_files(episode_id: ctx.ep1.id)
       assert [] = Library.list_media_files(episode_id: ctx.ep2.id)
+    end
+
+    test "a partial import renames when the library path has auto_rename on", ctx do
+      download = pack_download(ctx, %{})
+
+      assert {:ok, :partial} =
+               perform_job(
+                 MediaImport,
+                 partial_args(download, [%{"path" => ctx.ep1_path, "episode_id" => ctx.ep1.id}])
+               )
+
+      assert [media_file] = Library.list_media_files(episode_id: ctx.ep1.id)
+      name = Path.basename(media_file.relative_path)
+      refute name == Path.basename(ctx.ep1_path)
+      assert name =~ "Saltmarsh Hollow"
     end
 
     test "partial job is a no-op once the download has completed_at", ctx do
@@ -274,6 +291,31 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       assert [] = Library.list_media_files(episode_id: ctx.ep1.id)
       assert [_] = Library.list_media_files(episode_id: ctx.ep2.id)
       assert [_] = StubAdapter.take_removes()
+    end
+
+    test "full import still places a file whose early import failed", ctx do
+      download =
+        pack_download(ctx, %{
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 2,
+            "early_import_failed_paths" => [ctx.ep2_path]
+          }
+        })
+
+      stub_status(ctx, [ctx.ep1_path, ctx.ep2_path])
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => ctx.shared_dir
+               })
+
+      assert [_] = Library.list_media_files(episode_id: ctx.ep1.id)
+      assert [_] = Library.list_media_files(episode_id: ctx.ep2.id)
     end
 
     test "full import with every file already imported early still finishes", ctx do

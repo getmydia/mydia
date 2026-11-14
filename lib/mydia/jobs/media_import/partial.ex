@@ -6,7 +6,9 @@ defmodule Mydia.Jobs.MediaImport.Partial do
   and records them in the download's `metadata["early_imported_paths"]` and
   `metadata["early_imported_episode_ids"]`. The full import at completion
   skips those paths (`exclude_early/2`) and counts those episodes when it
-  checks for a partial pack.
+  checks for a partial pack. A target that fails is recorded in
+  `metadata["early_import_failed_paths"]`, so `EarlyImport` stops offering it
+  on every poll; the full import still processes it.
 
   Every `MediaImport` job carries `"partial"` and the worker is unique on
   `[:download_id, :partial]`, so a queued partial job never swallows the full
@@ -81,7 +83,8 @@ defmodule Mydia.Jobs.MediaImport.Partial do
 
       library_path ->
         # The torrent is still downloading and seeding, so its files stay put.
-        args = %{args | move_source: false}
+        # The library's auto_rename decides naming, as in the full import.
+        args = %{args | move_source: false, rename_files: library_path.auto_rename}
         place_all(download, targets, library_path, args, place_fun)
     end
   end
@@ -107,10 +110,11 @@ defmodule Mydia.Jobs.MediaImport.Partial do
       )
     end
 
-    if placed != [] do
-      record_early_imports(download.id, Enum.reverse(placed))
-      MediaServerNotifier.notify_all()
+    if placed != [] or failed != [] do
+      record_early_imports(download.id, Enum.reverse(placed), Enum.map(failed, &elem(&1, 0)))
     end
+
+    if placed != [], do: MediaServerNotifier.notify_all()
 
     {:ok, :partial}
   end
@@ -123,8 +127,9 @@ defmodule Mydia.Jobs.MediaImport.Partial do
   end
 
   # Read-modify-write on a fresh read: the monitor and other jobs write this
-  # row's metadata while the download runs.
-  defp record_early_imports(download_id, placed_targets) do
+  # row's metadata while the download runs. Failed paths are recorded so the
+  # monitor stops offering them on every poll; the full import still tries.
+  defp record_early_imports(download_id, placed_targets, failed_paths) do
     paths = Enum.map(placed_targets, & &1["path"])
     episode_ids = placed_targets |> Enum.map(& &1["episode_id"]) |> Enum.reject(&is_nil/1)
 
@@ -139,6 +144,7 @@ defmodule Mydia.Jobs.MediaImport.Partial do
           (current.metadata || %{})
           |> append_uniq("early_imported_paths", paths)
           |> append_uniq("early_imported_episode_ids", episode_ids)
+          |> append_uniq("early_import_failed_paths", failed_paths)
 
         case Downloads.update_download(current, %{metadata: metadata}) do
           {:ok, _} ->
@@ -152,6 +158,8 @@ defmodule Mydia.Jobs.MediaImport.Partial do
         end
     end
   end
+
+  defp append_uniq(metadata, _key, []), do: metadata
 
   defp append_uniq(metadata, key, values) do
     Map.put(metadata, key, Enum.uniq(List.wrap(metadata[key]) ++ values))
