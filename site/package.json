@@ -14,7 +14,7 @@
     "@astrojs/rss": "^4.0.19",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^7.4.2",
+    "astro": "^7.4.7",
     "daisyui": "^5.7.50",
     "tailwindcss": "^4.2.0"
   },
