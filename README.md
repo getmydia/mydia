@@ -3,14 +3,24 @@
 [![CI](https://github.com/getmydia/mydia/actions/workflows/ci.yml/badge.svg)](https://github.com/getmydia/mydia/actions/workflows/ci.yml)
 [![Documentation](https://github.com/getmydia/mydia/actions/workflows/ci-docs.yml/badge.svg)](https://docs.mydia.dev)
 [![Code health](https://api.repowise.dev/badge/health/getmydia/mydia.svg)](https://repowise.dev/repo/getmydia/mydia)
-[![repowise](https://api.repowise.dev/badge/wiki/getmydia/mydia.svg)](https://repowise.dev/repo/getmydia/mydia)
 [![TestFlight](https://img.shields.io/badge/TestFlight-Install%20on%20iOS-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
+[![Translation status](https://hosted.weblate.org/widget/mydia/svg-badge.svg)](https://hosted.weblate.org/engage/mydia/)
 
 **Your personal media companion, built with Phoenix LiveView**
 
 Mydia Server is a modern, self-hosted media management platform for tracking, organizing, and monitoring your movies and TV shows.
 
-> **Warning:** Mydia is in early development (0.x.x). Expect breaking changes. [Report issues](https://github.com/getmydia/mydia/issues) or [request features](https://github.com/getmydia/mydia/issues/new).
+> [!TIP]
+> **Speak another language? Help translate Mydia.** Translations happen on
+> [Weblate](https://hosted.weblate.org/engage/mydia/) with a free account, no
+> git or code needed.
+>
+> <a href="https://hosted.weblate.org/engage/mydia/">
+>   <picture>
+>     <source media="(prefers-color-scheme: dark)" srcset="https://hosted.weblate.org/widget/mydia/287x66-black.png" />
+>     <img src="https://hosted.weblate.org/widget/mydia/287x66-white.png" alt="Translation status" />
+>   </picture>
+> </a>
 
 <p align="center">
   <picture>
@@ -177,7 +187,13 @@ dashboard above switches with your GitHub theme.
 
 See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/) for details.
 
-Want Mydia in your language? See [TRANSLATING.md](TRANSLATING.md) to help translate the interface.
+### Translations
+
+Mydia Server and Mydia Player are translated on
+[Weblate](https://hosted.weblate.org/projects/mydia/). You need a free Weblate
+account, no git and no code. See [TRANSLATING.md](TRANSLATING.md) for the conventions and glossary.
+
+[![Translation status](https://hosted.weblate.org/widget/mydia/multi-auto.svg)](https://hosted.weblate.org/engage/mydia/)
 
 ### Documentation
 
