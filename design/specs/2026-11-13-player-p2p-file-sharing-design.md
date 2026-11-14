@@ -38,7 +38,7 @@ plays over P2P. Specifically:
 | What a host shares | All its Files accounts: local folders, SMB and WebDAV. The host relays SMB and WebDAV bytes. |
 | How a library appears | The host's matched index is replicated to the viewer and rendered by the existing Files source. |
 | Duplicates | A peer SMB/WebDAV account matching one this device already has is skipped. Local folders are never skipped. |
-| Wire transport | New `MydiaRequest::PeerFiles` variant in `mydia_p2p_core`. |
+| Wire transport | New `MydiaRequest::PeerFiles` variant for the manifest and index pages; reads reuse `MydiaRequest::HlsStream` with a `peerfile:` session. |
 | Who serves bytes on the host | Rust, from grants that Dart resolves on demand. Bytes never enter Dart on the host. |
 | Index updates | Full re-fetch of one account when its revision changes, in pages of at most 4 MiB. No diffs. |
 
@@ -71,12 +71,6 @@ pub enum PeerFilesRequest {
         revision: u64,
         cursor: Option<String>,
     },
-    Read {
-        account_id: String,
-        file_key: String,
-        range_start: Option<u64>,
-        range_end: Option<u64>,
-    },
 }
 
 pub enum PeerFilesResponse {
@@ -104,13 +98,20 @@ pub struct WireSharedAccount {
 - `Manifest` and `IndexPage` are request/response. p2p responses are capped
   at 8 MiB (`MAX_RESPONSE_BYTES`), so the host fills a page up to 4 MiB of
   encoded CBOR and returns a cursor for the rest.
-- `Read` is a streaming response using the `HlsResponseHeader` then raw chunks
-  framing, so the viewer's `P2pRangeStream`, `range_source` and `range_spool`
-  consume it unchanged. Status 206 or 200 on success, 403 for a caller that
-  is not an active member, 404 for an unknown file, 502 when the host's own
-  backend fails.
-- The Elixir server listener rejects `PeerFiles`, as it does `PeerSync`.
-- The web player can be a viewer but never a host.
+- **Reads reuse `MydiaRequest::HlsStream`.** A read is an `HlsRequest` whose
+  `session_id` is `peerfile:<host account id>` and whose `path` is the
+  base64url of the host's file path, with the request's range. The core
+  already streams `HlsStream` responses from a host (`send_hls_header`,
+  `send_hls_chunk`, `stream_file_range`), and the viewer's `LocalProxyService`
+  already turns mpv's HTTP ranges into `HlsStream` requests through
+  `openRangeStream`, so the viewer side needs no new Rust. Status 206 or 200
+  on success, 403 for a caller that is not an active member, 404 for a path
+  that is neither an indexed file nor one of its sidecars, 502 when the
+  host's own backend fails.
+- The Elixir server listener rejects `PeerFiles`, as it does `PeerSync`. A
+  `peerfile:` session sent to a server finds no session there.
+- The web player is neither host nor viewer: `sourceKindAllowedOnWeb` admits
+  only Mydia sources.
 
 ### Authorization
 
@@ -119,7 +120,7 @@ roster check that the node is known and not revoked
 (`peer_sync_service.dart`). `Manifest` and `IndexPage` run exactly those two
 checks in Dart.
 
-`Read` is checked in Rust. iroh authenticates the remote node ID at the QUIC
+Reads are checked in Rust. iroh authenticates the remote node ID at the QUIC
 layer, so Rust holds an allowlist of active member node IDs and rejects any
 read from a node outside it. Dart replaces the allowlist on startup, on every
 roster change, and with an empty list when the device leaves its group.
@@ -136,17 +137,20 @@ while the device belongs to a sync group.
   The key is the existing normalized identity: `normalizeSmbUrl` plus the
   share path for SMB, `normalizeWebDavUrl` for WebDAV, null for local
   folders.
-- `IndexPage` reads `FileLibraryIndex` directly. Paths are sent relative to
-  their root. If the account's revision no longer equals the requested one,
-  the answer is `StaleRevision`.
+- `IndexPage` reads `FileLibraryIndex` directly. Paths are sent as the host
+  stores them: they only mean something to the host, which is also the only
+  device that resolves them. If the account's revision no longer equals the
+  requested one, the answer is `StaleRevision`.
 - One revision counter per account, persisted in Hive, bumps when
   `FilesScanController` finishes a scan and when a match or pin changes.
 - It pushes the member allowlist into Rust.
 
-**Grants.** The host does not pre-register files. On a `Read` for an
-`(account_id, file_key)` it has no grant for, Rust makes one call into Dart
-(`resolve_peer_file`). Dart looks the file up in the account's index, calls
-the backend's `playable()`, and returns the URL and headers, or not found.
+**Grants.** The host does not pre-register files. On a read for an
+`(account_id, path)` it has no grant for, Rust makes one call into Dart
+(`peer_file_grant_stream`, answered with `respond_peer_file_grant`). Dart
+accepts the path only if it is an indexed file of that account or one of its
+sidecars, calls the backend's `playable()`, and returns the URL and headers,
+or not found.
 Rust caches grants per account and drops an account's cache when its revision
 bumps (Dart tells it) and after any failed read, so a re-addressed SMB share
 resolves again.
@@ -169,8 +173,9 @@ the shared libraries.
 - For every active member it fetches the `Manifest` on startup, after each
   successful PeerSync round with that member, and on pull to refresh.
 - For each account whose revision changed, it fetches every `IndexPage` into
-  a staging Hive box and swaps it into `peer_files_<node>_<account>` once the
-  last page arrives. A failed or interrupted fetch leaves the previous copy in
+  a new generation in the `peer_files_index` Hive box and flips that
+  account's generation pointer once the last page arrives, then deletes the
+  old generation. A failed or interrupted fetch leaves the previous copy in
   place. `StaleRevision` restarts the fetch, at most twice per round.
 
 **Peer sources.** Each `(peerNodeId, hostAccountId)` becomes a derived
@@ -184,18 +189,25 @@ the shared libraries.
 - Its index box loads into the existing `FileLibraryIndex`, so Home, detail,
   Folders, search and Continue Watching render it unchanged. The Folders view
   already reads from the index (`files_queries.dart`), not from the backend.
-- It keeps the host's `accountId`. Matched items sync by TMDB ID and unmatched
-  files by `unmatchedFileSyncKey(accountId, fileKey)`, so watch state and
-  resume positions land on the host's records through PeerSync with no new
-  sync work.
+- Its own account id is `p` + the first 12 hex characters of SHA-256 over the
+  peer's node id, `_`, and the host's account id. Every device's local folders
+  account is `flocal`, so the host's id alone would collide with the viewer's.
+  `FilesMediaSource` gains a `syncAccountId`, set to the host's account id, and
+  uses it wherever it builds or parses a sync key. Matched items sync by TMDB
+  ID and unmatched files by `unmatchedFileSyncKey(syncAccountId, fileKey)`, so
+  watch state and resume positions land on the host's records through
+  PeerSync with no new sync work.
 - It follows the existing All servers inclusion rules
   (`all_servers_inclusion.dart`).
 
 **`PeerFilesBackend implements FileSystemBackend`:**
 
-- `playable(path)` opens a session on `LocalProxyService` that maps each HTTP
-  range from mpv to a `PeerFiles::Read` stream, and returns the loopback URL.
-  Sidecar subtitles and casting through `FilesCastBridge` use the same call.
+- `playable(path)` starts a `LocalProxyService` target for the peer and returns
+  `MediaRoutes.peerFile(base, accountId, path)`, which the proxy forwards as
+  a `peerfile:` range stream. Before returning, it opens a one-byte range
+  (`0-0`) and maps the header's status to the errors below, so a dead host or
+  a missing file fails at Play rather than inside mpv. Sidecar subtitles and
+  casting through `FilesCastBridge` use the same call.
 - `list`, `stat` and `probe` throw `BackendUnreachable`. The scan controller
   never runs for a peer source.
 
@@ -230,11 +242,9 @@ the manifest, when its host is revoked, or when this device leaves the group.
 
 - **iOS hosts** stop serving when the app is backgrounded. Accepted: hosts are
   in practice desktops and TVs.
-- **Android local folders.** If the directory picker yields a `content://`
-  tree URI that Rust cannot open, those accounts are resolved through a
-  Dart-side loopback proxy, the same shape SMB already uses, and the grant
-  carries that URL. The implementation plan confirms which case applies before
-  the host byte server is written.
+- **Local folders** exist only on Linux, Windows and macOS
+  (`add_folder_screen.dart`), so their grants are always plain paths. Android
+  and iOS hosts share their SMB and WebDAV accounts.
 
 ## Testing
 
@@ -243,15 +253,17 @@ the manifest, when its host is revoked, or when this device leaves the group.
 - `peer_files.rs` unit tests: CBOR round trips for every variant.
   `tests/wire_format.rs` covers the new `MydiaRequest` tag so existing tags
   cannot shift.
-- `tests/two_node_peer_files.rs`, modelled on `two_node_peer_sync.rs` and the
-  `hls_stream_*` tests: exact bytes for a member's range read, 403 for a
-  non-member, 404 for an unknown grant, a cancel mid-stream stops the host's
-  reads, and the fifth concurrent read waits for a slot.
-- The server listener refuses `PeerFiles`, alongside `read_media_refused.rs`.
+- `tests/two_node_peer_files.rs`, modelled on `two_node_peer_sync.rs`: a
+  `PeerFiles` request reaches the other node as `RequestReceived` and its
+  answer comes back.
+- The server listener refuses `PeerFiles`.
 
 **`mydia_player_p2p`:** the host byte server against a temp file and a local
-HTTP server: range boundaries, open-ended ranges, 502 on upstream failure,
-grant cache dropped on revision bump and after a failed read.
+HTTP server: exact bytes for a range, open-ended ranges, 403 for a
+non-member, 404 for an unresolved grant, 502 on upstream failure, a cancel
+mid-stream stops the upstream read, the fifth concurrent read from one peer
+waits for a slot, and the grant cache is dropped on invalidation and after a
+failed read.
 
 **`player/test/core/p2p/`:**
 
