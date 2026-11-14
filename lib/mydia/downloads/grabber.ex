@@ -242,6 +242,12 @@ defmodule Mydia.Downloads.Grabber do
   defp format_error({:download_failed, message}) when is_binary(message),
     do: truncate("Failed to fetch release: #{message}")
 
+  defp format_error(
+         {:client_error,
+          %Mydia.Downloads.Client.Error{type: :insufficient_space, message: message}}
+       ),
+       do: truncate(message)
+
   defp format_error({:client_error, error}),
     do: truncate("Download client error: #{inspect(error)}")
 
