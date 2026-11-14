@@ -17,8 +17,13 @@ defmodule Mydia.Jobs.MediaImport.Partial do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
+  alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Jobs.MediaImport
+  alias Mydia.Jobs.MediaImport.{Args, Paths}
+  alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Repo
 
   @worker "Mydia.Jobs.MediaImport"
@@ -51,6 +56,105 @@ defmodule Mydia.Jobs.MediaImport.Partial do
         # In testing mode without running Oban, insert directly via Repo
         Repo.insert(changeset)
     end
+  end
+
+  @doc """
+  Runs a partial job: places what can be placed and records it.
+
+  The download is still running, so this never stamps `imported_at`, touches
+  `match_status`, removes sources or the torrent, or writes failure
+  bookkeeping. A file that fails here is left for the full import.
+  `place_fun` is `MediaImport`'s per-target placement.
+  """
+  @spec run(Download.t(), Args.t(), function()) :: :ok | {:ok, :partial} | {:cancel, term()}
+  def run(%{completed_at: completed_at} = download, _args, _place_fun)
+      when not is_nil(completed_at) do
+    Logger.info("Early import skipped: download already complete", download_id: download.id)
+    :ok
+  end
+
+  def run(download, %Args{target_files: [_ | _] = targets} = args, place_fun) do
+    case Paths.determine_library_path(download) do
+      nil ->
+        Logger.warning("Early import skipped: no library path", download_id: download.id)
+        {:cancel, :no_library_path}
+
+      library_path ->
+        # The torrent is still downloading and seeding, so its files stay put.
+        args = %{args | move_source: false}
+        place_all(download, targets, library_path, args, place_fun)
+    end
+  end
+
+  def run(download, _args, _place_fun) do
+    Logger.info("Early import skipped: no target files", download_id: download.id)
+    :ok
+  end
+
+  defp place_all(download, targets, library_path, args, place_fun) do
+    {placed, failed} =
+      Enum.reduce(targets, {[], []}, fn target, {placed, failed} ->
+        case safe_place(place_fun, download, target, library_path, args) do
+          {:ok, _} -> {[target | placed], failed}
+          {:error, reason} -> {placed, [{target["path"], reason} | failed]}
+        end
+      end)
+
+    if failed != [] do
+      Logger.warning("Early import left files for the full import",
+        download_id: download.id,
+        failures: inspect(Enum.reverse(failed))
+      )
+    end
+
+    if placed != [] do
+      record_early_imports(download.id, Enum.reverse(placed))
+      MediaServerNotifier.notify_all()
+    end
+
+    {:ok, :partial}
+  end
+
+  # One raising file must not cost the others their placement.
+  defp safe_place(place_fun, download, target, library_path, args) do
+    place_fun.(download, target, library_path, args)
+  rescue
+    exception -> {:error, {:import_exception, Exception.message(exception)}}
+  end
+
+  # Read-modify-write on a fresh read: the monitor and other jobs write this
+  # row's metadata while the download runs.
+  defp record_early_imports(download_id, placed_targets) do
+    paths = Enum.map(placed_targets, & &1["path"])
+    episode_ids = placed_targets |> Enum.map(& &1["episode_id"]) |> Enum.reject(&is_nil/1)
+
+    case Downloads.get_download(download_id) do
+      nil ->
+        Logger.info("Skipping early import record: download row no longer exists",
+          download_id: download_id
+        )
+
+      current ->
+        metadata =
+          (current.metadata || %{})
+          |> append_uniq("early_imported_paths", paths)
+          |> append_uniq("early_imported_episode_ids", episode_ids)
+
+        case Downloads.update_download(current, %{metadata: metadata}) do
+          {:ok, _} ->
+            :ok
+
+          {:error, changeset} ->
+            Logger.warning("Failed to record early imports",
+              download_id: download_id,
+              errors: inspect(changeset.errors)
+            )
+        end
+    end
+  end
+
+  defp append_uniq(metadata, key, values) do
+    Map.put(metadata, key, Enum.uniq(List.wrap(metadata[key]) ++ values))
   end
 
   # A partial import is a handful of hardlinks or copies. No Oban Lifeline

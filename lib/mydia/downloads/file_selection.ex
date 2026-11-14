@@ -47,25 +47,23 @@ defmodule Mydia.Downloads.FileSelection do
   def context_for(search_result, opts) do
     metadata = Duplicates.normalize_metadata(Map.get(search_result, :metadata))
     episode_id = opts[:episode_id]
-
-    episode =
-      if episode_id, do: Repo.get(Episode, episode_id)
-
+    episode = if episode_id, do: Repo.get(Episode, episode_id)
     media_item_id = opts[:media_item_id] || (episode && episode.media_item_id)
-    media_item = if media_item_id, do: Repo.get(MediaItem, media_item_id)
-
-    season_number =
-      (metadata && metadata.season_number) || (episode && episode.season_number)
-
-    metadata_ids = (metadata && metadata.episode_ids) || []
 
     %{
-      media_item: media_item,
-      season_number: season_number,
-      targeted_episode_ids: Enum.uniq(List.wrap(episode_id) ++ metadata_ids),
+      media_item: if(media_item_id, do: Repo.get(MediaItem, media_item_id)),
+      season_number: season_number(metadata, episode),
+      targeted_episode_ids: Enum.uniq(List.wrap(episode_id) ++ metadata_episode_ids(metadata)),
       single_episode?: not is_nil(episode_id)
     }
   end
+
+  defp season_number(%{season_number: season}, _episode) when not is_nil(season), do: season
+  defp season_number(_metadata, %Episode{season_number: season}), do: season
+  defp season_number(_metadata, _episode), do: nil
+
+  defp metadata_episode_ids(%{episode_ids: ids}) when is_list(ids), do: ids
+  defp metadata_episode_ids(_metadata), do: []
 
   @doc "Chooses the files to keep. See the module doc."
   @spec select(context(), [file_map()]) :: t()
@@ -106,26 +104,32 @@ defmodule Mydia.Downloads.FileSelection do
     targeted = MapSet.new(context.targeted_episode_ids)
     single? = Map.get(context, :single_episode?, false)
 
-    {kept, dropped_ids, file_episodes} =
-      Enum.reduce(entries, {[], [], %{}}, fn entry, {kept, dropped, fe} ->
-        case episode_for(entry, context, episode_map) do
-          nil ->
-            {[entry | kept], dropped, fe}
+    keep? = fn ep ->
+      single? or MapSet.member?(targeted, ep.id) or not MapSet.member?(owned, ep.id)
+    end
 
-          ep ->
-            if single? or MapSet.member?(targeted, ep.id) or not MapSet.member?(owned, ep.id) do
-              # Only videos map to an episode; early import treats every
-              # `file_episodes` entry as that episode's media file.
-              fe = if entry.kind == :video, do: Map.put(fe, entry.file.index, ep.id), else: fe
-              {[entry | kept], dropped, fe}
-            else
-              {kept, [ep.id | dropped], fe}
-            end
-        end
+    {kept, dropped_ids, file_episodes} =
+      Enum.reduce(entries, {[], [], %{}}, fn entry, acc ->
+        classify_entry(entry, episode_for(entry, context, episode_map), keep?, acc)
       end)
 
     finish(files, Enum.reverse(kept), file_episodes, dropped_ids)
   end
+
+  defp classify_entry(entry, nil, _keep?, {kept, dropped, fe}), do: {[entry | kept], dropped, fe}
+
+  defp classify_entry(entry, ep, keep?, {kept, dropped, fe}) do
+    if keep?.(ep) do
+      {[entry | kept], dropped, record_episode(fe, entry, ep)}
+    else
+      {kept, [ep.id | dropped], fe}
+    end
+  end
+
+  # Only videos map to an episode; early import treats every `file_episodes`
+  # entry as that episode's media file.
+  defp record_episode(fe, %{kind: :video} = entry, ep), do: Map.put(fe, entry.file.index, ep.id)
+  defp record_episode(fe, _entry, _ep), do: fe
 
   defp parse(entry) do
     parsed = ReleaseParser.parse(Path.basename(entry.file.path), [])

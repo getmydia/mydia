@@ -18,8 +18,7 @@ defmodule Mydia.Downloads.History do
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Seedbox
   alias Mydia.Downloads.StatusFilter
-  alias Mydia.Downloads.Structs.DownloadMetadata
-  alias Mydia.Downloads.Structs.EnrichedDownload
+  alias Mydia.Downloads.Structs.{DownloadMetadata, EnrichedDownload}
   alias Mydia.Settings
   alias Phoenix.PubSub
   require Logger

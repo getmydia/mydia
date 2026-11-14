@@ -129,7 +129,7 @@ defmodule Mydia.Jobs.MediaImport do
         :ok
 
       args.partial ->
-        perform_partial(download, args)
+        Partial.run(download, args, &place_target/4)
 
       Partial.executing?(download_id) ->
         # An early import of this download is placing files right now. Running
@@ -145,28 +145,32 @@ defmodule Mydia.Jobs.MediaImport do
         Failure.handle_incomplete_download(download, args, attempt, raw_args)
 
       true ->
-        args = %{args | move_source: ClientRemoval.import_consumes_source?(download)}
+        run_full_import(download, args, attempt)
+    end
+  end
 
-        case import_download(download, args) do
-          {:ok, result} ->
-            # Success - clear any retry metadata
-            Failure.clear_retry_metadata(download)
-            {:ok, result}
+  defp run_full_import(download, args, attempt) do
+    args = %{args | move_source: ClientRemoval.import_consumes_source?(download)}
 
-          {:error, reason} ->
-            # Failure - update retry metadata. If the failure is structurally
-            # unfixable (e.g. a completed torrent contains zero importable
-            # media files, or its save path has been gone for several
-            # attempts), stop Oban's retry loop so the row doesn't keep
-            # re-scanning for days.
-            terminal? = terminal_failure?(reason, attempt)
-            Failure.handle_import_failure(download, reason, attempt, terminal?: terminal?)
+    case import_download(download, args) do
+      {:ok, result} ->
+        # Success - clear any retry metadata
+        Failure.clear_retry_metadata(download)
+        {:ok, result}
 
-            if terminal? do
-              {:cancel, reason}
-            else
-              {:error, reason}
-            end
+      {:error, reason} ->
+        # Failure - update retry metadata. If the failure is structurally
+        # unfixable (e.g. a completed torrent contains zero importable
+        # media files, or its save path has been gone for several
+        # attempts), stop Oban's retry loop so the row doesn't keep
+        # re-scanning for days.
+        terminal? = terminal_failure?(reason, attempt)
+        Failure.handle_import_failure(download, reason, attempt, terminal?: terminal?)
+
+        if terminal? do
+          {:cancel, reason}
+        else
+          {:error, reason}
         end
     end
   end
@@ -514,87 +518,19 @@ defmodule Mydia.Jobs.MediaImport do
     # Cleanup is only safe when every file resolved — keep the
     # download in the client when some files remain unmatched so
     # the user can manually retry after fixing the matches.
-    unless has_unresolved do
-      case ClientRemoval.maybe_remove_after_import(download) do
-        :removed ->
-          Logger.info("Removed download from client after import",
-            download_id: download.id
-          )
+    unless has_unresolved, do: remove_from_client(download)
 
-        result when result in [:deferred, :still_seeding] ->
-          Logger.info("Keeping download in client until seeding finishes",
-            download_id: download.id
-          )
-
-        :skipped ->
-          Logger.info("Keeping download in client (remove_completed disabled)",
-            download_id: download.id
-          )
-
-        {:error, reason} ->
-          Logger.warning("Post-import client removal failed",
-            download_id: download.id,
-            error: inspect(reason)
-          )
-      end
-    end
-
-    # Always stamp `imported_at` once we've made an honest attempt,
-    # even when some files are still unresolved. `match_status` keeps
-    # surfacing the partial result in the Issues tab. The previous
-    # behaviour left `imported_at` nil on partial imports, which
-    # caused DownloadMonitor.list_stuck_downloads/1 to re-flag the
-    # download every poll and enqueue a fresh MediaImport job every
-    # 2 minutes — a retry loop that did no useful work but kept
-    # showing "Import stalled - never ran" in the UI.
     import_update =
       %{imported_at: DateTime.utc_now()}
-      |> then(fn attrs ->
-        # Preserve `match_status: "unresolved_files"` when present so
-        # the Issues tab can still surface partial imports. Only
-        # touch match_status when we're transitioning to a clean
-        # state (partial_pack or nil), never overwrite the
-        # in-progress "unresolved_files" flag.
-        if has_unresolved do
-          attrs
-        else
-          Map.put(attrs, :match_status, partial_pack_status)
-        end
-      end)
+      |> put_match_status(has_unresolved, partial_pack_status)
+      |> then(&Placement.attach_placement(&1, updated_download.metadata, placement))
 
-    import_update =
-      Placement.attach_placement(import_update, updated_download.metadata, placement)
-
-    case Downloads.update_download(updated_download, import_update) do
-      {:ok, _updated} ->
-        Placement.cleanup_sources(
-          placed_sources,
-          args,
-          download,
-          library_path.type,
-          not has_unresolved
-        )
-
-        # A successful import means whatever this item grabbed was real,
-        # so the consecutive-auto-rejection counter that
-        # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
-        # this, three genuine malware rejections would permanently
-        # disable auto-rejection for the item.
-        if download.media_item_id do
-          Mydia.Search.reset_backoff("auto_reject", download.media_item_id)
-        end
-
-        Logger.info("Download marked as imported",
-          download_id: download.id,
-          has_unresolved: has_unresolved
-        )
-
-      {:error, changeset} ->
-        Logger.warning("Failed to mark download as imported",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
-    end
+    record_import(updated_download, download, import_update, %{
+      placed_sources: placed_sources,
+      args: args,
+      library_path: library_path,
+      has_unresolved: has_unresolved
+    })
 
     # Write NFO metadata files if enabled for this library path
     if download.media_item_id do
@@ -613,6 +549,77 @@ defmodule Mydia.Jobs.MediaImport do
       {:ok, :partial_import}
     else
       {:ok, :imported}
+    end
+  end
+
+  defp remove_from_client(download) do
+    case ClientRemoval.maybe_remove_after_import(download) do
+      :removed ->
+        Logger.info("Removed download from client after import", download_id: download.id)
+
+      result when result in [:deferred, :still_seeding] ->
+        Logger.info("Keeping download in client until seeding finishes",
+          download_id: download.id
+        )
+
+      :skipped ->
+        Logger.info("Keeping download in client (remove_completed disabled)",
+          download_id: download.id
+        )
+
+      {:error, reason} ->
+        Logger.warning("Post-import client removal failed",
+          download_id: download.id,
+          error: inspect(reason)
+        )
+    end
+  end
+
+  # Always stamp `imported_at` once we've made an honest attempt, even when
+  # some files are still unresolved. `match_status` keeps surfacing the
+  # partial result in the Issues tab. Leaving `imported_at` nil on partial
+  # imports caused DownloadMonitor.list_stuck_downloads/1 to re-flag the
+  # download every poll and enqueue a fresh MediaImport job every 2 minutes,
+  # a retry loop that did no useful work but kept showing "Import stalled -
+  # never ran" in the UI.
+  #
+  # Preserve `match_status: "unresolved_files"` when present so the Issues tab
+  # can still surface partial imports. Only touch match_status when
+  # transitioning to a clean state (partial_pack or nil), never overwrite the
+  # in-progress "unresolved_files" flag.
+  defp put_match_status(attrs, true, _partial_pack_status), do: attrs
+  defp put_match_status(attrs, false, status), do: Map.put(attrs, :match_status, status)
+
+  defp record_import(updated_download, download, import_update, ctx) do
+    case Downloads.update_download(updated_download, import_update) do
+      {:ok, _updated} ->
+        Placement.cleanup_sources(
+          ctx.placed_sources,
+          ctx.args,
+          download,
+          ctx.library_path.type,
+          not ctx.has_unresolved
+        )
+
+        # A successful import means whatever this item grabbed was real,
+        # so the consecutive-auto-rejection counter that
+        # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
+        # this, three genuine malware rejections would permanently
+        # disable auto-rejection for the item.
+        if download.media_item_id do
+          Mydia.Search.reset_backoff("auto_reject", download.media_item_id)
+        end
+
+        Logger.info("Download marked as imported",
+          download_id: download.id,
+          has_unresolved: ctx.has_unresolved
+        )
+
+      {:error, changeset} ->
+        Logger.warning("Failed to mark download as imported",
+          download_id: download.id,
+          errors: inspect(changeset.errors)
+        )
     end
   end
 
@@ -665,99 +672,6 @@ defmodule Mydia.Jobs.MediaImport do
       Logger.warning("Target file no longer exists", path: path, download_id: download.id)
       {:error, :file_not_found}
     end
-  end
-
-  # Early import (`"partial" => true`): place what can be placed and record
-  # it. The download is still running, so this never stamps `imported_at`,
-  # touches `match_status`, removes sources or the torrent, or writes failure
-  # bookkeeping. A file that fails here is left for the full import.
-  defp perform_partial(%{completed_at: completed_at} = download, _args)
-       when not is_nil(completed_at) do
-    Logger.info("Early import skipped: download already complete", download_id: download.id)
-    :ok
-  end
-
-  defp perform_partial(download, %Args{target_files: [_ | _] = targets} = args) do
-    case require_library(Paths.determine_library_path(download)) do
-      {:ok, library_path} ->
-        # The torrent is still downloading and seeding, so its files stay put.
-        process_partial_import(download, targets, library_path, %{args | move_source: false})
-
-      {:error, :no_library_path} ->
-        Logger.warning("Early import skipped: no library path", download_id: download.id)
-        {:cancel, :no_library_path}
-    end
-  end
-
-  defp perform_partial(download, _args) do
-    Logger.info("Early import skipped: no target files", download_id: download.id)
-    :ok
-  end
-
-  defp process_partial_import(download, targets, library_path, args) do
-    {placed, failed} =
-      Enum.reduce(targets, {[], []}, fn target, {placed, failed} ->
-        case safe_place_target(download, target, library_path, args) do
-          {:ok, _} -> {[target | placed], failed}
-          {:error, reason} -> {placed, [{target["path"], reason} | failed]}
-        end
-      end)
-
-    if failed != [] do
-      Logger.warning("Early import left files for the full import",
-        download_id: download.id,
-        failures: inspect(Enum.reverse(failed))
-      )
-    end
-
-    if placed != [] do
-      record_early_imports(download.id, Enum.reverse(placed))
-      MediaServerNotifier.notify_all()
-    end
-
-    {:ok, :partial}
-  end
-
-  # One raising file must not cost the others their placement.
-  defp safe_place_target(download, target, library_path, args) do
-    place_target(download, target, library_path, args)
-  rescue
-    exception -> {:error, {:import_exception, Exception.message(exception)}}
-  end
-
-  # Read-modify-write on a fresh read: the monitor and other jobs write this
-  # row's metadata while the download runs.
-  defp record_early_imports(download_id, placed_targets) do
-    paths = Enum.map(placed_targets, & &1["path"])
-    episode_ids = placed_targets |> Enum.map(& &1["episode_id"]) |> Enum.reject(&is_nil/1)
-
-    case fetch_current_download(download_id) do
-      {:ok, current} ->
-        metadata =
-          (current.metadata || %{})
-          |> append_uniq("early_imported_paths", paths)
-          |> append_uniq("early_imported_episode_ids", episode_ids)
-
-        case Downloads.update_download(current, %{metadata: metadata}) do
-          {:ok, _} ->
-            :ok
-
-          {:error, changeset} ->
-            Logger.warning("Failed to record early imports",
-              download_id: download_id,
-              errors: inspect(changeset.errors)
-            )
-        end
-
-      :not_found ->
-        Logger.info("Skipping early import record: download row no longer exists",
-          download_id: download_id
-        )
-    end
-  end
-
-  defp append_uniq(metadata, key, values) do
-    Map.put(metadata, key, Enum.uniq(List.wrap(metadata[key]) ++ values))
   end
 
   defp do_process_targeted_import(download, target_files, library_path, args) do
