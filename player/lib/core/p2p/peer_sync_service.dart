@@ -157,6 +157,7 @@ class PeerSyncService {
 
   final _stateChangedController = StreamController<void>.broadcast();
   final _peerPairedController = StreamController<PeerMember>.broadcast();
+  final _leftGroupController = StreamController<void>.broadcast();
   StreamSubscription<FlutterInboundPeerSyncRequest>? _inboundSub;
   StreamSubscription<String>? _peerConnectedSub;
 
@@ -194,6 +195,10 @@ class PeerSyncService {
 
   Stream<void> get onStateChanged => _stateChangedController.stream;
   Stream<PeerMember> get onPeerPaired => _peerPairedController.stream;
+
+  /// Fires when [leaveGroup] completes: the group secret and roster are
+  /// gone, so whatever the members lent this device goes too.
+  Stream<void> get onLeftGroup => _leftGroupController.stream;
 
   Future<void> start() async {
     final stored = await _authStorage.read(PeerGroupSecret.storageKey);
@@ -898,6 +903,9 @@ class PeerSyncService {
     } finally {
       _leaving = false;
     }
+    // Only once the secret and roster are gone: a leave that failed part
+    // way leaves this device in the group.
+    if (!_leftGroupController.isClosed) _leftGroupController.add(null);
     _notifyStateChanged();
   }
 
@@ -908,6 +916,7 @@ class PeerSyncService {
     _throttleTimer?.cancel();
     _stateChangedController.close();
     _peerPairedController.close();
+    _leftGroupController.close();
   }
 }
 

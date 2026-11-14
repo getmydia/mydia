@@ -310,21 +310,22 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
     // Initialize P2P peer sync service alongside node registrations. The
     // files host starts once sync has read the group secret, so its first
-    // allowlist push already names the members. The client waits the same
-    // way, or it would read "in no group" and drop every lent library. The
-    // web player neither lends nor borrows files.
+    // allowlist push already names the members. The client starts only once
+    // sync started cleanly: before that it would see no members, and it
+    // fetches nothing without the group secret. The web player neither lends
+    // nor borrows files.
     final peerSync = ref.read(peerSyncServiceProvider).start();
     unawaited(peerSync);
     if (!kIsWeb) {
       final peerFiles = ref.read(peerFilesHostProvider);
-      // A failed sync start reports itself above; both start anyway.
+      // A failed sync start reports itself above; the host starts anyway.
       unawaited(peerSync.catchError((_) {}).then((_) => peerFiles.start()));
       // The copies live in a box opened with the files library boxes; when
       // those failed to open there is nowhere to keep them.
       if (Hive.isBoxOpen(PeerFilesStore.boxName)) {
         final peerFilesClient = ref.read(peerFilesClientProvider);
-        unawaited(
-            peerSync.catchError((_) {}).then((_) => peerFilesClient.start()));
+        unawaited(peerSync.then<void>((_) => peerFilesClient.start(),
+            onError: (Object _) {}));
       }
     }
 

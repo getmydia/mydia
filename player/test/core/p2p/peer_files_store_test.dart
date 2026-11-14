@@ -20,6 +20,9 @@ class _FlakyBox implements Box<Map<dynamic, dynamic>> {
   int failAt = 0;
   var _writes = 0;
 
+  /// Every key `put` was called with, failing or not.
+  final putKeys = <dynamic>[];
+
   void _count(Iterable<dynamic> keys) {
     final prefix = failPrefix;
     if (prefix == null) return;
@@ -35,6 +38,7 @@ class _FlakyBox implements Box<Map<dynamic, dynamic>> {
       _inner.get(key, defaultValue: defaultValue);
   @override
   Future<void> put(dynamic key, Map<dynamic, dynamic> value) async {
+    putKeys.add(key);
     _count([key]);
     await _inner.put(key, value);
   }
@@ -235,5 +239,55 @@ void main() {
     expect(stored.single.wire.kind, 'local');
     expect(stored.single.wire.dedupeKey, isNull);
     expect(stored.single.wire.revision, BigInt.from(9));
+  });
+
+  test('saving_an_unchanged_account_writes_nothing', () async {
+    final wire = FlutterWireSharedAccount(
+      accountId: 'flocal',
+      kind: 'local',
+      name: 'Films',
+      revision: BigInt.two,
+    );
+    await store.saveAccount(_id, nodeId: 'node-tv', wire: wire);
+    expect(box.putKeys, ['account/$_id']);
+
+    await store.saveAccount(_id, nodeId: 'node-tv', wire: wire);
+    expect(box.putKeys, hasLength(1));
+
+    await store.saveAccount(_id,
+        nodeId: 'node-tv',
+        wire: FlutterWireSharedAccount(
+          accountId: 'flocal',
+          kind: 'local',
+          name: 'Films',
+          revision: BigInt.from(3),
+        ));
+    expect(box.putKeys, hasLength(2));
+  });
+
+  test('sweep_deletes_records_no_pointer_reaches', () async {
+    const other = 'p0000000000ff_s1';
+    await store.replace(_id, 1, [
+      _page(files: [_file('ra', 'Old Lamp.mkv')]),
+    ]);
+    await store.replace(_id, 2, [
+      _page(files: [_file('ra', 'New Kite.mkv')]),
+    ]);
+    // A crash between a flip and its cleanup, one part way through the next
+    // fetch, and an account whose pointer never landed.
+    await raw.putAll({
+      '$_id@1/file/a': _file('ra', 'Stale A.mkv').toMap(),
+      '$_id@3/file/b': _file('ra', 'Half B.mkv').toMap(),
+      '$other@1/file/c': _file('ra', 'Lost C.mkv').toMap(),
+    });
+
+    final reopened = PeerFilesStore(box);
+    await reopened.sweep();
+
+    expect(raw.keys.whereType<String>().where((k) => k.contains('@')),
+        everyElement(startsWith('$_id@2/')));
+    expect(reopened.index(_id).files().values.map((f) => f.path),
+        ['New Kite.mkv']);
+    expect(reopened.revision(_id), 2);
   });
 }

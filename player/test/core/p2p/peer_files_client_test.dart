@@ -245,7 +245,11 @@ void main() {
   late _QuietSyncTransport syncTransport;
   late InMemoryPeerSyncStore syncStore;
   late PeerSyncService sync;
-  late List<SourceAccountRecord> local;
+  late MockAuthStorage auth;
+  late PeerGroupSecret secret;
+  late List<SourceAccountRecord>? local;
+  late Future<void> Function()? localReady;
+  late StreamController<void> localChanges;
   late StreamController<String> connected;
   late PeerFilesClient client;
   var n = 0;
@@ -258,7 +262,19 @@ void main() {
         sync: sync,
         store: store,
         localAccounts: () => local,
+        localAccountsReady: localReady,
+        localAccountsChanged: localChanges.stream,
         peerConnected: connected.stream,
+      );
+
+  PeerSyncService newSync(MockAuthStorage storage) => PeerSyncService(
+        store: syncStore,
+        authStorage: storage,
+        transport: syncTransport,
+        relayClient: RelayApiClient(),
+        deviceName: 'Viewer',
+        platform: 'linux',
+        resolveDeviceName: () async => 'Viewer',
       );
 
   List<String> shown() => [
@@ -282,8 +298,8 @@ void main() {
 
     syncTransport = _QuietSyncTransport();
     syncStore = InMemoryPeerSyncStore();
-    final auth = MockAuthStorage();
-    final secret = PeerGroupSecret.generate();
+    auth = MockAuthStorage();
+    secret = PeerGroupSecret.generate();
     await auth.write(PeerGroupSecret.storageKey, secret.toBase64Url());
     for (final (id, name) in [
       (_self, 'Viewer'),
@@ -297,15 +313,7 @@ void main() {
         updatedAt: 1,
       ));
     }
-    sync = PeerSyncService(
-      store: syncStore,
-      authStorage: auth,
-      transport: syncTransport,
-      relayClient: RelayApiClient(),
-      deviceName: 'Viewer',
-      platform: 'linux',
-      resolveDeviceName: () async => 'Viewer',
-    );
+    sync = newSync(auth);
     await sync.start();
 
     transport = _FakeFilesTransport(secret.authProof(_self));
@@ -315,6 +323,8 @@ void main() {
       ..lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
           kind: 'smb', dedupeKey: 'smb://nas.local/media');
     local = [_filesRecord(kFilesLocalAccountId, 'This device')];
+    localReady = null;
+    localChanges = StreamController<void>.broadcast();
     connected = StreamController<String>.broadcast();
     client = newClient();
   });
@@ -324,6 +334,7 @@ void main() {
     sync.dispose();
     syncTransport.dispose();
     await connected.close();
+    await localChanges.close();
     await Hive.close();
     await dir.delete(recursive: true);
   });
@@ -348,7 +359,7 @@ void main() {
     final dav = _filesRecord(_webdavId, 'Cloud', connections: [
       ServerConnection(uri: Uri.parse('https://dav.example.test/files/')),
     ]);
-    local = [...local, nas, dav];
+    local = [...?local, nas, dav];
     desk()
       ..drop(_smbId)
       ..lend('s1111111111111111', 'NAS', 1, ['Glass Orchard.mkv'],
@@ -378,7 +389,7 @@ void main() {
     final nas = _filesRecord(_smbId, 'My NAS', connections: [
       ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
     ]);
-    local = [...local, nas];
+    local = [...?local, nas];
     // Even a local-folders entry carrying a key that matches a local share
     // names folders on the host, never that share.
     tv().lend(kFilesLocalAccountId, 'Films', 1, ['Paper Moon Harbor.mkv'],
@@ -540,4 +551,149 @@ void main() {
     expect(indexed(_tv, kFilesLocalAccountId), ['Cedar Signal.mkv']);
     expect(shown(), ['Living Room TV · Films']);
   });
+
+  test('sync_start_failure_keeps_indexes', () async {
+    await client.start();
+    client.dispose();
+    sync.dispose();
+
+    // The group secret cannot be read this launch: sync knows no members.
+    sync = newSync(_UnreadableAuthStorage());
+    await expectLater(sync.start(), throwsA(anything));
+    expect(sync.activeMemberIds(), isEmpty);
+
+    client = newClient();
+    await client.start();
+    await client.refresh();
+    expect(store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)), 1);
+    expect(store.revision(peerFilesAccountId(_desk, _smbId)), 3);
+    expect(store.storedAccounts(), hasLength(2));
+    expect(indexed(_tv, kFilesLocalAccountId), ['Paper Moon Harbor.mkv']);
+  });
+
+  test('refresh_during_a_failed_leave_keeps_indexes', () async {
+    await client.start();
+    auth.failDeleteKeys.add(PeerGroupSecret.storageKey);
+    // Out of reach, so nothing lost here could be fetched back.
+    tv().offline = true;
+    desk().offline = true;
+
+    final leaving = sync.leaveGroup();
+    // Mid-leave the member list reads empty; that proves nothing.
+    final refreshed = client.refresh();
+    await expectLater(leaving, throwsA(anything));
+    await refreshed;
+    await client.refresh();
+
+    expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
+    expect(store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)), 1);
+    expect(store.storedAccounts(), hasLength(2));
+  });
+
+  test('completed_leave_removes_everything_without_a_refresh', () async {
+    await client.start();
+    await sync.leaveGroup();
+    await pumpEventQueue();
+
+    expect(client.accounts.value, isEmpty);
+    expect(store.storedAccounts(), isEmpty);
+    expect(store.revision(peerFilesAccountId(_desk, _smbId)), isNull);
+  });
+
+  test('host_revoked_while_closed_never_shows', () async {
+    await client.start();
+    client.dispose();
+    await syncStore.putMember(const PeerMember(
+      nodeId: _tv,
+      deviceName: 'Living Room TV',
+      platform: 'linux',
+      updatedAt: 99,
+      revoked: true,
+    ));
+    tv().offline = true;
+
+    client = newClient();
+    final seen = <List<String>>[];
+    client.accounts.addListener(() => seen.add(shown()));
+    await client.start();
+
+    expect(seen.expand((s) => s), isNot(contains('Living Room TV · Films')));
+    expect(shown(), ['Desk · NAS']);
+    expect(
+        store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)), isNull);
+  });
+
+  test('waits_for_local_accounts_before_deciding_dedupe', () async {
+    final nas = _filesRecord(_smbId, 'My NAS', connections: [
+      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
+    ]);
+    desk().lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
+        kind: 'smb', dedupeKey: filesDedupeKey(nas));
+    local = null;
+    final ready = Completer<void>();
+    localReady = () => ready.future;
+    client.dispose();
+    client = newClient();
+
+    final starting = client.start();
+    await pumpEventQueue();
+    expect(transport.manifestCalls, isEmpty);
+
+    local = [_filesRecord(kFilesLocalAccountId, 'This device'), nas];
+    ready.complete();
+    await starting;
+
+    expect(shown(), ['Living Room TV · Films']);
+    expect(transport.pageCalls, isNot(contains('$_desk/$_smbId')));
+    expect(store.revision(peerFilesAccountId(_desk, _smbId)), isNull);
+  });
+
+  test('unknown_local_accounts_leave_shares_undecided', () async {
+    // The stored sources failed to load: deciding with an empty set would
+    // fetch a copy of a share this device may have itself.
+    local = null;
+    localReady = () => Future.error(Exception('records unreadable'));
+    client.dispose();
+    client = newClient();
+
+    await client.start();
+    expect(shown(), ['Living Room TV · Films']);
+    expect(transport.pageCalls, isNot(contains('$_desk/$_smbId')));
+
+    // Once they load, without a match, the share is fetched and shown.
+    local = [_filesRecord(kFilesLocalAccountId, 'This device')];
+    localChanges.add(null);
+    await pumpEventQueue();
+    await client.refresh(nodeId: 'nobody');
+    expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
+  });
+
+  test('local_account_change_refreshes_dedupe', () async {
+    final nas = _filesRecord(_smbId, 'My NAS', connections: [
+      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
+    ]);
+    desk().lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
+        kind: 'smb', dedupeKey: filesDedupeKey(nas));
+    await client.start();
+    expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
+    final manifests = transport.manifestCalls.length;
+
+    // A change that moves no dedupe key costs no refresh.
+    local = [_filesRecord(kFilesLocalAccountId, 'Renamed device')];
+    localChanges.add(null);
+    await pumpEventQueue();
+    expect(transport.manifestCalls.length, manifests);
+
+    local = [...?local, nas];
+    localChanges.add(null);
+    await pumpEventQueue();
+    await client.refresh(nodeId: 'nobody');
+    expect(shown(), ['Living Room TV · Films']);
+    expect(store.revision(peerFilesAccountId(_desk, _smbId)), isNull);
+  });
+}
+
+class _UnreadableAuthStorage extends MockAuthStorage {
+  @override
+  Future<String?> read(String key) async => throw Exception('keyring locked');
 }

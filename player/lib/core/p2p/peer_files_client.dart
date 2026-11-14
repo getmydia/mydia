@@ -63,30 +63,49 @@ enum _Fetch { done, stale, failed }
 /// lends.
 ///
 /// Refreshes on [start], on every change to the sync group's state (which
-/// includes each completed sync round), when a member connects, and on
-/// [refresh]. Refreshes run one at a time; one asked for while another runs
-/// waits for it and then runs once for everything asked meanwhile.
+/// includes each completed sync round), when a member connects, when this
+/// device's own files accounts change, and on [refresh]. Refreshes run one at
+/// a time; one asked for while another runs waits for it and then runs once
+/// for everything asked meanwhile.
+///
+/// A copy is deleted only on positive evidence: its host is marked revoked
+/// in the roster, this device completed leaving the group, or the host's
+/// manifest no longer lists the account. An empty member list proves
+/// nothing (the group secret may simply not have loaded), so it deletes
+/// nothing.
 class PeerFilesClient {
   PeerFilesClient({
     required PeerFilesTransport transport,
     required PeerSyncService sync,
     required PeerFilesStore store,
-    required List<SourceAccountRecord> Function() localAccounts,
+    required List<SourceAccountRecord>? Function() localAccounts,
+    Future<void> Function()? localAccountsReady,
+    Stream<void>? localAccountsChanged,
     Stream<String>? peerConnected,
   })  : _transport = transport,
         _sync = sync,
         _store = store,
         _localAccounts = localAccounts,
+        _localAccountsReady = localAccountsReady,
+        _localAccountsChanged = localAccountsChanged,
         _peerConnected = peerConnected;
 
   /// How many times one member's fetch goes back to the manifest after a
   /// `StaleRevision`, before keeping the copy it has until the next refresh.
   static const maxRestarts = 2;
 
+  /// How long [start] waits for this device's accounts before refreshing
+  /// anyway, deciding nothing that needs them.
+  static const localAccountsWait = Duration(seconds: 30);
+
   final PeerFilesTransport _transport;
   final PeerSyncService _sync;
   final PeerFilesStore _store;
-  final List<SourceAccountRecord> Function() _localAccounts;
+
+  /// This device's accounts, null while they have not loaded or failed to.
+  final List<SourceAccountRecord>? Function() _localAccounts;
+  final Future<void> Function()? _localAccountsReady;
+  final Stream<void>? _localAccountsChanged;
   final Stream<String>? _peerConnected;
 
   final _accounts = ValueNotifier<List<PeerSharedAccount>>(const []);
@@ -96,49 +115,100 @@ class PeerFilesClient {
   /// manifest entry. Accounts with no index yet are held here but not shown.
   final _lent = <String, ({String nodeId, FlutterWireSharedAccount wire})>{};
 
-  StreamSubscription<void>? _stateSub;
-  StreamSubscription<String>? _connectedSub;
+  final _subs = <StreamSubscription<Object?>>[];
   bool _started = false;
   bool _disposed = false;
 
+  /// The dedupe keys the last refresh decided with, so a change to this
+  /// device's accounts that does not move them costs no refresh.
+  Set<String>? _decidedLocalKeys;
+
   Future<void>? _running;
+  bool _queuedLeave = false;
   bool _queuedAll = false;
   final _queuedNodes = <String>{};
 
   /// Shows what the store kept from earlier launches, then listens and
-  /// refreshes.
+  /// refreshes. Call it only once peer sync has started successfully.
   Future<void> start() async {
     if (_started || _disposed) return;
     _started = true;
+    try {
+      await _store.sweep();
+    } catch (e) {
+      debugPrint('[PeerFilesClient] Sweeping leftovers failed: $e');
+    }
     for (final a in _store.storedAccounts()) {
-      _lent[a.localAccountId] = (nodeId: a.nodeId, wire: a.wire);
+      if (_revoked(a.nodeId)) {
+        await _store.remove(a.localAccountId);
+      } else {
+        _lent[a.localAccountId] = (nodeId: a.nodeId, wire: a.wire);
+      }
     }
     _publish();
-    _stateSub = _sync.onStateChanged.listen((_) => unawaited(refresh()));
-    _connectedSub =
-        _peerConnected?.listen((node) => unawaited(refresh(nodeId: node)));
+    _subs.addAll([
+      _sync.onStateChanged.listen((_) => unawaited(refresh())),
+      _sync.onLeftGroup.listen((_) => unawaited(_leave())),
+      if (_peerConnected case final s?)
+        s.listen((node) => unawaited(refresh(nodeId: node))),
+      if (_localAccountsChanged case final s?)
+        s.listen((_) => _onLocalAccountsChanged()),
+    ]);
+    try {
+      await _localAccountsReady?.call().timeout(localAccountsWait);
+    } catch (e) {
+      debugPrint('[PeerFilesClient] Local accounts not loaded: $e');
+    }
+    if (_disposed) return;
     await refresh();
   }
 
   /// Fetches the manifest of [nodeId], or of every active member, and any
   /// index whose revision changed. Never throws.
   Future<void> refresh({String? nodeId}) {
-    if (_disposed) return Future.value();
     if (nodeId == null) {
       _queuedAll = true;
     } else {
       _queuedNodes.add(nodeId.toLowerCase());
     }
+    return _kick();
+  }
+
+  /// This device left the group: every copy goes.
+  Future<void> _leave() {
+    _queuedLeave = true;
+    return _kick();
+  }
+
+  Future<void> _kick() {
+    if (_disposed) return Future.value();
     return _running ??= _drain().whenComplete(() => _running = null);
   }
 
+  void _onLocalAccountsChanged() {
+    if (_disposed) return;
+    _publish();
+    final keys = _localKeys();
+    if (keys == null || setEquals(keys, _decidedLocalKeys)) return;
+    unawaited(refresh());
+  }
+
   Future<void> _drain() async {
-    while (!_disposed && (_queuedAll || _queuedNodes.isNotEmpty)) {
-      final all = _queuedAll;
-      final nodes = {..._queuedNodes};
-      _queuedAll = false;
-      _queuedNodes.clear();
+    while (
+        !_disposed && (_queuedLeave || _queuedAll || _queuedNodes.isNotEmpty)) {
       try {
+        if (_queuedLeave) {
+          _queuedLeave = false;
+          for (final id in _lent.keys.toList()) {
+            await _drop(id);
+          }
+          _publish();
+          continue;
+        }
+        final all = _queuedAll;
+        final nodes = {..._queuedNodes};
+        _queuedAll = false;
+        _queuedNodes.clear();
         await _refreshOnce(all ? null : nodes);
       } catch (e) {
         debugPrint('[PeerFilesClient] Refresh failed: $e');
@@ -146,34 +216,45 @@ class PeerFilesClient {
     }
   }
 
+  /// Whether the roster marks [nodeId] revoked. A node it does not hold is
+  /// not, since that is no evidence of anything.
+  bool _revoked(String nodeId) => _sync.member(nodeId)?.revoked ?? false;
+
+  /// This device's SMB and WebDAV dedupe keys, null while its accounts are
+  /// unknown.
+  Set<String>? _localKeys() {
+    final local = _localAccounts();
+    if (local == null) return null;
+    return {
+      for (final a in sharedFilesAccounts(local))
+        if (filesDedupeKey(a) case final key?) key,
+    };
+  }
+
   Future<void> _refreshOnce(Set<String>? only) async {
-    final members = _sync.activeMemberIds();
-    // A revoked host's accounts go, and every account once this device
-    // leaves the group (no members then).
-    final active = {for (final m in members) m.toLowerCase()};
     for (final entry in _lent.entries.toList()) {
-      if (!active.contains(entry.value.nodeId.toLowerCase())) {
-        await _drop(entry.key);
-      }
+      if (_revoked(entry.value.nodeId)) await _drop(entry.key);
     }
     _publish();
+    final localKeys = _localKeys();
+    if (localKeys != null) _decidedLocalKeys = localKeys;
     final targets = [
-      for (final m in members)
+      for (final m in _sync.activeMemberIds())
         if (only == null || only.contains(m.toLowerCase())) m,
     ];
     // Concurrently, so one member that does not answer holds up no other.
-    await Future.wait([for (final m in targets) _refreshMember(m)]);
+    await Future.wait([for (final m in targets) _refreshMember(m, localKeys)]);
     _publish();
   }
 
-  Future<void> _refreshMember(String nodeId) async {
+  Future<void> _refreshMember(String nodeId, Set<String>? localKeys) async {
     for (var attempt = 0; attempt <= maxRestarts; attempt++) {
       final proof = _sync.authProofForSelf();
       if (proof == null || _disposed) return;
       final manifest = await _manifest(nodeId, proof);
       // Unreachable, or refusing: keep what it lent last time.
       if (manifest == null) return;
-      if (!await _apply(nodeId, proof, manifest)) return;
+      if (!await _apply(nodeId, proof, manifest, localKeys)) return;
     }
   }
 
@@ -197,30 +278,39 @@ class PeerFilesClient {
 
   /// Brings [nodeId]'s accounts in line with [manifest], and says whether
   /// a fetch met a stale revision and the manifest should be read again.
+  ///
+  /// With [localKeys] unknown, a share that might duplicate one of this
+  /// device's is left exactly as it was: not fetched, not dropped.
   Future<bool> _apply(
     String nodeId,
     String proof,
     List<FlutterWireSharedAccount> manifest,
+    Set<String>? localKeys,
   ) async {
-    final localKeys = {
-      for (final a in sharedFilesAccounts(_localAccounts()))
-        if (filesDedupeKey(a) case final key?) key,
-    };
-    final shown = [
-      for (final wire in manifest)
-        if (!_sameAsLocalShare(wire, localKeys)) wire,
-    ];
-    final keep = {
-      for (final w in shown) peerFilesAccountId(nodeId, w.accountId)
-    };
+    final keep = <String>{};
+    final wanted = <FlutterWireSharedAccount>[];
+    for (final wire in manifest) {
+      final id = peerFilesAccountId(nodeId, wire.accountId);
+      if (_dedupable(wire)) {
+        if (localKeys == null) {
+          keep.add(id);
+          continue;
+        }
+        if (localKeys.contains(wire.dedupeKey)) continue;
+      }
+      keep.add(id);
+      wanted.add(wire);
+    }
+    final node = nodeId.toLowerCase();
     for (final entry in _lent.entries.toList()) {
-      if (entry.value.nodeId == nodeId && !keep.contains(entry.key)) {
+      if (entry.value.nodeId.toLowerCase() == node &&
+          !keep.contains(entry.key)) {
         await _drop(entry.key);
       }
     }
 
     var stale = false;
-    for (final wire in shown) {
+    for (final wire in wanted) {
       if (_disposed) return false;
       final id = peerFilesAccountId(nodeId, wire.accountId);
       await _store.saveAccount(id, nodeId: nodeId, wire: wire);
@@ -232,15 +322,13 @@ class PeerFilesClient {
     return stale;
   }
 
-  /// Whether [wire] is a network share this device already has as its own
-  /// account. Local folders name a folder on the host, so they never are.
-  static bool _sameAsLocalShare(
-      FlutterWireSharedAccount wire, Set<String> localKeys) {
-    if (wire.accountId == kFilesLocalAccountId) return false;
-    if (wire.kind != 'smb' && wire.kind != 'webdav') return false;
-    final key = wire.dedupeKey;
-    return key != null && localKeys.contains(key);
-  }
+  /// Whether [wire] is a network share that could be one this device has
+  /// as its own account. Local folders name a folder on the host, so they
+  /// never are.
+  static bool _dedupable(FlutterWireSharedAccount wire) =>
+      wire.accountId != kFilesLocalAccountId &&
+      (wire.kind == 'smb' || wire.kind == 'webdav') &&
+      wire.dedupeKey != null;
 
   /// Reads every page of [wire] at its revision into a new generation. Any
   /// failure leaves the stored copy as it was.
@@ -296,48 +384,73 @@ class PeerFilesClient {
     await _store.remove(localAccountId);
   }
 
+  /// Shows each account with an index whose host the roster holds and has
+  /// not revoked. A share that might duplicate one of this device's waits
+  /// until this device's accounts are known and it is not one of them.
   void _publish() {
     if (_disposed) return;
-    final next = [
-      for (final MapEntry(key: id, value: lent) in _lent.entries)
-        if (_store.revision(id) != null)
-          PeerSharedAccount(
-            nodeId: lent.nodeId,
-            deviceName: _sync.member(lent.nodeId)?.deviceName ?? lent.nodeId,
-            wire: lent.wire,
-          ),
-    ]..sort((a, b) {
-        final byDevice = a.deviceName.compareTo(b.deviceName);
-        if (byDevice != 0) return byDevice;
-        final byName = a.wire.name.compareTo(b.wire.name);
-        return byName != 0
-            ? byName
-            : a.localAccountId.compareTo(b.localAccountId);
-      });
+    final localKeys = _localKeys();
+    final next = <PeerSharedAccount>[];
+    for (final MapEntry(key: id, value: lent) in _lent.entries) {
+      if (_store.revision(id) == null) continue;
+      final member = _sync.member(lent.nodeId);
+      if (member == null || member.revoked) continue;
+      if (_dedupable(lent.wire) &&
+          (localKeys == null || localKeys.contains(lent.wire.dedupeKey))) {
+        continue;
+      }
+      next.add(PeerSharedAccount(
+        nodeId: lent.nodeId,
+        deviceName: member.deviceName,
+        wire: lent.wire,
+      ));
+    }
+    next.sort((a, b) {
+      final byDevice = a.deviceName.compareTo(b.deviceName);
+      if (byDevice != 0) return byDevice;
+      final byName = a.wire.name.compareTo(b.wire.name);
+      return byName != 0
+          ? byName
+          : a.localAccountId.compareTo(b.localAccountId);
+    });
     if (!listEquals(next, _accounts.value)) _accounts.value = next;
   }
 
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    unawaited(_stateSub?.cancel());
-    unawaited(_connectedSub?.cancel());
-    _stateSub = null;
-    _connectedSub = null;
+    for (final s in _subs) {
+      unawaited(s.cancel());
+    }
+    _subs.clear();
     _accounts.dispose();
   }
 }
 
 final peerFilesClientProvider = Provider<PeerFilesClient>((ref) {
   final p2p = ref.watch(p2pServiceProvider);
+  // Every change to the stored sources, filtered down to a change of
+  // dedupe keys by the client.
+  final localChanges = StreamController<void>.broadcast();
+  ref.listen(sourceRecordsProvider, (_, __) => localChanges.add(null));
   final client = PeerFilesClient(
     transport: P2pPeerFilesTransport(p2p),
     sync: ref.watch(peerSyncServiceProvider),
     store: ref.watch(peerFilesStoreProvider),
-    localAccounts: () =>
-        ref.read(sourceRecordsProvider).value?.accounts ?? const [],
+    localAccounts: () {
+      final records = ref.read(sourceRecordsProvider);
+      // A failed load is not "no accounts": deciding with an empty set would
+      // fetch every peer copy of this device's own shares.
+      if (records.hasError) return null;
+      return records.value?.accounts;
+    },
+    localAccountsReady: () => ref.read(sourceRecordsProvider.future),
+    localAccountsChanged: localChanges.stream,
     peerConnected: p2p.onPeerConnected,
   );
-  ref.onDispose(client.dispose);
+  ref.onDispose(() {
+    client.dispose();
+    unawaited(localChanges.close());
+  });
   return client;
 });

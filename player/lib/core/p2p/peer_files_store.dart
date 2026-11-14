@@ -2,6 +2,7 @@
 /// the `peer_files_index` box.
 library;
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
@@ -104,20 +105,49 @@ class PeerFilesStore {
     await _box.deleteAll(_recordKeys(localAccountId, keep: next));
   }
 
-  /// Remembers that [nodeId] lends [wire] as [localAccountId].
+  /// Deletes index records no pointer reaches: every generation but the
+  /// live one, and every generation of an account with no pointer at all.
+  /// A crash between a flip and its cleanup, or part way through a fetch,
+  /// leaves such records behind.
+  Future<void> sweep() async {
+    final orphans = <String>[];
+    for (final k in _box.keys) {
+      if (k is! String) continue;
+      final slash = k.indexOf('/');
+      if (slash < 0) continue;
+      final head = k.substring(0, slash);
+      final at = head.lastIndexOf('@');
+      if (at < 0) continue;
+      final gen = int.tryParse(head.substring(at + 1));
+      if (gen == null) continue;
+      final meta = _box.get(_metaKey(head.substring(0, at)));
+      if (meta == null || meta['gen'] != gen) orphans.add(k);
+    }
+    if (orphans.isEmpty) return;
+    await _box.deleteAll(orphans);
+    _indexes.clear();
+  }
+
+  /// Remembers that [nodeId] lends [wire] as [localAccountId]. Writes
+  /// nothing when that is already what is stored, since every completed
+  /// sync round asks again.
   Future<void> saveAccount(
     String localAccountId, {
     required String nodeId,
     required FlutterWireSharedAccount wire,
-  }) =>
-      _box.put(_accountKey(localAccountId), {
-        'nodeId': nodeId,
-        'accountId': wire.accountId,
-        'kind': wire.kind,
-        'name': wire.name,
-        'dedupeKey': wire.dedupeKey,
-        'revision': wire.revision.toString(),
-      });
+  }) async {
+    final entry = {
+      'nodeId': nodeId,
+      'accountId': wire.accountId,
+      'kind': wire.kind,
+      'name': wire.name,
+      'dedupeKey': wire.dedupeKey,
+      'revision': wire.revision.toString(),
+    };
+    final stored = _box.get(_accountKey(localAccountId));
+    if (stored != null && mapEquals(stored, entry)) return;
+    await _box.put(_accountKey(localAccountId), entry);
+  }
 
   /// Every account [saveAccount] stored and [remove] has not removed.
   List<StoredPeerAccount> storedAccounts() {
