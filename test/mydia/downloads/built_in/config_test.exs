@@ -206,6 +206,32 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
     end
 
+    test "rate limits convert from KiB/s to bytes per second, nil meaning unlimited" do
+      config = load([download_limit_kib: 2048, upload_limit_kib: 1], [])
+      assert config.download_limit_bps == 2_097_152
+      assert config.upload_limit_bps == 1024
+
+      unlimited = load([], [])
+      assert unlimited.download_limit_bps == nil
+      assert unlimited.upload_limit_bps == nil
+    end
+
+    test "a bad rate limit in the environment warns" do
+      config =
+        load([], [],
+          env: %{
+            "MYDIA_TORRENT_DOWNLOAD_LIMIT" => "fast",
+            "MYDIA_TORRENT_UPLOAD_LIMIT" => "0"
+          }
+        )
+
+      assert {:invalid_download_limit, "fast"} in config.warnings
+      assert {:invalid_upload_limit, "0"} in config.warnings
+
+      assert %Config{warnings: []} =
+               load([], [], env: %{"MYDIA_TORRENT_DOWNLOAD_LIMIT" => " 100 "})
+    end
+
     test "reserved gluetun variables are reported" do
       env = %{
         "MYDIA_VPN_SPLIT_TUNNEL_GID" => "5",
@@ -229,6 +255,7 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       refute Map.has_key?(Config.restart_key(a), :warnings)
 
       refute Config.restart_key(load([listen_port: 1], [])) == Config.restart_key(b)
+      refute Config.restart_key(load([upload_limit_kib: 100], [])) == Config.restart_key(b)
 
       vpn_on = load([vpn_enabled: true, vpn_provider: "mullvad"], [])
 

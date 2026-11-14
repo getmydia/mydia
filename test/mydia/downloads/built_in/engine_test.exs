@@ -107,6 +107,25 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     assert ["--bind-device", "tun0"] == Enum.slice(args, 5, 2)
   end
 
+  # rqbit takes the rate limits as global options, so they must come before
+  # the `server` subcommand.
+  @tag :tmp_dir
+  test "args pass rate limits as global flags before server start", ctx do
+    config = %{ctx.config | download_limit_bps: 2_097_152, upload_limit_bps: 524_288}
+    args = Engine.args(config, 3030, 6881)
+    server = Enum.find_index(args, &(&1 == "server"))
+
+    download = Enum.find_index(args, &(&1 == "--ratelimit-download"))
+    upload = Enum.find_index(args, &(&1 == "--ratelimit-upload"))
+    assert Enum.at(args, download + 1) == "2097152"
+    assert Enum.at(args, upload + 1) == "524288"
+    assert download < server and upload < server
+
+    only_upload = Engine.args(%{ctx.config | upload_limit_bps: 1024}, 3030, 6881)
+    refute "--ratelimit-download" in only_upload
+    assert "--ratelimit-upload" in only_upload
+  end
+
   @tag :tmp_dir
   test "args/4 puts --listen-ip right after the listen port", ctx do
     args = Engine.args(ctx.config, 3030, 6881, "10.2.0.2")

@@ -42,6 +42,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
+          download_limit_bps: pos_integer() | nil,
+          upload_limit_bps: pos_integer() | nil,
           vpn?: boolean(),
           vpn_provider: String.t() | nil,
           vpn_type: String.t() | nil,
@@ -59,6 +61,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
+            download_limit_bps: nil,
+            upload_limit_bps: nil,
             vpn?: false,
             vpn_provider: nil,
             vpn_type: nil,
@@ -113,6 +117,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       state_dir: state_dir,
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
+      download_limit_bps: kib_to_bps(section.download_limit_kib),
+      upload_limit_bps: kib_to_bps(section.upload_limit_kib),
       vpn?: section.vpn_enabled == true,
       vpn_provider: blank_to_nil(section.vpn_provider),
       vpn_type: blank_to_nil(section.vpn_type),
@@ -124,6 +130,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           name_warnings ++
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
+          rate_limit_warnings(env["MYDIA_TORRENT_DOWNLOAD_LIMIT"], :invalid_download_limit) ++
+          rate_limit_warnings(env["MYDIA_TORRENT_UPLOAD_LIMIT"], :invalid_upload_limit) ++
           reserved_warnings(env)
     }
   end
@@ -214,6 +222,24 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         end
     end
   end
+
+  defp rate_limit_warnings(value, warning) do
+    max = BuiltInTorrent.max_rate_limit_kib()
+
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {kib, ""} when kib >= 1 and kib <= max -> []
+          _ -> [{warning, value}]
+        end
+    end
+  end
+
+  defp kib_to_bps(nil), do: nil
+  defp kib_to_bps(kib) when is_integer(kib), do: kib * 1024
 
   # MYDIA_VPN_* names set in the environment that the section has no field
   # for: handed to gluetun as they are and invisible to the settings form.

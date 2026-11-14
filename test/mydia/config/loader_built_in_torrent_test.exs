@@ -37,6 +37,27 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
            ).valid?
   end
 
+  test "rate limits parse in KiB/s, and bad or out-of-range ones are left out" do
+    loaded =
+      BuiltInTorrentEnv.load(
+        env(%{"MYDIA_TORRENT_DOWNLOAD_LIMIT" => "2048", "MYDIA_TORRENT_UPLOAD_LIMIT" => " 512 "})
+      )
+
+    assert loaded.download_limit_kib == 2048
+    assert loaded.upload_limit_kib == 512
+
+    for bad <- ["0", "-5", "abc", "4194304", "1.5"],
+        {var, key} <- [
+          {"MYDIA_TORRENT_DOWNLOAD_LIMIT", :download_limit_kib},
+          {"MYDIA_TORRENT_UPLOAD_LIMIT", :upload_limit_kib}
+        ] do
+      refute Map.has_key?(BuiltInTorrentEnv.load(env(%{var => bad})), key)
+    end
+
+    assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_UPLOAD_LIMIT" => "4194303"})).upload_limit_kib ==
+             4_194_303
+  end
+
   test "enabled accepts off and ignores junk" do
     assert BuiltInTorrentEnv.load(env(%{"MYDIA_TORRENT_ENABLED" => " OFF "})).enabled ==
              false

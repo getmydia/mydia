@@ -81,6 +81,14 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe({:invalid_api_port, value}),
     do: "MYDIA_TORRENT_API_PORT is #{inspect(value)}, not a port number. Using 3030."
 
+  def describe({:invalid_download_limit, value}),
+    do:
+      "MYDIA_TORRENT_DOWNLOAD_LIMIT is #{inspect(value)}, not a whole number of KiB/s from 1 to #{Mydia.Config.Schema.BuiltInTorrent.max_rate_limit_kib()}. Ignoring it."
+
+  def describe({:invalid_upload_limit, value}),
+    do:
+      "MYDIA_TORRENT_UPLOAD_LIMIT is #{inspect(value)}, not a whole number of KiB/s from 1 to #{Mydia.Config.Schema.BuiltInTorrent.max_rate_limit_kib()}. Ignoring it."
+
   def describe({:invalid_enabled, value}),
     do:
       "MYDIA_TORRENT_ENABLED is #{inspect(value)}, which is neither true nor false. Ignoring it and deciding automatically."
