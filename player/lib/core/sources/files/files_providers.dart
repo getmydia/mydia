@@ -12,7 +12,11 @@ import 'package:http/http.dart' as http;
 import '../../cache/watcher_registry.dart' show invalidatorProvider;
 import '../../p2p/peer_files_host.dart'
     show HivePeerFilesRevisions, peerFilesHostProvider;
+import '../../p2p/media_proxy_factory.dart' show mediaProxyProvider;
+import '../../p2p/p2p_service.dart' show p2pServiceProvider;
+import '../../p2p/peer_files_backend.dart';
 import '../../p2p/peer_files_store.dart' show PeerFilesStore;
+import '../../p2p/peer_files_transport.dart' show P2pPeerFilesTransport;
 import '../../p2p/peer_sync_service.dart';
 import '../../p2p/peer_sync_store.dart';
 import '../../playback/playback_progress_store.dart';
@@ -30,6 +34,8 @@ import 'files_scan_controller.dart';
 import 'index/file_library_index.dart';
 import 'match/file_matcher.dart';
 import 'media_names.dart';
+import 'peer_files_sources.dart'
+    show isPeerFilesSource, peerFilesHostAccountId, peerFilesIndexProvider;
 import 'files_accounts.dart' show filesAccountsProvider;
 import 'smb_addresses.dart' show smbTargetsOf;
 import 'smb_discovery.dart' show smbDiscoveryProvider;
@@ -113,6 +119,16 @@ final filesBackendBuilderProvider =
 /// Folders on this device probe each of the account's roots. A WebDAV or SMB
 /// share reads its credentials on first use.
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
+  if (isPeerFilesSource(source)) {
+    final p2p = ref.read(p2pServiceProvider);
+    return PeerFilesBackend(
+      nodeId: source.server.machineIdentifier ?? '',
+      hostAccountId: peerFilesHostAccountId(source.account.id),
+      proxy: ref.read(mediaProxyProvider),
+      transport: P2pPeerFilesTransport(p2p),
+      isConnected: p2p.isConnectedToPeer,
+    );
+  }
   if (source.account.id == kFilesLocalAccountId ||
       source.server.connections.isEmpty) {
     final index = ref.read(filesIndexProvider(source.account.id));
@@ -147,13 +163,20 @@ bool filesRescanDue(DateTime? lastScanAt, DateTime now) =>
 /// A files source over its account's index. Probes the backend at once and
 /// on every resume or network change, and starts a scan when the last one
 /// is older than [kFilesRescanAfter].
+///
+/// A library a paired player lends reads the live copy of the host's index
+/// and is rebuilt when a new copy lands. It never scans (its host does),
+/// probes once, and keys sync on the host's account id.
 FilesMediaSource buildFilesSource(
   Ref ref,
   Source source, {
   required void Function() onReauthNeeded,
   void Function()? onSyncMutation,
 }) {
-  final index = ref.read(filesIndexProvider(source.account.id));
+  final peer = isPeerFilesSource(source);
+  final index = peer
+      ? ref.watch(peerFilesIndexProvider(source.account.id))
+      : ref.read(filesIndexProvider(source.account.id));
   final progress = ref.read(filesProgressStoreProvider);
   final tmdb = ref.read(relayTmdbProvider);
   final invalidator = ref.read(invalidatorProvider);
@@ -187,10 +210,12 @@ FilesMediaSource buildFilesSource(
   // A resume or a network change probes again, and scans when the app sat
   // in the background past the rescan interval: the source is not rebuilt
   // then, so the check on open alone would not see it.
-  final events = ref.read(connectionRefreshBusProvider).events.listen((_) {
-    unawaited(media.probe());
-    _scanIfDue(ref, source, index);
-  });
+  final events = peer
+      ? null
+      : ref.read(connectionRefreshBusProvider).events.listen((_) {
+          unawaited(media.probe());
+          _scanIfDue(ref, source, index);
+        });
   final backend = ref.read(filesBackendBuilderProvider)(ref, source);
   media = FilesMediaSource(
     source: source,
@@ -203,17 +228,18 @@ FilesMediaSource buildFilesSource(
     onSyncMutation: syncMutation,
     onReauthNeeded: onReauthNeeded,
     invalidate: invalidator.invalidate,
+    syncAccountId: peer ? peerFilesHostAccountId(source.account.id) : null,
     // An SMB account's playback URLs outlive this source: saving new
     // credentials or a folder rebuilds it, and a playback in progress
     // streams through them. They go with the account
     // ([closeRemovedFilesAccount]), or after 12 hours unused.
     onDispose: () {
-      unawaited(events.cancel());
+      if (events != null) unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
     },
   );
   unawaited(media.probe());
-  _scanIfDue(ref, source, index);
+  if (!peer) _scanIfDue(ref, source, index);
   return media;
 }
 

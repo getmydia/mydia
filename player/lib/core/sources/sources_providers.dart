@@ -16,6 +16,7 @@ import 'cache/source_cache.dart';
 import '../p2p/peer_files_host.dart' show peerFilesHostProvider;
 import 'files/files_providers.dart'
     show closeRemovedFilesAccount, filesIndexProvider;
+import 'files/peer_files_sources.dart' show peerFilesSourcesProvider;
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'source.dart';
@@ -483,9 +484,13 @@ final accountProfilesProvider =
 });
 
 /// Every source: the stored accounts, minus hidden ones while the app is
-/// locked.
-final sourcesProvider =
-    Provider<List<Source>>((ref) => ref.watch(thirdPartySourcesProvider));
+/// locked, then the files libraries paired players lend this one. Compares
+/// element-wise like [thirdPartySourcesProvider], so a new copy of a lent
+/// index that renames nothing does not notify.
+final sourcesProvider = Provider<List<Source>>((ref) => _SourceList([
+      ...ref.watch(thirdPartySourcesProvider),
+      ...ref.watch(peerFilesSourcesProvider),
+    ]));
 
 /// Whether any Mydia account is stored.
 final hasMydiaProvider = Provider<bool>((ref) {

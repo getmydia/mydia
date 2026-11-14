@@ -14,6 +14,7 @@ import 'backend/file_system_backend.dart';
 import 'files_media_source.dart';
 import 'files_providers.dart';
 import 'media_names.dart';
+import 'peer_files_sources.dart' show isPeerFilesSource;
 import 'scan/file_scanner.dart';
 
 @immutable
@@ -82,6 +83,8 @@ class FilesScanController extends Notifier<ScanState> {
   Future<void> _run() async {
     final media = ref.read(mediaSourceProvider(sourceId));
     if (media is! FilesMediaSource) return;
+    // A lent library's index is the host's copy, which its host scans.
+    if (isPeerFilesSource(media.source)) return;
     final index = media.index;
     final scanner = FileScanner(
       backend: media.backend,

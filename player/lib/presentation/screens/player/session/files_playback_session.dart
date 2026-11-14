@@ -19,6 +19,8 @@ import '../../../../core/sources/files/cast/files_cast_bridge.dart';
 import '../../../../core/sources/files/files_media_source.dart';
 import '../../../../core/sources/files/files_queries.dart';
 import '../../../../core/sources/files/index/index_records.dart';
+import '../../../../core/sources/files/peer_files_sources.dart'
+    show isPeerFilesSource;
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../l10n/l10n.dart';
@@ -187,6 +189,9 @@ String? _backendPathOf(FilesMediaSource source, String fileKey) {
 Future<bool> _fileIsThere(FilesMediaSource source, String fileKey) async {
   final path = _backendPathOf(source, fileKey);
   if (path == null) return false;
+  // A lent library cannot stat; its play probes the host for the file and
+  // fails there with the reason.
+  if (isPeerFilesSource(source.source)) return true;
   try {
     return await source.backend.stat(path) != null;
   } on BackendFailure {
