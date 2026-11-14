@@ -1,58 +1,49 @@
 ---
 title: "Introducing Mydia Player"
 date: 2026-02-22
-summary: "A cross-platform media player with P2P remote access, offline downloads, and native playback on Android, iOS, macOS, and more."
+summary: "A cross-platform media player with peer-to-peer remote access, offline downloads, and hardware-accelerated playback on Android, iOS, macOS, and web."
 tags: ["release", "player"]
 ---
 
-**TL;DR** -- Mydia now ships a cross-platform player built with Flutter and a shared Rust networking core. It supports native playback via mpv, P2P remote access via iroh (no port forwarding needed), and offline downloads. Available on Android (APK), iOS (TestFlight), macOS, and web. [Download the latest release](https://github.com/getmydia/mydia/releases/latest).
-
----
-
-Mydia now includes a built-in player written in Flutter. The Flutter codebase compiles to native apps for mobile and desktop, while also shipping as a web player embedded in Mydia itself.
+Mydia now ships a cross-platform player built with Flutter and a shared Rust networking core. It uses mpv for native playback, [iroh](https://www.iroh.computer/) for peer-to-peer remote connections without port forwarding, and supports offline downloads. Builds are available for Android (APK), iOS (TestFlight), macOS, and the web. [Download the latest release](https://github.com/getmydia/mydia/releases/latest).
 
 ## Cross-platform support
 
-The player uses mpv via a Flutter binding for hardware-accelerated playback across a wide range of codecs and container formats. The web build falls back to server-side transcoding via ffmpeg.
+The native apps use mpv via a Flutter binding for hardware-accelerated playback across common video codecs and container formats. The web build embedded in Mydia Server at `/player` uses server-side ffmpeg transcoding when the browser cannot play a stream directly.
 
-Primary development and testing targets are **Android**, **iOS**, and **macOS**. Windows and Linux builds compile but may require platform-specific adjustments.
+Primary development targets are **Android**, **iOS**, and **macOS**, with Windows and Linux builds also published on each release:
 
-- **Android** -- APK available in each [GitHub release](https://github.com/getmydia/mydia/releases/latest)
-- **iOS** -- Available via TestFlight
-- **Web** -- Built into Mydia, served at `/player`
+- **Android**: APK included in each [GitHub release](https://github.com/getmydia/mydia/releases/latest)
+- **iOS**: Distributed through TestFlight
+- **Web**: Served by Mydia Server at `/player`
 
 ## Remote Access
 
-The player can connect to a Mydia instance directly via URL, or through **Remote Access** -- a decentralized connectivity layer built on [iroh](https://www.iroh.computer/). Remote Access establishes encrypted P2P connections without exposing the Mydia instance to the public internet. Discovery uses a claim code to locate the server node.
+The player can connect to a Mydia Server instance directly by URL or through **Remote Access**, a peer-to-peer layer built on [iroh](https://www.iroh.computer/). Remote Access establishes encrypted QUIC connections without exposing the server port to the public internet, using a short claim code during initial pairing to exchange the server's node ID.
 
-Remote Access is disabled by default and requires both an environment variable toggle and explicit opt-in through the settings UI.
+Remote Access is off by default and requires enabling both the server environment variable and the setting in the web UI.
 
-For optimal connectivity, configuring `network_mode: host` in Docker increases the likelihood of establishing a direct peer connection. Relay-based connections are bandwidth-throttled by default. An experimental unthrottled relay is available but should not be relied upon for production use.
+Running the container with `network_mode: host` (or forwarding the UDP port) improves the chance of a direct peer-to-peer connection. When NAT traversal cannot establish a direct path, traffic falls back to a relay server. The default public relay is bandwidth-throttled, and the relay server itself is open source if you want to self-host one.
 
-The entire stack is open source, including relay infrastructure. Self-hosting your own relay is fully supported.
+### Why iroh
 
-### How we got here
+Remote Access went through a few prototypes before settling on iroh:
 
-Remote Access went through several iterations before landing on iroh. The first attempt was a custom protocol using the Noise framework for encryption. It worked well for direct connections, but maintaining backward compatibility across protocol changes was daunting, and establishing direct connections required manual configuration on both ends.
+1. A custom UDP protocol using the Noise framework for encryption worked on direct links, but required manual port configuration and left NAT traversal to us.
+2. WebRTC did not fit a standalone non-browser client and server model well.
+3. libp2p had the necessary primitives, but added more protocol surface than we needed.
+4. A standalone DHT prototype had slow initial node discovery.
 
-From there, WebRTC seemed like the obvious choice but turned out to be too limited for our use case. libp2p had the right abstractions but brought in far too much complexity. A standalone DHT approach was explored next, but discovery was painfully slow.
-
-iroh turned out to be the right fit. It handles hole punching, relay fallback, and encrypted transport out of the box. It just works, and it works well.
+iroh provides QUIC transport, UDP hole punching, DNS/pkarr node discovery, and relay fallback in one library.
 
 ### Architecture
 
-The networking core is implemented as a shared Rust crate (`mydia_p2p_core`). This ensures protocol parity between the server and all client platforms. Each side wraps the core through its own FFI interface -- Rustler NIF on the Elixir/Phoenix side, `flutter_rust_bridge` on the Dart/Flutter side. This keeps the performance-critical networking logic in Rust while exposing a simple, idiomatic API to each host language.
+The networking stack lives in a shared Rust crate (`mydia_p2p_core`) used by both the server and the player. Mydia Server calls it through a Rustler NIF, and Mydia Player calls the same crate through `flutter_rust_bridge`, keeping protocol behavior identical on both ends.
 
 ## Offline Downloads
 
-The player supports downloading media for offline playback. This integrates with Mydia's **Collections** feature, allowing a curated set of media to be synced across multiple devices automatically.
+Movies and episodes can be downloaded to a device for offline playback. You can also attach downloads to Mydia's **Collections** to keep a set of titles synced across devices.
 
 ## Current status
 
-This is still early. The player works well for the platforms, formats, and network conditions it has been tested against, but not every combination has been exercised. Expect bugs.
-
-If you run into something, please [open a GitHub issue](https://github.com/getmydia/mydia/issues).
-
-## Roadmap
-
-The player is not intended to be a full-featured media center. The focus is on reliable playback, offline support, and seamless remote connectivity for self-hosted media libraries.
+The player is in early development and has not been tested against every combination of platform, codec, and network setup. If you run into a bug, please [open a GitHub issue](https://github.com/getmydia/mydia/issues).

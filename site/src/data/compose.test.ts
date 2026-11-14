@@ -9,7 +9,9 @@ it('matches the README', () => {
     /\r\n/g,
     '\n',
   );
-  const quick = readme.slice(readme.indexOf('## Quick Start'));
+  const quickMatch = readme.match(/^#{2,3} Quick [Ss]tart/m);
+  expect(quickMatch).not.toBeNull();
+  const quick = readme.slice(quickMatch!.index);
   const m = quick.match(/```yaml\n([\s\S]*?)\n```/);
   expect(m).not.toBeNull();
   expect(composeYaml.trim()).toBe(m![1].trim());

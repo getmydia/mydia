@@ -1,62 +1,46 @@
 ---
 title: "Plugins Are Coming to Mydia"
 date: 2026-06-09
-summary: "We're building a plugin platform so Mydia can do more without bloating the core. Sandboxed, you approve what each plugin can touch, and a webhook notifier is the first one. Here's the idea and how to get involved."
+summary: "Mydia is adding a WebAssembly plugin sandbox with explicit capability permissions, starting with a webhook and Discord notifier."
 tags: ["development", "plugins"]
 ---
 
-**TL;DR** -- Mydia is getting plugins. They run safely inside the app, you decide exactly what each one is allowed to do, and the first one is a notifier that pings Discord (or a webhook) when something is added to your library. This is an early version we want to learn from, an SDK to make writing plugins easy is on the way, and we'd love your help.
-
----
+Mydia is adding support for WebAssembly plugins. Each plugin runs in a sandbox and can only use the permissions you grant on install. The first built-in plugin sends notifications to Discord or a generic webhook when media is added or a download finishes.
 
 ## Why plugins
 
-Mydia already connects to a lot of things: indexers, metadata sources, download clients, media servers. Every one of those was added by changing Mydia itself. That works, but it means the core keeps growing, and the things _you_ might want it to talk to are limited to whatever we've had time to build in.
+Until now, every indexer, metadata source, download client, and external integration lived inside the Mydia Server repository. That couples every niche integration to the main release cycle and expands the main codebase for features only some setups use.
 
-Plugins flip that around. Instead of waiting for us to add support for the one service you care about, a plugin can add it from the outside, without us touching the core and without you trusting a black box. The core stays lean, and Mydia can reach a lot further.
+Moving integrations into WebAssembly plugins lets third-party extensions run outside the core server while keeping a strict security boundary, similar to how [Zed](https://zed.dev/) isolates editor extensions.
 
-This has been on our minds from the start. There was even an early Lua proof-of-concept that never really went anywhere. This time we're taking cues from [Zed](https://zed.dev/), the Rust code editor, which runs its plugins as WebAssembly to keep them fast and safe. It's a model we think fits Mydia well, and it's where the platform is headed.
+## Capability permissions
 
-## Safe by default
+Plugins run in a Wasmtime sandbox with no default access to the filesystem, network, or database. Each plugin declares the capabilities it needs in its manifest:
 
-The thing we cared about most is that installing a plugin should never feel like a leap of faith.
+- Events it subscribes to (for example, `media.added` or `download.completed`)
+- Outbound HTTP hosts it requests permission to contact (such as `discord.com`)
+- Host functions it calls to read library data
 
-Every plugin runs in a sandbox. On its own it can't read your files, reach the network, or poke at your library. It can only do the specific things it asks for, and only after you say yes.
+When you install a plugin, Mydia Server lists these requested permissions and waits for approval before enabling it. Requests to unapproved hosts or capabilities are rejected at the host boundary, and permissions can be revoked at any time in the admin UI.
 
-When you install one, Mydia shows you in plain language exactly what it wants. Something like:
+HTTP requests from plugins are restricted to the approved host list and blocked from connecting to private, loopback, or link-local IP ranges, preventing plugins from probing services on your local network.
 
-- "React to: media added, download completed"
-- "Make network requests to: `discord.com`"
-- "Read your library data"
+If a plugin traps, exceeds its memory limit, or times out, the failure is isolated to that plugin invocation.
 
-Nothing happens until you approve that list. If a plugin tries to do anything it didn't ask for, or anything you didn't grant, it's simply blocked. Change your mind later and revoke a permission, and it takes effect right away.
+## First plugin: webhook and Discord notifier
 
-Network access gets extra care. If a plugin is allowed to talk to `discord.com`, that's _all_ it can reach. It can't be tricked into poking at your router, your other home-lab services, or anything else on your network. And you can always see where a plugin has actually been connecting.
+To test the runtime end to end, we wrote a notification plugin as the first guest module. When an item is added to a library or a download completes, the plugin posts a formatted message to a configured Discord webhook or generic HTTP endpoint, with retries when the destination returns a transient error.
 
-If a plugin misbehaves, crashes, or gets stuck, it's contained. Mydia keeps running, and so does every other plugin.
+## Activity log and testing
 
-## The first plugin: a notifier
+Each installed plugin has an activity page in the admin UI showing recent invocations, durations, and any error output. A **Test** action lets you send a sample event immediately after configuring a plugin to verify that credentials and network permissions work.
 
-To make sure the platform works in practice and not just on paper, we built the first plugin ourselves: a notifier. When something is added to your library or a download finishes, it sends a message to Discord or any webhook URL you point it at. If the destination is briefly down, it keeps retrying so you don't miss the notification.
+## Next steps
 
-It's small on purpose. The point was to prove the whole path end to end, and to be a working example for the plugins that come next.
+Writing a plugin currently requires implementing the WIT guest interface directly in Rust. We are working on:
 
-## Knowing it's working
+- A Rust SDK crate that wraps the guest bindings and event types
+- Documentation for building and loading plugins from other languages that target WASIP2
+- A plugin catalog for installing community plugins from the admin UI
 
-A plugin you can't observe is a plugin you can't trust, so each one has its own activity view in the admin UI. You can see when it ran, what it did, and whether it succeeded or failed, with the error right there if something went wrong. There's also a Test button that triggers a plugin on demand, so right after installing you can confirm it works without waiting for real activity.
-
-## An SDK is coming
-
-Right now, writing a plugin means working close to the metal. That's fine for us proving things out, but it's not the experience we want for anyone else.
-
-So an SDK is on the way to make building a plugin straightforward: write your logic, build it, drop it into a running Mydia, and test it. To start it'll support **Rust**, and because plugins run on WebAssembly, support for other languages that compile to WebAssembly is planned after that. The aim is that adding a new integration to Mydia is something a motivated person can do in an afternoon.
-
-Alongside that we're working toward a community catalog you can browse and install from directly inside Mydia, and more flexible setups like pointing the notifier at your own server (your own ntfy instance, for example).
-
-## Help us shape it
-
-This is an early version, scoped on purpose, and we fully expect it to change as we learn what people actually want to build.
-
-So tell us. What do you wish Mydia could talk to? Where does the permission model feel too strict or not strict enough? If you're the kind of person who'd enjoy building a plugin or improving the core, even better. The whole project is open source.
-
-Come build with us [on GitHub](https://github.com/getmydia/mydia).
+Feedback and contributions are welcome [on GitHub](https://github.com/getmydia/mydia).

@@ -16,20 +16,20 @@ const fan = [
 ];
 
 const together = [
-  { title: 'Remote streaming', body: 'Watch from anywhere, securely, with no port forwarding.' },
-  { title: 'Offline downloads', body: 'Save titles to your device, transcoded to fit.' },
-  { title: 'Casting', body: 'Send playback to your TV from the player.' },
+  { title: 'Remote streaming', body: 'Connect Mydia Player to Mydia Server from outside your home network over an encrypted peer-to-peer link without port forwarding.' },
+  { title: 'Transcoded downloads', body: 'Mydia Server can transcode movies and episodes to smaller files before Mydia Player downloads them for offline playback.' },
+  { title: 'Shared accounts', body: 'Sign in to Mydia Player with your Mydia Server account and keep watch progress synced across devices.' },
 ];
 ---
 
 <Base
-  title="Mydia: a player for every server, and a server for your library"
-  description="Mydia Player plays your Plex, Jellyfin and Mydia Server libraries on every screen. Mydia Server organizes your movies and TV and automates downloads."
+  title="Mydia: media player and self-hosted library server"
+  description="Mydia Player connects to Plex, Jellyfin and Mydia Server on phones, tablets, TVs and desktops. Mydia Server organizes your movies and TV shows and automates downloads."
 >
   <Hero
-    title="Your media,"
-    accent="played and managed your way"
-    subtitle="A player for every server you use, and a server that runs your library."
+    title="Open-source media player"
+    accent="and library server"
+    subtitle="Play from Plex, Jellyfin and Mydia Server on your devices, or run Mydia Server to organize and download movies and TV shows."
     wall={{ rows: 4, height: '40rem' }}
   />
 
@@ -58,9 +58,9 @@ const together = [
         id="player"
         name="Mydia Player"
         bullets={[
-          'Works with Plex, Jellyfin and Mydia Server',
-          'Offline downloads',
-          'On every platform',
+          'Connects to Plex, Jellyfin and Mydia Server',
+          'Offline downloads on phones, tablets and laptops',
+          'Android, iOS, macOS, Windows, Linux and web',
         ]}
         primary={{ label: 'Download', href: '/download' }}
         secondary={{ label: 'Learn more', href: '/player' }}
@@ -85,9 +85,9 @@ const together = [
       <ProductCard
         name="Mydia Server"
         bullets={[
-          'Organizes your library and fetches metadata',
-          "Finds and downloads what you're missing",
-          'Remote access without port forwarding',
+          'Scans your library and fetches TMDB and TVDB metadata',
+          'Monitors and downloads missing movies and episodes',
+          'Peer-to-peer remote access without port forwarding',
         ]}
         primary={{ label: 'Get started', href: '/server#install' }}
         secondary={{ label: 'Learn more', href: '/server' }}
@@ -107,7 +107,7 @@ const together = [
 
   <section id="together" class="py-16 px-4 bg-base-200/50 scroll-mt-16">
     <div class="max-w-5xl mx-auto text-center">
-      <h2 class="text-2xl sm:text-3xl font-bold mb-10">Better together</h2>
+      <h2 class="text-2xl sm:text-3xl font-bold mb-10">Using both together</h2>
       <div class="grid sm:grid-cols-3 gap-6 mb-8">
         {together.map(item => (
           <div>
@@ -116,7 +116,7 @@ const together = [
           </div>
         ))}
       </div>
-      <a href="/server" class="link link-primary text-sm">See what Mydia Server adds</a>
+      <a href="/server" class="link link-primary text-sm">More about Mydia Server</a>
     </div>
   </section>
 

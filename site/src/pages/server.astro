@@ -14,31 +14,31 @@ import { postersFrom } from '../data/posters';
 const wallPosters = postersFrom(2 / 3);
 
 const features = [
-  { icon: 'film', title: 'Library and metadata', description: 'Organizes your movies and TV, and fills in posters, descriptions and episode details for you.' },
-  { icon: 'sparkles', title: 'Automated downloads', description: 'Finds what is missing and grabs it, with quality profiles and automatic upgrades when something better appears.' },
-  { icon: 'download', title: 'Your clients and indexers', description: 'Works with qBittorrent, SABnzbd, Prowlarr and debrid providers.' },
-  { icon: 'users', title: 'Multi-user', description: 'Give family and friends their own accounts, with requests and single sign-on.' },
-  { icon: 'globe', title: 'Remote access', description: 'Reach your library from anywhere with Mydia Player. No port forwarding, no VPN.' },
-  { icon: 'sliders', title: 'Configure it your way', description: 'Set everything in the web interface, or in files and environment variables.' },
+  { icon: 'film', title: 'Library and metadata', description: 'Scans your movie and TV directories and fetches posters, descriptions and episode details from TMDB and TVDB.' },
+  { icon: 'sparkles', title: 'Automated downloads', description: 'Monitors missing movies and episodes, downloads matching releases, and upgrades files according to your quality profile.' },
+  { icon: 'download', title: 'Download clients and indexers', description: 'Connects to qBittorrent, Transmission, SABnzbd, NZBGet, Prowlarr, Jackett and debrid providers.' },
+  { icon: 'users', title: 'Multi-user and requests', description: 'Supports admin and guest accounts, a media request approval workflow, and single sign-on.' },
+  { icon: 'globe', title: 'Peer-to-peer remote access', description: 'Streams to Mydia Player outside your home network without port forwarding or a VPN.' },
+  { icon: 'sliders', title: 'File or UI configuration', description: 'Configure download clients, indexers and libraries in the web UI, a YAML file or environment variables.' },
 ];
 ---
 
 <Base
-  title="Mydia Server: self-hosted library and automation"
-  description="Mydia Server organizes your movies and TV, finds what's missing, and streams it to Mydia Player anywhere. Self-hosted with Docker."
+  title="Mydia Server: self-hosted library and download manager"
+  description="Mydia Server organizes your movies and TV shows, automates downloads, and streams to Mydia Player over peer-to-peer connections."
 >
   <Hero
     badge="Mydia Server"
-    title="Your library, on autopilot."
-    subtitle="A self-hosted server that organizes your movies and TV, finds what's missing, and streams it to Mydia Player anywhere."
+    title="Self-hosted library and download manager."
+    subtitle="Organizes your movies and TV shows, downloads missing releases, and streams directly to Mydia Player."
     primary={{ label: 'Get started', href: '#install' }}
     secondary={{ label: 'Docs', href: 'https://docs.mydia.dev/latest/', external: true }}
     wall={{ rows: 3, height: '34rem', posters: wallPosters }}
   />
 
   <Features
-    title="Everything your library needs"
-    subtitle="From the first scan to the next episode, handled."
+    title="What Mydia Server does"
+    subtitle="Library management, release monitoring and remote streaming in a single container."
     items={features}
   />
 
@@ -54,8 +54,8 @@ const features = [
   <Install />
 
   <CrossSell
-    text="Watch it with Mydia Player."
+    text="Use Mydia Player to watch your library on phone, tablet, TV and desktop."
     href="/player"
-    label="Meet Mydia Player"
+    label="Learn about Mydia Player"
   />
 </Base>
