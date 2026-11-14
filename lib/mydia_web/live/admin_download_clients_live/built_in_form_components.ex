@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
   use MydiaWeb, :html
 
   import MydiaWeb.AdminDownloadClientsLive.BuiltInFieldComponents
+  import MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents
 
   alias Mydia.Downloads.BuiltIn.Preflight
   alias Mydia.Downloads.BuiltIn.VpnProviders
@@ -178,6 +179,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         type="number"
         label={gettext("Listen port")}
       />
+
+      <.seeding_fields form={@form} sources={@sources} />
 
       <details class="collapse collapse-arrow bg-base-200 border border-base-300">
         <summary class="collapse-title text-sm font-medium">{gettext("Advanced")}</summary>
