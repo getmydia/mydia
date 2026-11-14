@@ -10,7 +10,7 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
-use mydia_p2p_core::{blocking, Host, HostConfig};
+use mydia_p2p_core::{blocking, HlsResponseHeader, Host, HostConfig};
 use std::time::Duration;
 
 /// The endpoint binds and publishes its address asynchronously, so poll
@@ -45,6 +45,33 @@ fn a_second_shutdown_returns_instead_of_hanging() {
     blocking::shutdown(&host);
 
     assert_eq!(blocking::get_node_addr(&host), "");
+}
+
+/// A responder outliving its host must not keep the host's command channel
+/// open: the player's event dispatcher holds one for as long as the event
+/// channel is open, and that channel closes only once the loop has ended.
+/// With a strong sender the dropped host's loop would answer this call
+/// itself; with the weak one the call fails before it is ever sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_responder_does_not_keep_a_dropped_host_alive() {
+    let (host, _node_id) = Host::new(HostConfig::default());
+    let responder = host.hls_responder();
+    drop(host);
+
+    let result = responder
+        .send_header(
+            "missing".to_string(),
+            HlsResponseHeader {
+                status: 200,
+                content_type: "video/mp4".to_string(),
+                content_length: 0,
+                content_range: None,
+                cache_control: None,
+            },
+        )
+        .await;
+
+    assert_eq!(result, Err("send_failed".to_string()));
 }
 
 /// A host still waiting for its relay answers Shutdown at once instead of

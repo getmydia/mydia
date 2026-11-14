@@ -1052,21 +1052,35 @@ impl Host {
 /// Wraps a cloned `cmd_tx` so a responder can write a stream's header, chunks
 /// and end without holding the `Host`. Each method sends the same command the
 /// `Host` method of the same purpose sends.
+///
+/// The sender is weak. A responder lives inside the player's event
+/// dispatcher, which runs until the event channel closes, and the event
+/// channel closes only when the loop ends, which needs every strong command
+/// sender gone. A strong clone here would keep a dropped host's loop and iroh
+/// endpoint alive for the life of the process. Once the `Host` is dropped
+/// every call answers `send_failed`, as a call on a dropped host does.
 #[cfg(feature = "host")]
 #[derive(Clone)]
 pub struct HlsResponder {
-    cmd_tx: mpsc::Sender<Command>,
+    cmd_tx: mpsc::WeakSender<Command>,
 }
 
 #[cfg(feature = "host")]
 impl HlsResponder {
+    /// A strong sender for one call, or `send_failed` once the host is gone.
+    fn sender(&self) -> Result<mpsc::Sender<Command>, String> {
+        self.cmd_tx
+            .upgrade()
+            .ok_or_else(|| "send_failed".to_string())
+    }
+
     pub async fn send_header(
         &self,
         stream_id: String,
         header: HlsResponseHeader,
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
+        self.sender()?
             .send(Command::SendHlsHeader {
                 stream_id,
                 header,
@@ -1079,7 +1093,7 @@ impl HlsResponder {
 
     pub async fn send_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
+        self.sender()?
             .send(Command::SendHlsChunk {
                 stream_id,
                 data,
@@ -1092,7 +1106,7 @@ impl HlsResponder {
 
     pub async fn finish(&self, stream_id: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
+        self.sender()?
             .send(Command::FinishHlsStream {
                 stream_id,
                 reply: tx,
@@ -1104,7 +1118,7 @@ impl HlsResponder {
 
     pub async fn abort(&self, stream_id: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
+        self.sender()?
             .send(Command::AbortHlsStream {
                 stream_id,
                 reply: tx,
@@ -1122,7 +1136,7 @@ impl HlsResponder {
         length: u64,
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
+        self.sender()?
             .send(Command::StreamFileRange {
                 stream_id,
                 file_path,
@@ -1141,7 +1155,7 @@ impl Host {
     /// Create a clone-able HLS responder handle for spawned tasks.
     pub fn hls_responder(&self) -> HlsResponder {
         HlsResponder {
-            cmd_tx: self.cmd_tx.clone(),
+            cmd_tx: self.cmd_tx.downgrade(),
         }
     }
 }
