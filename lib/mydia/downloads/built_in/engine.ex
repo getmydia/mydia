@@ -64,8 +64,14 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       listen ++
       ["--disable-upnp-port-forward"] ++
       bind ++
+      rate_limit_arg("--ratelimit-download", config.download_limit_bps) ++
+      rate_limit_arg("--ratelimit-upload", config.upload_limit_bps) ++
       ["server", "start", "--persistence-location", config.state_dir, config.download_path]
   end
+
+  # rqbit's rate limits are global options in bytes per second; nil is unlimited.
+  defp rate_limit_arg(_flag, nil), do: []
+  defp rate_limit_arg(flag, bps), do: [flag, Integer.to_string(bps)]
 
   @impl true
   def init(opts) do

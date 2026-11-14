@@ -24,6 +24,9 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :state_path, :string, default: "/config/rqbit"
     field :listen_port, :integer, default: 51413
     field :api_port, :integer, default: 3030
+    # KiB/s; nil is unlimited.
+    field :download_limit_kib, :integer
+    field :upload_limit_kib, :integer
     field :vpn_enabled, :boolean, default: false
     field :vpn_provider, :string
     field :vpn_type, :string
@@ -39,8 +42,6 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :seed_ratio, :float
     field :seed_time, :integer
     field :seed_goal_action, :string, default: "pause"
-    field :download_limit, :integer
-    field :upload_limit, :integer
   end
 
   @type t :: %__MODULE__{}
@@ -51,6 +52,8 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     state_path: "MYDIA_TORRENT_STATE_PATH",
     listen_port: "MYDIA_TORRENT_PORT",
     api_port: "MYDIA_TORRENT_API_PORT",
+    download_limit_kib: "MYDIA_TORRENT_DOWNLOAD_LIMIT",
+    upload_limit_kib: "MYDIA_TORRENT_UPLOAD_LIMIT",
     vpn_enabled: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_provider: "MYDIA_VPN_SERVICE_PROVIDER",
     vpn_type: "MYDIA_VPN_VPN_TYPE",
@@ -65,9 +68,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     vpn_port_forwarding: "MYDIA_VPN_VPN_PORT_FORWARDING",
     seed_ratio: "MYDIA_TORRENT_SEED_RATIO",
     seed_time: "MYDIA_TORRENT_SEED_TIME",
-    seed_goal_action: "MYDIA_TORRENT_SEED_GOAL_ACTION",
-    download_limit: "MYDIA_TORRENT_DOWNLOAD_LIMIT",
-    upload_limit: "MYDIA_TORRENT_UPLOAD_LIMIT"
+    seed_goal_action: "MYDIA_TORRENT_SEED_GOAL_ACTION"
   ]
 
   @seed_goal_actions ~w(pause remove)
@@ -77,6 +78,21 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
   def seed_goal_actions, do: @seed_goal_actions
 
   @secret_fields [:vpn_openvpn_password, :vpn_wireguard_private_key]
+
+  # rqbit takes the limits in bytes per second as a u32, and its limiter's
+  # burst equals the limit. Peers move 16 KiB blocks and rqbit errors on a
+  # block larger than the burst instead of waiting, so below 16 KiB/s a
+  # download loops through peer reconnects and uploads stop.
+  @min_rate_limit_kib 16
+  @max_rate_limit_kib div(4_294_967_295, 1024)
+
+  @doc "The smallest rate limit, in KiB/s, rqbit can transfer under."
+  @spec min_rate_limit_kib() :: pos_integer()
+  def min_rate_limit_kib, do: @min_rate_limit_kib
+
+  @doc "The largest rate limit, in KiB/s, rqbit accepts."
+  @spec max_rate_limit_kib() :: pos_integer()
+  def max_rate_limit_kib, do: @max_rate_limit_kib
 
   @doc "The single field-to-environment-variable table."
   @spec env_vars() :: [{atom(), String.t()}]
@@ -95,9 +111,20 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
     |> validate_number(:seed_time, greater_than_or_equal_to: 0)
-    |> validate_number(:download_limit, greater_than_or_equal_to: 0)
-    |> validate_number(:upload_limit, greater_than_or_equal_to: 0)
     |> validate_inclusion(:seed_goal_action, @seed_goal_actions)
+    |> validate_rate_limits()
+  end
+
+  @doc "Validates both rate limits against `min_rate_limit_kib/0`..`max_rate_limit_kib/0`."
+  @spec validate_rate_limits(Ecto.Changeset.t()) :: Ecto.Changeset.t()
+  def validate_rate_limits(changeset) do
+    for field <- [:download_limit_kib, :upload_limit_kib], reduce: changeset do
+      changeset ->
+        validate_number(changeset, field,
+          greater_than_or_equal_to: @min_rate_limit_kib,
+          less_than_or_equal_to: @max_rate_limit_kib
+        )
+    end
   end
 
   defp normalize_identifier(changeset, field) do

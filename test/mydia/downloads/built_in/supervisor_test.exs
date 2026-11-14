@@ -1,7 +1,7 @@
 defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Downloads.BuiltIn.{Config, Engine, Limits, Status, Vpn}
+  alias Mydia.Downloads.BuiltIn.{Config, Engine, Status, Vpn}
   alias Mydia.Downloads.BuiltIn.Supervisor, as: BuiltInSupervisor
 
   defp ids(children), do: Enum.map(children, &Supervisor.child_spec(&1, []).id)
@@ -22,25 +22,15 @@ defmodule Mydia.Downloads.BuiltIn.SupervisorTest do
 
   test "without a VPN the engine autostarts" do
     children = BuiltInSupervisor.children(%Config{enabled?: true}, credentials: {"u", "p"})
-    assert ids(children) == [Status, Engine, Limits]
+    assert ids(children) == [Status, Engine]
     assert engine_opts(children)[:autostart] == true
-  end
-
-  test "Limits starts after the engine with the config" do
-    config = %Config{enabled?: true, download_limit: 10}
-    children = BuiltInSupervisor.children(config, credentials: {"u", "p"})
-
-    spec = Enum.find(children, &(Supervisor.child_spec(&1, []).id == Limits))
-    {Limits, :start_link, [opts]} = Supervisor.child_spec(spec, []).start
-    assert opts[:config] == config
   end
 
   test "with a VPN the gate starts it" do
     children =
       BuiltInSupervisor.children(%Config{enabled?: true, vpn?: true}, credentials: {"u", "p"})
 
-    # Limits last: under rest_for_one, a Limits crash must not restart the gate.
-    assert ids(children) == [Status, Engine, Vpn, Limits]
+    assert ids(children) == [Status, Engine, Vpn]
     assert engine_opts(children)[:autostart] == false
   end
 

@@ -103,4 +103,55 @@ defmodule Mydia.Indexers.ResultDedupTest do
     assert length(results) == 2
     assert Enum.all?(results, &(&1.sources == []))
   end
+
+  describe "releases on different protocols" do
+    defp nzb(indexer, title \\ @title) do
+      %SearchResult{
+        title: title,
+        size: 1_000,
+        seeders: nil,
+        leechers: nil,
+        download_url: "https://#{indexer}.test/get.nzb",
+        indexer: indexer,
+        download_protocol: :nzb
+      }
+    end
+
+    defp torrent(indexer, seeders) do
+      %{result(indexer, seeders) | download_protocol: :torrent}
+    end
+
+    test "a torrent and an NZB of the same release stay separate, so either can be grabbed" do
+      results =
+        ResultDedup.deduplicate([torrent("Brinewater Exchange", 40), nzb("Kelpline Usenet")])
+
+      assert length(results) == 2
+
+      by_protocol = Map.new(results, &{&1.download_protocol, &1})
+
+      assert by_protocol.nzb.indexer == "Kelpline Usenet"
+      assert by_protocol.nzb.download_url == "https://Kelpline Usenet.test/get.nzb"
+      assert by_protocol.torrent.indexer == "Brinewater Exchange"
+      assert Enum.all?(results, &(&1.sources == []))
+    end
+
+    test "torrent copies from two trackers still merge" do
+      [merged] =
+        ResultDedup.deduplicate([
+          torrent("Brinewater Exchange", 5),
+          torrent("Saltmarsh Mirror", 40),
+          nzb("Kelpline Usenet")
+        ])
+        |> Enum.filter(&(&1.download_protocol == :torrent))
+
+      assert SearchResult.indexers(merged) == ["Brinewater Exchange", "Saltmarsh Mirror"]
+    end
+
+    test "NZB copies from two indexers still merge" do
+      [merged] = ResultDedup.deduplicate([nzb("Kelpline Usenet"), nzb("Tidewater News")])
+
+      assert merged.download_protocol == :nzb
+      assert SearchResult.indexers(merged) == ["Kelpline Usenet", "Tidewater News"]
+    end
+  end
 end

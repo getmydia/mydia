@@ -548,19 +548,6 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert {:error, %Mydia.Downloads.Client.Error{type: :not_found}} =
                Rqbit.set_file_selection(config, @hash, [0])
     end
-
-    test "set_session_limits always sends both keys, null for unlimited", %{
-      bypass: bypass,
-      config: config
-    } do
-      Bypass.expect_once(bypass, "POST", "/torrents/limits", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        assert Jason.decode!(body) == %{"download_bps" => nil, "upload_bps" => 524_288}
-        json_resp(conn, 200, %{})
-      end)
-
-      assert :ok = Rqbit.set_session_limits(config, %{download_bps: nil, upload_bps: 524_288})
-    end
   end
 
   ## Helpers

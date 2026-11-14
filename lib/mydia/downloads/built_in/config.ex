@@ -33,9 +33,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @section_vpn_fields for {field, _var} <- BuiltInTorrent.env_vars(),
                           String.starts_with?(Atom.to_string(field), "vpn_"),
                           do: field
-  # Seeding targets and speed limits are applied to the running engine, never
-  # by restarting it.
-  @live_keys [:seed_ratio, :seed_time, :seed_goal_action, :download_limit, :upload_limit]
+  # Seeding targets are read by Mydia's own policies, never by the engine, so
+  # changing one needs no restart. Speed limits are engine flags and do.
+  @live_keys [:seed_ratio, :seed_time, :seed_goal_action]
   @secret_fragments ~w(SECRET PASSWORD TOKEN)
 
   @type t :: %__MODULE__{
@@ -45,6 +45,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
+          download_limit_bps: pos_integer() | nil,
+          upload_limit_bps: pos_integer() | nil,
           vpn?: boolean(),
           vpn_provider: String.t() | nil,
           vpn_type: String.t() | nil,
@@ -53,8 +55,6 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           seed_ratio: float() | nil,
           seed_time: non_neg_integer() | nil,
           seed_goal_action: :pause | :remove,
-          download_limit: non_neg_integer() | nil,
-          upload_limit: non_neg_integer() | nil,
           env_vpn_names: [String.t()],
           state_dir: String.t(),
           gluetun_dir: String.t(),
@@ -67,6 +67,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
+            download_limit_bps: nil,
+            upload_limit_bps: nil,
             vpn?: false,
             vpn_provider: nil,
             vpn_type: nil,
@@ -75,8 +77,6 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             seed_ratio: nil,
             seed_time: nil,
             seed_goal_action: :pause,
-            download_limit: nil,
-            upload_limit: nil,
             env_vpn_names: [],
             state_dir: @default_state_dir,
             gluetun_dir: "/config/gluetun",
@@ -126,6 +126,8 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       state_dir: state_dir,
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
+      download_limit_bps: kib_to_bps(section.download_limit_kib),
+      upload_limit_bps: kib_to_bps(section.upload_limit_kib),
       vpn?: section.vpn_enabled == true,
       vpn_provider: blank_to_nil(section.vpn_provider),
       vpn_type: blank_to_nil(section.vpn_type),
@@ -134,22 +136,22 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       seed_ratio: section.seed_ratio,
       seed_time: section.seed_time,
       seed_goal_action: seed_goal_action(section.seed_goal_action),
-      download_limit: section.download_limit,
-      upload_limit: section.upload_limit,
       env_vpn_names: env_vpn_names(env),
       warnings:
         enabled_warnings(env["MYDIA_TORRENT_ENABLED"]) ++
           name_warnings ++
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
+          rate_limit_warnings(env["MYDIA_TORRENT_DOWNLOAD_LIMIT"], :invalid_download_limit) ++
+          rate_limit_warnings(env["MYDIA_TORRENT_UPLOAD_LIMIT"], :invalid_upload_limit) ++
           reserved_warnings(env)
     }
   end
 
   @doc """
   What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
-  the config minus `warnings`, the seeding and speed-limit fields (applied to
-  the running engine, not by restarting it) and, while the VPN is off, minus every VPN
+  the config minus `warnings`, the seeding fields (read by Mydia, not by the
+  engine) and, while the VPN is off, minus every VPN
   field, since those do not reach a client running without it. Turning the
   VPN on still changes the key.
   """
@@ -234,6 +236,25 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         end
     end
   end
+
+  defp rate_limit_warnings(value, warning) do
+    min = BuiltInTorrent.min_rate_limit_kib()
+    max = BuiltInTorrent.max_rate_limit_kib()
+
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {kib, ""} when kib >= min and kib <= max -> []
+          _ -> [{warning, value}]
+        end
+    end
+  end
+
+  defp kib_to_bps(nil), do: nil
+  defp kib_to_bps(kib) when is_integer(kib), do: kib * 1024
 
   # MYDIA_VPN_* names set in the environment that the section has no field
   # for: handed to gluetun as they are and invisible to the settings form.

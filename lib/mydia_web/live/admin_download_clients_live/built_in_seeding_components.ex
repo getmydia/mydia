@@ -1,6 +1,6 @@
 defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
   @moduledoc """
-  The seeding target and speed limit field groups of the built-in client's
+  The seeding target field group of the built-in client's
   settings modal (`MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents`).
   """
   use MydiaWeb, :html
@@ -55,30 +55,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
           )}
         </:hint>
       </.field_row>
-    </fieldset>
-
-    <fieldset
-      id="built-in-speed-limits"
-      class="fieldset bg-base-200 border border-base-300 rounded-box p-4 space-y-2"
-    >
-      <legend class="fieldset-legend">{gettext("Speed limits")}</legend>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-        <.text_field
-          form={@form}
-          field={:download_limit}
-          sources={@sources}
-          type="number"
-          label={gettext("Download limit (KiB/s)")}
-        />
-        <.text_field
-          form={@form}
-          field={:upload_limit}
-          sources={@sources}
-          type="number"
-          label={gettext("Upload limit (KiB/s)")}
-        />
-      </div>
-      <p class="label whitespace-normal">{gettext("0 or blank for unlimited.")}</p>
     </fieldset>
     """
   end

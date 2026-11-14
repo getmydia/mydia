@@ -81,6 +81,12 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe({:invalid_api_port, value}),
     do: "MYDIA_TORRENT_API_PORT is #{inspect(value)}, not a port number. Using 3030."
 
+  def describe({:invalid_download_limit, value}),
+    do: rate_limit_description("MYDIA_TORRENT_DOWNLOAD_LIMIT", value)
+
+  def describe({:invalid_upload_limit, value}),
+    do: rate_limit_description("MYDIA_TORRENT_UPLOAD_LIMIT", value)
+
   def describe({:invalid_enabled, value}),
     do:
       "MYDIA_TORRENT_ENABLED is #{inspect(value)}, which is neither true nor false. Ignoring it and deciding automatically."
@@ -149,9 +155,6 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "The built-in torrent client failed to start (#{start_failure(reason)}). Mydia retries automatically; saving its settings again retries at once."
 
-  def describe({:limits_failed, message}),
-    do: "Could not apply the speed limits: #{message}"
-
   def describe(other), do: "Built-in torrent client error: #{inspect(other)}"
 
   # Peels the supervisor's wrapping off down to the child that failed.
@@ -159,4 +162,11 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do: "#{inspect(child)}: #{start_failure(reason)}"
 
   defp start_failure(reason), do: inspect(reason)
+
+  defp rate_limit_description(var, value) do
+    min = Mydia.Config.Schema.BuiltInTorrent.min_rate_limit_kib()
+    max = Mydia.Config.Schema.BuiltInTorrent.max_rate_limit_kib()
+
+    "#{var} is #{inspect(value)}, not a whole number of KiB/s from #{min} to #{max}. Ignoring it."
+  end
 end

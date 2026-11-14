@@ -445,10 +445,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
 
       assert has_element?(view, "#built-in-field-seed_ratio")
       assert has_element?(view, "#built-in-field-seed_time")
-      assert has_element?(view, "#built-in-field-download_limit")
-      assert has_element?(view, "#built-in-field-upload_limit")
       assert has_element?(view, "#built-in-seed_goal_action-remove")
-      assert has_element?(view, "#built-in-speed-limits", "unlimited")
+      assert has_element?(view, "#built-in-field-download_limit_kib")
+      assert has_element?(view, "#built-in-field-upload_limit_kib")
+      refute has_element?(view, "#built-in-speed-limits")
     end
 
     test "saving a seed target and action stores the rows", %{conn: conn} do
@@ -550,19 +550,37 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert LazyHTML.query(doc, "#built-in-field-listen_port[disabled]") |> Enum.count() == 0
     end
 
-    test "an env-sourced upload limit is disabled with its variable" do
+    test "an env-sourced seed goal action shows no choice" do
       html =
         render_component(
           &BuiltInFormComponents.built_in_settings_modal/1,
-          modal_assigns(%{sources: %{upload_limit: :env, seed_goal_action: :env}})
+          modal_assigns(%{sources: %{seed_goal_action: :env}})
         )
 
       doc = LazyHTML.from_fragment(html)
-      assert LazyHTML.query(doc, "#built-in-field-upload_limit[disabled]") |> Enum.count() == 1
-      assert LazyHTML.query(doc, "#built-in-field-download_limit[disabled]") |> Enum.count() == 0
-      assert LazyHTML.query(doc, "#built-in-source-upload_limit") |> LazyHTML.text() =~ "ENV"
-      assert html =~ "MYDIA_TORRENT_UPLOAD_LIMIT"
       assert LazyHTML.query(doc, "#built-in-seed_goal_action") |> Enum.count() == 0
+      assert html =~ "MYDIA_TORRENT_SEED_GOAL_ACTION"
+    end
+
+    test "the torrent section has rate limit fields, read-only when set from env" do
+      html =
+        render_component(
+          &BuiltInFormComponents.built_in_settings_modal/1,
+          modal_assigns(%{sources: %{upload_limit_kib: :env}})
+        )
+
+      doc = LazyHTML.from_fragment(html)
+
+      assert LazyHTML.query(doc, "#built-in-section-torrent #built-in-field-download_limit_kib")
+             |> Enum.count() == 1
+
+      assert LazyHTML.query(doc, "#built-in-field-download_limit_kib[disabled]") |> Enum.count() ==
+               0
+
+      assert LazyHTML.query(doc, "#built-in-field-upload_limit_kib[disabled]") |> Enum.count() ==
+               1
+
+      assert html =~ "MYDIA_TORRENT_UPLOAD_LIMIT"
     end
 
     test "lists environment-only VPN variable names, never values" do

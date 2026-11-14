@@ -181,7 +181,7 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       [pid] = instance_pids(ctx)
       %BuiltIn.Runtime{api_port: api_port, credentials: creds} = BuiltIn.runtime()
 
-      set(ctx, seed_ratio: 1.5, seed_time: 30, seed_goal_action: "remove", upload_limit: 99)
+      set(ctx, seed_ratio: 1.5, seed_time: 30, seed_goal_action: "remove")
       reload(manager)
 
       assert [^pid] = instance_pids(ctx)
@@ -190,41 +190,21 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert runtime.credentials == creds
       assert runtime.config.seed_ratio == 1.5
       assert runtime.config.seed_goal_action == :remove
-      assert runtime.config.upload_limit == 99
       assert %{action: :remove} = BuiltIn.seeding_target()
       assert %Config{seed_ratio: 1.5} = Manager.await_applied(manager)
     end
 
-    test "a limits-only reload pushes without restarting the instance", ctx do
-      # Limits finds the engine through the client list, which reads the database.
-      owner = Ecto.Adapters.SQL.Sandbox.start_owner!(Mydia.Repo, shared: true)
-      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(owner) end)
-
-      bypass = Bypass.open(port: 39_031)
-      test_pid = self()
-
-      Bypass.stub(bypass, "POST", "/torrents/limits", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        send(test_pid, {:limits_body, Jason.decode!(body)})
-        Plug.Conn.resp(conn, 200, "{}")
-      end)
-
+    # Speed limits reach rqbit as command-line flags, so only a restart applies them.
+    test "a new speed limit replaces the instance", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)
-      # The fake rqbit never serves the API, so declare the engine running.
-      Status.put(Status, :engine, :running)
-      assert_receive {:limits_body, %{"download_bps" => nil, "upload_bps" => nil}}
 
-      set(ctx, download_limit: 100)
+      set(ctx, upload_limit_kib: 64)
       reload(manager)
 
-      assert_receive {:limits_body, %{"download_bps" => 102_400, "upload_bps" => nil}}
-      assert [^pid] = instance_pids(ctx)
-
-      # A reload that leaves the limits alone sends nothing.
-      set(ctx, seed_ratio: 2.0)
-      reload(manager)
-      refute_receive {:limits_body, _}, 100
+      assert [new_pid] = instance_pids(ctx)
+      refute new_pid == pid
+      assert %Config{upload_limit_bps: 65_536} = Manager.await_applied(manager)
     end
 
     test "a VPN field edited while the VPN is off leaves the instance alone", ctx do

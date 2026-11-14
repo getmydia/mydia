@@ -35,7 +35,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
   @secret_fields BuiltInTorrent.secret_fields()
 
   @booleans [:vpn_enabled, :vpn_port_forwarding]
-  @integers [:listen_port, :api_port, :seed_time, :download_limit, :upload_limit]
+  @integers [:listen_port, :api_port, :download_limit_kib, :upload_limit_kib, :seed_time]
   @floats [:seed_ratio]
   @enabled_choices ["automatic", "true", "false"]
   @text_fields @fields -- (@booleans ++ @integers ++ @floats ++ [:enabled, :seed_goal_action])
@@ -97,10 +97,9 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     |> validate_inclusion(:seed_goal_action, BuiltInTorrent.seed_goal_actions())
     |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
     |> validate_number(:seed_time, greater_than_or_equal_to: 0)
-    |> validate_number(:download_limit, greater_than_or_equal_to: 0)
-    |> validate_number(:upload_limit, greater_than_or_equal_to: 0)
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
+    |> BuiltInTorrent.validate_rate_limits()
     |> validate_single_line(@text_fields -- locked)
     |> validate_lengths(@vpn_text_fields -- locked)
     |> validate_vpn(locked)

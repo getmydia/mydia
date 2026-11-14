@@ -245,19 +245,6 @@ defmodule Mydia.Downloads.Client.Rqbit do
     post_json(config, "/torrents/#{client_id}/update_only_files", %{only_files: indexes})
   end
 
-  @doc """
-  Applies session-wide speed limits (bytes per second, `nil` = unlimited).
-
-  rqbit treats an omitted key as unlimited, so both keys are always sent.
-  """
-  @spec set_session_limits(map(), %{
-          download_bps: pos_integer() | nil,
-          upload_bps: pos_integer() | nil
-        }) :: :ok | {:error, Error.t()}
-  def set_session_limits(config, %{download_bps: download, upload_bps: upload}) do
-    post_json(config, "/torrents/limits", %{download_bps: download, upload_bps: upload})
-  end
-
   ## Private Functions
 
   defp post_json(config, path, body) do

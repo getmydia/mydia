@@ -179,6 +179,26 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
         type="number"
         label={gettext("Listen port")}
       />
+      <div class="grid gap-4 sm:grid-cols-2">
+        <.text_field
+          form={@form}
+          field={:download_limit_kib}
+          sources={@sources}
+          type="number"
+          min="16"
+          placeholder={gettext("Unlimited")}
+          label={gettext("Download limit (KiB/s)")}
+        />
+        <.text_field
+          form={@form}
+          field={:upload_limit_kib}
+          sources={@sources}
+          type="number"
+          min="16"
+          placeholder={gettext("Unlimited")}
+          label={gettext("Upload limit (KiB/s)")}
+        />
+      </div>
 
       <.seeding_fields form={@form} sources={@sources} />
 

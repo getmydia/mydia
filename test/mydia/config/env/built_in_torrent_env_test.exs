@@ -3,21 +3,17 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnvTest do
 
   alias Mydia.Config.Env.BuiltInTorrentEnv
 
-  test "reads seeding and limit variables" do
+  test "reads seeding variables" do
     env = %{
       "MYDIA_TORRENT_SEED_RATIO" => "1.5",
       "MYDIA_TORRENT_SEED_TIME" => "4320",
-      "MYDIA_TORRENT_SEED_GOAL_ACTION" => "Remove",
-      "MYDIA_TORRENT_DOWNLOAD_LIMIT" => "0",
-      "MYDIA_TORRENT_UPLOAD_LIMIT" => "512"
+      "MYDIA_TORRENT_SEED_GOAL_ACTION" => "Remove"
     }
 
     assert %{
              seed_ratio: 1.5,
              seed_time: 4320,
-             seed_goal_action: "remove",
-             download_limit: 0,
-             upload_limit: 512
+             seed_goal_action: "remove"
            } = BuiltInTorrentEnv.load(&env[&1])
   end
 
@@ -30,14 +26,12 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnvTest do
     env = %{
       "MYDIA_TORRENT_SEED_RATIO" => "-1",
       "MYDIA_TORRENT_SEED_TIME" => "abc",
-      "MYDIA_TORRENT_SEED_GOAL_ACTION" => "delete",
-      "MYDIA_TORRENT_DOWNLOAD_LIMIT" => "-5",
-      "MYDIA_TORRENT_UPLOAD_LIMIT" => "1.5"
+      "MYDIA_TORRENT_SEED_GOAL_ACTION" => "delete"
     }
 
     loaded = BuiltInTorrentEnv.load(&env[&1])
 
-    for key <- [:seed_ratio, :seed_time, :seed_goal_action, :download_limit, :upload_limit] do
+    for key <- [:seed_ratio, :seed_time, :seed_goal_action] do
       refute Map.has_key?(loaded, key)
     end
   end

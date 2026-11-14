@@ -206,6 +206,32 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
     end
 
+    test "rate limits convert from KiB/s to bytes per second, nil meaning unlimited" do
+      config = load([download_limit_kib: 2048, upload_limit_kib: 16], [])
+      assert config.download_limit_bps == 2_097_152
+      assert config.upload_limit_bps == 16_384
+
+      unlimited = load([], [])
+      assert unlimited.download_limit_bps == nil
+      assert unlimited.upload_limit_bps == nil
+    end
+
+    test "a bad rate limit in the environment warns" do
+      config =
+        load([], [],
+          env: %{
+            "MYDIA_TORRENT_DOWNLOAD_LIMIT" => "fast",
+            "MYDIA_TORRENT_UPLOAD_LIMIT" => "15"
+          }
+        )
+
+      assert {:invalid_download_limit, "fast"} in config.warnings
+      assert {:invalid_upload_limit, "15"} in config.warnings
+
+      assert %Config{warnings: []} =
+               load([], [], env: %{"MYDIA_TORRENT_DOWNLOAD_LIMIT" => " 100 "})
+    end
+
     test "reserved gluetun variables are reported" do
       env = %{
         "MYDIA_VPN_SPLIT_TUNNEL_GID" => "5",
@@ -221,9 +247,8 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
   end
 
   describe "restart_key/1" do
-    test "seeding and limit fields do not change it, with the VPN off or on" do
+    test "seeding fields do not change it, with the VPN off or on" do
       new = [seed_ratio: 2.0, seed_time: 60, seed_goal_action: "remove"]
-      new = new ++ [download_limit: 100, upload_limit: 50]
 
       for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]] do
         base = load(vpn, [])
@@ -232,11 +257,17 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
         assert changed.seed_goal_action == :remove
         assert changed.seed_ratio == 2.0
         assert changed.seed_time == 60
-        assert changed.download_limit == 100
-        assert changed.upload_limit == 50
       end
 
       assert load([], []).seed_goal_action == :pause
+    end
+
+    # Speed limits reach rqbit as command-line flags, so a change must restart it.
+    test "speed limits change it, with the VPN off or on" do
+      for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]],
+          limit <- [[download_limit_kib: 100], [upload_limit_kib: 50]] do
+        refute Config.restart_key(load(vpn, [])) == Config.restart_key(load(vpn ++ limit, []))
+      end
     end
 
     test "ignores warnings and nothing else" do
@@ -247,6 +278,7 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       refute Map.has_key?(Config.restart_key(a), :warnings)
 
       refute Config.restart_key(load([listen_port: 1], [])) == Config.restart_key(b)
+      refute Config.restart_key(load([upload_limit_kib: 100], [])) == Config.restart_key(b)
 
       vpn_on = load([vpn_enabled: true, vpn_provider: "mullvad"], [])
 
