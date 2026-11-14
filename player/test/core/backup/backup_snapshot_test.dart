@@ -13,6 +13,9 @@ import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/files/files_account.dart';
+import 'package:player/core/sources/files/index/index_records.dart';
+import 'package:player/core/sources/files/media_names.dart';
+import 'package:crypto/crypto.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_identity.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -44,13 +47,27 @@ class _Device {
       loadSubtitleLanguages: () async => subtitleLanguages,
       saveSubtitleLanguages: (l) async => subtitleLanguages = l,
       onRemoteFilesChanges: (w, p) async => remoteChanges.add((w, p)),
+      rootsFor: (id) async => roots[id] ?? const [],
+      putRoots: (id, r) async {
+        // Roots land after the account record.
+        expect(putAccountCalls, contains(id));
+        roots[id] = [...?roots[id], ...r];
+        putRootsCalls[id] = r;
+      },
     );
   }
 
   final auth = MockAuthStorage();
   final sources = InMemorySourceStore();
   final sync = InMemoryPeerSyncStore();
-  final meta = BackupMetaStore(InMemoryBackupMetaStorage());
+  final metaStorage = InMemoryBackupMetaStorage();
+  late final meta = BackupMetaStore(metaStorage);
+  final roots = <String, List<LibraryRoot>>{};
+  final putRootsCalls = <String, List<LibraryRoot>>{};
+
+  /// Storage keys other than the per-install fingerprint key.
+  Iterable<String> get dataKeys =>
+      auth.keys.where((k) => k != kBackupFingerprintKeyStorageKey);
   late final settings = SettingsService(storage: auth);
   List<String>? subtitleLanguages;
   final remoteChanges = <(Set<String>, Set<String>)>[];
@@ -334,7 +351,7 @@ void main() {
       );
       await b.snapshot.apply([rec],
           mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
-      expect(b.auth.keys, isEmpty);
+      expect(b.dataKeys, isEmpty);
       expect(
           (await b.sources.load()).accounts.single.account.needsReauth, isTrue);
     });
@@ -541,7 +558,7 @@ void main() {
       expect(result.accountsAdded, 0);
       expect(result.settingsApplied, 0);
       expect((await b.sources.load()).accounts, isEmpty);
-      expect(b.auth.keys, isEmpty);
+      expect(b.dataKeys, isEmpty);
       expect(await b.settings.getDefaultQuality(), 'auto');
       final offer = result.newOffers.single;
       expect(offer.accountId, 'p1');
@@ -654,7 +671,7 @@ void main() {
           updatedAt: _now,
         ),
       ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
-      expect(b.auth.keys.toSet(),
+      expect(b.dataKeys.toSet(),
           {'source/p1/account_token', 'source/p1/owner/srv1/token'});
     });
 
@@ -675,7 +692,7 @@ void main() {
         ),
       ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
       expect(result.accountsAdded, 0);
-      expect(b.auth.keys, isEmpty);
+      expect(b.dataKeys, isEmpty);
       expect((await b.sources.load()).accounts, isEmpty);
     });
 
@@ -694,7 +711,7 @@ void main() {
             updatedAt: _now),
       ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
       expect(result.settingsApplied, 0);
-      expect(b.auth.keys, isEmpty);
+      expect(b.dataKeys, isEmpty);
     });
 
     test('writes the group secret only when none is stored', () async {
@@ -731,6 +748,135 @@ void main() {
       await b.snapshot.apply(records,
           mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
       expect(b.meta.pendingAccounts(), isEmpty);
+    });
+  });
+
+  group('share roots', () {
+    const smbId = 's0123456789abcdef';
+    const root = LibraryRoot(
+        id: 'r0123456789ab',
+        path: 'Movies',
+        kind: FilesLibraryKind.movies,
+        title: 'Movies');
+
+    Future<void> addSmb(_Device d) async {
+      await d.auth.write('source/$smbId/account_token', '{"password":"pw"}');
+      await d.sources.putAccount(SourceAccountRecord(
+        account: const ProviderAccount(
+          id: smbId,
+          kind: SourceKind.files,
+          displayName: 'nas',
+          storageNamespace: 'source/$smbId',
+          activeProfileId: kOwnerProfileId,
+        ),
+        profiles: const [
+          SourceProfile(
+              id: kOwnerProfileId, accountId: smbId, name: 'O', isOwner: true),
+        ],
+        servers: const [
+          SourceServer(
+              id: smbId,
+              accountId: smbId,
+              profileId: kOwnerProfileId,
+              name: 'nas'),
+        ],
+        addedAtMs: 5,
+      ));
+      d.roots[smbId] = [root];
+    }
+
+    test('collect includes an SMB account roots', () async {
+      final a = _Device();
+      await addSmb(a);
+      final rec = _account(await a.snapshot.collect(nowMs: _now), smbId);
+      expect(rec.recordJson['roots'], [root.toMap()]);
+    });
+
+    test('restore calls putRoots after the record, then collects stably',
+        () async {
+      final a = _Device();
+      await addSmb(a);
+      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+
+      final b = _Device();
+      final result = await b.snapshot.apply(records,
+          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 1);
+      expect(result.accountsAdded, 1);
+      expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
+      expect(await b.auth.read('source/$smbId/account_token'),
+          '{"password":"pw"}');
+      final again = await b.snapshot.collect(nowMs: _now + 9);
+      expect(_account(again, smbId).updatedAt, _now);
+    });
+
+    test('a root change re-stamps the account', () async {
+      final a = _Device();
+      await addSmb(a);
+      await a.snapshot.collect(nowMs: _now);
+      a.roots[smbId] = [
+        root,
+        const LibraryRoot(
+            id: 'rfedcba987654',
+            path: 'Shows',
+            kind: FilesLibraryKind.series,
+            title: 'Shows'),
+      ];
+      final again = await a.snapshot.collect(nowMs: _now + 1);
+      expect(_account(again, smbId).updatedAt, _now + 1);
+    });
+
+    test('the local folders account is still excluded', () async {
+      final a = _Device();
+      await a.sources.putAccount(_localFolders());
+      a.roots[kFilesLocalAccountId] = [root];
+      final records = await a.snapshot.collect(nowMs: _now);
+      expect(records.whereType<AccountBackupRecord>(), isEmpty);
+    });
+
+    test('a non-files account carries no roots', () async {
+      final a = _Device();
+      await _addPlex(a);
+      a.roots['p1'] = [root];
+      final rec = _account(await a.snapshot.collect(nowMs: _now), 'p1');
+      expect(rec.recordJson.containsKey('roots'), isFalse);
+    });
+  });
+
+  group('fingerprints', () {
+    test('are an HMAC under a per-install key, stable across calls', () async {
+      final a = _Device();
+      await a.settings.setDefaultQuality('1080p');
+      await a.snapshot.collect(nowMs: _now);
+      final key = await a.auth.read(kBackupFingerprintKeyStorageKey);
+      expect(key, isNotNull);
+      expect(base64Url.decode(base64.normalize(key!)), hasLength(32));
+
+      String stored() =>
+          (jsonDecode(a.metaStorage.get('stamp:setting:default_quality')!)
+              as Map)['fp'] as String;
+      final first = stored();
+      final bare = sha256
+          .convert(utf8.encode(jsonEncode({'value': '1080p'})))
+          .toString();
+      expect(first, isNot(bare));
+      expect(first, hasLength(64));
+
+      await a.snapshot.collect(nowMs: _now + 1);
+      expect(stored(), first);
+      expect(await a.auth.read(kBackupFingerprintKeyStorageKey), key);
+    });
+
+    test('two installs fingerprint the same value differently', () async {
+      final a = _Device();
+      final b = _Device();
+      for (final d in [a, b]) {
+        await d.settings.setDefaultQuality('1080p');
+        await d.snapshot.collect(nowMs: _now);
+      }
+      String fp(_Device d) =>
+          (jsonDecode(d.metaStorage.get('stamp:setting:default_quality')!)
+              as Map)['fp'] as String;
+      expect(fp(a), isNot(fp(b)));
     });
   });
 

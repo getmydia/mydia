@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -11,6 +12,7 @@ import '../p2p/peer_sync_records.dart';
 import '../p2p/peer_sync_store.dart';
 import '../settings/settings_service.dart';
 import '../sources/files/files_account.dart' show kFilesLocalAccountId;
+import '../sources/files/index/index_records.dart' show LibraryRoot;
 import '../sources/source.dart';
 import '../sources/store/source_records.dart';
 import '../sources/store/source_secrets.dart';
@@ -33,6 +35,16 @@ const kBackupSettingKeys = [
 /// Setting key of the subtitle search languages, a JSON list of language
 /// codes (`SubtitleLanguagePrefs`).
 const kBackupSubtitleLanguagesKey = 'subtitle_search_languages';
+
+/// `AuthStorage` key of the per-install HMAC key fingerprints are made with.
+/// Fingerprints cover secrets (share passwords among them) and sit in the
+/// plain Hive box `backup_meta`; a keyed HMAC keeps them from being checked
+/// against guesses offline.
+const kBackupFingerprintKeyStorageKey = 'backup/fingerprint_key';
+
+/// Extra top-level key of a share account's `recordJson`: its folder roots
+/// (`LibraryRoot.toMap`). Not part of `SourceAccountRecord`.
+const _rootsJsonKey = 'roots';
 
 const _settingPrefix = 'setting:';
 const _groupKey = 'group';
@@ -82,7 +94,12 @@ class BackupSnapshot {
     required Future<void> Function(List<String>) saveSubtitleLanguages,
     required Future<void> Function(Set<String> watchKeys, Set<String> pinKeys)
         onRemoteFilesChanges,
-  })  : _peerSync = peerSync,
+    required Future<List<LibraryRoot>> Function(String accountId) rootsFor,
+    required Future<void> Function(String accountId, List<LibraryRoot> roots)
+        putRoots,
+  })  : _rootsFor = rootsFor,
+        _putRoots = putRoots,
+        _peerSync = peerSync,
         _auth = authStorage,
         _meta = meta,
         _loadSources = loadSources,
@@ -101,6 +118,36 @@ class BackupSnapshot {
   final Future<List<String>?> Function() _loadSubtitleLanguages;
   final Future<void> Function(List<String>) _saveSubtitleLanguages;
   final Future<void> Function(Set<String>, Set<String>) _onRemoteFilesChanges;
+  final Future<List<LibraryRoot>> Function(String) _rootsFor;
+  final Future<void> Function(String, List<LibraryRoot>) _putRoots;
+
+  Future<Hmac>? _hmac;
+
+  /// HMAC-SHA256 hex of [value]'s canonical JSON (keys sorted at every
+  /// level) under the per-install key, created on first use.
+  Future<String> _fingerprint(Map<String, dynamic> value) async {
+    final Hmac hmac;
+    try {
+      hmac = await (_hmac ??= _loadHmac());
+    } catch (_) {
+      // Not cached: the next call tries storage again.
+      _hmac = null;
+      rethrow;
+    }
+    return hmac.convert(utf8.encode(jsonEncode(_sorted(value)))).toString();
+  }
+
+  Future<Hmac> _loadHmac() async {
+    var encoded = await _auth.read(kBackupFingerprintKeyStorageKey);
+    if (encoded == null) {
+      final random = Random.secure();
+      encoded = base64Url.encode([
+        for (var i = 0; i < 32; i++) random.nextInt(256)
+      ]).replaceAll('=', '');
+      await _auth.write(kBackupFingerprintKeyStorageKey, encoded);
+    }
+    return Hmac(sha256, base64Url.decode(base64.normalize(encoded)));
+  }
 
   // Collect
 
@@ -144,6 +191,9 @@ class BackupSnapshot {
       final id = record.account.id;
       present.add(id);
       final json = _sanitizedRecordJson(record);
+      if (record.account.kind == SourceKind.files) {
+        json[_rootsJsonKey] = _rootsJson(await _rootsFor(id));
+      }
       final secrets = record.account.kind == SourceKind.mydia
           ? const <String, String>{}
           : await _readSecrets(record);
@@ -153,7 +203,9 @@ class BackupSnapshot {
         recordJson: json,
         secrets: secrets,
         updatedAt: await _meta.stamp(
-            key, _fingerprint({'recordJson': json, 'secrets': secrets}), nowMs),
+            key,
+            await _fingerprint({'recordJson': json, 'secrets': secrets}),
+            nowMs),
       ));
     }
     for (final key in _meta.stampedKeys(AccountBackupRecord.keyPrefix)) {
@@ -171,6 +223,11 @@ class BackupSnapshot {
     }
     return out;
   }
+
+  /// Roots in id order, so the fingerprint does not depend on index order.
+  static List<Map<String, dynamic>> _rootsJson(List<LibraryRoot> roots) => [
+        for (final r in roots) r.toMap()
+      ]..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
 
   /// The local folders account names paths on this device only.
   static bool _backedUp(ProviderAccount a) =>
@@ -230,8 +287,8 @@ class BackupSnapshot {
         key: recordKey,
         settingKey: key,
         value: value,
-        updatedAt:
-            await _meta.stamp(recordKey, _fingerprint({'value': value}), nowMs),
+        updatedAt: await _meta.stamp(
+            recordKey, await _fingerprint({'value': value}), nowMs),
       ));
     }
     return out;
@@ -247,7 +304,7 @@ class BackupSnapshot {
         groupSecretB64: secret,
         nodeToSlot: nodes,
         updatedAt: await _meta.stamp(_groupKey,
-            _fingerprint({'secret': secret, 'nodeToSlot': nodes}), nowMs),
+            await _fingerprint({'secret': secret, 'nodeToSlot': nodes}), nowMs),
       ),
     ];
   }
@@ -366,14 +423,23 @@ class BackupSnapshot {
     }
   }
 
-  /// Writes [r]'s secrets, then its record with no locks. Returns false and
-  /// writes nothing when the record is malformed. A Mydia account gets no
-  /// secrets and is flagged to sign in again. Used by a restore and to
-  /// accept a pending offer.
+  /// Writes [r]'s secrets, then its record with no locks, then a share
+  /// account's folder roots. Returns false and writes nothing when the
+  /// record is malformed. A Mydia account gets no secrets and is flagged to
+  /// sign in again. Used by a restore and to accept a pending offer.
   Future<bool> addAccount(AccountBackupRecord r) async {
     final SourceAccountRecord parsed;
+    final List<LibraryRoot> roots;
     try {
-      parsed = SourceAccountRecord.fromJson(r.recordJson);
+      final json = Map<String, dynamic>.of(r.recordJson);
+      final rawRoots = json.remove(_rootsJsonKey) as List?;
+      parsed = SourceAccountRecord.fromJson(json);
+      roots = parsed.account.kind == SourceKind.files
+          ? [
+              for (final m in rawRoots ?? const [])
+                LibraryRoot.fromMap(m as Map),
+            ]
+          : const [];
     } catch (e) {
       debugPrint('[Backup] Unreadable account record ${r.accountId}: '
           '${e.runtimeType}');
@@ -401,11 +467,15 @@ class BackupSnapshot {
       await _auth.write('${account.storageNamespace}/$key', value);
     }
     await _putAccount(record);
+    if (roots.isNotEmpty) await _putRoots(account.id, roots);
     await _meta.removePending(account.id);
+    final stamped = _sanitizedRecordJson(record);
+    if (account.kind == SourceKind.files) {
+      stamped[_rootsJsonKey] = _rootsJson(roots);
+    }
     await _meta.setStamp(
         r.key,
-        _fingerprint(
-            {'recordJson': _sanitizedRecordJson(record), 'secrets': secrets}),
+        await _fingerprint({'recordJson': stamped, 'secrets': secrets}),
         r.updatedAt);
     return true;
   }
@@ -434,7 +504,8 @@ class BackupSnapshot {
       debugPrint('[Backup] Could not restore setting $key: ${e.runtimeType}');
       return false;
     }
-    await _meta.setStamp(r.key, _fingerprint({'value': value}), r.updatedAt);
+    await _meta.setStamp(
+        r.key, await _fingerprint({'value': value}), r.updatedAt);
     return true;
   }
 
@@ -453,10 +524,6 @@ class BackupSnapshot {
     }
   }
 }
-
-/// SHA-256 hex of [value]'s canonical JSON (keys sorted at every level).
-String _fingerprint(Map<String, dynamic> value) =>
-    sha256.convert(utf8.encode(jsonEncode(_sorted(value)))).toString();
 
 Object? _sorted(Object? v) {
   if (v is Map) {
