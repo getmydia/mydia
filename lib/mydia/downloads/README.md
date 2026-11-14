@@ -341,10 +341,12 @@ recorded episode and a path that exists on this host are imported early.
 A partial `MediaImport` job (`"partial" => true`) is unique on
 `[:download_id, :partial]`, so it never swallows the full import enqueued at
 completion, and a second partial job is dropped until the first finishes. A
-full import that starts while a recent partial job for the download is
-executing snoozes 30 seconds (a snooze does not use an attempt). Executing
-partial rows older than 10 minutes are treated as stale and ignored, so a job
-that died mid-run cannot hold the full import back. Partial mode never stamps
+full import that starts while a partial job for the download is executing
+snoozes 30 seconds (a snooze does not use an attempt). No Oban Lifeline runs,
+so an executing row is orphaned only by a crash or restart: a partial row
+attempted before this node booted (`Mydia.Application.booted_at/0`) is
+ignored, so a job that died mid-run cannot hold the full import back, while
+one copying a large file for half an hour still does. Partial mode never stamps
 `imported_at`, runs `detect_partial_pack` or removes the torrent; a file that
 fails stays out of `early_imported_paths` and the full import retries it.
 It records its paths through `MetadataKey.modify/2`, under the same row lock

@@ -10,8 +10,40 @@ defmodule Mydia.Application do
   # Check if running in CLI mode (quiet startup)
   defp cli_mode?, do: System.get_env("MYDIA_CLI_MODE") == "true"
 
+  @booted_at_key {__MODULE__, :booted_at}
+
+  @doc """
+  When this node started the application, as a UTC `DateTime`.
+
+  No Oban Lifeline runs here, so a job row left in `executing` is orphaned
+  only by a crash or restart, and every job executing now was attempted after
+  this time. Before `start/2` has run it falls back to the VM's start.
+  """
+  @spec booted_at() :: DateTime.t()
+  def booted_at do
+    case :persistent_term.get(@booted_at_key, nil) do
+      %DateTime{} = booted_at -> booted_at
+      nil -> vm_started_at()
+    end
+  end
+
+  @doc false
+  # Set once at start; tests override it.
+  @spec put_booted_at(DateTime.t()) :: :ok
+  def put_booted_at(%DateTime{} = booted_at),
+    do: :persistent_term.put(@booted_at_key, booted_at)
+
+  defp vm_started_at do
+    # Both monotonic readings are in native units.
+    uptime = System.monotonic_time() - :erlang.system_info(:start_time)
+    uptime = System.convert_time_unit(uptime, :native, :microsecond)
+    DateTime.add(DateTime.utc_now(), -uptime, :microsecond)
+  end
+
   @impl true
   def start(_type, _args) do
+    put_booted_at(DateTime.utc_now())
+
     # Suppress logger output in CLI mode
     if cli_mode?(), do: Logger.configure(level: :error)
 

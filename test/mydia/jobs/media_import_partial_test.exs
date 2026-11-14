@@ -443,14 +443,16 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
 
     # No Oban Lifeline runs here, so a partial job orphaned in `executing` by
     # a crash or restart would otherwise hold the full import off forever.
-    test "a partial job stuck in executing for over 10 minutes does not block the full import",
+    test "a partial job left executing from before this node booted does not block the full import",
          ctx do
+      booted_at = DateTime.add(DateTime.utc_now(), -60, :second)
+      put_booted_at(booted_at)
       download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
       stub_status(ctx, [ctx.ep1_path, ctx.ep2_path])
 
       insert_executing_job(
         %{"download_id" => download.id, "partial" => true},
-        DateTime.add(DateTime.utc_now(), -11 * 60, :second)
+        DateTime.add(booted_at, -1, :second)
       )
 
       refute Partial.executing?(download.id)
@@ -463,12 +465,15 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
                })
     end
 
-    test "a partial job that started a minute ago still holds the full import off", ctx do
+    # A large file can take far longer than a few minutes to copy.
+    test "a partial job started after boot holds the full import off however long it runs",
+         ctx do
+      put_booted_at(DateTime.add(DateTime.utc_now(), -2 * 60 * 60, :second))
       download = pack_download(ctx, %{status: "completed", completed_at: DateTime.utc_now()})
 
       insert_executing_job(
         %{"download_id" => download.id, "partial" => true},
-        DateTime.add(DateTime.utc_now(), -60, :second)
+        DateTime.add(DateTime.utc_now(), -30 * 60, :second)
       )
 
       assert {:snooze, 30} =
@@ -533,6 +538,13 @@ defmodule Mydia.Jobs.MediaImportPartialTest do
       assert {:ok, %Oban.Job{conflict?: true}} = Oban.insert(full)
       assert length(all_enqueued(worker: MediaImport)) == 2
     end
+  end
+
+  # The boot time is global; this module runs async: false.
+  defp put_booted_at(booted_at) do
+    previous = Mydia.Application.booted_at()
+    Mydia.Application.put_booted_at(booted_at)
+    on_exit(fn -> Mydia.Application.put_booted_at(previous) end)
   end
 
   # Oban stamps attempted_at when it starts a job, so an executing row has one.
