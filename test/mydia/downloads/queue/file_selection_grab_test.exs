@@ -186,7 +186,10 @@ defmodule Mydia.Downloads.Queue.FileSelectionGrabTest do
 
       on_exit(fn ->
         :persistent_term.erase({PlainAdapter, :pid})
-        if previous, do: Registry.register(:transmission, previous)
+
+        if previous,
+          do: Registry.register(:transmission, previous),
+          else: Registry.unregister(:transmission)
       end)
 
       download_client_config_fixture(%{name: "plain-client", type: "transmission"})
