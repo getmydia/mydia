@@ -24,8 +24,11 @@ defmodule Mydia.Downloads.BuiltIn.DiskSpace do
     e in ErlangError ->
       case e.original do
         :enoent -> {:error, :df_unavailable}
-        _ -> reraise e, __STACKTRACE__
+        other -> {:error, {:df_error, other}}
       end
+
+    ArgumentError ->
+      {:error, {:df_error, :invalid_path}}
   end
 
   @doc "Formats bytes as decimal gigabytes with one decimal, e.g. `\"41.2 GB\"`."

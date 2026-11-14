@@ -59,6 +59,16 @@ defmodule Mydia.Downloads.BuiltIn.DiskSpaceTest do
       assert {:error, :df_unavailable} == DiskSpace.free_bytes("/x", cmd)
     end
 
+    test "maps other ErlangErrors to df_error" do
+      cmd = fn _, _, _ -> raise ErlangError, original: :eacces end
+      assert {:error, {:df_error, :eacces}} == DiskSpace.free_bytes("/x", cmd)
+    end
+
+    test "maps ArgumentError to invalid_path" do
+      cmd = fn _, _, _ -> raise ArgumentError, "bad path" end
+      assert {:error, {:df_error, :invalid_path}} == DiskSpace.free_bytes("/x", cmd)
+    end
+
     test "works against the real df" do
       assert {:ok, n} = DiskSpace.free_bytes(System.tmp_dir!())
       assert n > 0
