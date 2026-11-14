@@ -35,6 +35,7 @@ defmodule MetadataRelay.BackupConcurrencyTest do
 
     {:ok, vault} =
       Backup.create_vault(%{
+        vault_id: Base.encode16(:crypto.strong_rand_bytes(16), case: :lower),
         signer: first,
         slot_id: slot_id(first),
         envelope: "e",

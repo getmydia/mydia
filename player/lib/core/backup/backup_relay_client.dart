@@ -50,6 +50,7 @@ class BackupRelayException implements Exception {
 
 class CreateVaultRequest {
   const CreateVaultRequest({
+    required this.vaultId,
     required this.signer,
     required this.boxPub,
     required this.slotId,
@@ -61,6 +62,9 @@ class CreateVaultRequest {
     required this.lookupHash,
   });
 
+  /// 32 lowercase hex chars, chosen by the client before sealing so every
+  /// envelope binds it. A taken id is a [BackupRelayError.conflict].
+  final String vaultId;
   final List<int> signer;
   final List<int> boxPub;
   final String slotId;
@@ -74,6 +78,7 @@ class CreateVaultRequest {
   final String lookupHash;
 
   Map<String, dynamic> toJson() => {
+        'vault_id': vaultId,
         'signer': backupB64(signer),
         'slot_id': slotId,
         'envelope': backupB64(envelope),
@@ -269,6 +274,8 @@ class BackupRelayClient {
   /// Clock correction learned from a skew 401.
   int get offsetMs => _offsetMs;
 
+  /// Returns the vault id (the one [request] carries). Throws
+  /// [BackupRelayError.conflict] when that id is taken.
   Future<String> createVault(CreateVaultRequest request) async {
     final r = await _send(
       'POST',

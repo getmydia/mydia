@@ -68,6 +68,7 @@ vault from a missing slot.
 | --- | --- | --- |
 | 401, 403, 404 | see above | |
 | 409 | `conflict` | Member change against a stale `expected_epoch` |
+| 409 | `vault_taken` | Vault creation with a `vault_id` already in use |
 | 409 | `stale_epoch` | Slot write with an `x-backup-epoch` that is not the vault epoch |
 | 412 | `precondition_failed` | `If-Match` does not equal the slot's current seq |
 | 413 | `too_large` | Body over its cap. A `Content-Length` over the cap is refused without reading the body |
@@ -82,7 +83,8 @@ vault from a missing slot.
 ### `POST /vaults`
 
 Unauthenticated, 10 per hour per client address. Creates a vault at epoch 1
-with two members: the first device and the recovery member. The recovery signer
+under `vault_id`, which the client chooses (16 random bytes as lowercase hex)
+so that the envelopes it seals in this request can bind the vault id. Two members: the first device and the recovery member. The recovery signer
 authenticates but never writes a slot.
 
 ```
@@ -90,6 +92,7 @@ POST /backup/v1/vaults
 Content-Type: application/vnd.mydia.backup
 
 {
+  "vault_id": "<32 lowercase hex, chosen by the client>",
   "signer": "<b64url 32 bytes>",
   "slot_id": "<16 hex>",
   "envelope": "<b64url>",
@@ -102,7 +105,9 @@ Content-Type: application/vnd.mydia.backup
 }
 ```
 
-`201 {"vault_id": "<32 hex>"}`. Errors: 422 `invalid`, 422 `lookup_taken`, 429.
+`201 {"vault_id": "<32 hex>"}`, echoing the id sent. Errors: 422 `invalid`
+(including a missing or malformed `vault_id`), 422 `lookup_taken`, 409
+`vault_taken` (the id is in use: pick a new one and seal again), 429.
 `slot_id` and `recovery_slot_id` must differ, as must the two signers.
 
 ### `GET /lookup/:handle`

@@ -33,56 +33,66 @@ defmodule MetadataRelay.Backup do
   @type vault_id :: String.t()
 
   @doc """
-  Creates a vault at epoch 1 with two members: the first device (`signer`,
+  Creates vault `vault_id` (32 lowercase hex, chosen by the client so the
+  envelopes it seals can bind it) at epoch 1 with two members: the first device (`signer`,
   `slot_id`, `envelope`, `box_pub`) and the recovery key (`recovery_signer`,
   `recovery_slot_id`, `recovery_envelope`, `recovery_box_pub`). Box keys are
   32-byte X25519 public keys. The recovery signer can
   authenticate but never writes a slot. `lookup_hash` is the lowercase hex
   SHA-256 of the lookup handle.
   """
-  @spec create_vault(map()) :: {:ok, vault_id()} | {:error, :lookup_taken | :invalid}
+  @spec create_vault(map()) ::
+          {:ok, vault_id()} | {:error, :vault_taken | :lookup_taken | :invalid}
   def create_vault(attrs) when is_map(attrs) do
     with {:ok, a} <- validate_create(attrs) do
-      vault_id = Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
+      vault_id = a.vault_id
       now = DateTime.utc_now()
 
-      Repo.transaction(fn ->
-        vault =
-          %Vault{
-            id: vault_id,
-            epoch: 1,
-            lookup_hash: a.lookup_hash,
-            recovery_signer: b64(a.recovery_signer),
-            recovery_envelope: b64(a.recovery_envelope),
-            last_write_at: now
-          }
-          |> Ecto.Changeset.change()
-          |> Ecto.Changeset.unique_constraint(:lookup_hash)
+      Repo.transaction(
+        fn ->
+          if Repo.exists?(from(v in Vault, where: v.id == ^vault_id)),
+            do: Repo.rollback(:vault_taken)
 
-        case Repo.insert(vault) do
-          {:ok, _} -> :ok
-          {:error, %Ecto.Changeset{errors: [lookup_hash: _]}} -> Repo.rollback(:lookup_taken)
-          {:error, _} -> Repo.rollback(:invalid)
-        end
+          vault =
+            %Vault{
+              id: vault_id,
+              epoch: 1,
+              lookup_hash: a.lookup_hash,
+              recovery_signer: b64(a.recovery_signer),
+              recovery_envelope: b64(a.recovery_envelope),
+              last_write_at: now
+            }
+            |> Ecto.Changeset.change()
+            |> Ecto.Changeset.unique_constraint(:lookup_hash)
+            |> Ecto.Changeset.unique_constraint(:id)
 
-        Repo.insert!(%Member{
-          vault_id: vault_id,
-          signer: b64(a.signer),
-          slot_id: a.slot_id,
-          envelope: b64(a.envelope),
-          box_pub: b64(a.box_pub)
-        })
+          case Repo.insert(vault) do
+            {:ok, _} -> :ok
+            {:error, %Ecto.Changeset{errors: [lookup_hash: _]}} -> Repo.rollback(:lookup_taken)
+            {:error, %Ecto.Changeset{errors: [id: _]}} -> Repo.rollback(:vault_taken)
+            {:error, _} -> Repo.rollback(:invalid)
+          end
 
-        Repo.insert!(%Member{
-          vault_id: vault_id,
-          signer: b64(a.recovery_signer),
-          slot_id: a.recovery_slot_id,
-          envelope: b64(a.recovery_envelope),
-          box_pub: b64(a.recovery_box_pub)
-        })
+          Repo.insert!(%Member{
+            vault_id: vault_id,
+            signer: b64(a.signer),
+            slot_id: a.slot_id,
+            envelope: b64(a.envelope),
+            box_pub: b64(a.box_pub)
+          })
 
-        vault_id
-      end)
+          Repo.insert!(%Member{
+            vault_id: vault_id,
+            signer: b64(a.recovery_signer),
+            slot_id: a.recovery_slot_id,
+            envelope: b64(a.recovery_envelope),
+            box_pub: b64(a.recovery_box_pub)
+          })
+
+          vault_id
+        end,
+        mode: :immediate
+      )
     end
   end
 
@@ -685,10 +695,11 @@ defmodule MetadataRelay.Backup do
   defp envelope_b64(e), do: if(is_binary(e) and e != "", do: b64(e), else: invalid())
 
   defp validate_create(attrs) do
-    a = Map.take(attrs, ~w(signer slot_id envelope recovery_signer recovery_slot_id
+    a = Map.take(attrs, ~w(vault_id signer slot_id envelope recovery_signer recovery_slot_id
                            recovery_envelope lookup_hash box_pub recovery_box_pub)a)
 
-    if map_size(a) == 9 and valid_signer?(a.box_pub) and valid_signer?(a.recovery_box_pub) and
+    if map_size(a) == 10 and valid_vault_id?(a.vault_id) and valid_signer?(a.box_pub) and
+         valid_signer?(a.recovery_box_pub) and
          valid_signer?(a.signer) and valid_signer?(a.recovery_signer) and
          a.signer != a.recovery_signer and valid_slot_id?(a.slot_id) and
          valid_slot_id?(a.recovery_slot_id) and a.slot_id != a.recovery_slot_id and

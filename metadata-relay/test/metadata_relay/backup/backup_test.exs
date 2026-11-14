@@ -28,6 +28,7 @@ defmodule MetadataRelay.BackupTest do
 
   defp box(s), do: :crypto.hash(:sha256, "box" <> s)
   defp handle, do: :crypto.strong_rand_bytes(32)
+  defp vault_id, do: Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
 
   defp create do
     s = signer()
@@ -35,6 +36,7 @@ defmodule MetadataRelay.BackupTest do
     h = handle()
 
     attrs = %{
+      vault_id: vault_id(),
       signer: s,
       slot_id: slot_id(s),
       envelope: "env-" <> Base.encode16(s),
@@ -50,11 +52,11 @@ defmodule MetadataRelay.BackupTest do
     %{vault: vault_id, signer: s, slot: slot_id(s), recovery: r, handle: h, attrs: attrs}
   end
 
-  test "create then lookup by handle" do
+  test "create keeps the client's vault id, then lookup by handle finds it" do
     v = create()
+    assert v.vault == v.attrs.vault_id
     assert {:ok, vault_id} = Backup.lookup(v.handle)
     assert vault_id == v.vault
-    assert vault_id =~ ~r/\A[0-9a-f]{32}\z/
     assert {:error, :not_found} = Backup.lookup(handle())
   end
 
@@ -65,13 +67,33 @@ defmodule MetadataRelay.BackupTest do
 
     attrs = %{
       v.attrs
-      | signer: s,
+      | vault_id: vault_id(),
+        signer: s,
         slot_id: slot_id(s),
         recovery_signer: r,
         recovery_slot_id: slot_id(r)
     }
 
     assert {:error, :lookup_taken} = Backup.create_vault(attrs)
+  end
+
+  test "a vault id already in use is vault_taken" do
+    v = create()
+    s = signer()
+    r = signer()
+
+    attrs = %{
+      v.attrs
+      | signer: s,
+        slot_id: slot_id(s),
+        recovery_signer: r,
+        recovery_slot_id: slot_id(r),
+        lookup_hash: Base.encode16(:crypto.hash(:sha256, handle()), case: :lower)
+    }
+
+    assert {:error, :vault_taken} = Backup.create_vault(attrs)
+    assert Backup.member?(v.vault, v.signer)
+    refute Backup.member?(v.vault, s)
   end
 
   test "create validates its inputs" do
@@ -82,13 +104,17 @@ defmodule MetadataRelay.BackupTest do
 
     ok = %{
       base
-      | signer: s,
+      | vault_id: vault_id(),
+        signer: s,
         slot_id: slot_id(s),
         recovery_signer: r,
         recovery_slot_id: slot_id(r)
     }
 
     assert {:error, :invalid} = Backup.create_vault(%{ok | signer: "short"})
+    assert {:error, :invalid} = Backup.create_vault(%{ok | vault_id: "ABC"})
+    assert {:error, :invalid} = Backup.create_vault(%{ok | vault_id: String.duplicate("A", 32)})
+    assert {:error, :invalid} = Backup.create_vault(Map.delete(ok, :vault_id))
     assert {:error, :invalid} = Backup.create_vault(%{ok | slot_id: "ZZ"})
     assert {:error, :invalid} = Backup.create_vault(%{ok | lookup_hash: "abc"})
     assert {:error, :invalid} = Backup.create_vault(%{ok | recovery_signer: s})

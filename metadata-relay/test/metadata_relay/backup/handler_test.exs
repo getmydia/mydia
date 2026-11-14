@@ -67,8 +67,9 @@ defmodule MetadataRelay.Backup.HandlerTest do
     %{pub: pub, priv: priv}
   end
 
-  defp create_body(first, recovery, handle) do
+  defp create_body(first, recovery, handle, vault_id \\ new_vault_id()) do
     Jason.encode!(%{
+      vault_id: vault_id,
       signer: b64(first.pub),
       slot_id: slot_id(first.pub),
       envelope: b64("env-1"),
@@ -80,6 +81,8 @@ defmodule MetadataRelay.Backup.HandlerTest do
       lookup_hash: Base.encode16(:crypto.hash(:sha256, handle), case: :lower)
     })
   end
+
+  defp new_vault_id, do: Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
 
   defp post_vaults(body, type \\ @json) do
     Plug.Test.conn(:post, "/backup/v1/vaults", body)
@@ -304,6 +307,24 @@ defmodule MetadataRelay.Backup.HandlerTest do
     taken = post_vaults(create_body(key(), key(), handle))
     assert taken.status == 422
     assert taken.resp_body == ~s({"error":"lookup_taken"})
+  end
+
+  test "POST /vaults keeps the client's vault id, 422 on a malformed one, 409 on a taken one" do
+    id = new_vault_id()
+    conn = post_vaults(create_body(key(), key(), :crypto.strong_rand_bytes(32), id))
+    assert conn.status == 201
+    assert Jason.decode!(conn.resp_body) == %{"vault_id" => id}
+
+    malformed = post_vaults(create_body(key(), key(), :crypto.strong_rand_bytes(32), "XYZ"))
+    assert malformed.status == 422
+    assert error(malformed) == "invalid"
+
+    missing = post_vaults(create_body(key(), key(), :crypto.strong_rand_bytes(32), nil))
+    assert missing.status == 422
+
+    taken = post_vaults(create_body(key(), key(), :crypto.strong_rand_bytes(32), id))
+    assert taken.status == 409
+    assert error(taken) == "vault_taken"
   end
 
   test "POST /vaults is limited to 10 per address per hour, lookup to 30" do

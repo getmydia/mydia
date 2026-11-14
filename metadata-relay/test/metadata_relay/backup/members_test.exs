@@ -36,6 +36,7 @@ defmodule MetadataRelay.Backup.MembersTest do
 
     {:ok, vault} =
       Backup.create_vault(%{
+        vault_id: Base.encode16(:crypto.strong_rand_bytes(16), case: :lower),
         signer: s,
         slot_id: slot_id(s),
         envelope: "env-1",

@@ -84,11 +84,12 @@ void main() {
     final c = client((r) async {
       seen.add(r);
       return http.Response(
-        '{"vault_id":"abc"}',
+        '{"vault_id":"0123456789abcdef0123456789abcdef"}',
         r.method == 'POST' ? 201 : 200,
       );
     });
     const req = CreateVaultRequest(
+      vaultId: '0123456789abcdef0123456789abcdef',
       signer: [1],
       boxPub: [2],
       slotId: 'aa',
@@ -99,14 +100,38 @@ void main() {
       recoveryEnvelope: [6],
       lookupHash: 'cc',
     );
-    expect(await c.createVault(req), 'abc');
-    expect(await c.lookup(Uint8List.fromList([255, 254])), 'abc');
+    expect(await c.createVault(req), '0123456789abcdef0123456789abcdef');
+    expect(await c.lookup(Uint8List.fromList([255, 254])),
+        '0123456789abcdef0123456789abcdef');
     expect(seen[0].headers['content-type'], backupJsonContentType);
+    expect((jsonDecode(seen[0].body) as Map)['vault_id'],
+        '0123456789abcdef0123456789abcdef');
     expect((jsonDecode(seen[0].body) as Map)['recovery_box_pub'], 'BQ');
     expect(seen[1].url.path, '/backup/v1/lookup/__4');
     for (final r in seen) {
       expect(r.headers.containsKey('authorization'), isFalse);
     }
+  });
+
+  test('createVault maps a taken vault id (409) to conflict', () async {
+    final c = client((r) async => _err(409, 'vault_taken'));
+    await expectLater(
+      c.createVault(const CreateVaultRequest(
+        vaultId: '0123456789abcdef0123456789abcdef',
+        signer: [1],
+        boxPub: [2],
+        slotId: 'aa',
+        envelope: [3],
+        recoverySigner: [4],
+        recoveryBoxPub: [5],
+        recoverySlotId: 'bb',
+        recoveryEnvelope: [6],
+        lookupHash: 'cc',
+      )),
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.kind, 'kind', BackupRelayError.conflict)
+          .having((e) => e.code, 'code', 'vault_taken')),
+    );
   });
 
   test('manifest parses, passes etag, returns null on 304', () async {

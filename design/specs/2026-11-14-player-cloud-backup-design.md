@@ -187,7 +187,7 @@ writes are guarded by sequence and epoch CAS.
 
 | Method and path | Who | Does |
 | --- | --- | --- |
-| `POST /vaults` | anyone, rate-limited per IP | Creates a vault: first member signer and envelope, recovery signer and envelope, `sha256(lookup handle)`, epoch 1. Returns the vault id (random 128 bits) |
+| `POST /vaults` | anyone, rate-limited per IP | Creates a vault under a vault id the client chose (random 128 bits, so the epoch-1 envelopes can bind it): first member signer and envelope, recovery signer and envelope, `sha256(lookup handle)`, epoch 1. A taken id answers 409 |
 | `GET /lookup/:handle` | holder of the handle | Returns the vault id |
 | `GET /vaults/:id` | member | Manifest: epoch, member signers with their slot ids, the requester's own envelope, each slot's `seq`, `epoch`, size and `updated_at`. ETag, `If-None-Match` answers 304 |
 | `PUT /vaults/:id/slots/:slot` | the slot's owner | Writes ciphertext. `If-Match: <seq>` (absent for the first write); 412 on mismatch |

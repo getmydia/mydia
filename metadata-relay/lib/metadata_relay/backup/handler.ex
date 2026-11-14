@@ -186,6 +186,7 @@ defmodule MetadataRelay.Backup.Handler do
 
   defp decode_create(body) do
     with {:ok, m} <- decode_json(body),
+         {:ok, vault_id} <- text(m, "vault_id"),
          {:ok, signer} <- bin(m, "signer"),
          {:ok, envelope} <- bin(m, "envelope"),
          {:ok, box_pub} <- bin(m, "box_pub"),
@@ -197,6 +198,7 @@ defmodule MetadataRelay.Backup.Handler do
          {:ok, lookup_hash} <- text(m, "lookup_hash") do
       {:ok,
        %{
+         vault_id: vault_id,
          signer: signer,
          slot_id: slot_id,
          envelope: envelope,
@@ -407,7 +409,7 @@ defmodule MetadataRelay.Backup.Handler do
   defp status(reason) when reason in [:not_member, :not_owner], do: 403
   defp status(reason) when reason in [:vault_not_found, :not_found], do: 404
   defp status(:precondition_failed), do: 412
-  defp status(reason) when reason in [:conflict, :stale_epoch], do: 409
+  defp status(reason) when reason in [:conflict, :stale_epoch, :vault_taken], do: 409
   defp status(:too_large), do: 413
   defp status(reason) when reason in [:invalid, :lookup_taken, :too_many_members], do: 422
   defp status(_storage), do: 503
