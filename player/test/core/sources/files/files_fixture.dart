@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Locale;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -69,10 +70,15 @@ class FilesFixture {
   static const rootPath = '/media/mix';
   static int _n = 0;
 
-  static Future<FilesFixture> create({bool seed = true}) async {
+  /// [inMemory] opens the box in memory, which a `testWidgets` case needs:
+  /// a disk write there never completes in the fake-async zone (see
+  /// `player/docs/workflow.md`).
+  static Future<FilesFixture> create(
+      {bool seed = true, bool inMemory = false}) async {
     final dir = await Directory.systemTemp.createTemp('files_fixture');
     Hive.init(dir.path);
-    final box = await Hive.openBox<Map<dynamic, dynamic>>('files_${_n++}');
+    final box = await Hive.openBox<Map<dynamic, dynamic>>('files_${_n++}',
+        bytes: inMemory ? Uint8List(0) : null);
     final index = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
     final f = FilesFixture._(dir, box, index, InMemoryPlaybackProgressStore());
     addTearDown(() async {

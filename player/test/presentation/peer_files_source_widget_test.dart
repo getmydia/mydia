@@ -25,8 +25,8 @@ void main() {
       (tester) async {
     late PeerHarness h;
     await tester.runAsync(() async {
-      h = PeerHarness(await FilesFixture.create(seed: false));
-      await h.seed();
+      h = PeerHarness(await FilesFixture.create(seed: false, inMemory: true));
+      await h.seed(inMemory: true);
     });
     h.client.list.value = [lentFlocal()];
     final peerId = peerFilesSource(lentFlocal()).id;

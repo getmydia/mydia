@@ -138,11 +138,15 @@ class PeerHarness {
   late PeerFilesStore store;
   late FileLibraryIndex host;
 
-  Future<void> seed() async {
-    store = PeerFilesStore(
-        await Hive.openBox<Map<dynamic, dynamic>>('peer_files_test'));
-    host = await hostIndex(
-        await Hive.openBox<Map<dynamic, dynamic>>('host_index_test'));
+  /// [inMemory] as in [FilesFixture.create].
+  Future<void> seed({bool inMemory = false}) async {
+    final bytes = inMemory ? Uint8List(0) : null;
+    store = PeerFilesStore(await Hive.openBox<Map<dynamic, dynamic>>(
+        'peer_files_test',
+        bytes: bytes));
+    host = await hostIndex(await Hive.openBox<Map<dynamic, dynamic>>(
+        'host_index_test',
+        bytes: bytes));
     await store.replace(peerLocalId, 1, pageIndex(host));
   }
 
