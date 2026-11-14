@@ -110,6 +110,10 @@ not paused again. With `remove`, an imported row is left to `ClientRemoval`
 (`BuiltIn.client_configs/0` sets `remove_completed` for a remove target, so the
 normal removal path takes it, still behind the guard), and an unimported one is
 paused until it is imported. Failures are logged and never fail the poll.
+Switching the action to `remove` applies to the whole backlog:
+`list_pending_removals/1` picks up every imported built-in row without
+`client_removed_at`, stamped or not, so the next poll removes (and deletes the
+data of) each one past the goal, including torrents the operator resumed by hand.
 
 **Manual removal is never guarded.** The Downloads page's cancel and clear
 confirms and the media page's cancel dialog add a hit-and-run warning while the

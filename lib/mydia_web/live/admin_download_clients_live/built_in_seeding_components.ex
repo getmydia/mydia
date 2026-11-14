@@ -49,6 +49,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
           label={gettext("When a target is reached")}
           options={[{"pause", gettext("Pause")}, {"remove", gettext("Remove from client")}]}
         />
+        <:hint>
+          {gettext(
+            "Remove also applies to imported torrents already in the client, including ones you resumed by hand: those past the target are removed with their files on the next check."
+          )}
+        </:hint>
       </.field_row>
     </fieldset>
 

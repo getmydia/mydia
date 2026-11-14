@@ -86,7 +86,10 @@ applies to new grabs; torrents already running finish where they started.
   Mydia leaves it running. A tracker's own minimum ratio or seed time has to
   be met as well, so the target never shortens it, and a torrent from a
   private tracker whose rules Mydia does not know is never paused or removed
-  automatically. Leave both fields blank for no target.
+  automatically. Switching to "Remove from client" applies to every imported
+  torrent still in the client, including ones you resumed by hand, so those
+  already past the target are removed, with their files, within a few
+  minutes. Leave both fields blank for no target.
 - **File selection.** When a torrent's file list is known, Mydia skips the
   files it would not import (samples, trailers, extras and anything that is not a video or subtitle)
   and keeps the videos and subtitles. If a torrent has no importable video,
