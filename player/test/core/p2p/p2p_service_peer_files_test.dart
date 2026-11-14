@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/p2p/peer_files_transport.dart';
 import 'package:player/native/lib.dart';
 
 /// Stands in for the native host. Only the peer files surface is exercised;
@@ -12,6 +13,34 @@ class _FakeHost implements P2PHost {
   final inbound = StreamController<FlutterInboundPeerFilesRequest>();
   final responses = <(String, FlutterPeerFilesResponse)>[];
   final sent = <(String, FlutterPeerFilesRequest)>[];
+  // Closed by each test through addTearDown.
+  // ignore: close_sinks
+  final grantRequests = StreamController<FlutterPeerFileGrantRequest>();
+  final grantResponses = <(String, FlutterPeerFileGrant?)>[];
+  final members = <List<String>>[];
+  final invalidated = <String>[];
+
+  @override
+  Stream<FlutterPeerFileGrantRequest> peerFileGrantStream() =>
+      grantRequests.stream;
+
+  @override
+  Future<void> respondPeerFileGrant({
+    required String requestId,
+    FlutterPeerFileGrant? grant,
+  }) async {
+    grantResponses.add((requestId, grant));
+  }
+
+  @override
+  Future<void> setPeerFilesMembers({required List<String> nodeIds}) async {
+    members.add(nodeIds);
+  }
+
+  @override
+  Future<void> invalidatePeerFileGrants({required String accountId}) async {
+    invalidated.add(accountId);
+  }
 
   @override
   Stream<FlutterInboundPeerFilesRequest> peerFilesStream() => inbound.stream;
@@ -89,5 +118,65 @@ void main() {
           'p', const FlutterPeerFilesRequest.manifest(authProof: 'x')),
       throwsException,
     );
+  });
+
+  test('grant requests surface and the grant calls reach the host', () async {
+    final host = _FakeHost();
+    addTearDown(host.inbound.close);
+    addTearDown(host.grantRequests.close);
+    final service = P2pService()..debugSetHost(host);
+    addTearDown(service.dispose);
+    final transport = P2pPeerFilesTransport(service);
+
+    final received = <FlutterPeerFileGrantRequest>[];
+    transport.onPeerFileGrantRequest.listen(received.add);
+    host.grantRequests.add(const FlutterPeerFileGrantRequest(
+        requestId: 'g1', accountId: 'acct', path: 'a/b.txt'));
+    await pumpEventQueue();
+    expect(received.single.requestId, 'g1');
+    expect(received.single.path, 'a/b.txt');
+
+    const grant = FlutterPeerFileGrant(url: 'file:///x', headers: []);
+    await transport.respondPeerFileGrant('g1', grant);
+    await transport.respondPeerFileGrant('g2', null);
+    await transport.setPeerFilesMembers(['n1', 'n2']);
+    await transport.invalidatePeerFileGrants('acct');
+    expect(host.grantResponses, [('g1', grant), ('g2', null)]);
+    expect(host.members.single, ['n1', 'n2']);
+    expect(host.invalidated.single, 'acct');
+  });
+
+  test('the adapter forwards peer files calls and requests', () async {
+    final host = _FakeHost();
+    addTearDown(host.inbound.close);
+    addTearDown(host.grantRequests.close);
+    final service = P2pService()..debugSetHost(host);
+    addTearDown(service.dispose);
+    final transport = P2pPeerFilesTransport(service);
+
+    final received = <FlutterInboundPeerFilesRequest>[];
+    transport.onPeerFilesRequest.listen(received.add);
+    host.inbound.add(const FlutterInboundPeerFilesRequest(
+      peer: 'peer1',
+      requestId: 'req1',
+      request: FlutterPeerFilesRequest.manifest(authProof: 'proof'),
+    ));
+    await pumpEventQueue();
+    expect(received.single.requestId, 'req1');
+
+    await transport.respondToPeerFiles(
+        'req1', const FlutterPeerFilesResponse.staleRevision());
+    expect(host.responses.single.$1, 'req1');
+    final res = await transport.sendPeerFiles(
+        'peer1', const FlutterPeerFilesRequest.manifest(authProof: 'p'));
+    expect(res, const FlutterPeerFilesResponse.notAuthorized());
+  });
+
+  test('without a host the grant calls are no-ops', () async {
+    final service = P2pService();
+    addTearDown(service.dispose);
+    await service.respondPeerFileGrant('g', null);
+    await service.setPeerFilesMembers(['n']);
+    await service.invalidatePeerFileGrants('acct');
   });
 }
