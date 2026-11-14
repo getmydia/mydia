@@ -30,6 +30,12 @@ config :metadata_relay, :player_logs,
   report_budget_bytes: 268_435_456,
   sweep_interval_ms: 3_600_000
 
+# End-to-end encrypted player backup. Slot ciphertexts are files under `dir`;
+# SQLite holds vaults, members and slot metadata. See MetadataRelay.Backup.
+config :metadata_relay, :backup,
+  dir: "./backup",
+  sweep_interval_ms: 3_600_000
+
 # How often MetadataRelay.UpdateCheck.Releases re-reads GitHub's release list.
 config :metadata_relay, :update_check, releases_refresh_ms: 3_600_000
 

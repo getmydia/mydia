@@ -83,6 +83,10 @@ if config_env() != :test do
     report_budget_bytes: player_logs_report_budget_bytes,
     sweep_interval_ms: 3_600_000
 
+  config :metadata_relay, :backup,
+    dir: normalize_env.("BACKUP_DIR") || Path.join(Path.dirname(db_path), "backup"),
+    sweep_interval_ms: 3_600_000
+
   # Phoenix endpoint port configuration (serves both API and dashboard)
   port = String.to_integer(System.get_env("PORT") || "4001")
 
