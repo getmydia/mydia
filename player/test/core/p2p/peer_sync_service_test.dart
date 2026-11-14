@@ -522,6 +522,23 @@ void main() {
         isFalse);
   });
 
+  test('auth_proof_for_self_is_the_proof_members_accept', () async {
+    expect(nodeB.service.authProofForSelf(), isNull);
+
+    final offerA = await nodeA.service.startPairingOffer();
+    await nodeB.service.pairWithCode(offerA.code);
+
+    final proof = nodeB.service.authProofForSelf();
+    expect(proof, isNotNull);
+    expect(nodeA.service.authorizes('node-b', proof!), isTrue);
+    expect(nodeB.service.member('node-a')?.nodeId, 'node-a');
+    expect(nodeB.service.member('NODE-A')?.nodeId, 'node-a');
+    expect(nodeB.service.member('node-x'), isNull);
+
+    await nodeB.service.leaveGroup();
+    expect(nodeB.service.authProofForSelf(), isNull);
+  });
+
   test('unreachable_peer_enters_60s_cooldown_until_cleared', () async {
     // Pair A <-> B
     final offer = await nodeA.service.startPairingOffer();

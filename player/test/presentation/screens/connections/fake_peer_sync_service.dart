@@ -64,6 +64,12 @@ class FakePeerSyncService implements PeerSyncService {
   List<String> activeMemberIds() => const [];
 
   @override
+  String? authProofForSelf() => null;
+
+  @override
+  PeerMember? member(String nodeId) => store.member(nodeId);
+
+  @override
   Future<void> start() async {}
 
   @override

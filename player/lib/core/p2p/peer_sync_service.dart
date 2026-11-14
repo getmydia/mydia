@@ -673,6 +673,19 @@ class PeerSyncService {
     ]..sort();
   }
 
+  /// The proof this device sends with a request to another member, the one
+  /// [authorizes] checks on the other end. Null while the device is in no
+  /// group or is leaving it.
+  String? authProofForSelf() {
+    final secret = _secret;
+    if (secret == null || _leaving) return null;
+    return secret.authProof(_transport.nodeId ?? '');
+  }
+
+  /// The roster entry for [nodeId], matched without regard to case: its
+  /// device name, and whether it was revoked.
+  PeerMember? member(String nodeId) => _knownMember(nodeId);
+
   /// The roster entry for [nodeId], matched without regard to case.
   PeerMember? _knownMember(String nodeId) {
     final direct = _store.member(nodeId);

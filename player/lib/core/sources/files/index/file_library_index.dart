@@ -118,6 +118,40 @@ class FileLibraryIndex {
     await _box.deleteAll([for (final k in list) _key(_file, k)]);
   }
 
+  /// Stores records of every kind in one box write, for filling an index
+  /// from a paired player's pages without a write per record.
+  Future<void> putRecords({
+    Iterable<LibraryRoot> roots = const [],
+    Iterable<IndexedFile> files = const [],
+    Iterable<GroupMatch> groups = const [],
+    Iterable<MatchedMovie> movies = const [],
+    Iterable<MatchedShow> shows = const [],
+  }) async {
+    // Stored first, so a write that fails leaves memory matching the box.
+    await _box.putAll({
+      for (final r in roots) _key(_root, r.id): r.toMap(),
+      for (final f in files) _key(_file, f.key): f.toMap(),
+      for (final g in groups) _key(_group, g.groupKey): g.toMap(),
+      for (final m in movies) _key(_movie, m.tmdbId): m.toMap(),
+      for (final s in shows) _key(_show, s.tmdbId): s.toMap(),
+    });
+    for (final r in roots) {
+      _roots[r.id] = r;
+    }
+    for (final f in files) {
+      _files[f.key] = f;
+    }
+    for (final g in groups) {
+      _groups[g.groupKey] = g;
+    }
+    for (final m in movies) {
+      _movies[m.tmdbId] = m;
+    }
+    for (final s in shows) {
+      _shows[s.tmdbId] = s;
+    }
+  }
+
   GroupMatch? group(String key) => _groups[key];
 
   /// Every group, movie and show the index holds, for handing the whole
