@@ -12,6 +12,10 @@ abstract class _RouteStackObserver extends NavigatorObserver
   final List<Route<dynamic>> _stack = [];
   bool _disposed = false;
 
+  /// Whether any [PopupRoute] (a dialog, a bottom sheet, a popover, a menu)
+  /// is in this navigator's stack.
+  bool get hasPopup => ShellPopupObserver.hasPopupRoute(_stack);
+
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _stack.add(route);
@@ -89,9 +93,6 @@ class PageCoverObserver extends _RouteStackObserver {
 /// misses them, yet the native tab bar is drawn above the whole Flutter view
 /// and would cover the sheet's controls. [hasPopup] is the missing signal.
 class ShellPopupObserver extends _RouteStackObserver {
-  /// Whether any [PopupRoute] is in the shell navigator's stack.
-  bool get hasPopup => hasPopupRoute(_stack);
-
   /// The decision, pure for tests.
   static bool hasPopupRoute(List<Route<dynamic>> stack) =>
       stack.any((route) => route is PopupRoute);

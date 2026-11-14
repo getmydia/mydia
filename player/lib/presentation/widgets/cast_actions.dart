@@ -6,6 +6,7 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_session_manager.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
+import '../../core/remote/ambient_targets.dart';
 import '../../core/player/platform_features.dart';
 import '../../core/sources/files/files_providers.dart';
 import '../../domain/models/cast_device.dart';
@@ -237,6 +238,51 @@ Future<void> _connectToDevice(
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;
     showToast(context, context.l10n.castConnectFailed('$e'),
+        kind: ToastKind.error);
+  }
+}
+
+/// Takes control of a paired player that is already playing: the one step
+/// between the "Playing on X" banner and its controls.
+///
+/// Called from the banner itself (the floating bar's row, the native
+/// accessory), so a single tap reaches the controls.
+///
+/// [AmbientTarget.device] carries no `nowPlayingTitle` metadata of its own
+/// (only `AmbientTargets.sweep`'s roster-wide probe sets that, on the
+/// discovery-shaped [CastDevice] `MydiaCastBackend` builds; an ambient one
+/// never goes through that path). Without it, `isPlayingMydiaTarget` would
+/// read this device as idle and connect media-less instead of adopting,
+/// showing "Ready to play on" over a receiver that is actually mid-film.
+/// [AmbientTarget.snapshot] already has the one field that check needs, so
+/// this rebuilds the device with it set rather than reaching back into
+/// discovery for it.
+Future<void> connectToAmbientTarget(
+  BuildContext context,
+  WidgetRef ref,
+  AmbientTarget ambientTarget,
+  String name,
+) async {
+  final device = CastDevice(
+    id: ambientTarget.device.id,
+    name: name,
+    protocol: CastProtocolKind.mydia,
+    metadata: {
+      'nodeId': ambientTarget.device.id,
+      'nowPlayingTitle': ambientTarget.snapshot.title,
+    },
+  );
+
+  try {
+    final manager = await ref.read(castSessionManagerProvider.future);
+    await manager.connectTo(device);
+  } on CastBackendException catch (e) {
+    if (!context.mounted) return;
+    showCastErrorToast(context, e, ref: ref, isMydiaTarget: true);
+  } catch (e) {
+    debugPrint('[cast_actions] Unexpected error opening $name: $e');
+    if (!context.mounted) return;
+    showToast(context, context.l10n.castBarOpenFailed(name, '$e'),
         kind: ToastKind.error);
   }
 }

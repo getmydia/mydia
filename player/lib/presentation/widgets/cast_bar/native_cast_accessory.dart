@@ -8,6 +8,7 @@ import '../../../core/platform/native_tab_bar_channel.dart';
 import '../../../core/router/navigator_keys.dart';
 import '../../../domain/models/cast_device.dart';
 import '../../../l10n/l10n.dart';
+import '../cast_actions.dart';
 import '../cast_controls_sheet.dart';
 import 'cast_bar_state.dart';
 
@@ -16,7 +17,8 @@ import 'cast_bar_state.dart';
 ///
 /// Play/pause appears only while playing and not syncing, which is when the
 /// Flutter bar's play/pause button is enabled. Every other action
-/// (reconnect, stop, dismiss) is in the sheet a tap opens.
+/// (reconnect, stop, dismiss) is in the sheet a tap opens. On the ambient
+/// banner that tap also takes control, so the sheet opens onto the transport.
 NativeAccessory? nativeAccessoryFor(
   AppLocalizations l10n,
   CastBarState? state,
@@ -101,6 +103,18 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
       case NativeAccessoryTapped():
         if (!mounted || _sheetOpen) return;
         _sheetOpen = true;
+        // The banner has nothing to control until a connect: start it now,
+        // so the sheet opens onto "Connecting" and then the transport rather
+        // than onto the same banner with a View button to tap again.
+        final state = ref.read(castBarStateProvider);
+        if (state is CastBarAmbient) {
+          unawaited(connectToAmbientTarget(
+            rootNavigatorKey.currentContext ?? context,
+            ref,
+            state.target,
+            state.deviceName,
+          ));
+        }
         // The router's root navigator, so the sheet covers the shell; the
         // fallback is for widget tests, which have no router.
         try {
