@@ -64,11 +64,13 @@ Each entry starts from the index, with no I/O:
 | `fileName`, `directory` | `IndexedFile.path` |
 | `sizeBytes` | `IndexedFile.size` |
 | `container` | the extension, lowercased |
-| `resolution`, `codec` | `IndexedFile.parsed` (the release name) |
-| `externalSubtitles` | `IndexedFile.sidecars` |
+| `externalSubtitles` | `IndexedFile.sidecars`, through `FilesCatalog.sidecarStreams` |
 
-The probe result, when there is one, overrides `container`, `resolution`
-and `codec`, and adds `durationSeconds`, `bitrate` and `streams`. `bitrate`
+`ParsedName` carries no resolution or codec, so those stay null until a
+probe answers. The probe result, when there is one, overrides `container`,
+and adds `resolution` (from the default video stream's height, `2160p`,
+`1080p`, `720p`, `480p`, else `<height>p`), `codec` (that stream's codec),
+`durationSeconds`, `bitrate` and `streams`. `bitrate`
 falls back to `size * 8 / duration` when mpv reports none.
 
 ### `MediaProbe`
@@ -143,9 +145,12 @@ file of that source whose cache entry is missing or stale. The queue:
   the same source scans again;
 - never runs for a paired device's library.
 
-`ScanState` gains `probing`, `probeDone` and `probeTotal`. The scan banner
-shows a quieter "Reading file details n/m" line while they are set; the
-library is fully usable throughout.
+Its progress is its own state (`filesProbeProgressProvider`, per source),
+not part of `ScanState`, so a scan's `running` flag is not held open by it.
+The scan banner shows a quieter "Reading file details n of m" line while it
+runs; the library is fully usable throughout. "While playback is active"
+means `playingSourceProvider.current != null`, checked before each probe
+and polled every 5 seconds while it holds.
 
 ### On demand
 
