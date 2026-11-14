@@ -7,7 +7,8 @@ defmodule Mydia.Jobs.MediaImport.Args do
     snooze_count: 0,
     use_hardlinks: true,
     move_source: false,
-    rename_files: false
+    rename_files: false,
+    partial: false
   ]
 
   @type t :: %__MODULE__{
@@ -17,7 +18,8 @@ defmodule Mydia.Jobs.MediaImport.Args do
           snooze_count: integer(),
           use_hardlinks: boolean(),
           move_source: boolean(),
-          rename_files: boolean()
+          rename_files: boolean(),
+          partial: boolean()
         }
 
   def parse(%{"download_id" => download_id} = raw) do
@@ -27,7 +29,8 @@ defmodule Mydia.Jobs.MediaImport.Args do
       save_path: parse_save_path(Map.get(raw, "save_path")),
       snooze_count: Map.get(raw, "snooze_count", 0),
       use_hardlinks: Map.get(raw, "use_hardlinks", true) != false,
-      rename_files: Map.get(raw, "rename_files", false) == true
+      rename_files: Map.get(raw, "rename_files", false) == true,
+      partial: Map.get(raw, "partial", false) == true
     }
   end
 

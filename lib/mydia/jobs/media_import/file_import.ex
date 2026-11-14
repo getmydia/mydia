@@ -123,9 +123,13 @@ defmodule Mydia.Jobs.MediaImport.FileImport do
     if not is_integer(expected_count) or expected_count <= 0 do
       nil
     else
+      # Episodes an early import placed while the download ran count too.
+      early_episode_ids = List.wrap(metadata["early_imported_episode_ids"])
+
       actual_count =
         imported_files
         |> Enum.map(& &1.episode_id)
+        |> Enum.concat(early_episode_ids)
         |> Enum.reject(&is_nil/1)
         |> Enum.uniq()
         |> length()
