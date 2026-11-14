@@ -552,7 +552,8 @@ writes the credentials, then the record; saving a URL already saved reuses
 its account, replaces the credentials and clears `needsReauth`. Signing a
 files account in again (`/sources/add/files?account=`) redirects to the
 folder picker for `flocal` and to the prefilled WebDAV form otherwise.
-`removeFilesAccount` removes the record and secrets, then clears the index.
+`removeFilesAccount` removes the record and secrets, clears the index and
+clears that account's media info cache.
 
 ### Media Info
 
@@ -569,7 +570,9 @@ the `FileLibraryIndex`. A failed read shows the index details with `streams`
 null and is not cached. On desktop a background queue probes new files after
 each scan; on mobile and TV, and for libraries a paired player lends, files
 are probed lazily when the panel asks (`probeFileKey`, which shares one probe
-between concurrent asks for a file).
+between concurrent asks for a file). The queue pauses while something plays
+(it checks every 5 seconds) and sweeps the index after each scan. The cache is
+cleared when an account is removed or a paired library is dropped.
 
 ### Peer files sources
 

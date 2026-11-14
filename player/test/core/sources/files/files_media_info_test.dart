@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:player/core/player/mpv_probe_mapping.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
@@ -37,6 +38,15 @@ const _probed = ProbeResult(
   ],
 );
 
+/// A cache whose writes fail.
+class _ThrowingCache extends FilesMediaInfoCache {
+  _ThrowingCache(super.box);
+
+  @override
+  Future<void> put(String accountId, IndexedFile file, ProbeResult result) =>
+      throw StateError('disk full');
+}
+
 class _Built {
   _Built(this.fixture, this.source, this.probe, this.cache);
   final FilesFixture fixture;
@@ -45,11 +55,14 @@ class _Built {
   final FilesMediaInfoCache cache;
 }
 
-Future<_Built> _build({ProbeResult? result}) async {
+Future<_Built> _build({ProbeResult? result, bool throwingCache = false}) async {
   final f = await FilesFixture.create();
   final relay = FakeFilesRelay();
   final probe = FakeMediaProbe(result);
-  final cache = await f.mediaInfoCache();
+  final cache = throwingCache
+      ? _ThrowingCache(
+          await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_throw'))
+      : await f.mediaInfoCache();
   final source = FilesMediaSource(
     source: filesLocalSource,
     backend: FakeBackend(const {}),
@@ -138,6 +151,15 @@ void main() {
     final again = await b.source.mediaInfo(ref);
     expect(b.probe.probed, hasLength(2));
     expect(again.firstWhere((m) => m.id == _hdKey).codec, 'hevc');
+  });
+
+  test('a cache write failure still returns the probe result', () async {
+    final b = await _build(result: _probed, throwingCache: true);
+    final files =
+        await b.source.mediaInfo(b.fixture.ref(ItemKind.movie, '101'));
+    final hd = files.firstWhere((m) => m.id == _hdKey);
+    expect(hd.streams, hasLength(2));
+    expect(hd.codec, 'hevc');
   });
 
   test('a failed probe gives streams null and is not cached', () async {

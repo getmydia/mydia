@@ -516,7 +516,7 @@ final peerFilesClientProvider = Provider<PeerFilesClient>((ref) {
     localAccountsReady: () => ref.read(sourceRecordsProvider.future),
     localAccountsChanged: localChanges.stream,
     peerConnected: p2p.onPeerConnected,
-    mediaInfoCache: ref.watch(filesMediaInfoCacheProvider),
+    mediaInfoCache: ref.read(filesMediaInfoCacheProvider),
   );
   ref.onDispose(() {
     client.dispose();

@@ -832,7 +832,12 @@ class FilesMediaSource extends MediaSource
     final file = indexedFile(fileKey);
     final cache = _mediaInfoCache;
     if (result != null && file != null && cache != null) {
-      await cache.put(source.account.id, file, result);
+      try {
+        await cache.put(source.account.id, file, result);
+      } catch (e) {
+        // A cache failure must not hide a probe that worked.
+        debugPrint('[FilesMediaSource] Media info not cached: $e');
+      }
     }
     return result;
   }
