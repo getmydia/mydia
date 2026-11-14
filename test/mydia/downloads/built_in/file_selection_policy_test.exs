@@ -173,6 +173,21 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     assert stamped(row) == %{"source" => "manual"}
   end
 
+  test "an import finished after the poll snapshot is never overridden" do
+    StubAdapter.put_files({:ok, video_and_junk()})
+    # The poll read the row before the import finished.
+    row = row()
+
+    row.id
+    |> Downloads.get_download!()
+    |> Ecto.Changeset.change(imported_at: DateTime.truncate(DateTime.utc_now(), :second))
+    |> Mydia.Repo.update!()
+
+    assert :done = FileSelectionPolicy.apply(row)
+    assert StubAdapter.selections() == []
+    refute stamped(row)
+  end
+
   test "a failure after a manual save keeps the manual stamp" do
     StubAdapter.fail!()
     row = row()

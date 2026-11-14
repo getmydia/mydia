@@ -98,11 +98,12 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicy do
   end
 
   # The row is the poll's snapshot: the operator may have saved a selection
-  # since, and that choice must win. A deleted row needs nothing either.
+  # since, and that choice must win; the import may have finished since, and
+  # an imported torrent is never touched. A deleted row needs nothing either.
   defp final_now?(id) do
     case Repo.get(Download, id) do
-      %Download{metadata: metadata} -> final?(Map.get(metadata || %{}, @key))
-      nil -> true
+      %Download{imported_at: nil, metadata: metadata} -> final?(Map.get(metadata || %{}, @key))
+      _imported_or_deleted -> true
     end
   end
 
