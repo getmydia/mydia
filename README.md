@@ -90,8 +90,9 @@ openssl rand -base64 48  # SECRET_KEY_BASE
 openssl rand -base64 48  # GUARDIAN_SECRET_KEY
 ```
 
-Create `docker-compose.yml`, pasting the two values in place of the
-placeholders:
+Create `docker-compose.yml`. Paste the two values in place of the secret
+placeholders, and replace `/path/to/media` with the folder that holds your
+movies and TV:
 
 ```yaml
 services:
