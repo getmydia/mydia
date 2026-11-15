@@ -512,8 +512,9 @@ The SQLite suite runs as four shards (`Test (SQLite N/4)`) and the PostgreSQL
 suite as three (`Test / PostgreSQL (N/3)`), each a separate runner using
 `mix test --partitions`. SQLite stays at `max_cases: 1` inside every runner,
 since the suite shares one writer per database; each shard has its own
-`mydia_test.db` (a fixed path, so this holds because shards are separate
-runners, not because of a partition suffix), and the constraint holds. `--partitions` sorts the test files and
+`mydia_testN.db` (`config/test.exs` suffixes `MIX_TEST_PARTITION`, which lets
+`scripts/test-partitioned.sh` run the same partitions side by side on one
+machine), and the constraint holds. `--partitions` sorts the test files and
 deals them out round-robin, not by duration, so adding a test file can shift
 later files to another shard. If one shard runs well over the others, raise the count
 in the matrix and in the `--partitions` argument rather than moving files by

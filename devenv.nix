@@ -423,11 +423,18 @@ in
       execIfModified = [ "mix.exs" ];
     };
 
+    # A fresh worktree starts from the main checkout's compiled deps and NIF
+    # targets instead of building them from scratch. No-op everywhere else.
+    "mydia:seed-build" = {
+      exec = "./scripts/seed-worktree-build.sh";
+      before = onEnterShell;
+    };
+
     "mydia:deps" = {
       exec = "mix deps.get";
       execIfModified = [ "mix.exs" "mix.lock" ];
       before = onEnterShell;
-      after = [ "mydia:hex" ];
+      after = [ "mydia:hex" "mydia:seed-build" ];
     };
 
     # Deliberately NOT a shell-entry task. Entering a devenv shell must never
