@@ -32,7 +32,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
     :api_port
   ]
   # Values a segmented control sends as a click rather than a form change.
-  @choice_keys ["enabled", "vpn_type"]
+  # Every non-secret field is accepted: a hand-kept list of the controls
+  # silently dropped `seed_goal_action` (issue #1422).
+  @choice_keys (Keyword.keys(BuiltInTorrent.env_vars()) -- @secret_fields)
+               |> Enum.map(&Atom.to_string/1)
 
   @doc "The events `handle_event/3` answers."
   def events, do: @events

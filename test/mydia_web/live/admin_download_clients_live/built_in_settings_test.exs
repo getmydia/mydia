@@ -481,6 +481,22 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
                Mydia.Settings.get_config_setting_by_key("built_in_torrent.seed_goal_action")
     end
 
+    # Issue #1422: the click handler dropped every key but `enabled` and
+    # `vpn_type`, so the Remove segment re-rendered as Pause.
+    test "clicking Remove on the seed goal action selects and saves it", %{conn: conn} do
+      view = open_settings(conn)
+
+      render_click(element(view, "#built-in-seed_goal_action-remove"))
+
+      assert has_element?(view, ~s(#built-in-seed_goal_action-remove[aria-pressed="true"]))
+      assert has_element?(view, ~s(input[name="built_in[seed_goal_action]"][value="remove"]))
+
+      render_submit(element(view, "#built-in-settings-form"), %{"built_in" => %{}})
+
+      assert %{value: "remove"} =
+               Mydia.Settings.get_config_setting_by_key("built_in_torrent.seed_goal_action")
+    end
+
     test "a negative seed ratio shows an error and saves nothing", %{conn: conn} do
       view = open_settings(conn)
 
