@@ -279,6 +279,13 @@ regenerate step then pins devenv.lock's nixpkgs back to flake.lock's revision.
 The devenv CLI in CI comes from that same nixpkgs (`--inputs-from .`), so it
 moves too.
 
+Every check a nix bump needs runs on its pull request, because the gate's
+merge starts no workflows on master (the trap that left the Cardigann guest
+unpublished). `devenv.lock` moving gates in the full `ci.yml` suite, `flake.lock`
+moving gates in the NixOS module tests, and the fixup touches nothing under
+`.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
+ignored: it moves by hand, with Flutter.
+
 A bump can fail for reasons no fixup can repair: `beam-version.nix` aborts when
 the new nixpkgs no longer ships the OTP major in `.otp-version`, and the NixOS
 module tests (which run on flake.lock PRs, above) catch a package that no

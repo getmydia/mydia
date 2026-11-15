@@ -253,6 +253,17 @@ updates:
   # Version updates only: the nix ecosystem has no security updates. Inputs
   # track commits rather than versions, so there is no semver and no major to
   # ignore. Without `groups` Dependabot opens one pull request per input.
+  #
+  # Nothing here is built or published only on a master push, which is what
+  # broke the Cardigann guest: the gate merges with GITHUB_TOKEN, so the merge
+  # starts no workflows, and every check this bump needs has to run on the
+  # pull request. It does: devenv.lock moving gates in the ci.yml suite, and
+  # flake.lock moving gates in the NixOS module tests. The fixup edits only
+  # devenv.lock, never a file under .github/workflows/, so the gate can merge it.
+  #
+  # nixpkgs-android is ignored. flake.nix pins it to a commit so the shipped
+  # Android SDK, NDK and Flutter move only on purpose, together with
+  # player/.fvmrc. Move it by hand.
   - package-ecosystem: nix
     directory: /
     schedule:
@@ -260,6 +271,8 @@ updates:
     groups:
       nix:
         patterns: ["*"]
+    ignore:
+      - dependency-name: nixpkgs-android
     cooldown:
       default-days: 7
 
