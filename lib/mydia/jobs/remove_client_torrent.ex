@@ -17,7 +17,11 @@ defmodule Mydia.Jobs.RemoveClientTorrent do
 
   require Logger
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Downloads.ClientRemoval
+  alias Mydia.Downloads.Download
+  alias Mydia.Repo
 
   @doc "The job for one torrent."
   @spec new_for(String.t(), String.t(), boolean()) :: Ecto.Changeset.t()
@@ -29,6 +33,21 @@ defmodule Mydia.Jobs.RemoveClientTorrent do
   def perform(%Oban.Job{
         args: %{"client" => client, "client_id" => client_id, "delete_files" => delete_files}
       }) do
+    if tracked?(client, client_id), do: :ok, else: remove(client, client_id, delete_files)
+  end
+
+  # The torrent was adopted for another item between the delete and this job:
+  # it belongs to that download now, and removing it (with its files) would
+  # take the new item's source away.
+  defp tracked?(client, client_id) do
+    Repo.exists?(
+      from(d in Download,
+        where: d.download_client == ^client and d.download_client_id == ^client_id
+      )
+    )
+  end
+
+  defp remove(client, client_id, delete_files) do
     case ClientRemoval.remove_torrent(client, client_id, delete_files) do
       :ok ->
         :ok

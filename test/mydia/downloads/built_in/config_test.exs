@@ -212,6 +212,17 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
     end
 
+    test "a bad priority in the environment warns" do
+      for bad <- ["first", "0", "-1", "2.5"] do
+        config = load([], [], env: %{"MYDIA_TORRENT_PRIORITY" => bad})
+        assert {:invalid_priority, bad} in config.warnings
+      end
+
+      for good <- ["1", " 7 ", " "] do
+        assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PRIORITY" => good})
+      end
+    end
+
     test "a bad disk reserve in the environment warns" do
       for bad <- ["lots", "-1", "2.5"] do
         config = load([], [], env: %{"MYDIA_TORRENT_MIN_FREE_SPACE_GB" => bad})

@@ -31,7 +31,8 @@ defmodule Mydia.Downloads.Queue.ClientPriorityTest do
     assert ClientSelection.select_client_by_priority(:torrent).name == external.name
   end
 
-  test "a lower built-in priority wins" do
+  test "a lower built-in priority wins", %{external: external} do
+    {:ok, _} = Mydia.Settings.update_download_client_config(external, %{priority: 2})
     run_built_in(1)
     assert BuiltIn.managed?(ClientSelection.select_client_by_priority(:torrent))
   end

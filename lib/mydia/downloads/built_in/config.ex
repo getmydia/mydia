@@ -153,6 +153,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
           reserve_warnings(env["MYDIA_TORRENT_MIN_FREE_SPACE_GB"]) ++
+          priority_warnings(env["MYDIA_TORRENT_PRIORITY"]) ++
           rate_limit_warnings(env["MYDIA_TORRENT_DOWNLOAD_LIMIT"], :invalid_download_limit) ++
           rate_limit_warnings(env["MYDIA_TORRENT_UPLOAD_LIMIT"], :invalid_upload_limit) ++
           reserved_warnings(env)
@@ -260,6 +261,19 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   # The env loader drops anything but a whole number >= 0.
+  defp priority_warnings(value) do
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {priority, ""} when priority >= 1 -> []
+          _ -> [{:invalid_priority, value}]
+        end
+    end
+  end
+
   defp reserve_warnings(value) do
     case blank_to_nil(value) do
       nil ->
