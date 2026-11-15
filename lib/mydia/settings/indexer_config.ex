@@ -176,7 +176,7 @@ defmodule Mydia.Settings.IndexerConfig do
 
   defp validate_base_url(changeset) do
     validate_change(changeset, :base_url, fn :base_url, url ->
-      case URI.parse(url) do
+      case parse_url(url) do
         %URI{host: nil} ->
           [base_url: "must include a valid host"]
 
@@ -193,5 +193,16 @@ defmodule Mydia.Settings.IndexerConfig do
           []
       end
     end)
+  end
+
+  # URI.parse/1 turns an out-of-range port such as 80192 into nil (since Elixir
+  # 1.20.5), which would let it pass the range check above. URI.new/1 keeps it.
+  # URI.parse/1 stays the fallback for URLs URI.new/1 refuses outright, so the
+  # host and scheme checks still see them.
+  defp parse_url(url) do
+    case URI.new(url) do
+      {:ok, uri} -> uri
+      {:error, _} -> URI.parse(url)
+    end
   end
 end
