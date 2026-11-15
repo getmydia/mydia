@@ -81,13 +81,44 @@ void main() {
     expect(reads, 2);
   });
 
-  test('close_closes_the_client_it_made', () async {
-    final backend = LazyS3Backend(
+  test('close_closes_the_client_it_made_and_not_a_given_one', () {
+    final made = _TrackedClient();
+    LazyS3Backend(
       connection: _connection,
       credentials: () async => _creds.toJson(),
+      newClient: () => made,
+    ).close();
+    expect(made.closed, isTrue);
+
+    final given = _TrackedClient();
+    LazyS3Backend(
+      connection: _connection,
+      credentials: () async => _creds.toJson(),
+      client: given,
+      newClient: () => fail('a given client is used as is'),
+    ).close();
+    expect(given.closed, isFalse);
+  });
+
+  test('a_damaged_connection_is_unreachable', () async {
+    final backend = LazyS3Backend(
+      connection: Uri.parse('https://s3.example.test/bkt'),
+      credentials: () async => _creds.toJson(),
+      client: MockClient((_) async => http.Response(_listing, 200)),
     );
-    backend.close();
-    // A closed client refuses before any socket is opened.
     await expectLater(backend.probe(), throwsA(isA<BackendUnreachable>()));
   });
+}
+
+/// Records [close]; answers nothing a test reaches.
+class _TrackedClient extends MockClient {
+  _TrackedClient() : super((_) async => http.Response('', 500));
+
+  bool closed = false;
+
+  @override
+  void close() {
+    closed = true;
+    super.close();
+  }
 }

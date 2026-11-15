@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_files_host.dart'
     show peerFilesHostProvider, peerFilesRevisionsProvider;
+import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/s3_backend.dart';
 import 'package:player/core/sources/files/backend/smb_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
@@ -23,6 +24,10 @@ import 'fake_backend.dart';
 import 'fake_media_names.dart';
 import 'fake_smb_native.dart';
 import 'files_fixture.dart';
+
+/// What the production [defaultFilesBackend] builds for a source.
+final _backendForTest = Provider.family<FileSystemBackend, Source>(
+    (ref, source) => defaultFilesBackend(ref, source));
 
 Future<void> _settle() async {
   for (var i = 0; i < 50; i++) {
@@ -352,15 +357,40 @@ void main() {
       expect(record.servers.single.connections.single.local, isTrue);
     });
 
+    test('a typed prefix is canonicalized before anything is stored', () async {
+      final c = await container();
+      final id = await c.read(filesAccountsProvider).addS3Account(
+          location: S3Location(
+            endpoint: Uri.parse('https://s3.example.test'),
+            bucket: 'bkt',
+            prefix: '/media',
+            region: 'r',
+            style: S3Style.path,
+          ),
+          credentials: creds);
+      final record = (await store.load()).accounts.single;
+      final canonical = Uri.parse(
+          's3+https://s3.example.test/bkt/media/?region=r&style=path');
+      expect(record.servers.single.connections.single.uri, canonical);
+      expect(record.account.displayName, 'bkt/media');
+      expect(record.account.id, s3AccountId(canonical));
+      expect(id.value.split(':').first, s3AccountId(canonical));
+    });
+
     test('a saved bucket gets a LazyS3Backend and roots', () async {
-      final c = await container(smb: FakeSmbNative());
+      final c = await container();
       final accounts = c.read(filesAccountsProvider);
       final id =
           await accounts.addS3Account(location: location, credentials: creds);
       await accounts.addS3Root(id,
           path: '/Films/', kind: FilesLibraryKind.movies);
-      final source = c.read(mediaSourceProvider(id))! as FilesMediaSource;
-      expect(source.backend, isA<LazyS3Backend>());
+      // The production choice, never called: the source reads a fake, so
+      // nothing reaches the network.
+      final source =
+          (c.read(mediaSourceProvider(id))! as FilesMediaSource).source;
+      final built = c.read(_backendForTest(source));
+      expect(built, isA<LazyS3Backend>());
+      (built as LazyS3Backend).close();
       final accountId = id.value.split(':').first;
       expect(
           c.read(filesIndexProvider(accountId)).roots().single.path, '/Films');

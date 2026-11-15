@@ -313,8 +313,7 @@ FilesMediaSource buildFilesSource(
     // ([closeRemovedFilesAccount]), or after 12 hours unused.
     onDispose: () {
       unawaited(events.cancel());
-      if (backend is LazyWebDavBackend) backend.close();
-      if (backend is LazyS3Backend) backend.close();
+      if (backend is LazyFilesBackend) backend.close();
     },
   );
   unawaited(media.probe());
@@ -391,34 +390,40 @@ class LocalFoldersBackend implements FileSystemBackend {
   }
 }
 
-/// A [WebDavBackend] built on first use from the stored credentials. A
-/// missing or unreadable credential is a refused one, and a refused call
-/// drops the built backend, so the next call reads the credentials again
-/// (after the viewer signs in anew).
+/// A network backend built on first use from the account's stored
+/// credentials. A missing or unreadable credential is a refused one, and a
+/// refused call drops the built backend, so the next call reads the
+/// credentials again (after the viewer signs in anew). A build that fails
+/// any other way is not kept either.
 ///
 /// Every backend it builds shares one HTTP client, so dropping one leaks
 /// nothing and a request still in flight on it finishes. [close] closes that
 /// client unless it was given one, which its owner closes.
-class LazyWebDavBackend implements FileSystemBackend {
-  LazyWebDavBackend({
-    required this.base,
+abstract class LazyFilesBackend<B extends FileSystemBackend>
+    implements FileSystemBackend {
+  LazyFilesBackend({
     required this.credentials,
     http.Client? client,
-  })  : _owned = client == null ? http.Client() : null,
+    @visibleForTesting http.Client Function()? newClient,
+  })  : _owned = client == null ? (newClient ?? http.Client.new)() : null,
         _given = client;
 
-  final Uri base;
   final Future<String?> Function() credentials;
   final http.Client? _owned;
   final http.Client? _given;
-  Future<WebDavBackend>? _backend;
+  Future<B>? _backend;
 
-  http.Client get _client => (_given ?? _owned)!;
+  /// Names the credentials in a log line, as `WebDAV` or `S3`.
+  String get credentialsLabel;
+
+  /// The backend for the stored token [stored], over [client]. Throws
+  /// [FormatException] when [stored] is not this kind's credentials.
+  B build(String stored, http.Client client);
 
   /// Closes the client this backend made. Called when its source goes.
   void close() => _owned?.close();
 
-  Future<T> _call<T>(Future<T> Function(WebDavBackend b) run) async {
+  Future<T> _call<T>(Future<T> Function(B b) run) async {
     final b = await _resolve();
     try {
       return await run(b);
@@ -428,7 +433,7 @@ class LazyWebDavBackend implements FileSystemBackend {
     }
   }
 
-  Future<WebDavBackend> _resolve() => _backend ??= _build().then(
+  Future<B> _resolve() => _backend ??= _build().then(
         (b) => b,
         onError: (Object e, StackTrace st) {
           _backend = null;
@@ -436,18 +441,18 @@ class LazyWebDavBackend implements FileSystemBackend {
         },
       );
 
-  Future<WebDavBackend> _build() async {
+  Future<B> _build() async {
     final stored = await credentials();
     if (stored == null) throw const BackendUnauthorized('no credentials');
-    final WebDavCredentials c;
     try {
-      c = WebDavCredentials.fromJson(stored);
+      return build(stored, (_given ?? _owned)!);
     } on FormatException catch (e) {
-      debugPrint('[FilesSource] Unreadable WebDAV credentials: $e');
+      // Only the message: the exception's source is the stored token,
+      // which holds the password or secret.
+      debugPrint(
+          '[FilesSource] Unreadable $credentialsLabel credentials: ${e.message}');
       throw const BackendUnauthorized('unreadable credentials');
     }
-    return WebDavBackend(
-        base: base, user: c.user, password: c.password, client: _client);
   }
 
   @override
@@ -463,85 +468,57 @@ class LazyWebDavBackend implements FileSystemBackend {
   Future<void> probe() => _call((b) => b.probe());
 }
 
-/// An [S3Backend] built on first use from the stored credentials, as
-/// [LazyWebDavBackend] builds its backend: a missing or unreadable
-/// credential is a refused one, and a refused call drops the built backend,
-/// so the next call reads the credentials again.
-///
-/// Every backend it builds shares one HTTP client. [close] closes that
-/// client unless it was given one, which its owner closes.
-class LazyS3Backend implements FileSystemBackend {
+/// A [WebDavBackend] built on first use (see [LazyFilesBackend]).
+class LazyWebDavBackend extends LazyFilesBackend<WebDavBackend> {
+  LazyWebDavBackend({
+    required this.base,
+    required super.credentials,
+    super.client,
+    @visibleForTesting super.newClient,
+  });
+
+  final Uri base;
+
+  @override
+  String get credentialsLabel => 'WebDAV';
+
+  @override
+  WebDavBackend build(String stored, http.Client client) {
+    final c = WebDavCredentials.fromJson(stored);
+    return WebDavBackend(
+        base: base, user: c.user, password: c.password, client: client);
+  }
+}
+
+/// An [S3Backend] built on first use (see [LazyFilesBackend]).
+class LazyS3Backend extends LazyFilesBackend<S3Backend> {
   LazyS3Backend({
     required this.connection,
-    required this.credentials,
-    http.Client? client,
-  })  : _owned = client == null ? http.Client() : null,
-        _given = client;
+    required super.credentials,
+    super.client,
+    @visibleForTesting super.newClient,
+  });
 
   /// The account's S3 connection URI; it carries no key.
   final Uri connection;
-  final Future<String?> Function() credentials;
-  final http.Client? _owned;
-  final http.Client? _given;
-  Future<S3Backend>? _backend;
 
-  http.Client get _client => (_given ?? _owned)!;
+  @override
+  String get credentialsLabel => 'S3';
 
-  /// Closes the client this backend made. Called when its source goes.
-  void close() => _owned?.close();
-
-  Future<T> _call<T>(Future<T> Function(S3Backend b) run) async {
-    final b = await _resolve();
-    try {
-      return await run(b);
-    } on BackendUnauthorized {
-      _backend = null;
-      rethrow;
-    }
-  }
-
-  Future<S3Backend> _resolve() => _backend ??= _build().then(
-        (b) => b,
-        onError: (Object e, StackTrace st) {
-          _backend = null;
-          Error.throwWithStackTrace(e, st);
-        },
-      );
-
-  Future<S3Backend> _build() async {
+  @override
+  S3Backend build(String stored, http.Client client) {
     final location = S3Location.fromConnectionUri(connection);
     // Only a damaged record: signing in again keeps the stored connection,
     // so this is not worded as a refusal.
     if (location == null) {
       throw const BackendUnreachable('not an S3 connection');
     }
-    final stored = await credentials();
-    if (stored == null) throw const BackendUnauthorized('no credentials');
-    final S3Credentials c;
-    try {
-      c = S3Credentials.fromJson(stored);
-    } on FormatException catch (e) {
-      // The exception's text quotes the stored JSON, which holds the secret.
-      debugPrint('[FilesSource] Unreadable S3 credentials: ${e.message}');
-      throw const BackendUnauthorized('unreadable credentials');
-    }
+    final c = S3Credentials.fromJson(stored);
     return S3Backend(
       location: location,
       accessKeyId: c.accessKeyId,
       secretAccessKey: c.secretAccessKey,
-      client: _client,
+      client: client,
     );
   }
-
-  @override
-  Future<List<FileEntry>> list(String dir) => _call((b) => b.list(dir));
-
-  @override
-  Future<FileEntry?> stat(String path) => _call((b) => b.stat(path));
-
-  @override
-  Future<PlayableFile> playable(String path) => _call((b) => b.playable(path));
-
-  @override
-  Future<void> probe() => _call((b) => b.probe());
 }

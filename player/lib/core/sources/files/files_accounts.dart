@@ -234,16 +234,22 @@ class FilesAccounts {
   /// before the record, which holds neither key. A location already saved
   /// reuses its account: the credentials are replaced and `needsReauth`
   /// clears.
+  ///
+  /// [location] may be as typed (a prefix `media` or `/media/`): it is
+  /// canonicalized first, so the id, connection and name agree with what
+  /// [normalizeS3Url] makes of the stored connection.
   Future<SourceId> addS3Account({
     required S3Location location,
     required S3Credentials credentials,
   }) async {
-    final connection = location.toConnectionUri();
+    // Built by toConnectionUri, so it always parses.
+    final loc = S3Location.fromConnectionUri(location.toConnectionUri())!;
+    final connection = loc.toConnectionUri();
     final id = s3AccountId(connection);
-    final prefix = location.prefix;
+    final prefix = loc.prefix;
     final name = prefix.isEmpty
-        ? location.bucket
-        : '${location.bucket}/${prefix.substring(0, prefix.length - 1)}';
+        ? loc.bucket
+        : '${loc.bucket}/${prefix.substring(0, prefix.length - 1)}';
     final existing = await _stored(id);
     final account = existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
@@ -269,7 +275,7 @@ class FilesAccounts {
               connections: [
                 ServerConnection(
                   uri: connection,
-                  local: isPrivateHost(location.endpoint.host),
+                  local: isPrivateHost(loc.endpoint.host),
                 ),
               ],
             ),
