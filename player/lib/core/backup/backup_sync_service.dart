@@ -124,6 +124,7 @@ class BackupSyncService {
 
   final _members = ValueNotifier<List<BackupMemberInfo>>(const []);
   final _offers = ValueNotifier<List<PendingAccountOffer>>(const []);
+  final _removals = ValueNotifier<List<PendingRemoval>>(const []);
 
   /// Every device in the vault, this one first, as of the last manifest
   /// read. Empty while off.
@@ -132,6 +133,10 @@ class BackupSyncService {
   /// Accounts other devices backed up that this one has not added or
   /// dismissed.
   ValueListenable<List<PendingAccountOffer>> get pendingOffers => _offers;
+
+  /// Devices revoked from the p2p group that are still in the vault: each
+  /// can read the backup until [removeMember] takes it out.
+  ValueListenable<List<PendingRemoval>> get pendingRemovals => _removals;
 
   BackupVaultState? _state;
   BackupIdentity? _identity;
@@ -199,6 +204,7 @@ class BackupSyncService {
     _vaultChoice.dispose();
     _members.dispose();
     _offers.dispose();
+    _removals.dispose();
   }
 
   // Triggers
@@ -334,7 +340,7 @@ class BackupSyncService {
           await _rememberName(e.key, e.value.deviceName);
         }
         _refreshOffers();
-        _publishMembers(preview.manifest, identity.slotId);
+        await _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
         await _attempt(() => _upload(force: true));
         return result;
@@ -369,32 +375,47 @@ class BackupSyncService {
 
   // Member changes
 
-  /// Removes the member owning [slotId] and rotates to a fresh vault key
-  /// sealed to every remaining member and the recovery member.
-  Future<void> removeMember(String slotId) => _userOp(() async {
-        final rotation = await _rotate(removeSlotId: slotId);
+  /// Removes the member owning [slotId] and, in the same rotation, replaces
+  /// the recovery key: a fresh vault key is sealed to every remaining
+  /// member and the new recovery member. The removed device may hold the
+  /// old recovery key (it created the vault, restored with it or generated
+  /// it), so keeping that key would let it read on. Returns the new key,
+  /// which the viewer must save.
+  Future<RecoveryKey> removeMember(String slotId) => _userOp(() async {
+        final (_, identity) = _require();
+        if (slotId == identity.slotId) {
+          throw StateError('use disable() to remove this device');
+        }
+        final key = await _replaceRecoveryKey(removeSlotId: slotId);
         _setMembers([
           for (final m in _members.value)
             if (m.slotId != slotId) m,
         ]);
-        if (rotation != null) await _attempt(() => _upload(force: true));
+        await _forgetRemovalsOf(slotId);
+        return key;
       });
 
   /// Replaces the recovery key (and rotates). The old key stops working.
-  Future<RecoveryKey> regenerateRecoveryKey() => _userOp(() async {
-        final key = RecoveryKey.generate();
-        final (state, _) = _require();
-        // Kept before the relay call: if the relay takes the new key and
-        // the reply is lost, the next poll promotes it (see
-        // _reconcileRecovery) instead of leaving the dead old key shown.
-        await _save(state.copyWith(
-          pendingRecoveryKeyText: () => key.display,
-          manifestEtag: () => null,
-        ));
-        await _rotate(newRecovery: await RecoveryMember.of(key));
-        await _attempt(() => _upload(force: true));
-        return key;
-      });
+  Future<RecoveryKey> regenerateRecoveryKey() =>
+      _userOp(() => _replaceRecoveryKey());
+
+  /// A rotation to a new recovery key, removing [removeSlotId]'s member in
+  /// it when given, then this device's upload under the new epoch.
+  Future<RecoveryKey> _replaceRecoveryKey({String? removeSlotId}) async {
+    final key = RecoveryKey.generate();
+    final (state, _) = _require();
+    // Kept before the relay call: if the relay takes the new key and the
+    // reply is lost, the next poll promotes it (see _reconcileRecovery)
+    // instead of leaving the dead old key shown.
+    await _save(state.copyWith(
+      pendingRecoveryKeyText: () => key.display,
+      manifestEtag: () => null,
+    ));
+    await _rotate(
+        removeSlotId: removeSlotId, newRecovery: await RecoveryMember.of(key));
+    await _attempt(() => _upload(force: true));
+    return key;
+  }
 
   /// Deletes the vault for every member, then turns backup off here.
   Future<void> deleteBackup() => _userOp(() async {
@@ -582,14 +603,27 @@ class BackupSyncService {
         }
       });
 
-  /// Removes the vault member that p2p node [nodeId] is. Its slot comes
-  /// from this device's own pairing record or from that slot's own group
-  /// record claiming the node, never from what one member says of
-  /// another's slot. A node that never joined the vault is skipped, and so
-  /// is one that two slots claim: removing either could hit the wrong
-  /// device.
-  Future<void> removeMemberForNode(String nodeId) async {
+  /// Records that p2p node [nodeId] (named [deviceName] in the group) was
+  /// revoked, so [pendingRemovals] asks the viewer to remove it from the
+  /// vault too. Writes nothing to the relay: removing a device replaces the
+  /// recovery key, which the viewer has to save, so it is never done
+  /// silently. The node's slot is resolved by [_slotForNode]; an entry
+  /// that names no slot yet waits for a group record that does.
+  Future<void> notePeerRevoked(String nodeId, {String? deviceName}) async {
     if (_state == null) return;
+    final slotId = _slotForNode(nodeId);
+    if (slotId != null && slotId == _identity?.slotId) return;
+    await _meta.setPendingRemoval(nodeId,
+        slotId: slotId, deviceName: deviceName);
+    _publishRemovals();
+  }
+
+  /// The vault slot p2p node [nodeId] owns, from this device's own pairing
+  /// record or from that slot's own group record claiming the node, never
+  /// from what one member says of another's slot. Null when no slot claims
+  /// it (it never joined the vault) or two do: either could be the wrong
+  /// device.
+  String? _slotForNode(String nodeId) {
     final wanted = nodeId.toLowerCase();
     final slots = <String>{
       for (final e in _meta.nodeToSlot().entries)
@@ -597,14 +631,63 @@ class BackupSyncService {
       for (final e in _meta.slotClaims().entries)
         if (e.value.any((n) => n.toLowerCase() == wanted)) e.key,
     };
-    if (slots.length > 1) {
-      debugPrint('[Backup] Revocation not applied to the backup: more than '
-          'one device claims that node');
-      return;
+    return slots.length == 1 ? slots.single : null;
+  }
+
+  /// Settles the stored pending removals against [m]: resolves an entry's
+  /// slot once a trusted record names it, and drops an entry whose slot is
+  /// no longer a member (removed here or by another device) or is this
+  /// device's own.
+  Future<void> _reconcileRemovals(BackupManifest m, String ownSlotId) async {
+    final memberSlots = {
+      for (final x in m.members)
+        if (!x.recovery) x.slotId,
+    };
+    for (final MapEntry(key: nodeId, value: e)
+        in _meta.pendingRemovals().entries) {
+      final slotId = e.slotId ?? _slotForNode(nodeId);
+      if (slotId == null) continue;
+      if (slotId == ownSlotId || !memberSlots.contains(slotId)) {
+        await _meta.removePendingRemoval(nodeId);
+      } else if (e.slotId == null) {
+        await _meta.setPendingRemoval(nodeId,
+            slotId: slotId, deviceName: e.deviceName);
+      }
     }
-    final slotId = slots.firstOrNull;
-    if (slotId == null || slotId == _identity?.slotId) return;
-    await removeMember(slotId);
+  }
+
+  Future<void> _forgetRemovalsOf(String slotId) async {
+    for (final MapEntry(key: nodeId, value: e)
+        in _meta.pendingRemovals().entries) {
+      if ((e.slotId ?? _slotForNode(nodeId)) == slotId) {
+        await _meta.removePendingRemoval(nodeId);
+      }
+    }
+    _publishRemovals();
+  }
+
+  /// Publishes the stored removals whose slot is in the member list.
+  void _publishRemovals() {
+    if (_disposed) return;
+    final members = {
+      for (final m in _members.value)
+        if (!m.isThisDevice) m.slotId: m,
+    };
+    final out = <PendingRemoval>[];
+    for (final MapEntry(key: nodeId, value: e)
+        in _meta.pendingRemovals().entries) {
+      final slotId = e.slotId ?? _slotForNode(nodeId);
+      final member = members[slotId];
+      if (slotId == null || member == null) continue;
+      if (out.any((r) => r.slotId == slotId)) continue;
+      out.add(PendingRemoval(
+        nodeId: nodeId,
+        slotId: slotId,
+        deviceName: member.deviceName ?? e.deviceName,
+      ));
+    }
+    out.sort((a, b) => a.nodeId.compareTo(b.nodeId));
+    _removals.value = List.unmodifiable(out);
   }
 
   /// Reads [vaultId]'s manifest as [identity], again up to [adoptRetries]
@@ -664,6 +747,7 @@ class BackupSyncService {
     await _meta.clearSlotClaims();
     await _meta.clearSlotNames();
     await _meta.clearOffers();
+    await _meta.clearPendingRemovals();
     _refreshOffers();
     try {
       await _save(state);
@@ -812,7 +896,7 @@ class BackupSyncService {
       }
     }
     _refreshOffers();
-    _publishMembers(m, identity.slotId);
+    await _publishMembers(m, identity.slotId);
     if (!_disposed) _unreadable.value = unreadable;
     // An unreadable slot keeps the ETag unset, so the next poll reads the
     // manifest again (the slot itself only once its seq moves) and the
@@ -842,7 +926,8 @@ class BackupSyncService {
 
   /// [m]'s devices (not the recovery member), this device first and listed
   /// even when the manifest predates its joining.
-  void _publishMembers(BackupManifest m, String ownSlotId) {
+  Future<void> _publishMembers(BackupManifest m, String ownSlotId) async {
+    await _reconcileRemovals(m, ownSlotId);
     final names = _meta.slotNames();
     final updated = {for (final s in m.slots) s.slotId: s.updatedAt};
     BackupMemberInfo info(String slotId) => BackupMemberInfo(
@@ -859,7 +944,9 @@ class BackupSyncService {
   }
 
   void _setMembers(List<BackupMemberInfo> members) {
-    if (!_disposed) _members.value = List.unmodifiable(members);
+    if (_disposed) return;
+    _members.value = List.unmodifiable(members);
+    _publishRemovals();
   }
 
   void _refreshOffers() {
@@ -1050,7 +1137,9 @@ class BackupSyncService {
     await _meta.clearSlotClaims();
     await _meta.clearSlotNames();
     await _meta.clearOffers();
+    await _meta.clearPendingRemovals();
     _refreshOffers();
+    _publishRemovals();
     await _meta.setJoinedNoticePending(false);
     if (!_disposed) _unreadable.value = const {};
     _set(next);

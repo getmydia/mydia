@@ -2852,9 +2852,22 @@
       }
     }
   },
-  "backupRemoveMemberBody": "It stops backing up and can no longer read the backup. What it already has stays on it.",
+  "backupRemoveMemberBody": "It stops backing up and can no longer read the backup. This also replaces your recovery key: the old key stops working, so save the new one shown next. What the device already has stays on it.",
   "@backupRemoveMemberBody": {
-    "description": "Body of the confirmation before removing another device from the cloud backup."
+    "description": "Body of the confirmation before removing another device from the cloud backup. Removing a device always replaces the recovery key too."
+  },
+  "backupPendingRemoval": "{device} was removed from your devices but can still read your backup",
+  "@backupPendingRemoval": {
+    "description": "Warning in Backup & sync after a paired device was revoked: it is still in the cloud backup until removed with the Remove button next to it.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupKeyReplacedNotice": "This key replaces your old recovery key, which no longer works. Save it before you close this.",
+  "@backupKeyReplacedNotice": {
+    "description": "Shown above a new recovery key right after removing a device or generating a new key."
   },
   "backupShowRecoveryKey": "Show recovery key",
   "@backupShowRecoveryKey": {

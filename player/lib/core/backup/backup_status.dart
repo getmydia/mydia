@@ -66,6 +66,24 @@ class BackupMemberInfo {
   final int? lastUploadMs;
 }
 
+/// A device revoked from the p2p group that is still in the vault, so it
+/// can still read the backup until it is removed (with
+/// [BackupSyncService.removeMember]).
+class PendingRemoval {
+  const PendingRemoval({
+    required this.nodeId,
+    required this.slotId,
+    this.deviceName,
+  });
+
+  final String nodeId;
+  final String slotId;
+
+  /// Its name in the vault, else in the p2p group; null when neither is
+  /// known.
+  final String? deviceName;
+}
+
 /// A recovery key's vault, read but not yet joined: what a restore would
 /// bring. [BackupSyncService.commitRestore] applies it.
 class RestorePreview {

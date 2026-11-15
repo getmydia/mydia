@@ -35,7 +35,7 @@ servers added.
 | Contents | Watch state and pins; source accounts with tokens; settings |
 | Live sync vs restore | Watch state and pins apply live. Accounts are offered on live devices and applied on restore. Settings apply only on restore |
 | Device identity | A per-install Ed25519 signer and X25519 box key, separate from the iroh node key |
-| Revocation | Remove the signer from the relay's member list, delete its slot, rotate the vault key |
+| Revocation | Remove the signer from the relay's member list, delete its slot, rotate the vault key, and replace the recovery key in the same rotation. Revoking a paired device only flags it; the viewer confirms the removal in Backup & sync |
 | Freshness | Polling with ETags (foreground, after a p2p sync, every 15 minutes while open). No push |
 | Web | Not offered |
 
@@ -145,18 +145,43 @@ recovery key" replaces the recovery signer, lookup hash and envelope in one
 member update; the old key stops working at once. The key can be shown again
 only on a device that holds it: the one that created or last regenerated it,
 or one restored with it. It is never sent to devices that join by pairing,
-because a device holding the recovery key can rejoin the vault after being
-removed. A device without it offers "Generate a new recovery key" instead.
+because a device holding the recovery key could rejoin the vault after being
+removed. For the same reason removing a device replaces the recovery key
+(see "Revocation and rotation"). A device without it offers "Generate a new
+recovery key" instead.
 
 ### Revocation and rotation
 
-Removing a device (from Settings, Paired devices, which also revokes it in the
-p2p roster) does, in one `POST /members` call CAS'd on `epoch`:
+Removing a device from the vault (the Remove button on its row in Backup &
+sync) does, in one `POST /members` call CAS'd on `epoch`:
 
 1. Remove the device's signer from the member list.
 2. Delete its slot.
-3. Rotate to a fresh VK at `epoch + 1`, with envelopes for every remaining
-   member and recovery.
+3. Replace the recovery member with a new recovery key: new recovery signer,
+   lookup hash and envelope.
+4. Rotate to a fresh VK at `epoch + 1`, with envelopes for every remaining
+   member and the new recovery member.
+
+Step 3 is not optional. The removed device may hold the recovery key (it
+created the vault, last regenerated the key, or restored with it), and the
+recovery key is itself a member: keeping it would let the removed device sign
+as the recovery member, read the manifest and open the next epoch's recovery
+envelope. The new key is kept on the device as pending before the relay call,
+exactly as "Generate a new recovery key" does, so a lost reply is settled by
+the next poll. The confirmation says that removing a device also replaces
+the recovery key and the old key stops working, and the new key is then shown
+(save, copy, QR) until the viewer acknowledges it.
+
+Revoking a device in the p2p roster (Paired devices) does not touch the vault,
+since that removal needs the viewer to save a new key. The backup records a
+pending removal for that node's slot, resolved by the same trusted node to
+slot rules (this device's own pairing record, or the slot's own group record
+claiming the node; an unknown or doubly claimed node names no slot until a
+trusted record does). Backup & sync then shows "{device} was removed from your
+devices but can still read your backup" with a Remove action that runs the
+removal above. The entry clears once its slot is no longer in the manifest,
+whoever removed it. Pending removals live in `backup_meta` and are cleared
+when this device leaves or switches vaults.
 
 Every member that next reads the manifest sees the new epoch, opens its
 envelope, and re-uploads its slot under it. Slots still at the old epoch are
@@ -294,8 +319,10 @@ is asked which to keep; the other is deleted after its records are merged.
   restore without tokens and flagged `needsReauth`.
 - **`BackupSyncService` against a fake relay**: two devices with no p2p link
   converge on watch state and pins; debounce limits uploads during simulated
-  playback; revoke rotates the epoch, the revoked device gets 403 and cannot
-  open the new epoch; restore onto an empty store yields the same records and
+  playback; removing a device rotates the epoch and replaces the recovery
+  key, so the removed device gets 403 and cannot open the new epoch even
+  with the old recovery key; revoking a paired device only records a pending
+  removal; restore onto an empty store yields the same records and
   joins the group; 404 on the base path disables the feature cleanly.
 - **Relay ExUnit**: signature, clock skew and membership checks; slot
   ownership; `seq` and `epoch` CAS; limits; lookup; the sweeper deletes idle

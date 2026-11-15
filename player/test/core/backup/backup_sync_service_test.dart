@@ -8,8 +8,10 @@ import 'package:player/core/backup/backup_meta_store.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
 import 'package:player/core/backup/backup_snapshot.dart';
 import 'package:player/core/backup/backup_sync_service.dart';
+import 'package:player/core/backup/backup_vault_ops.dart';
 import 'package:player/core/backup/backup_vault_state.dart';
 import 'package:player/core/backup/recovery_key.dart';
+import 'package:player/core/backup/vault_crypto.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/source.dart';
@@ -473,6 +475,73 @@ void main() {
       await c.service.flush();
       await a.service.poll();
       expect(a.watched('tmdb:movie:3'), isTrue);
+    });
+
+    test('removing a device replaces the recovery key it may hold', () async {
+      final (a, oldKey) = await rig.enabled('Living Room TV');
+      // b restored with the recovery key, so it holds it.
+      final b = await rig.joined('Night Harbor Laptop', oldKey);
+      expect((await b.state())!.recoveryKeyText, oldKey.display);
+      final vault = rig.relay.onlyVault;
+      final oldSigner = vault.recoverySigner;
+
+      final fresh = await a.service.removeMember(await b.slotId());
+
+      expect(fresh.display, isNot(oldKey.display));
+      expect(vault.epoch, 2);
+      expect(vault.recoverySigner, isNot(oldSigner));
+      expect(vault.members.containsKey(oldSigner), isFalse);
+      final aState = (await a.state())!;
+      expect(aState.recoveryKeyText, fresh.display);
+      expect(aState.pendingRecoveryKeyText, isNull);
+      expect(a.service.recoveryKeyMismatch.value, isFalse);
+      expect(
+          rig.relay.requests.where((r) => r.endsWith('/members')), hasLength(2),
+          reason: 'one join by restore, one rotation for the removal');
+
+      // b, holding the old key: its lookup handle no longer finds the
+      // vault, its recovery signer can no longer read the manifest, and the
+      // old key's box does not open the new recovery envelope.
+      final old = await RecoveryMember.of(oldKey);
+      final client = rig.relay.relayClient();
+      await expectLater(client.lookup(old.lookupHandle),
+          _throwsRelay(BackupRelayError.notFound));
+      await expectLater(client.manifest(vault.id, old.signer),
+          _throwsRelay(BackupRelayError.notMember));
+      await expectLater(
+          VaultCrypto.openEnvelope(
+            box: old.box,
+            envelope:
+                backupUnb64(vault.members[vault.recoverySigner]!.envelope),
+            vaultId: vault.id,
+            epoch: 2,
+          ),
+          throwsA(isA<VaultCryptoException>()));
+      final c = rig.device('Pocket Phone');
+      await c.service.start();
+      await expectLater(c.service.previewRestore(oldKey.display),
+          _throwsRelay(BackupRelayError.notFound));
+
+      // The new key restores.
+      await c.service
+          .commitRestore(await c.service.previewRestore(fresh.display));
+      expect(c.service.status.value, isA<BackupIdle>());
+    });
+
+    test('a removal whose reply was lost keeps the new key', () async {
+      final (a, oldKey) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Night Harbor Laptop', oldKey);
+      rig.relay.dropNextMembersResponse = true;
+      await expectLater(a.service.removeMember(await b.slotId()),
+          _throwsRelay(BackupRelayError.network));
+      final pending = (await a.state())!.pendingRecoveryKeyText!;
+
+      await a.service.poll();
+      final settled = (await a.state())!;
+      expect(settled.recoveryKeyText, pending);
+      expect(settled.pendingRecoveryKeyText, isNull);
+      expect(rig.relay.onlyVault.members.values.map((m) => m.slotId),
+          isNot(contains(await b.slotId())));
     });
 
     test('recovers_epoch_after_crash_mid_rotation', () async {

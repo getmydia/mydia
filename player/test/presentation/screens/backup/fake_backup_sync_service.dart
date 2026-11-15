@@ -13,6 +13,7 @@ class FakeBackupSyncService implements BackupSyncService {
   final mismatchNotifier = ValueNotifier<bool>(false);
   final membersNotifier = ValueNotifier<List<BackupMemberInfo>>(const []);
   final offersNotifier = ValueNotifier<List<PendingAccountOffer>>(const []);
+  final removalsNotifier = ValueNotifier<List<PendingRemoval>>(const []);
 
   final calls = <String>[];
 
@@ -43,6 +44,8 @@ class FakeBackupSyncService implements BackupSyncService {
   @override
   ValueListenable<List<PendingAccountOffer>> get pendingOffers =>
       offersNotifier;
+  @override
+  ValueListenable<List<PendingRemoval>> get pendingRemovals => removalsNotifier;
   @override
   bool get enabled => isEnabled;
   @override
@@ -82,12 +85,19 @@ class FakeBackupSyncService implements BackupSyncService {
   }
 
   @override
-  Future<void> removeMember(String slotId) async {
+  Future<RecoveryKey> removeMember(String slotId) async {
     calls.add('removeMember $slotId');
     membersNotifier.value = [
       for (final m in membersNotifier.value)
         if (m.slotId != slotId) m,
     ];
+    removalsNotifier.value = [
+      for (final r in removalsNotifier.value)
+        if (r.slotId != slotId) r,
+    ];
+    final key = RecoveryKey.generate();
+    keyText = key.display;
+    return key;
   }
 
   @override

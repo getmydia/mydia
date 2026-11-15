@@ -102,15 +102,57 @@ void main() {
     expect(find.text('Last backed up 3 minutes ago'), findsOneWidget);
   });
 
-  testWidgets('removing a device asks first', (tester) async {
+  testWidgets(
+      'removing a device asks first, then shows the new recovery key '
+      'until acknowledged', (tester) async {
     final fake = await _pump(tester, _enabled());
     await tester.tap(find.byKey(const Key('backup-member-remove-tv')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove Living Room TV from the backup?'), findsOneWidget);
+    expect(find.textContaining('replaces your recovery key'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backup-remove-member-confirm')));
+    await tester.pumpAndSettle();
+    expect(fake.calls, ['removeMember tv']);
+    expect(find.byKey(const Key('backup-member-tv')), findsNothing);
+
+    // The replaced key is up, and Back or a tap outside does not close it.
+    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+    expect(find.text(fake.keyText!), findsOneWidget);
+    expect(find.byKey(const Key('recovery-key-copy')), findsOneWidget);
+    expect(find.byKey(const Key('recovery-key-qr')), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    await navigator.maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('recovery-key-done')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recovery-key-replaced')), findsNothing);
+  });
+
+  testWidgets('a revoked device still in the backup is flagged with Remove',
+      (tester) async {
+    final fake = _enabled()
+      ..removalsNotifier.value = const [
+        PendingRemoval(
+            nodeId: 'node-tv', slotId: 'tv', deviceName: 'Living Room TV'),
+      ];
+    await _pump(tester, fake);
+    expect(
+        find.text('Living Room TV was removed from your devices but can still '
+            'read your backup'),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('backup-pending-removal-remove-tv')));
     await tester.pumpAndSettle();
     expect(find.text('Remove Living Room TV from the backup?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('backup-remove-member-confirm')));
     await tester.pumpAndSettle();
     expect(fake.calls, ['removeMember tv']);
-    expect(find.byKey(const Key('backup-member-tv')), findsNothing);
+    await tester.tap(find.byKey(const Key('recovery-key-done')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('backup-pending-removal-tv')), findsNothing);
   });
 
   testWidgets('a device that joined by pairing has no key to show',

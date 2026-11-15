@@ -52,12 +52,36 @@ Future<bool> showEnableBackupSheet(
 Future<void> showRecoveryKeySheet(BuildContext context, String keyText) =>
     _showAdaptive<void>(context, RecoveryKeySheet.show(keyText: keyText));
 
+/// Shows [keyText], the recovery key that just replaced the old one, and
+/// stays up until the viewer presses Done: a tap outside or Back does not
+/// close it, since the old key no longer works.
+Future<void> showReplacedRecoveryKeySheet(
+        BuildContext context, String keyText) =>
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: GlassDialog(
+          content: SizedBox(
+            width: 460,
+            child: RecoveryKeySheet.show(keyText: keyText, replaced: true),
+          ),
+        ),
+      ),
+    );
+
 class RecoveryKeySheet extends StatefulWidget {
   const RecoveryKeySheet.enable({super.key, required this.service})
-      : keyText = null;
+      : keyText = null,
+        replaced = false;
 
-  const RecoveryKeySheet.show({super.key, required this.keyText})
+  const RecoveryKeySheet.show(
+      {super.key, required this.keyText, this.replaced = false})
       : service = null;
+
+  /// The key just replaced the old one: says so above the key.
+  final bool replaced;
 
   /// Set when turning backup on.
   final BackupSyncService? service;
@@ -211,6 +235,16 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
             const SizedBox(height: 8),
             Text(l10n.backupKeySheetBody,
                 style: TextStyle(color: palette.textSecondary)),
+            if (widget.replaced) ...[
+              const SizedBox(height: 12),
+              Text(
+                l10n.backupKeyReplacedNotice,
+                key: const Key('recovery-key-replaced'),
+                style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.error),
+              ),
+            ],
             if (_retrying) ...[
               const SizedBox(height: 12),
               Text(

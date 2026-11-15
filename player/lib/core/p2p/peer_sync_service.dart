@@ -101,6 +101,11 @@ class P2pPeerSyncTransport implements PeerSyncTransport {
 typedef JoinerBackupKeysHook = Future<String?> Function(
     String nodeId, String signerB64, String boxB64, DateTime deadline);
 
+/// A device was revoked from the group: [deviceName] is its roster name,
+/// null when it was not in the roster.
+typedef PeerRevokedHook = Future<void> Function(
+    String nodeId, String? deviceName);
+
 /// The cloud backup's part in pairing, as [PeerSyncService] takes it. All
 /// null when backup is not offered (web).
 class BackupPairingHooks {
@@ -114,7 +119,7 @@ class BackupPairingHooks {
   final Future<({String signer, String box})?> Function()? backupKeysForPair;
   final JoinerBackupKeysHook? onJoinerBackupKeys;
   final Future<void> Function(String vaultId)? onJoinedVault;
-  final Future<void> Function(String nodeId)? onPeerRevoked;
+  final PeerRevokedHook? onPeerRevoked;
 }
 
 class ActivePairingOffer {
@@ -155,7 +160,7 @@ class PeerSyncService {
     Future<({String signer, String box})?> Function()? backupKeysForPair,
     JoinerBackupKeysHook? onJoinerBackupKeys,
     Future<void> Function(String vaultId)? onJoinedVault,
-    Future<void> Function(String nodeId)? onPeerRevoked,
+    PeerRevokedHook? onPeerRevoked,
     Duration backupHookTimeout = backupAdmitTimeout,
   })  : _backupHookTimeout = backupHookTimeout,
         _backupKeysForPair = backupKeysForPair,
@@ -201,13 +206,13 @@ class PeerSyncService {
   /// Joiner: takes up the vault the host added it to.
   final Future<void> Function(String vaultId)? _onJoinedVault;
 
-  /// Removes a revoked device from the vault.
-  final Future<void> Function(String nodeId)? _onPeerRevoked;
+  /// Flags a revoked device for removal from the vault.
+  final PeerRevokedHook? _onPeerRevoked;
 
   /// How long pairing or a revocation waits on a backup hook: the host's
   /// vault add before replying without it (well inside the 30 s the joiner
-  /// waits for the reply), the joiner's vault adoption, the removal from
-  /// the vault after a revoke.
+  /// waits for the reply), the joiner's vault adoption, recording a
+  /// revoked device for removal.
   static const backupAdmitTimeout = Duration(seconds: 10);
   final Duration _backupHookTimeout;
 
@@ -970,11 +975,14 @@ class PeerSyncService {
     await syncAll(ignoreCooldown: true);
     _notifyStateChanged();
 
-    // Out of the backup vault too, with a rotation, when it was in it.
+    // The backup only records it: removing it from the vault replaces the
+    // recovery key, which the viewer confirms in Backup & sync.
     try {
-      await _onPeerRevoked?.call(nodeId).timeout(_backupHookTimeout);
+      await _onPeerRevoked
+          ?.call(nodeId, current?.deviceName)
+          .timeout(_backupHookTimeout);
     } catch (e) {
-      debugPrint('[PeerSyncService] Revoked device still in the backup: '
+      debugPrint('[PeerSyncService] Revocation not recorded for the backup: '
           '${e.runtimeType}');
     }
   }

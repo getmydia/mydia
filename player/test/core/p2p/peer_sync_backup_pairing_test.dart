@@ -60,7 +60,8 @@ class _Node {
       onJoinerBackupKeys: (node, signer, box, deadline) => backup
           .addMemberForPair(signer, box, nodeId: node, deadline: deadline),
       onJoinedVault: backup.adoptVault,
-      onPeerRevoked: backup.removeMemberForNode,
+      onPeerRevoked: (node, name) =>
+          backup.notePeerRevoked(node, deviceName: name),
       backupHookTimeout: net.hookTimeout,
     );
   }
@@ -221,27 +222,73 @@ void main() {
     expect(net.backupRelay.onlyVault.members, hasLength(2));
   });
 
-  test('revoking the joiner on the host removes it and rotates', () async {
+  test('revoking the joiner records a pending removal and writes nothing',
+      () async {
     final host = await net.node('Living Room TV', 'node-a');
     final joiner = await net.node('Night Harbor Laptop', 'node-b');
     await host.enableBackup();
     await net.pair(host, joiner);
+    await host.backup.poll();
     final joinerSlot = await joiner.slotId();
     final vault = net.backupRelay.onlyVault;
-    expect(vault.slots.containsKey(joinerSlot), isTrue);
+    final before = net.backupRelay.requests.length;
 
     net.clock.setMs(5000);
     await host.peers.revokePeer('node-b');
 
     expect(host.store.member('node-b')!.revoked, isTrue);
+    expect(net.backupRelay.requests.skip(before), isEmpty);
+    expect(vault.epoch, 1);
+    expect(host.meta.pendingRemovals()['node-b']?.slotId, joinerSlot);
+    final pending = host.backup.pendingRemovals.value.single;
+    expect(pending.slotId, joinerSlot);
+    expect(pending.deviceName, 'Night Harbor Laptop');
+
+    // The viewer removes it: a rotation that also replaces the recovery
+    // key, and the entry clears.
+    final key = await host.backup.removeMember(pending.slotId);
     expect(vault.epoch, 2);
-    expect(
-        vault.members.values.map((m) => m.slotId), isNot(contains(joinerSlot)));
     expect(vault.slots.containsKey(joinerSlot), isFalse);
-    expect((await host.state())!.epoch, 2);
+    expect((await host.state())!.recoveryKeyText, key.display);
+    expect(host.backup.pendingRemovals.value, isEmpty);
+    expect(host.meta.pendingRemovals(), isEmpty);
 
     await joiner.backup.poll();
     expect(joiner.backup.status.value, isA<BackupRemoved>());
+  });
+
+  test('a pending removal clears once another device removed the slot',
+      () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final laptop = await net.node('Night Harbor Laptop', 'node-b');
+    final phone = await net.node('Pocket Phone', 'node-c');
+    await host.enableBackup();
+    await net.pair(host, laptop);
+    await net.pair(host, phone);
+    await host.backup.poll();
+    await host.peers.revokePeer('node-b');
+    expect(host.backup.pendingRemovals.value, hasLength(1));
+
+    await phone.backup.poll();
+    await phone.backup.removeMember(await laptop.slotId());
+    await host.backup.poll();
+
+    expect(host.backup.pendingRemovals.value, isEmpty);
+    expect(host.meta.pendingRemovals(), isEmpty);
+  });
+
+  test('pending removals are forgotten when backup is turned off', () async {
+    final host = await net.node('Living Room TV', 'node-a');
+    final joiner = await net.node('Night Harbor Laptop', 'node-b');
+    await host.enableBackup();
+    await net.pair(host, joiner);
+    await host.peers.revokePeer('node-b');
+    expect(host.meta.pendingRemovals(), isNotEmpty);
+
+    await host.backup.disable();
+
+    expect(host.meta.pendingRemovals(), isEmpty);
+    expect(host.backup.pendingRemovals.value, isEmpty);
   });
 
   test('revoking a peer that never joined the vault leaves it alone', () async {
@@ -254,12 +301,13 @@ void main() {
     await host.peers.revokePeer('node-b');
 
     expect(host.store.member('node-b')!.revoked, isTrue);
-    expect(net.backupRelay.onlyVault.epoch, 1);
     expect(net.backupRelay.requests.skip(before), isEmpty);
+    await host.backup.poll();
+    expect(host.backup.pendingRemovals.value, isEmpty);
+    expect(net.backupRelay.onlyVault.epoch, 1);
   });
 
-  test('a device revokes a peer that claims its node in its own slot',
-      () async {
+  test('a device flags a peer that claims its node in its own slot', () async {
     final host = await net.node('Living Room TV', 'node-a');
     final laptop = await net.node('Night Harbor Laptop', 'node-b');
     final phone = await net.node('Pocket Phone', 'node-c');
@@ -274,9 +322,8 @@ void main() {
     expect(laptop.meta.slotClaims()[phoneSlot], {'node-c'});
 
     await laptop.peers.revokePeer('node-c');
-    final vault = net.backupRelay.onlyVault;
-    expect(vault.epoch, 2);
-    expect(vault.slots.containsKey(phoneSlot), isFalse);
+    expect(laptop.backup.pendingRemovals.value.single.slotId, phoneSlot);
+    expect(net.backupRelay.onlyVault.epoch, 1);
   });
 
   test('a member cannot aim a revocation at another member slot', () async {
@@ -299,12 +346,12 @@ void main() {
 
     await phone.peers.revokePeer('node-b');
 
-    final vault = net.backupRelay.onlyVault;
-    expect(vault.epoch, 1, reason: 'no claim the phone believes names it');
-    expect(vault.slots.containsKey(hostSlot), isTrue);
+    expect(phone.backup.pendingRemovals.value, isEmpty,
+        reason: 'no claim the phone believes names it');
+    expect(net.backupRelay.onlyVault.epoch, 1);
   });
 
-  test('a node two slots claim is not revoked from the vault', () async {
+  test('a node two slots claim is not flagged', () async {
     final host = await net.node('Living Room TV', 'node-a');
     final laptop = await net.node('Night Harbor Laptop', 'node-b');
     final phone = await net.node('Pocket Phone', 'node-c');
@@ -319,13 +366,10 @@ void main() {
 
     await host.peers.revokePeer('node-b');
 
-    final vault = net.backupRelay.onlyVault;
     expect(host.store.member('node-b')!.revoked, isTrue);
-    expect(vault.epoch, 1);
-    expect(vault.slots.keys,
-        containsAll([await laptop.slotId(), await phone.slotId()]));
+    expect(host.backup.pendingRemovals.value, isEmpty);
+    expect(net.backupRelay.onlyVault.epoch, 1);
   });
-
   test('a signer already in the vault is not recorded against the node',
       () async {
     final host = await net.node('Living Room TV', 'node-a');

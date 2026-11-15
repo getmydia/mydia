@@ -113,8 +113,8 @@ class PendingAccountOffer {
 /// fingerprints that keep a record's `updatedAt` stable while its value is
 /// unchanged, pending account offers and dismissals, the `seq` of each slot
 /// already merged, each slot's device name, the p2p node id to backup slot
-/// id map, and whether the
-/// joined-by-pairing notice is pending.
+/// id map, revoked devices still to be removed from the vault, and whether
+/// the joined-by-pairing notice is pending.
 class BackupMetaStore {
   BackupMetaStore(this._storage);
 
@@ -127,6 +127,7 @@ class BackupMetaStore {
   static const _nodePrefix = 'node:';
   static const _claimPrefix = 'claim:';
   static const _namePrefix = 'name:';
+  static const _removalPrefix = 'removal:';
 
   final BackupMetaStorage _storage;
 
@@ -287,6 +288,42 @@ class BackupMetaStore {
   Future<void> clearSlotNames() async {
     for (final k in _storage.keys.toList()) {
       if (k.startsWith(_namePrefix)) await _storage.delete(k);
+    }
+  }
+
+  /// Devices revoked from the p2p group that may still read the backup, by
+  /// p2p node id: the slot they were matched to (null until a trusted
+  /// node to slot record names exactly one) and the name they had in the
+  /// group, if known.
+  Map<String, ({String? slotId, String? deviceName})> pendingRemovals() {
+    final out = <String, ({String? slotId, String? deviceName})>{};
+    for (final k in _storage.keys) {
+      if (!k.startsWith(_removalPrefix)) continue;
+      try {
+        final json = jsonDecode(_storage.get(k)!) as Map<String, dynamic>;
+        out[k.substring(_removalPrefix.length)] = (
+          slotId: json['slot'] as String?,
+          deviceName: json['name'] as String?,
+        );
+      } catch (e) {
+        debugPrint('[Backup] Unreadable pending removal $k: ${e.runtimeType}');
+      }
+    }
+    return out;
+  }
+
+  Future<void> setPendingRemoval(String nodeId,
+          {String? slotId, String? deviceName}) =>
+      _storage.put('$_removalPrefix$nodeId',
+          jsonEncode({'slot': slotId, 'name': deviceName}));
+
+  Future<void> removePendingRemoval(String nodeId) =>
+      _storage.delete('$_removalPrefix$nodeId');
+
+  /// Forgets every pending removal, when this device leaves a vault.
+  Future<void> clearPendingRemovals() async {
+    for (final k in _storage.keys.toList()) {
+      if (k.startsWith(_removalPrefix)) await _storage.delete(k);
     }
   }
 

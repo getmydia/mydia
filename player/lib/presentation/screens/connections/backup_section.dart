@@ -128,15 +128,21 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     }
   }
 
-  Future<void> _removeMember(BackupMemberInfo member, String name) async {
+  /// Removes the device owning [slotId], which also replaces the recovery
+  /// key: the new one is shown until the viewer acknowledges it.
+  Future<void> _removeMember(String slotId, String name) async {
     final l10n = context.l10n;
-    if (await _confirm(
+    if (!await _confirm(
       title: l10n.backupRemoveMemberTitle(name),
       body: l10n.backupRemoveMemberBody,
       action: l10n.commonRemove,
       key: const Key('backup-remove-member-confirm'),
     )) {
-      await _run(() => _service.removeMember(member.slotId));
+      return;
+    }
+    final key = await _run(() => _service.removeMember(slotId));
+    if (key != null && mounted) {
+      await showReplacedRecoveryKeySheet(context, key.display);
     }
   }
 
@@ -152,7 +158,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     }
     final key = await _run(_service.regenerateRecoveryKey);
     if (key != null && mounted) {
-      await showRecoveryKeySheet(context, key.display);
+      await showReplacedRecoveryKeySheet(context, key.display);
     }
   }
 
@@ -180,6 +186,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         s.unreadableSlots,
         s.recoveryKeyMismatch,
         s.members,
+        s.pendingRemovals,
       ]),
       builder: (context, _) {
         final status = s.status.value;
@@ -298,6 +305,22 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           text: l10n.backupKeyMismatch,
           warning: true,
         ),
+      for (final r in s.pendingRemovals.value)
+        _Notice(
+          key: Key('backup-pending-removal-${r.slotId}'),
+          icon: Icons.warning_amber_rounded,
+          warning: true,
+          text: l10n
+              .backupPendingRemoval(r.deviceName ?? l10n.backupUnknownDevice),
+          action: TextButton(
+            key: Key('backup-pending-removal-remove-${r.slotId}'),
+            onPressed: _busy
+                ? null
+                : () => _removeMember(
+                    r.slotId, r.deviceName ?? l10n.backupUnknownDevice),
+            child: Text(l10n.commonRemove),
+          ),
+        ),
       for (final slot in s.unreadableSlots.value)
         _Line(
           key: Key('backup-unreadable-$slot'),
@@ -323,7 +346,8 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                   key: Key('backup-member-remove-${m.slotId}'),
                   tooltip: l10n.commonRemove,
                   icon: const Icon(Icons.remove_circle_outline_rounded),
-                  onPressed: _busy ? null : () => _removeMember(m, nameOf(m)),
+                  onPressed:
+                      _busy ? null : () => _removeMember(m.slotId, nameOf(m)),
                 ),
         ),
       PendingSourcesRow(service: s),
@@ -372,25 +396,31 @@ class _Notice extends StatelessWidget {
     required this.icon,
     required this.text,
     required this.action,
+    this.warning = false,
   });
 
   final IconData icon;
   final String text;
   final Widget action;
 
+  /// Drawn in the error colour: something is wrong until acted on.
+  final bool warning;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final error = Theme.of(context).colorScheme.error;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: palette.primary),
+          Icon(icon, size: 20, color: warning ? error : palette.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Text(text,
                 style: TextStyle(
-                    fontWeight: FontWeight.w600, color: palette.textPrimary)),
+                    fontWeight: FontWeight.w600,
+                    color: warning ? error : palette.textPrimary)),
           ),
           action,
         ],

@@ -141,7 +141,8 @@ final Provider<BackupSyncService> backupSyncServiceProvider =
 });
 
 /// What `peerSyncServiceProvider` hands [PeerSyncService] so pairing joins
-/// the group's backup vault and revocation leaves it. Each hook reads
+/// the group's backup vault and revocation flags the device for removal
+/// from it (see [BackupSyncService.pendingRemovals]). Each hook reads
 /// [backupSyncServiceProvider] only when called: that provider watches
 /// `peerSyncServiceProvider`, so reading it here would be a cycle.
 final Provider<BackupPairingHooks> backupPairingHooksProvider =
@@ -153,6 +154,7 @@ final Provider<BackupPairingHooks> backupPairingHooksProvider =
     onJoinerBackupKeys: (nodeId, signer, box, deadline) => backup()
         .addMemberForPair(signer, box, nodeId: nodeId, deadline: deadline),
     onJoinedVault: (vaultId) => backup().adoptVault(vaultId),
-    onPeerRevoked: (nodeId) => backup().removeMemberForNode(nodeId),
+    onPeerRevoked: (nodeId, name) =>
+        backup().notePeerRevoked(nodeId, deviceName: name),
   );
 });

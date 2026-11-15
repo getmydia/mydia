@@ -30,8 +30,9 @@ the Backup & sync section is hidden there (`isWebProvider`).
   when this device holds it.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
   offers and dismissals, the seq of each slot already merged, each slot's
-  device name, the p2p node to slot map and each slot's node claims, and
-  whether the joined-by-pairing notice is still to be seen. Not backed up.
+  device name, the p2p node to slot map and each slot's node claims, revoked
+  devices still to be removed from the vault, and whether the
+  joined-by-pairing notice is still to be seen. Not backed up.
 
 ## Record kinds
 
@@ -79,9 +80,27 @@ the joiner sends its backup public keys with `Pair`; the host adds it to the
 vault (`addMemberForPair`, at the current epoch, no rotation) and returns the
 vault id; the joiner adopts it (`adoptVault`) and raises the one-time notice
 "This device is now backed up with your group". A joiner already in another
-vault is not switched: `pendingVaultChoice` asks which to keep. Revoking a
-paired device also removes it from the vault (`removeMemberForNode`), which
-rotates the vault key. A hook that fails or times out never fails pairing.
+vault is not switched: `pendingVaultChoice` asks which to keep. A hook that
+fails or times out never fails pairing.
+
+## Removing a device
+
+`removeMember` removes a device and replaces the recovery key in one
+rotation: the removed device may hold the old key (it created the vault, last
+regenerated the key or restored with it), and the recovery member could
+otherwise still read the manifest and open the next epoch's envelope. The new
+key is stored as pending before the relay call, like `regenerateRecoveryKey`,
+and the UI shows it until the viewer presses Done.
+
+Revoking a paired device writes nothing to the relay, since a removal needs
+the viewer to save a new key. `notePeerRevoked` records a pending removal in
+`backup_meta`, keyed by node id, with the slot the trusted node to slot rules
+resolve (this device's own pairing record, or the slot's own group record
+claiming the node; none when no slot or two slots claim it, until a record
+settles it). `pendingRemovals` lists those whose slot is still a member, and
+Backup & sync shows "{device} was removed from your devices but can still read
+your backup" with Remove. An entry clears once its slot leaves the manifest,
+and all of them when this device leaves or switches vaults.
 
 ## Failure behaviour
 
