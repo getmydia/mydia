@@ -1,6 +1,7 @@
 defmodule Mydia.Downloads.BuiltIn.Status do
   @moduledoc """
-  The built-in torrent client's combined state: engine, VPN and listen port.
+  The built-in torrent client's combined state: engine, VPN, listen port and
+  free disk space.
 
   Every change is broadcast so the admin page updates live. The `Rqbit`
   adapter and `ClientHealth` read `blocking_reason/1`, so a stopped engine
@@ -11,7 +12,9 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   @topic "built_in_torrent:status"
 
-  defstruct engine: :starting, vpn: :off, port: nil, warnings: [], topic: @topic
+  # `disk` is written by `SpaceGuard`: `:ok`, or `{:low, %{free: _, reserve: _}}`
+  # with both sizes formatted for display. It never blocks the client.
+  defstruct engine: :starting, vpn: :off, port: nil, disk: :ok, warnings: [], topic: @topic
 
   @type t :: %__MODULE__{}
 
@@ -34,7 +37,7 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   @spec get(GenServer.server()) :: t()
   def get(server \\ __MODULE__), do: Agent.get(server, & &1)
 
-  @spec put(GenServer.server(), :engine | :vpn | :port | :warnings, term()) :: :ok
+  @spec put(GenServer.server(), :engine | :vpn | :port | :disk | :warnings, term()) :: :ok
   # Broadcasts from inside the Agent, so subscribers receive updates in the
   # order they were applied even when several processes write at once.
   def put(server \\ __MODULE__, part, value) do
@@ -80,6 +83,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
 
   def describe({:invalid_api_port, value}),
     do: "MYDIA_TORRENT_API_PORT is #{inspect(value)}, not a port number. Using 3030."
+
+  def describe({:invalid_min_free_space, value}),
+    do:
+      "MYDIA_TORRENT_MIN_FREE_SPACE_GB is #{inspect(value)}, not a whole number of gigabytes. Using the saved setting or 5."
 
   def describe({:invalid_download_limit, value}),
     do: rate_limit_description("MYDIA_TORRENT_DOWNLOAD_LIMIT", value)
@@ -139,6 +146,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
   def describe({:engine_exit, code}), do: "The torrent engine exited with code #{code}."
   def describe(:engine_starting), do: "The torrent engine is starting."
   def describe(:engine_disabled), do: "The built-in torrent client is disabled."
+
+  def describe({:low_disk, %{free: free, reserve: reserve}}),
+    do:
+      "The download volume is low on space (#{free} free, #{reserve} kept free). Downloads are paused until space frees up."
 
   def describe(:rqbit_not_found),
     do: "The rqbit binary is missing from this installation."

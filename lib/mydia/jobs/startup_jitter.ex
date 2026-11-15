@@ -11,7 +11,9 @@ defmodule Mydia.Jobs.StartupJitter do
   on every install for a month.
 
   Every `{:snooze, _}` in `lib/` goes through this module, which
-  `test/mydia/jobs/startup_jitter_test.exs` enforces.
+  `test/mydia/jobs/startup_jitter_test.exs` enforces. The exceptions are the
+  snoozes listed in that test's `@allowed_snoozes`, which wait on another
+  job's state and never read the attempt number.
   """
 
   require Logger

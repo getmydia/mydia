@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import '../auth/auth_storage.dart';
 import '../player/subtitle_size.dart';
 import '../theme/glass_material.dart';
@@ -28,6 +31,31 @@ class SettingsService {
   static const _glassMaterialKey = 'glass_material';
   static const _localeKey = 'interface_locale';
 
+  /// The library keys [setLibrarySort] has stored, as a JSON list, so the
+  /// cloud backup can find them: secure storage cannot list its keys. Not
+  /// under [_librarySortKeyPrefix], so it is never taken for a sort.
+  static const _librarySortIndexKey = 'library_sorts_index';
+
+  /// Library keys stored before [_librarySortIndexKey] existed.
+  static const _legacyLibrarySortKeys = ['movies', 'tvShows'];
+
+  /// The storage key of every value written or deleted through any
+  /// [SettingsService], after the write. Static because several instances
+  /// exist (the provider's, `UpdateTrackStore`'s); the cloud backup listens
+  /// to upload a backed-up setting that changed.
+  static Stream<String> get changes => _changes.stream;
+  static final _changes = StreamController<String>.broadcast();
+
+  Future<void> _write(String key, String value) async {
+    await _storage.write(key, value);
+    _changes.add(key);
+  }
+
+  Future<void> _delete(String key) async {
+    await _storage.delete(key);
+    _changes.add(key);
+  }
+
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
     final quality = await _storage.read(_defaultQualityKey);
@@ -36,7 +64,7 @@ class SettingsService {
 
   /// Set the default quality setting.
   Future<void> setDefaultQuality(String quality) async {
-    await _storage.write(_defaultQualityKey, quality);
+    await _write(_defaultQualityKey, quality);
   }
 
   /// Get the automatic intro and credits skipping setting.
@@ -50,7 +78,7 @@ class SettingsService {
 
   /// Set the automatic intro and credits skipping setting.
   Future<void> setAutoSkipSegments(bool enabled) async {
-    await _storage.write(_autoSkipSegmentsKey, enabled.toString());
+    await _write(_autoSkipSegmentsKey, enabled.toString());
   }
 
   /// Whether the playback stats panel is drawn over the video.
@@ -65,7 +93,7 @@ class SettingsService {
 
   /// Set whether the playback stats panel is drawn over the video.
   Future<void> setStatsOverlayEnabled(bool enabled) async {
-    await _storage.write(_statsOverlayEnabledKey, enabled.toString());
+    await _write(_statsOverlayEnabledKey, enabled.toString());
   }
 
   /// How large text subtitles are drawn on this device.
@@ -78,7 +106,7 @@ class SettingsService {
 
   /// Set how large text subtitles are drawn on this device.
   Future<void> setSubtitleSize(SubtitleSize size) async {
-    await _storage.write(_subtitleSizeKey, size.name);
+    await _write(_subtitleSizeKey, size.name);
   }
 
   /// Get the remembered sort for a library, as its encoded string.
@@ -93,7 +121,54 @@ class SettingsService {
 
   /// Set the remembered sort for a library, as its encoded string.
   Future<void> setLibrarySort(String libraryKey, String encoded) async {
-    await _storage.write('$_librarySortKeyPrefix$libraryKey', encoded);
+    await _write('$_librarySortKeyPrefix$libraryKey', encoded);
+    if (_legacyLibrarySortKeys.contains(libraryKey)) return;
+    final known = await _librarySortIndex();
+    if (known.contains(libraryKey)) return;
+    await _write(_librarySortIndexKey, jsonEncode([...known, libraryKey]));
+  }
+
+  /// The storage key of every library sort this device may hold, stored or
+  /// cleared. For the cloud backup.
+  Future<List<String>> librarySortStorageKeys() async => [
+        for (final k in {
+          ..._legacyLibrarySortKeys,
+          ...await _librarySortIndex()
+        })
+          '$_librarySortKeyPrefix$k',
+      ];
+
+  Future<List<String>> _librarySortIndex() async {
+    final raw = await _storage.read(_librarySortIndexKey);
+    if (raw == null) return const [];
+    try {
+      return List<String>.from(jsonDecode(raw) as List);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Whether [storageKey] is a library sort key, as
+  /// [librarySortStorageKeys] lists them.
+  static bool isLibrarySortKey(String storageKey) =>
+      storageKey.startsWith(_librarySortKeyPrefix) &&
+      storageKey.length > _librarySortKeyPrefix.length;
+
+  /// The stored string under [storageKey], for the cloud backup, which
+  /// decides which keys it may read.
+  Future<String?> readStoredValue(String storageKey) =>
+      _storage.read(storageKey);
+
+  /// Writes [value] under [storageKey], or deletes it when null, for a
+  /// cloud backup restore. A library sort goes through [setLibrarySort] so
+  /// it is indexed.
+  Future<void> writeStoredValue(String storageKey, String? value) async {
+    if (value == null) return _delete(storageKey);
+    if (isLibrarySortKey(storageKey)) {
+      return setLibrarySort(
+          storageKey.substring(_librarySortKeyPrefix.length), value);
+    }
+    await _write(storageKey, value);
   }
 
   /// The release track this install follows, as its stored string.
@@ -106,7 +181,7 @@ class SettingsService {
 
   /// Set the release track this install follows.
   Future<void> setUpdateTrack(String track) async {
-    await _storage.write(_updateTrackKey, track);
+    await _write(_updateTrackKey, track);
   }
 
   /// The theme preset this device uses, as its stored name.
@@ -118,7 +193,7 @@ class SettingsService {
 
   /// Set the theme preset this device uses.
   Future<void> setThemePreset(ThemePreset preset) async {
-    await _storage.write(_themePresetKey, preset.name);
+    await _write(_themePresetKey, preset.name);
   }
 
   /// The material this device draws controls with, as its stored name.
@@ -130,7 +205,7 @@ class SettingsService {
 
   /// Set the material this device draws controls with.
   Future<void> setGlassMaterial(GlassMaterial material) async {
-    await _storage.write(_glassMaterialKey, material.name);
+    await _write(_glassMaterialKey, material.name);
   }
 
   /// The interface language this device uses, as a language tag, or null to
@@ -141,9 +216,9 @@ class SettingsService {
   /// Set the interface language; null returns to the device language.
   Future<void> setLocaleCode(String? code) async {
     if (code == null) {
-      await _storage.delete(_localeKey);
+      await _delete(_localeKey);
     } else {
-      await _storage.write(_localeKey, code);
+      await _write(_localeKey, code);
     }
   }
 
@@ -156,10 +231,10 @@ class SettingsService {
   /// as does the Diagnostics choice in `DiagnosticsSettings`.
   Future<void> clearSettings() async {
     await Future.wait([
-      _storage.delete(_defaultQualityKey),
-      _storage.delete(_autoSkipSegmentsKey),
-      _storage.delete('${_librarySortKeyPrefix}movies'),
-      _storage.delete('${_librarySortKeyPrefix}tvShows'),
+      _delete(_defaultQualityKey),
+      _delete(_autoSkipSegmentsKey),
+      _delete('${_librarySortKeyPrefix}movies'),
+      _delete('${_librarySortKeyPrefix}tvShows'),
     ]);
   }
 }

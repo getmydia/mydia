@@ -84,6 +84,13 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   @impl true
+  def call(%Plug.Conn{method: "GET", request_path: "/backup/v1" <> _rest} = conn, _opts) do
+    # Never cache backup reads: they are signed per request, per member, and
+    # carry ciphertext and envelopes that must not be served to anyone else.
+    conn
+  end
+
+  @impl true
   def call(%Plug.Conn{method: "GET", request_path: "/pairing" <> _rest} = conn, _opts) do
     # Skip caching for pairing endpoints (dynamic data, rate limited)
     conn

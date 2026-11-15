@@ -72,6 +72,22 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
 
       assert Status.blocking_reason(%Status{engine: :starting}) == :engine_starting
     end
+
+    test "low disk space does not block a running engine" do
+      status = %Status{engine: :running, disk: {:low, %{free: "1.0 GB", reserve: "5 GB"}}}
+      assert Status.blocking_reason(status) == nil
+    end
+  end
+
+  describe "low disk space" do
+    test "starts ok and is described with free space and the reserve", %{name: name} do
+      assert Status.get(name).disk == :ok
+      :ok = Status.put(name, :disk, {:low, %{free: "1.0 GB", reserve: "5 GB"}})
+      assert %Status{disk: {:low, _}} = Status.get(name)
+
+      assert Status.describe({:low_disk, %{free: "1.0 GB", reserve: "5 GB"}}) ==
+               "The download volume is low on space (1.0 GB free, 5 GB kept free). Downloads are paused until space frees up."
+    end
   end
 
   describe "describe/1" do
@@ -84,6 +100,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         {:invalid_port, "x"},
         {:invalid_api_port, "x"},
         {:invalid_enabled, "maybe"},
+        {:invalid_min_free_space, "lots"},
         {:reserved_name_taken},
         {:path_unwritable, "/config/rqbit", :eacces, "MYDIA_TORRENT_STATE_PATH"},
         {:vpn_auth_failed, "bad credentials"},
@@ -114,6 +131,10 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
       assert Status.describe(:missing_net_admin) =~ "cap_add"
       assert Status.describe(:missing_tun) =~ "/dev/net/tun"
       assert Status.describe(:split_group_missing) =~ "PGID"
+
+      assert Status.describe({:invalid_min_free_space, "lots"}) =~
+               "MYDIA_TORRENT_MIN_FREE_SPACE_GB"
+
       assert Status.describe({:reserved_variable, "DNS_ADDRESS"}) =~ "MYDIA_VPN_DNS_ADDRESS"
 
       unreadable = Status.describe({:preflight_unreadable, :eacces})

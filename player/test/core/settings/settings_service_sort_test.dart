@@ -35,6 +35,21 @@ void main() {
     expect(await service.getLibrarySort('tvShows'), 'LAST_PLAYED:DESC');
   });
 
+  test('every stored library sort key is listed for the backup', () async {
+    final service = SettingsService();
+
+    expect(await service.librarySortStorageKeys(),
+        ['library_sort_movies', 'library_sort_tvShows']);
+    await service.setLibrarySort('acct:owner:srv/lib1', 'TITLE:ASC');
+    await service.setLibrarySort('acct:owner:srv/lib1', 'YEAR:ASC');
+
+    expect(await service.librarySortStorageKeys(), [
+      'library_sort_movies',
+      'library_sort_tvShows',
+      'library_sort_acct:owner:srv/lib1',
+    ]);
+  });
+
   test('clearSettings drops both library sorts', () async {
     final service = SettingsService();
     await service.setLibrarySort('movies', 'YEAR:ASC');

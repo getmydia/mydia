@@ -18,6 +18,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @reserved ~w(SPLIT_TUNNEL_GID HTTP_CONTROL_SERVER_ADDRESS HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH DNS_ADDRESS DNS_SERVER)
   @default_port 51413
   @default_api_port 3030
+  @default_min_free_space_gb 5
+  # `min_free_space_gb` is decimal gigabytes, like `DiskSpace.format_gb/1`.
+  @gb 1_000_000_000
   @default_download_path "/data/downloads"
   @default_state_dir "/config/rqbit"
 
@@ -45,6 +48,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           download_path: String.t(),
           port: pos_integer(),
           api_port: pos_integer(),
+          min_free_space_bytes: non_neg_integer(),
           download_limit_bps: pos_integer() | nil,
           upload_limit_bps: pos_integer() | nil,
           vpn?: boolean(),
@@ -67,6 +71,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             download_path: @default_download_path,
             port: @default_port,
             api_port: @default_api_port,
+            min_free_space_bytes: @default_min_free_space_gb * @gb,
             download_limit_bps: nil,
             upload_limit_bps: nil,
             vpn?: false,
@@ -126,6 +131,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       state_dir: state_dir,
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
+      min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * @gb,
       download_limit_bps: kib_to_bps(section.download_limit_kib),
       upload_limit_bps: kib_to_bps(section.upload_limit_kib),
       vpn?: section.vpn_enabled == true,
@@ -142,6 +148,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           name_warnings ++
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
+          reserve_warnings(env["MYDIA_TORRENT_MIN_FREE_SPACE_GB"]) ++
           rate_limit_warnings(env["MYDIA_TORRENT_DOWNLOAD_LIMIT"], :invalid_download_limit) ++
           rate_limit_warnings(env["MYDIA_TORRENT_UPLOAD_LIMIT"], :invalid_upload_limit) ++
           reserved_warnings(env)
@@ -151,14 +158,24 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @doc """
   What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
   the config minus `warnings`, the seeding fields (read by Mydia, not by the
-  engine) and, while the VPN is off, minus every VPN
+  engine), the disk reserve (`min_free_space_bytes`; the disk guard reads it
+  live, the engine never does) and, while the VPN is off, minus every VPN
   field, since those do not reach a client running without it. Turning the
   VPN on still changes the key.
   """
   @spec restart_key(t()) :: map()
   def restart_key(%__MODULE__{} = config) do
-    key = config |> Map.from_struct() |> Map.drop([:warnings | @live_keys])
-    key = Map.update!(key, :vpn_section, &(&1 |> Map.from_struct() |> Map.drop(@live_keys)))
+    key =
+      config
+      |> Map.from_struct()
+      |> Map.drop([:warnings, :min_free_space_bytes | @live_keys])
+
+    key =
+      Map.update!(
+        key,
+        :vpn_section,
+        &(&1 |> Map.from_struct() |> Map.drop([:min_free_space_gb | @live_keys]))
+      )
 
     if config.vpn? do
       key
@@ -233,6 +250,20 @@ defmodule Mydia.Downloads.BuiltIn.Config do
         case Integer.parse(String.trim(value)) do
           {port, ""} when port in 1..65_535 -> []
           _ -> [{warning, value}]
+        end
+    end
+  end
+
+  # The env loader drops anything but a whole number >= 0.
+  defp reserve_warnings(value) do
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {gb, ""} when gb >= 0 -> []
+          _ -> [{:invalid_min_free_space, value}]
         end
     end
   end

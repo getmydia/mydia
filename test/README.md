@@ -13,11 +13,33 @@ actual test time. The cost is per invocation, so batch test paths into one call
 in `./dev` exists to amortize this, running all its steps inside a single
 `devenv shell --`.
 
-Run these in the foreground with a long timeout. A full
-`devenv shell -- mix precommit` takes roughly 9 minutes, past the usual 600s
-tooling ceiling, but backgrounding it and polling is how work gets lost: an agent
-that does so tends to stop with "still in progress" having made its edits, run no
-tests, and committed nothing. Two minutes of silence is normal here, not a hang.
+Run these in the foreground with a long timeout. Backgrounding and polling is
+how work gets lost: an agent that does so tends to stop with "still in progress"
+having made its edits, run no tests, and committed nothing. Two minutes of
+silence is normal here, not a hang.
+
+`./dev test` with no arguments and the Tests step of `./dev mix precommit` run
+the suite through `scripts/test-partitioned.sh`, which does on one machine what
+CI does across runners: `mix test --partitions N`, here as side-by-side
+processes. Each partition has its own SQLite file (`mydia_testN.db`), its own
+empty TMPDIR and its own S3 bucket, and the BEAMs split the cores between them.
+On a 16-thread machine the suite takes about 140s instead of about 640s, and
+the whole precommit about 210s instead of about 700s. A failing partition
+prints its numbered failures and the path of its full log.
+`MYDIA_TEST_JOBS` caps concurrent partitions (default half the cores, up to 8),
+`MYDIA_TEST_PARTITIONS` sets how many (default twice the jobs, so a free slot
+takes the next one; `--partitions` deals files round-robin, not by duration),
+and `MYDIA_TEST_PARTITIONS=1` gives the old single `mix test`. `./dev test
+<paths>` and `./dev mix test` are unchanged. A failure that appears only in a
+partitioned run is either a load-timing test (a 2s `assert_receive`) or a
+`Database busy` from the class in `.github/ci-flakes.md`; rerun the file alone
+before treating it as yours.
+
+Req's retry backoff is zeroed for the whole suite (`Req.default_options/1` in
+`test_helper.exs`); before that, every test that stubbed a 5xx or an unreachable
+host waited 7s or more for retries. A test that needs real backoff timing sets
+`:retry_delay` on its own request. Wallaby (and its chromedriver) starts only
+when a `MydiaWeb.FeatureCase` module runs.
 
 `./dev mix precommit` calls `run_precommit()` in the `./dev` script, which is a
 reimplementation of the `precommit` alias in `mix.exs` rather than a wrapper
@@ -47,8 +69,9 @@ but two of its paths were directories that do not exist
 all three runs executed only `test/mydia_web/live/media_live/`. `ls` every path
 before passing it, and sanity-check the reported count.
 
-Do not run two `./dev mix test` or `./dev mix precommit` invocations concurrently
-in the same worktree. They share one SQLite test database and produce
+Do not run two `./dev test`, `./dev mix test` or `./dev mix precommit`
+invocations concurrently in the same worktree (the partitioned runner refuses
+a second partitioned run, but not a plain `mix test` beside it). They share the same SQLite test databases and produce
 `(Exqlite.Error) Database busy` failures in files unrelated to the change under
 test. Seen 2026-08-23, where a full precommit alongside a subagent's test run
 produced a single failure in `Mydia.Settings.CustomFormatsTest` while the change

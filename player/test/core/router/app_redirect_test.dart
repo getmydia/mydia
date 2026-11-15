@@ -35,6 +35,7 @@ void main() {
       '/unlock',
       '/sources/manage',
       '/login',
+      '/backup/restore',
     ]) {
       expect(go(l), isNull, reason: l);
     }

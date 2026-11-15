@@ -35,6 +35,8 @@ name: Dependabot auto-merge
 on:
   workflow_run:
     workflows:
+      - Cardigann guest
+      - Cardigann precompiled guest
       - CI
       - CI / Appcast
       - CI / Documentation

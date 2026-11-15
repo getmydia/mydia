@@ -156,8 +156,9 @@ defmodule Mydia.Downloads.BuiltIn.Manager do
       else: restart(state, config, expected_hash)
   end
 
-  # A reload that needs no restart can still carry new seeding targets:
-  # publish them on the running entry, keeping its API port and credentials.
+  # A reload that needs no restart can still carry new seeding targets or a
+  # new disk reserve: publish them on the running entry, keeping its API port
+  # and credentials.
   defp refresh_live_settings(state, config) do
     case BuiltIn.runtime() do
       nil -> :ok

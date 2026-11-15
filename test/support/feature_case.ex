@@ -122,6 +122,13 @@ defmodule MydiaWeb.FeatureCase do
     end
   end
 
+  setup_all do
+    # Idempotent; test_helper.exs leaves it unstarted so runs without
+    # feature tests never boot chromedriver.
+    {:ok, _} = Application.ensure_all_started(:wallaby)
+    :ok
+  end
+
   setup tags do
     # Every :feature test module sets `async: false` (SQLite can't take
     # concurrent writes), so exactly one of these setups runs at a time —

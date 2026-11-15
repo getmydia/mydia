@@ -2747,11 +2747,15 @@ impl SseDecode for crate::FlutterPeerSyncRequest {
                 let mut var_deviceName = <String>::sse_decode(deserializer);
                 let mut var_platform = <String>::sse_decode(deserializer);
                 let mut var_endpointAddrJson = <Option<String>>::sse_decode(deserializer);
+                let mut var_backupSigner = <Option<String>>::sse_decode(deserializer);
+                let mut var_backupBox = <Option<String>>::sse_decode(deserializer);
                 return crate::FlutterPeerSyncRequest::Pair {
                     claim_code: var_claimCode,
                     device_name: var_deviceName,
                     platform: var_platform,
                     endpoint_addr_json: var_endpointAddrJson,
+                    backup_signer: var_backupSigner,
+                    backup_box: var_backupBox,
                 };
             }
             1 => {
@@ -2791,11 +2795,13 @@ impl SseDecode for crate::FlutterPeerSyncResponse {
                     <Vec<crate::FlutterWireWatchRecord>>::sse_decode(deserializer);
                 let mut var_pinRecords =
                     <Vec<crate::FlutterWirePinRecord>>::sse_decode(deserializer);
+                let mut var_vaultId = <Option<String>>::sse_decode(deserializer);
                 return crate::FlutterPeerSyncResponse::Paired {
                     group_secret_base64: var_groupSecretBase64,
                     roster: var_roster,
                     watch_records: var_watchRecords,
                     pin_records: var_pinRecords,
+                    vault_id: var_vaultId,
                 };
             }
             1 => {
@@ -4184,12 +4190,16 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterPeerSyncRequest {
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             } => [
                 0.into_dart(),
                 claim_code.into_into_dart().into_dart(),
                 device_name.into_into_dart().into_dart(),
                 platform.into_into_dart().into_dart(),
                 endpoint_addr_json.into_into_dart().into_dart(),
+                backup_signer.into_into_dart().into_dart(),
+                backup_box.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::FlutterPeerSyncRequest::Sync {
@@ -4232,12 +4242,14 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterPeerSyncResponse {
                 roster,
                 watch_records,
                 pin_records,
+                vault_id,
             } => [
                 0.into_dart(),
                 group_secret_base64.into_into_dart().into_dart(),
                 roster.into_into_dart().into_dart(),
                 watch_records.into_into_dart().into_dart(),
                 pin_records.into_into_dart().into_dart(),
+                vault_id.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::FlutterPeerSyncResponse::PairRejected { reason } => {
@@ -5110,12 +5122,16 @@ impl SseEncode for crate::FlutterPeerSyncRequest {
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             } => {
                 <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(claim_code, serializer);
                 <String>::sse_encode(device_name, serializer);
                 <String>::sse_encode(platform, serializer);
                 <Option<String>>::sse_encode(endpoint_addr_json, serializer);
+                <Option<String>>::sse_encode(backup_signer, serializer);
+                <Option<String>>::sse_encode(backup_box, serializer);
             }
             crate::FlutterPeerSyncRequest::Sync {
                 auth_proof,
@@ -5149,12 +5165,14 @@ impl SseEncode for crate::FlutterPeerSyncResponse {
                 roster,
                 watch_records,
                 pin_records,
+                vault_id,
             } => {
                 <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(group_secret_base64, serializer);
                 <Vec<crate::FlutterWirePeerMember>>::sse_encode(roster, serializer);
                 <Vec<crate::FlutterWireWatchRecord>>::sse_encode(watch_records, serializer);
                 <Vec<crate::FlutterWirePinRecord>>::sse_encode(pin_records, serializer);
+                <Option<String>>::sse_encode(vault_id, serializer);
             }
             crate::FlutterPeerSyncResponse::PairRejected { reason } => {
                 <i32>::sse_encode(1, serializer);

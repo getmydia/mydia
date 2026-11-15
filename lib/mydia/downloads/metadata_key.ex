@@ -21,7 +21,15 @@ defmodule Mydia.Downloads.MetadataKey do
   failed write as one to retry.
   """
   @spec put(binary(), String.t(), term()) :: :ok | {:error, term()}
-  def put(download_id, key, value) do
+  def put(download_id, key, value), do: modify(download_id, &Map.put(&1, key, value))
+
+  @doc """
+  Replaces the download's metadata with `fun.(metadata)`, reading and writing
+  under the same lock as `put/3`, so keys other writers set meanwhile are
+  kept. `fun` receives `%{}` for nil metadata. Same results as `put/3`.
+  """
+  @spec modify(binary(), (map() -> map())) :: :ok | {:error, term()}
+  def modify(download_id, fun) when is_function(fun, 1) do
     result =
       Repo.transaction(fn ->
         case download_id |> locked_row() |> Repo.one() do
@@ -29,7 +37,7 @@ defmodule Mydia.Downloads.MetadataKey do
             :ok
 
           %Download{id: id, metadata: metadata} ->
-            merged = Map.put(metadata || %{}, key, value)
+            merged = fun.(metadata || %{})
             Repo.update_all(where(Download, [d], d.id == ^id), set: [metadata: merged])
             :ok
         end

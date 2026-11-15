@@ -83,6 +83,28 @@ if config_env() != :test do
     report_budget_bytes: player_logs_report_budget_bytes,
     sweep_interval_ms: 3_600_000
 
+  # A positive integer from the environment, else the default (never a crash
+  # at boot, as above).
+  positive_env = fn name, default ->
+    with value when is_binary(value) <- normalize_env.(name),
+         {n, ""} when n > 0 <- Integer.parse(value) do
+      n
+    else
+      _ -> default
+    end
+  end
+
+  backup_max_bytes = positive_env.("BACKUP_MAX_BYTES", 10_737_418_240)
+  backup_max_vaults = positive_env.("BACKUP_MAX_VAULTS", 100_000)
+
+  config :metadata_relay, :backup,
+    dir: normalize_env.("BACKUP_DIR") || Path.join(Path.dirname(db_path), "backup"),
+    sweep_interval_ms: 3_600_000,
+    # Off by default for the reason RELAY_PROXY_RATE_LIMIT is.
+    address_limits: normalize_env.("RELAY_BACKUP_ADDRESS_LIMITS") in ~w(1 true yes on),
+    max_bytes: backup_max_bytes,
+    max_vaults: backup_max_vaults
+
   # Phoenix endpoint port configuration (serves both API and dashboard)
   port = String.to_integer(System.get_env("PORT") || "4001")
 

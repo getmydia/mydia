@@ -193,6 +193,165 @@ defmodule Mydia.Downloads.Client.RqbitTest do
     end
   end
 
+  describe "list_torrent_files/2 and selective add (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "list_torrent_files posts list_only and returns files and peers", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["list_only"] == "true"
+
+        json_resp(conn, 200, %{
+          "id" => nil,
+          "output_folder" => "/downloads/Pack",
+          "seen_peers" => ["10.0.0.2:6881"],
+          "details" => %{
+            "info_hash" => @hash,
+            "output_folder" => "/downloads/Pack",
+            "files" => [
+              %{
+                "name" => "e01.mkv",
+                "components" => ["Pack", "e01.mkv"],
+                "length" => 100,
+                "included" => true,
+                "attributes" => %{}
+              }
+            ]
+          }
+        })
+      end)
+
+      assert {:ok,
+              %{files: [%{index: 0, path: "Pack/e01.mkv", length: 100}], peers: ["10.0.0.2:6881"]}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?xt=urn:btih:#{@hash}"})
+    end
+
+    test "list_torrent_files tolerates null seen_peers and falls back to name", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, %{
+          "id" => nil,
+          "seen_peers" => nil,
+          "details" => %{
+            "files" => [%{"name" => "solo.mkv", "components" => [], "length" => 7}]
+          }
+        })
+      end)
+
+      assert {:ok, %{files: [%{index: 0, path: "solo.mkv", length: 7}], peers: []}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?x"})
+    end
+
+    test "list_torrent_files returns the API error on non-2xx", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 400, %{"error_kind" => "internal_error", "human_readable" => "nope"})
+      end)
+
+      assert {:error, %Mydia.Downloads.Client.Error{}} =
+               Rqbit.list_torrent_files(config, {:magnet, "magnet:?x"})
+    end
+
+    test "add_torrent sends only_files and initial_peers comma-joined", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["only_files"] == "0,3"
+        assert conn.query_params["initial_peers"] == "10.0.0.2:6881,10.0.0.3:6881"
+        json_resp(conn, 200, add_response(@hash))
+      end)
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: [0, 3],
+                 initial_peers: ["10.0.0.2:6881", "10.0.0.3:6881"]
+               )
+    end
+
+    test "add_torrent omits only_files and initial_peers when nil or empty", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "POST", "/torrents", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        refute Map.has_key?(conn.query_params, "only_files")
+        refute Map.has_key?(conn.query_params, "initial_peers")
+        json_resp(conn, 200, add_response(@hash))
+      end)
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: nil,
+                 initial_peers: nil
+               )
+
+      assert {:ok, @hash} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"},
+                 only_files: [],
+                 initial_peers: []
+               )
+    end
+
+    test "an already-managed torrent with a different selection gets only_files updated", %{
+      bypass: bypass,
+      config: config
+    } do
+      # rqbit returns the existing torrent unchanged and ignores the new only_files.
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, true, true, true]))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(body) == %{"only_files" => [0, 3]}
+        json_resp(conn, 200, %{})
+      end)
+
+      assert {:ok, @hash} = Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [3, 0])
+    end
+
+    test "an add whose reported selection matches only_files sends no update", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, false, false, true]))
+      end)
+
+      assert {:ok, @hash} = Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [0, 3])
+    end
+
+    test "a failed only_files update fails the add", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "POST", "/torrents", fn conn ->
+        json_resp(conn, 200, add_response_with_files(@hash, [true, true]))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        json_resp(conn, 400, %{"error_kind" => "internal_error", "human_readable" => "nope"})
+      end)
+
+      assert {:error, %Mydia.Downloads.Client.Error{}} =
+               Rqbit.add_torrent(config, {:magnet, "magnet:?x"}, only_files: [1])
+    end
+
+    test "Client.list_torrent_files returns {:error, :unsupported} without the callback" do
+      defmodule NoListAdapter do
+      end
+
+      assert {:error, :unsupported} =
+               Mydia.Downloads.Client.list_torrent_files(NoListAdapter, %{}, {:magnet, "m"})
+    end
+  end
+
   describe "get_status/2 state mapping (Bypass)" do
     setup do
       bypass = Bypass.open()
@@ -318,6 +477,35 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert {:ok, status} = Rqbit.get_status(config, @hash)
       assert status.save_path == "/mnt/storage/media/Downloads/rqbit/"
       assert status.files == ["/mnt/storage/media/Downloads/rqbit/Silo.S03E03.mkv"]
+    end
+
+    test "maps file_progress by index, keeping indices of excluded files", %{
+      bypass: bypass,
+      config: config
+    } do
+      stub_pack_details(bypass)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", progress_bytes: 140, total_bytes: 150)
+        |> Map.put("file_progress", [100, 0, 40])
+      )
+
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+
+      assert status.file_progress == [
+               %{index: 0, path: "/downloads/Pack/e01.mkv", length: 100, have: 100},
+               %{index: 2, path: "/downloads/Pack/e03.mkv", length: 50, have: 40}
+             ]
+
+      assert status.files == ["/downloads/Pack/e01.mkv", "/downloads/Pack/e03.mkv"]
+    end
+
+    test "file_progress is nil when stats carry none", %{bypass: bypass, config: config} do
+      stub_pack_details(bypass)
+      stub_stats(bypass, stats(state: "live", progress_bytes: 0, total_bytes: 150))
+
+      assert {:ok, %{file_progress: nil}} = Rqbit.get_status(config, @hash)
     end
   end
 
@@ -584,6 +772,17 @@ defmodule Mydia.Downloads.Client.RqbitTest do
     }
   end
 
+  defp add_response_with_files(hash, included) do
+    files =
+      included
+      |> Enum.with_index()
+      |> Enum.map(fn {included?, index} ->
+        %{"name" => "e0#{index}.mkv", "length" => 100, "included" => included?}
+      end)
+
+    put_in(add_response(hash), ["details", "files"], files)
+  end
+
   defp stats(overrides \\ []) do
     base = %{
       "state" => "live",
@@ -606,6 +805,37 @@ defmodule Mydia.Downloads.Client.RqbitTest do
         "name" => "Movie",
         "output_folder" => "/downloads",
         "total_pieces" => 100
+      })
+    end)
+  end
+
+  defp stub_pack_details(bypass) do
+    Bypass.stub(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+      json_resp(conn, 200, %{
+        "id" => 0,
+        "info_hash" => @hash,
+        "name" => "Pack",
+        "output_folder" => "/downloads",
+        "files" => [
+          %{
+            "name" => "Pack/e01.mkv",
+            "components" => ["Pack", "e01.mkv"],
+            "length" => 100,
+            "included" => true
+          },
+          %{
+            "name" => "Pack/e02.mkv",
+            "components" => ["Pack", "e02.mkv"],
+            "length" => 60,
+            "included" => false
+          },
+          %{
+            "name" => "Pack/e03.mkv",
+            "components" => ["Pack", "e03.mkv"],
+            "length" => 50,
+            "included" => true
+          }
+        ]
       })
     end)
   end

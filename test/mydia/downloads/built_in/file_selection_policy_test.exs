@@ -232,6 +232,17 @@ defmodule Mydia.Downloads.BuiltIn.FileSelectionPolicyTest do
     assert StubAdapter.selections() == []
   end
 
+  test "defers to a selection WantedFiles recorded at grab" do
+    StubAdapter.put_files({:ok, video_and_junk()})
+    entry = FileSelectionPolicy.auto_entry(4)
+    row = row(%{metadata: %{"file_selection" => entry, "selected_files" => [0]}})
+
+    assert :done = FileSelectionPolicy.apply(row)
+    assert StubAdapter.list_calls() == 0
+    assert StubAdapter.selections() == []
+    assert stamped(row) == %{"source" => "auto", "skipped" => 4}
+  end
+
   test "an imported row is done without a call" do
     row = row(%{imported_at: DateTime.utc_now()})
     assert :done = FileSelectionPolicy.apply(row)

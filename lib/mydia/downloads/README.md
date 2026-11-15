@@ -177,7 +177,11 @@ name. `ClientRemoval` and the other config builders must carry
 `connection_settings`, or `BuiltIn.managed?/1` reads the built-in client as
 unmanaged and the guard below is skipped.
 
-**File selection.** `BuiltIn.FileSelectionPolicy` (run by `BuiltIn.Policies`
+**File selection.** When `WantedFiles` (see "Wanted files and early import"
+below) leaves files out before the add, it records the policy's final `auto`
+entry so nothing re-selects what it skipped. Otherwise (it kept every file,
+or the listing failed or timed out) `BuiltIn.FileSelectionPolicy` deselects
+the junk after the add. It (run by `BuiltIn.Policies`
 for rows that are in the client and downloading, paused, checking or queued)
 deselects junk once per torrent, as soon as the file list is known (a magnet
 has none until its metadata resolves; an empty list waits, and so does a
@@ -300,3 +304,65 @@ In VPN mode the engine is started with `--listen-ip <tunnel IPv4>`, read from
 `ip -4 -o addr show dev <iface>` as the mydia user, so that inbound UDP replies
 leave the tunnel from the port the peer contacted. See
 `vendor/gluetun/README.md`, "Inbound UDP needs a bound socket".
+
+## Wanted files and early import (rqbit)
+
+`Client.Rqbit` lists a torrent's files before adding it, and
+`Queue.ClientSelection` decides which to keep (`WantedFiles.select/2`) and
+adds with `only_files`. A selection that keeps everything (`only_files: nil`)
+still adds with every listed index, so rqbit widens an older, narrower
+selection on a torrent it already manages. Clients without
+`list_torrent_files/2`, and a failed listing, add with no selection.
+Junk is what `FileSelection.importable?/1` and `subtitle?/1` say it is, the
+same rules `FileSelectionPolicy` applies, so the two never disagree on a
+sample or an `.nfo`; `WantedFiles` adds the episode rules (skip an owned
+episode the search did not target, keep anything it cannot match). The
+selection is recorded in the download's metadata:
+
+- `"file_selection"`: `%{"source" => "auto", "skipped" => n}`, `n` (1 or
+  more) the files left out, written only when the selection left files out
+  (`only_files` set). It is `FileSelectionPolicy`'s final entry, so the
+  policy leaves the torrent alone; a manual selection from the Files panel
+  replaces it with `manual` as usual. A selection that keeps everything
+  (including the every-video-owned fallback) writes no entry, and neither
+  does a failed listing (which records none of these keys), so the policy
+  deselects junk after the add.
+- `"selected_files"`: indices of the files kept.
+- `"file_episodes"`: file index (a string) to the single episode id a kept
+  video parsed to. Multi-episode and unmatched files have no entry.
+- `"skipped_owned_episode_ids"`: episodes dropped because the library already
+  has them. `FileImport.detect_partial_pack/2` subtracts these, so such a pack
+  is not flagged `partial_pack`.
+- `"early_imported_paths"` and `"early_imported_episode_ids"`: what partial
+  imports already placed. The full import excludes those paths.
+
+Early import is driven by `Downloads.EarlyImport` from `DownloadMonitor`. The
+rqbit torrent list carries no per-file data, so EarlyImport fetches per-download
+status (`file_progress`) to learn which files are whole. Only files with a
+recorded episode and a path that exists on this host are imported early.
+
+A partial `MediaImport` job (`"partial" => true`) is unique on
+`[:download_id, :partial]`, so it never swallows the full import enqueued at
+completion, and a second partial job is dropped until the first finishes.
+Partial jobs run on the single-slot `:early_import` queue, so two of them never
+copy at once even when a copy outlasts the 600-second unique period (the
+second one's atomic copy would remove the first one's temp file); full imports
+stay on `:default`. A full import that starts while a partial job for the
+download is executing snoozes 30 seconds (a snooze does not use an attempt).
+No Oban Lifeline runs, so a crash, a restart or a queue restarted inside this
+node leaves an orphaned `executing` row. An executing partial row counts only
+if the `:early_import` queue on this node is running its job id
+(`Oban.check_queue/1`'s `:running`), so a job that died mid-run cannot hold
+the full import back, while one copying a large file for half an hour still
+does. When that lookup fails (the queue is not running), the boot-time rule
+stands in: a row attempted before this node booted
+(`Mydia.Application.booted_at/0`) is ignored. Partial mode never stamps
+`imported_at`, runs `detect_partial_pack` or removes the torrent; a file that
+fails stays out of `early_imported_paths` and the full import retries it.
+It records its paths through `MetadataKey.modify/2`, under the same row lock
+the policies and the Files panel stamp with, so neither side drops the other's
+keys.
+
+A manual selection made after the grab does not rewrite `"file_episodes"`.
+A file the operator deselects never completes, so it is never imported early;
+one they add has no entry and waits for the full import.

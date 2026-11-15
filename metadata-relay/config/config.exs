@@ -30,6 +30,19 @@ config :metadata_relay, :player_logs,
   report_budget_bytes: 268_435_456,
   sweep_interval_ms: 3_600_000
 
+# End-to-end encrypted player backup. Slot ciphertexts are files under `dir`;
+# SQLite holds vaults, members and slot metadata. See MetadataRelay.Backup.
+config :metadata_relay, :backup,
+  dir: "./backup",
+  sweep_interval_ms: 3_600_000,
+  # Per-address limits on POST /vaults and /lookup. Off: behind Cloudflare
+  # every install shares one address (see MetadataRelay.Backup.Handler).
+  address_limits: false,
+  # Relay-wide bounds, enforced whatever address_limits says: total slot
+  # bytes across every vault (10 GiB) and the number of vaults.
+  max_bytes: 10_737_418_240,
+  max_vaults: 100_000
+
 # How often MetadataRelay.UpdateCheck.Releases re-reads GitHub's release list.
 config :metadata_relay, :update_check, releases_refresh_ms: 3_600_000
 

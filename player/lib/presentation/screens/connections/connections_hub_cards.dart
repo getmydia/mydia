@@ -52,6 +52,56 @@ class HubCardSurface extends StatelessWidget {
   }
 }
 
+/// A hub section's eyebrow title with an optional hint below and action at
+/// the end.
+class HubSectionHeader extends StatelessWidget {
+  const HubSectionHeader(
+      {super.key, required this.title, this.hint, this.action});
+
+  final String title;
+  final String? hint;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final hintText = hint;
+    final trailing = action;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 0, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: palette.textDisabled,
+                  ),
+                ),
+                if (hintText != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    hintText,
+                    style:
+                        TextStyle(fontSize: 12.5, color: palette.textSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+}
+
 /// The kind's name, as the brand spells it.
 String connectionKindName(SourceKind kind, AppLocalizations l10n) =>
     switch (kind) {

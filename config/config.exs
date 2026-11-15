@@ -299,7 +299,12 @@ config :mydia, Oban,
     subsync: 1,
     # Mydia.Jobs.RemoveDownload. One slot: Transmission answers one RPC at a
     # time and stops answering entirely while it deletes a torrent's data.
-    client_removals: 1
+    client_removals: 1,
+    # Partial MediaImport jobs (Mydia.Jobs.MediaImport.Partial). One slot: two
+    # early imports of one download must never copy at once, or the second
+    # one's atomic copy removes the first one's temp file. Full imports stay
+    # on :default.
+    early_import: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days

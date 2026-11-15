@@ -59,10 +59,29 @@ class SubtitleLanguagePrefs {
     }
   }
 
+  /// The saved list, or null when none was saved (or the box is
+  /// unavailable). The cloud backup reads this rather than [load], so an
+  /// install never backs up its locale defaults as a choice.
+  static Future<List<String>?> loadSaved() async {
+    try {
+      final saved = (await _box()).get(_key);
+      if (saved == null || saved.isEmpty) return null;
+      return List<String>.from(saved);
+    } catch (e) {
+      debugPrint('[SubtitleLanguagePrefs] Box unavailable: $e');
+      return null;
+    }
+  }
+
+  /// Fires after every [save] that persisted. The cloud backup listens.
+  static Stream<void> get changes => _changes.stream;
+  static final _changes = StreamController<void>.broadcast();
+
   static Future<void> save(List<String> languages) async {
     try {
       final box = await _box();
       await box.put(_key, languages);
+      _changes.add(null);
     } catch (e) {
       debugPrint('[SubtitleLanguagePrefs] Box unavailable, not persisting: $e');
     }

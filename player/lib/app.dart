@@ -66,6 +66,8 @@ import 'package:player/core/p2p/peer_files_store.dart' show PeerFilesStore;
 import 'package:hive_ce/hive.dart' show Hive;
 import 'package:player/core/p2p/peer_sync_service.dart'
     show peerSyncServiceProvider;
+import 'package:player/core/backup/backup_providers.dart'
+    show backupSyncServiceProvider;
 import 'package:player/native/lib.dart';
 
 /// Answers one inbound control [request], re-checking the opt-out first.
@@ -327,6 +329,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         unawaited(peerSync.then<void>((_) => peerFilesClient.start(),
             onError: (Object _) {}));
       }
+      // The cloud backup polls after p2p syncs, so it starts after them.
+      // Its start never throws: failures land in its status.
+      final backup = ref.read(backupSyncServiceProvider);
+      unawaited(peerSync.catchError((_) {}).then((_) => backup.start()));
     }
 
     // Fire and forget: the source starts on its fallback layout, so the
@@ -547,6 +553,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         state == AppLifecycleState.hidden) {
       final uploader = ref.read(logUploaderProvider);
       if (uploader != null) unawaited(uploader.flushNow());
+    }
+    // The cloud backup uploads what waits on its debounce before the OS
+    // suspends the app, and reads what other devices uploaded on return.
+    if (!kIsWeb) {
+      if (state == AppLifecycleState.paused) {
+        unawaited(ref.read(backupSyncServiceProvider).flush());
+      } else if (state == AppLifecycleState.resumed) {
+        unawaited(ref.read(backupSyncServiceProvider).poll());
+      }
     }
     if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
       // Live screens refetch now; dormant ones become cold for their next

@@ -70,6 +70,46 @@ void main() {
     expect(mydia.enabled, isTrue);
   });
 
+  testWidgets('Restore from backup is offered natively and opens the screen',
+      (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(
+          path: '/', builder: (_, __) => const AddSourceScreen(isWeb: false)),
+      GoRoute(
+        path: '/backup/restore',
+        builder: (_, __) => const SizedBox(key: Key('restore-marker')),
+      ),
+    ]);
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final tile = find.byKey(const Key('add-source-restore'));
+    expect(tile, findsOneWidget);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('restore-marker')), findsOneWidget);
+  });
+
+  testWidgets('Restore from backup is not offered on web', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: true),
+      ),
+    ));
+    expect(find.byKey(const Key('add-source-restore')), findsNothing);
+  });
+
   testWidgets('Folder and WebDAV are marked experimental', (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [hasMydiaProvider.overrideWithValue(false)],

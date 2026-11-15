@@ -112,7 +112,7 @@ defmodule Mydia.Downloads.SeedingLimitsTest do
     end
 
     test "the tracker's limits reach the client" do
-      assert {:ok, _config, "limits-id", _type} =
+      assert {:ok, _config, "limits-id", _type, _selection} =
                Queue.select_and_add_to_client(search_result(@terms), [])
 
       assert_received {:set_share_limits, "limits-id", %{ratio: 1.0, seed_time: 3600}}
@@ -122,13 +122,13 @@ defmodule Mydia.Downloads.SeedingLimitsTest do
       :persistent_term.put({LimitsAdapter, :result}, {:error, Error.api_error("nope")})
 
       capture_log(fn ->
-        assert {:ok, _config, "limits-id", _type} =
+        assert {:ok, _config, "limits-id", _type, _selection} =
                  Queue.select_and_add_to_client(search_result(@terms), [])
       end)
     end
 
     test "a release without terms pushes nothing" do
-      assert {:ok, _config, "limits-id", _type} =
+      assert {:ok, _config, "limits-id", _type, _selection} =
                Queue.select_and_add_to_client(search_result(nil), [])
 
       refute_received {:set_share_limits, _, _}

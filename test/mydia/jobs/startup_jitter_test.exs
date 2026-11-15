@@ -51,12 +51,20 @@ defmodule Mydia.Jobs.StartupJitterTest do
     @helper Path.expand("lib/mydia/jobs/startup_jitter.ex")
 
     # A snooze decided anywhere else can repeat the attempt == 1 mistake.
+    # Snoozes that wait on another job's state rather than delaying a first
+    # run. They read no attempt number, and the attempt-gating guard below
+    # still covers their files.
+    @allowed_snoozes [
+      {"lib/mydia/jobs/media_import.ex", "{:snooze, @partial_wait_seconds}"}
+    ]
+
     test "every snooze in lib/ goes through StartupJitter" do
       offenders =
         for path <- Path.wildcard("lib/**/*.ex"),
             Path.expand(path) != @helper,
             {line, number} <- path |> File.read!() |> String.split("\n") |> Enum.with_index(1),
             snooze_tuple?(line),
+            {path, String.trim(line)} not in @allowed_snoozes,
             do: "#{path}:#{number}: #{String.trim(line)}"
 
       assert offenders == [],

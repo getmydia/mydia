@@ -8,8 +8,15 @@ name: Cardigann guest
 # read-only token because it runs PR-controlled build scripts. Only the publish
 # job (push to master) gets contents: write, and it runs no repository build
 # scripts. Never create the release or upload assets by hand.
+#
+# Dependabot's nuget bumps change the guest's sources, and the auto-merge gate
+# merges them with GITHUB_TOKEN, whose push starts no workflows. Running on
+# every master push (without a path filter) lets the 5-second release check in
+# `Skip if published` self-heal on the next push; `workflow_dispatch` recovers
+# immediately when no push is queued (`gh workflow run cardigann-guest.yml --ref master`).
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
@@ -17,9 +24,6 @@ on:
       - ".github/workflows/cardigann-guest.yml"
   push:
     branches: [master]
-    paths:
-      - "native/cardigann_guest/**"
-      - ".github/workflows/cardigann-guest.yml"
 
 permissions:
   contents: read
@@ -94,12 +98,15 @@ jobs:
   publish:
     name: Publish
     needs: build
-    if: github.event_name == 'push' && needs.build.outputs.built == 'true'
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/master' &&
+      needs.build.outputs.built == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     concurrency:
-      group: cardigann-guest-publish
+      group: cardigann-guest-publish-${{ needs.build.outputs.hash }}
       cancel-in-progress: false
     steps:
       # Only for LICENSE and NOTICE; no repository script runs in this job.

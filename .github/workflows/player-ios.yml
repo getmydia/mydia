@@ -33,6 +33,11 @@ on:
           above the highest upload (17000042 becomes 17000042.1), resolved after
           this job holds the TestFlight lock. player-ondemand.yml uses it for
           branch builds, so they never take a number from master's sequence.
+          `fixed_or_after_latest` uploads version_code when it clears the
+          highest upload and otherwise goes just above it, as after_latest
+          does. player-ondemand.yml uses it for master builds, whose
+          version_code falls behind a draft release's upload until the
+          release is published and tagged.
         type: string
         required: false
         default: fixed
@@ -114,9 +119,9 @@ jobs:
     # next release corrects it, so the version is deliberately not re-resolved
     # after the lock is acquired.
     #
-    # The exception is build_number_mode: after_latest, which must read the
-    # highest upload under this lock: read before it, a concurrent upload could
-    # take the number first.
+    # The exception is build_number_mode: after_latest (and
+    # fixed_or_after_latest), which must read the highest upload under this
+    # lock: read before it, a concurrent upload could take the number first.
     concurrency:
       group: player-ios-testflight
       cancel-in-progress: false
@@ -148,10 +153,11 @@ jobs:
           flutter-version-file: player/.fvmrc
           channel: 'stable'
 
-      # Before the version stamp, because after_latest needs fastlane to read
-      # App Store Connect. Otherwise only the upload needs it.
+      # Before the version stamp, because after_latest and
+      # fixed_or_after_latest need fastlane to read App Store Connect.
+      # Otherwise only the upload needs it.
       - name: Setup Ruby for Fastlane
-        if: ${{ env.APP_STORE_CONNECT_API_KEY_ID != '' && (!inputs.dry_run || inputs.build_number_mode == 'after_latest') }}
+        if: ${{ env.APP_STORE_CONNECT_API_KEY_ID != '' && (!inputs.dry_run || inputs.build_number_mode != 'fixed') }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
         uses: ruby/setup-ruby@v1
@@ -178,19 +184,26 @@ jobs:
             fixed)
               BUILD_NUMBER="$VERSION_CODE"
               ;;
-            after_latest)
+            after_latest|fixed_or_after_latest)
               if [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
                 echo "::warning::No App Store Connect credentials; stamping version_code $VERSION_CODE. Nothing will upload."
                 BUILD_NUMBER="$VERSION_CODE"
               else
                 (cd "$PLAYER_PATH/ios" && bundle exec fastlane highest_build_number)
                 HIGHEST=$(cat "$HIGHEST_BUILD_NUMBER_PATH")
-                BUILD_NUMBER=$(./scripts/branch-build-number.sh "$HIGHEST")
+                if [ "$MODE" = "fixed_or_after_latest" ]; then
+                  BUILD_NUMBER=$(./scripts/branch-build-number.sh "$HIGHEST" "$VERSION_CODE")
+                  if [ "$BUILD_NUMBER" != "$VERSION_CODE" ]; then
+                    echo "::warning::version_code $VERSION_CODE does not clear the highest TestFlight upload $HIGHEST (a draft release?); uploading as $BUILD_NUMBER."
+                  fi
+                else
+                  BUILD_NUMBER=$(./scripts/branch-build-number.sh "$HIGHEST")
+                fi
                 echo "Highest upload $HIGHEST, this build $BUILD_NUMBER"
               fi
               ;;
             *)
-              echo "::error::Unknown build_number_mode '$MODE'; expected fixed or after_latest."
+              echo "::error::Unknown build_number_mode '$MODE'; expected fixed, after_latest or fixed_or_after_latest."
               exit 1
               ;;
           esac

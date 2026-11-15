@@ -282,6 +282,20 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
                Mydia.Settings.get_config_setting_by_key("built_in_torrent.enabled")
     end
 
+    test "the free space field is on the form and saves zero", %{conn: conn} do
+      run_built_in(%Config{enabled?: true})
+      view = open_settings(conn)
+
+      assert has_element?(view, "#built-in-field-min_free_space_gb[type=number]")
+
+      render_submit(element(view, "#built-in-settings-form"), %{
+        "built_in" => %{"min_free_space_gb" => "0"}
+      })
+
+      assert %{value: "0"} =
+               Mydia.Settings.get_config_setting_by_key("built_in_torrent.min_free_space_gb")
+    end
+
     test "switching to automatic when that resolves off asks like off", %{conn: conn} do
       # Another torrent client is configured, so automatic resolves off.
       create_test_download_client()

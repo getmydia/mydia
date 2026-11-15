@@ -118,16 +118,86 @@ defmodule Mydia.Downloads.Client.Rqbit do
     end)
   end
 
+  @impl true
+  def list_torrent_files(config, torrent) do
+    guarded(config, fn ->
+      req = HTTP.new_request(config)
+      {body, params} = build_add_request(torrent, [])
+
+      case HTTP.post(req, "/torrents", params: Map.put(params, :list_only, true), body: body) do
+        {:ok, %{status: status, body: resp_body}} when status in 200..299 ->
+          {:ok, parse_listing(resp_body)}
+
+        {:ok, response} ->
+          {:error, api_error_from(response)}
+
+        {:error, _} = error ->
+          error
+      end
+    end)
+  end
+
+  defp parse_listing(body) when is_map(body) do
+    files =
+      case get_in(body, ["details", "files"]) do
+        files when is_list(files) -> files
+        _ -> []
+      end
+
+    %{
+      files:
+        files
+        |> Enum.with_index()
+        |> Enum.map(fn {file, index} ->
+          %{index: index, path: listing_path(file), length: file["length"] || 0}
+        end),
+      peers: if(is_list(body["seen_peers"]), do: body["seen_peers"], else: [])
+    }
+  end
+
+  defp parse_listing(_), do: %{files: [], peers: []}
+
+  defp listing_path(%{"components" => [_ | _] = components}), do: Enum.join(components, "/")
+  defp listing_path(file), do: file["name"] || ""
+
   defp finish_add(config, resp_body, opts) do
     case extract_info_hash(resp_body) do
       nil ->
         {:error, Error.parse_error("rqbit add response missing info_hash", %{body: resp_body})}
 
       info_hash ->
-        maybe_pause_after_add(config, info_hash, opts)
-        {:ok, info_hash}
+        with :ok <- reconcile_only_files(config, info_hash, resp_body, opts[:only_files]) do
+          maybe_pause_after_add(config, info_hash, opts)
+          {:ok, info_hash}
+        end
     end
   end
+
+  # rqbit answers an add for an info hash it already manages with that torrent
+  # unchanged (AlreadyManaged) and ignores the new `only_files`. The response
+  # reports the selection in force through `details.files[].included`; when it
+  # differs from the one asked for, set it explicitly. A response without a
+  # file list says nothing either way and is left alone.
+  defp reconcile_only_files(config, info_hash, resp_body, [_ | _] = only_files) do
+    wanted = MapSet.new(only_files)
+
+    case reported_selection(resp_body) do
+      nil -> :ok
+      ^wanted -> :ok
+      _other -> set_file_selection(config, info_hash, Enum.sort(only_files))
+    end
+  end
+
+  defp reconcile_only_files(_config, _info_hash, _resp_body, _only_files), do: :ok
+
+  defp reported_selection(%{"details" => %{"files" => files}}) when is_list(files) do
+    files
+    |> Enum.with_index()
+    |> Enum.filter(fn {file, _index} -> file_included?(file) end)
+    |> MapSet.new(fn {_file, index} -> index end)
+  end
+
+  defp reported_selection(_resp_body), do: nil
 
   @impl true
   def get_status(config, client_id) do
@@ -301,7 +371,13 @@ defmodule Mydia.Downloads.Client.Rqbit do
   defp add_params(opts, is_url: is_url) do
     %{is_url: is_url}
     |> maybe_put(:output_folder, opts[:save_path])
+    |> maybe_put(:only_files, join_list(opts[:only_files]))
+    |> maybe_put(:initial_peers, join_list(opts[:initial_peers]))
   end
+
+  # An empty list counts as unset: rqbit rejects an empty `only_files`.
+  defp join_list(list) when is_list(list) and list != [], do: Enum.join(list, ",")
+  defp join_list(_), do: nil
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
@@ -380,6 +456,8 @@ defmodule Mydia.Downloads.Client.Rqbit do
       ratio: ratio(stats["uploaded_bytes"], total_bytes),
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
+      file_progress:
+        resolve_file_progress(output_folder, details["files"], stats["file_progress"]),
       added_at: nil,
       completed_at: nil
     })
@@ -402,6 +480,31 @@ defmodule Mydia.Downloads.Client.Rqbit do
       list -> list
     end
   end
+
+  # Zip by position BEFORE dropping excluded files: rqbit's `file_progress`
+  # lines up with `details.files` including `included: false` entries, and the
+  # index must stay the torrent's own file index.
+  defp resolve_file_progress(output_folder, files, have)
+       when is_list(files) and is_list(have) do
+    progress =
+      files
+      |> Enum.zip(have)
+      |> Enum.with_index()
+      |> Enum.filter(fn {{file, _have}, _index} -> file_included?(file) end)
+      |> Enum.flat_map(fn {{file, bytes}, index} ->
+        case absolute_torrent_path(output_folder, file) do
+          path when is_binary(path) and path != "" ->
+            [%{index: index, path: path, length: file["length"] || 0, have: bytes}]
+
+          _ ->
+            []
+        end
+      end)
+
+    if progress == [], do: nil, else: progress
+  end
+
+  defp resolve_file_progress(_output_folder, _files, _have), do: nil
 
   defp file_included?(%{"included" => false}), do: false
   defp file_included?(_), do: true

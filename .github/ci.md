@@ -512,8 +512,9 @@ The SQLite suite runs as four shards (`Test (SQLite N/4)`) and the PostgreSQL
 suite as three (`Test / PostgreSQL (N/3)`), each a separate runner using
 `mix test --partitions`. SQLite stays at `max_cases: 1` inside every runner,
 since the suite shares one writer per database; each shard has its own
-`mydia_test.db` (a fixed path, so this holds because shards are separate
-runners, not because of a partition suffix), and the constraint holds. `--partitions` sorts the test files and
+`mydia_testN.db` (`config/test.exs` suffixes `MIX_TEST_PARTITION`, which lets
+`scripts/test-partitioned.sh` run the same partitions side by side on one
+machine), and the constraint holds. `--partitions` sorts the test files and
 deals them out round-robin, not by duration, so adding a test file can shift
 later files to another shard. If one shard runs well over the others, raise the count
 in the matrix and in the `--partitions` argument rather than moving files by
@@ -610,7 +611,11 @@ for x86_64 and aarch64, each on a native runner through the Dockerfile's
 `cwasm-out` target, so the artifact is built by the release image's own Wasmex
 and wasmtime. It runs on a guest, Dockerfile, Wasmex pin or engine-config
 change, and again when the `Cardigann guest` workflow completes on master (the
-guest is only downloadable once that has published it). Pull requests build both
+guest is only downloadable once that has published it). `cardigann-guest.yml`
+runs on every `master` push without a path filter (exiting in seconds when
+`cardigann-guest-<hash>` already exists) and supports `workflow_dispatch` so a
+Dependabot merge with `GITHUB_TOKEN` cannot leave a new guest hash permanently
+unpublished. Pull requests build both
 architectures and upload them as run artifacts, but never publish. On master the
 `publish` job creates the immutable release
 `cardigann-cwasm-<hash>-wasmtime<ver>-cfg<n>` holding both `.cwasm.gz` files with

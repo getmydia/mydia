@@ -191,6 +191,13 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :listen_port)
     end
 
+    test "min_free_space_gb accepts zero and rejects negatives" do
+      assert changeset(%{"min_free_space_gb" => "0"}).valid?
+      assert changeset(%{"min_free_space_gb" => "12"}).valid?
+      cs = changeset(%{"min_free_space_gb" => "-1"})
+      assert Keyword.has_key?(cs.errors, :min_free_space_gb)
+    end
+
     test "rate limits accept 16..4194303 KiB/s, and blank means unlimited" do
       assert changeset(%{"download_limit_kib" => "16", "upload_limit_kib" => "4194303"}).valid?
       assert changeset(%{"download_limit_kib" => "", "upload_limit_kib" => ""}).valid?

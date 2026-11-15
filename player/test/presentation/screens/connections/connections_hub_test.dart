@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/p2p/peer_group_roster.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
@@ -20,6 +21,7 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'connections_hub_fixtures.dart';
+import '../backup/fake_backup_sync_service.dart';
 import 'fake_peer_sync_service.dart';
 
 /// Built per test, never cached: [hubDevice] stamps its sync time from the
@@ -61,6 +63,8 @@ Future<_Harness> _pump(
   String? initialSection,
   SourceId? direct,
   bool settle = true,
+  bool isWeb = false,
+  FakeBackupSyncService? backup,
 }) async {
   final nav = RecordingNav();
   final store = InMemoryPeerSyncStore();
@@ -78,6 +82,9 @@ Future<_Harness> _pump(
       peerSyncServiceProvider.overrideWithValue(service),
       peerSyncStoreProvider.overrideWithValue(store),
       peerGroupRosterProvider.overrideWithValue(roster),
+      isWebProvider.overrideWithValue(isWeb),
+      backupSyncServiceProvider
+          .overrideWithValue(backup ?? FakeBackupSyncService()),
     ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -104,6 +111,56 @@ void _phone(WidgetTester tester, {double height = 600}) {
 }
 
 void main() {
+  testWidgets('Backup & sync follows the paired devices', (tester) async {
+    _phone(tester, height: 2400);
+    await _pump(tester, _populated());
+    final section = find.byKey(const Key('connections-backup-section'));
+    expect(section, findsOneWidget);
+    expect(
+        tester.getTopLeft(section).dy,
+        greaterThan(tester
+            .getTopLeft(find.byKey(const Key('connections-devices-section')))
+            .dy));
+  });
+
+  testWidgets('a join into the group backup toasts once, with a way there',
+      (tester) async {
+    _phone(tester);
+    final backup = FakeBackupSyncService()
+      ..isEnabled = true
+      ..statusNotifier.value = const BackupIdle(null);
+    await _pump(tester, _populated(), backup: backup);
+    final section = find.byKey(const Key('connections-backup-section'));
+    // Below the fold on a phone.
+    expect(tester.getTopLeft(section).dy, greaterThan(600));
+
+    await tester.ensureVisible(find.byKey(const Key('connections-enter-code')));
+    await tester.tap(find.byKey(const Key('connections-enter-code')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('pair-code-input')), 'ABC123');
+    // Pairing adopts the group's vault before it returns.
+    backup.joinedNoticeNotifier.value = true;
+    await tester.tap(find.byKey(const Key('pair-submit-code-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This device is now backed up with your group'),
+        findsWidgets);
+    expect(backup.calls, contains('acknowledgeJoinedNotice'),
+        reason: 'shown once: the toast marks it seen');
+    expect(find.byKey(const Key('backup-joined-notice')), findsNothing);
+
+    await tester.tap(find.text('View'));
+    await tester.pumpAndSettle();
+    final top = tester.getTopLeft(section).dy;
+    expect(top, lessThan(600), reason: 'Backup & sync scrolled into view');
+  });
+
+  testWidgets('Backup & sync is absent on web', (tester) async {
+    _phone(tester, height: 2400);
+    await _pump(tester, _populated(), isWeb: true);
+    expect(find.byKey(const Key('connections-backup-section')), findsNothing);
+  });
+
   testWidgets('renders sections', (tester) async {
     _phone(tester, height: 1400);
     await _pump(tester, _populated());

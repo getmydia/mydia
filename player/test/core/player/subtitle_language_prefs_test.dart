@@ -42,6 +42,12 @@ void main() {
       expect(await SubtitleLanguagePrefs.load(), ['es', 'en']);
     });
 
+    test('loadSaved is null until a list is saved, then that list', () async {
+      expect(await SubtitleLanguagePrefs.loadSaved(), isNull);
+      await SubtitleLanguagePrefs.save(['es', 'en']);
+      expect(await SubtitleLanguagePrefs.loadSaved(), ['es', 'en']);
+    });
+
     test('a later save replaces an earlier one', () async {
       await SubtitleLanguagePrefs.save(['fr']);
       await SubtitleLanguagePrefs.save(['de', 'en']);
