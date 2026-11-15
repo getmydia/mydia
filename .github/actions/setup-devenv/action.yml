@@ -57,7 +57,7 @@ runs:
     # devenv.lock's nixpkgs node — bump both together.
     - name: Install devenv
       shell: bash
-      run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
+      run: nix profile install github:NixOS/nixpkgs/d5cc6833999746cffdfe0598f7bc801a57b887a9#devenv
 
     # patches/** is in the deps and build keys because `mix deps.get`
     # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it

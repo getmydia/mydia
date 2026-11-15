@@ -86,7 +86,7 @@ jobs:
       # workflow resolves the identical toolchain (Rust, Flutter, wasm-pack,
       # binaryen) that PRs already build and test against.
       - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
+        run: nix profile install github:NixOS/nixpkgs/d5cc6833999746cffdfe0598f7bc801a57b887a9#devenv
 
       - name: Warm devenv environment
         run: |
