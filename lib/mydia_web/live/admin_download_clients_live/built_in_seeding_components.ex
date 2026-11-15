@@ -19,7 +19,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
       <legend class="fieldset-legend">{gettext("Seeding")}</legend>
       <p class="text-sm text-base-content/70">
         {gettext(
-          "Leave both targets blank to seed forever. A tracker's own minimum always applies on top."
+          "Torrents keep seeding until a target below is reached. With both blank they seed forever; set a ratio of 0 to stop as soon as the download finishes. A tracker's own minimum always applies on top."
         )}
       </p>
       <%!-- A number input's default step of 1 would make browsers reject 1.5. --%>
@@ -28,6 +28,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
         field={:seed_ratio}
         sources={@sources}
         inputmode="decimal"
+        placeholder={gettext("Blank: seed forever")}
         label={gettext("Seed ratio")}
       />
       <.text_field
@@ -35,6 +36,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSeedingComponents do
         field={:seed_time}
         sources={@sources}
         type="number"
+        placeholder={gettext("Blank: seed forever")}
         label={gettext("Seed time (minutes)")}
       />
       <.field_row

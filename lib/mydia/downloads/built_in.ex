@@ -50,7 +50,7 @@ defmodule Mydia.Downloads.BuiltIn do
             name: @name,
             type: :rqbit,
             enabled: true,
-            priority: 10,
+            priority: config.priority,
             host: "127.0.0.1",
             port: port,
             use_ssl: false,

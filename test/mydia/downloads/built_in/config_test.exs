@@ -304,6 +304,12 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
                Config.restart_key(vpn_on)
     end
 
+    test "priority defaults to 10 and never restarts the engine" do
+      assert load([], []).priority == 10
+      assert load([priority: 2], []).priority == 2
+      assert Config.restart_key(load([priority: 2], [])) == Config.restart_key(load([], []))
+    end
+
     test "the free space reserve never restarts the engine, VPN on or off" do
       for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]] do
         a = load(vpn, [])

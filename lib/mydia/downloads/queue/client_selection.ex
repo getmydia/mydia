@@ -408,11 +408,16 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     |> Enum.find(&(&1.name == name && &1.enabled))
   end
 
-  defp select_client_by_priority(download_type) do
+  # Lowest priority wins. On a tie the built-in client wins: external clients
+  # default to 1, the lowest a priority can be, so otherwise the built-in one
+  # could never be made the default (issue #1422).
+  @doc false
+  # Public for testing.
+  def select_client_by_priority(download_type) do
     client =
       Settings.list_download_client_configs()
       |> Enum.filter(&(&1.enabled and supports_download_type?(&1, download_type)))
-      |> Enum.sort_by(& &1.priority, :asc)
+      |> Enum.sort_by(&{&1.priority, not BuiltIn.managed?(&1)}, :asc)
       |> List.first()
 
     if client do

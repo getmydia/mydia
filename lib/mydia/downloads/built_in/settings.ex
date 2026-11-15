@@ -41,7 +41,8 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     :min_free_space_gb,
     :download_limit_kib,
     :upload_limit_kib,
-    :seed_time
+    :seed_time,
+    :priority
   ]
   @floats [:seed_ratio]
   @enabled_choices ["automatic", "true", "false"]
@@ -107,6 +108,7 @@ defmodule Mydia.Downloads.BuiltIn.Settings do
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:min_free_space_gb, greater_than_or_equal_to: 0)
+    |> validate_number(:priority, greater_than_or_equal_to: 1)
     |> BuiltInTorrent.validate_rate_limits()
     |> validate_single_line(@text_fields -- locked)
     |> validate_lengths(@vpn_text_fields -- locked)

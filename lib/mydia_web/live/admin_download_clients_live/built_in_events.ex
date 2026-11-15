@@ -27,6 +27,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
     :enabled,
     :download_path,
     :min_free_space_gb,
+    :priority,
     :listen_port,
     :state_path,
     :api_port
@@ -90,6 +91,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
     socket
     |> assign(:built_in?, runtime != nil)
     |> assign(:built_in_vpn?, runtime != nil and runtime.config.vpn?)
+    |> assign(:built_in_priority, runtime && runtime.config.priority)
     |> assign(:built_in_status, status)
   end
 
