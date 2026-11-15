@@ -166,6 +166,10 @@ enum Outcome {
     /// The grant led nowhere readable, so it is dropped and the next read
     /// asks Dart again (an SMB share that moved, a file that was deleted).
     Failed,
+    /// The upstream refused the grant (401 or 403) before any byte went to
+    /// the sink: a presigned URL that expired. `serve` asks Dart for a fresh
+    /// grant once.
+    Stale,
 }
 
 /// Where a grant points.
@@ -463,35 +467,50 @@ impl<R: GrantResolver> PeerFilesHost<R> {
             reply_status(&sink, 403, None).await;
             return;
         }
-        let grant = match self.grant(&account_id, &path).await {
-            GrantAnswer::Granted(grant) => grant,
-            GrantAnswer::NotShared => {
-                reply_status(&sink, 404, None).await;
+        let mut outcome = Outcome::Stale;
+        // One re-grant at most: a second refusal is a real one.
+        for attempt in 0..2 {
+            let grant = match self.grant(&account_id, &path).await {
+                GrantAnswer::Granted(grant) => grant,
+                GrantAnswer::NotShared => {
+                    reply_status(&sink, 404, None).await;
+                    return;
+                }
+                GrantAnswer::Failed => {
+                    reply_status(&sink, 502, None).await;
+                    return;
+                }
+            };
+            if !self.is_member(&peer) {
+                reply_status(&sink, 403, None).await;
                 return;
             }
-            GrantAnswer::Failed => {
-                reply_status(&sink, 502, None).await;
-                return;
+            outcome = match grant_target(&grant.url) {
+                Some(Target::File(file)) => serve_file(&sink, &file, &request).await,
+                Some(Target::Http(url)) => {
+                    self.serve_http(&sink, &url, &grant.headers, &path, &request)
+                        .await
+                }
+                None => {
+                    tracing::warn!("peer files: grant for {account_id} has an unsupported scheme");
+                    reply_status(&sink, 404, None).await;
+                    Outcome::Failed
+                }
+            };
+            if outcome != Outcome::Stale {
+                break;
             }
-        };
-        if !self.is_member(&peer) {
-            reply_status(&sink, 403, None).await;
-            return;
+            lock(&self.grants).remove(&(account_id.clone(), path.clone()));
+            if attempt == 0 {
+                tracing::info!("peer files: grant for {account_id} was refused, asking again");
+            }
         }
-        let outcome = match grant_target(&grant.url) {
-            Some(Target::File(file)) => serve_file(&sink, &file, &request).await,
-            Some(Target::Http(url)) => {
-                self.serve_http(&sink, &url, &grant.headers, &path, &request)
-                    .await
+        match outcome {
+            Outcome::Stale => reply_status(&sink, 502, None).await,
+            Outcome::Failed => {
+                lock(&self.grants).remove(&(account_id, path));
             }
-            None => {
-                tracing::warn!("peer files: grant for {account_id} has an unsupported scheme");
-                reply_status(&sink, 404, None).await;
-                Outcome::Failed
-            }
-        };
-        if outcome == Outcome::Failed {
-            lock(&self.grants).remove(&(account_id, path));
+            Outcome::Done | Outcome::Cancelled => {}
         }
     }
 
@@ -518,12 +537,16 @@ impl<R: GrantResolver> PeerFilesHost<R> {
         let mut response = match upstream.send().await {
             Ok(response) if response.status().is_success() => response,
             Ok(response) => {
-                tracing::warn!("peer files: upstream answered {}", response.status());
+                let status = response.status();
+                tracing::warn!("peer files: upstream answered {status}");
+                if matches!(status.as_u16(), 401 | 403) {
+                    return Outcome::Stale;
+                }
                 reply_status(sink, 502, None).await;
                 return Outcome::Failed;
             }
             Err(e) => {
-                tracing::warn!("peer files: upstream unreachable: {e}");
+                tracing::warn!("peer files: upstream unreachable: {}", e.without_url());
                 reply_status(sink, 502, None).await;
                 return Outcome::Failed;
             }
@@ -570,7 +593,7 @@ impl<R: GrantResolver> PeerFilesHost<R> {
                     return Outcome::Done;
                 }
                 Err(e) => {
-                    tracing::warn!("peer files: upstream body failed: {e}");
+                    tracing::warn!("peer files: upstream body failed: {}", e.without_url());
                     sink.abort().await;
                     return Outcome::Failed;
                 }
@@ -930,6 +953,12 @@ mod tests {
         if req.uri().path() == "/fail" {
             return Ok(Response::builder()
                 .status(500)
+                .body(Full::new(Bytes::new()).boxed())
+                .unwrap());
+        }
+        if req.uri().path() == "/expired" {
+            return Ok(Response::builder()
+                .status(403)
                 .body(Full::new(Bytes::new()).boxed())
                 .unwrap());
         }
@@ -1452,6 +1481,129 @@ mod tests {
                 assert_eq!(host.resolver().calls(), expected_calls);
             }
         });
+    }
+
+    /// Hands out `urls` in order, then the last one again, counting calls.
+    struct SequenceResolver {
+        urls: Vec<String>,
+        calls: AtomicUsize,
+    }
+
+    impl SequenceResolver {
+        fn new(urls: Vec<String>) -> Self {
+            Self {
+                urls,
+                calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl GrantResolver for SequenceResolver {
+        async fn resolve(&self, _account_id: &str, _path: &str) -> GrantAnswer {
+            let n = self.calls.fetch_add(1, Ordering::SeqCst);
+            let url = self.urls[n.min(self.urls.len() - 1)].clone();
+            GrantAnswer::Granted(Grant {
+                url,
+                headers: vec![],
+            })
+        }
+    }
+
+    #[test]
+    fn expired_grant_is_reissued_once() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let host = host_with(SequenceResolver::new(vec![
+                format!("{}/expired", server.base),
+                format!("{}/ok", server.base),
+            ]));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", Some(0), Some(99)),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(206));
+            assert_eq!(sink.body().len(), 100);
+            assert_eq!(host.resolver().calls(), 2);
+        });
+    }
+
+    #[test]
+    fn grant_still_forbidden_after_reissue_is_502() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let host = host_with(SequenceResolver::new(vec![format!(
+                "{}/expired",
+                server.base
+            )]));
+            for expected_calls in [2, 4] {
+                let sink = RecordingSink::default();
+                host.serve(
+                    MEMBER.to_string(),
+                    request("/share/movie.mkv", None, None),
+                    sink.clone(),
+                )
+                .await;
+                assert_eq!(sink.status(), Some(502));
+                assert_eq!(host.resolver().calls(), expected_calls);
+            }
+        });
+    }
+
+    /// A `tracing` writer that keeps everything written to it.
+    #[derive(Clone, Default)]
+    struct LogCapture(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for LogCapture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogCapture {
+        type Writer = LogCapture;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn upstream_error_log_has_no_url() {
+        let capture = LogCapture::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(capture.clone())
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        runtime::block_on(async {
+            let host = host_with(MapResolver::with(
+                "/share/movie.mkv",
+                "http://127.0.0.1:1/x?X-Amz-Signature=secret",
+            ));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", None, None),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+        });
+        let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+        assert!(log.contains("upstream unreachable"), "log was: {log}");
+        assert!(!log.contains("X-Amz-Signature"), "log was: {log}");
     }
 
     #[test]
