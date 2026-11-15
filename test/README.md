@@ -69,8 +69,9 @@ but two of its paths were directories that do not exist
 all three runs executed only `test/mydia_web/live/media_live/`. `ls` every path
 before passing it, and sanity-check the reported count.
 
-Do not run two `./dev mix test` or `./dev mix precommit` invocations concurrently
-in the same worktree. They share the same SQLite test databases and produce
+Do not run two `./dev test`, `./dev mix test` or `./dev mix precommit`
+invocations concurrently in the same worktree (the partitioned runner refuses
+a second partitioned run, but not a plain `mix test` beside it). They share the same SQLite test databases and produce
 `(Exqlite.Error) Database busy` failures in files unrelated to the change under
 test. Seen 2026-08-23, where a full precommit alongside a subagent's test run
 produced a single failure in `Mydia.Settings.CustomFormatsTest` while the change

@@ -427,6 +427,7 @@ in
     # targets instead of building them from scratch. No-op everywhere else.
     "mydia:seed-build" = {
       exec = "./scripts/seed-worktree-build.sh";
+      cwd = config.devenv.root;
       before = onEnterShell;
     };
 

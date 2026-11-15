@@ -45,6 +45,15 @@ root=$(pwd -P)
 # unix-socket paths some tests create.
 tag=$(printf '%s' "$root" | cksum | cut -d' ' -f1)
 base="${TMPDIR:-/tmp}/mydia-t$tag"
+# A second run in this checkout would share the partition databases, logs and
+# exit records, and could report the other run's results as its own.
+lock="$base.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+    echo "Another partitioned test run is active in this checkout ($lock)." >&2
+    echo "If none is, remove that directory and retry." >&2
+    exit 1
+fi
+trap 'rmdir "$lock"' EXIT
 rm -rf "$base"
 mkdir -p "$base"
 
@@ -58,7 +67,9 @@ run_partition() {
     (
         export MIX_TEST_PARTITION=$i
         export TMPDIR="$base/p$i/tmp"
-        export MYDIA_TEST_S3_BUCKET="$s3_bucket-p$i"        # $jobs BEAMs each starting one scheduler per core, all spinning while
+        export MYDIA_TEST_S3_BUCKET="$s3_bucket-p$i"
+        export MYDIA_TEST_FAILURES_MANIFEST="$base/p$i/failures"
+        # $jobs BEAMs each starting one scheduler per core, all spinning while
         # idle, starve each other: timing-sensitive tests (2s assert_receive,
         # 5s accept) then fail only here. Split the cores and stop the spin.
         export ERL_FLAGS="${ERL_FLAGS:-} +S $schedulers +sbwt none +sbwtdcpu none +sbwtdio none"
@@ -75,6 +86,18 @@ for i in $(seq 1 "$n"); do
 done
 wait
 
+# Each partition wrote its own failures manifest (a shared one is read at start
+# and replaced at finish, so partitions would erase each other's failures).
+# Merge them into the default path so `./dev test --failed` reruns them all.
+elixir -e '
+  [out | parts] = System.argv()
+  parts
+  |> Enum.map(&ExUnit.FailuresManifest.read/1)
+  |> Enum.reduce(%{}, &Map.merge/2)
+  |> ExUnit.FailuresManifest.write!(out)
+' "$root/_build/test/lib/mydia/.mix/.mix_test_failures" "$base"/p*/failures 2>/dev/null ||
+    echo "warning: could not merge failure manifests; ./dev test --failed may be incomplete" >&2
+
 status=0
 passed=0
 failed=0
@@ -85,6 +108,11 @@ for i in $(seq 1 "$n"); do
     code=${code:-1}
     clean=$(sed 's/\x1b\[[0-9;]*m//g' "$log")
     result=$(echo "$clean" | grep -E '^Result: ' | tail -1)
+    # With path arguments, a partition can be dealt no files at all.
+    if [ -z "$result" ] && echo "$clean" | grep -q '^Paths given to "mix test" did not match'; then
+        code=0
+        result="(no files in this partition)"
+    fi
     finished=$(echo "$clean" | grep -oE '^Finished in [0-9.]+ seconds' | grep -oE '[0-9.]+' | tail -1)
     # ExUnit prints "Result: 940 passed, ..." or, with failures,
     # "Result: 1237/1238 passed, ...".

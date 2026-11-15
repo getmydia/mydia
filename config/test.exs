@@ -67,6 +67,13 @@ config :mydia, MydiaWeb.Endpoint,
   secret_key_base: "CuiGpJ9j+jd1Xb0aq51rBSKLxBYwqr3tvwvMyS2aXBUAlHRtSCT3/GX8fxFcV6UE",
   server: true
 
+# scripts/test-partitioned.sh gives each concurrent partition its own failures
+# manifest, then merges them into the default one, so `mix test --failed`
+# still sees every partition's failures.
+if manifest = System.get_env("MYDIA_TEST_FAILURES_MANIFEST") do
+  config :ex_unit, failures_manifest_path: manifest
+end
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

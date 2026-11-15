@@ -28,11 +28,28 @@ shards=${MYDIA_PLAYER_TEST_SHARDS:-$(( cores / 2 ))}
 (( shards < 1 )) && shards=1
 (( shards > 8 )) && [ -z "${MYDIA_PLAYER_TEST_SHARDS:-}" ] && shards=8
 
+for arg in "$@"; do
+    case "$arg" in
+        --coverage*)
+            # Every shard would write coverage/lcov.info and the last one wins.
+            echo "--coverage is not supported here; use ./dev flutter test --coverage --concurrency=1" >&2
+            exit 2 ;;
+    esac
+done
+
 tag=$(printf '%s' "$(pwd -P)" | cksum | cut -d' ' -f1)
 logs="${TMPDIR:-/tmp}/mydia-pt$tag"
+# A second run in this checkout would rewrite the same bundles and logs and
+# could report the other run's results as its own.
+lock="$logs.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+    echo "Another player test run is active in this checkout ($lock)." >&2
+    echo "If none is, remove that directory and retry." >&2
+    exit 1
+fi
+trap 'rm -f test/.test_optimizer_s*.dart; rmdir "$lock"' EXIT
 rm -rf "$logs"
 mkdir -p "$logs"
-trap 'rm -f test/.test_optimizer_s*.dart' EXIT
 
 bundled=()
 unbundled=()
@@ -117,6 +134,9 @@ for i in $(seq 0 $(( shards - 1 ))); do
             grep -q '^Flutter failed to copy file' "$logs/s$i.log" || break
             sleep $(( attempt * 2 ))
         done
+        # 79 is "no tests selected": with --name or --plain-name most bundles
+        # match nothing. The total below still fails a run that ran nothing.
+        (( code == 79 )) && code=0
         echo "EXIT=$code" > "$logs/s$i.exit"
     ) &
     sleep 1
@@ -159,4 +179,8 @@ done
 
 echo ""
 echo "$passed passed, $skipped skipped, $failed failed in $(( SECONDS - start ))s"
+if (( passed + skipped + failed == 0 )); then
+    echo "No tests ran." >&2
+    status=1
+fi
 exit $status
