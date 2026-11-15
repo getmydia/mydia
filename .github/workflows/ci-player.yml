@@ -141,6 +141,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
 
+    # The S3 server s3_integration_test.dart runs against. The image is the
+    # release devenv's `rustfs` packages (1.0.0-rc.6), so local runs and CI
+    # test the same server; its default command serves /data on port 9000.
+    # The credentials are devenv.nix's MYDIA_TEST_S3_* values. Services take
+    # no `if:`, so the image is empty, which starts nothing, when the
+    # steps below are skipped.
+    services:
+      rustfs:
+        image: ${{ needs.changes.outputs.player == 'true' && 'rustfs/rustfs:1.0.0-rc.6' || '' }}
+        ports:
+          - 9000:9000
+        env:
+          RUSTFS_ACCESS_KEY: mydia
+          RUSTFS_SECRET_KEY: mydia-dev-secret
+        options: >-
+          --health-cmd "curl -s -o /dev/null http://127.0.0.1:9000"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
     defaults:
       run:
         working-directory: player
@@ -212,7 +232,14 @@ jobs:
         # --concurrency 1 is still load-bearing: very_good passes -j 4 by
         # default, and at default concurrency flutter test silently drops
         # 2-4 files while exiting 0.
+        #
+        # The MYDIA_TEST_S3_* variables point s3_integration_test.dart at the
+        # rustfs service above; without them that file skips itself.
         if: needs.changes.outputs.player == 'true'
+        env:
+          MYDIA_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+          MYDIA_TEST_S3_ACCESS_KEY_ID: mydia
+          MYDIA_TEST_S3_SECRET_ACCESS_KEY: mydia-dev-secret
         run: dart pub global run very_good_cli:very_good test --concurrency 1
 
       - name: Run television-tier tests
