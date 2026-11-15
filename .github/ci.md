@@ -610,7 +610,11 @@ for x86_64 and aarch64, each on a native runner through the Dockerfile's
 `cwasm-out` target, so the artifact is built by the release image's own Wasmex
 and wasmtime. It runs on a guest, Dockerfile, Wasmex pin or engine-config
 change, and again when the `Cardigann guest` workflow completes on master (the
-guest is only downloadable once that has published it). Pull requests build both
+guest is only downloadable once that has published it). `cardigann-guest.yml`
+runs on every `master` push without a path filter (exiting in seconds when
+`cardigann-guest-<hash>` already exists) and supports `workflow_dispatch` so a
+Dependabot merge with `GITHUB_TOKEN` cannot leave a new guest hash permanently
+unpublished. Pull requests build both
 architectures and upload them as run artifacts, but never publish. On master the
 `publish` job creates the immutable release
 `cardigann-cwasm-<hash>-wasmtime<ver>-cfg<n>` holding both `.cwasm.gz` files with

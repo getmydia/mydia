@@ -10,10 +10,10 @@ name: Cardigann guest
 # scripts. Never create the release or upload assets by hand.
 #
 # Dependabot's nuget bumps change the guest's sources, and the auto-merge gate
-# merges them with GITHUB_TOKEN, whose push starts no workflows. The guest for
-# the new hash is then never published, and the release image's
-# `cardigann_guest pin --require` fails. Recover with
-# `gh workflow run cardigann-guest.yml --ref master`.
+# merges them with GITHUB_TOKEN, whose push starts no workflows. Running on
+# every master push (without a path filter) lets the 5-second release check in
+# `Skip if published` self-heal on the next push; `workflow_dispatch` recovers
+# immediately when no push is queued (`gh workflow run cardigann-guest.yml --ref master`).
 
 on:
   workflow_dispatch:
@@ -24,9 +24,6 @@ on:
       - ".github/workflows/cardigann-guest.yml"
   push:
     branches: [master]
-    paths:
-      - "native/cardigann_guest/**"
-      - ".github/workflows/cardigann-guest.yml"
 
 permissions:
   contents: read
@@ -109,7 +106,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: cardigann-guest-publish
+      group: cardigann-guest-publish-${{ needs.build.outputs.hash }}
       cancel-in-progress: false
     steps:
       # Only for LICENSE and NOTICE; no repository script runs in this job.
