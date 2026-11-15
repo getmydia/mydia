@@ -200,19 +200,30 @@ class DialogSettingsNav implements SettingsNav {
         builder: (_) => _MydiaInstancePage(sourceId: id),
       ));
 
+  /// Selects [category] while the dialog is open. Its controller is disposed
+  /// once it closes, and a toast action (the pairing notice's "View") can
+  /// fire after that; then this does nothing.
+  void _select(SettingsCategory category) {
+    if (_connections == null) return;
+    scope.select(category);
+  }
+
   @override
-  void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
+  void openDiagnostics() => _select(SettingsCategory.diagnostics);
 
   /// Paired devices are a section of the hub; the dialog returns the pane to
   /// its root and selects it.
   @override
-  void openPairedDevices() => scope.connectionsSection.value = 'devices';
+  void openPairedDevices() {
+    if (_connections == null) return;
+    scope.connectionsSection.value = 'devices';
+  }
 
   @override
-  void openBackup() => scope.select(SettingsCategory.backup);
+  void openBackup() => _select(SettingsCategory.backup);
 
   @override
-  void openConnections() => scope.select(SettingsCategory.connections);
+  void openConnections() => _select(SettingsCategory.connections);
 
   @override
   void openAccount(String accountId) =>

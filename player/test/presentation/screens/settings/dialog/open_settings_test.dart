@@ -293,6 +293,33 @@ void main() {
     expect(nav.instanceRemoved, returnsNormally);
   });
 
+  testWidgets(
+      'a toast asking for Backup & sync after the dialog closed is a '
+      'no-op', (tester) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
+    await open(tester);
+    final nav = dialogNav(tester);
+
+    await tester.tap(find.byKey(const Key('settings-dialog-close')).first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+
+    // The pairing notice's "View" outlives the dialog (and its controller).
+    expect(nav.openBackup, returnsNormally);
+    expect(nav.openDiagnostics, returnsNormally);
+    expect(nav.openConnections, returnsNormally);
+    expect(nav.openPairedDevices, returnsNormally);
+  });
+
+  testWidgets('a Backup & sync request maps to the backup category',
+      (tester) async {
+    await pumpApp(tester, dialog: true);
+    final context = tester.element(find.text('open'));
+    expect(openSettingsForRoute(context, backupRequestLocation()), isTrue);
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.backup);
+  });
+
   testWidgets('a second open retargets instead of stacking', (tester) async {
     await pumpApp(tester, dialog: true);
     await open(tester);

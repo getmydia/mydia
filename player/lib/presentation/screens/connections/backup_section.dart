@@ -1,4 +1,5 @@
-/// Backup & sync on the Servers & devices hub: the end-to-end encrypted cloud
+/// Backup & sync, on the main Settings screen and in the desktop settings
+/// dialog's own category: the end-to-end encrypted cloud
 /// backup's switch and status, the devices in it, the recovery key, and
 /// deleting it.
 library;
