@@ -8,6 +8,16 @@ rules: `metadata-relay/docs/backup.md`, which the client here is built
 against. Native only: nothing in this directory runs on web (`kIsWeb`), and
 the Backup & sync section is hidden there (`isWebProvider`).
 
+## Threat model
+
+The relay never sees a vault key or plaintext, but it is trusted not to
+forge membership: members take the member list from its manifest, and a
+rotation seals the vault key to every box key listed. A
+relay that inserted a member row of its own would receive the key at the
+next rotation and read what is written under it from then on, though
+nothing sealed before. Detecting that is out of scope; see "Threat model" in
+the spec.
+
 ## Units
 
 | File | Job |

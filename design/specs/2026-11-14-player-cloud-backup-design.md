@@ -100,6 +100,23 @@ Every record is LWW per key on its origin `updatedAt`, the rule
 All primitives come from the `cryptography` package already in
 `player/pubspec.yaml`: Ed25519, X25519, HKDF-SHA256, XChaCha20-Poly1305.
 
+### Threat model
+
+The relay is honest-but-curious about content: it stores ciphertext, public
+keys and envelopes, never a vault key or plaintext, so reading its disk or
+its traffic reveals sizes, timing and membership, not records. It is trusted
+not to forge membership. Members learn who else is in the vault only from
+the relay's manifest, and whichever device rotates seals the new vault key
+to every box key listed there. A relay that actively lies, inserting a
+member row of its own, would therefore receive the vault key at the next
+rotation (a removal, a new recovery key, a device leaving) and could read
+slots written under it
+from then on. It cannot read anything sealed before that, cannot write a
+slot as another member (slots are bound to their owner's signer and the
+AAD), and cannot remove a device's knowledge of past keys. Detecting an
+injected member (out-of-band member fingerprints, or members signing the
+member list) is out of scope for this version.
+
 ### Device backup identity
 
 Each install creates an Ed25519 signer and an X25519 box key on first use and
