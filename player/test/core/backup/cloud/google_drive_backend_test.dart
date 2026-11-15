@@ -64,8 +64,8 @@ void main() {
     final server = FakeDriveServer();
     final auth = _FakeAuth(server);
     return (
-      CloudSlotTransport(_backend(server, auth, _meta()), 'slot-a'),
-      CloudSlotTransport(_backend(server, auth, _meta()), 'slot-b'),
+      CloudSlotTransport(_backend(server, auth, _meta()), 'a1b2c3d4e5f60001'),
+      CloudSlotTransport(_backend(server, auth, _meta()), 'a1b2c3d4e5f60002'),
     );
   });
 
@@ -83,13 +83,14 @@ void main() {
     });
 
     test('first_write_creates_then_patches', () async {
-      await _write(backend, 'slot-a', [1, 2, 3]);
-      expect(server.requests, ['POST /upload/drive/v3/files']);
+      await _write(backend, 'a1b2c3d4e5f60001', [1, 2, 3]);
+      expect(server.requests,
+          ['GET /drive/v3/files', 'POST /upload/drive/v3/files']);
       final id = meta.gdriveOwnFileId;
       expect(id, isNotNull);
-      expect(server.files[id]!.appProperties['slotId'], 'slot-a');
+      expect(server.files[id]!.appProperties['slotId'], 'a1b2c3d4e5f60001');
 
-      await _write(backend, 'slot-a', [4, 5], name: 'Den');
+      await _write(backend, 'a1b2c3d4e5f60001', [4, 5], name: 'Den');
       expect(server.requests.last, 'PATCH /upload/drive/v3/files/$id');
       expect(server.files, hasLength(1));
       expect(server.files[id]!.bytes, [4, 5]);
@@ -97,28 +98,62 @@ void main() {
     });
 
     test('patch_404_recreates', () async {
-      await _write(backend, 'slot-a', [1]);
+      await _write(backend, 'a1b2c3d4e5f60001', [1]);
       final old = meta.gdriveOwnFileId!;
       server.files.remove(old);
 
-      await _write(backend, 'slot-a', [2]);
+      await _write(backend, 'a1b2c3d4e5f60001', [2]);
       expect(meta.gdriveOwnFileId, isNot(old));
       expect(server.files.values.single.bytes, [2]);
-      expect(server.requests.sublist(server.requests.length - 2), [
+      expect(server.requests.sublist(server.requests.length - 3), [
         'PATCH /upload/drive/v3/files/$old',
+        'GET /drive/v3/files',
         'POST /upload/drive/v3/files',
       ]);
+    });
+
+    test('lost_cached_id_reuses_existing_file', () async {
+      await _write(backend, 'a1b2c3d4e5f60001', [1]);
+      final id = meta.gdriveOwnFileId!;
+      await meta.setGdriveOwnFileId(null);
+      server.requests.clear();
+
+      await _write(backend, 'a1b2c3d4e5f60001', [2]);
+      expect(server.files, hasLength(1));
+      expect(server.files[id]!.bytes, [2]);
+      expect(meta.gdriveOwnFileId, id);
+      expect(server.requests,
+          ['GET /drive/v3/files', 'PATCH /upload/drive/v3/files/$id']);
+    });
+
+    test('duplicate_files_keep_newest', () async {
+      FakeDriveFile dup(String id, int minute, List<int> bytes) => server
+              .files[id] = FakeDriveFile(id, 'slot-a1b2c3d4e5f60001.json.gz', {
+            'slotId': 'a1b2c3d4e5f60001',
+            'deviceName': 'Den',
+          })
+            ..bytes = bytes
+            ..version = minute
+            ..modified = DateTime.utc(2026, 1, 1, 0, minute);
+      dup('old', 1, [1]);
+      dup('new', 5, [5]);
+      dup('mid', 3, [3]);
+
+      final l = (await backend.list())!;
+      expect(l.slots, hasLength(1));
+      expect(l.slots.single.version, '5');
+      expect(await backend.readBytes('a1b2c3d4e5f60001'), [5]);
     });
 
     test('paged_listing_is_merged', () async {
       server.pageLimit = 2;
       for (var i = 0; i < 5; i++) {
-        await _write(_backend(server, auth, _meta()), 'slot-$i', [i]);
+        await _write(_backend(server, auth, _meta()), 'a1b2c3d4e5f6000$i', [i]);
       }
       server.requests.clear();
       final l = (await backend.list())!;
       expect(l.slots.map((s) => s.slotId).toSet(),
-          {for (var i = 0; i < 5; i++) 'slot-$i'});
+          {for (var i = 0; i < 5; i++) 'a1b2c3d4e5f6000$i'});
       expect(server.requests, everyElement('GET /drive/v3/files'));
       expect(server.requests, hasLength(3));
       expect(await backend.list(cursor: l.cursor), isNull);
@@ -126,11 +161,11 @@ void main() {
 
     test('list_reports_drive_metadata_and_skips_files_without_slot_id',
         () async {
-      await _write(backend, 'slot-a', [1, 2, 3], name: 'Den');
+      await _write(backend, 'a1b2c3d4e5f60001', [1, 2, 3], name: 'Den');
       server.files['stray'] = FakeDriveFile('stray', 'stray.gz', {})
         ..version = 9;
       final slot = (await backend.list())!.slots.single;
-      expect(slot.slotId, 'slot-a');
+      expect(slot.slotId, 'a1b2c3d4e5f60001');
       expect(slot.deviceName, 'Den');
       expect(slot.size, 3);
       expect(slot.updatedAtMs, isNotNull);
@@ -138,25 +173,25 @@ void main() {
     });
 
     test('read_of_unlisted_slot_lists_first_then_not_found', () async {
-      await _write(_backend(server, auth, _meta()), 'slot-b', [7]);
-      expect(await backend.readBytes('slot-b'), [7]);
+      await _write(_backend(server, auth, _meta()), 'a1b2c3d4e5f60002', [7]);
+      expect(await backend.readBytes('a1b2c3d4e5f60002'), [7]);
       await expectLater(backend.readBytes('nope'),
           throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)));
     });
 
     test('read_404_after_vanish_is_not_found', () async {
-      await _write(backend, 'slot-a', [1]);
+      await _write(backend, 'a1b2c3d4e5f60001', [1]);
       await backend.list();
       server.files.clear();
-      await expectLater(backend.readBytes('slot-a'),
+      await expectLater(backend.readBytes('a1b2c3d4e5f60001'),
           throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)));
     });
 
     test('delete_404_is_success', () async {
-      await _write(backend, 'slot-a', [1]);
+      await _write(backend, 'a1b2c3d4e5f60001', [1]);
       await backend.list();
       server.files.clear();
-      await backend.delete('slot-a');
+      await backend.delete('a1b2c3d4e5f60001');
     });
 
     test('401_refreshes_once_then_signed_out', () async {
@@ -185,7 +220,7 @@ void main() {
                   ]
                 }
               })));
-      await expectLater(_write(backend, 'slot-a', [1]),
+      await expectLater(_write(backend, 'a1b2c3d4e5f60001', [1]),
           throwsA(predicate((e) => _kindOf(e) == BackupRelayError.quotaFull)));
     });
 
@@ -242,7 +277,7 @@ void main() {
     });
 
     test('sign_out_delegates_and_clears_the_own_file_id', () async {
-      await _write(backend, 'slot-a', [1]);
+      await _write(backend, 'a1b2c3d4e5f60001', [1]);
       expect(meta.gdriveOwnFileId, isNotNull);
       await backend.signOut();
       expect(auth.signedOut, isTrue);

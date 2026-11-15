@@ -13,7 +13,7 @@ import 'cloud_backend.dart';
 import 'google_auth.dart';
 
 /// A [CloudBackend] over Drive v3's hidden `appDataFolder`. Each device's
-/// slot is one file named `<slotId>.json.gz`, tagged with `appProperties`
+/// slot is one file named `slot-<slotId>.json.gz`, tagged with `appProperties`
 /// `slotId` and `deviceName`.
 class GoogleDriveBackend implements CloudBackend {
   GoogleDriveBackend({
@@ -70,24 +70,34 @@ class GoogleDriveBackend implements CloudBackend {
     ]..sort();
     final current = sha256.convert(utf8.encode(pairs.join('\n'))).toString();
 
-    _fileIds.clear();
-    final slots = <SlotInfo>[];
+    // Several files may carry one slotId (a lost cached id used to create
+    // a second); the newest by modifiedTime stands for the slot.
+    final newest = <String, SlotInfo>{};
+    final newestFile = <String, String>{};
     for (final f in files) {
       final props = (f['appProperties'] as Map?)?.cast<String, dynamic>();
       final slotId = props?['slotId'] as String?;
       if (slotId == null) continue;
-      _fileIds[slotId] = f['id'] as String;
-      slots.add(SlotInfo(
+      final info = SlotInfo(
         slotId: slotId,
         version: '${f['version']}',
         deviceName: props?['deviceName'] as String?,
         updatedAtMs:
             DateTime.tryParse('${f['modifiedTime']}')?.millisecondsSinceEpoch,
         size: int.tryParse('${f['size']}'),
-      ));
+      );
+      final seen = newest[slotId];
+      if (seen != null && (info.updatedAtMs ?? 0) <= (seen.updatedAtMs ?? 0)) {
+        continue;
+      }
+      newest[slotId] = info;
+      newestFile[slotId] = f['id'] as String;
     }
+    _fileIds
+      ..clear()
+      ..addAll(newestFile);
     if (cursor == current) return null;
-    return CloudListing(cursor: current, slots: slots);
+    return CloudListing(cursor: current, slots: newest.values.toList());
   }
 
   @override
@@ -120,6 +130,18 @@ class GoogleDriveBackend implements CloudBackend {
         return;
       }
       await _meta.setGdriveOwnFileId(null);
+    }
+    // No cached id (first write, or the meta store was lost): reuse the
+    // file a fresh listing already holds for this slot before creating.
+    await list();
+    final existing = _fileIds[slotId];
+    if (existing != null) {
+      final r = await _upload('PATCH', existing, slotId, bytes, deviceName);
+      if (r.statusCode != 404) {
+        _expectOk(r);
+        await _meta.setGdriveOwnFileId(existing);
+        return;
+      }
     }
     final r = await _upload('POST', null, slotId, bytes, deviceName);
     _expectOk(r);
@@ -160,7 +182,7 @@ class GoogleDriveBackend implements CloudBackend {
         'mydia-${Random.secure().nextInt(1 << 32).toRadixString(36)}'
         '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
     final metadata = jsonEncode({
-      if (fileId == null) 'name': '$slotId.json.gz',
+      if (fileId == null) 'name': 'slot-$slotId.json.gz',
       if (fileId == null) 'parents': ['appDataFolder'],
       'appProperties': {'slotId': slotId, 'deviceName': deviceName},
     });

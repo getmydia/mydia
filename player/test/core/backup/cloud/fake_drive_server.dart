@@ -160,6 +160,10 @@ class FakeDriveServer {
           (meta['parents'] as List).single != 'appDataFolder') {
         throw StateError('Create needs parents: [appDataFolder]');
       }
+      final slot = (meta['appProperties'] as Map?)?['slotId'];
+      if (meta['name'] != 'slot-$slot.json.gz') {
+        throw StateError('Bad file name: ${meta['name']}');
+      }
       final newId = 'file-${_nextId++}';
       file = files[newId] = FakeDriveFile(newId, meta['name'] as String, {});
     } else {
