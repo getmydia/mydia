@@ -47,7 +47,9 @@ tag=$(printf '%s' "$root" | cksum | cut -d' ' -f1)
 base="${TMPDIR:-/tmp}/mydia-t$tag"
 # A second run in this checkout would share the partition databases, logs and
 # exit records, and could report the other run's results as its own.
-lock="$base.lock"
+# In the checkout, not under TMPDIR, so runs with different TMPDIRs still
+# exclude each other. _build is gitignored and already exists after compile.
+lock="$root/_build/.test-partitioned.lock"
 if ! mkdir "$lock" 2>/dev/null; then
     echo "Another partitioned test run is active in this checkout ($lock)." >&2
     echo "If none is, remove that directory and retry." >&2
@@ -89,13 +91,21 @@ wait
 # Each partition wrote its own failures manifest (a shared one is read at start
 # and replaced at finish, so partitions would erase each other's failures).
 # Merge them into the default path so `./dev test --failed` reruns them all.
+# A partition whose files failed to load writes the "rerun everything"
+# sentinel, which read/1 would turn into an empty map; keep it. The default
+# path follows Mix's build path, which devenv moves for DATABASE_TYPE=postgres.
+build_path="${MIX_BUILD_PATH:-${MIX_BUILD_ROOT:-_build}/test}"
+case "$build_path" in /*) ;; *) build_path="$root/$build_path" ;; esac
 elixir -e '
+  alias ExUnit.FailuresManifest, as: M
   [out | parts] = System.argv()
-  parts
-  |> Enum.map(&ExUnit.FailuresManifest.read/1)
-  |> Enum.reduce(%{}, &Map.merge/2)
-  |> ExUnit.FailuresManifest.write!(out)
-' "$root/_build/test/lib/mydia/.mix/.mix_test_failures" "$base"/p*/failures 2>/dev/null ||
+
+  if Enum.any?(parts, &(M.info(&1) == :all)) do
+    M.fail_all!(out)
+  else
+    parts |> Enum.map(&M.read/1) |> Enum.reduce(%{}, &Map.merge/2) |> M.write!(out)
+  end
+' "$build_path/lib/mydia/.mix/.mix_test_failures" "$base"/p*/failures 2>/dev/null ||
     echo "warning: could not merge failure manifests; ./dev test --failed may be incomplete" >&2
 
 status=0
@@ -139,4 +149,10 @@ done
 echo ""
 # "N tests, M failures" is what ./dev's precommit summary greps for.
 echo "$(( passed + failed )) tests, $failed failures across $n partitions in $(( SECONDS - start ))s"
+# Empty partitions are fine one at a time; a run that executed nothing (a
+# mistyped path in every partition) is not, matching plain `mix test`.
+if (( passed + failed == 0 )); then
+    echo "No tests ran." >&2
+    status=1
+fi
 exit $status

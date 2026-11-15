@@ -34,14 +34,21 @@ for arg in "$@"; do
             # Every shard would write coverage/lcov.info and the last one wins.
             echo "--coverage is not supported here; use ./dev flutter test --coverage --concurrency=1" >&2
             exit 2 ;;
+        --machine|--reporter*|-r)
+            # Results are read from the expanded reporter's progress lines.
+            echo "$arg is not supported here; use ./dev flutter test $arg --concurrency=1" >&2
+            exit 2 ;;
     esac
 done
 
 tag=$(printf '%s' "$(pwd -P)" | cksum | cut -d' ' -f1)
 logs="${TMPDIR:-/tmp}/mydia-pt$tag"
 # A second run in this checkout would rewrite the same bundles and logs and
-# could report the other run's results as its own.
-lock="$logs.lock"
+# could report the other run's results as its own. The lock lives in the
+# checkout (.dart_tool is gitignored), not under TMPDIR, so runs with different
+# TMPDIRs still exclude each other.
+lock=.dart_tool/test-sharded.lock
+mkdir -p .dart_tool
 if ! mkdir "$lock" 2>/dev/null; then
     echo "Another player test run is active in this checkout ($lock)." >&2
     echo "If none is, remove that directory and retry." >&2
