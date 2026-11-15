@@ -199,6 +199,40 @@ void main() {
     expect(u.path, '/bkt/media/a//x.mkv');
   });
 
+  test('folders carry their key prefix as identity', () async {
+    final b = backend(MockClient((r) async {
+      if (r.method == 'HEAD') return http.Response('', 404);
+      return switch (r.url.queryParameters['prefix']) {
+        'media/' => http.Response(listing(prefixes: ['media/a/']), 200),
+        'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
+        'media/a//' =>
+          http.Response(listing(contents: [object('media/a//x.mkv')]), 200),
+        final p => http.Response('unexpected prefix $p', 500),
+      };
+    }));
+
+    expect((await b.stat('/'))?.identity, 'media/');
+    expect((await b.list('/')).single.identity, 'media/a/');
+    expect((await b.stat('/a'))?.identity, 'media/a/');
+    final inner = (await b.list('/a')).single;
+    expect(inner.identity, 'media/a//');
+    expect((await b.stat(inner.path))?.identity, 'media/a//');
+    // Files keep no identity: their path is where they are.
+    expect((await b.list(inner.path)).single.identity, isNull);
+
+    final bare = backend(
+      MockClient((_) async => http.Response('', 500)),
+      location: S3Location(
+        endpoint: Uri.parse('https://h'),
+        bucket: 'bkt',
+        prefix: '',
+        region: 'us-east-1',
+        style: S3Style.path,
+      ),
+    );
+    expect((await bare.stat('/'))?.identity, '/');
+  });
+
   test('an empty first segment at the root is not listed', () async {
     final entries = await backend(MockClient((_) async => http.Response(
         listing(prefixes: ['media//', 'media/Movies/']), 200))).list('/');

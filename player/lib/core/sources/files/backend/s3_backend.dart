@@ -173,13 +173,7 @@ class S3Backend implements FileSystemBackend {
         // `<prefix>/` at the root, an empty first segment, has no path
         // apart from the root itself.
         if (path == '/') continue;
-        entries.add(FileEntry(
-          path: path,
-          name: _nameOf(path),
-          isDir: true,
-          size: 0,
-          modified: _epoch,
-        ));
+        entries.add(_dirEntry(path));
       }
       for (final o in page.objects) {
         // The zero-byte marker web consoles create for a folder.
@@ -211,10 +205,7 @@ class S3Backend implements FileSystemBackend {
   @override
   Future<FileEntry?> stat(String path) async {
     final key = _keyOf(path);
-    if (_isRoot(path)) {
-      return FileEntry(
-          path: '/', name: '/', isDir: true, size: 0, modified: _epoch);
-    }
+    if (_isRoot(path)) return _dirEntry('/');
     final response = await _send('HEAD', _location.objectUri(key));
     final status = response.statusCode;
     if (status >= 200 && status < 300) {
@@ -237,9 +228,20 @@ class S3Backend implements FileSystemBackend {
       'max-keys': '1',
     });
     if (page.objects.isEmpty && page.prefixes.isEmpty) return null;
+    return _dirEntry(path);
+  }
+
+  /// The folder at [path]. Its identity is its key prefix in the bucket
+  /// (the root's is the location prefix, or `/` without one): a walk that
+  /// trims one trailing `/` from paths would take the folder `/a/` (key
+  /// `<prefix>a//`) for its parent `/a` and never enter it, while the keys
+  /// `<prefix>a/` and `<prefix>a//` stay apart after that trim.
+  FileEntry _dirEntry(String path) {
+    final key = _dirKey(path);
     return FileEntry(
-      path: path,
-      name: _nameOf(path),
+      path: _isRoot(path) ? '/' : path,
+      name: _isRoot(path) ? '/' : _nameOf(path),
+      identity: key.isEmpty ? '/' : key,
       isDir: true,
       size: 0,
       modified: _epoch,

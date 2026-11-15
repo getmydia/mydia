@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:player/core/sources/connection/app_foreground.dart';
 import 'package:player/core/sources/files/backend/webdav_backend.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
+import 'package:player/core/sources/files/backend/s3_backend.dart';
 import 'package:player/core/sources/files/backend/local_path_backend.dart';
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
@@ -297,6 +298,57 @@ void main() {
       });
     });
   }
+
+  test('an_s3_folder_whose_key_holds_a_double_slash_is_walked', () async {
+    // `media/Glass Harbor//` is the folder `/Glass Harbor/`, a child of
+    // `/Glass Harbor`: told apart by path alone after one trailing slash is
+    // trimmed, it would read as visited and its files never be indexed.
+    String obj(String key) => '<Contents><Key>$key</Key>'
+        '<LastModified>2026-01-02T03:04:05.000Z</LastModified>'
+        '<Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>';
+    String pfx(String p) => '<CommonPrefixes><Prefix>$p</Prefix>'
+        '</CommonPrefixes>';
+    String page(String inner) => '<ListBucketResult>'
+        '<IsTruncated>false</IsTruncated>$inner</ListBucketResult>';
+    final listings = {
+      'media/': page(pfx('media/Glass Harbor/')),
+      'media/Glass Harbor/': page(
+          obj('media/Glass Harbor/Glass Harbor S01E01.mkv') +
+              pfx('media/Glass Harbor//')),
+      'media/Glass Harbor//':
+          page(obj('media/Glass Harbor//Glass Harbor S01E02.mkv')),
+    };
+    final s3 = S3Backend(
+      location: S3Location(
+        endpoint: Uri.parse('https://s3.example.test'),
+        bucket: 'bkt',
+        prefix: 'media/',
+        region: 'us-east-1',
+        style: S3Style.path,
+      ),
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: 'secret',
+      client: MockClient((r) async {
+        final body = r.method == 'GET'
+            ? listings[r.url.queryParameters['prefix']]
+            : null;
+        return body == null ? http.Response('', 404) : http.Response(body, 200);
+      }),
+    );
+    const s3Root = LibraryRoot(
+      id: 'rs3',
+      path: '/',
+      kind: FilesLibraryKind.mixed,
+      title: 'Bucket',
+    );
+
+    await FileScanner(backend: s3, names: names, index: index).scan(s3Root);
+
+    expect(index.files().values.map((f) => f.path).toSet(), {
+      'Glass Harbor/Glass Harbor S01E01.mkv',
+      'Glass Harbor//Glass Harbor S01E02.mkv',
+    });
+  });
 
   group('webdav entries the server refuses', () {
     const davRoot = LibraryRoot(
