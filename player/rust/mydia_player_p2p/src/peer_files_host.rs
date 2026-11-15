@@ -166,9 +166,10 @@ enum Outcome {
     /// The grant led nowhere readable, so it is dropped and the next read
     /// asks Dart again (an SMB share that moved, a file that was deleted).
     Failed,
-    /// The upstream refused the grant (401 or 403) before any byte went to
-    /// the sink: a presigned URL that expired. `serve` asks Dart for a fresh
-    /// grant once.
+    /// The upstream answered 403 before any byte went to the sink: what an
+    /// expired presigned URL answers. `serve` asks Dart for a fresh grant
+    /// once. A 401 is bad credentials, not expiry, and is `Failed`: retrying
+    /// it would double the bad-auth attempts a share that throttles counts.
     Stale,
 }
 
@@ -539,7 +540,7 @@ impl<R: GrantResolver> PeerFilesHost<R> {
             Ok(response) => {
                 let status = response.status();
                 tracing::warn!("peer files: upstream answered {status}");
-                if matches!(status.as_u16(), 401 | 403) {
+                if status.as_u16() == 403 {
                     return Outcome::Stale;
                 }
                 reply_status(sink, 502, None).await;
@@ -959,6 +960,12 @@ mod tests {
         if req.uri().path() == "/expired" {
             return Ok(Response::builder()
                 .status(403)
+                .body(Full::new(Bytes::new()).boxed())
+                .unwrap());
+        }
+        if req.uri().path() == "/unauthorized" {
+            return Ok(Response::builder()
+                .status(401)
                 .body(Full::new(Bytes::new()).boxed())
                 .unwrap());
         }
@@ -1531,6 +1538,26 @@ mod tests {
             assert_eq!(sink.status(), Some(206));
             assert_eq!(sink.body().len(), 100);
             assert_eq!(host.resolver().calls(), 2);
+        });
+    }
+
+    #[test]
+    fn unauthorized_grant_is_not_reissued() {
+        runtime::block_on(async {
+            let server = start_server().await;
+            let host = host_with(SequenceResolver::new(vec![
+                format!("{}/unauthorized", server.base),
+                format!("{}/ok", server.base),
+            ]));
+            let sink = RecordingSink::default();
+            host.serve(
+                MEMBER.to_string(),
+                request("/share/movie.mkv", Some(0), Some(99)),
+                sink.clone(),
+            )
+            .await;
+            assert_eq!(sink.status(), Some(502));
+            assert_eq!(host.resolver().calls(), 1);
         });
     }
 

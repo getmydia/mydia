@@ -51,7 +51,7 @@
 | Create `player/lib/presentation/screens/sources/add_s3_screen.dart` | The add / sign-in-again screen |
 | Modify `player/lib/presentation/screens/sources/add_source_screen.dart` | The S3 tile |
 | Modify `player/lib/core/router/app_router.dart` | `/sources/add/s3` route, `filesReauthLocation` branch |
-| Modify `player/rust/mydia_player_p2p/src/peer_files_host.rs` | Re-grant once on upstream 401/403; scrub URLs from errors |
+| Modify `player/rust/mydia_player_p2p/src/peer_files_host.rs` | Re-grant once on upstream 403; scrub URLs from errors |
 | Create `player/test/core/sources/files/backend/s3_integration_test.dart` | Against RustFS |
 | Modify `.github/workflows/ci-player.yml` | RustFS service for `test-player` |
 | Modify `player/lib/core/sources/README.md` | The S3 backend section |
@@ -397,7 +397,7 @@ Expected: the new tests fail.
 - Modify: `player/rust/mydia_player_p2p/src/peer_files_host.rs` (`serve` ~line 442, `serve_http` ~line 499, tests module)
 
 **Interfaces:**
-- Produces: a new `Outcome::Stale` variant. `serve_http` returns it when the upstream answers 401 or 403, before any header has been written to the sink. `serve` handles `Stale` by removing the cached grant, resolving a fresh one through `self.grant` and serving once more. A second `Stale` is answered with 502 and handled like `Failed`.
+- Produces: a new `Outcome::Stale` variant. `serve_http` returns it when the upstream answers 403 (a 401 is bad credentials and stays `Failed`), before any header has been written to the sink. `serve` handles `Stale` by removing the cached grant, resolving a fresh one through `self.grant` and serving once more. A second `Stale` is answered with 502 and handled like `Failed`.
 
 - [ ] **Step 1: Write the failing tests** in the existing `tests` module, using its `start_server`, `MapResolver` and `RecordingSink`:
   - `expired_grant_is_reissued_once`: the resolver hands out `…/expired` first and `…/ok` second, where the test server answers `/expired` with 403 and `/ok` with 206. One read gets 206, and the resolver was called twice.
