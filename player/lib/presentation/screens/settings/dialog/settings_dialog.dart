@@ -13,6 +13,7 @@ import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
   connections(Icons.hub_outlined),
+  backup(Icons.cloud_upload_outlined),
   playback(Icons.play_circle_outline),
   diagnostics(Icons.lan_outlined),
   about(Icons.info_outline);
@@ -24,6 +25,7 @@ enum SettingsCategory {
   /// The sidebar label, which is also the category's root page title.
   String label(AppLocalizations l10n) => switch (this) {
         connections => l10n.connectionsTitle,
+        backup => l10n.backupSectionTitle,
         playback => l10n.settingsPlayback,
         diagnostics => l10n.settingsDiagnostics,
         about => l10n.settingsAbout,

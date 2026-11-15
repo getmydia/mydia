@@ -83,6 +83,7 @@ SettingsCategory? _categoryFor(String route) => switch (route) {
       '/sources/manage' ||
       '/settings/paired-devices' =>
         SettingsCategory.connections,
+      settingsBackupLocation => SettingsCategory.backup,
       '/settings/diagnostics' => SettingsCategory.diagnostics,
       _ => null,
     };
@@ -119,6 +120,8 @@ Future<void> openSettings(
     switch (initial) {
       case SettingsCategory.playback || SettingsCategory.about:
         router.go('/settings');
+      case SettingsCategory.backup:
+        router.go(settingsBackupLocation);
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
       case SettingsCategory.connections:

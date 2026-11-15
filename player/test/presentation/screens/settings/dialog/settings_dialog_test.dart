@@ -49,7 +49,7 @@ Future<SettingsDialogController> _open(WidgetTester tester,
 }
 
 void main() {
-  testWidgets('lists the four categories and shows the selected one',
+  testWidgets('lists every category and shows the selected one',
       (tester) async {
     await _open(tester);
     for (final c in SettingsCategory.values) {

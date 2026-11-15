@@ -353,6 +353,19 @@ void main() {
     );
   });
 
+  testWidgets('Backup & sync has its own pane; openBackup selects it',
+      (tester) async {
+    await pumpApp(tester, dialog: true);
+    await open(tester);
+    expect(selected(tester), SettingsCategory.playback);
+
+    dialogNav(tester).openBackup();
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.backup);
+    expect(find.byKey(const Key('settings-backup-section')), findsOneWidget);
+    expect(find.byKey(const Key('backup-switch')), findsOneWidget);
+  });
+
   testWidgets('paired devices is no longer pushed onto playback',
       (tester) async {
     await pumpApp(tester, dialog: true);

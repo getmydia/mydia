@@ -16,6 +16,8 @@ class RecordingNav implements SettingsNav {
   @override
   void openPairedDevices() => calls.add('paired-devices');
   @override
+  void openBackup() => calls.add('backup');
+  @override
   void openConnections() => calls.add('connections');
   @override
   void openAccount(String accountId) => calls.add('account $accountId');

@@ -11,6 +11,7 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
 import '../../connections/account_detail_page.dart';
+import '../../connections/backup_section.dart';
 import '../../connections/connections_hub.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
@@ -23,6 +24,13 @@ const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
       SettingsCategory.connections => const _ConnectionsPage(),
+      SettingsCategory.backup => const _CategoryPane(
+          category: SettingsCategory.backup,
+          child: SingleChildScrollView(
+            padding: _bodyPadding,
+            child: BackupSection(key: Key('settings-backup-section')),
+          ),
+        ),
       SettingsCategory.playback => const _PlaybackPage(),
       SettingsCategory.diagnostics => const _CategoryPane(
           category: SettingsCategory.diagnostics,
@@ -199,6 +207,9 @@ class DialogSettingsNav implements SettingsNav {
   /// its root and selects it.
   @override
   void openPairedDevices() => scope.connectionsSection.value = 'devices';
+
+  @override
+  void openBackup() => scope.select(SettingsCategory.backup);
 
   @override
   void openConnections() => scope.select(SettingsCategory.connections);

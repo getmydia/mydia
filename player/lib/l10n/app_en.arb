@@ -2979,23 +2979,9 @@
   "@backupKeyFileName": {
     "description": "Suggested file name when saving the recovery key."
   },
-  "backupKeyConfirmPrompt": "Type group {number} to show you saved it",
-  "@backupKeyConfirmPrompt": {
-    "description": "Asks the viewer to type back one group of the recovery key. number counts the groups from 1.",
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
-  },
-  "backupKeyConfirmLabel": "Group {number}",
-  "@backupKeyConfirmLabel": {
-    "description": "Label of the field where one group of the recovery key is typed back.",
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
+  "backupKeySavedCheckbox": "I saved my recovery key somewhere safe",
+  "@backupKeySavedCheckbox": {
+    "description": "Checkbox under a new recovery key. Turning backup on stays disabled until it is ticked."
   },
   "backupKeyConfirmButton": "Turn on backup",
   "@backupKeyConfirmButton": {

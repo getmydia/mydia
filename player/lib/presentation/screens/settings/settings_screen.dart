@@ -12,12 +12,13 @@ import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../connections/backup_section.dart';
 import '../connections/connections_constellation_card.dart';
 import 'settings_controller.dart';
 import 'settings_nav.dart';
 import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
-    show activeSourceIdProvider, mydiaAccountCountProvider;
+    show activeSourceIdProvider, isWebProvider, mydiaAccountCountProvider;
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -36,7 +37,10 @@ export 'widgets/settings_sections.dart' show updateCheckSubtitle;
 /// screen down with it: someone opening settings while something is broken is
 /// quite likely there to sign out or collect diagnostics.
 class SettingsScreen extends ConsumerWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.initialSection});
+
+  /// `'backup'` scrolls Backup & sync into view once laid out.
+  final String? initialSection;
 
   /// Builds Settings' title-bar header.
   ///
@@ -147,6 +151,21 @@ class SettingsScreen extends ConsumerWidget {
                           )
                         else
                           const ConnectionsConstellationCard(),
+                        // The web player has no cloud backup.
+                        if (!ref.watch(isWebProvider)) ...[
+                          const SizedBox(height: 18),
+                          // After the connections card (item 1), before the
+                          // first section (item 100).
+                          FocusMemoryItem(
+                            id: 'backup-section',
+                            index: 2,
+                            child: _RevealOnRequest(
+                              reveal: initialSection == 'backup',
+                              child: const BackupSection(
+                                  key: Key('settings-backup-section')),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 18),
                         section(
                           1,
@@ -171,6 +190,46 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Scrolls [child] into view after layout when [reveal] turns true, as the
+/// pairing notice's "View" asks for Backup & sync.
+class _RevealOnRequest extends StatefulWidget {
+  const _RevealOnRequest({required this.reveal, required this.child});
+
+  final bool reveal;
+  final Widget child;
+
+  @override
+  State<_RevealOnRequest> createState() => _RevealOnRequestState();
+}
+
+class _RevealOnRequestState extends State<_RevealOnRequest> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.reveal) _revealAfterFrame();
+  }
+
+  @override
+  void didUpdateWidget(_RevealOnRequest oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reveal && !oldWidget.reveal) _revealAfterFrame();
+  }
+
+  void _revealAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Hands focus to the first focusable row when Settings opens on a television.

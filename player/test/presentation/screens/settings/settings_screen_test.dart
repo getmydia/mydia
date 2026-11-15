@@ -10,6 +10,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/build_channel.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
@@ -33,6 +34,8 @@ import 'package:player/presentation/widgets/glass/glass_dialog.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
+import 'package:player/presentation/screens/settings/settings_nav.dart'
+    show settingsBackupLocation;
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
@@ -43,6 +46,7 @@ import '../../../core/sources/mydia/mydia_account_harness.dart'
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
+import '../backup/fake_backup_sync_service.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
@@ -184,6 +188,8 @@ Future<void> _pump(
   ({InMemorySourceStore store, SourceSecrets secrets})? mydia,
   DownloadService? downloads,
   Locale? locale,
+  bool isWeb = false,
+  String initialLocation = '/settings',
 }) async {
   final stored = mydia ?? await _twoMydiaServers();
   final sources = stored.store;
@@ -218,6 +224,8 @@ Future<void> _pump(
         else
           downloadManagerProvider.overrideWith((ref) async => downloads),
         noCollectionSyncOverride,
+        isWebProvider.overrideWithValue(isWeb),
+        backupSyncServiceProvider.overrideWithValue(FakeBackupSyncService()),
         sourceStoreProvider.overrideWith((ref) async => sources),
         sourceSecretsProvider.overrideWithValue(secrets),
         remoteControlSettingsProvider.overrideWith(
@@ -244,13 +252,14 @@ Future<void> _pump(
         supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: GoRouter(
-          initialLocation: '/settings',
+          initialLocation: initialLocation,
           routes: [
             GoRoute(
               path: '/settings',
               builder: (context, state) => inShell
                   ? shellScaffold(child: const SettingsScreen())
-                  : const SettingsScreen(),
+                  : SettingsScreen(
+                      initialSection: state.uri.queryParameters['section']),
             ),
             GoRoute(
               path: '/settings/diagnostics',
@@ -328,6 +337,43 @@ void main() {
     );
     expect(find.byKey(const Key('paired-devices-row')), findsNothing);
     expect(find.byKey(const Key('manage-sources-row')), findsNothing);
+  });
+
+  testWidgets('Backup & sync sits between the connections card and playback',
+      (tester) async {
+    await _pump(tester);
+
+    final backup = find.byKey(const Key('settings-backup-section'));
+    expect(backup, findsOneWidget);
+    expect(find.byKey(const Key('backup-switch')), findsOneWidget);
+    final top = tester.getTopLeft(backup).dy;
+    expect(
+        top,
+        greaterThan(
+            tester.getTopLeft(find.byKey(const Key('connections-card'))).dy));
+    expect(
+        top,
+        lessThan(tester
+            .getTopLeft(find.byKey(const Key('default-quality-row')))
+            .dy));
+  });
+
+  testWidgets('Backup & sync is absent on web', (tester) async {
+    await _pump(tester, isWeb: true);
+    expect(find.byKey(const Key('settings-backup-section')), findsNothing);
+  });
+
+  testWidgets('section=backup scrolls Backup & sync into view', (tester) async {
+    // Short enough that the section starts below the fold.
+    const size = Size(400, 400);
+    await _pump(tester, size: size);
+    final backup = find.byKey(const Key('settings-backup-section'));
+    expect(tester.getTopLeft(backup).dy, greaterThan(size.height),
+        reason: 'below the fold without the request');
+
+    await _pump(tester, size: size, initialLocation: settingsBackupLocation);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(backup).dy, lessThan(size.height));
   });
 
   testWidgets('sign out lives on each server, not here', (tester) async {
@@ -590,6 +636,7 @@ void main() {
     );
 
     await tester.ensureVisible(row);
+    await tester.pump();
     await tester.tap(row);
     await tester.pumpAndSettle();
 
@@ -609,6 +656,7 @@ void main() {
 
     final row = find.byKey(const Key('check-for-updates-row'));
     await tester.ensureVisible(row);
+    await tester.pump();
     await tester.tap(row);
     await tester.pumpAndSettle();
 

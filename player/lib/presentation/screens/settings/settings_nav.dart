@@ -21,6 +21,9 @@ abstract interface class SettingsNav {
 
   void openPairedDevices();
 
+  /// Backup & sync.
+  void openBackup();
+
   /// The Servers & devices hub.
   void openConnections();
 
@@ -44,6 +47,9 @@ abstract interface class SettingsNav {
   void switchedTo(SourceId id);
 }
 
+/// Settings, scrolled to Backup & sync.
+const settingsBackupLocation = '/settings?section=backup';
+
 /// Where adding a server of [kind] starts; the kind picker when null.
 String addServerLocation(SourceKind? kind) =>
     kind == null ? '/sources/add' : '/sources/add/${kind.name}';
@@ -62,6 +68,10 @@ class RouterSettingsNav implements SettingsNav {
 
   @override
   void openPairedDevices() => _router.push('/sources/manage?section=devices');
+
+  /// Backup & sync is a section of Settings itself.
+  @override
+  void openBackup() => _router.go(settingsBackupLocation);
 
   @override
   void openConnections() => _router.push('/sources/manage');
