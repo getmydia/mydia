@@ -805,6 +805,171 @@ void main() {
     expect(saved['refreshToken'], 'rt-prior');
   });
 
+  test(
+      'in-flight refresh read before newer sign-in commits keeps newer grant on invalid_grant',
+      () async {
+    // Seed grant A without email so B's grant (without id_token) falls through
+    // to /userinfo before writing grant B.
+    storage.seedData({
+      googleDriveStorageKey: jsonEncode({
+        'refreshToken': 'rt-a',
+        'clientKind': 'desktop',
+      }),
+    });
+    final userInfoStarted = Completer<void>();
+    final userInfoGate = Completer<void>();
+    final refreshStarted = Completer<void>();
+    final refreshGate = Completer<void>();
+    final client = MockClient((req) async {
+      if (req.url.toString() ==
+          'https://openidconnect.googleapis.com/v1/userinfo') {
+        if (!userInfoStarted.isCompleted) userInfoStarted.complete();
+        await userInfoGate.future;
+        return _json(200, {'email': 'b@example.test'});
+      }
+      if (req.url.toString() == _tokenUrl) {
+        final form = Uri.splitQueryString(req.body);
+        expect(form['refresh_token'], 'rt-a');
+        if (!refreshStarted.isCompleted) refreshStarted.complete();
+        await refreshGate.future;
+        return _json(400, {'error': 'invalid_grant'});
+      }
+      fail('unexpected request: ${req.url}');
+    });
+    final auth = tokenAuth(client);
+
+    final signInB = auth.completeSignIn(
+      _grant(access: 'at-b', refresh: 'rt-b')
+        ..remove('id_token')
+        ..['scope'] = googleDriveAppDataScope,
+    );
+    await userInfoStarted.future;
+
+    // Refresh starts while B is in /userinfo (after B bumped generation,
+    // before B commits grant B) and reads grant A.
+    final staleRefresh = auth.accessToken();
+    await refreshStarted.future;
+
+    userInfoGate.complete();
+    expect(await signInB, 'b@example.test');
+
+    refreshGate.complete();
+    await expectLater(
+      staleRefresh,
+      throwsA(
+        isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)
+            .having((e) => e.code, 'code', 'invalid_grant'),
+      ),
+    );
+
+    expect(stored()['email'], 'b@example.test');
+    expect(stored()['refreshToken'], 'rt-b');
+    expect(await auth.currentEmail(), 'b@example.test');
+    expect(await auth.accessToken(), 'at-b');
+  });
+
+  test(
+      'accessToken(forceRefresh: true) after newer sign-in refreshes new grant',
+      () async {
+    storage.seedData({
+      googleDriveStorageKey: jsonEncode({
+        'email': 'a@example.test',
+        'refreshToken': 'rt-a',
+        'clientKind': 'desktop',
+      }),
+    });
+    final refreshAStarted = Completer<void>();
+    final refreshAGate = Completer<void>();
+    final refreshBStarted = Completer<void>();
+    final refreshBGate = Completer<void>();
+    var refreshBCount = 0;
+    final client = MockClient((req) async {
+      expect(req.url.toString(), _tokenUrl);
+      final rt = Uri.splitQueryString(req.body)['refresh_token'];
+      if (rt == 'rt-a') {
+        if (!refreshAStarted.isCompleted) refreshAStarted.complete();
+        await refreshAGate.future;
+        return _json(200, {'access_token': 'at-a-stale', 'expires_in': 3600});
+      }
+      if (rt == 'rt-b') {
+        refreshBCount++;
+        if (!refreshBStarted.isCompleted) refreshBStarted.complete();
+        await refreshBGate.future;
+        return _json(200, {'access_token': 'at-b-fresh', 'expires_in': 3600});
+      }
+      fail('unexpected refresh_token: $rt');
+    });
+    final auth = tokenAuth(client);
+
+    final first = auth.accessToken();
+    await refreshAStarted.future;
+
+    await auth.completeSignIn({
+      ..._grant(access: 'at-b', refresh: 'rt-b', email: 'b@example.test'),
+      'scope': googleDriveAppDataScope,
+    });
+
+    final forced = auth.accessToken(forceRefresh: true);
+    await refreshBStarted.future;
+
+    refreshAGate.complete();
+    final firstResult = await first;
+    expect(firstResult, 'at-b');
+
+    // A's completion must not clear B's in-flight _refreshing slot.
+    final coalesced = auth.accessToken(forceRefresh: true);
+
+    refreshBGate.complete();
+    expect(await forced, 'at-b-fresh');
+    expect(await coalesced, 'at-b-fresh');
+    expect(refreshBCount, 1);
+    expect(await auth.accessToken(), 'at-b-fresh');
+  });
+
+  test(
+      'in-flight refresh finishing after signOut never caches or returns token',
+      () async {
+    storage.seedData({
+      googleDriveStorageKey: jsonEncode({
+        'email': 'a@example.test',
+        'refreshToken': 'rt-a',
+        'clientKind': 'desktop',
+      }),
+    });
+    final refreshStarted = Completer<void>();
+    final refreshGate = Completer<void>();
+    final client = MockClient((req) async {
+      if (req.url.toString() == _tokenUrl) {
+        if (!refreshStarted.isCompleted) refreshStarted.complete();
+        await refreshGate.future;
+        return _json(200, {'access_token': 'at-a-stale', 'expires_in': 3600});
+      }
+      if (req.url.toString() == 'https://oauth2.googleapis.com/revoke') {
+        return http.Response('', 200);
+      }
+      fail('unexpected request: ${req.url}');
+    });
+    final auth = tokenAuth(client);
+
+    final pending = auth.accessToken();
+    await refreshStarted.future;
+
+    await auth.signOut();
+    refreshGate.complete();
+
+    await expectLater(
+      pending,
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.kind, 'kind', BackupRelayError.signedOut)),
+    );
+    await expectLater(
+      auth.accessToken(),
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.kind, 'kind', BackupRelayError.signedOut)),
+    );
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,

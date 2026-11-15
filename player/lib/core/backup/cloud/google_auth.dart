@@ -169,8 +169,11 @@ class GoogleTokenAuth implements GoogleAuth {
   String? _accessToken;
   DateTime? _accessExpiry;
   Future<String>? _refreshing;
+  int? _refreshingGeneration;
+  int? _refreshingSession;
   Future<void> _storageOps = Future<void>.value();
   int _signInGeneration = 0;
+  int _committedSession = 0;
 
   Future<T> _serialiseStorage<T>(Future<T> Function() op) {
     final next = _storageOps.then((_) => op());
@@ -179,8 +182,15 @@ class GoogleTokenAuth implements GoogleAuth {
     return next;
   }
 
+  void _clearRefresh() {
+    _refreshing = null;
+    _refreshingGeneration = null;
+    _refreshingSession = null;
+  }
+
   @override
-  Future<String?> currentEmail() async => (await _readGrant())?['email'];
+  Future<String?> currentEmail() async =>
+      (await _serialiseStorage(_readGrant))?['email'];
 
   @override
   Future<String> accessToken({bool forceRefresh = false}) {
@@ -192,12 +202,30 @@ class GoogleTokenAuth implements GoogleAuth {
         _now().isBefore(expiry.subtract(_expirySkew))) {
       return Future.value(cached);
     }
-    return _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+    if (_refreshing != null &&
+        _refreshingGeneration == _signInGeneration &&
+        _refreshingSession == _committedSession) {
+      return _refreshing!;
+    }
+    final generation = _signInGeneration;
+    final session = _committedSession;
+    late final Future<String> pending;
+    pending = _refresh(forceRefresh: forceRefresh).whenComplete(() {
+      if (identical(_refreshing, pending)) {
+        _clearRefresh();
+      }
+    });
+    _refreshing = pending;
+    _refreshingGeneration = generation;
+    _refreshingSession = session;
+    return pending;
   }
 
-  Future<String> _refresh() async {
-    final refreshGeneration = _signInGeneration;
-    final grant = await _readGrant();
+  Future<String> _refresh({bool forceRefresh = false}) async {
+    final (refreshGeneration, refreshSession, grant) =
+        await _serialiseStorage(() async {
+      return (_signInGeneration, _committedSession, await _readGrant());
+    });
     final refreshToken = grant?['refreshToken'];
     if (refreshToken == null || grant?['clientKind'] != clientKind) {
       throw const BackupRelayException(BackupRelayError.signedOut);
@@ -211,11 +239,16 @@ class GoogleTokenAuth implements GoogleAuth {
     if (res.status != 200) {
       if (res.error == 'invalid_grant') {
         // Revoked, expired, or the password changed: the grant is dead
-        // unless a newer sign-in already superseded this refresh attempt.
+        // unless a newer sign-in/sign-out started or a different session now
+        // owns storage.
         await _serialiseStorage(() async {
-          if (_signInGeneration != refreshGeneration) return;
+          if (_signInGeneration != refreshGeneration ||
+              _committedSession != refreshSession) {
+            return;
+          }
           _clearCache();
           await _storage.delete(googleDriveStorageKey);
+          _committedSession++;
         });
         throw const BackupRelayException(
           BackupRelayError.signedOut,
@@ -224,14 +257,17 @@ class GoogleTokenAuth implements GoogleAuth {
       }
       throw oauthError(res);
     }
-    if (_signInGeneration != refreshGeneration) {
-      final token = res.json['access_token'];
-      if (token is! String) {
-        throw const FormatException('token response has no access_token');
+    final cached = await _serialiseStorage(() async {
+      if (_signInGeneration != refreshGeneration ||
+          _committedSession != refreshSession) {
+        return null;
       }
-      return token;
+      return _cacheAccess(res.json);
+    });
+    if (cached == null) {
+      return accessToken(forceRefresh: forceRefresh);
     }
-    return _cacheAccess(res.json);
+    return cached;
   }
 
   /// Stores the grant of a finished sign-in flow and returns its email.
@@ -323,6 +359,8 @@ class GoogleTokenAuth implements GoogleAuth {
         }
         checkActive();
       }
+      _committedSession++;
+      _clearRefresh();
       _cacheAccess(grant);
     });
     return resolvedEmail;
@@ -331,10 +369,14 @@ class GoogleTokenAuth implements GoogleAuth {
   @override
   Future<void> signOut() async {
     _signInGeneration++;
+    _clearCache();
+    _clearRefresh();
     final refreshToken = await _serialiseStorage(() async {
       final token = (await _readGrant())?['refreshToken'];
       _clearCache();
+      _clearRefresh();
       await _storage.delete(googleDriveStorageKey);
+      _committedSession++;
       return token;
     });
     if (refreshToken == null) return;
