@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,7 @@ import 'package:player/core/backup/backup_vault_ops.dart';
 import 'package:player/core/backup/backup_vault_state.dart';
 import 'package:player/core/backup/recovery_key.dart';
 import 'package:player/core/backup/vault_crypto.dart';
+import 'package:player/core/p2p/peer_group_secret.dart';
 import 'package:player/core/p2p/peer_sync_store.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/source.dart';
@@ -232,6 +234,25 @@ void main() {
       await b.service.flush();
       await a.service.poll();
       expect(a.watched('tmdb:movie:2'), isTrue);
+    });
+
+    test('restore takes node claims but leaves the group secret unset',
+        () async {
+      final a = rig.device('Living Room TV');
+      await a.service.start();
+      await a.auth.write(
+          PeerGroupSecret.storageKey,
+          PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 4)))
+              .toBase64Url());
+      final aSlot = await a.slotId();
+      await a.meta.setNodeToSlot('node-a', aSlot);
+      final key = await a.service.prepareEnable();
+      await a.service.confirmEnable(key);
+
+      final b = await rig.joined('Night Harbor Laptop', key);
+
+      expect(await b.auth.read(PeerGroupSecret.storageKey), isNull);
+      expect(b.meta.slotClaims()[aSlot], {'node-a'});
     });
 
     test('a wrong key finds no backup', () async {

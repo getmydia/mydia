@@ -3054,7 +3054,7 @@
       }
     }
   },
-  "backupRestoreMergeNote": "It is merged with what is already on this device, and this device joins the backup and your sync group.",
+  "backupRestoreMergeNote": "It is merged with what is already on this device, and this device joins the backup. To sync with your other devices directly again, pair it with them.",
   "@backupRestoreMergeNote": {
     "description": "Explains what confirming a restore does."
   },

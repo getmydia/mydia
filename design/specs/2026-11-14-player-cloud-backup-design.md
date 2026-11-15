@@ -70,7 +70,7 @@ Every record is LWW per key on its origin `updatedAt`, the rule
 | Pin | `(isShow, groupKey)` | `PeerPinRecord` | Merged via `mergeRemote` | Merged |
 | Account | `accountId` | `HiveSourceStore` record JSON plus every `SourceSecrets` / `AuthStorage` token under `source/<accountId>/` | Listed as a pending offer | Applied |
 | Setting | setting key | the stored value | Ignored | Applied |
-| Group | `group` | the p2p `groupSecret` and roster | Already shared by pairing | Applied, so restore rejoins the p2p group |
+| Group | `group` | the p2p `groupSecret` and each slot's own node ids | Already shared by pairing | Node claims only; the secret is not applied (see Restore below) |
 
 - **Mydia accounts** are backed up without tokens: kind, instance id, URL or
   node address. Restore adds them flagged `needsReauth`. Their watch state
@@ -290,7 +290,11 @@ is asked which to keep; the other is deleted after its records are merged.
 - **Restore from backup** sits on the first-run and empty-sources screen and
   on Add server. Enter or scan the key, see a summary ("6 sources, 1,240 watch
   records, from 3 devices"), confirm. Restore merges into whatever is already
-  on the device and joins this device to the vault and the p2p group.
+  on the device and joins this device to the vault. It brings back sources,
+  watch state, pins and settings. It does not rejoin the p2p group: a group
+  secret without the roster would leave the device thinking it is in a group
+  whose members reject it, so the secret is never applied. To sync with the
+  other devices directly again, pair once more.
 - **Pending sources** on live devices: a row in Backup & sync and on the
   sources screen, "2 sources added on Living Room TV", with Add and Dismiss.
   Dismiss is remembered per account and record version.
@@ -322,8 +326,8 @@ is asked which to keep; the other is deleted after its records are merged.
   playback; removing a device rotates the epoch and replaces the recovery
   key, so the removed device gets 403 and cannot open the new epoch even
   with the old recovery key; revoking a paired device only records a pending
-  removal; restore onto an empty store yields the same records and
-  joins the group; 404 on the base path disables the feature cleanly.
+  removal; restore onto an empty store yields the same records, joins the
+  vault and leaves the group secret unset; 404 on the base path disables the feature cleanly.
 - **Relay ExUnit**: signature, clock skew and membership checks; slot
   ownership; `seq` and `epoch` CAS; limits; lookup; the sweeper deletes idle
   vaults and their files.

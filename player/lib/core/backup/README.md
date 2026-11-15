@@ -1,7 +1,7 @@
 # Cloud backup (player)
 
-End-to-end encrypted backup of the player's watch state, pins, servers,
-settings and sync group, stored on the metadata relay. The relay holds
+End-to-end encrypted backup of the player's watch state, pins, servers and
+settings, stored on the metadata relay. The relay holds
 ciphertext and public keys only. Design:
 `design/specs/2026-11-14-player-cloud-backup-design.md`. Wire format and relay
 rules: `metadata-relay/docs/backup.md`, which the client here is built
@@ -44,7 +44,11 @@ Every record is last-writer-wins on its origin `updatedAt`, with tombstones.
 | Pin | Merged | Merged |
 | Account (record plus every secret under `source/<id>/`) | Offered: "2 sources added on Living Room TV", Add or Dismiss | Applied |
 | Setting (only the keys in `kBackupSettingKeys`) | Ignored | Applied |
-| Group (p2p group secret and roster, node to slot claims) | Already shared by pairing | Applied, so the device rejoins the p2p group |
+| Group (p2p group secret, node to slot claims) | Already shared by pairing | Only the node claims are taken. The secret is not applied: without the roster the device would think it is in a group whose members reject it |
+
+Restore brings back sources, watch state, pins and settings and joins the
+vault. It does not rejoin the p2p group: to sync with the other devices
+directly again, pair once more.
 
 Mydia accounts travel without tokens and come back flagged `needsReauth`.
 Server locks, the Files index, downloads, caches, the iroh node key and the

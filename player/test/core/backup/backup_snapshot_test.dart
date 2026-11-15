@@ -714,7 +714,7 @@ void main() {
       expect(b.dataKeys, isEmpty);
     });
 
-    test('writes the group secret only when none is stored', () async {
+    test('never writes the group secret', () async {
       final a = _Device();
       final secret =
           PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 5)));
@@ -722,11 +722,12 @@ void main() {
       await a.meta.setNodeToSlot('nodeA', 'slotA');
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
+      // A secret without the roster would leave the device in a group whose
+      // members reject it: restore does not rejoin, pairing again does.
       final b = _Device();
       await b.snapshot.apply(records,
           mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
-      expect(
-          await b.auth.read(PeerGroupSecret.storageKey), secret.toBase64Url());
+      expect(await b.auth.read(PeerGroupSecret.storageKey), isNull);
       expect(b.meta.nodeToSlot(), isEmpty,
           reason: 'node claims are taken per slot by BackupSyncService');
 

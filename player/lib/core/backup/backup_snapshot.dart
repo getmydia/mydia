@@ -59,8 +59,8 @@ enum BackupApplyMode {
   /// A device already in use: watch and pins merge, accounts are offered.
   live,
 
-  /// A device restoring from the backup: accounts, settings and the group
-  /// secret are written too.
+  /// A device restoring from the backup: accounts and settings are written
+  /// too. The group secret never is (see [BackupSnapshot.apply]).
   restore,
 }
 
@@ -391,8 +391,10 @@ class BackupSnapshot {
       for (final r in merged.whereType<SettingBackupRecord>()) {
         if (await _applySetting(r)) settingsApplied++;
       }
-      final group = merged.whereType<GroupBackupRecord>().firstOrNull;
-      if (group != null && !group.deleted) await _applyGroup(group);
+      // The group record's secret is never applied: without the roster the
+      // device would think it is in a group whose members reject it. To
+      // sync directly again it pairs once more. Its node claims are taken
+      // per slot by `BackupSyncService._apply`.
     }
 
     return ApplyResult(
@@ -507,20 +509,6 @@ class BackupSnapshot {
     await _meta.setStamp(
         r.key, await _fingerprint({'value': value}), r.updatedAt);
     return true;
-  }
-
-  Future<void> _applyGroup(GroupBackupRecord r) async {
-    if (await _auth.read(PeerGroupSecret.storageKey) != null) return;
-    try {
-      PeerGroupSecret.fromBase64Url(r.groupSecretB64);
-    } catch (_) {
-      debugPrint('[Backup] Group secret in the backup is malformed');
-      return;
-    }
-    // The node map is not taken from here: the merged record has lost which
-    // slot sent it, and a node is believed only from its own slot (see
-    // `BackupSyncService._apply`).
-    await _auth.write(PeerGroupSecret.storageKey, r.groupSecretB64);
   }
 }
 
