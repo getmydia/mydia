@@ -17,7 +17,7 @@ import '../../../test_utils/mock_auth_storage.dart';
 /// `tester.runAsync`.
 class BackupTestDevice {
   BackupTestDevice(this.relay, this.name) {
-    final snapshot = BackupSnapshot(
+    snapshot = BackupSnapshot(
       peerSync: sync,
       authStorage: auth,
       meta: meta,
@@ -49,6 +49,7 @@ class BackupTestDevice {
   final sources = InMemorySourceStore();
   final sync = InMemoryPeerSyncStore();
   final meta = BackupMetaStore(InMemoryBackupMetaStorage());
+  late final BackupSnapshot snapshot;
   late final BackupSyncService service;
 
   /// Account ids written through the backup's `putAccount`.

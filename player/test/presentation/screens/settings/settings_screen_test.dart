@@ -46,6 +46,7 @@ import '../../../core/sources/mydia/mydia_account_harness.dart'
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
+import '../backup/fake_backup_controller.dart';
 import '../backup/fake_backup_sync_service.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
@@ -190,6 +191,7 @@ Future<void> _pump(
   Locale? locale,
   bool isWeb = false,
   String initialLocation = '/settings',
+  FakeBackupController? backupController,
 }) async {
   final stored = mydia ?? await _twoMydiaServers();
   final sources = stored.store;
@@ -225,7 +227,10 @@ Future<void> _pump(
           downloadManagerProvider.overrideWith((ref) async => downloads),
         noCollectionSyncOverride,
         isWebProvider.overrideWithValue(isWeb),
-        backupSyncServiceProvider.overrideWithValue(FakeBackupSyncService()),
+        backupSyncServiceProvider.overrideWithValue(
+            backupController?.relay ?? FakeBackupSyncService()),
+        if (backupController != null)
+          backupControllerProvider.overrideWithValue(backupController),
         sourceStoreProvider.overrideWith((ref) async => sources),
         sourceSecretsProvider.overrideWithValue(secrets),
         remoteControlSettingsProvider.overrideWith(
@@ -355,6 +360,40 @@ void main() {
         lessThan(tester
             .getTopLeft(find.byKey(const Key('default-quality-row')))
             .dy));
+  });
+
+  testWidgets(
+      'Backup & sync in Settings offers every store and turns the relay '
+      'on through the backup controller', (tester) async {
+    final relay = FakeBackupSyncService();
+    final controller = FakeBackupController(relay: relay, offered: const {
+      BackupStoreKind.relay,
+      BackupStoreKind.icloud,
+      BackupStoreKind.gdrive,
+    });
+    await _pump(tester, backupController: controller);
+
+    final section = find.byKey(const Key('settings-backup-section'));
+    for (final store in ['relay', 'icloud', 'gdrive']) {
+      expect(
+          find.descendant(
+              of: section, matching: find.byKey(Key('backup-store-$store'))),
+          findsOneWidget);
+    }
+
+    await tester.ensureVisible(find.byKey(const Key('backup-store-relay')));
+    await tester.tap(find.byKey(const Key('backup-store-relay')));
+    await tester.pumpAndSettle();
+    final confirm = find.byKey(const Key('recovery-key-confirm-button'));
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull,
+        reason: 'disabled until the key is ticked as saved');
+    await tester.tap(find.byKey(const Key('recovery-key-saved-checkbox')));
+    await tester.pump();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(controller.calls, ['switchTo relay deleteOld=false key']);
+    expect(relay.calls.last, startsWith('confirmEnable'));
   });
 
   testWidgets('Backup & sync is absent on web', (tester) async {

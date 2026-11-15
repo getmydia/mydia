@@ -75,6 +75,11 @@ class AppDelegate: FlutterAppDelegate {
   // Held here because menu items do not retain their target.
   private var appMenu: AppMenu?
 
+  /// Owns `mydia/cloudkit` (the iCloud backup). Held here because the
+  /// silent pushes arrive on this delegate: macOS plugins have no
+  /// remote-notification hook, so they are forwarded by hand.
+  private var cloudKitPlugin: CloudKitPlugin?
+
   override func applicationDidFinishLaunching(_ notification: Notification) {
     updaterController = SPUStandardUpdaterController(
       startingUpdater: true,
@@ -154,6 +159,21 @@ class AppDelegate: FlutterAppDelegate {
       menu.install(in: mainMenu, updater: updaterController)
     }
     appMenu = menu
+
+    let cloudKit = CloudKitPlugin(messenger: controller.engine.binaryMessenger)
+    cloudKitPlugin = cloudKit
+    // Silent CloudKit pushes need no notification permission, only a build
+    // that opted in to iCloud (and so carries the push entitlement).
+    if cloudKit.enabled {
+      NSApp.registerForRemoteNotifications()
+    }
+  }
+
+  // FlutterAppDelegate does not implement this, so there is no super to call.
+  override func application(
+    _ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]
+  ) {
+    cloudKitPlugin?.handleRemoteNotification(userInfo)
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

@@ -17,6 +17,8 @@
 		7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */; };
 		7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000003 /* CastAccessoryView.swift */; };
 		7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */; };
+		7AB0C0DE000000000000000C /* CloudKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE000000000000000B /* CloudKitPlugin.swift */; };
+		7AB0C0DE000000000000000F /* CloudKitPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
@@ -64,6 +66,9 @@
 		7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MydiaRootViewController.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000003 /* CastAccessoryView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CastAccessoryView.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000B /* CloudKitPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CloudKitPlugin.swift; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000D /* RunnerCloudKit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerCloudKit.entitlements; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPluginTests.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -103,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -155,6 +161,8 @@
 				7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */,
 				7AB0C0DE0000000000000003 /* CastAccessoryView.swift */,
 				7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */,
+				7AB0C0DE000000000000000B /* CloudKitPlugin.swift */,
+				7AB0C0DE000000000000000D /* RunnerCloudKit.entitlements */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -218,6 +226,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				C62FD6400206165A2A11CB76 /* [CP] Embed Pods Frameworks */,
 				7D089D0CCE632B1BAF20D747 /* [CP] Copy Pods Resources */,
+				8A4E7B2C1F094D6E9B3A1102 /* Check or Strip Google URL Scheme */,
 			);
 			buildRules = (
 			);
@@ -304,6 +313,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+		};
+		8A4E7B2C1F094D6E9B3A1102 /* Check or Strip Google URL Scheme */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Check or Strip Google URL Scheme";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "plist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n[ -f \"$plist\" ] || exit 0\nif [ -z \"${GOOGLE_REVERSED_CLIENT_ID:-}\" ]; then\n  if [ -n \"${DART_DEFINES:-}\" ]; then\n    OLD_IFS=\"$IFS\"\n    IFS=','\n    for encoded in $DART_DEFINES; do\n      decoded=$(printf '%s' \"$encoded\" | base64 -D 2>/dev/null || printf '%s' \"$encoded\" | base64 -d 2>/dev/null || true)\n      case \"$decoded\" in\n        MYDIA_GDRIVE_CLIENT_ID_IOS=?*)\n          echo \"error: GOOGLE_REVERSED_CLIENT_ID is empty while MYDIA_GDRIVE_CLIENT_ID_IOS is set. Create ios/Flutter/GoogleClient.xcconfig.\" >&2\n          exit 1\n          ;;\n      esac\n    done\n    IFS=\"$OLD_IFS\"\n  fi\n  i=0\n  while /usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:$i\" \"$plist\" >/dev/null 2>&1; do\n    scheme=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:$i:CFBundleURLSchemes:0\" \"$plist\" 2>/dev/null || true)\n    if [ -z \"$scheme\" ] || [ \"$scheme\" = '$(GOOGLE_REVERSED_CLIENT_ID)' ]; then\n      /usr/libexec/PlistBuddy -c \"Delete :CFBundleURLTypes:$i\" \"$plist\"\n      continue\n    fi\n    i=$((i + 1))\n  done\n  /usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:0\" \"$plist\" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c \"Delete :CFBundleURLTypes\" \"$plist\" 2>/dev/null || true\nfi\n";
 		};
 		7D089D0CCE632B1BAF20D747 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -406,6 +431,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				7AB0C0DE000000000000000F /* CloudKitPluginTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -420,6 +446,7 @@
 				7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */,
 				7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */,
 				7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */,
+				7AB0C0DE000000000000000C /* CloudKitPlugin.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -512,6 +539,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(MYDIA_CLOUDKIT_ENTITLEMENTS_$(MYDIA_CLOUDKIT))";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;
@@ -696,6 +724,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(MYDIA_CLOUDKIT_ENTITLEMENTS_$(MYDIA_CLOUDKIT))";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;
@@ -720,6 +749,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(MYDIA_CLOUDKIT_ENTITLEMENTS_$(MYDIA_CLOUDKIT))";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;

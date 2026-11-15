@@ -260,12 +260,20 @@ class GroupBackupRecord extends BackupRecord {
       'updatedAt: $updatedAt, deleted: $deleted)';
 }
 
+/// A payload written by a newer app build (`v` above [BackupPayload.version]).
+class NewerBackupVersionException extends FormatException {
+  NewerBackupVersionException(int found)
+      : super('backup payload version $found is newer than '
+            '${BackupPayload.version}');
+}
+
 class BackupPayload {
   const BackupPayload({
     required this.deviceName,
     required this.platform,
     required this.createdAt,
     required this.records,
+    this.movedTo,
   });
 
   static const int version = 1;
@@ -275,23 +283,31 @@ class BackupPayload {
   final int createdAt;
   final List<BackupRecord> records;
 
+  /// Set when this device's backup now lives in another store (its id):
+  /// the slot carries no records worth merging. Absent when null, so a
+  /// build that predates the field reads the payload unchanged.
+  final String? movedTo;
+
   List<int> encode() => gzipEncode(utf8.encode(jsonEncode({
         'v': version,
         'deviceName': deviceName,
         'platform': platform,
         'createdAt': createdAt,
         'records': [for (final r in records) r.toJson()],
+        if (movedTo != null) 'movedTo': movedTo,
       })));
 
-  /// Throws [FormatException] for bad gzip, bad JSON, a wrong version or a
-  /// malformed record. Records of an unknown type are dropped.
+  /// Throws [FormatException] for bad gzip, bad JSON, a wrong version
+  /// ([NewerBackupVersionException] for a newer one) or a malformed record. Records of an unknown type are dropped.
   static BackupPayload decode(List<int> bytes) {
     try {
       final json = jsonDecode(utf8.decode(gzipDecode(bytes)));
       if (json is! Map<String, dynamic>) {
         throw const FormatException('backup payload is not an object');
       }
-      if (json['v'] != version) {
+      final v = json['v'];
+      if (v is int && v > version) throw NewerBackupVersionException(v);
+      if (v != version) {
         throw FormatException(
             'unsupported backup payload version ${json['v']}');
       }
@@ -305,6 +321,7 @@ class BackupPayload {
         platform: json['platform'] as String,
         createdAt: (json['createdAt'] as num).toInt(),
         records: records,
+        movedTo: json['movedTo'] as String?,
       );
     } on FormatException {
       rethrow;

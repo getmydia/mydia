@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/p2p/peer_group_roster.dart';
 import 'package:player/core/p2p/peer_sync_records.dart';
 import 'package:player/core/p2p/peer_sync_service.dart';
@@ -16,20 +17,25 @@ import 'package:player/presentation/widgets/toast/toaster.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../test_utils/toast_harness.dart';
+import '../backup/fake_backup_controller.dart';
 import 'fake_peer_sync_service.dart';
 
 Widget _wrap(
-    FakePeerSyncService service, PeerSyncStore store, PairSheetMode mode) {
+    FakePeerSyncService service, PeerSyncStore store, PairSheetMode mode,
+    {FakeBackupController? backup}) {
   final roster = PeerGroupRoster(
     store: store,
     localNodeId: () => service.localNodeId,
     isPeerConnected: (_) => true,
   );
+  final controller = backup ?? FakeBackupController();
   return ProviderScope(
     overrides: [
       peerSyncServiceProvider.overrideWithValue(service),
       peerSyncStoreProvider.overrideWithValue(store),
       peerGroupRosterProvider.overrideWithValue(roster),
+      backupSyncServiceProvider.overrideWithValue(controller.relay),
+      backupControllerProvider.overrideWithValue(controller),
     ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -231,6 +237,32 @@ void main() {
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
+  testWidgets('a join that brings a cloud store hint says where to sign in',
+      (tester) async {
+    final store = InMemoryPeerSyncStore();
+    final backup = FakeBackupController(
+        offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive});
+    // Pairing keeps the host's store as a hint before the join completes.
+    final service = _HintingPeerSync(
+        store: store,
+        onPair: () => backup.hintNotifier.value =
+            const CloudStoreHint(BackupStoreKind.gdrive, 'ana@example.com'));
+    await tester
+        .pumpWidget(_wrap(service, store, PairSheetMode.enter, backup: backup));
+    await tester.tap(find.byKey(const Key('open-sheet')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('pair-code-input')), 'ABC123');
+    await tester.tap(find.byKey(const Key('pair-submit-code-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your devices back up to Google Drive. Sign in to join.'),
+        findsOneWidget);
+    expect(backup.calls, isNot(contains('acknowledgeHint')),
+        reason: 'Backup & sync keeps the hint until it is answered');
+    expect(find.byType(PairDeviceSheet), findsNothing);
+  });
+
   testWidgets('a joined code with no member yet toasts a plain success',
       (tester) async {
     final store = InMemoryPeerSyncStore();
@@ -336,4 +368,18 @@ void main() {
 
     expect(find.byType(BottomSheet), findsOneWidget);
   });
+}
+
+/// Calls [onPair] as pairing starts, the way the real service keeps the
+/// host's cloud store hint before its join completes.
+class _HintingPeerSync extends FakePeerSyncService {
+  _HintingPeerSync({required super.store, required this.onPair});
+
+  final void Function() onPair;
+
+  @override
+  Future<void> pairWithCode(String code) {
+    onPair();
+    return super.pairWithCode(code);
+  }
 }

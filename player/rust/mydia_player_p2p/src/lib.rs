@@ -798,6 +798,8 @@ pub enum FlutterPeerSyncResponse {
         watch_records: Vec<FlutterWireWatchRecord>,
         pin_records: Vec<FlutterWirePinRecord>,
         vault_id: Option<String>,
+        backup_store: Option<String>,
+        backup_account: Option<String>,
     },
     PairRejected {
         reason: String,
@@ -1212,12 +1214,16 @@ impl From<FlutterPeerSyncResponse> for PeerSyncResponse {
                 watch_records,
                 pin_records,
                 vault_id,
+                backup_store,
+                backup_account,
             } => PeerSyncResponse::Paired {
                 group_secret_base64,
                 roster: roster.into_iter().map(Into::into).collect(),
                 watch_records: watch_records.into_iter().map(Into::into).collect(),
                 pin_records: pin_records.into_iter().map(Into::into).collect(),
                 vault_id,
+                backup_store,
+                backup_account,
             },
             FlutterPeerSyncResponse::PairRejected { reason } => {
                 PeerSyncResponse::PairRejected { reason }
@@ -1247,12 +1253,16 @@ impl From<PeerSyncResponse> for FlutterPeerSyncResponse {
                 watch_records,
                 pin_records,
                 vault_id,
+                backup_store,
+                backup_account,
             } => FlutterPeerSyncResponse::Paired {
                 group_secret_base64,
                 roster: roster.into_iter().map(Into::into).collect(),
                 watch_records: watch_records.into_iter().map(Into::into).collect(),
                 pin_records: pin_records.into_iter().map(Into::into).collect(),
                 vault_id,
+                backup_store,
+                backup_account,
             },
             PeerSyncResponse::PairRejected { reason } => {
                 FlutterPeerSyncResponse::PairRejected { reason }

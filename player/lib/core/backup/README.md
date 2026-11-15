@@ -1,12 +1,23 @@
 # Cloud backup (player)
 
-End-to-end encrypted backup of the player's watch state, pins, servers and
-settings, stored on the metadata relay. The relay holds
-ciphertext and public keys only. Design:
-`design/specs/2026-11-14-player-cloud-backup-design.md`. Wire format and relay
-rules: `metadata-relay/docs/backup.md`, which the client here is built
-against. Native only: nothing in this directory runs on web (`kIsWeb`), and
-the Backup & sync section is hidden there (`isWebProvider`).
+Backup of the player's watch state, pins, servers and settings to exactly one
+store per device group:
+
+| Store | Where | Encryption |
+| --- | --- | --- |
+| `relay` | The metadata relay vault | End to end. The relay holds ciphertext and public keys only |
+| `icloud` | CloudKit private database (iOS and macOS) | None. Apple can read it, source sign-ins included |
+| `gdrive` | Drive `appDataFolder`, scope `drive.appdata` (Android, Android TV, iOS, macOS, Linux, Windows) | None. Google can read it, source sign-ins included |
+
+On a cloud store the account is the group: no recovery key, no member list,
+no pairing. Designs:
+`design/specs/2026-11-14-player-cloud-backup-design.md` (relay) and
+`design/specs/2026-11-14-player-cloud-drive-backup-design.md` (iCloud and
+Drive). Wire format and relay rules: `metadata-relay/docs/backup.md`, which
+the relay client here is built against. Native only: nothing in this
+directory runs on web (`kIsWeb`), and the Backup & sync section is hidden
+there (`isWebProvider`). iCloud is hidden on a build without the CloudKit
+entitlements, see `player/docs/packaging.md`.
 
 ## Threat model
 
@@ -28,25 +39,86 @@ the spec.
 | `backup_relay_client.dart` | Signed `/backup/v1` calls and the error kinds (`BackupRelayError`) |
 | `backup_vault_ops.dart` | Multi-call relay sequences: create, preview a restore, add, rotate |
 | `backup_snapshot.dart` | Collects this device's records and applies other devices' records |
-| `backup_sync_service.dart` | Debounced upload, polling, merge, member changes, pending offers. Free of Riverpod |
-| `backup_providers.dart` | Wires the stores, the change triggers and the pairing hooks |
+| `slot_transport.dart` | `SlotTransport`: a store of per-device slots (`list` with a cursor returning `SlotInfo`s, `read`, `writeOwn` returning void, `delete`, `changes`), plaintext payloads |
+| `relay_slot_transport.dart` | The relay vault as a `SlotTransport`: seals, compare-and-swaps on seq and epoch, takes up new epochs. Owns the vault state while joined |
+| `slot_sync_engine.dart` | Store-agnostic sync: debounced upload, polling, merge by slot version, backoff, pending offers, the one operation queue. Free of Riverpod |
+| `backup_sync_service.dart` | The relay backup: runs a `SlotSyncEngine` over a `RelaySlotTransport`, and owns enable, restore, member changes, the recovery key and pairing. Free of Riverpod |
+| `backup_controller.dart` | `BackupController`: the one active store (relay, iCloud or Google Drive), switching between them, the pairing store hint, and the triggers forwarded to the active store only. Free of Riverpod |
+| `backup_providers.dart` | Wires the stores, the controller, the change triggers and the pairing hooks |
+| `cloud/cloud_backend.dart` | `CloudBackend`: the raw file-like store a cloud transport sits on (list, read, write own, delete, changes) and `CloudStoreKind` |
+| `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`: plaintext gzip `BackupPayload` JSON (`v`, `deviceName`, `platform`, `createdAt`, `records`, optional `movedTo`) with `p2pGroup` records stripped. A newer `v` throws `NewerBackupVersionException`; a corrupt body is skipped |
+| `cloud/cloud_backup_service.dart` | One cloud store's service: enable, sign-in state, restore preview (skips slots that vanish mid-read), switching away, error kinds. Runs a `SlotSyncEngine` over a `CloudSlotTransport`. Free of Riverpod |
+| `cloud/google_auth.dart` | Google sign-in per platform (`google_sign_in` on Android and iOS), token refresh, and the signed-out state |
+| `cloud/google_oauth_flows.dart` | Loopback redirect with PKCE for macOS, Linux and Windows, and the device-code flow for Android TV |
+| `cloud/google_drive_backend.dart` | Drive v3 REST on `appDataFolder`. One file per device, `slot-<slotId>.json.gz`, looked up by its own name before a create so a lost file id never makes a second file |
+| `cloud/cloudkit_backend.dart` | Dart side of the `mydia/cloudkit` channel, handled by `CloudKitPlugin.swift` in each Runner target. `Slot` records in the `Backup` zone of `iCloud.dev.mydia.player`; a silent push feeds `changes` |
 
 ## Where state lives
 
 - `AuthStorage` `backup/identity`: the device signer and box key. Never
   backed up, never leaves the install. Read with `StrictAuthRead` where the
   storage offers it, so a keyring that fails to answer is an error, never
-  "absent" (which would generate a new identity over the old one). The
-  service loads it once even when pairing and a user action ask together.
+  "absent" (which would generate a new identity over the old one).
+  Overlapping loads on one storage share one load, so pairing, a user
+  action and the relay and cloud stores starting together never create two.
 - `AuthStorage` `backup/vault`: vault id, epoch, the vault key per known
   epoch, this device's slot seq, the last success, and the recovery key text
-  when this device holds it.
+  when this device holds it. Kept dormant (`relayDormant` in `backup_meta`)
+  after moving to a cloud store: still a member, so the moved stub stays
+  readable, but never synced until the device switches back.
+- `AuthStorage` `backup/store`: the active store, `relay`, `icloud`,
+  `gdrive` or `off`. Missing on an install from before cloud stores, where a
+  `backup/vault` means the relay.
+- `AuthStorage` `backup/storeHint`: the cloud store pairing said the group
+  uses, until the viewer dismisses it or backs up there.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
   offers and dismissals, accounts added from the backup whose folder roots
-  have not landed yet, the seq of each slot already merged, each slot's
+  have not landed yet, the version of each slot already merged, kept per
+  store because a slot id is the same device everywhere and two stores'
+  versions can be the same string (the relay's under `ver:`, falling back
+  to the `seq:` an older install wrote; a cloud store's under
+  `merged:<icloud|gdrive>:`), each slot's
   device name, the p2p node to slot map and each slot's node claims, revoked
   devices still to be removed from the vault, and whether the
-  joined-by-pairing notice is still to be seen. Not backed up.
+  joined-by-pairing notice is still to be seen. Not backed up. The cloud
+  stores add: `cloudCursor:<kind>` (the listing cursor), `cloudLastSuccess:<kind>`
+  (last upload, for the status line), `gdriveOwnFileId` (this device's Drive
+  file), `cloudkitToken`, `cloudkitSlots` and `cloudkitUser` (the CloudKit
+  change token, the slot table as of that token, and the iCloud user they
+  belong to; a different user drops them) and `relayDormant`.
+- `AuthStorage` `backup/gdrive`: the Google account email and, on desktop
+  and TV, the refresh token and client kind. Never backed up. A refused
+  refresh (`invalid_grant`) shows "Signed out" with Reconnect and keeps local
+  data. Google's consent screen lets the viewer untick Drive: a sign-in
+  whose granted scopes (the token response's `scope`, or tokeninfo for the
+  platform plugin) lack `drive.appdata` stores no grant and fails with code
+  `scope_missing`, and a Drive 403 `insufficientPermissions` /
+  `ACCESS_TOKEN_SCOPE_INSUFFICIENT` is signed out too, so Reconnect asks
+  again.
+
+## Cloud stores
+
+A cloud slot is plaintext gzip JSON, one per device, named by the install's
+slot id, so a device keeps its identity across stores. The Group record kind
+(p2p secret, node claims) is not written. Mydia server tokens stay excluded.
+
+Switching confirms first. The device rewrites its own slot in the old store
+as a stub carrying `movedTo`, offers to delete the old backup (deleting keeps
+this device's stub so other devices still see where it went), then starts the
+new store and uploads. A device reading another's stub shows "{device} moved
+backup to Google Drive" with a Switch button. The new store comes up before
+the old one is left, so a failed sign-in leaves the old store active. If
+writing the stub fails after that, the new store stays active and the old one
+is still left (a relay vault goes dormant), so it never syncs in the
+background and switching back to it works; only the stub is missing.
+
+Removing a device deletes its slot. That is cleanup, not revocation: a device
+still signed in writes its slot again on its next upload.
+
+CloudKit errors map to the shared kinds: `notAuthenticated` and
+`accountTemporarilyUnavailable` to "iCloud unavailable", network failures to
+`network`, `zoneNotFound` and `changeTokenExpired` to a recreated zone or a
+dropped token and a full list.
 
 ## Record kinds
 
@@ -106,6 +178,11 @@ vault id; the joiner adopts it (`adoptVault`) and raises the one-time notice
 "This device is now backed up with your group". A joiner already in another
 vault is not switched: `pendingVaultChoice` asks which to keep. A hook that
 fails or times out never fails pairing.
+
+A host whose active store is iCloud or Google Drive adds no one: `Paired`
+carries `backup_store` and `backup_account` (the Google email, never a
+token) instead of a vault id, and the joiner keeps them as
+`BackupController.storeHint` ("sign in to join") and does nothing else.
 
 ## Removing a device
 

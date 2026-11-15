@@ -239,3 +239,106 @@ The AppImage updates itself from the `linux-appimage` slot of
 checks the ELF and AppImage type 2 magic, and renames over it, so the file keeps
 its name and desktop entries from AppImageLauncher or Gear Lever keep working.
 A tarball install reads the `linux` slot and never sees an AppImage.
+
+## Google Drive backup needs client ids at build time
+
+Google Drive appears as a backup store only on platforms whose OAuth client id
+was passed with `--dart-define`; an empty define hides it there. No client id
+or secret is committed.
+
+| Platform | Defines |
+| --- | --- |
+| Android phones | `MYDIA_GDRIVE_CLIENT_ID_ANDROID` |
+| iOS | `MYDIA_GDRIVE_CLIENT_ID_IOS` |
+| macOS, Linux, Windows | `MYDIA_GDRIVE_CLIENT_ID_DESKTOP`, `MYDIA_GDRIVE_CLIENT_SECRET_DESKTOP` |
+| Android TV | `MYDIA_GDRIVE_CLIENT_ID_TV`, `MYDIA_GDRIVE_CLIENT_SECRET_TV` |
+
+The desktop and TV secrets belong to Google "installed app" clients and are
+not confidential, but they still stay out of git.
+
+Android needs nothing beyond the define: Google identifies the app by its
+package name and signing certificate SHA-1, registered on the Android client.
+No `serverClientId` is set, because Drive access is authorized on the device.
+
+iOS also needs the reversed client id as a URL scheme, which a define cannot
+reach. `ios/Runner/Info.plist` reads it from the `GOOGLE_REVERSED_CLIENT_ID`
+build setting, empty by default in `ios/Flutter/{Debug,Release}.xcconfig`.
+Set it in the git-ignored `ios/Flutter/GoogleClient.xcconfig`, which both
+include when present:
+
+    GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.<the id's first part>
+
+The Runner target's **Check or Strip Google URL Scheme** build phase fails fast
+if `MYDIA_GDRIVE_CLIENT_ID_IOS` is set in `--dart-define` while
+`GOOGLE_REVERSED_CLIENT_ID` is empty, and strips the empty `CFBundleURLTypes`
+entry from the built `Info.plist` when neither is configured.
+
+## iCloud backup is opt-in per build
+
+The iCloud backup store (`lib/core/backup/cloud/cloudkit_backend.dart`, over
+`CloudKitPlugin.swift` in each Runner target) keeps slots in the CloudKit
+container `iCloud.dev.mydia.player`: private database, zone `Backup`, record
+type `Slot`. It learns of other devices' writes from silent pushes of the
+`backup-changes` database subscription.
+
+iCloud and push are restricted entitlements. An app signed with them needs a
+development team and a provisioning profile that grants them, which ad-hoc
+contributor builds and the current release workflows do not have. So iCloud
+is off by default: builds sign with the plain entitlements, and
+`CloudKitBackend.isEnabled()` answers false, which hides iCloud in the app.
+Every release keeps it hidden until the steps below are done.
+
+The switch is the build setting `MYDIA_CLOUDKIT` (`NO` by default):
+
+| | Default | Override (git-ignored) | Entitlements when `YES` |
+| --- | --- | --- | --- |
+| iOS | `ios/Flutter/{Debug,Release}.xcconfig` | `ios/Flutter/CloudKit.xcconfig` | `ios/Runner/RunnerCloudKit.entitlements` (none when `NO`) |
+| macOS | `macos/Runner/Configs/AppInfo.xcconfig` | `macos/Runner/Configs/CloudKit.xcconfig` | `macos/Runner/{DebugProfile,Release}CloudKit.entitlements` |
+
+The override holds one line:
+
+    MYDIA_CLOUDKIT = YES
+
+`CODE_SIGN_ENTITLEMENTS` picks the file from it, and `Info.plist` passes it on
+as `MydiaCloudKitEnabled`. With anything but `YES` the Swift plugin never
+touches CloudKit: `isEnabled` is false, `accountStatus` answers `disabled`
+and every other method fails with `unavailable`.
+
+To opt in:
+
+1. In the Apple developer account, create the container
+   `iCloud.dev.mydia.player` (Certificates, Identifiers and Profiles, iCloud
+   Containers). Turn on iCloud (CloudKit, with that container) and Push
+   Notifications for the `dev.mydia.player` App ID.
+2. Sign with the team: iOS already sets `DEVELOPMENT_TEAM`. macOS signs ad
+   hoc (`CODE_SIGN_IDENTITY = "-"`) and needs a team and identity for an
+   opted-in build.
+3. Regenerate the provisioning profiles after the capability change: the iOS
+   App Store profile CI installs (`IOS_PROVISIONING_PROFILE_BASE64`), and a
+   macOS Developer ID profile.
+4. In CI, write the override file before building. On macOS,
+   `player-macos.yml` re-signs with
+   `codesign --entitlements macos/Runner/Release.entitlements`; an opted-in
+   release must sign with `ReleaseCloudKit.entitlements` and embed the
+   Developer ID profile as `Contents/embedded.provisionprofile`, or macOS
+   refuses to launch it.
+5. Deploy the `Slot` record type, with fields `slotId`, `deviceName`,
+   `platform`, `updatedAt`, `size` and `payload`, from the development to
+   the production CloudKit schema in the CloudKit Console. Development builds
+   create it on first save; production never does.
+
+Push environments:
+
+| File | push key | value |
+| --- | --- | --- |
+| `ios/Runner/RunnerCloudKit.entitlements` | `aps-environment` | `development`; App Store and TestFlight signing takes `production` from the distribution profile |
+| `macos/Runner/DebugProfileCloudKit.entitlements` | `com.apple.developer.aps-environment` | `development` |
+| `macos/Runner/ReleaseCloudKit.entitlements` | `com.apple.developer.aps-environment` | `production`, plus `com.apple.developer.icloud-container-environment` `Production`, which a Developer ID app sets itself |
+
+Keep the `*CloudKit` macOS entitlements in sync with their plain
+counterparts: they are full copies with the iCloud keys added.
+
+iOS gets silent pushes through `remote-notification` in `UIBackgroundModes`
+and registers for them only when opted in; no notification permission is
+asked. macOS plugins have no push hook, so `macos/Runner/AppDelegate.swift`
+forwards them to the plugin.

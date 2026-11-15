@@ -100,6 +100,31 @@ void main() {
     expect(results, isEmpty);
   });
 
+  testWidgets('a failure after relay is enabled keeps the same key',
+      (tester) async {
+    final first = _key(1);
+    final second = _key(2);
+    final fake = FakeBackupSyncService()
+      ..keys.addAll([first, second])
+      ..enableBeforeConfirmError = true
+      ..confirmError = const BackupRelayException(BackupRelayError.server);
+    final results = await _open(tester, fake);
+    await tester.tap(_savedBox);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('recovery-key-confirm-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('recovery-key-retry')), findsOneWidget);
+    expect(find.text(first.display), findsOneWidget);
+    expect(find.text(second.display), findsNothing);
+    expect(fake.calls, ['prepareEnable', 'confirmEnable ${first.display}']);
+
+    await tester.tap(find.byKey(const Key('recovery-key-confirm-button')));
+    await tester.pumpAndSettle();
+    expect(fake.calls.last, 'confirmEnable ${first.display}');
+    expect(results, [true]);
+  });
+
   testWidgets('a copied key is cleared from the clipboard on close',
       (tester) async {
     String? clipboard;

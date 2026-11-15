@@ -125,6 +125,7 @@ class BackupMetaStore {
   static const _pendingPrefix = 'pending:';
   static const _dismissedPrefix = 'dismissed:';
   static const _seqPrefix = 'seq:';
+  static const _versionPrefix = 'ver:';
   static const _nodePrefix = 'node:';
   static const _claimPrefix = 'claim:';
   static const _namePrefix = 'name:';
@@ -248,14 +249,42 @@ class BackupMetaStore {
   Future<void> setMergedSeq(String slotId, int seq) =>
       _storage.put('$_seqPrefix$slotId', '$seq');
 
-  /// Forgets every merged seq, when this device leaves a vault: slot ids
-  /// derive from signers, so a later vault holding the same devices starts
-  /// their seqs at 1 again.
-  Future<void> clearMergedSeqs() async {
+  /// The version of [slotId] already merged from [store], null when none.
+  ///
+  /// Each store keeps its own: a slot id is the same device in every store,
+  /// and the versions of two stores (relay seqs, Drive versions) can be the
+  /// same string, so a shared record could skip a slot that changed. A null
+  /// [store] is the relay, under its original keys; an install that
+  /// recorded int seqs ([setMergedSeq]) reads its seq as the version, which
+  /// is how the relay names its versions, so an upgrade does not merge every
+  /// slot again. A cloud store is a `CloudStoreKind` name.
+  String? mergedVersion(String slotId, {String? store}) => store == null
+      ? _storage.get('$_versionPrefix$slotId') ??
+          _storage.get('$_seqPrefix$slotId')
+      : _storage.get('${_mergedPrefix(store)}$slotId');
+
+  Future<void> setMergedVersion(String slotId, String version,
+          {String? store}) =>
+      _storage.put(
+          store == null
+              ? '$_versionPrefix$slotId'
+              : '${_mergedPrefix(store)}$slotId',
+          version);
+
+  /// Forgets every version merged from [store] (null is the relay), when
+  /// this device leaves or joins it: slot ids derive from signers, so a
+  /// later vault holding the same devices starts their seqs at 1 again.
+  /// Other stores' versions are kept.
+  Future<void> clearMergedSeqs({String? store}) async {
+    bool mine(String k) => store == null
+        ? k.startsWith(_seqPrefix) || k.startsWith(_versionPrefix)
+        : k.startsWith(_mergedPrefix(store));
     for (final k in _storage.keys.toList()) {
-      if (k.startsWith(_seqPrefix)) await _storage.delete(k);
+      if (mine(k)) await _storage.delete(k);
     }
   }
+
+  static String _mergedPrefix(String store) => 'merged:$store:';
 
   /// What this device itself recorded: its own node and the devices it
   /// added to the vault at pairing. Uploaded in its group record.
@@ -361,4 +390,72 @@ class BackupMetaStore {
       : _storage.delete(_joinedNoticeKey);
 
   static const _joinedNoticeKey = 'notice:joined';
+
+  /// The listing cursor of the cloud store [kind] (a `CloudStoreKind`
+  /// name), null when none is kept.
+  String? cloudCursor(String kind) => _storage.get('$_cloudCursorPrefix$kind');
+
+  Future<void> setCloudCursor(String kind, String? cursor) => cursor == null
+      ? _storage.delete('$_cloudCursorPrefix$kind')
+      : _storage.put('$_cloudCursorPrefix$kind', cursor);
+
+  static const _cloudCursorPrefix = 'cloudCursor:';
+
+  /// When this device's slot last went up to the cloud store [kind] (a
+  /// `CloudStoreKind` name), so the status line survives a restart. Null
+  /// before the first upload, or after leaving that store.
+  int? cloudLastSuccessMs(String kind) =>
+      int.tryParse(_storage.get('$_cloudLastSuccessPrefix$kind') ?? '');
+
+  Future<void> setCloudLastSuccessMs(String kind, int? ms) =>
+      _putOrDelete('$_cloudLastSuccessPrefix$kind', ms?.toString());
+
+  static const _cloudLastSuccessPrefix = 'cloudLastSuccess:';
+
+  /// True while the relay vault in `backup/vault` is kept dormant: this
+  /// device moved its backup to a cloud store and left a moved stub in its
+  /// slot. The relay does not sync a dormant vault.
+  bool get relayDormant => _storage.get(_relayDormantKey) == '1';
+
+  Future<void> setRelayDormant(bool dormant) =>
+      _putOrDelete(_relayDormantKey, dormant ? '1' : null);
+
+  static const _relayDormantKey = 'relayDormant';
+
+  /// The Drive file id of this device's own slot, null when not created yet.
+  String? get gdriveOwnFileId => _storage.get(_gdriveOwnFileIdKey);
+
+  Future<void> setGdriveOwnFileId(String? id) => id == null
+      ? _storage.delete(_gdriveOwnFileIdKey)
+      : _storage.put(_gdriveOwnFileIdKey, id);
+
+  static const _gdriveOwnFileIdKey = 'gdriveOwnFileId';
+
+  /// The base64 archived CloudKit change token of the `Backup` zone, null
+  /// before the first fetch.
+  String? get cloudkitToken => _storage.get(_cloudkitTokenKey);
+
+  Future<void> setCloudkitToken(String? token) =>
+      _putOrDelete(_cloudkitTokenKey, token);
+
+  /// The CloudKit slot table as of [cloudkitToken] (JSON, owned by
+  /// `CloudKitBackend`).
+  String? get cloudkitSlots => _storage.get(_cloudkitSlotsKey);
+
+  Future<void> setCloudkitSlots(String? json) =>
+      _putOrDelete(_cloudkitSlotsKey, json);
+
+  /// The iCloud user record name [cloudkitToken] and [cloudkitSlots]
+  /// belong to.
+  String? get cloudkitUser => _storage.get(_cloudkitUserKey);
+
+  Future<void> setCloudkitUser(String? user) =>
+      _putOrDelete(_cloudkitUserKey, user);
+
+  static const _cloudkitTokenKey = 'cloudkitToken';
+  static const _cloudkitSlotsKey = 'cloudkitSlots';
+  static const _cloudkitUserKey = 'cloudkitUser';
+
+  Future<void> _putOrDelete(String key, String? value) =>
+      value == null ? _storage.delete(key) : _storage.put(key, value);
 }

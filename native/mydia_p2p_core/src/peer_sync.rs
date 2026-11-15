@@ -63,6 +63,13 @@ pub enum PeerSyncResponse {
         pin_records: Vec<WirePinRecord>,
         #[serde(default)]
         vault_id: Option<String>,
+        /// The cloud store the group backs up to (`icloud` or `gdrive`),
+        /// sent instead of `vault_id` so the joiner can offer to sign in.
+        #[serde(default)]
+        backup_store: Option<String>,
+        /// The Google account of a `gdrive` store; never a credential.
+        #[serde(default)]
+        backup_account: Option<String>,
     },
     PairRejected {
         reason: String,
@@ -157,8 +164,63 @@ mod tests {
                 watch_records: vec![],
                 pin_records: vec![],
                 vault_id: None,
+                backup_store: None,
+                backup_account: None,
             }
         );
+    }
+
+    /// `Paired` as the relay-only backup sent it: a vault id, no cloud store.
+    #[derive(serde::Serialize)]
+    enum VaultOnlyPeerSyncResponse {
+        Paired {
+            group_secret_base64: String,
+            roster: Vec<WirePeerMember>,
+            watch_records: Vec<WireWatchRecord>,
+            pin_records: Vec<WirePinRecord>,
+            vault_id: Option<String>,
+        },
+    }
+
+    #[test]
+    fn paired_without_backup_store_decodes() {
+        let old = VaultOnlyPeerSyncResponse::Paired {
+            group_secret_base64: "c2VjcmV0".into(),
+            roster: vec![],
+            watch_records: vec![],
+            pin_records: vec![],
+            vault_id: Some("0123456789abcdef0123456789abcdef".into()),
+        };
+        let bytes = serde_cbor::to_vec(&old).expect("serialize old paired");
+        let decoded: PeerSyncResponse = serde_cbor::from_slice(&bytes).expect("decode old paired");
+        assert_eq!(
+            decoded,
+            PeerSyncResponse::Paired {
+                group_secret_base64: "c2VjcmV0".into(),
+                roster: vec![],
+                watch_records: vec![],
+                pin_records: vec![],
+                vault_id: Some("0123456789abcdef0123456789abcdef".into()),
+                backup_store: None,
+                backup_account: None,
+            }
+        );
+    }
+
+    #[test]
+    fn cloud_store_hint_round_trips_cbor() {
+        let response = PeerSyncResponse::Paired {
+            group_secret_base64: "c2VjcmV0".into(),
+            roster: vec![],
+            watch_records: vec![],
+            pin_records: vec![],
+            vault_id: None,
+            backup_store: Some("gdrive".into()),
+            backup_account: Some("viewer@example.com".into()),
+        };
+        let bytes = serde_cbor::to_vec(&response).expect("serialize");
+        let decoded: PeerSyncResponse = serde_cbor::from_slice(&bytes).expect("decode");
+        assert_eq!(decoded, response);
     }
 
     #[test]
@@ -181,6 +243,8 @@ mod tests {
             watch_records: vec![],
             pin_records: vec![],
             vault_id: Some("0123456789abcdef0123456789abcdef".into()),
+            backup_store: None,
+            backup_account: None,
         };
         let bytes = serde_cbor::to_vec(&response).expect("serialize");
         let decoded: PeerSyncResponse = serde_cbor::from_slice(&bytes).expect("decode");
@@ -244,6 +308,8 @@ mod tests {
             }],
             pin_records: vec![],
             vault_id: None,
+            backup_store: None,
+            backup_account: None,
         };
         let bytes = serde_cbor::to_vec(&response).expect("serialize paired response");
         let decoded: PeerSyncResponse =

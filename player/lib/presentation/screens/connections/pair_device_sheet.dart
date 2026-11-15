@@ -7,7 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/backup/backup_providers.dart'
-    show backupSyncServiceProvider;
+    show backupControllerProvider, backupSyncServiceProvider, CloudStoreHint;
 import '../../../core/p2p/peer_sync_records.dart';
 import '../../../core/p2p/peer_sync_service.dart';
 import '../../../core/sources/sources_providers.dart' show isWebProvider;
@@ -15,6 +15,7 @@ import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
+import '../backup/store_picker.dart' show backupStoreName;
 
 /// Which half of pairing the sheet opens on.
 enum PairSheetMode {
@@ -157,9 +158,10 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
 
   /// The joining side hears no [onPeerPaired]: name the newest other member
   /// of the group it just joined.
-  void _announceJoined() {
+  void _announceJoined({CloudStoreHint? hintBefore}) {
     if (!mounted) return;
     if (_announceBackupJoined()) return;
+    if (_announceStoreHint(hintBefore)) return;
     final newest = ref
         .read(peerGroupRosterProvider)
         .activeMembers()
@@ -190,6 +192,34 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
           : ToastAction(label: l10n.backupJoinedNoticeOpen, onPressed: open),
     );
     backup.acknowledgeJoinedNotice();
+    if (ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).maybePop();
+    }
+    return true;
+  }
+
+  /// The cloud store hint as it stands, null on the web.
+  CloudStoreHint? _storeHint() => ref.read(isWebProvider)
+      ? null
+      : ref.read(backupControllerProvider).storeHint.value;
+
+  /// When the join brought a cloud store hint (the group backs up to iCloud
+  /// or Google Drive, which this device must sign in to), says where, with
+  /// an action to Backup & sync. The hint stays there until answered.
+  bool _announceStoreHint(CloudStoreHint? before) {
+    final hint = _storeHint();
+    if (hint == null || hint == before || _announced) return false;
+    _announced = true;
+    final l10n = context.l10n;
+    final open = widget.onOpenBackup;
+    showToast(
+      context,
+      l10n.backupStoreHint(backupStoreName(l10n, hint.kind)),
+      kind: ToastKind.success,
+      action: open == null
+          ? null
+          : ToastAction(label: l10n.backupJoinedNoticeOpen, onPressed: open),
+    );
     if (ModalRoute.of(context)?.isCurrent == true) {
       Navigator.of(context).maybePop();
     }
@@ -236,11 +266,12 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
       _failure = null;
     });
     try {
+      final hint = _storeHint();
       await _service.pairWithCode(cleanCode);
       // The viewer may have left while pairing was pending; a disposed
       // controller must not be notified.
       if (mounted) _codeController.clear();
-      _announceJoined();
+      _announceJoined(hintBefore: hint);
     } catch (e) {
       if (mounted) setState(() => _failure = _PairingFailure.pairing);
     } finally {
@@ -284,8 +315,9 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
       _failure = null;
     });
     try {
+      final hint = _storeHint();
       await _service.pairWithQr(qrJson);
-      _announceJoined();
+      _announceJoined(hintBefore: hint);
     } catch (e) {
       if (mounted) setState(() => _failure = _PairingFailure.pairing);
     } finally {

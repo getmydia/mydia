@@ -47,11 +47,17 @@ class _FlutterSecureStorageBackend implements SecretBackend {
   Future<void> deleteAll() => _storage.deleteAll();
 }
 
-class NativeAuthStorage implements AuthStorage, StrictAuthRead {
+class NativeAuthStorage
+    implements AuthStorage, StrictAuthRead, SharedAuthBacking {
   NativeAuthStorage({SecretBackend? backend})
       : _backend = backend ?? const _FlutterSecureStorageBackend();
 
   final SecretBackend _backend;
+
+  /// The keychain behind this instance. The default backend is a const, so
+  /// every `getAuthStorage()` instance answers the identical object.
+  @override
+  Object get backing => _backend;
 
   static final Map<String, String> _memoryStorage = <String, String>{};
   static bool _warnedAboutFallback = false;

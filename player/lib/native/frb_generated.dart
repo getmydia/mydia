@@ -2176,6 +2176,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           watchRecords: dco_decode_list_flutter_wire_watch_record(raw[3]),
           pinRecords: dco_decode_list_flutter_wire_pin_record(raw[4]),
           vaultId: dco_decode_opt_String(raw[5]),
+          backupStore: dco_decode_opt_String(raw[6]),
+          backupAccount: dco_decode_opt_String(raw[7]),
         );
       case 1:
         return FlutterPeerSyncResponse_PairRejected(
@@ -3398,12 +3400,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_pinRecords =
             sse_decode_list_flutter_wire_pin_record(deserializer);
         var var_vaultId = sse_decode_opt_String(deserializer);
+        var var_backupStore = sse_decode_opt_String(deserializer);
+        var var_backupAccount = sse_decode_opt_String(deserializer);
         return FlutterPeerSyncResponse_Paired(
             groupSecretBase64: var_groupSecretBase64,
             roster: var_roster,
             watchRecords: var_watchRecords,
             pinRecords: var_pinRecords,
-            vaultId: var_vaultId);
+            vaultId: var_vaultId,
+            backupStore: var_backupStore,
+            backupAccount: var_backupAccount);
       case 1:
         var var_reason = sse_decode_String(deserializer);
         return FlutterPeerSyncResponse_PairRejected(reason: var_reason);
@@ -4667,7 +4673,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           roster: final roster,
           watchRecords: final watchRecords,
           pinRecords: final pinRecords,
-          vaultId: final vaultId
+          vaultId: final vaultId,
+          backupStore: final backupStore,
+          backupAccount: final backupAccount
         ):
         sse_encode_i_32(0, serializer);
         sse_encode_String(groupSecretBase64, serializer);
@@ -4675,6 +4683,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_list_flutter_wire_watch_record(watchRecords, serializer);
         sse_encode_list_flutter_wire_pin_record(pinRecords, serializer);
         sse_encode_opt_String(vaultId, serializer);
+        sse_encode_opt_String(backupStore, serializer);
+        sse_encode_opt_String(backupAccount, serializer);
       case FlutterPeerSyncResponse_PairRejected(reason: final reason):
         sse_encode_i_32(1, serializer);
         sse_encode_String(reason, serializer);

@@ -734,6 +734,8 @@ sealed class FlutterPeerSyncResponse with _$FlutterPeerSyncResponse {
     required List<FlutterWireWatchRecord> watchRecords,
     required List<FlutterWirePinRecord> pinRecords,
     String? vaultId,
+    String? backupStore,
+    String? backupAccount,
   }) = FlutterPeerSyncResponse_Paired;
   const factory FlutterPeerSyncResponse.pairRejected({
     required String reason,

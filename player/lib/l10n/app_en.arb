@@ -3137,5 +3137,208 @@
   "backupPendingAdd": "Add",
   "@backupPendingAdd": {
     "description": "Button that adds the servers another device backed up."
+  },
+  "backupStoreRelay": "Mydia relay (end-to-end encrypted)",
+  "@backupStoreRelay": {
+    "description": "Name of the backup store run by Mydia, in the store picker and messages that name a store."
+  },
+  "backupStoreICloud": "iCloud",
+  "@backupStoreICloud": {
+    "description": "Name of the iCloud backup store. Apple's product name."
+  },
+  "backupStoreGoogleDrive": "Google Drive",
+  "@backupStoreGoogleDrive": {
+    "description": "Name of the Google Drive backup store. Google's product name."
+  },
+  "backupStoreICloudPrivacy": "Stored in your iCloud account. Apple can read it, including your source sign-ins.",
+  "@backupStoreICloudPrivacy": {
+    "description": "Under iCloud in the backup store picker: who can read the backup."
+  },
+  "backupStoreGoogleDrivePrivacy": "Stored in your Google account. Google can read it, including your source sign-ins.",
+  "@backupStoreGoogleDrivePrivacy": {
+    "description": "Under Google Drive in the backup store picker: who can read the backup."
+  },
+  "backupStoreRelayPrivacy": "Only your devices can read it. Keep the recovery key safe.",
+  "@backupStoreRelayPrivacy": {
+    "description": "Under the Mydia relay in the backup store picker: who can read the backup."
+  },
+  "backupCloudActive": "Backing up to {store} ({account})",
+  "@backupCloudActive": {
+    "description": "Status of a cloud backup. store is iCloud or Google Drive, account the signed-in account's email.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      },
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "backupCloudActiveNoAccount": "Backing up to {store}",
+  "@backupCloudActiveNoAccount": {
+    "description": "Status of a cloud backup with no account to name. store is iCloud or Google Drive.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSignedOut": "Signed out of {store}. Backup is paused.",
+  "@backupSignedOut": {
+    "description": "Status when the cloud store's account was signed out or its access revoked. store is iCloud or Google Drive.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupReconnect": "Reconnect",
+  "@backupReconnect": {
+    "description": "Button that signs in to the cloud store again after it was signed out."
+  },
+  "backupQuotaFull": "Your Google storage is full. Backup is paused.",
+  "@backupQuotaFull": {
+    "description": "Status when the Google account has no room for the backup."
+  },
+  "backupICloudUnavailable": "iCloud is unavailable. Sign in to iCloud in Settings.",
+  "@backupICloudUnavailable": {
+    "description": "Shown when iCloud cannot be used: not signed in, or iCloud Drive is off. Settings is the system Settings app."
+  },
+  "backupNewerVersion": "A device uses a newer Mydia. Update this one to read its backup.",
+  "@backupNewerVersion": {
+    "description": "Shown when another device's backup was written by a newer app version."
+  },
+  "backupMovedNotice": "{device} moved backup to {store}.",
+  "@backupMovedNotice": {
+    "description": "Shown when another device moved the group's backup to another store. device is its name, store the store's name.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSwitch": "Switch",
+  "@backupSwitch": {
+    "description": "Button that moves this device's backup to another store."
+  },
+  "backupStoreHint": "Your devices back up to {store}. Sign in to join.",
+  "@backupStoreHint": {
+    "description": "Shown after pairing with a device that backs up to a cloud store. store is iCloud or Google Drive.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStoreHintJoin": "Sign in",
+  "@backupStoreHintJoin": {
+    "description": "Button on the pairing hint that signs in to the cloud store and turns backup on there."
+  },
+  "backupSwitchConfirm": "Switch backup to {store}? Your other devices will be asked to switch too.",
+  "@backupSwitchConfirm": {
+    "description": "Confirmation before moving the backup to another store. store is that store's name.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSwitchDeleteOld": "Delete the backup in {store}",
+  "@backupSwitchDeleteOld": {
+    "description": "Checkbox in the switch confirmation: also delete the backup in the store being left. store is that store's name.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSwitchStoreHeader": "Back up somewhere else",
+  "@backupSwitchStoreHeader": {
+    "description": "Heading above the other backup stores while backup is on, to move the backup to one."
+  },
+  "backupRemoveCloudDeviceConfirm": "Remove {device} from the backup? It can still read the backup until it signs out of {store}.",
+  "@backupRemoveCloudDeviceConfirm": {
+    "description": "Confirmation before removing a device from a cloud backup. device is its name, store is iCloud or Google Drive.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "backupGoogleConnectionsLink": "Manage Google account access",
+  "@backupGoogleConnectionsLink": {
+    "description": "Link to the Google account page where an app's access can be removed."
+  },
+  "backupGoogleScopeMissing": "Mydia needs permission to store its backup in your Google Drive. Sign in again and allow it.",
+  "@backupGoogleScopeMissing": {
+    "description": "Toast when the viewer signed in to Google but did not allow Drive access on the consent screen."
+  },
+  "backupGoogleAccountMismatch": "Signed in to {actual}. Sign in to {expected} to join this backup.",
+  "@backupGoogleAccountMismatch": {
+    "description": "Toast when joining a Google Drive backup requires a specific Google account, and the viewer signed in to another one.",
+    "placeholders": {
+      "actual": {
+        "type": "String"
+      },
+      "expected": {
+        "type": "String"
+      }
+    }
+  },
+  "backupCloudDeleteConfirm": "Delete the backup in {store}? Devices still signed in will back it up again until you turn backup off on them.",
+  "@backupCloudDeleteConfirm": {
+    "description": "Confirmation before deleting a cloud backup. store is iCloud or Google Drive.",
+    "placeholders": {
+      "store": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreFromICloud": "Restore from iCloud",
+  "@restoreFromICloud": {
+    "description": "Button that restores the backup kept in iCloud."
+  },
+  "restoreFromGoogleDrive": "Restore from Google Drive",
+  "@restoreFromGoogleDrive": {
+    "description": "Button that restores the backup kept in Google Drive."
+  },
+  "restoreWithRecoveryKey": "Restore with a recovery key",
+  "@restoreWithRecoveryKey": {
+    "description": "Button that restores the Mydia relay backup with its recovery key."
+  },
+  "restoreNothingToApply": "Nothing could be read from this backup.",
+  "@restoreNothingToApply": {
+    "description": "Restore summary when no device's part of the backup could be read, so there is nothing to restore."
+  },
+  "googleDeviceCodeTitle": "Sign in to Google",
+  "@googleDeviceCodeTitle": {
+    "description": "Title of the TV sign-in sheet that shows a code to enter on another device."
+  },
+  "googleDeviceCodeBody": "On your phone, open {url} and enter this code:",
+  "@googleDeviceCodeBody": {
+    "description": "TV sign-in instructions above the code. url is Google's sign-in page.",
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "googleDeviceCodeExpired": "The code expired. Try again.",
+  "@googleDeviceCodeExpired": {
+    "description": "TV sign-in: the code ran out before it was entered."
+  },
+  "googleSignInBrowserDone": "You can close this window and return to Mydia.",
+  "@googleSignInBrowserDone": {
+    "description": "Shown in the system browser tab after completing Google sign-in on desktop."
+  },
+  "googleSignInBrowserStateMismatch": "This sign-in link is not the one Mydia opened.",
+  "@googleSignInBrowserStateMismatch": {
+    "description": "Shown in the system browser tab when a Google sign-in redirect does not match the active request."
   }
 }

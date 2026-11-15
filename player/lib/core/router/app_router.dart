@@ -34,6 +34,7 @@ import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/add_s3_screen.dart';
 import '../../presentation/screens/backup/restore_backup_screen.dart';
+import '../backup/backup_controller.dart' show BackupStoreKind;
 import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
@@ -365,7 +366,10 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         redirect: (context, state) =>
             ref.read(isWebProvider) ? '/sources/add' : null,
-        builder: (context, state) => const RestoreBackupScreen(),
+        // `?store=icloud` opens straight on that store's backup.
+        builder: (context, state) => RestoreBackupScreen(
+            initialStore:
+                BackupStoreKind.parse(state.uri.queryParameters['store'])),
       ),
       GoRoute(
         path: '/sources/add/plex',

@@ -39,6 +39,15 @@ enum BackupRelayError {
   unauthorized,
   network,
   server,
+
+  /// A cloud store: the user's account is signed out or its grant revoked.
+  signedOut,
+
+  /// A cloud store: the account has no room for the slot.
+  quotaFull,
+
+  /// A cloud store: the drive service is unreachable or disabled.
+  cloudUnavailable,
 }
 
 class BackupRelayException implements Exception {

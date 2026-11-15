@@ -15,10 +15,13 @@ class FakeBackupSyncService implements BackupSyncService {
   final membersNotifier = ValueNotifier<List<BackupMemberInfo>>(const []);
   final offersNotifier = ValueNotifier<List<PendingAccountOffer>>(const []);
   final removalsNotifier = ValueNotifier<List<PendingRemoval>>(const []);
+  final movedNotifier = ValueNotifier<Map<String, String>>(const {});
+  final newerNotifier = ValueNotifier<bool>(false);
 
   final calls = <String>[];
 
   bool isEnabled = false;
+  bool isDormant = false;
   String? keyText;
   Map<String, String> names = {};
 
@@ -27,6 +30,10 @@ class FakeBackupSyncService implements BackupSyncService {
 
   /// Makes the next [confirmEnable] fail with this.
   Exception? confirmError;
+
+  /// When true, a failing [confirmEnable] marks [isEnabled] true first to
+  /// mimic a post-enable persistence failure.
+  bool enableBeforeConfirmError = false;
 
   @override
   ValueListenable<BackupStatus> get status => statusNotifier;
@@ -50,6 +57,12 @@ class FakeBackupSyncService implements BackupSyncService {
   @override
   ValueListenable<List<PendingRemoval>> get pendingRemovals => removalsNotifier;
   @override
+  ValueListenable<Map<String, String>> get movedSlots => movedNotifier;
+  @override
+  ValueListenable<bool> get newerVersionSeen => newerNotifier;
+  @override
+  bool get dormant => isDormant;
+  @override
   bool get enabled => isEnabled;
   @override
   String? get recoveryKeyText => keyText;
@@ -67,6 +80,10 @@ class FakeBackupSyncService implements BackupSyncService {
     calls.add('confirmEnable ${key.display}');
     final error = confirmError;
     if (error != null) {
+      if (enableBeforeConfirmError) {
+        isEnabled = true;
+        keyText = key.display;
+      }
       confirmError = null;
       throw error;
     }

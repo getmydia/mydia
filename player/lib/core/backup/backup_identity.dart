@@ -33,13 +33,40 @@ class BackupIdentity {
 
   /// Loads the stored identity or creates and persists a new one.
   ///
+  /// One load at a time per backing store: callers that overlap get the same
+  /// future, so the relay and the cloud stores starting together on a fresh
+  /// install never create two identities (the last write would win, and one
+  /// of them would hold keys that are not stored). The memo is keyed by
+  /// [SharedAuthBacking.backing] when the storage has one, because
+  /// `getAuthStorage()` returns a new instance per call and the relay
+  /// service, the controller and each cloud service hold different instances
+  /// over the same keychain. Once the load settles the next call reads the
+  /// storage again, so what is stored is always what is used.
+  ///
   /// Throws [StateError] if stored data exists but is unreadable, or the
   /// storage could not say whether it exists ([StrictAuthRead]): replacing
   /// it would orphan this device's vault membership, so the caller decides.
-  ///
-  /// Not safe to run twice at once on one storage: both could create. The
-  /// caller serialises it.
-  static Future<BackupIdentity> loadOrCreate(AuthStorage storage) async {
+  static Future<BackupIdentity> loadOrCreate(AuthStorage storage) {
+    final key = switch (storage) {
+      final SharedAuthBacking shared => shared.backing,
+      _ => storage,
+    };
+    final running = _loads[key];
+    if (running != null) return running;
+    final load = _loadOrCreate(storage);
+    _loads[key] = load;
+    void settled() {
+      if (identical(_loads[key], load)) _loads[key] = null;
+    }
+
+    load.then<void>((_) => settled(), onError: (Object _) => settled());
+    return load;
+  }
+
+  /// The load running for each backing store, kept with the store itself.
+  static final _loads = Expando<Future<BackupIdentity>>('backupIdentity');
+
+  static Future<BackupIdentity> _loadOrCreate(AuthStorage storage) async {
     final String? raw;
     try {
       raw = await switch (storage) {

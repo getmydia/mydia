@@ -33,3 +33,14 @@ abstract interface class StrictAuthRead {
   /// when the backend could not answer.
   Future<String?> readStrict(String key);
 }
+
+/// An [AuthStorage] whose instances are views over one shared store.
+///
+/// `getAuthStorage()` returns a new instance per call, but every native
+/// instance reads and writes the same keychain. A caller that must serialise
+/// work per store (not per instance) keys it by [backing].
+abstract interface class SharedAuthBacking {
+  /// The store this instance writes to. Instances over the same store return
+  /// the identical object.
+  Object get backing;
+}

@@ -421,7 +421,7 @@ class BackupSnapshot {
       // The group record's secret is never applied: without the roster the
       // device would think it is in a group whose members reject it. To
       // sync directly again it pairs once more. Its node claims are taken
-      // per slot by `BackupSyncService._apply`.
+      // per slot by `BackupSyncService._recordSlotClaims`.
     }
 
     return ApplyResult(

@@ -142,8 +142,14 @@ class BackupVaultOps {
     final seqs = <String, int>{};
     final unreadable = <String>{};
     for (final s in opened.manifest.slots) {
-      final p = await readSlot(opened.vaultId, recovery.signer, s,
-          {opened.manifest.epoch: opened.vaultKey});
+      final BackupPayload? p;
+      try {
+        p = await readSlot(opened.vaultId, recovery.signer, s,
+            {opened.manifest.epoch: opened.vaultKey});
+      } on NewerBackupVersionException {
+        unreadable.add(s.slotId);
+        continue;
+      }
       if (p == null) {
         unreadable.add(s.slotId);
       } else {
@@ -330,6 +336,8 @@ class BackupVaultOps {
         seq: slot.seq,
         sealed: sealed,
       ));
+    } on NewerBackupVersionException {
+      rethrow;
     } on Object catch (e) {
       debugPrint('[Backup] Slot ${slot.slotId} unreadable: ${e.runtimeType}');
       return null;
