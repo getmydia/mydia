@@ -246,8 +246,11 @@ writes are guarded by sequence and epoch CAS.
   writes and member changes share it), so four devices playing at once stay
   well clear of 429.
   Exceeding them answers 413 or 429, which the player shows as a status.
-- A vault with no write for 180 days is deleted by the sweeper. The settings
-  screen states this.
+- A vault with no write (slot write or member change) for 180 days is
+  deleted by the sweeper. The settings screen states this.
+- The per-IP limits on `POST /vaults` and `POST /lookup` ship off
+  (`RELAY_BACKUP_ADDRESS_LIMITS`): behind Cloudflare every install resolves
+  to one address, so they would be a single bucket for all of them.
 - The relay logs no request bodies for these routes.
 
 ### Compatibility window

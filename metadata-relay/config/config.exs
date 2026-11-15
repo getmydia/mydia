@@ -34,7 +34,10 @@ config :metadata_relay, :player_logs,
 # SQLite holds vaults, members and slot metadata. See MetadataRelay.Backup.
 config :metadata_relay, :backup,
   dir: "./backup",
-  sweep_interval_ms: 3_600_000
+  sweep_interval_ms: 3_600_000,
+  # Per-address limits on POST /vaults and /lookup. Off: behind Cloudflare
+  # every install shares one address (see MetadataRelay.Backup.Handler).
+  address_limits: false
 
 # How often MetadataRelay.UpdateCheck.Releases re-reads GitHub's release list.
 config :metadata_relay, :update_check, releases_refresh_ms: 3_600_000

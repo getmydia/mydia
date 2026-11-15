@@ -123,4 +123,28 @@ defmodule MetadataRelay.BackupConcurrencyTest do
     assert Enum.count(results, &(&1 == {:ok, 2})) == 1
     assert Enum.count(results, &(&1 == {:error, :conflict})) == 1
   end
+
+  test "a rotation committing while the manifest is read does not mix epochs" do
+    s = signer()
+    vault = create_vault([s])
+    {:ok, %{members: members}, _} = Backup.manifest(vault, s)
+    recovery = Enum.find(members, &(&1.signer != s)).signer
+
+    rotate = fn ->
+      Task.async(fn ->
+        Backup.update_members(vault, s, %{
+          expected_epoch: 1,
+          new_epoch: 2,
+          envelopes: %{s => "e2", recovery => "r2"}
+        })
+      end)
+      |> Task.await(15_000)
+      |> then(&assert(&1 == {:ok, 2}))
+    end
+
+    assert {:ok, %{epoch: 1, envelope: "e"}, _} =
+             Backup.manifest(vault, s, after_member: rotate)
+
+    assert {:ok, %{epoch: 2, envelope: "e2"}, _} = Backup.manifest(vault, s)
+  end
 end

@@ -352,7 +352,22 @@ defmodule MetadataRelay.Backup.HandlerTest do
     assert error(taken) == "vault_taken"
   end
 
+  defp address_limits(on) do
+    previous = Application.fetch_env!(:metadata_relay, :backup)
+    Application.put_env(:metadata_relay, :backup, Keyword.put(previous, :address_limits, on))
+  end
+
+  test "address limits are off by default: behind Cloudflare every install shares one" do
+    for _ <- 1..11, do: post_vaults("not json")
+    assert post_vaults("not json").status == 422
+
+    body = lookup_body(:crypto.strong_rand_bytes(32))
+    for _ <- 1..31, do: post_lookup(body)
+    assert post_lookup(body).status == 404
+  end
+
   test "POST /vaults is limited to 10 per address per hour, lookup to 30" do
+    address_limits(true)
     for _ <- 1..10, do: post_vaults("not json")
     assert post_vaults("not json").status == 429
 

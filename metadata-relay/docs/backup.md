@@ -83,7 +83,8 @@ vault from a missing slot.
 
 ### `POST /vaults`
 
-Unauthenticated, 10 per hour per client address. Creates a vault at epoch 1
+Unauthenticated, 10 per hour per client address when address limits are on
+(see "Address limits"). Creates a vault at epoch 1
 under `vault_id`, which the client chooses (16 random bytes as lowercase hex)
 so that the envelopes it seals in this request can bind the vault id. Two members: the first device and the recovery member. The recovery signer
 authenticates but never writes a slot.
@@ -114,7 +115,7 @@ Content-Type: application/vnd.mydia.backup
 ### `POST /lookup`
 
 Unauthenticated (the handle is the credential), 30 per hour per client
-address. The handle travels in the body, never the URL, so it stays out of
+address when address limits are on. The handle travels in the body, never the URL, so it stays out of
 access logs and caches.
 
 ```
@@ -234,5 +235,15 @@ Member. Deletes the vault, its members and every slot. `204`, empty body.
 ## Retention
 
 The hourly sweeper deletes any vault with no write for 180 days (or, never
-written, created more than 180 days ago), files included. The backup directory
-is `BACKUP_DIR`, default `backup/` beside the SQLite file.
+written, created more than 180 days ago), files included. Slot writes and
+member changes both count as writes. The backup directory is `BACKUP_DIR`,
+default `backup/` beside the SQLite file.
+
+## Address limits
+
+The per-address limits on `POST /vaults` and `POST /lookup` are off unless
+`RELAY_BACKUP_ADDRESS_LIMITS` is `1`, `true`, `yes` or `on`. Behind
+Cloudflare the relay resolves every caller to a shared address, so the limits
+would be one bucket for all installs. They can be turned on once the origin
+accepts traffic only from Cloudflare and the relay keys on
+`CF-Connecting-IP`, the same precondition as `RELAY_PROXY_RATE_LIMIT`.

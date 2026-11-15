@@ -36,7 +36,8 @@ config :metadata_relay, :player_logs,
 # Tests point `dir` at a tmp directory of their own and never run the sweeper.
 config :metadata_relay, :backup,
   dir: Path.join(System.tmp_dir!(), "metadata_relay_backup_test"),
-  sweep_interval_ms: nil
+  sweep_interval_ms: nil,
+  address_limits: false
 
 # Tests set the release answer with Releases.put/1 rather than reach GitHub.
 config :metadata_relay, :update_check, releases_refresh_ms: nil

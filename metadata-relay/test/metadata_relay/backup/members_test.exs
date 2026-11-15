@@ -197,24 +197,73 @@ defmodule MetadataRelay.Backup.MembersTest do
     new = signer()
     {:ok, 1} = add_device(v, new)
     {:ok, 1} = Backup.put_slot(v.vault, new, slot_id(new), "ciphertext", nil, 1)
-    path = Store.slot_path(v.vault, slot_id(new), 1)
+    path = file_of(v.vault, slot_id(new))
     assert {:ok, _} = Store.read(path)
 
-    assert {:ok, 2} =
-             Backup.update_members(
-               v.vault,
-               v.signer,
-               change(
-                 new_epoch: 2,
-                 remove: [new],
-                 envelopes: %{v.signer => "a", v.recovery => "r"}
-               )
-             )
+    assert {:ok, 2} = remove_device(v, new, 1)
 
     refute Backup.member?(v.vault, new)
     assert {:error, :not_found} = Backup.get_slot(v.vault, slot_id(new))
     assert {:error, :enoent} = Store.read(path)
     assert Repo.aggregate(from(m in Member, where: m.vault_id == ^v.vault), :count) == 2
+  end
+
+  defp file_of(vault, slot),
+    do: Repo.get_by!(MetadataRelay.Backup.Slot, vault_id: vault, slot_id: slot).path
+
+  defp remove_device(%{vault: vault, signer: s, recovery: r}, gone, epoch) do
+    Backup.update_members(
+      vault,
+      s,
+      change(
+        expected_epoch: epoch,
+        new_epoch: epoch + 1,
+        remove: [gone],
+        envelopes: %{s => "a", r => "r"}
+      )
+    )
+  end
+
+  test "a late cleanup of a removed slot cannot delete the file of its replacement" do
+    v = create()
+    new = signer()
+    {:ok, 1} = add_device(v, new)
+    {:ok, 1} = Backup.put_slot(v.vault, new, slot_id(new), "old", nil, 1)
+    old_path = file_of(v.vault, slot_id(new))
+    {:ok, 2} = remove_device(v, new, 1)
+
+    # The same device comes back: same slot id, seq restarting at 1.
+    {:ok, 2} =
+      Backup.update_members(
+        v.vault,
+        v.signer,
+        change(
+          expected_epoch: 2,
+          new_epoch: 2,
+          add: [%{signer: new, slot_id: slot_id(new), box_pub: box(new)}],
+          envelopes: %{new => "env-new"}
+        )
+      )
+
+    {:ok, 1} = Backup.put_slot(v.vault, new, slot_id(new), "new", nil, 2)
+    # The removal's file deletion, had it run only now.
+    Store.delete(old_path)
+
+    assert {:ok, "new", 1} = Backup.get_slot(v.vault, slot_id(new))
+  end
+
+  test "a member change counts as activity for the idle sweep" do
+    v = create()
+    long_ago = DateTime.add(DateTime.utc_now(), -200 * 86_400)
+
+    Repo.update_all(from(x in Vault, where: x.id == ^v.vault),
+      set: [last_write_at: long_ago, inserted_at: long_ago]
+    )
+
+    {:ok, 1} = add_device(v, signer())
+
+    assert {:ok, 0} = Backup.sweep()
+    assert Repo.get(Vault, v.vault)
   end
 
   test "removing without rotation is :invalid" do

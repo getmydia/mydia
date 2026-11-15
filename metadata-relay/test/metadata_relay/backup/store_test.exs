@@ -6,6 +6,7 @@ defmodule MetadataRelay.Backup.StoreTest do
   @vault String.duplicate("a1", 16)
   @other_vault String.duplicate("b2", 16)
   @slot "0123456789abcdef"
+  @gen "00ff00ff00ff00ff"
 
   setup do
     dir = Path.join(System.tmp_dir!(), "backup_#{System.unique_integer([:positive])}")
@@ -22,21 +23,21 @@ defmodule MetadataRelay.Backup.StoreTest do
 
   test "write then read round-trips bytes" do
     data = :crypto.strong_rand_bytes(1024)
-    path = Store.slot_path(@vault, @slot, 3)
+    path = Store.slot_path(@vault, @slot, 3, @gen)
 
-    assert path == "#{@vault}/#{@slot}-3.bin"
+    assert path == "#{@vault}/#{@slot}-3-#{@gen}.bin"
     assert :ok = Store.write(path, data)
     assert {:ok, ^data} = Store.read(path)
-    assert {:error, :enoent} = Store.read(Store.slot_path(@vault, @slot, 4))
+    assert {:error, :enoent} = Store.read(Store.slot_path(@vault, @slot, 4, @gen))
   end
 
   test "write leaves no .tmp file behind", %{dir: dir} do
-    :ok = Store.write(Store.slot_path(@vault, @slot, 1), "x")
+    :ok = Store.write(Store.slot_path(@vault, @slot, 1, @gen), "x")
     assert Path.wildcard(Path.join(dir, "**/*.tmp")) == []
   end
 
   test "delete removes one file and tolerates a missing one" do
-    path = Store.slot_path(@vault, @slot, 1)
+    path = Store.slot_path(@vault, @slot, 1, @gen)
     :ok = Store.write(path, "x")
     assert :ok = Store.delete(path)
     assert {:error, :enoent} = Store.read(path)
@@ -44,8 +45,12 @@ defmodule MetadataRelay.Backup.StoreTest do
   end
 
   test "delete_vault_dir removes every file of that vault only" do
-    mine = [Store.slot_path(@vault, @slot, 1), Store.slot_path(@vault, "fedcba9876543210", 2)]
-    theirs = Store.slot_path(@other_vault, @slot, 1)
+    mine = [
+      Store.slot_path(@vault, @slot, 1, @gen),
+      Store.slot_path(@vault, "fedcba9876543210", 2, @gen)
+    ]
+
+    theirs = Store.slot_path(@other_vault, @slot, 1, @gen)
     Enum.each(mine, &Store.write(&1, "a"))
     :ok = Store.write(theirs, "b")
 
@@ -58,11 +63,12 @@ defmodule MetadataRelay.Backup.StoreTest do
 
   test "slot_path and delete_vault_dir reject ids that are not lowercase hex" do
     for bad <- ["../etc", "ABCDEF", "", "a/b", "zz"] do
-      assert_raise ArgumentError, fn -> Store.slot_path(bad, @slot, 1) end
-      assert_raise ArgumentError, fn -> Store.slot_path(@vault, bad, 1) end
+      assert_raise ArgumentError, fn -> Store.slot_path(bad, @slot, 1, @gen) end
+      assert_raise ArgumentError, fn -> Store.slot_path(@vault, bad, 1, @gen) end
+      assert_raise ArgumentError, fn -> Store.slot_path(@vault, @slot, 1, bad) end
       assert_raise ArgumentError, fn -> Store.delete_vault_dir(bad) end
     end
 
-    assert_raise ArgumentError, fn -> Store.slot_path(@vault, @slot, "1") end
+    assert_raise ArgumentError, fn -> Store.slot_path(@vault, @slot, "1", @gen) end
   end
 end

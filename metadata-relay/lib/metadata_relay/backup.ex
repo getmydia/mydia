@@ -136,12 +136,26 @@ defmodule MetadataRelay.Backup do
 
   `members` includes the recovery signer (`recovery?: true`) and every member's
   X25519 `box_pub`, which devices seal a rotated vault key to.
+
+  Every row is read in one transaction, so a rotation committing meanwhile
+  cannot pair the old epoch's envelope with the new epoch (or its ETag).
+  `opts[:after_member]` is a test hook called after the requester's row is
+  read.
   """
-  @spec manifest(String.t(), binary()) ::
+  @spec manifest(String.t(), binary(), keyword()) ::
           {:ok, map(), String.t()} | {:error, :not_found}
-  def manifest(vault_id, signer) do
-    with true <- valid_vault_id?(vault_id) and valid_signer?(signer),
-         %Member{} = me <- get_member(vault_id, signer),
+  def manifest(vault_id, signer, opts \\ []) do
+    if valid_vault_id?(vault_id) and valid_signer?(signer) do
+      {:ok, result} = Repo.transaction(fn -> read_manifest(vault_id, signer, opts) end)
+      result
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp read_manifest(vault_id, signer, opts) do
+    with %Member{} = me <- get_member(vault_id, signer),
+         _ <- run_hook(opts[:after_member]),
          %Vault{} = vault <- Repo.get(Vault, vault_id) do
       members = Repo.all(from(m in Member, where: m.vault_id == ^vault_id, order_by: m.slot_id))
       slots = Repo.all(from(s in Slot, where: s.vault_id == ^vault_id, order_by: s.slot_id))
@@ -193,8 +207,11 @@ defmodule MetadataRelay.Backup do
   only committed rows, and the file is written before commit, so a row never
   points at a missing file. A file write failure rolls back
   (`{:error, :storage}`); a failure after the write but before commit can
-  leave an orphan file at the new seq, which the next write at that seq
-  overwrites. The previous seq's file is deleted after commit.
+  leave an orphan file, which stays until the vault is deleted. The previous
+  seq's file is deleted after commit. Every write gets a fresh file name
+  (the generation of `Store.slot_path/4`), so neither that deletion nor a
+  removed member's can reach a file a later write made under a reused slot
+  id and seq.
 
   The rate limit is charged before the conditional update, so a write that
   then fails with `:precondition_failed` still counts. The recovery signer
@@ -238,8 +255,9 @@ defmodule MetadataRelay.Backup do
           end
 
           new_seq = (if_match || 0) + 1
-          path = Store.slot_path(vault_id, slot_id, new_seq)
+          path = Store.slot_path(vault_id, slot_id, new_seq, Store.new_gen())
           now = DateTime.utc_now()
+          previous = if if_match, do: slot_file(vault_id, slot_id)
 
           if cas_slot(vault_id, slot_id, if_match, new_seq, epoch, byte_size(body), path, now) !=
                1,
@@ -251,15 +269,21 @@ defmodule MetadataRelay.Backup do
           end
 
           Repo.update_all(from(v in Vault, where: v.id == ^vault_id), set: [last_write_at: now])
-          new_seq
+          {new_seq, previous}
         end,
         mode: :immediate
       )
 
-    with {:ok, new_seq} <- result do
-      if if_match, do: Store.delete(Store.slot_path(vault_id, slot_id, if_match))
+    with {:ok, {new_seq, previous}} <- result do
+      if previous, do: Store.delete(previous)
       {:ok, new_seq}
     end
+  end
+
+  defp slot_file(vault_id, slot_id) do
+    Repo.one(
+      from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id == ^slot_id, select: s.path)
+    )
   end
 
   @doc """
@@ -386,30 +410,40 @@ defmodule MetadataRelay.Backup do
   @doc """
   Deletes every vault idle for more than 180 days (no write since, or never
   written and created that long ago), files included. Returns how many.
+
+  Each deletion re-checks the idle condition in the same statement, so a
+  write that lands after the vault was selected keeps it; its files go only
+  when that statement removed the row. `opts[:after_select]` is a test hook
+  called with the selected ids.
   """
-  @spec sweep(DateTime.t()) :: {:ok, non_neg_integer()}
-  def sweep(now \\ DateTime.utc_now()) do
+  @spec sweep(DateTime.t(), keyword()) :: {:ok, non_neg_integer()}
+  def sweep(now \\ DateTime.utc_now(), opts \\ []) do
     cutoff = DateTime.add(now, -@idle_days * 86_400, :second)
-    {:ok, sweep_batches(cutoff, 0)}
+    {:ok, sweep_batches(cutoff, 0, opts)}
   end
 
-  defp sweep_batches(cutoff, deleted) do
-    ids =
-      Repo.all(
-        from(v in Vault,
-          where: coalesce(v.last_write_at, v.inserted_at) < type(^cutoff, :utc_datetime_usec),
-          select: v.id,
-          order_by: v.id,
-          limit: @sweep_batch
-        )
-      )
+  defp sweep_batches(cutoff, deleted, opts) do
+    ids = Repo.all(from(v in idle(cutoff), select: v.id, order_by: v.id, limit: @sweep_batch))
+    if hook = opts[:after_select], do: hook.(ids)
 
-    Enum.each(ids, &delete_vault/1)
+    removed =
+      Enum.count(ids, fn id ->
+        case Repo.delete_all(from(v in idle(cutoff), where: v.id == ^id)) do
+          {1, _} -> Store.delete_vault_dir(id) == :ok
+          _ -> false
+        end
+      end)
 
     if length(ids) == @sweep_batch,
-      do: sweep_batches(cutoff, deleted + length(ids)),
-      else: deleted + length(ids)
+      do: sweep_batches(cutoff, deleted + removed, opts),
+      else: deleted + removed
   end
+
+  defp idle(cutoff),
+    do:
+      from(v in Vault,
+        where: coalesce(v.last_write_at, v.inserted_at) < type(^cutoff, :utc_datetime_usec)
+      )
 
   @doc "Reads `backup.<key>` from the application environment."
   @spec config(atom()) :: term()
@@ -475,7 +509,8 @@ defmodule MetadataRelay.Backup do
     if length(plan.final) > @max_members, do: Repo.rollback(:too_many_members)
 
     case from(v in Vault, where: v.id == ^vault_id and v.epoch == ^c.expected_epoch)
-         |> Repo.update_all(set: [epoch: c.new_epoch]) do
+         # A member change is activity too: the idle sweep keys on last_write_at.
+         |> Repo.update_all(set: [epoch: c.new_epoch, last_write_at: DateTime.utc_now()]) do
       {1, _} -> :ok
       {0, _} -> Repo.rollback(:conflict)
     end
@@ -591,9 +626,12 @@ defmodule MetadataRelay.Backup do
     slot_ids = Enum.map(removed_members, & &1.slot_id)
 
     paths =
-      from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id in ^slot_ids)
-      |> Repo.all()
-      |> Enum.map(&Store.slot_path(vault_id, &1.slot_id, &1.seq))
+      Repo.all(
+        from(s in Slot,
+          where: s.vault_id == ^vault_id and s.slot_id in ^slot_ids,
+          select: s.path
+        )
+      )
 
     Repo.delete_all(from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id in ^slot_ids))
 
@@ -711,6 +749,9 @@ defmodule MetadataRelay.Backup do
       {:error, :invalid}
     end
   end
+
+  defp run_hook(nil), do: nil
+  defp run_hook(hook), do: hook.()
 
   defp get_member(vault_id, signer),
     do: Repo.get_by(Member, vault_id: vault_id, signer: b64(signer))

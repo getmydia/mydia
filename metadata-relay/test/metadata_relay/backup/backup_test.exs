@@ -182,16 +182,19 @@ defmodule MetadataRelay.BackupTest do
     assert {:error, :not_found} = Backup.get_slot(v.vault, v.slot)
   end
 
-  test "the previous seq's file is deleted and failed writes leave no file" do
+  defp file_of(v), do: Repo.get_by!(Slot, vault_id: v.vault, slot_id: v.slot).path
+
+  test "the previous seq's file is deleted and failed writes leave no file", %{dir: dir} do
     v = create()
     {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "one", nil, 1)
-    assert {:ok, "one"} = Store.read(Store.slot_path(v.vault, v.slot, 1))
+    one = file_of(v)
+    assert {:ok, "one"} = Store.read(one)
     {:ok, 2} = Backup.put_slot(v.vault, v.signer, v.slot, "two", 1, 1)
-    assert {:error, :enoent} = Store.read(Store.slot_path(v.vault, v.slot, 1))
-    assert {:ok, "two"} = Store.read(Store.slot_path(v.vault, v.slot, 2))
+    assert {:error, :enoent} = Store.read(one)
+    assert {:ok, "two"} = Store.read(file_of(v))
     {:error, :precondition_failed} = Backup.put_slot(v.vault, v.signer, v.slot, "bad", 1, 1)
-    assert {:ok, "two"} = Store.read(Store.slot_path(v.vault, v.slot, 2))
-    assert {:error, :enoent} = Store.read(Store.slot_path(v.vault, v.slot, 3))
+    assert {:ok, "two"} = Store.read(file_of(v))
+    assert [_] = Path.wildcard(Path.join([dir, v.vault, "*.bin"]))
   end
 
   test "another member cannot write this slot, nor can the recovery signer or a stranger" do
@@ -224,7 +227,7 @@ defmodule MetadataRelay.BackupTest do
   test "get_slot is not_found when the file is gone and the seq is unchanged" do
     v = create()
     {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "one", nil, 1)
-    Store.delete(Store.slot_path(v.vault, v.slot, 1))
+    Store.delete(file_of(v))
     assert {:error, :not_found} = Backup.get_slot(v.vault, v.slot)
   end
 

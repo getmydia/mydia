@@ -170,12 +170,23 @@ defmodule MetadataRelay.Backup.Handler do
 
   # ---- rate limits ---------------------------------------------------------
 
+  # Off unless `backup.address_limits` is true (RELAY_BACKUP_ADDRESS_LIMITS).
+  # Behind Cloudflare `ClientIp.resolve/1` sees a shared edge or Traefik
+  # address, so these limits would be one bucket for every install: the
+  # eleventh install of the hour could not turn backup on. They wait for the
+  # same precondition as `MetadataRelay.Plug.ProxyRateLimit`. Meanwhile a
+  # vault is a small row the idle sweep removes, and a lookup handle is a
+  # 256-bit secret, so neither limit is what keeps the data safe.
   defp limit(conn, name, max) do
-    key = "backup:#{name}:#{ClientIp.resolve(conn)}"
+    if Backup.config(:address_limits) == true do
+      key = "backup:#{name}:#{ClientIp.resolve(conn)}"
 
-    case RateLimiter.check_rate_limit(key, limit: max, window_ms: @hour_ms) do
-      {:ok, _} -> :ok
-      {:error, :rate_limited} -> {:error, :rate_limited}
+      case RateLimiter.check_rate_limit(key, limit: max, window_ms: @hour_ms) do
+        {:ok, _} -> :ok
+        {:error, :rate_limited} -> {:error, :rate_limited}
+      end
+    else
+      :ok
     end
   end
 

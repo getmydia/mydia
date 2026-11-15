@@ -85,7 +85,9 @@ if config_env() != :test do
 
   config :metadata_relay, :backup,
     dir: normalize_env.("BACKUP_DIR") || Path.join(Path.dirname(db_path), "backup"),
-    sweep_interval_ms: 3_600_000
+    sweep_interval_ms: 3_600_000,
+    # Off by default for the reason RELAY_PROXY_RATE_LIMIT is.
+    address_limits: normalize_env.("RELAY_BACKUP_ADDRESS_LIMITS") in ~w(1 true yes on)
 
   # Phoenix endpoint port configuration (serves both API and dashboard)
   port = String.to_integer(System.get_env("PORT") || "4001")

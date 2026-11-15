@@ -68,6 +68,20 @@ defmodule MetadataRelay.Backup.SweepTest do
     assert File.dir?(dir(fresh))
   end
 
+  test "a write landing after the sweep picked the vault keeps it and its files" do
+    id = create()
+    set(id, last_write_at: days_ago(181))
+
+    refresh = fn ids ->
+      assert id in ids
+      set(id, last_write_at: DateTime.utc_now())
+    end
+
+    assert {:ok, 0} = Backup.sweep(DateTime.utc_now(), after_select: refresh)
+    assert Repo.get(Vault, id)
+    assert File.dir?(dir(id))
+  end
+
   test "a vault never written falls back to inserted_at" do
     old = create()
     set(old, last_write_at: nil, inserted_at: days_ago(200))
