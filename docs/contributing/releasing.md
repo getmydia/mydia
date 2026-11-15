@@ -600,6 +600,15 @@ shown in the run summary, and publishes nowhere master's builds do:
   later first-parent commit, so its integer (`17000043` or higher) still
   clears it. The TestFlight notes open with the branch and commit.
 
+A master build's iOS upload uses `build_number_mode: fixed_or_after_latest`:
+its version-derived number, unless TestFlight already holds a higher one. That
+happens while a release is a draft. Its build is uploaded, but its tag only
+exists once it is published, so master's dev builds still anchor on the
+previous release (`0.19.0-dev.15`, `19000015`, behind the draft beta's
+`19031000`). Such a build goes just above the highest upload (`19031000.1`),
+as a branch build does, and the run warns. Once the release is published,
+master's builds anchor on its tag and clear it again.
+
 The one shared resource left is the `player-ios-testflight` lock: a release or
 master iOS upload dispatched while a branch iOS build runs waits for it.
 
