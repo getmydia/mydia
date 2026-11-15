@@ -99,4 +99,28 @@ void main() {
     expect(withBody['x-amz-content-sha256'], hello);
     expect(withBody['authorization'], isNot(base['authorization']));
   });
+
+  String sigFor(String url) => signer().sign(
+        method: 'GET',
+        uri: Uri.parse(url),
+      )['authorization']!;
+
+  test('sub-delimiters in the path are signed encoded', () {
+    expect(sigFor('https://h.example.com/b/a+b'),
+        sigFor('https://h.example.com/b/a%2Bb'));
+    expect(
+      sigFor("https://h.example.com/b/a+b&c=d(e)!\$'*,;:@"),
+      sigFor(
+        'https://h.example.com/b/a%2Bb%26c%3Dd%28e%29%21%24%27%2A%2C%3B%3A%40',
+      ),
+    );
+  });
+
+  test('encoded and decoded paths sign identically', () {
+    final decoded = signer().sign(
+      method: 'GET',
+      uri: Uri(scheme: 'https', host: 'h.example.com', path: '/b/Sp ace\u00e9'),
+    )['authorization'];
+    expect(sigFor('https://h.example.com/b/Sp%20ace%C3%A9'), decoded);
+  });
 }

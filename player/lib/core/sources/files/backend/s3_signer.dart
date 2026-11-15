@@ -163,8 +163,24 @@ class S3Signer {
         : uri.host;
   }
 
-  /// The path exactly as given: S3 paths are never normalized.
-  String _canonicalPath(Uri uri) => uri.path.isEmpty ? '/' : uri.path;
+  /// Each segment is decoded and re-encoded so the canonical path matches what
+  /// S3 computes whatever `Uri` left unescaped. Empty segments are kept: S3
+  /// paths are never normalized.
+  String _canonicalPath(Uri uri) {
+    if (uri.path.isEmpty) return '/';
+    return uri.path
+        .split('/')
+        .map((seg) => s3UriEncode(_decodeSegment(seg), encodeSlash: true))
+        .join('/');
+  }
+
+  String _decodeSegment(String seg) {
+    try {
+      return Uri.decodeComponent(seg);
+    } on FormatException {
+      return seg;
+    }
+  }
 
   String _canonicalQuery(Uri uri) {
     final pairs = <List<String>>[];
